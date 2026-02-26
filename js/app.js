@@ -235,19 +235,14 @@ function showDayPicker(dateStr, cellEl) {
 
     document.body.appendChild(popup);
 
-    // Position below the clicked cell, clamped to viewport
-    const rect       = cellEl.getBoundingClientRect();
-    const popupW     = 220;
-    const scrollY    = window.scrollY || 0;
+    // Position centered below the entire calendar grid (not the individual cell)
+    const calRect = document.getElementById('calendar').getBoundingClientRect();
+    const scrollY = window.scrollY || 0;
 
-    let top  = rect.bottom + scrollY + 10;
-    let left = rect.left + rect.width / 2 - popupW / 2;
-
-    // Keep within horizontal viewport
-    left = Math.max(8, Math.min(left, window.innerWidth - popupW - 8));
-
-    popup.style.top  = top + 'px';
-    popup.style.left = left + 'px';
+    popup.style.position  = 'fixed';
+    popup.style.top       = (calRect.bottom + 14) + 'px';
+    popup.style.left      = (calRect.left + calRect.width / 2) + 'px';
+    popup.style.transform = 'translateX(-50%)';
 
     // Button handlers
     popup.querySelectorAll('.picker-btn').forEach(btn => {
