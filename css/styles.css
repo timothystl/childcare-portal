@@ -160,7 +160,7 @@ main { padding: 32px 36px; }
 
 .calendar {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 6px;
     margin-bottom: 16px;
 }
@@ -367,6 +367,129 @@ main { padding: 32px 36px; }
 .loading-text { color: #aaa; font-style: italic; }
 
 /* ============================================================
+   ROOM RATE LINE
+   ============================================================ */
+.room-rate {
+    margin-top: 8px;
+    font-size: .8em;
+    color: #667eea;
+    font-weight: 600;
+}
+
+/* ============================================================
+   DATE LIST — new layout with controls
+   ============================================================ */
+.date-list li {
+    display: block;          /* override old flex rule */
+    padding: 0;
+    background: none;
+    border-left: none;
+}
+
+.date-list-item {
+    background: #f8f9ff;
+    border-left: 4px solid #667eea;
+    border-radius: 6px;
+    padding: 10px 14px;
+}
+
+.date-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.date-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.date-label {
+    font-weight: 500;
+    font-size: .95em;
+}
+
+.date-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* ============================================================
+   FULL / HALF DAY TOGGLE
+   ============================================================ */
+.day-type-toggle {
+    display: flex;
+    border: 2px solid #667eea;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.day-type-btn {
+    background: #fff;
+    color: #667eea;
+    border: none;
+    padding: 5px 11px;
+    font-size: .8em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+    white-space: nowrap;
+}
+.day-type-btn:first-child {
+    border-right: 1px solid #667eea;
+}
+.day-type-btn.active {
+    background: #667eea;
+    color: #fff;
+}
+.day-type-btn:hover:not(.active) {
+    background: #f3f1ff;
+}
+
+.day-type-fixed {
+    font-size: .82em;
+    color: #667eea;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* ============================================================
+   BILLING TOTAL
+   ============================================================ */
+.billing-total {
+    margin-top: 14px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #f3f1ff 0%, #e8f4f8 100%);
+    border-radius: 8px;
+    text-align: right;
+    font-size: 1.05em;
+    color: #333;
+    border: 1px solid #d6d0f5;
+}
+.billing-total strong {
+    color: #667eea;
+    font-size: 1.15em;
+}
+.billing-note {
+    display: block;
+    font-size: .78em;
+    color: #999;
+    margin-top: 3px;
+}
+
+.total-line {
+    margin-top: 12px !important;
+    font-size: 1.05em !important;
+    color: #667eea !important;
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width: 600px) {
@@ -378,4 +501,6 @@ main { padding: 32px 36px; }
     .cal-day  { border-radius: 4px; }
     .day-num  { font-size: .85em; }
     .spot-badge { display: none; }
+    .date-row { flex-direction: column; align-items: flex-start; }
+    .date-controls { width: 100%; justify-content: space-between; }
 }
