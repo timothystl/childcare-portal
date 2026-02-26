@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Childcare Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <h1>Admin Login</h1>
+            <p>Childcare Registration Portal</p>
+            <div class="form-group">
+                <label for="adminPassword">Password</label>
+                <input type="password" id="adminPassword" placeholder="Enter admin password">
+            </div>
+            <button id="loginBtn" class="btn-primary">Login</button>
+            <p id="loginError" class="login-error hidden">Incorrect password.</p>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="dashboard" class="hidden">
+        <header class="admin-header">
+            <div>
+                <h1>Registrations Dashboard</h1>
+                <p id="regCount" class="sub-label">Loading…</p>
+            </div>
+            <div class="header-actions">
+                <button id="refreshBtn" class="btn-secondary">&#8635; Refresh</button>
+                <button id="exportCsvBtn" class="btn-secondary">&#8595; Export CSV</button>
+                <button id="exportXlsxBtn" class="btn-primary">&#8595; Export Excel</button>
+                <button id="logoutBtn" class="btn-ghost">Logout</button>
+            </div>
+        </header>
+
+        <!-- Filters -->
+        <div class="filters">
+            <input type="text" id="searchInput" placeholder="Search by parent, child, or email…">
+            <select id="roomFilter">
+                <option value="">All rooms</option>
+            </select>
+            <select id="statusFilter">
+                <option value="">All statuses</option>
+                <option value="confirmed">Confirmed only</option>
+                <option value="waitlist">Waitlist only</option>
+            </select>
+        </div>
+
+        <!-- Capacity Overview -->
+        <section class="capacity-section">
+            <h2>Capacity Overview <span class="hint-small">(next 30 days)</span></h2>
+            <div id="capacityGrid" class="capacity-grid">
+                <!-- rendered by admin.js -->
+            </div>
+        </section>
+
+        <!-- Registrations Table -->
+        <section class="table-section">
+            <h2>All Registrations</h2>
+            <div class="table-wrapper">
+                <table id="regTable">
+                    <thead>
+                        <tr>
+                            <th>Submitted</th>
+                            <th>Parent</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Child</th>
+                            <th>Age</th>
+                            <th>Room</th>
+                            <th>Dates</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="regTableBody">
+                        <tr><td colspan="9" class="loading-cell">Loading registrations…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <!-- Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="js/supabase.js?v=3"></script>
+    <script src="js/admin.js?v=2"></script>
+</body>
+</html>

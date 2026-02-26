@@ -1,0 +1,233 @@
+/* ============================================================
+   ADMIN — LOGIN SCREEN
+   ============================================================ */
+.admin-body { padding: 0; }
+
+.login-screen {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 20px;
+}
+
+.login-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 48px 40px;
+    max-width: 400px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 12px 48px rgba(0,0,0,.2);
+}
+.login-card h1 { color: #333; margin-bottom: 6px; }
+.login-card > p { color: #888; margin-bottom: 28px; }
+
+.login-card .form-group { text-align: left; margin-bottom: 20px; }
+.login-card .btn-primary { width: 100%; }
+
+.login-error {
+    margin-top: 14px;
+    color: #e53e3e;
+    font-size: .9em;
+}
+
+/* ============================================================
+   ADMIN — DASHBOARD
+   ============================================================ */
+#dashboard {
+    min-height: 100vh;
+    background: #f5f6fa;
+}
+
+.admin-header {
+    background: #fff;
+    padding: 20px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #eee;
+    flex-wrap: wrap;
+    gap: 14px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+.admin-header h1 { font-size: 1.4em; color: #333; }
+.sub-label        { color: #888; font-size: .88em; margin-top: 2px; }
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.btn-secondary {
+    background: #fff;
+    color: #667eea;
+    border: 2px solid #667eea;
+    padding: 9px 18px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: .9em;
+    transition: all .2s;
+}
+.btn-secondary:hover { background: #f3f1ff; }
+
+.btn-ghost {
+    background: transparent;
+    color: #888;
+    border: 2px solid #ddd;
+    padding: 9px 18px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: .9em;
+    transition: all .2s;
+}
+.btn-ghost:hover { background: #f5f6fa; color: #333; }
+
+/* Filters */
+.filters {
+    padding: 20px 32px;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    background: #fff;
+    border-bottom: 1px solid #eee;
+}
+
+.filters input,
+.filters select {
+    padding: 10px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 7px;
+    font-size: .95em;
+    flex: 1;
+    min-width: 180px;
+    transition: border-color .2s;
+}
+.filters input:focus,
+.filters select:focus { outline: none; border-color: #667eea; }
+
+/* Capacity section */
+.capacity-section,
+.table-section {
+    padding: 28px 32px;
+}
+.capacity-section h2,
+.table-section h2 {
+    font-size: 1.2em;
+    color: #333;
+    margin-bottom: 16px;
+}
+.hint-small { font-size: .78em; color: #aaa; font-weight: 400; }
+
+.capacity-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+.cap-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+}
+.cap-card h3    { font-size: 1em; color: #333; margin-bottom: 4px; }
+.cap-meta       { color: #888; font-size: .82em; margin-bottom: 12px; }
+
+.progress-bar {
+    height: 8px;
+    background: #eee;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+.progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width .4s ease;
+}
+.bar-green  { background: #48bb78; }
+.bar-orange { background: #ed8936; }
+.bar-red    { background: #e53e3e; }
+.cap-pct    { font-size: .8em; color: #888; }
+
+/* Table */
+.table-wrapper {
+    overflow-x: auto;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+}
+
+#regTable {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    font-size: .9em;
+}
+
+#regTable thead th {
+    background: #667eea;
+    color: #fff;
+    padding: 12px 14px;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+#regTable tbody tr { border-bottom: 1px solid #f0f0f0; }
+#regTable tbody tr:hover { background: #f8f9ff; }
+#regTable tbody td { padding: 12px 14px; vertical-align: top; }
+
+.loading-cell {
+    text-align: center;
+    color: #aaa;
+    font-style: italic;
+    padding: 28px !important;
+}
+.loading-cell.error { color: #e53e3e; }
+
+.dates-cell { max-width: 260px; }
+
+.date-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: .78em;
+    margin: 2px;
+    white-space: nowrap;
+}
+.badge-confirmed { background: #c6f6d5; color: #276749; }
+.badge-waitlist  { background: #fed7d7; color: #9b2c2c; }
+.date-chip em    { font-style: normal; font-weight: 700; }
+
+.btn-delete {
+    background: #fff;
+    color: #e53e3e;
+    border: 2px solid #e53e3e;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .82em;
+    transition: all .2s;
+    white-space: nowrap;
+}
+.btn-delete:hover { background: #e53e3e; color: #fff; }
+
+/* ============================================================
+   RESPONSIVE ADMIN
+   ============================================================ */
+@media (max-width: 700px) {
+    .admin-header { padding: 16px; }
+    .filters, .capacity-section, .table-section { padding: 16px; }
+    .header-actions { gap: 6px; }
+    .btn-secondary, .btn-ghost, .btn-primary { padding: 8px 12px; font-size: .82em; }
+}

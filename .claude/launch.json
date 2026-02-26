@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Static Site (Parent Portal)",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["/Users/andrewdinger/Desktop/childcare-portal/serve.py"],
+      "port": 3000
+    }
+  ]
+}

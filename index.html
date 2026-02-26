@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Childcare Registration Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Childcare Registration</h1>
+            <p>Select your child's care schedule below</p>
+        </header>
+
+        <main>
+            <form id="registrationForm" novalidate>
+
+                <!-- Step 1: Parent & Child Info -->
+                <section class="form-section">
+                    <h2><span class="step-badge">1</span> Parent &amp; Child Information</h2>
+                    <div class="field-grid">
+                        <div class="form-group">
+                            <label for="parentName">Parent / Guardian Name <span class="req">*</span></label>
+                            <input type="text" id="parentName" required placeholder="Jane Smith">
+                        </div>
+                        <div class="form-group">
+                            <label for="parentEmail">Email <span class="req">*</span></label>
+                            <input type="email" id="parentEmail" required placeholder="jane@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="parentPhone">Phone <span class="req">*</span></label>
+                            <input type="tel" id="parentPhone" required placeholder="(555) 000-0000">
+                        </div>
+                        <div class="form-group">
+                            <label for="childName">Child's Name <span class="req">*</span></label>
+                            <input type="text" id="childName" required placeholder="Alex Smith">
+                        </div>
+                        <div class="form-group">
+                            <label for="childAge">Child's Age (years) <span class="req">*</span></label>
+                            <input type="number" id="childAge" required min="0" max="12" placeholder="3">
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Step 2: Room Selection -->
+                <section class="form-section">
+                    <h2><span class="step-badge">2</span> Select Age Group / Room</h2>
+                    <div id="roomGrid" class="room-grid">
+                        <!-- Rendered by app.js -->
+                        <p class="loading-text">Loading rooms…</p>
+                    </div>
+                </section>
+
+                <!-- Step 3: Calendar -->
+                <section class="form-section">
+                    <h2><span class="step-badge">3</span> Select Care Days</h2>
+                    <p class="hint" id="calendarHint">Select a room above to enable the calendar.</p>
+
+                    <div id="calendarWrapper" class="calendar-wrapper hidden">
+                        <div class="calendar-controls">
+                            <button type="button" id="prevMonth">&larr; Prev</button>
+                            <h3 id="currentMonthLabel"></h3>
+                            <button type="button" id="nextMonth">Next &rarr;</button>
+                        </div>
+                        <div id="calendar" class="calendar"></div>
+                        <div class="legend">
+                            <span class="legend-item"><span class="dot available"></span> Available</span>
+                            <span class="legend-item"><span class="dot limited"></span> &le;3 spots left</span>
+                            <span class="legend-item"><span class="dot full"></span> Full (waitlist)</span>
+                            <span class="legend-item"><span class="dot selected"></span> Your selection</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Step 4: Review -->
+                <section class="form-section">
+                    <h2><span class="step-badge">4</span> Review Selection</h2>
+                    <div id="selectedDates" class="selected-dates">
+                        <p class="empty-state">No dates selected yet.</p>
+                    </div>
+                </section>
+
+                <!-- Submit -->
+                <div class="form-actions">
+                    <button type="submit" id="submitBtn" class="btn-primary">Submit Registration</button>
+                </div>
+            </form>
+        </main>
+
+        <!-- Success Modal -->
+        <div id="successModal" class="modal" role="dialog" aria-modal="true">
+            <div class="modal-content">
+                <div class="modal-icon">&#10003;</div>
+                <h2>Registration Submitted!</h2>
+                <div id="successDetails"></div>
+                <button id="closeModal" class="btn-primary">Done</button>
+            </div>
+        </div>
+
+        <!-- Error Toast -->
+        <div id="errorToast" class="toast error hidden"></div>
+    </div>
+
+    <!-- Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase.js?v=3"></script>
+    <script src="js/app.js?v=3"></script>
+</body>
+</html>
