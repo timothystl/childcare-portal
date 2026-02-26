@@ -276,7 +276,8 @@ async function handleSubmit(e) {
         if (!SUPABASE_CONFIGURED) {
             showToast('⚙️ Database not connected yet. Follow the setup steps in README.md to link Supabase, then registrations will save.');
         } else {
-            showToast('Something went wrong. Please try again or contact us directly.');
+            const msg = err?.message || err?.error_description || JSON.stringify(err);
+            showToast('❌ Error: ' + msg);
         }
     } finally {
         btn.disabled = false;
