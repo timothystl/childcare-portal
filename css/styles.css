@@ -418,45 +418,107 @@ main { padding: 32px 36px; }
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
+    margin-left: auto;
 }
 
 /* ============================================================
-   FULL / HALF DAY TOGGLE
+   SELECTED DAY TYPE BADGE (on calendar cell)
    ============================================================ */
-.day-type-toggle {
-    display: flex;
-    border: 2px solid #667eea;
-    border-radius: 6px;
-    overflow: hidden;
+.selected-type-badge {
+    font-size: .65em;
+    font-weight: 700;
+    color: #fff;
+    margin-top: 2px;
+    opacity: .9;
+    letter-spacing: .02em;
 }
 
-.day-type-btn {
+.cal-day.picker-active {
+    box-shadow: 0 0 0 3px #fff, 0 0 0 5px #667eea;
+    z-index: 2;
+}
+
+/* ============================================================
+   DAY PICKER POPUP
+   ============================================================ */
+.day-picker-popup {
+    position: absolute;
+    z-index: 500;
     background: #fff;
-    color: #667eea;
-    border: none;
-    padding: 5px 11px;
-    font-size: .8em;
+    border: 2px solid #667eea;
+    border-radius: 12px;
+    padding: 16px;
+    width: 220px;
+    box-shadow: 0 8px 32px rgba(102,126,234,.25);
+    text-align: center;
+}
+
+.picker-title {
+    font-size: .85em;
     font-weight: 600;
+    color: #555;
+    margin-bottom: 12px;
+}
+
+.picker-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.picker-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 8px;
+    background: #f3f1ff;
+    border: 2px solid #667eea;
+    border-radius: 8px;
     cursor: pointer;
-    transition: background .15s, color .15s;
-    white-space: nowrap;
+    transition: background .15s, transform .1s;
 }
-.day-type-btn:first-child {
-    border-right: 1px solid #667eea;
-}
-.day-type-btn.active {
+.picker-btn:hover {
     background: #667eea;
     color: #fff;
+    transform: translateY(-1px);
 }
-.day-type-btn:hover:not(.active) {
-    background: #f3f1ff;
+.picker-btn:hover .picker-rate { color: rgba(255,255,255,.85); }
+
+.picker-label {
+    font-size: .85em;
+    font-weight: 700;
+    color: #667eea;
+}
+.picker-btn:hover .picker-label { color: #fff; }
+
+.picker-rate {
+    font-size: .9em;
+    font-weight: 600;
+    color: #333;
 }
 
-.day-type-fixed {
-    font-size: .82em;
+.picker-cancel {
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: .8em;
+    cursor: pointer;
+    padding: 2px 8px;
+}
+.picker-cancel:hover { color: #e53e3e; }
+
+/* ============================================================
+   DATE LIST — day type label
+   ============================================================ */
+.day-type-label {
+    font-size: .8em;
     color: #667eea;
     font-weight: 600;
-    white-space: nowrap;
+    background: #f3f1ff;
+    padding: 2px 8px;
+    border-radius: 10px;
 }
 
 /* ============================================================
