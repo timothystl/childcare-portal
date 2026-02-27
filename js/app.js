@@ -9,17 +9,17 @@ const DAY_HEADERS_MF = ['Mon','Tue','Wed','Thu','Fri'];
 // STATE
 // ============================================================
 let currentDate         = new Date();
-let selectedRoom        = null;
-let selectedDates       = new Map();   // 'YYYY-MM-DD' -> { status: 'confirmed'|'waitlist', dayType: 'full'|'half' }
-let capacityCache       = {};
-let closureMap          = new Map();   // 'YYYY-MM-DD' -> reason string
+let selectedFamily      = null;     // { id, parent_name, parent_email, parent_phone, pin, students:[] }
+let selectedChildren    = [];       // [{ name, dob, room: ROOMS[i], isNew: bool, studentId: string|null }]
+let selectedDates       = new Map();  // 'YYYY-MM-DD' -> { status: 'confirmed'|'waitlist', dayType: 'full'|'half' }
+let capacityCache       = {};         // { roomId: { 'YYYY-MM-DD': count } }
+let closureMap          = new Map();  // 'YYYY-MM-DD' -> reason string
 let calendarLoading     = false;
 let pickerOpenDate      = null;
-let regWindowOverride   = 'auto';      // 'auto' | 'open' | 'closed' — loaded from Supabase settings
+let regWindowOverride   = 'auto';     // 'auto' | 'open' | 'closed' — loaded from Supabase settings
 
 // ============================================================
 // REGISTRATION WINDOW  (Items 6 & 7)
-// - Target: always the NEXT calendar month
 // - mode 'confirmed' : day 1–20  → form enabled, dates saved as confirmed
 // - mode 'waitlist'  : day 21+   → form enabled, ALL dates saved as waitlisted
 // - mode 'closed'    : admin override only — hard disables form
@@ -31,18 +31,13 @@ function getRegistrationWindow() {
     const year   = today.getFullYear();
     const month  = today.getMonth();
 
-    // Target: always the NEXT calendar month
     const targetDate  = new Date(year, month + 1, 1);
     const targetLabel = MONTH_NAMES[targetDate.getMonth()] + ' ' + targetDate.getFullYear();
 
-    // Deadline label: "February 20" (20th of the current month)
     const deadlineDate  = new Date(year, month, 20);
     const deadlineLabel = deadlineDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
-    // mode: confirmed (1-20), waitlist (21+)
     let mode = day <= 20 ? 'confirmed' : 'waitlist';
-
-    // Admin override takes precedence
     if (regWindowOverride === 'open')   mode = 'confirmed';
     if (regWindowOverride === 'closed') mode = 'closed';
 
@@ -58,19 +53,15 @@ function getTargetMonthKey() {
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
-    // Load admin override before computing the window state
     regWindowOverride = (await fetchSetting('reg_window_override')) || 'auto';
 
     const win            = getRegistrationWindow();
     const targetMonthKey = getTargetMonthKey();
 
-    // Set calendar to show the target month
     currentDate = new Date(win.targetDate.getFullYear(), win.targetDate.getMonth(), 1);
 
-    // Check localStorage for already-submitted flag
     const alreadySubmitted = localStorage.getItem(`childcare_submitted_${targetMonthKey}`) === 'true';
 
-    // Update the registration window banner
     const banner = document.getElementById('regWindowBanner');
     if (banner) {
         if (alreadySubmitted) {
@@ -88,7 +79,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Update submit button based on mode
     const btn = document.getElementById('submitBtn');
     if (btn) {
         if (alreadySubmitted) {
@@ -106,10 +96,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    renderRooms();
+    // Set max date on child DOB input
+    const dobInput = document.getElementById('newChildDob');
+    if (dobInput) dobInput.max = new Date().toISOString().split('T')[0];
+
+    setupFamilyLookup();
+    setupChildSection();
     setupFormListeners();
 
-    // Load closures and build map (date -> reason) for Item 3
     const closures = await fetchClosures();
     closureMap = new Map(closures.map(c => [c.close_date, c.reason || '']));
 });
@@ -134,88 +128,319 @@ function getRoomIdFromDob(dobStr) {
     return 'owl';
 }
 
+function getRoomFromDob(dobStr) {
+    const roomId = getRoomIdFromDob(dobStr);
+    return roomId ? (ROOMS.find(r => r.id === roomId) || null) : null;
+}
+
 // ============================================================
-// ROOM CARDS
+// FAMILY LOOKUP  (Item 9)
 // ============================================================
-function renderRooms() {
-    const grid = document.getElementById('roomGrid');
-    grid.innerHTML = ROOMS.map(room => {
-        const rateStr = room.fullDayOnly
-            ? `$${room.fullDayRate} / day &nbsp;·&nbsp; Full day only`
-            : `Full day $${room.fullDayRate} &nbsp;·&nbsp; Half day $${room.halfDayRate}`;
-        return `
-        <label class="room-option" data-room="${room.id}">
-            <input type="radio" name="room" value="${room.id}">
-            <div class="room-card">
-                <h3>${room.label}</h3>
-                <p class="room-ages">${room.ages}</p>
-                <span class="cap-badge">Max ${room.capacity} children</span>
-                <p class="room-rate">${rateStr}</p>
-            </div>
-        </label>`;
+function setupFamilyLookup() {
+    const searchInput = document.getElementById('familySearchInput');
+    const searchBtn   = document.getElementById('familySearchBtn');
+    const pinInput    = document.getElementById('familyPinInput');
+    const pinBtn      = document.getElementById('familyPinBtn');
+
+    let searchTimer;
+    searchInput?.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(runFamilySearch, 380);
+    });
+    searchInput?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); runFamilySearch(); }
+    });
+    searchBtn?.addEventListener('click', runFamilySearch);
+
+    pinInput?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); runPinLookup(); }
+    });
+    pinBtn?.addEventListener('click', runPinLookup);
+
+    document.getElementById('changeFamilyBtn')?.addEventListener('click', resetFamilyLookup);
+}
+
+async function runFamilySearch() {
+    const query     = document.getElementById('familySearchInput')?.value.trim();
+    const resultsEl = document.getElementById('familySearchResults');
+    if (!resultsEl) return;
+    if (!query || query.length < 2) { resultsEl.innerHTML = ''; return; }
+
+    resultsEl.innerHTML = '<div class="lookup-searching">Searching…</div>';
+    try {
+        const families = await searchFamilies(query);
+        renderFamilySearchResults(families, query);
+    } catch {
+        resultsEl.innerHTML = '<div class="lookup-error">Search failed. Please try again.</div>';
+    }
+}
+
+async function runPinLookup() {
+    const pin    = document.getElementById('familyPinInput')?.value.trim();
+    const pinBtn = document.getElementById('familyPinBtn');
+    if (!pin || pin.length !== 4) { showToast('Please enter your 4-digit family PIN.'); return; }
+
+    if (pinBtn) { pinBtn.textContent = 'Looking up…'; pinBtn.disabled = true; }
+    try {
+        const family = await lookupFamilyByPin(pin);
+        if (family) {
+            document.getElementById('familySearchResults').innerHTML = '';
+            selectFamily(family);
+        } else {
+            showToast(`No family found for PIN ${pin}. Please check and try again.`);
+        }
+    } catch {
+        showToast('PIN lookup failed. Please try again.');
+    } finally {
+        if (pinBtn) { pinBtn.textContent = 'Look Up'; pinBtn.disabled = false; }
+    }
+}
+
+function renderFamilySearchResults(families, query) {
+    const resultsEl = document.getElementById('familySearchResults');
+    if (!families.length) {
+        resultsEl.innerHTML = `<div class="lookup-no-results">No family found for "<strong>${escStr(query)}</strong>". Fill in the form below to register as a new family.</div>`;
+        return;
+    }
+    resultsEl.innerHTML = families.map(f => {
+        const kids = (f.students || []).length;
+        return `<div class="family-result-item" data-id="${f.id}">
+            <span class="family-result-name">${escStr(f.parent_name)}</span>
+            <span class="family-result-meta">${escStr(f.parent_email || '')}${kids ? ` &middot; ${kids} child${kids > 1 ? 'ren' : ''}` : ''}</span>
+        </div>`;
     }).join('');
 
-    grid.querySelectorAll('input[name="room"]').forEach(radio => {
-        radio.addEventListener('change', onRoomChange);
+    resultsEl.querySelectorAll('.family-result-item').forEach(el => {
+        el.addEventListener('click', () => {
+            const fam = families.find(f => String(f.id) === el.dataset.id);
+            if (fam) selectFamily(fam);
+        });
     });
 }
 
-// Called when the DOB field changes — auto-selects the right room
-function onDobChange() {
-    const dob    = document.getElementById('childDob').value;
-    const roomId = getRoomIdFromDob(dob);
+function selectFamily(family) {
+    selectedFamily = family;
+    document.getElementById('familySearchResults').innerHTML = '';
 
-    document.querySelectorAll('.room-option').forEach(label => {
-        const radio = label.querySelector('input[type="radio"]');
-        const rid   = radio.value;
+    // Pre-fill parent fields (read-only)
+    setPrefilled('parentName',  family.parent_name);
+    setPrefilled('parentEmail', family.parent_email);
+    setPrefilled('parentPhone', family.parent_phone);
 
-        if (!roomId) {
-            label.classList.remove('locked');
-            radio.disabled = false;
-            label.querySelector('.age-lock-msg')?.remove();
-            return;
-        }
+    // Show selected bar
+    const bar = document.getElementById('familySelectedBar');
+    if (bar) bar.classList.remove('hidden');
+    const nameEl = document.getElementById('selectedFamilyName');
+    if (nameEl) nameEl.textContent = family.parent_name;
+    const pinEl = document.getElementById('selectedFamilyPin');
+    if (pinEl) {
+        pinEl.textContent = family.pin ? `PIN: ${family.pin}` : '';
+        pinEl.style.display = family.pin ? '' : 'none';
+    }
 
-        if (rid !== roomId) {
-            label.classList.add('locked');
-            radio.disabled = true;
-            if (!label.querySelector('.age-lock-msg')) {
-                const msg = document.createElement('p');
-                msg.className   = 'age-lock-msg';
-                msg.textContent = 'Not this age group';
-                label.querySelector('.room-card').appendChild(msg);
+    // Render child section with family's existing children
+    renderChildSection();
+}
+
+function resetFamilyLookup() {
+    selectedFamily   = null;
+    selectedChildren = [];
+
+    const searchInput = document.getElementById('familySearchInput');
+    const pinInput    = document.getElementById('familyPinInput');
+    if (searchInput) searchInput.value = '';
+    if (pinInput)    pinInput.value    = '';
+    const resultsEl = document.getElementById('familySearchResults');
+    if (resultsEl) resultsEl.innerHTML = '';
+
+    document.getElementById('familySelectedBar')?.classList.add('hidden');
+
+    clearPrefilled('parentName');
+    clearPrefilled('parentEmail');
+    clearPrefilled('parentPhone');
+
+    renderChildSection();
+    hideCalendar();
+    selectedDates = new Map();
+    renderSelectedDates();
+}
+
+function setPrefilled(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value    = value || '';
+    el.readOnly = true;
+    el.classList.add('prefilled');
+}
+
+function clearPrefilled(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value    = '';
+    el.readOnly = false;
+    el.classList.remove('prefilled');
+}
+
+// ============================================================
+// CHILD SECTION  (Item 8 — multi-child same dates)
+// ============================================================
+function setupChildSection() {
+    document.getElementById('newChildDob')?.addEventListener('change', onNewChildDobChange);
+    document.getElementById('addChildBtn')?.addEventListener('click', onAddChildClick);
+}
+
+function onNewChildDobChange() {
+    const dob   = document.getElementById('newChildDob')?.value;
+    const room  = getRoomFromDob(dob);
+    const label = document.getElementById('newChildRoomAssign');
+    if (!label) return;
+    if (room) {
+        label.innerHTML   = `&rarr; <strong>${room.label}</strong> &nbsp;·&nbsp; ${room.ages}`;
+        label.className   = 'child-room-assign';
+        label.classList.remove('hidden');
+    } else if (dob) {
+        label.textContent = '→ Date of birth not recognised';
+        label.className   = 'child-room-assign error';
+        label.classList.remove('hidden');
+    } else {
+        label.classList.add('hidden');
+    }
+}
+
+function onAddChildClick() {
+    const name = document.getElementById('newChildName')?.value.trim();
+    const dob  = document.getElementById('newChildDob')?.value;
+    if (!name) { showToast('Please enter the child\'s name.'); return; }
+    if (!dob)  { showToast('Please enter the child\'s date of birth.'); return; }
+    const room = getRoomFromDob(dob);
+    if (!room) { showToast('Could not determine a room for this date of birth.'); return; }
+
+    addChild({ name, dob, room, isNew: true, studentId: null });
+
+    // Clear the add-child form
+    document.getElementById('newChildName').value = '';
+    document.getElementById('newChildDob').value  = '';
+    document.getElementById('newChildRoomAssign')?.classList.add('hidden');
+}
+
+function addChild(child) {
+    if (selectedChildren.some(c => c.name === child.name && c.dob === child.dob)) {
+        showToast(`${child.name} is already added.`);
+        return;
+    }
+    selectedChildren.push(child);
+    renderChildSection();
+    onChildrenChanged();
+}
+
+function removeChild(index) {
+    selectedChildren.splice(index, 1);
+    renderChildSection();
+    onChildrenChanged();
+}
+
+function renderChildSection() {
+    const section = document.getElementById('childSection');
+    if (!section) return;
+
+    // Family children as checkboxes (shown when a family is selected)
+    let familyCards = '';
+    if (selectedFamily && (selectedFamily.students || []).length > 0) {
+        familyCards = `
+            <p class="child-select-label">Select which children to register — they'll all share the same care days:</p>
+            <div class="child-cards-row">
+                ${selectedFamily.students.map(s => {
+                    const room       = getRoomFromDob(s.child_dob);
+                    const isSelected = selectedChildren.some(c => c.studentId === s.id);
+                    const dobLabel   = s.child_dob
+                        ? new Date(s.child_dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : '';
+                    return `<label class="child-card-label${isSelected ? ' selected' : ''}" data-student-id="${s.id}">
+                        <input type="checkbox" class="child-card-checkbox"
+                               data-student-id="${s.id}"
+                               data-name="${escStr(s.child_name)}"
+                               data-dob="${escStr(s.child_dob || '')}"
+                               ${isSelected ? 'checked' : ''}>
+                        <span class="child-card-name">${escStr(s.child_name)}</span>
+                        ${dobLabel ? `<span class="child-card-dob">${dobLabel}</span>` : ''}
+                        ${room ? `<span class="child-card-room">${room.label}</span>` : ''}
+                    </label>`;
+                }).join('')}
+            </div>`;
+    }
+
+    // Selected new children chips
+    const newChildren = selectedChildren.filter(c => c.isNew);
+    let selectedChips = '';
+    if (newChildren.length) {
+        selectedChips = `<div class="selected-children-chips">
+            ${newChildren.map(c => {
+                const idx = selectedChildren.indexOf(c);
+                return `<div class="child-chip">
+                    <span class="child-chip-name">${escStr(c.name)}</span>
+                    <span class="child-chip-room">${c.room.label}</span>
+                    <button type="button" class="child-chip-remove" data-index="${idx}" title="Remove">&times;</button>
+                </div>`;
+            }).join('')}
+        </div>`;
+    }
+
+    section.innerHTML = familyCards + selectedChips;
+
+    // Bind checkboxes
+    section.querySelectorAll('.child-card-checkbox').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const studentId = cb.dataset.studentId;
+            const childName = cb.dataset.name;
+            const childDob  = cb.dataset.dob;
+            const room      = getRoomFromDob(childDob);
+            if (!room) {
+                cb.checked = false;
+                showToast(`Could not assign a room for ${childName} — please check their date of birth.`);
+                return;
             }
-        } else {
-            label.classList.remove('locked');
-            radio.disabled = false;
-            label.querySelector('.age-lock-msg')?.remove();
-            if (!radio.checked) {
-                radio.checked = true;
-                radio.dispatchEvent(new Event('change'));
+            // Update label selected state
+            cb.closest('.child-card-label').classList.toggle('selected', cb.checked);
+            if (cb.checked) {
+                addChild({ name: childName, dob: childDob, room, isNew: false, studentId });
+            } else {
+                const idx = selectedChildren.findIndex(c => c.studentId === studentId);
+                if (idx !== -1) removeChild(idx);
             }
-        }
+        });
+    });
+
+    // Bind remove chips
+    section.querySelectorAll('.child-chip-remove').forEach(btn => {
+        btn.addEventListener('click', () => removeChild(Number(btn.dataset.index)));
     });
 }
 
-async function onRoomChange(e) {
-    selectedRoom  = ROOMS.find(r => r.id === e.target.value);
+async function onChildrenChanged() {
     selectedDates = new Map();
     capacityCache = {};
-    closeDayPicker();
-
-    document.getElementById('calendarWrapper').classList.remove('hidden');
-    document.getElementById('calendarHint').classList.add('hidden');
-
+    if (!selectedChildren.length) {
+        hideCalendar();
+        renderSelectedDates();
+        return;
+    }
+    document.getElementById('calendarWrapper')?.classList.remove('hidden');
+    document.getElementById('calendarHint')?.classList.add('hidden');
     await loadMonthCapacity();
     renderCalendar();
     renderSelectedDates();
 }
 
+function hideCalendar() {
+    document.getElementById('calendarWrapper')?.classList.add('hidden');
+    document.getElementById('calendarHint')?.classList.remove('hidden');
+}
+
 // ============================================================
-// CAPACITY
+// CAPACITY  (multi-room aware)
 // ============================================================
 async function loadMonthCapacity() {
-    if (!selectedRoom) return;
+    if (!selectedChildren.length) return;
     calendarLoading = true;
     const year  = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -227,26 +452,37 @@ async function loadMonthCapacity() {
         const dow  = date.getDay();
         if (dow !== 0 && dow !== 6) dates.push(formatDate(date));
     }
-    capacityCache   = await fetchCapacityForDates(selectedRoom.id, dates);
+
+    const distinctRooms = [...new Set(selectedChildren.map(c => c.room.id))];
+    capacityCache = {};
+    for (const roomId of distinctRooms) {
+        capacityCache[roomId] = await fetchCapacityForDates(roomId, dates);
+    }
     calendarLoading = false;
 }
 
 function getDateStatus(dateStr) {
-    if (!selectedRoom) return 'disabled';
-    const booked   = capacityCache[dateStr] || 0;
-    const capacity = selectedRoom.capacity;
-    if (booked >= capacity)     return 'full';
-    if (booked >= capacity - 3) return 'limited';
-    return 'available';
+    if (!selectedChildren.length) return 'disabled';
+    let worstStatus = 'available';
+    for (const child of selectedChildren) {
+        const booked   = (capacityCache[child.room.id] || {})[dateStr] || 0;
+        const capacity = child.room.capacity;
+        if (booked >= capacity)     return 'full';
+        if (booked >= capacity - 3) worstStatus = 'limited';
+    }
+    return worstStatus;
 }
 
 function spotsLeft(dateStr) {
-    if (!selectedRoom) return 0;
-    return Math.max(0, selectedRoom.capacity - (capacityCache[dateStr] || 0));
+    if (!selectedChildren.length) return 0;
+    return Math.min(...selectedChildren.map(child => {
+        const booked = (capacityCache[child.room.id] || {})[dateStr] || 0;
+        return Math.max(0, child.room.capacity - booked);
+    }));
 }
 
 // ============================================================
-// CALENDAR — Mon–Fri only, closed days blocked (Item 3: reason shown)
+// CALENDAR — Mon–Fri only, closed days blocked (Item 3)
 // ============================================================
 function renderCalendar() {
     const year        = currentDate.getFullYear();
@@ -257,9 +493,8 @@ function renderCalendar() {
 
     document.getElementById('currentMonthLabel').textContent = `${MONTH_NAMES[month]} ${year}`;
 
-    // Update nav button states — only the target month is navigable
-    const win     = getRegistrationWindow();
-    const target  = win.targetDate;
+    const win      = getRegistrationWindow();
+    const target   = win.targetDate;
     const atTarget = (year === target.getFullYear() && month === target.getMonth());
     const prevBtn  = document.getElementById('prevMonth');
     const nextBtn  = document.getElementById('nextMonth');
@@ -310,7 +545,6 @@ function renderCalendar() {
                 ? '<span class="selected-type-badge">½ day</span>'
                 : '<span class="selected-type-badge">Full</span>';
         } else if (isClosed) {
-            // Item 3: show the reason for the closure if available
             const reason = closureMap.get(dateStr);
             badge = `<span class="spot-badge closed-badge">Closed</span>${reason ? `<span class="closed-reason">${escStr(reason)}</span>` : ''}`;
         } else if (!isPast && status === 'full') {
@@ -336,7 +570,7 @@ function renderCalendar() {
 // DAY PICKER POPUP
 // ============================================================
 function handleDayClick(dateStr, status, cellEl) {
-    if (!selectedRoom) return;
+    if (!selectedChildren.length) return;
 
     if (selectedDates.has(dateStr)) {
         selectedDates.delete(dateStr);
@@ -348,7 +582,8 @@ function handleDayClick(dateStr, status, cellEl) {
 
     if (status === 'full') {
         closeDayPicker();
-        const join = confirm(`This day is full (${selectedRoom.label}).\n\nJoin the waitlist for this date?`);
+        const childNames = selectedChildren.map(c => c.name).join(' & ');
+        const join = confirm(`This day is full for one or more rooms.\n\nAdd ${childNames} to the waitlist for this date?`);
         if (join) {
             selectedDates.set(dateStr, { status: 'waitlist', dayType: 'full' });
             renderCalendar();
@@ -357,7 +592,8 @@ function handleDayClick(dateStr, status, cellEl) {
         return;
     }
 
-    if (selectedRoom.fullDayOnly) {
+    const allFullDayOnly = selectedChildren.every(c => c.room.fullDayOnly);
+    if (allFullDayOnly) {
         closeDayPicker();
         selectedDates.set(dateStr, { status: 'confirmed', dayType: 'full' });
         renderCalendar();
@@ -373,7 +609,6 @@ function showDayPicker(dateStr, cellEl) {
     pickerOpenDate = dateStr;
     renderCalendar();
 
-    // Translucent backdrop so popup always reads clearly
     const backdrop = document.createElement('div');
     backdrop.id        = 'dayPickerBackdrop';
     backdrop.className = 'day-picker-backdrop';
@@ -384,27 +619,36 @@ function showDayPicker(dateStr, cellEl) {
     });
     document.body.appendChild(backdrop);
 
+    // Calculate combined rates across all children
+    const fullTotal = selectedChildren.reduce((s, c) => s + (c.room.fullDayRate || 0), 0);
+    const halfTotal = selectedChildren.reduce((s, c) => s + (c.room.halfDayRate || 0), 0);
+    const hasHalf   = selectedChildren.some(c => !c.room.fullDayOnly);
+
+    const childCountNote = selectedChildren.length > 1
+        ? `<p class="picker-subtitle">${selectedChildren.length} children · rates combined</p>`
+        : '';
+
     const popup = document.createElement('div');
     popup.id        = 'dayPickerPopup';
     popup.className = 'day-picker-popup';
     popup.innerHTML = `
         <p class="picker-title">${friendlyDate(dateStr)}</p>
+        ${childCountNote}
         <div class="picker-buttons">
             <button type="button" class="picker-btn" data-date="${dateStr}" data-type="full">
                 <span class="picker-label">Full Day</span>
-                <span class="picker-rate">$${selectedRoom.fullDayRate}</span>
+                <span class="picker-rate">$${fullTotal}</span>
             </button>
-            <button type="button" class="picker-btn" data-date="${dateStr}" data-type="half">
+            ${hasHalf ? `<button type="button" class="picker-btn" data-date="${dateStr}" data-type="half">
                 <span class="picker-label">Half Day</span>
-                <span class="picker-rate">$${selectedRoom.halfDayRate}</span>
-            </button>
+                <span class="picker-rate">$${halfTotal}</span>
+            </button>` : ''}
         </div>
         <button type="button" class="picker-cancel">✕ Cancel</button>
     `;
 
     document.body.appendChild(popup);
 
-    // Always anchor to viewport center so it's visible regardless of scroll position
     popup.style.position  = 'fixed';
     popup.style.top       = '50%';
     popup.style.left      = '50%';
@@ -448,14 +692,18 @@ function outsideClickHandler(e) {
 }
 
 // ============================================================
-// SELECTED DATES + BILLING TOTAL
+// SELECTED DATES + BILLING TOTAL (multi-child aware)
 // ============================================================
 function calcTotal() {
-    if (!selectedRoom) return 0;
+    if (!selectedChildren.length) return 0;
     let total = 0;
     for (const [, entry] of selectedDates) {
         if (entry.status === 'waitlist') continue;
-        total += (entry.dayType === 'half' ? selectedRoom.halfDayRate : selectedRoom.fullDayRate) || 0;
+        for (const child of selectedChildren) {
+            total += entry.dayType === 'half'
+                ? (child.room.halfDayRate || 0)
+                : (child.room.fullDayRate || 0);
+        }
     }
     return total;
 }
@@ -473,12 +721,22 @@ function renderSelectedDates() {
         const statusBadge = isWaitlist
             ? '<span class="waitlist-badge">Waitlist</span>'
             : '<span class="confirmed-badge">Confirmed</span>';
+
         let dayTypeLabel = '';
-        if (!isWaitlist) {
-            const typeText = entry.dayType === 'half' ? 'Half Day' : 'Full Day';
-            const rate     = entry.dayType === 'half' ? selectedRoom.halfDayRate : selectedRoom.fullDayRate;
-            dayTypeLabel   = `<span class="day-type-label">${typeText} — $${rate}</span>`;
+        if (!isWaitlist && selectedChildren.length) {
+            const typeText   = entry.dayType === 'half' ? 'Half Day' : 'Full Day';
+            const lineTotal  = selectedChildren.reduce((s, c) =>
+                s + (entry.dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0)), 0);
+            if (selectedChildren.length === 1) {
+                dayTypeLabel = `<span class="day-type-label">${typeText} — $${lineTotal}</span>`;
+            } else {
+                const breakdown = selectedChildren
+                    .map(c => `${escStr(c.name)}: $${entry.dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0)}`)
+                    .join(' · ');
+                dayTypeLabel = `<span class="day-type-label">${typeText} — $${lineTotal}</span><span class="rate-breakdown">${breakdown}</span>`;
+            }
         }
+
         return `
             <li class="date-list-item">
                 <div class="date-row">
@@ -519,15 +777,12 @@ function setupFormListeners() {
         document.getElementById('successModal').style.display = 'none';
     });
 
-    document.getElementById('childDob').addEventListener('change', onDobChange);
-
-    // Navigation: restricted to target month only
     document.getElementById('prevMonth').addEventListener('click', async () => {
         closeDayPicker();
-        const target = getRegistrationWindow().targetDate;
+        const target   = getRegistrationWindow().targetDate;
         const atTarget = currentDate.getFullYear() === target.getFullYear() &&
                          currentDate.getMonth()    === target.getMonth();
-        if (atTarget) return;   // Can't go below target month
+        if (atTarget) return;
         currentDate.setMonth(currentDate.getMonth() - 1);
         await loadMonthCapacity();
         renderCalendar();
@@ -535,10 +790,10 @@ function setupFormListeners() {
 
     document.getElementById('nextMonth').addEventListener('click', async () => {
         closeDayPicker();
-        const target = getRegistrationWindow().targetDate;
+        const target   = getRegistrationWindow().targetDate;
         const atTarget = currentDate.getFullYear() === target.getFullYear() &&
                          currentDate.getMonth()    === target.getMonth();
-        if (atTarget) return;   // Can't go above target month
+        if (atTarget) return;
         currentDate.setMonth(currentDate.getMonth() + 1);
         await loadMonthCapacity();
         renderCalendar();
@@ -546,7 +801,7 @@ function setupFormListeners() {
 }
 
 // ============================================================
-// FORM SUBMISSION (Items 4 & 7)
+// FORM SUBMISSION (Items 4, 7, 8)
 // ============================================================
 async function handleSubmit(e) {
     e.preventDefault();
@@ -555,13 +810,11 @@ async function handleSubmit(e) {
     const win            = getRegistrationWindow();
     const targetMonthKey = getTargetMonthKey();
 
-    // Guard: registration window closed by admin?
     if (win.mode === 'closed') {
-        showToast(`🔒 Registration is currently closed by admin.`);
+        showToast('🔒 Registration is currently closed by admin.');
         return;
     }
 
-    // Guard: already submitted (localStorage)?
     if (localStorage.getItem(`childcare_submitted_${targetMonthKey}`) === 'true') {
         showToast(`✅ You've already registered for ${win.targetLabel}. Contact us to make changes.`);
         return;
@@ -570,15 +823,13 @@ async function handleSubmit(e) {
     const parentName  = document.getElementById('parentName').value.trim();
     const parentEmail = document.getElementById('parentEmail').value.trim();
     const parentPhone = document.getElementById('parentPhone').value.trim();
-    const childName   = document.getElementById('childName').value.trim();
-    const childDob    = document.getElementById('childDob').value;
 
-    if (!parentName || !parentEmail || !parentPhone || !childName || !childDob) {
-        showToast('Please fill in all required fields.');
+    if (!parentName || !parentEmail || !parentPhone) {
+        showToast('Please fill in all parent information fields.');
         return;
     }
-    if (!selectedRoom) {
-        showToast('Please select a room / age group.');
+    if (!selectedChildren.length) {
+        showToast('Please add at least one child.');
         return;
     }
     if (selectedDates.size === 0) {
@@ -591,21 +842,11 @@ async function handleSubmit(e) {
     btn.textContent = 'Submitting…';
 
     try {
-        // Guard: server-side duplicate check (Item 7)
-        const alreadyReg = await checkExistingRegistration(parentEmail, targetMonthKey);
-        if (alreadyReg) {
-            showToast(`⚠️ A registration for ${win.targetLabel} already exists for this email. Please contact us to make changes.`);
-            btn.disabled    = false;
-            btn.textContent = 'Submit Registration';
-            return;
-        }
-
-        // In waitlist mode ALL dates go on the waitlist regardless of room availability
+        // Build shared date lists (same for all children)
         let confirmedDates, waitlistDates, regStatus;
         if (win.mode === 'waitlist') {
             confirmedDates = [];
-            waitlistDates  = [...selectedDates.entries()]
-                .map(([d, en]) => ({ date: d, dayType: en.dayType }));
+            waitlistDates  = [...selectedDates.entries()].map(([d, en]) => ({ date: d, dayType: en.dayType }));
             regStatus = 'pending_approval';
         } else {
             confirmedDates = [...selectedDates.entries()]
@@ -617,79 +858,119 @@ async function handleSubmit(e) {
             regStatus = 'confirmed';
         }
 
-        const total     = calcTotal();
-        const ageMonths = calcAgeMonths(childDob);
+        // Submit one registration per child
+        const results = [];
+        const errors  = [];
 
-        await submitRegistration({
-            parent: { name: parentName, email: parentEmail, phone: parentPhone },
-            child:  { name: childName, ageMonths, dob: childDob },
-            roomId: selectedRoom.id,
-            confirmedDates,
-            waitlistDates,
-            status: regStatus,
-        });
+        for (const child of selectedChildren) {
+            // Check for duplicate (per child, not per family)
+            const alreadyReg = await checkExistingRegistration(parentEmail, targetMonthKey, child.name);
+            if (alreadyReg) {
+                errors.push(`${child.name} is already registered for ${win.targetLabel}.`);
+                continue;
+            }
+            try {
+                const reg = await submitRegistration({
+                    parent: { name: parentName, email: parentEmail, phone: parentPhone },
+                    child:  { name: child.name, ageMonths: calcAgeMonths(child.dob), dob: child.dob },
+                    roomId: child.room.id,
+                    confirmedDates,
+                    waitlistDates,
+                    status: regStatus,
+                });
+                results.push({ child, reg });
+            } catch (childErr) {
+                errors.push(`${child.name}: ${childErr.message}`);
+            }
+        }
 
-        // Mark as submitted in localStorage (Item 7)
+        if (!results.length) {
+            errors.forEach(err => showToast('⚠️ ' + err));
+            btn.disabled    = false;
+            btn.textContent = win.mode === 'waitlist' ? 'Submit to Waitlist' : 'Submit Registration';
+            return;
+        }
+
+        // Mark as submitted in localStorage
         localStorage.setItem(`childcare_submitted_${targetMonthKey}`, 'true');
 
-        // Build itemized receipt (Item 4)
-        const confirmedSorted = confirmedDates
-            .slice()
-            .sort((a, b) => a.date.localeCompare(b.date));
+        // Save / update family record (non-fatal)
+        try {
+            if (!selectedFamily) {
+                const fam = await createFamily({ parentName, parentEmail, parentPhone });
+                for (const child of selectedChildren) {
+                    await addStudent({ familyId: fam.id, childName: child.name, childDob: child.dob });
+                }
+            } else {
+                // Add any newly entered children to the existing family
+                for (const child of selectedChildren.filter(c => c.isNew)) {
+                    await addStudent({ familyId: selectedFamily.id, childName: child.name, childDob: child.dob });
+                }
+            }
+        } catch (famErr) {
+            console.warn('Family record save failed (non-fatal):', famErr);
+        }
 
+        // Build itemized receipt
+        const confirmedSorted = confirmedDates.slice().sort((a, b) => a.date.localeCompare(b.date));
         let receiptHtml = '';
         if (confirmedSorted.length) {
             const receiptRows = confirmedSorted.map(({ date, dayType }) => {
-                const typeLabel = dayType === 'half' ? 'Half Day' : 'Full Day';
-                const rate      = dayType === 'half' ? selectedRoom.halfDayRate : selectedRoom.fullDayRate;
+                const typeLabel  = dayType === 'half' ? 'Half Day' : 'Full Day';
+                const lineTotal  = results.reduce((s, { child }) =>
+                    s + (dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0)), 0);
                 return `<tr>
                     <td>${friendlyDate(date)}</td>
                     <td>${typeLabel}</td>
-                    <td class="receipt-amount">$${rate}</td>
+                    <td class="receipt-amount">$${lineTotal}</td>
                 </tr>`;
             }).join('');
 
+            const grandTotal = results.reduce((s, { child }) =>
+                confirmedSorted.reduce((ss, { dayType }) =>
+                    ss + (dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0)), s), 0);
+
             receiptHtml = `
                 <table class="receipt-table">
-                    <thead>
-                        <tr><th>Date</th><th>Type</th><th>Amount</th></tr>
-                    </thead>
+                    <thead><tr><th>Date</th><th>Type</th><th>Amount</th></tr></thead>
                     <tbody>${receiptRows}</tbody>
                     <tfoot>
                         <tr class="receipt-total-row">
                             <td colspan="2"><strong>Total</strong></td>
-                            <td class="receipt-amount"><strong>$${total.toFixed(2)}</strong></td>
+                            <td class="receipt-amount"><strong>$${grandTotal.toFixed(2)}</strong></td>
                         </tr>
                     </tfoot>
                 </table>`;
         }
 
-        let details = `<p>Registration for <strong>${childName}</strong> in <strong>${selectedRoom.label}</strong>.</p>`;
+        const childList = results
+            .map(({ child }) => `<strong>${escStr(child.name)}</strong> (${child.room.label})`)
+            .join(', ');
+
+        let details = `<p>Registration for ${childList}.</p>`;
         details += receiptHtml;
         if (win.mode === 'waitlist') {
             details += `<p class="receipt-waitlist-note">⏳ <strong>Waitlist submission</strong> — all ${waitlistDates.length} day(s) are pending admin approval. We'll contact you at <strong>${parentEmail}</strong> once approved.</p>`;
         } else if (waitlistDates.length) {
             details += `<p class="receipt-waitlist-note"><strong>${waitlistDates.length}</strong> day(s) on waitlist — we'll contact you at <strong>${parentEmail}</strong> if a spot opens.</p>`;
         }
+        if (errors.length) {
+            details += `<p class="receipt-error-note">⚠️ Note: ${escStr(errors.join('; '))}</p>`;
+        }
 
         document.getElementById('successDetails').innerHTML = details;
         document.getElementById('successModal').style.display = 'flex';
 
-        // Reset form
+        // Reset form (keep family selected so parent can register next child)
         document.getElementById('registrationForm').reset();
-        selectedRoom  = null;
-        selectedDates = new Map();
-        capacityCache = {};
-        document.getElementById('calendarWrapper').classList.add('hidden');
-        document.getElementById('calendarHint').classList.remove('hidden');
-        document.querySelectorAll('.room-option').forEach(label => {
-            label.classList.remove('locked');
-            label.querySelector('input').disabled = false;
-            label.querySelector('.age-lock-msg')?.remove();
-        });
+        selectedChildren = [];
+        selectedDates    = new Map();
+        capacityCache    = {};
+        hideCalendar();
+        renderChildSection();   // Re-render family's child cards (unchecked)
         renderSelectedDates();
 
-        // Update UI to show submitted state (Item 7)
+        // Update banner/button
         const postBanner = document.getElementById('regWindowBanner');
         if (postBanner) {
             postBanner.className = 'reg-window-banner submitted';
@@ -708,7 +989,7 @@ async function handleSubmit(e) {
             showToast('❌ Error: ' + (err?.message || JSON.stringify(err)));
         }
         btn.disabled    = false;
-        btn.textContent = 'Submit Registration';
+        btn.textContent = win.mode === 'waitlist' ? 'Submit to Waitlist' : 'Submit Registration';
     }
 }
 

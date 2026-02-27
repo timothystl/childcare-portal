@@ -46,6 +46,7 @@ async function initDashboard() {
     setupClosures();
     setupMonthlyReport();
     setupWindowOverride();
+    setupFamilies();
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
     document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
@@ -730,6 +731,234 @@ function baseRow(reg, roomLabel, date, status, dayType) {
         'Rate':        date && rate ? `$${rate}` : '',
         'Total Bill':  `$${bill.toFixed(2)}`,
     };
+}
+
+// ============================================================
+// FAMILIES & STUDENTS  (Items 1, 8, 9)
+// ============================================================
+let importRows = [];   // rows parsed from uploaded file
+
+function setupFamilies() {
+    const fileInput  = document.getElementById('familiesFileInput');
+    const importBtn  = document.getElementById('importFamiliesBtn');
+    const refreshBtn = document.getElementById('refreshFamiliesBtn');
+
+    fileInput?.addEventListener('change', onFamiliesFileChange);
+    importBtn?.addEventListener('click', onImportFamilies);
+    refreshBtn?.addEventListener('click', loadFamilies);
+}
+
+async function onFamiliesFileChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById('familiesFileName').textContent = file.name;
+    document.getElementById('importFamiliesBtn').disabled = true;
+    document.getElementById('importPreview').innerHTML =
+        '<p class="empty-hint">Parsing file…</p>';
+    importRows = [];
+
+    try {
+        const rawRows = await parseUploadedFile(file);
+        if (!rawRows.length) {
+            document.getElementById('importPreview').innerHTML =
+                '<p class="empty-hint">No data rows found in the file.</p>';
+            return;
+        }
+
+        importRows = rawRows.map(normalizeImportRow).filter(r => r.parentName);
+
+        if (!importRows.length) {
+            document.getElementById('importPreview').innerHTML =
+                '<p class="import-error">Could not detect parent name column. ' +
+                'Expected headers like "Parent Name", "Guardian", or "First Name" + "Last Name".</p>';
+            return;
+        }
+
+        renderImportPreview(importRows);
+        document.getElementById('importFamiliesBtn').disabled = false;
+    } catch (err) {
+        document.getElementById('importPreview').innerHTML =
+            `<p class="import-error">Error reading file: ${escHtml(err.message)}</p>`;
+        console.error('File parse error:', err);
+    }
+}
+
+function parseUploadedFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const wb   = XLSX.read(data, { type: 'array', cellDates: true });
+                const ws   = wb.Sheets[wb.SheetNames[0]];
+                // Use raw: false so dates come as strings; defval: '' fills blanks
+                const rows = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' });
+                resolve(rows);
+            } catch (err) { reject(err); }
+        };
+        reader.onerror = () => reject(new Error('File read failed.'));
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+// Auto-detect ProCare / custom column mapping
+function normalizeImportRow(rawRow) {
+    const keys     = Object.keys(rawRow);
+    const findCol  = (...keywords) => {
+        const key = keys.find(k =>
+            keywords.some(kw => k.toLowerCase().replace(/[^a-z ]/g, ' ').includes(kw))
+        );
+        return key ? String(rawRow[key] ?? '').trim() : '';
+    };
+
+    // Parent name — "parent name", "guardian", "primary contact", or first+last
+    let parentName = findCol('parent name', 'guardian name', 'primary contact');
+    if (!parentName) {
+        const f = findCol('parent first', 'guardian first');
+        const l = findCol('parent last',  'guardian last');
+        if (f && l) parentName = `${f} ${l}`.trim();
+        else if (f) parentName = f;
+    }
+    // Fall back to generic first+last only if no other match found
+    if (!parentName) {
+        const f = findCol('first name', 'first');
+        const l = findCol('last name',  'last');
+        if (f && l) parentName = `${f} ${l}`.trim();
+        else if (f) parentName = f;
+    }
+
+    const parentEmail = findCol('email', 'e-mail', 'e mail');
+    const parentPhone = findCol('phone', 'cell', 'mobile', 'telephone');
+
+    // Child name — "student", "child name"
+    let childName = findCol('student name', 'child name', 'student first name');
+    if (!childName) {
+        const f = findCol('student first', 'child first');
+        const l = findCol('student last',  'child last');
+        if (f && l) childName = `${f} ${l}`.trim();
+        else if (f) childName = f;
+    }
+
+    const childDobRaw = findCol('dob', 'birth date', 'birthday', 'date of birth');
+    const childDob    = normalizeDobStr(childDobRaw);
+
+    return { parentName, parentEmail, parentPhone, childName, childDob };
+}
+
+function normalizeDobStr(raw) {
+    if (!raw) return null;
+    const str = String(raw).trim();
+    if (!str) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    return null;
+}
+
+function renderImportPreview(rows) {
+    const preview   = rows.slice(0, 10);
+    const remaining = rows.length - preview.length;
+
+    const tableRows = preview.map(r => `
+        <tr>
+            <td>${escHtml(r.parentName)}</td>
+            <td>${escHtml(r.parentEmail)}</td>
+            <td>${escHtml(r.parentPhone)}</td>
+            <td>${escHtml(r.childName)}</td>
+            <td>${escHtml(r.childDob || '')}</td>
+        </tr>`).join('');
+
+    document.getElementById('importPreview').innerHTML = `
+        <p class="import-preview-count">
+            <strong>${rows.length}</strong> record${rows.length !== 1 ? 's' : ''} detected
+            ${remaining > 0 ? ` (showing first 10)` : ''}
+        </p>
+        <div class="table-wrapper import-table-wrap">
+            <table class="import-preview-table">
+                <thead>
+                    <tr>
+                        <th>Parent Name</th><th>Email</th><th>Phone</th>
+                        <th>Child Name</th><th>Child DOB</th>
+                    </tr>
+                </thead>
+                <tbody>${tableRows}</tbody>
+            </table>
+        </div>`;
+}
+
+async function onImportFamilies() {
+    if (!importRows.length) return;
+    const btn = document.getElementById('importFamiliesBtn');
+    btn.disabled    = true;
+    btn.textContent = 'Importing…';
+    try {
+        const { familiesImported, studentsImported } = await importFamiliesData(importRows);
+        document.getElementById('importPreview').innerHTML =
+            `<p class="import-success">
+                ✅ Import complete — <strong>${familiesImported}</strong> families,
+                <strong>${studentsImported}</strong> students.
+             </p>`;
+        importRows = [];
+        document.getElementById('familiesFileInput').value = '';
+        document.getElementById('familiesFileName').textContent = 'No file chosen';
+        await loadFamilies();
+    } catch (err) {
+        alert('Import failed: ' + err.message);
+        btn.disabled    = false;
+        btn.textContent = '⬆ Import';
+    }
+}
+
+async function loadFamilies() {
+    const container = document.getElementById('familiesList');
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const families = await fetchAllFamilies();
+        renderFamiliesList(families);
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Failed to load families: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function renderFamiliesList(families) {
+    const container = document.getElementById('familiesList');
+    if (!families.length) {
+        container.innerHTML = '<p class="empty-hint">No families yet. Import from Excel or submit a registration.</p>';
+        return;
+    }
+    container.innerHTML = `
+        <p class="families-count">${families.length} famil${families.length !== 1 ? 'ies' : 'y'}</p>
+        <ul class="families-list">
+            ${families.map(f => {
+                const kids  = (f.students || []);
+                const since = f.created_at
+                    ? new Date(f.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                    : '';
+                return `
+                    <li class="family-row">
+                        <div class="family-row-top">
+                            <span class="family-row-name">${escHtml(f.parent_name)}</span>
+                            ${f.pin ? `<span class="family-pin-badge">PIN: ${f.pin}</span>` : ''}
+                            <span class="family-row-meta">${escHtml(f.parent_email || '')}${f.parent_email && f.parent_phone ? ' &middot; ' : ''}${escHtml(f.parent_phone || '')}</span>
+                            ${since ? `<span class="family-row-since">Since ${since}</span>` : ''}
+                        </div>
+                        ${kids.length ? `
+                            <ul class="family-students">
+                                ${kids.map(s => {
+                                    const dobStr = s.child_dob
+                                        ? new Date(s.child_dob + 'T00:00:00').toLocaleDateString('en-US',
+                                            { month: 'short', day: 'numeric', year: 'numeric' })
+                                        : '';
+                                    return `<li class="family-student-item">
+                                        <span class="student-bullet">└</span>
+                                        <span class="student-name">${escHtml(s.child_name)}</span>
+                                        ${dobStr ? `<span class="student-dob">${dobStr}</span>` : ''}
+                                    </li>`;
+                                }).join('')}
+                            </ul>` : ''}
+                    </li>`;
+            }).join('')}
+        </ul>`;
 }
 
 // ============================================================

@@ -224,19 +224,19 @@ async function upsertSetting(key, value) {
 // Returns true if this email already has confirmed dates in the given month.
 // monthKey format: 'YYYY-MM'
 // ============================================================
-async function checkExistingRegistration(email, monthKey) {
+// childName is optional — when provided, only checks that specific child's registrations
+async function checkExistingRegistration(email, monthKey, childName = null) {
     if (!sbClient) return false;
     try {
-        // Get all registration IDs for this email
-        const { data: regs, error: regErr } = await sbClient
+        let regsQuery = sbClient
             .from('registrations')
             .select('id')
             .eq('parent_email', email);
+        if (childName) regsQuery = regsQuery.eq('child_name', childName);
+        const { data: regs, error: regErr } = await regsQuery;
         if (regErr || !regs || !regs.length) return false;
 
         const ids = regs.map(r => r.id);
-
-        // Check if any confirmed dates in target month exist
         const { data: dates, error: datesErr } = await sbClient
             .from('registration_dates')
             .select('id')
@@ -250,4 +250,120 @@ async function checkExistingRegistration(email, monthKey) {
     } catch {
         return false;
     }
+}
+
+// ============================================================
+// FAMILIES & STUDENTS  (Items 1, 8, 9)
+// ============================================================
+async function searchFamilies(query) {
+    if (!sbClient || !query) return [];
+    const { data, error } = await sbClient
+        .from('families')
+        .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob)')
+        .or(`parent_name.ilike.%${query}%,parent_email.ilike.%${query}%`)
+        .order('parent_name')
+        .limit(8);
+    if (error) { console.error('searchFamilies:', error); return []; }
+    return data || [];
+}
+
+async function lookupFamilyByPin(pin) {
+    if (!sbClient) return null;
+    const { data, error } = await sbClient
+        .from('families')
+        .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob)')
+        .eq('pin', parseInt(pin, 10))
+        .maybeSingle();
+    if (error) { console.error('lookupFamilyByPin:', error); return null; }
+    return data || null;
+}
+
+async function createFamily({ parentName, parentEmail, parentPhone }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+
+    // If email provided, upsert by email
+    if (parentEmail) {
+        const { data: existing } = await sbClient
+            .from('families').select('id, pin')
+            .eq('parent_email', parentEmail).maybeSingle();
+        if (existing) {
+            await sbClient.from('families')
+                .update({ parent_name: parentName, parent_phone: parentPhone || '' })
+                .eq('id', existing.id);
+            const { data: updated } = await sbClient
+                .from('families')
+                .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob)')
+                .eq('id', existing.id).single();
+            return updated;
+        }
+    }
+
+    // Generate unique 4-digit PIN
+    let pin = null;
+    for (let i = 0; i < 10; i++) {
+        const candidate = Math.floor(1000 + Math.random() * 9000);
+        const { data: exists } = await sbClient
+            .from('families').select('id').eq('pin', candidate).maybeSingle();
+        if (!exists) { pin = candidate; break; }
+    }
+
+    const { data, error } = await sbClient
+        .from('families')
+        .insert({ parent_name: parentName, parent_email: parentEmail || '', parent_phone: parentPhone || '', pin })
+        .select('id, parent_name, parent_email, parent_phone, pin')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function addStudent({ familyId, childName, childDob }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    // Skip if already exists
+    const { data: existing } = await sbClient
+        .from('students').select('id')
+        .eq('family_id', familyId).eq('child_name', childName).maybeSingle();
+    if (existing) return existing;
+    const { data, error } = await sbClient
+        .from('students')
+        .insert({ family_id: familyId, child_name: childName, child_dob: childDob || null })
+        .select().single();
+    if (error) throw error;
+    return data;
+}
+
+async function fetchAllFamilies() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('families')
+        .select('id, parent_name, parent_email, parent_phone, pin, created_at, students(id, child_name, child_dob)')
+        .order('parent_name');
+    if (error) throw error;
+    return data || [];
+}
+
+async function importFamiliesData(rows) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    // Group rows by email (or name if no email)
+    const byKey = {};
+    rows.forEach(r => {
+        if (!r.parentName) return;
+        const key = (r.parentEmail || r.parentName).toLowerCase().trim();
+        if (!byKey[key]) {
+            byKey[key] = { parentName: r.parentName, parentEmail: r.parentEmail || '', parentPhone: r.parentPhone || '', children: [] };
+        }
+        if (r.childName) byKey[key].children.push({ childName: r.childName, childDob: r.childDob || null });
+    });
+
+    let familiesImported = 0, studentsImported = 0;
+    for (const group of Object.values(byKey)) {
+        try {
+            const fam = await createFamily({ parentName: group.parentName, parentEmail: group.parentEmail, parentPhone: group.parentPhone });
+            familiesImported++;
+            for (const child of group.children) {
+                await addStudent({ familyId: fam.id, childName: child.childName, childDob: child.childDob });
+                studentsImported++;
+            }
+        } catch (e) { console.warn('Import row failed:', e); }
+    }
+    return { familiesImported, studentsImported };
 }

@@ -674,6 +674,323 @@ main { padding: 32px 36px; }
 .room-hint { margin-bottom: 14px; }
 
 /* ============================================================
+   BUTTON VARIANTS
+   ============================================================ */
+.btn-secondary {
+    background: #fff;
+    color: #667eea;
+    border: 2px solid #667eea;
+    padding: 10px 20px;
+    font-size: .95em;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background .2s, color .2s;
+    white-space: nowrap;
+}
+.btn-secondary:hover { background: #667eea; color: #fff; }
+.btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-ghost {
+    background: none;
+    color: #888;
+    border: 1.5px solid #ddd;
+    padding: 8px 16px;
+    font-size: .9em;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color .2s, color .2s;
+}
+.btn-ghost:hover { border-color: #667eea; color: #667eea; }
+
+.btn-sm { padding: 5px 12px !important; font-size: .82em !important; }
+
+/* ============================================================
+   FAMILY LOOKUP SECTION  (Item 9)
+   ============================================================ */
+.lookup-section { background: #f8f9ff; border-radius: 10px; padding: 24px; margin-bottom: 12px; }
+.lookup-section h2 { margin-bottom: 8px; }
+
+.lookup-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.lookup-search-row,
+.lookup-pin-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex: 1 1 200px;
+}
+
+.lookup-search-row input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 7px;
+    font-size: .95em;
+    transition: border-color .2s;
+}
+.lookup-search-row input:focus { outline: none; border-color: #667eea; }
+
+.lookup-divider {
+    color: #bbb;
+    font-size: .88em;
+    padding: 0 4px;
+    white-space: nowrap;
+}
+
+.pin-input {
+    width: 100px;
+    padding: 10px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 7px;
+    font-size: 1.1em;
+    font-weight: 700;
+    letter-spacing: .15em;
+    text-align: center;
+    transition: border-color .2s;
+}
+.pin-input:focus { outline: none; border-color: #667eea; }
+
+/* Search results dropdown */
+#familySearchResults {
+    margin-top: 8px;
+    width: 100%;
+}
+
+.family-result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 11px 14px;
+    background: #fff;
+    border: 1.5px solid #d6d0f5;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 6px;
+    transition: border-color .2s, background .2s;
+    gap: 10px;
+}
+.family-result-item:hover { border-color: #667eea; background: #f3f1ff; }
+
+.family-result-name { font-weight: 600; color: #333; }
+.family-result-meta { color: #888; font-size: .85em; text-align: right; }
+
+.lookup-searching,
+.lookup-error,
+.lookup-no-results {
+    padding: 10px 14px;
+    border-radius: 7px;
+    font-size: .88em;
+    margin-top: 4px;
+}
+.lookup-searching  { color: #667eea; background: #f3f1ff; }
+.lookup-error      { color: #e53e3e; background: #fff5f5; }
+.lookup-no-results { color: #7b4a00; background: #fffbeb; }
+
+/* Selected family banner */
+.family-selected-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    padding: 10px 16px;
+    background: #f0fff4;
+    border: 1.5px solid #68d391;
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+.family-selected-icon { color: #48bb78; font-size: 1.1em; }
+.family-selected-name { font-weight: 600; color: #276749; flex: 1; }
+.fam-pin-badge {
+    background: #48bb78;
+    color: #fff;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: .78em;
+    font-weight: 700;
+    letter-spacing: .04em;
+}
+
+/* Pre-filled read-only inputs */
+input.prefilled {
+    background: #f0fff4;
+    border-color: #68d391 !important;
+    color: #276749;
+    font-weight: 500;
+}
+
+/* ============================================================
+   CHILDREN SECTION  (Item 8)
+   ============================================================ */
+.child-select-label {
+    font-size: .93em;
+    color: #555;
+    margin-bottom: 12px;
+}
+
+/* Child cards grid (existing family children as checkboxes) */
+.child-cards-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.child-card-label {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 14px 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    cursor: pointer;
+    min-width: 160px;
+    max-width: 220px;
+    background: #fff;
+    transition: border-color .2s, background .2s, box-shadow .2s;
+    position: relative;
+}
+.child-card-label:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(102,126,234,.15);
+}
+.child-card-label.selected {
+    border-color: #667eea;
+    background: #f3f1ff;
+}
+
+/* Hide native checkbox, show custom via card border */
+.child-card-checkbox { display: none; }
+
+.child-card-name {
+    font-weight: 600;
+    color: #333;
+    font-size: .97em;
+}
+.child-card-dob {
+    color: #999;
+    font-size: .8em;
+}
+.child-card-room {
+    display: inline-block;
+    margin-top: 4px;
+    background: #f3f1ff;
+    color: #667eea;
+    padding: 2px 9px;
+    border-radius: 12px;
+    font-size: .78em;
+    font-weight: 600;
+}
+.child-card-label.selected .child-card-room {
+    background: #667eea;
+    color: #fff;
+}
+
+/* New child chips (added via "Add a Child" form) */
+.selected-children-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.child-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    background: #f3f1ff;
+    border: 1.5px solid #667eea;
+    border-radius: 20px;
+    font-size: .88em;
+}
+.child-chip-name { font-weight: 600; color: #333; }
+.child-chip-room {
+    color: #667eea;
+    font-size: .82em;
+}
+.child-chip-remove {
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 1.1em;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 2px;
+    transition: color .2s;
+}
+.child-chip-remove:hover { color: #e53e3e; }
+
+/* Room auto-assignment label under DOB */
+.child-room-assign {
+    margin-top: 6px;
+    font-size: .88em;
+    color: #667eea;
+    padding: 4px 10px;
+    background: #f3f1ff;
+    border-radius: 6px;
+    display: inline-block;
+}
+.child-room-assign.error { color: #e53e3e; background: #fff5f5; }
+
+/* Add-child inline form */
+.add-child-form {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1.5px dashed #e0e0e0;
+}
+.add-child-heading {
+    font-size: .92em;
+    font-weight: 600;
+    color: #888;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.field-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 14px;
+    align-items: end;
+}
+.form-group-btn { flex-direction: column; }
+
+/* ============================================================
+   PICKER SUBTITLE  (multi-child combined rate note)
+   ============================================================ */
+.picker-subtitle {
+    font-size: .78em;
+    color: #888;
+    margin-bottom: 10px;
+    margin-top: -6px;
+}
+
+/* ============================================================
+   RATE BREAKDOWN  (per-child in date list)
+   ============================================================ */
+.rate-breakdown {
+    display: block;
+    font-size: .75em;
+    color: #999;
+    margin-top: 2px;
+}
+
+/* ============================================================
+   RECEIPT ERROR NOTE
+   ============================================================ */
+.receipt-error-note {
+    font-size: .82em !important;
+    color: #e53e3e !important;
+    margin-top: 8px !important;
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width: 600px) {
@@ -687,4 +1004,11 @@ main { padding: 32px 36px; }
     .spot-badge { display: none; }
     .date-row { flex-direction: column; align-items: flex-start; }
     .date-controls { width: 100%; justify-content: space-between; }
+    .lookup-row { flex-direction: column; }
+    .lookup-search-row,
+    .lookup-pin-row { width: 100%; }
+    .field-grid-3 { grid-template-columns: 1fr 1fr; }
+    .field-grid-3 .form-group-btn { grid-column: 1 / -1; }
+    .child-cards-row { gap: 8px; }
+    .child-card-label { min-width: 130px; }
 }

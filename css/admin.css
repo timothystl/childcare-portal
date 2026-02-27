@@ -528,6 +528,209 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 
 /* ============================================================
+   FAMILIES & STUDENTS SECTION  (Items 1, 8, 9)
+   ============================================================ */
+
+/* File import row */
+.families-import-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+/* Hidden native file input, label acts as the button */
+.hidden-file-input { display: none; }
+
+.file-upload-label {
+    display: inline-block;
+    background: #fff;
+    color: #667eea;
+    border: 2px solid #667eea;
+    padding: 9px 18px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: .9em;
+    font-weight: 600;
+    transition: background .2s, color .2s;
+    white-space: nowrap;
+}
+.file-upload-label:hover { background: #f3f1ff; }
+
+.families-file-name {
+    color: #888;
+    font-size: .88em;
+    flex: 1;
+    min-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Import preview area */
+.import-preview {
+    margin-bottom: 24px;
+}
+
+.import-preview-count {
+    font-size: .9em;
+    color: #555;
+    margin-bottom: 10px;
+}
+
+.import-table-wrap {
+    max-width: 800px;
+}
+
+.import-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    font-size: .85em;
+}
+.import-preview-table thead th {
+    background: #f3f1ff;
+    color: #667eea;
+    padding: 9px 12px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #d6d0f5;
+    white-space: nowrap;
+}
+.import-preview-table tbody tr { border-bottom: 1px solid #f0f0f0; }
+.import-preview-table tbody tr:hover { background: #fafaf5; }
+.import-preview-table tbody td { padding: 8px 12px; color: #444; }
+
+.import-success {
+    padding: 12px 16px;
+    background: #f0fff4;
+    border: 1.5px solid #68d391;
+    border-radius: 7px;
+    color: #276749;
+    font-size: .9em;
+}
+.import-error {
+    padding: 10px 14px;
+    background: #fff5f5;
+    border: 1.5px solid #fc8181;
+    border-radius: 7px;
+    color: #9b2c2c;
+    font-size: .88em;
+}
+
+/* Family list header */
+.families-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    padding-top: 4px;
+    border-top: 1.5px solid #eee;
+    padding-top: 18px;
+}
+.families-list-header h3 {
+    font-size: 1em;
+    color: #333;
+    font-weight: 700;
+}
+
+.families-count {
+    font-size: .85em;
+    color: #888;
+    margin-bottom: 12px;
+}
+
+/* Family list items */
+.families-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 600px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.family-row {
+    background: #fff;
+    border-radius: 9px;
+    padding: 14px 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    border-left: 4px solid #667eea;
+}
+
+.family-row-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+
+.family-row-name {
+    font-weight: 700;
+    color: #333;
+    font-size: .97em;
+}
+
+.family-pin-badge {
+    background: #667eea;
+    color: #fff;
+    padding: 2px 9px;
+    border-radius: 12px;
+    font-size: .74em;
+    font-weight: 700;
+    letter-spacing: .04em;
+}
+
+.family-row-meta {
+    color: #888;
+    font-size: .84em;
+    flex: 1;
+}
+
+.family-row-since {
+    color: #bbb;
+    font-size: .78em;
+    white-space: nowrap;
+}
+
+/* Students nested list */
+.family-students {
+    list-style: none;
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding-left: 8px;
+}
+
+.family-student-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .86em;
+    color: #555;
+}
+
+.student-bullet {
+    color: #bbb;
+    font-size: .9em;
+    flex-shrink: 0;
+}
+
+.student-name {
+    font-weight: 500;
+    color: #444;
+}
+
+.student-dob {
+    color: #aaa;
+    font-size: .9em;
+}
+
+/* ============================================================
    RESPONSIVE ADMIN
    ============================================================ */
 @media (max-width: 700px) {
@@ -535,4 +738,6 @@ tr.pending-approval:hover { background: #fef3c7; }
     .filters, .capacity-section, .table-section { padding: 16px; }
     .header-actions { gap: 6px; }
     .btn-secondary, .btn-ghost, .btn-primary { padding: 8px 12px; font-size: .82em; }
+    .families-import-row { gap: 8px; }
+    .families-list { max-height: 400px; }
 }

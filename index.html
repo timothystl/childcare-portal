@@ -14,14 +14,43 @@
         </header>
 
         <main>
-            <!-- Registration window status banner (Items 6 & 7) -->
+            <!-- Registration window status banner -->
             <div id="regWindowBanner" class="reg-window-banner"></div>
 
             <form id="registrationForm" novalidate>
 
-                <!-- Step 1: Parent & Child Info -->
+                <!-- Family Lookup (no step badge) -->
+                <section class="form-section lookup-section">
+                    <h2>👨‍👩‍👧 Returning Family?</h2>
+                    <p class="hint">Search for your family to pre-fill your information, or fill in the form below to register as a new family.</p>
+
+                    <div class="lookup-row">
+                        <div class="lookup-search-row">
+                            <input type="text" id="familySearchInput" placeholder="Search by name or email…" autocomplete="off">
+                            <button type="button" id="familySearchBtn" class="btn-secondary">Search</button>
+                        </div>
+                        <div class="lookup-divider"><span>or</span></div>
+                        <div class="lookup-pin-row">
+                            <input type="text" id="familyPinInput" placeholder="4-digit PIN" maxlength="4"
+                                   pattern="[0-9]{4}" inputmode="numeric" autocomplete="off" class="pin-input">
+                            <button type="button" id="familyPinBtn" class="btn-secondary">Look Up</button>
+                        </div>
+                    </div>
+
+                    <div id="familySearchResults"></div>
+
+                    <!-- Shown once a family is selected -->
+                    <div id="familySelectedBar" class="family-selected-bar hidden">
+                        <span class="family-selected-icon">✓</span>
+                        <span id="selectedFamilyName" class="family-selected-name"></span>
+                        <span id="selectedFamilyPin" class="fam-pin-badge"></span>
+                        <button type="button" id="changeFamilyBtn" class="btn-ghost btn-sm">Change</button>
+                    </div>
+                </section>
+
+                <!-- Step 1: Parent Information -->
                 <section class="form-section">
-                    <h2><span class="step-badge">1</span> Parent &amp; Child Information</h2>
+                    <h2><span class="step-badge">1</span> Parent &amp; Guardian Information</h2>
                     <div class="field-grid">
                         <div class="form-group">
                             <label for="parentName">Parent / Guardian Name <span class="req">*</span></label>
@@ -35,31 +64,42 @@
                             <label for="parentPhone">Phone <span class="req">*</span></label>
                             <input type="tel" id="parentPhone" required placeholder="(555) 000-0000">
                         </div>
-                        <div class="form-group">
-                            <label for="childName">Child's Name <span class="req">*</span></label>
-                            <input type="text" id="childName" required placeholder="Alex Smith">
-                        </div>
-                        <div class="form-group">
-                            <label for="childDob">Child's Date of Birth <span class="req">*</span></label>
-                            <input type="date" id="childDob" required max="">
-                        </div>
                     </div>
                 </section>
 
-                <!-- Step 2: Room Selection -->
+                <!-- Step 2: Children -->
                 <section class="form-section">
-                    <h2><span class="step-badge">2</span> Select Age Group / Room</h2>
-                    <p class="hint room-hint">Enter your child's date of birth above — the correct room will be highlighted automatically.</p>
-                    <div id="roomGrid" class="room-grid">
-                        <!-- Rendered by app.js -->
-                        <p class="loading-text">Loading rooms…</p>
+                    <h2><span class="step-badge">2</span> Children</h2>
+                    <p class="hint">All selected children will share the same care days. Rooms are assigned automatically based on date of birth.</p>
+
+                    <!-- Existing family children (checkboxes) + new-child chips rendered here by app.js -->
+                    <div id="childSection"></div>
+
+                    <!-- Add new child form -->
+                    <div class="add-child-form">
+                        <h3 class="add-child-heading">Add a Child</h3>
+                        <div class="field-grid field-grid-3">
+                            <div class="form-group">
+                                <label for="newChildName">Child's Name</label>
+                                <input type="text" id="newChildName" placeholder="Alex Smith">
+                            </div>
+                            <div class="form-group">
+                                <label for="newChildDob">Date of Birth</label>
+                                <input type="date" id="newChildDob" max="">
+                            </div>
+                            <div class="form-group form-group-btn">
+                                <label>&nbsp;</label>
+                                <button type="button" id="addChildBtn" class="btn-secondary">+ Add Child</button>
+                            </div>
+                        </div>
+                        <div id="newChildRoomAssign" class="child-room-assign hidden"></div>
                     </div>
                 </section>
 
                 <!-- Step 3: Calendar -->
                 <section class="form-section">
                     <h2><span class="step-badge">3</span> Select Care Days</h2>
-                    <p class="hint" id="calendarHint">Select a room above to enable the calendar.</p>
+                    <p class="hint" id="calendarHint">Add at least one child above to enable the calendar.</p>
 
                     <div id="calendarWrapper" class="calendar-wrapper hidden">
                         <div class="calendar-controls">
@@ -108,11 +148,7 @@
 
     <!-- Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase.js?v=9"></script>
-    <script src="js/app.js?v=12"></script>
-    <script>
-        // Prevent future dates in the DOB picker
-        document.getElementById('childDob').max = new Date().toISOString().split('T')[0];
-    </script>
+    <script src="js/supabase.js?v=10"></script>
+    <script src="js/app.js?v=13"></script>
 </body>
 </html>

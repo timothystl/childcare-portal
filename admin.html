@@ -115,6 +115,28 @@
             <p id="overrideStatus" class="override-status"></p>
         </section>
 
+        <!-- Families & Students -->
+        <section class="admin-section" id="familiesSection">
+            <h2>👨‍👩‍👧 Families &amp; Students</h2>
+            <p class="section-desc">Import from a ProCare or custom Excel / CSV file, or browse the family directory used for parent look-up.</p>
+
+            <div class="families-import-row">
+                <label class="file-upload-label" for="familiesFileInput">📂 Choose File</label>
+                <input type="file" id="familiesFileInput" accept=".xlsx,.xls,.csv" class="hidden-file-input">
+                <span id="familiesFileName" class="families-file-name">No file chosen</span>
+                <button id="importFamiliesBtn" class="btn-primary" disabled>⬆ Import</button>
+            </div>
+            <div id="importPreview" class="import-preview"></div>
+
+            <div class="families-list-header">
+                <h3>Family Directory</h3>
+                <button id="refreshFamiliesBtn" class="btn-secondary">&#8635; Refresh</button>
+            </div>
+            <div id="familiesList">
+                <p class="empty-hint">Click Refresh to load families.</p>
+            </div>
+        </section>
+
         <!-- Closed Days -->
         <section class="admin-section">
             <h2>🚫 Closed Days</h2>
@@ -166,7 +188,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=9"></script>
-    <script src="js/admin.js?v=7"></script>
+    <script src="js/supabase.js?v=10"></script>
+    <script src="js/admin.js?v=8"></script>
 </body>
 </html>
