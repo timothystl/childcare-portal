@@ -95,6 +95,7 @@ async function loadRegistrations() {
         '<tr><td colspan="10" class="loading-cell">Loading…</td></tr>';
     try {
         allRegistrations = await fetchAllRegistrations();
+        populateCareMonthFilter();
         renderTable(allRegistrations);
         renderCapacityOverview();
         document.getElementById('regCount').textContent =
@@ -104,6 +105,31 @@ async function loadRegistrations() {
         document.getElementById('regTableBody').innerHTML =
             '<tr><td colspan="10" class="loading-cell error">Failed to load — check Supabase config.</td></tr>';
     }
+}
+
+// Populate care-month dropdown with all months present in registration_dates
+function populateCareMonthFilter() {
+    const sel = document.getElementById('careMonthFilter');
+    const current = sel.value; // preserve selection if already set
+    while (sel.options.length > 1) sel.remove(1);
+
+    const months = new Set();
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (d.care_date) months.add(d.care_date.substring(0, 7));
+        });
+    });
+
+    [...months].sort().forEach(m => {
+        const [y, mo] = m.split('-').map(Number);
+        const label = MONTH_NAMES_ADMIN[mo - 1] + ' ' + y;
+        const opt = document.createElement('option');
+        opt.value       = m;
+        opt.textContent = label;
+        sel.appendChild(opt);
+    });
+
+    if (current) sel.value = current; // restore selection
 }
 
 // ============================================================
@@ -611,25 +637,28 @@ async function loadClosureList() {
 // FILTERS
 // ============================================================
 function setupFilters() {
-    ['searchInput', 'roomFilter', 'statusFilter'].forEach(id => {
+    ['searchInput', 'roomFilter', 'careMonthFilter', 'statusFilter'].forEach(id => {
         document.getElementById(id).addEventListener('input', applyFilters);
     });
 }
 
 function applyFilters() {
-    const search = document.getElementById('searchInput').value.toLowerCase();
-    const room   = document.getElementById('roomFilter').value;
-    const status = document.getElementById('statusFilter').value;
+    const search    = document.getElementById('searchInput').value.toLowerCase();
+    const room      = document.getElementById('roomFilter').value;
+    const careMonth = document.getElementById('careMonthFilter').value;   // 'YYYY-MM' or ''
+    const status    = document.getElementById('statusFilter').value;
 
     const filtered = allRegistrations.filter(reg => {
         const matchSearch = !search ||
-            reg.parent_name.toLowerCase().includes(search)  ||
-            reg.parent_email.toLowerCase().includes(search) ||
-            reg.child_name.toLowerCase().includes(search);
-        const matchRoom   = !room   || reg.room_id === room;
-        const matchStatus = !status || (reg.registration_dates || []).some(d =>
+            (reg.parent_name  || '').toLowerCase().includes(search) ||
+            (reg.parent_email || '').toLowerCase().includes(search) ||
+            (reg.child_name   || '').toLowerCase().includes(search);
+        const matchRoom      = !room      || reg.room_id === room;
+        const matchCareMonth = !careMonth || (reg.registration_dates || []).some(d =>
+            d.care_date && d.care_date.startsWith(careMonth));
+        const matchStatus    = !status    || (reg.registration_dates || []).some(d =>
             status === 'confirmed' ? !d.waitlisted : d.waitlisted);
-        return matchSearch && matchRoom && matchStatus;
+        return matchSearch && matchRoom && matchCareMonth && matchStatus;
     });
     renderTable(filtered);
 }

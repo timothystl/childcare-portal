@@ -147,7 +147,12 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
         const { error: datesError } = await sbClient
             .from('registration_dates')
             .insert(dateRows);
-        if (datesError) throw datesError;
+        if (datesError) {
+            // Rollback: remove the registration row we just created so it doesn't
+            // show as a ghost/orphan (no dates) on future duplicate checks.
+            await sbClient.from('registrations').delete().eq('id', reg.id);
+            throw datesError;
+        }
     }
 
     return reg;
@@ -187,6 +192,12 @@ async function approveRegistration(id) {
 
 async function deleteRegistration(id) {
     if (!sbClient) throw new Error('Supabase not configured.');
+    // Delete registration_dates first (no cascade in DB), then the registration
+    const { error: datesErr } = await sbClient
+        .from('registration_dates')
+        .delete()
+        .eq('registration_id', id);
+    if (datesErr) throw datesErr;
     const { error } = await sbClient
         .from('registrations')
         .delete()
@@ -219,17 +230,19 @@ async function upsertSetting(key, value) {
 
 // ============================================================
 // DUPLICATE REGISTRATION CHECK
+// Returns the existing registration object { id, created_at } if found, or null.
+// Uses ilike for case-insensitive email/name comparison to catch mis-cased duplicates.
 // ============================================================
 async function checkExistingRegistration(email, monthKey, childName = null) {
-    if (!sbClient) return false;
+    if (!sbClient) return null;
     try {
         let regsQuery = sbClient
             .from('registrations')
-            .select('id')
-            .eq('parent_email', email);
-        if (childName) regsQuery = regsQuery.eq('child_name', childName);
+            .select('id, created_at, child_name, parent_email')
+            .ilike('parent_email', email);
+        if (childName) regsQuery = regsQuery.ilike('child_name', childName);
         const { data: regs, error: regErr } = await regsQuery;
-        if (regErr || !regs || !regs.length) return false;
+        if (regErr || !regs || !regs.length) return null;
 
         const ids = regs.map(r => r.id);
         const { data: dates, error: datesErr } = await sbClient
@@ -240,10 +253,12 @@ async function checkExistingRegistration(email, monthKey, childName = null) {
             .lte('care_date', monthKey + '-31')
             .eq('waitlisted', false)
             .limit(1);
-        if (datesErr) return false;
-        return !!(dates && dates.length > 0);
+        if (datesErr) return null;
+        if (!(dates && dates.length > 0)) return null;
+        // Return the matched registration so the caller can show the submission date
+        return regs[0];
     } catch {
-        return false;
+        return null;
     }
 }
 

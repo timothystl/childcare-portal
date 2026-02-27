@@ -471,8 +471,13 @@ function renderCalendar() {
             badge = `<span class="spot-badge closed-badge">Closed</span>${reason ? `<span class="closed-reason">${escStr(reason)}</span>` : ''}`;
         } else if (!isPast && status === 'full') {
             badge = '<span class="spot-badge full-badge">Full</span>';
-        } else if (!isPast && status === 'limited') {
-            badge = `<span class="spot-badge limited-badge">${spotsLeft(dateStr)} left</span>`;
+        } else if (!isPast && (status === 'limited' || status === 'available')) {
+            // Show spots remaining on all open days so parents can plan ahead
+            const spots = spotsLeft(dateStr);
+            if (spots > 0) {
+                const cls = status === 'limited' ? 'limited-badge' : 'available-badge';
+                badge = `<span class="spot-badge ${cls}">${spots} left</span>`;
+            }
         }
 
         cell.innerHTML = `<span class="day-num">${d}</span>${badge}`;
@@ -810,9 +815,12 @@ async function handleSubmit(e) {
         const errors  = [];
 
         for (const child of selectedChildren) {
-            const alreadyReg = await checkExistingRegistration(parentEmail, targetMonthKey, child.name);
-            if (alreadyReg) {
-                errors.push(`${child.name} is already registered for ${win.targetLabel}.`);
+            const existingReg = await checkExistingRegistration(parentEmail, targetMonthKey, child.name);
+            if (existingReg) {
+                const submittedOn = existingReg.created_at
+                    ? ` (submitted ${new Date(existingReg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`
+                    : '';
+                errors.push(`${child.name} is already registered for ${win.targetLabel}${submittedOn}.`);
                 continue;
             }
             try {
