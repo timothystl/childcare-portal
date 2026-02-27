@@ -100,6 +100,21 @@
             </div>
         </section>
 
+        <!-- Registration Window Override -->
+        <section class="admin-section">
+            <h2>🔓 Registration Window Override</h2>
+            <p class="section-desc">Manually open or close the registration window regardless of the normal date rules (auto: open days 1–20 and last day of month).</p>
+            <div class="override-row">
+                <select id="windowOverrideSelect" class="override-select">
+                    <option value="auto">Auto — follow normal rules</option>
+                    <option value="open">Force Open — allow registration right now</option>
+                    <option value="closed">Force Closed — block registration right now</option>
+                </select>
+                <button id="saveOverrideBtn" class="btn-primary">Save</button>
+            </div>
+            <p id="overrideStatus" class="override-status"></p>
+        </section>
+
         <!-- Closed Days -->
         <section class="admin-section">
             <h2>🚫 Closed Days</h2>
@@ -151,7 +166,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=7"></script>
-    <script src="js/admin.js?v=5"></script>
+    <script src="js/supabase.js?v=8"></script>
+    <script src="js/admin.js?v=6"></script>
 </body>
 </html>

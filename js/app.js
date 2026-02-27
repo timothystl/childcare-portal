@@ -8,13 +8,14 @@ const DAY_HEADERS_MF = ['Mon','Tue','Wed','Thu','Fri'];
 // ============================================================
 // STATE
 // ============================================================
-let currentDate     = new Date();
-let selectedRoom    = null;
-let selectedDates   = new Map();   // 'YYYY-MM-DD' -> { status: 'confirmed'|'waitlist', dayType: 'full'|'half' }
-let capacityCache   = {};
-let closureMap      = new Map();   // 'YYYY-MM-DD' -> reason string
-let calendarLoading = false;
-let pickerOpenDate  = null;
+let currentDate         = new Date();
+let selectedRoom        = null;
+let selectedDates       = new Map();   // 'YYYY-MM-DD' -> { status: 'confirmed'|'waitlist', dayType: 'full'|'half' }
+let capacityCache       = {};
+let closureMap          = new Map();   // 'YYYY-MM-DD' -> reason string
+let calendarLoading     = false;
+let pickerOpenDate      = null;
+let regWindowOverride   = 'auto';      // 'auto' | 'open' | 'closed' — loaded from Supabase settings
 
 // ============================================================
 // REGISTRATION WINDOW  (Items 6 & 7)
@@ -36,7 +37,12 @@ function getRegistrationWindow() {
     const targetLabel = MONTH_NAMES[targetDate.getMonth()] + ' ' + targetDate.getFullYear();
 
     // Open if today <= 20th OR today is the last day of the month
-    const isOpen      = day <= 20 || isLastDay;
+    let isOpen = day <= 20 || isLastDay;
+
+    // Admin override takes precedence
+    if (regWindowOverride === 'open')   isOpen = true;
+    if (regWindowOverride === 'closed') isOpen = false;
+
     const reopenDate  = new Date(year, month, lastDay);
     const reopenLabel = reopenDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
@@ -52,6 +58,9 @@ function getTargetMonthKey() {
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
+    // Load admin override before computing the window state
+    regWindowOverride = (await fetchSetting('reg_window_override')) || 'auto';
+
     const win            = getRegistrationWindow();
     const targetMonthKey = getTargetMonthKey();
 
@@ -352,6 +361,17 @@ function showDayPicker(dateStr, cellEl) {
     pickerOpenDate = dateStr;
     renderCalendar();
 
+    // Translucent backdrop so popup always reads clearly
+    const backdrop = document.createElement('div');
+    backdrop.id        = 'dayPickerBackdrop';
+    backdrop.className = 'day-picker-backdrop';
+    backdrop.addEventListener('click', e => {
+        e.stopPropagation();
+        closeDayPicker();
+        renderCalendar();
+    });
+    document.body.appendChild(backdrop);
+
     const popup = document.createElement('div');
     popup.id        = 'dayPickerPopup';
     popup.className = 'day-picker-popup';
@@ -372,10 +392,10 @@ function showDayPicker(dateStr, cellEl) {
 
     document.body.appendChild(popup);
 
-    const calRect = document.getElementById('calendar').getBoundingClientRect();
+    // Always anchor to viewport center so it's visible regardless of scroll position
     popup.style.position  = 'fixed';
-    popup.style.top       = (calRect.top + calRect.height / 2) + 'px';
-    popup.style.left      = (calRect.left + calRect.width / 2) + 'px';
+    popup.style.top       = '50%';
+    popup.style.left      = '50%';
     popup.style.transform = 'translate(-50%, -50%)';
 
     popup.querySelectorAll('.picker-btn').forEach(btn => {
@@ -402,6 +422,7 @@ function showDayPicker(dateStr, cellEl) {
 
 function closeDayPicker() {
     document.getElementById('dayPickerPopup')?.remove();
+    document.getElementById('dayPickerBackdrop')?.remove();
     pickerOpenDate = null;
     document.removeEventListener('click', outsideClickHandler);
 }

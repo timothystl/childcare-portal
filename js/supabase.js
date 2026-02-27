@@ -180,6 +180,29 @@ async function deleteRegistration(id) {
 }
 
 // ============================================================
+// SETTINGS  (key/value table for admin overrides)
+// ============================================================
+async function fetchSetting(key) {
+    if (!sbClient) return null;
+    const { data, error } = await sbClient
+        .from('settings')
+        .select('value')
+        .eq('key', key)
+        .maybeSingle();
+    if (error) { console.error('fetchSetting:', error); return null; }
+    return data?.value ?? null;
+}
+
+async function upsertSetting(key, value) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key, value, updated_at: new Date().toISOString() },
+                 { onConflict: 'key' });
+    if (error) throw error;
+}
+
+// ============================================================
 // DUPLICATE REGISTRATION CHECK  (Item 7)
 // Returns true if this email already has confirmed dates in the given month.
 // monthKey format: 'YYYY-MM'

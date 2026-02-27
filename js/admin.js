@@ -45,6 +45,7 @@ async function initDashboard() {
     setupRoster();
     setupClosures();
     setupMonthlyReport();
+    setupWindowOverride();
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
     document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
@@ -374,6 +375,47 @@ function exportRoster() {
     if (!w) { alert('Pop-up was blocked. Please allow pop-ups for this site and try again.'); return; }
     w.document.write(html);
     w.document.close();
+}
+
+// ============================================================
+// REGISTRATION WINDOW OVERRIDE
+// ============================================================
+async function setupWindowOverride() {
+    // Load current setting and pre-select dropdown
+    try {
+        const current = await fetchSetting('reg_window_override') || 'auto';
+        document.getElementById('windowOverrideSelect').value = current;
+        showOverrideStatus(current, false);
+    } catch (err) {
+        console.warn('Could not load window override setting:', err);
+    }
+
+    document.getElementById('saveOverrideBtn').addEventListener('click', async () => {
+        const val    = document.getElementById('windowOverrideSelect').value;
+        const btn    = document.getElementById('saveOverrideBtn');
+        btn.disabled    = true;
+        btn.textContent = 'Saving…';
+        try {
+            await upsertSetting('reg_window_override', val);
+            showOverrideStatus(val, true);
+        } catch (err) {
+            alert('Error saving override: ' + err.message);
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Save';
+        }
+    });
+}
+
+function showOverrideStatus(val, saved) {
+    const el = document.getElementById('overrideStatus');
+    const labels = {
+        auto:   '⚙️ Auto — normal date rules in effect.',
+        open:   '🟢 Force Open — registration is open for all parents right now.',
+        closed: '🔴 Force Closed — registration is blocked for all parents right now.',
+    };
+    el.textContent = (saved ? '✅ Saved. ' : '') + (labels[val] || '');
+    el.className   = `override-status override-${val}`;
 }
 
 // ============================================================

@@ -448,6 +448,40 @@
 .report-revenue { color: #276749; font-weight: 600; }
 .report-total-row td { color: #333; }
 
+/* Registration Window Override section */
+.override-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.override-select {
+    flex: 1;
+    min-width: 260px;
+    max-width: 460px;
+    padding: 10px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 7px;
+    font-size: .95em;
+    background: #fff;
+    cursor: pointer;
+}
+.override-select:focus { outline: none; border-color: #667eea; }
+
+.override-status {
+    font-size: .9em;
+    line-height: 1.5;
+    padding: 8px 14px;
+    border-radius: 7px;
+    background: #f8f9ff;
+    color: #555;
+    max-width: 540px;
+}
+.override-status.override-open   { background: #f0fff4; color: #276749; }
+.override-status.override-closed { background: #fff5f5; color: #9b2c2c; }
+.override-status.override-auto   { background: #f8f9ff; color: #444; }
+
 /* Bill column in All Registrations table */
 .bill-cell {
     font-weight: 700;

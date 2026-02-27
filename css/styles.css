@@ -439,11 +439,18 @@ main { padding: 32px 36px; }
 }
 
 /* ============================================================
-   DAY PICKER POPUP
+   DAY PICKER BACKDROP + POPUP
    ============================================================ */
+.day-picker-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.30);
+    z-index: 499;
+}
+
 .day-picker-popup {
     position: fixed;
-    z-index: 500;
+    z-index: 500;   /* sits above backdrop (499) */
     background: #fff;
     border: 2px solid #667eea;
     border-radius: 12px;
