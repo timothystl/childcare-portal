@@ -552,16 +552,94 @@ main { padding: 32px 36px; }
 }
 
 /* ============================================================
+   REGISTRATION WINDOW BANNER  (Items 6 & 7)
+   ============================================================ */
+.reg-window-banner {
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: .93em;
+    margin-bottom: 22px;
+    line-height: 1.5;
+}
+.reg-window-banner:empty { display: none; }
+
+.reg-window-banner.open {
+    background: #f0fff4;
+    border: 1.5px solid #68d391;
+    color: #276749;
+}
+.reg-window-banner.locked {
+    background: #fff5f5;
+    border: 1.5px solid #fc8181;
+    color: #9b2c2c;
+}
+.reg-window-banner.submitted {
+    background: #ebf8ff;
+    border: 1.5px solid #63b3ed;
+    color: #2b6cb0;
+}
+
+/* ============================================================
+   RECEIPT TABLE  (Item 4)
+   ============================================================ */
+.receipt-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 8px;
+    font-size: .9em;
+    text-align: left;
+}
+.receipt-table th {
+    background: #f3f1ff;
+    color: #667eea;
+    padding: 8px 10px;
+    font-weight: 600;
+    border-bottom: 2px solid #d6d0f5;
+}
+.receipt-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    color: #444;
+}
+.receipt-table tbody tr:last-child td { border-bottom: none; }
+.receipt-table tfoot td {
+    padding: 9px 10px;
+    border-top: 2px solid #d6d0f5;
+    background: #fafaf5;
+}
+.receipt-amount { text-align: right; }
+.receipt-total-row td { color: #333; }
+.receipt-waitlist-note {
+    font-size: .82em !important;
+    color: #888 !important;
+    margin-top: 8px !important;
+}
+
+/* ============================================================
    CLOSED CALENDAR DAY
    ============================================================ */
 .cal-day.closed {
     background: #f5f5f5;
     border-color: #ddd;
     cursor: not-allowed;
-    opacity: 0.55;
+    opacity: 0.65;
 }
 .cal-day.closed .day-num { color: #bbb; text-decoration: line-through; }
 .closed-badge { color: #999; }
+
+/* Item 3: closure reason shown on calendar cell */
+.closed-reason {
+    font-size: .58em;
+    color: #aaa;
+    display: block;
+    margin-top: 1px;
+    max-width: 96%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+    line-height: 1.2;
+}
 
 /* ============================================================
    LOCKED ROOM CARD (wrong age group)

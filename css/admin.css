@@ -373,6 +373,82 @@
 .btn-remove-closure:hover { background: #e53e3e; color: #fff; }
 
 /* ============================================================
+   SIMPLIFIED ROSTER — name list  (Item 2)
+   ============================================================ */
+.roster-date-heading {
+    font-weight: 700;
+    color: #333;
+    font-size: 1.05em;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #eee;
+}
+
+.name-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+.name-list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+}
+.name-list-name {
+    flex: 1;
+    font-size: .95em;
+    font-weight: 500;
+    color: #333;
+}
+
+/* ============================================================
+   MONTHLY BILLING REPORT  (Item 5)
+   ============================================================ */
+.report-month-title {
+    font-size: 1.1em;
+    color: #333;
+    margin-bottom: 14px;
+    font-weight: 700;
+}
+
+.report-table-wrap {
+    max-width: 720px;
+}
+
+.report-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    font-size: .9em;
+}
+.report-table thead th {
+    background: #667eea;
+    color: #fff;
+    padding: 11px 14px;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.report-table thead th:not(:first-child) { text-align: right; }
+.report-table tbody tr { border-bottom: 1px solid #f0f0f0; }
+.report-table tbody tr:hover { background: #f8f9ff; }
+.report-table tbody td { padding: 10px 14px; }
+.report-table tfoot td {
+    padding: 11px 14px;
+    background: #f3f1ff;
+    border-top: 2px solid #c5bef5;
+}
+.report-num { text-align: right; }
+.report-revenue { color: #276749; font-weight: 600; }
+.report-total-row td { color: #333; }
+
+/* ============================================================
    RESPONSIVE ADMIN
    ============================================================ */
 @media (max-width: 700px) {

@@ -178,3 +178,36 @@ async function deleteRegistration(id) {
         .eq('id', id);
     if (error) throw error;
 }
+
+// ============================================================
+// DUPLICATE REGISTRATION CHECK  (Item 7)
+// Returns true if this email already has confirmed dates in the given month.
+// monthKey format: 'YYYY-MM'
+// ============================================================
+async function checkExistingRegistration(email, monthKey) {
+    if (!sbClient) return false;
+    try {
+        // Get all registration IDs for this email
+        const { data: regs, error: regErr } = await sbClient
+            .from('registrations')
+            .select('id')
+            .eq('parent_email', email);
+        if (regErr || !regs || !regs.length) return false;
+
+        const ids = regs.map(r => r.id);
+
+        // Check if any confirmed dates in target month exist
+        const { data: dates, error: datesErr } = await sbClient
+            .from('registration_dates')
+            .select('id')
+            .in('registration_id', ids)
+            .gte('care_date', monthKey + '-01')
+            .lte('care_date', monthKey + '-31')
+            .eq('waitlisted', false)
+            .limit(1);
+        if (datesErr) return false;
+        return !!(dates && dates.length > 0);
+    } catch {
+        return false;
+    }
+}

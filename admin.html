@@ -81,6 +81,25 @@
             </div>
         </section>
 
+        <!-- Monthly Billing Report (Item 5) -->
+        <section class="admin-section">
+            <h2>📊 Monthly Billing Report</h2>
+            <p class="section-desc">Attendance and billing totals for a selected month across all rooms.</p>
+            <div class="roster-controls">
+                <div class="roster-field">
+                    <label for="reportMonth">Month</label>
+                    <input type="month" id="reportMonth">
+                </div>
+                <div class="roster-btns">
+                    <button id="generateReportBtn" class="btn-secondary">Generate Report</button>
+                    <button id="exportReportBtn" class="btn-primary">&#8595; Export Excel</button>
+                </div>
+            </div>
+            <div id="reportContent">
+                <p class="empty-hint">Select a month above and click Generate Report.</p>
+            </div>
+        </section>
+
         <!-- Closed Days -->
         <section class="admin-section">
             <h2>🚫 Closed Days</h2>
@@ -131,7 +150,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=5"></script>
-    <script src="js/admin.js?v=3"></script>
+    <script src="js/supabase.js?v=6"></script>
+    <script src="js/admin.js?v=4"></script>
 </body>
 </html>

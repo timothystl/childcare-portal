@@ -1,23 +1,96 @@
 // ============================================================
+// CONSTANTS
+// ============================================================
+const MONTH_NAMES    = ['January','February','March','April','May','June',
+                        'July','August','September','October','November','December'];
+const DAY_HEADERS_MF = ['Mon','Tue','Wed','Thu','Fri'];
+
+// ============================================================
 // STATE
 // ============================================================
 let currentDate     = new Date();
 let selectedRoom    = null;
 let selectedDates   = new Map();   // 'YYYY-MM-DD' -> { status: 'confirmed'|'waitlist', dayType: 'full'|'half' }
 let capacityCache   = {};
-let closureSet      = new Set();   // 'YYYY-MM-DD' strings for admin-blocked dates
+let closureMap      = new Map();   // 'YYYY-MM-DD' -> reason string
 let calendarLoading = false;
 let pickerOpenDate  = null;
+
+// ============================================================
+// REGISTRATION WINDOW  (Items 6 & 7)
+// - Target: always the NEXT calendar month
+// - Open: day 1–20 of current month  OR  last day of current month
+// - Locked: day 21 through penultimate day of current month
+// ============================================================
+function getRegistrationWindow() {
+    const today          = new Date();
+    today.setHours(0, 0, 0, 0);
+    const day            = today.getDate();
+    const year           = today.getFullYear();
+    const month          = today.getMonth();
+    const lastDay        = new Date(year, month + 1, 0).getDate();
+    const isLastDay      = (day === lastDay);
+
+    // Target: always the NEXT calendar month
+    const targetDate  = new Date(year, month + 1, 1);
+    const targetLabel = MONTH_NAMES[targetDate.getMonth()] + ' ' + targetDate.getFullYear();
+
+    // Open if today <= 20th OR today is the last day of the month
+    const isOpen      = day <= 20 || isLastDay;
+    const reopenDate  = new Date(year, month, lastDay);
+    const reopenLabel = reopenDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+
+    return { isOpen, targetDate, targetLabel, reopenDate, reopenLabel };
+}
+
+function getTargetMonthKey() {
+    const { targetDate } = getRegistrationWindow();
+    return `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`;
+}
 
 // ============================================================
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
+    const win            = getRegistrationWindow();
+    const targetMonthKey = getTargetMonthKey();
+
+    // Set calendar to show the target month
+    currentDate = new Date(win.targetDate.getFullYear(), win.targetDate.getMonth(), 1);
+
+    // Check localStorage for already-submitted flag
+    const alreadySubmitted = localStorage.getItem(`childcare_submitted_${targetMonthKey}`) === 'true';
+
+    // Update the registration window banner
+    const banner = document.getElementById('regWindowBanner');
+    if (banner) {
+        if (alreadySubmitted) {
+            banner.className = 'reg-window-banner submitted';
+            banner.innerHTML = `✅ Your registration for <strong>${win.targetLabel}</strong> has been submitted. Please contact us to make any changes.`;
+        } else if (!win.isOpen) {
+            banner.className = 'reg-window-banner locked';
+            banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed. It reopens on <strong>${win.reopenLabel}</strong>.`;
+        } else {
+            banner.className = 'reg-window-banner open';
+            banner.innerHTML = `📅 Now accepting registrations for <strong>${win.targetLabel}</strong>.`;
+        }
+    }
+
+    // Disable submit button if window is closed or already submitted
+    if (!win.isOpen || alreadySubmitted) {
+        const btn = document.getElementById('submitBtn');
+        if (btn) {
+            btn.disabled    = true;
+            btn.textContent = alreadySubmitted ? 'Already Submitted' : 'Registration Closed';
+        }
+    }
+
     renderRooms();
-    setupListeners();
-    // Load closures once so calendar can mark blocked days
+    setupFormListeners();
+
+    // Load closures and build map (date -> reason) for Item 3
     const closures = await fetchClosures();
-    closureSet = new Set(closures.map(c => c.close_date));
+    closureMap = new Map(closures.map(c => [c.close_date, c.reason || '']));
 });
 
 // ============================================================
@@ -33,7 +106,7 @@ function calcAgeMonths(dobStr) {
 function getRoomIdFromDob(dobStr) {
     if (!dobStr) return null;
     const months = calcAgeMonths(dobStr);
-    if (months < 0)  return null;   // future date — invalid
+    if (months < 0)  return null;
     if (months < 12) return 'bear';
     if (months < 24) return 'bee';
     if (months < 36) return 'turtle';
@@ -66,7 +139,7 @@ function renderRooms() {
     });
 }
 
-// Called whenever the DOB field changes — auto-selects the right room
+// Called when the DOB field changes — auto-selects the right room
 function onDobChange() {
     const dob    = document.getElementById('childDob').value;
     const roomId = getRoomIdFromDob(dob);
@@ -76,7 +149,6 @@ function onDobChange() {
         const rid   = radio.value;
 
         if (!roomId) {
-            // No DOB yet — unlock everything
             label.classList.remove('locked');
             radio.disabled = false;
             label.querySelector('.age-lock-msg')?.remove();
@@ -96,7 +168,6 @@ function onDobChange() {
             label.classList.remove('locked');
             radio.disabled = false;
             label.querySelector('.age-lock-msg')?.remove();
-            // Auto-select this room if not already selected
             if (!radio.checked) {
                 radio.checked = true;
                 radio.dispatchEvent(new Event('change'));
@@ -154,12 +225,8 @@ function spotsLeft(dateStr) {
 }
 
 // ============================================================
-// CALENDAR — Mon–Fri only, closed days blocked
+// CALENDAR — Mon–Fri only, closed days blocked (Item 3: reason shown)
 // ============================================================
-const MONTH_NAMES    = ['January','February','March','April','May','June',
-                        'July','August','September','October','November','December'];
-const DAY_HEADERS_MF = ['Mon','Tue','Wed','Thu','Fri'];
-
 function renderCalendar() {
     const year        = currentDate.getFullYear();
     const month       = currentDate.getMonth();
@@ -168,6 +235,15 @@ function renderCalendar() {
     const firstDow    = new Date(year, month, 1).getDay();
 
     document.getElementById('currentMonthLabel').textContent = `${MONTH_NAMES[month]} ${year}`;
+
+    // Update nav button states — only the target month is navigable
+    const win     = getRegistrationWindow();
+    const target  = win.targetDate;
+    const atTarget = (year === target.getFullYear() && month === target.getMonth());
+    const prevBtn  = document.getElementById('prevMonth');
+    const nextBtn  = document.getElementById('nextMonth');
+    if (prevBtn) prevBtn.disabled = atTarget;
+    if (nextBtn) nextBtn.disabled = atTarget;
 
     const cal = document.getElementById('calendar');
     cal.innerHTML = '';
@@ -193,7 +269,7 @@ function renderCalendar() {
 
         const dateStr      = formatDate(date);
         const isPast       = date < today;
-        const isClosed     = closureSet.has(dateStr);
+        const isClosed     = closureMap.has(dateStr);
         const entry        = selectedDates.get(dateStr);
         const isSelected   = !!entry;
         const isPickerOpen = pickerOpenDate === dateStr;
@@ -213,7 +289,9 @@ function renderCalendar() {
                 ? '<span class="selected-type-badge">½ day</span>'
                 : '<span class="selected-type-badge">Full</span>';
         } else if (isClosed) {
-            badge = '<span class="spot-badge closed-badge">Closed</span>';
+            // Item 3: show the reason for the closure if available
+            const reason = closureMap.get(dateStr);
+            badge = `<span class="spot-badge closed-badge">Closed</span>${reason ? `<span class="closed-reason">${escStr(reason)}</span>` : ''}`;
         } else if (!isPast && status === 'full') {
             badge = '<span class="spot-badge full-badge">Full</span>';
         } else if (!isPast && status === 'limited') {
@@ -399,31 +477,62 @@ function renderSelectedDates() {
 }
 
 // ============================================================
-// FORM SUBMISSION
+// FORM LISTENERS
 // ============================================================
-document.addEventListener('DOMContentLoaded', () => {
+function setupFormListeners() {
     document.getElementById('registrationForm').addEventListener('submit', handleSubmit);
+
     document.getElementById('closeModal').addEventListener('click', () => {
         document.getElementById('successModal').style.display = 'none';
     });
+
     document.getElementById('childDob').addEventListener('change', onDobChange);
+
+    // Navigation: restricted to target month only
     document.getElementById('prevMonth').addEventListener('click', async () => {
         closeDayPicker();
+        const target = getRegistrationWindow().targetDate;
+        const atTarget = currentDate.getFullYear() === target.getFullYear() &&
+                         currentDate.getMonth()    === target.getMonth();
+        if (atTarget) return;   // Can't go below target month
         currentDate.setMonth(currentDate.getMonth() - 1);
         await loadMonthCapacity();
         renderCalendar();
     });
+
     document.getElementById('nextMonth').addEventListener('click', async () => {
         closeDayPicker();
+        const target = getRegistrationWindow().targetDate;
+        const atTarget = currentDate.getFullYear() === target.getFullYear() &&
+                         currentDate.getMonth()    === target.getMonth();
+        if (atTarget) return;   // Can't go above target month
         currentDate.setMonth(currentDate.getMonth() + 1);
         await loadMonthCapacity();
         renderCalendar();
     });
-});
+}
 
+// ============================================================
+// FORM SUBMISSION (Items 4 & 7)
+// ============================================================
 async function handleSubmit(e) {
     e.preventDefault();
     closeDayPicker();
+
+    const win            = getRegistrationWindow();
+    const targetMonthKey = getTargetMonthKey();
+
+    // Guard: registration window closed?
+    if (!win.isOpen) {
+        showToast(`🔒 Registration for ${win.targetLabel} is closed. It reopens on ${win.reopenLabel}.`);
+        return;
+    }
+
+    // Guard: already submitted (localStorage)?
+    if (localStorage.getItem(`childcare_submitted_${targetMonthKey}`) === 'true') {
+        showToast(`✅ You've already registered for ${win.targetLabel}. Contact us to make changes.`);
+        return;
+    }
 
     const parentName  = document.getElementById('parentName').value.trim();
     const parentEmail = document.getElementById('parentEmail').value.trim();
@@ -448,17 +557,26 @@ async function handleSubmit(e) {
     btn.disabled    = true;
     btn.textContent = 'Submitting…';
 
-    const confirmedDates = [...selectedDates.entries()]
-        .filter(([, en]) => en.status === 'confirmed')
-        .map(([d, en]) => ({ date: d, dayType: en.dayType }));
-    const waitlistDates = [...selectedDates.entries()]
-        .filter(([, en]) => en.status === 'waitlist')
-        .map(([d, en]) => ({ date: d, dayType: en.dayType }));
-
-    const total     = calcTotal();
-    const ageMonths = calcAgeMonths(childDob);
-
     try {
+        // Guard: server-side duplicate check (Item 7)
+        const alreadyReg = await checkExistingRegistration(parentEmail, targetMonthKey);
+        if (alreadyReg) {
+            showToast(`⚠️ A registration for ${win.targetLabel} already exists for this email. Please contact us to make changes.`);
+            btn.disabled    = false;
+            btn.textContent = 'Submit Registration';
+            return;
+        }
+
+        const confirmedDates = [...selectedDates.entries()]
+            .filter(([, en]) => en.status === 'confirmed')
+            .map(([d, en]) => ({ date: d, dayType: en.dayType }));
+        const waitlistDates = [...selectedDates.entries()]
+            .filter(([, en]) => en.status === 'waitlist')
+            .map(([d, en]) => ({ date: d, dayType: en.dayType }));
+
+        const total     = calcTotal();
+        const ageMonths = calcAgeMonths(childDob);
+
         await submitRegistration({
             parent: { name: parentName, email: parentEmail, phone: parentPhone },
             child:  { name: childName, ageMonths, dob: childDob },
@@ -467,27 +585,72 @@ async function handleSubmit(e) {
             waitlistDates,
         });
 
-        let details = `<p>We've received the registration for <strong>${childName}</strong> in <strong>${selectedRoom.label}</strong>.</p>`;
-        if (confirmedDates.length) details += `<p><strong>${confirmedDates.length}</strong> day(s) confirmed.</p>`;
-        if (waitlistDates.length)  details += `<p><strong>${waitlistDates.length}</strong> day(s) on waitlist — we'll be in touch at <strong>${parentEmail}</strong> if a spot opens.</p>`;
-        details += `<p class="total-line">Estimated total: <strong>$${total.toFixed(2)}</strong></p>`;
+        // Mark as submitted in localStorage (Item 7)
+        localStorage.setItem(`childcare_submitted_${targetMonthKey}`, 'true');
+
+        // Build itemized receipt (Item 4)
+        const confirmedSorted = confirmedDates
+            .slice()
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+        let receiptHtml = '';
+        if (confirmedSorted.length) {
+            const receiptRows = confirmedSorted.map(({ date, dayType }) => {
+                const typeLabel = dayType === 'half' ? 'Half Day' : 'Full Day';
+                const rate      = dayType === 'half' ? selectedRoom.halfDayRate : selectedRoom.fullDayRate;
+                return `<tr>
+                    <td>${friendlyDate(date)}</td>
+                    <td>${typeLabel}</td>
+                    <td class="receipt-amount">$${rate}</td>
+                </tr>`;
+            }).join('');
+
+            receiptHtml = `
+                <table class="receipt-table">
+                    <thead>
+                        <tr><th>Date</th><th>Type</th><th>Amount</th></tr>
+                    </thead>
+                    <tbody>${receiptRows}</tbody>
+                    <tfoot>
+                        <tr class="receipt-total-row">
+                            <td colspan="2"><strong>Total</strong></td>
+                            <td class="receipt-amount"><strong>$${total.toFixed(2)}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>`;
+        }
+
+        let details = `<p>Registration for <strong>${childName}</strong> in <strong>${selectedRoom.label}</strong>.</p>`;
+        details += receiptHtml;
+        if (waitlistDates.length) {
+            details += `<p class="receipt-waitlist-note"><strong>${waitlistDates.length}</strong> day(s) on waitlist — we'll contact you at <strong>${parentEmail}</strong> if a spot opens.</p>`;
+        }
 
         document.getElementById('successDetails').innerHTML = details;
         document.getElementById('successModal').style.display = 'flex';
 
+        // Reset form
         document.getElementById('registrationForm').reset();
         selectedRoom  = null;
         selectedDates = new Map();
         capacityCache = {};
         document.getElementById('calendarWrapper').classList.add('hidden');
         document.getElementById('calendarHint').classList.remove('hidden');
-        // Remove any room locks from previous DOB entry
         document.querySelectorAll('.room-option').forEach(label => {
             label.classList.remove('locked');
             label.querySelector('input').disabled = false;
             label.querySelector('.age-lock-msg')?.remove();
         });
         renderSelectedDates();
+
+        // Update UI to show submitted state (Item 7)
+        const banner = document.getElementById('regWindowBanner');
+        if (banner) {
+            banner.className = 'reg-window-banner submitted';
+            banner.innerHTML = `✅ Your registration for <strong>${win.targetLabel}</strong> has been submitted. Contact us to make any changes.`;
+        }
+        btn.disabled    = true;
+        btn.textContent = 'Already Submitted';
 
     } catch (err) {
         console.error(err);
@@ -496,7 +659,6 @@ async function handleSubmit(e) {
         } else {
             showToast('❌ Error: ' + (err?.message || JSON.stringify(err)));
         }
-    } finally {
         btn.disabled    = false;
         btn.textContent = 'Submit Registration';
     }
@@ -516,6 +678,9 @@ function showToast(msg) {
     const t = document.getElementById('errorToast');
     t.textContent = msg;
     t.classList.remove('hidden');
-    setTimeout(() => t.classList.add('hidden'), 4000);
+    setTimeout(() => t.classList.add('hidden'), 5000);
 }
-function setupListeners() {}
+function escStr(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function setupListeners() {}   // kept for compatibility

@@ -44,6 +44,7 @@ async function initDashboard() {
     setupFilters();
     setupRoster();
     setupClosures();
+    setupMonthlyReport();
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
     document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
@@ -182,7 +183,7 @@ function renderCapacityOverview() {
 }
 
 // ============================================================
-// DAILY ROSTER
+// DAILY ROSTER  (Item 2: simplified to just names per room)
 // ============================================================
 function setupRoster() {
     document.getElementById('viewRosterBtn').addEventListener('click', viewRoster);
@@ -214,6 +215,7 @@ function getRosterForDate(date, roomId) {
         .sort((a, b) => a.roomId.localeCompare(b.roomId) || a.childName.localeCompare(b.childName));
 }
 
+// Item 2: Simplified view — just child names per room with day type chip
 function viewRoster() {
     const date   = document.getElementById('rosterDate').value;
     const roomId = document.getElementById('rosterRoomFilter').value;
@@ -234,35 +236,21 @@ function viewRoster() {
         byRoom[r.roomLabel].push(r);
     });
 
-    container.innerHTML = Object.entries(byRoom).map(([roomLabel, kids]) => `
-        <div class="roster-group">
-            <h3 class="roster-room-title">${roomLabel}
-                <span class="roster-count">${kids.length} child${kids.length !== 1 ? 'ren' : ''}</span>
-            </h3>
-            <table class="roster-table">
-                <thead>
-                    <tr>
-                        <th>Child</th>
-                        <th>DOB</th>
-                        <th>Day</th>
-                        <th>Rate</th>
-                        <th>Parent</th>
-                        <th>Phone</th>
-                    </tr>
-                </thead>
-                <tbody>
+    container.innerHTML = `
+        <p class="roster-date-heading">${friendlyShort(date)}</p>
+        ${Object.entries(byRoom).map(([roomLabel, kids]) => `
+            <div class="roster-group">
+                <h3 class="roster-room-title">${roomLabel}
+                    <span class="roster-count">${kids.length} child${kids.length !== 1 ? 'ren' : ''}</span>
+                </h3>
+                <ul class="name-list">
                     ${kids.map(k => `
-                        <tr>
-                            <td>${escHtml(k.childName)}</td>
-                            <td>${k.childDob ? new Date(k.childDob + 'T00:00:00').toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
-                            <td><span class="day-chip ${k.dayType}">${k.dayType === 'half' ? 'Half' : 'Full'}</span></td>
-                            <td>$${k.rate}</td>
-                            <td>${escHtml(k.parentName)}</td>
-                            <td>${escHtml(k.parentPhone)}</td>
-                        </tr>`).join('')}
-                </tbody>
-            </table>
-        </div>`).join('');
+                        <li class="name-list-item">
+                            <span class="name-list-name">${escHtml(k.childName)}</span>
+                            <span class="day-chip ${k.dayType}">${k.dayType === 'half' ? 'Half Day' : 'Full Day'}</span>
+                        </li>`).join('')}
+                </ul>
+            </div>`).join('')}`;
 }
 
 function exportRoster() {
@@ -292,6 +280,160 @@ function exportRoster() {
         wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
     }));
     XLSX.writeFile(wb, `roster-${date}.xlsx`);
+}
+
+// ============================================================
+// MONTHLY BILLING REPORT  (Item 5)
+// ============================================================
+const MONTH_NAMES_ADMIN = ['January','February','March','April','May','June',
+                           'July','August','September','October','November','December'];
+
+function setupMonthlyReport() {
+    document.getElementById('generateReportBtn').addEventListener('click', generateMonthlyReport);
+    document.getElementById('exportReportBtn').addEventListener('click', exportMonthlyReport);
+
+    // Default to current month
+    const now = new Date();
+    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    document.getElementById('reportMonth').value = monthStr;
+}
+
+function generateMonthlyReport() {
+    const monthVal = document.getElementById('reportMonth').value;
+    if (!monthVal) { alert('Please select a month.'); return; }
+
+    const breakdown = {};
+    ROOMS.forEach(r => {
+        breakdown[r.id] = {
+            roomLabel: r.label,
+            full: 0, half: 0,
+            waitlistFull: 0, waitlistHalf: 0,
+            revenue: 0,
+        };
+    });
+
+    let totalFull = 0, totalHalf = 0, totalRevenue = 0, totalWaitlist = 0;
+
+    allRegistrations.forEach(reg => {
+        const room = ROOMS.find(r => r.id === reg.room_id);
+        if (!room) return;
+        (reg.registration_dates || []).forEach(d => {
+            if (!d.care_date.startsWith(monthVal)) return;
+            if (d.waitlisted) {
+                if (d.day_type === 'half') breakdown[reg.room_id].waitlistHalf++;
+                else                       breakdown[reg.room_id].waitlistFull++;
+                totalWaitlist++;
+            } else if (d.day_type === 'half') {
+                breakdown[reg.room_id].half++;
+                breakdown[reg.room_id].revenue += room.halfDayRate || 0;
+                totalHalf++;
+                totalRevenue += room.halfDayRate || 0;
+            } else {
+                breakdown[reg.room_id].full++;
+                breakdown[reg.room_id].revenue += room.fullDayRate || 0;
+                totalFull++;
+                totalRevenue += room.fullDayRate || 0;
+            }
+        });
+    });
+
+    const [y, m] = monthVal.split('-').map(Number);
+    const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+
+    renderMonthlyReport(monthLabel, monthVal, breakdown,
+        { totalFull, totalHalf, totalRevenue, totalWaitlist });
+}
+
+function renderMonthlyReport(monthLabel, monthVal, breakdown, totals) {
+    const container = document.getElementById('reportContent');
+
+    const rows = ROOMS.map(room => {
+        const b         = breakdown[room.id];
+        const totalDays = b.full + b.half;
+        const waitlist  = b.waitlistFull + b.waitlistHalf;
+        return `
+            <tr>
+                <td>${room.label}</td>
+                <td class="report-num">${b.full}</td>
+                <td class="report-num">${b.half}</td>
+                <td class="report-num"><strong>${totalDays}</strong></td>
+                <td class="report-num report-revenue">$${b.revenue.toFixed(2)}</td>
+                <td class="report-num">${waitlist > 0 ? waitlist : '—'}</td>
+            </tr>`;
+    }).join('');
+
+    if (totals.totalFull === 0 && totals.totalHalf === 0 && totals.totalWaitlist === 0) {
+        container.innerHTML = `<p class="empty-hint">No registrations found for ${monthLabel}.</p>`;
+        return;
+    }
+
+    container.innerHTML = `
+        <h3 class="report-month-title">${monthLabel}</h3>
+        <div class="table-wrapper report-table-wrap">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Room</th>
+                        <th>Full Days</th>
+                        <th>Half Days</th>
+                        <th>Total Days</th>
+                        <th>Revenue</th>
+                        <th>Waitlisted</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+                <tfoot>
+                    <tr class="report-total-row">
+                        <td><strong>Grand Total</strong></td>
+                        <td class="report-num"><strong>${totals.totalFull}</strong></td>
+                        <td class="report-num"><strong>${totals.totalHalf}</strong></td>
+                        <td class="report-num"><strong>${totals.totalFull + totals.totalHalf}</strong></td>
+                        <td class="report-num report-revenue"><strong>$${totals.totalRevenue.toFixed(2)}</strong></td>
+                        <td class="report-num"><strong>${totals.totalWaitlist > 0 ? totals.totalWaitlist : '—'}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>`;
+}
+
+function exportMonthlyReport() {
+    const monthVal = document.getElementById('reportMonth').value;
+    if (!monthVal) { alert('Please select a month first.'); return; }
+
+    const rows = [];
+    ROOMS.forEach(room => {
+        let full = 0, half = 0, waitlist = 0, revenue = 0;
+        allRegistrations.forEach(reg => {
+            if (reg.room_id !== room.id) return;
+            (reg.registration_dates || []).forEach(d => {
+                if (!d.care_date.startsWith(monthVal)) return;
+                if (d.waitlisted) { waitlist++; return; }
+                if (d.day_type === 'half') { half++; revenue += room.halfDayRate || 0; }
+                else                       { full++; revenue += room.fullDayRate || 0; }
+            });
+        });
+        rows.push({
+            'Room':        room.label,
+            'Full Days':   full,
+            'Half Days':   half,
+            'Total Days':  full + half,
+            'Revenue':     `$${revenue.toFixed(2)}`,
+            'Waitlisted':  waitlist,
+        });
+    });
+
+    if (!rows.length) { alert('No data to export.'); return; }
+
+    const [y, m] = monthVal.split('-').map(Number);
+    const label  = MONTH_NAMES_ADMIN[m - 1] + '-' + y;
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, label);
+    ws['!cols'] = Object.keys(rows[0]).map(k => ({
+        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
+    }));
+    XLSX.writeFile(wb, `billing-report-${monthVal}.xlsx`);
 }
 
 // ============================================================
@@ -326,7 +468,7 @@ async function loadClosureList() {
                 ${closures.map(c => `
                     <li class="closure-item">
                         <span class="closure-date-lbl">${friendlyShort(c.close_date)}</span>
-                        <span class="closure-reason-lbl">${escHtml(c.reason || '')}</span>
+                        <span class="closure-reason-lbl">${escHtml(c.reason || '—')}</span>
                         <button class="btn-remove-closure" data-date="${c.close_date}">Remove</button>
                     </li>`).join('')}
             </ul>`;

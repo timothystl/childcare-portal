@@ -14,6 +14,9 @@
         </header>
 
         <main>
+            <!-- Registration window status banner (Items 6 & 7) -->
+            <div id="regWindowBanner" class="reg-window-banner"></div>
+
             <form id="registrationForm" novalidate>
 
                 <!-- Step 1: Parent & Child Info -->
@@ -105,8 +108,8 @@
 
     <!-- Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase.js?v=5"></script>
-    <script src="js/app.js?v=9"></script>
+    <script src="js/supabase.js?v=6"></script>
+    <script src="js/app.js?v=10"></script>
     <script>
         // Prevent future dates in the DOB picker
         document.getElementById('childDob').max = new Date().toISOString().split('T')[0];
