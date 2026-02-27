@@ -780,10 +780,9 @@ async function handleSubmit(e) {
         return;
     }
 
-    if (localStorage.getItem(`childcare_submitted_${targetMonthKey}`) === 'true') {
-        showToast(`✅ You've already registered for ${win.targetLabel}. Contact us to make changes.`);
-        return;
-    }
+    // NOTE: no localStorage early-return here — the server-side checkExistingRegistration
+    // handles actual duplicate prevention, and the localStorage guard was blocking
+    // different families submitting from the same computer (e.g. office / shared device).
 
     const parentName  = document.getElementById('parentName').value.trim();
     const parentEmail = document.getElementById('parentEmail').value.trim();
