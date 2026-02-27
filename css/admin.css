@@ -448,6 +448,13 @@
 .report-revenue { color: #276749; font-weight: 600; }
 .report-total-row td { color: #333; }
 
+/* Bill column in All Registrations table */
+.bill-cell {
+    font-weight: 700;
+    color: #276749;
+    white-space: nowrap;
+}
+
 /* ============================================================
    RESPONSIVE ADMIN
    ============================================================ */

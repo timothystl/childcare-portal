@@ -71,11 +71,25 @@ function populateRosterRoomFilter() {
 }
 
 // ============================================================
+// BILLING HELPER
+// ============================================================
+function calcRegistrationBill(reg) {
+    const room = ROOMS.find(r => r.id === reg.room_id);
+    if (!room) return 0;
+    return (reg.registration_dates || [])
+        .filter(d => !d.waitlisted)
+        .reduce((sum, d) => {
+            const rate = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
+            return sum + rate;
+        }, 0);
+}
+
+// ============================================================
 // LOAD REGISTRATIONS
 // ============================================================
 async function loadRegistrations() {
     document.getElementById('regTableBody').innerHTML =
-        '<tr><td colspan="9" class="loading-cell">Loading…</td></tr>';
+        '<tr><td colspan="10" class="loading-cell">Loading…</td></tr>';
     try {
         allRegistrations = await fetchAllRegistrations();
         renderTable(allRegistrations);
@@ -95,7 +109,7 @@ async function loadRegistrations() {
 function renderTable(data) {
     const tbody = document.getElementById('regTableBody');
     if (!data.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="loading-cell">No registrations found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="loading-cell">No registrations found.</td></tr>';
         return;
     }
 
@@ -119,6 +133,8 @@ function renderTable(data) {
                 { month: 'short', day: 'numeric', year: 'numeric' })
             : (reg.child_age != null ? reg.child_age + ' mo' : '—');
 
+        const bill = calcRegistrationBill(reg);
+
         return `
             <tr data-id="${reg.id}" data-room="${reg.room_id}">
                 <td>${submitted}</td>
@@ -129,6 +145,7 @@ function renderTable(data) {
                 <td>${dobDisplay}</td>
                 <td>${room.label}</td>
                 <td class="dates-cell">${datesHtml}</td>
+                <td class="bill-cell">$${bill.toFixed(2)}</td>
                 <td>
                     <button class="btn-delete" data-id="${reg.id}">Delete</button>
                 </td>
@@ -253,6 +270,7 @@ function viewRoster() {
             </div>`).join('')}`;
 }
 
+// Item 2: Export as a clean printable page (user prints to PDF)
 function exportRoster() {
     const date   = document.getElementById('rosterDate').value;
     const roomId = document.getElementById('rosterRoomFilter').value;
@@ -261,25 +279,101 @@ function exportRoster() {
     const roster = getRosterForDate(date, roomId || null);
     if (!roster.length) { alert('No confirmed registrations for this date.'); return; }
 
-    const rows = roster.map(r => ({
-        'Date':         date,
-        'Room':         r.roomLabel,
-        'Child Name':   r.childName,
-        'DOB':          r.childDob || '',
-        'Day Type':     r.dayType === 'half' ? 'Half Day' : 'Full Day',
-        'Rate':         `$${r.rate}`,
-        'Parent Name':  r.parentName,
-        'Phone':        r.parentPhone,
-        'Email':        r.parentEmail,
-    }));
+    const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US',
+        { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Roster ${date}`);
-    ws['!cols'] = Object.keys(rows[0]).map(k => ({
-        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
-    }));
-    XLSX.writeFile(wb, `roster-${date}.xlsx`);
+    // Group by room
+    const byRoom = {};
+    roster.forEach(r => {
+        if (!byRoom[r.roomLabel]) byRoom[r.roomLabel] = [];
+        byRoom[r.roomLabel].push(r);
+    });
+
+    const roomSections = Object.entries(byRoom).map(([roomLabel, kids]) => `
+        <div class="room-block">
+            <h2>${escHtml(roomLabel)} <span class="count">${kids.length} child${kids.length !== 1 ? 'ren' : ''}</span></h2>
+            <ul>
+                ${kids.map(k => `
+                    <li>
+                        <span class="child-name">${escHtml(k.childName)}</span>
+                        <span class="day-label ${k.dayType}">${k.dayType === 'half' ? 'Half Day' : 'Full Day'}</span>
+                    </li>`).join('')}
+            </ul>
+        </div>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Daily Roster — ${dateLabel}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 36px 48px;
+    color: #222;
+    max-width: 680px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 1.4em;
+    font-weight: 700;
+    border-bottom: 3px solid #333;
+    padding-bottom: 10px;
+    margin-bottom: 28px;
+  }
+  h1 .facility { font-size: .75em; font-weight: 400; color: #666; display: block; margin-bottom: 4px; }
+  .room-block { margin-bottom: 32px; page-break-inside: avoid; }
+  h2 {
+    font-size: 1.05em;
+    font-weight: 700;
+    background: #f0f0f0;
+    padding: 8px 14px;
+    border-left: 4px solid #555;
+    margin-bottom: 0;
+  }
+  .count { font-size: .8em; font-weight: 400; color: #666; margin-left: 10px; }
+  ul { list-style: none; border: 1px solid #ddd; border-top: none; }
+  li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 14px;
+    border-bottom: 1px solid #eee;
+    font-size: .97em;
+  }
+  li:last-child { border-bottom: none; }
+  .child-name { font-weight: 500; }
+  .day-label {
+    font-size: .82em;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+    letter-spacing: .02em;
+  }
+  .day-label.full { background: #d1fae5; color: #065f46; }
+  .day-label.half { background: #fef3c7; color: #92400e; }
+  .footer { margin-top: 40px; font-size: .78em; color: #aaa; text-align: center; }
+  @media print {
+    body { padding: 20px 24px; }
+    @page { margin: 0.75in; }
+  }
+</style>
+</head>
+<body>
+  <h1><span class="facility">Daily Classroom Roster</span>${dateLabel}</h1>
+  ${roomSections}
+  <div class="footer">Printed ${new Date().toLocaleString('en-US')}</div>
+  <script>
+    window.addEventListener('load', function() { window.print(); });
+  <\/script>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) { alert('Pop-up was blocked. Please allow pop-ups for this site and try again.'); return; }
+    w.document.write(html);
+    w.document.close();
 }
 
 // ============================================================
@@ -559,6 +653,7 @@ function flattenForExport(data) {
 function baseRow(reg, roomLabel, date, status, dayType) {
     const room = ROOMS.find(r => r.label === roomLabel);
     const rate = dayType === 'Half Day' ? room?.halfDayRate : room?.fullDayRate;
+    const bill = calcRegistrationBill(reg);
     return {
         'Submitted':   new Date(reg.created_at).toLocaleDateString('en-US'),
         'Parent Name': reg.parent_name,
@@ -571,6 +666,7 @@ function baseRow(reg, roomLabel, date, status, dayType) {
         'Day Type':    dayType,
         'Status':      status,
         'Rate':        date && rate ? `$${rate}` : '',
+        'Total Bill':  `$${bill.toFixed(2)}`,
     };
 }
 

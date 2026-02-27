@@ -73,7 +73,7 @@
                 </div>
                 <div class="roster-btns">
                     <button id="viewRosterBtn" class="btn-secondary">View Roster</button>
-                    <button id="exportRosterBtn" class="btn-primary">&#8595; Export Excel</button>
+                    <button id="exportRosterBtn" class="btn-primary">&#128438; Print / PDF</button>
                 </div>
             </div>
             <div id="rosterContent">
@@ -137,11 +137,12 @@
                             <th>DOB</th>
                             <th>Room</th>
                             <th>Dates</th>
+                            <th>Bill</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="regTableBody">
-                        <tr><td colspan="9" class="loading-cell">Loading registrations…</td></tr>
+                        <tr><td colspan="10" class="loading-cell">Loading registrations…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -150,7 +151,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=6"></script>
-    <script src="js/admin.js?v=4"></script>
+    <script src="js/supabase.js?v=7"></script>
+    <script src="js/admin.js?v=5"></script>
 </body>
 </html>
