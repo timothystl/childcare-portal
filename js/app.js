@@ -11,18 +11,17 @@ const DAY_HEADERS_MF = ['Mon','Tue','Wed','Thu','Fri'];
 let currentDate         = new Date();
 let selectedFamily      = null;     // { id, parent_name, parent_email, parent_phone, pin, students:[] }
 let selectedChildren    = [];       // [{ name, dob, room: ROOMS[i], isNew: bool, studentId: string|null }]
-let selectedDates       = new Map();  // 'YYYY-MM-DD' -> { status: 'confirmed'|'waitlist', dayType: 'full'|'half' }
+let selectedDates       = new Map();  // 'YYYY-MM-DD' -> { dayType: 'full'|'half' }
 let capacityCache       = {};         // { roomId: { 'YYYY-MM-DD': count } }
 let closureMap          = new Map();  // 'YYYY-MM-DD' -> reason string
 let calendarLoading     = false;
 let pickerOpenDate      = null;
-let regWindowOverride   = 'auto';     // 'auto' | 'open' | 'closed' — loaded from Supabase settings
+let regWindowOverride   = 'auto';     // 'auto' | 'open' | 'closed'
 
 // ============================================================
-// REGISTRATION WINDOW  (Items 6 & 7)
+// REGISTRATION WINDOW
 // - mode 'confirmed' : day 1–20  → form enabled, dates saved as confirmed
-// - mode 'waitlist'  : day 21+   → form enabled, ALL dates saved as waitlisted
-// - mode 'closed'    : admin override only — hard disables form
+// - mode 'closed'    : day 21+   → registration closed (no waitlist)
 // ============================================================
 function getRegistrationWindow() {
     const today  = new Date();
@@ -37,7 +36,7 @@ function getRegistrationWindow() {
     const deadlineDate  = new Date(year, month, 20);
     const deadlineLabel = deadlineDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
-    let mode = day <= 20 ? 'confirmed' : 'waitlist';
+    let mode = day <= 20 ? 'confirmed' : 'closed';
     if (regWindowOverride === 'open')   mode = 'confirmed';
     if (regWindowOverride === 'closed') mode = 'closed';
 
@@ -60,19 +59,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     currentDate = new Date(win.targetDate.getFullYear(), win.targetDate.getMonth(), 1);
 
-    const alreadySubmitted = localStorage.getItem(`childcare_submitted_${targetMonthKey}`) === 'true';
-
+    // Show window open/closed status — no "already submitted" check on load
     const banner = document.getElementById('regWindowBanner');
     if (banner) {
-        if (alreadySubmitted) {
-            banner.className = 'reg-window-banner submitted';
-            banner.innerHTML = `✅ Your registration for <strong>${win.targetLabel}</strong> has been submitted. Please contact us to make any changes.`;
-        } else if (win.mode === 'closed') {
+        if (win.mode === 'closed') {
             banner.className = 'reg-window-banner locked';
-            banner.innerHTML = `🔒 Registration is currently closed by admin.`;
-        } else if (win.mode === 'waitlist') {
-            banner.className = 'reg-window-banner waitlist';
-            banner.innerHTML = `⚠️ The deadline has passed for <strong>${win.targetLabel}</strong>. You can still submit — your registration will be placed on the <strong>waitlist</strong> for admin review.`;
+            banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed. Deadline was <strong>${win.deadlineLabel}</strong>.`;
         } else {
             banner.className = 'reg-window-banner open';
             banner.innerHTML = `📅 Now accepting registrations for <strong>${win.targetLabel}</strong>. Deadline: <strong>${win.deadlineLabel}</strong>.`;
@@ -81,15 +73,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const btn = document.getElementById('submitBtn');
     if (btn) {
-        if (alreadySubmitted) {
-            btn.disabled    = true;
-            btn.textContent = 'Already Submitted';
-        } else if (win.mode === 'closed') {
+        if (win.mode === 'closed') {
             btn.disabled    = true;
             btn.textContent = 'Registration Closed';
-        } else if (win.mode === 'waitlist') {
-            btn.disabled    = false;
-            btn.textContent = 'Submit to Waitlist';
         } else {
             btn.disabled    = false;
             btn.textContent = 'Submit Registration';
@@ -98,6 +84,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setupFamilyLookup();
     setupFormListeners();
+    setupContactModal();
 
     const closures = await fetchClosures();
     closureMap = new Map(closures.map(c => [c.close_date, c.reason || '']));
@@ -126,6 +113,15 @@ function getRoomIdFromDob(dobStr) {
 function getRoomFromDob(dobStr) {
     const roomId = getRoomIdFromDob(dobStr);
     return roomId ? (ROOMS.find(r => r.id === roomId) || null) : null;
+}
+
+// Returns room: checks admin-set override first, falls back to age-based
+function getRoomForStudent(student) {
+    if (student.room_override) {
+        const room = ROOMS.find(r => r.id === student.room_override);
+        if (room) return room;
+    }
+    return getRoomFromDob(student.child_dob || student.dob || null);
 }
 
 // ============================================================
@@ -217,12 +213,10 @@ function selectFamily(family) {
     selectedFamily = family;
     document.getElementById('familySearchResults').innerHTML = '';
 
-    // Pre-fill parent fields (read-only)
     setPrefilled('parentName',  family.parent_name);
     setPrefilled('parentEmail', family.parent_email);
     setPrefilled('parentPhone', family.parent_phone);
 
-    // Show selected bar
     const bar = document.getElementById('familySelectedBar');
     if (bar) bar.classList.remove('hidden');
     const nameEl = document.getElementById('selectedFamilyName');
@@ -233,11 +227,9 @@ function selectFamily(family) {
         pinEl.style.display = family.pin ? '' : 'none';
     }
 
-    // Unlock registration steps
     document.getElementById('lookupRequiredMsg')?.classList.add('hidden');
     document.getElementById('registrationSteps')?.classList.remove('hidden');
 
-    // Render child section with family's existing children
     renderChildSection();
 }
 
@@ -254,7 +246,6 @@ function resetFamilyLookup() {
 
     document.getElementById('familySelectedBar')?.classList.add('hidden');
 
-    // Lock registration steps again
     document.getElementById('lookupRequiredMsg')?.classList.remove('hidden');
     document.getElementById('registrationSteps')?.classList.add('hidden');
 
@@ -283,24 +274,8 @@ function clearPrefilled(id) {
 }
 
 // ============================================================
-// CHILD SECTION  (Item 8 — multi-child same dates)
+// CHILD SECTION  (existing family children only, with room override)
 // ============================================================
-function addChild(child) {
-    if (selectedChildren.some(c => c.name === child.name && c.dob === child.dob)) {
-        showToast(`${child.name} is already added.`);
-        return;
-    }
-    selectedChildren.push(child);
-    renderChildSection();
-    onChildrenChanged();
-}
-
-function removeChild(index) {
-    selectedChildren.splice(index, 1);
-    renderChildSection();
-    onChildrenChanged();
-}
-
 function renderChildSection() {
     const section = document.getElementById('childSection');
     if (!section) return;
@@ -315,31 +290,35 @@ function renderChildSection() {
     section.innerHTML = `
         <div class="child-cards-row">
             ${students.map(s => {
-                const room       = getRoomFromDob(s.child_dob);
+                const room       = getRoomForStudent(s);
                 const isSelected = selectedChildren.some(c => c.studentId === s.id);
                 const dobLabel   = s.child_dob
                     ? new Date(s.child_dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                     : '';
+                const overrideNote = s.room_override
+                    ? `<span class="child-card-override">Assigned by office</span>` : '';
                 return `<label class="child-card-label${isSelected ? ' selected' : ''}" data-student-id="${s.id}">
                     <input type="checkbox" class="child-card-checkbox"
                            data-student-id="${s.id}"
                            data-name="${escStr(s.child_name)}"
                            data-dob="${escStr(s.child_dob || '')}"
+                           data-room-override="${escStr(s.room_override || '')}"
                            ${isSelected ? 'checked' : ''}>
                     <span class="child-card-name">${escStr(s.child_name)}</span>
                     ${dobLabel ? `<span class="child-card-dob">${dobLabel}</span>` : ''}
                     ${room ? `<span class="child-card-room">${room.label}</span>` : '<span class="child-card-room" style="background:#fff5f5;color:#e53e3e;">Age not set</span>'}
+                    ${overrideNote}
                 </label>`;
             }).join('')}
         </div>`;
 
-    // Bind checkboxes
     section.querySelectorAll('.child-card-checkbox').forEach(cb => {
         cb.addEventListener('change', () => {
-            const studentId = cb.dataset.studentId;
-            const childName = cb.dataset.name;
-            const childDob  = cb.dataset.dob;
-            const room      = getRoomFromDob(childDob);
+            const studentId    = cb.dataset.studentId;
+            const childName    = cb.dataset.name;
+            const childDob     = cb.dataset.dob;
+            const roomOverride = cb.dataset.roomOverride || null;
+            const room = getRoomForStudent({ child_dob: childDob, room_override: roomOverride });
             if (!room) {
                 cb.checked = false;
                 showToast(`Could not assign a room for ${childName} — please check their date of birth.`);
@@ -425,7 +404,7 @@ function spotsLeft(dateStr) {
 }
 
 // ============================================================
-// CALENDAR — Mon–Fri only, closed days blocked (Item 3)
+// CALENDAR — Mon–Fri only; closed and full days are not clickable
 // ============================================================
 function renderCalendar() {
     const year        = currentDate.getFullYear();
@@ -498,7 +477,8 @@ function renderCalendar() {
 
         cell.innerHTML = `<span class="day-num">${d}</span>${badge}`;
 
-        if (!isPast && !isClosed) {
+        // Only add click handler for available/limited dates (full treated same as closed)
+        if (!isPast && !isClosed && status !== 'full') {
             cell.addEventListener('click', (e) => {
                 e.stopPropagation();
                 handleDayClick(dateStr, status, cell);
@@ -523,22 +503,10 @@ function handleDayClick(dateStr, status, cellEl) {
         return;
     }
 
-    if (status === 'full') {
-        closeDayPicker();
-        const childNames = selectedChildren.map(c => c.name).join(' & ');
-        const join = confirm(`This day is full for one or more rooms.\n\nAdd ${childNames} to the waitlist for this date?`);
-        if (join) {
-            selectedDates.set(dateStr, { status: 'waitlist', dayType: 'full' });
-            renderCalendar();
-            renderSelectedDates();
-        }
-        return;
-    }
-
     const allFullDayOnly = selectedChildren.every(c => c.room.fullDayOnly);
     if (allFullDayOnly) {
         closeDayPicker();
-        selectedDates.set(dateStr, { status: 'confirmed', dayType: 'full' });
+        selectedDates.set(dateStr, { dayType: 'full' });
         renderCalendar();
         renderSelectedDates();
         return;
@@ -562,7 +530,6 @@ function showDayPicker(dateStr, cellEl) {
     });
     document.body.appendChild(backdrop);
 
-    // Calculate combined rates across all children
     const fullTotal = selectedChildren.reduce((s, c) => s + (c.room.fullDayRate || 0), 0);
     const halfTotal = selectedChildren.reduce((s, c) => s + (c.room.halfDayRate || 0), 0);
     const hasHalf   = selectedChildren.some(c => !c.room.fullDayOnly);
@@ -601,7 +568,6 @@ function showDayPicker(dateStr, cellEl) {
         btn.addEventListener('click', e => {
             e.stopPropagation();
             selectedDates.set(btn.getAttribute('data-date'), {
-                status:  'confirmed',
                 dayType: btn.getAttribute('data-type'),
             });
             closeDayPicker();
@@ -641,7 +607,6 @@ function calcTotal() {
     if (!selectedChildren.length) return 0;
     let total = 0;
     for (const [, entry] of selectedDates) {
-        if (entry.status === 'waitlist') continue;
         for (const child of selectedChildren) {
             total += entry.dayType === 'half'
                 ? (child.room.halfDayRate || 0)
@@ -660,15 +625,10 @@ function renderSelectedDates() {
 
     const sorted = [...selectedDates.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     const rows = sorted.map(([dateStr, entry]) => {
-        const isWaitlist  = entry.status === 'waitlist';
-        const statusBadge = isWaitlist
-            ? '<span class="waitlist-badge">Waitlist</span>'
-            : '<span class="confirmed-badge">Confirmed</span>';
-
         let dayTypeLabel = '';
-        if (!isWaitlist && selectedChildren.length) {
-            const typeText   = entry.dayType === 'half' ? 'Half Day' : 'Full Day';
-            const lineTotal  = selectedChildren.reduce((s, c) =>
+        if (selectedChildren.length) {
+            const typeText  = entry.dayType === 'half' ? 'Half Day' : 'Full Day';
+            const lineTotal = selectedChildren.reduce((s, c) =>
                 s + (entry.dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0)), 0);
             if (selectedChildren.length === 1) {
                 dayTypeLabel = `<span class="day-type-label">${typeText} — $${lineTotal}</span>`;
@@ -685,7 +645,6 @@ function renderSelectedDates() {
                 <div class="date-row">
                     <div class="date-info">
                         <span class="date-label">${friendlyDate(dateStr)}</span>
-                        ${statusBadge}
                         ${dayTypeLabel}
                     </div>
                     <button type="button" class="remove-btn" data-date="${dateStr}">&times;</button>
@@ -698,7 +657,6 @@ function renderSelectedDates() {
         <ul class="date-list">${rows}</ul>
         <div class="billing-total">
             Estimated total: <strong>$${total.toFixed(2)}</strong>
-            <span class="billing-note">(waitlisted days not included)</span>
         </div>`;
 
     container.querySelectorAll('.remove-btn').forEach(btn => {
@@ -744,7 +702,61 @@ function setupFormListeners() {
 }
 
 // ============================================================
-// FORM SUBMISSION (Items 4, 7, 8)
+// CONTACT US MODAL
+// ============================================================
+function setupContactModal() {
+    const contactBtn   = document.getElementById('contactUsBtn');
+    const contactModal = document.getElementById('contactModal');
+    const closeContact = document.getElementById('closeContactModal');
+    const contactForm  = document.getElementById('contactForm');
+
+    contactBtn?.addEventListener('click', () => {
+        // Pre-fill name/email from selected family if available
+        const nameEl  = document.getElementById('contactName');
+        const emailEl = document.getElementById('contactEmail');
+        if (nameEl  && selectedFamily) nameEl.value  = selectedFamily.parent_name  || '';
+        if (emailEl && selectedFamily) emailEl.value = selectedFamily.parent_email || '';
+        if (contactModal) contactModal.style.display = 'flex';
+    });
+
+    closeContact?.addEventListener('click', () => {
+        if (contactModal) contactModal.style.display = 'none';
+    });
+
+    contactModal?.addEventListener('click', e => {
+        if (e.target === contactModal) contactModal.style.display = 'none';
+    });
+
+    contactForm?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const nameVal    = document.getElementById('contactName').value.trim();
+        const emailVal   = document.getElementById('contactEmail').value.trim();
+        const messageVal = document.getElementById('contactMessage').value.trim();
+        if (!messageVal) { showToast('Please enter a message.'); return; }
+
+        const submitBtn = contactForm.querySelector('button[type="submit"]');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Sending…'; }
+
+        try {
+            await addMessage({ parentName: nameVal, parentEmail: emailVal, message: messageVal });
+            if (contactModal) contactModal.style.display = 'none';
+            contactForm.reset();
+            showToast('✅ Message sent! We\'ll be in touch soon.');
+        } catch (err) {
+            // Fallback: open mailto if DB fails
+            const subject = encodeURIComponent('Registration Question');
+            const body    = encodeURIComponent(`Name: ${nameVal}\n\n${messageVal}`);
+            window.location.href = `mailto:?subject=${subject}&body=${body}`;
+            if (contactModal) contactModal.style.display = 'none';
+            contactForm.reset();
+        } finally {
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Send Message'; }
+        }
+    });
+}
+
+// ============================================================
+// FORM SUBMISSION
 // ============================================================
 async function handleSubmit(e) {
     e.preventDefault();
@@ -754,7 +766,7 @@ async function handleSubmit(e) {
     const targetMonthKey = getTargetMonthKey();
 
     if (win.mode === 'closed') {
-        showToast('🔒 Registration is currently closed by admin.');
+        showToast('🔒 Registration is currently closed.');
         return;
     }
 
@@ -790,28 +802,14 @@ async function handleSubmit(e) {
     btn.textContent = 'Submitting…';
 
     try {
-        // Build shared date lists (same for all children)
-        let confirmedDates, waitlistDates, regStatus;
-        if (win.mode === 'waitlist') {
-            confirmedDates = [];
-            waitlistDates  = [...selectedDates.entries()].map(([d, en]) => ({ date: d, dayType: en.dayType }));
-            regStatus = 'pending_approval';
-        } else {
-            confirmedDates = [...selectedDates.entries()]
-                .filter(([, en]) => en.status === 'confirmed')
-                .map(([d, en]) => ({ date: d, dayType: en.dayType }));
-            waitlistDates = [...selectedDates.entries()]
-                .filter(([, en]) => en.status === 'waitlist')
-                .map(([d, en]) => ({ date: d, dayType: en.dayType }));
-            regStatus = 'confirmed';
-        }
+        // All selected dates are confirmed
+        const confirmedDates = [...selectedDates.entries()]
+            .map(([d, en]) => ({ date: d, dayType: en.dayType }));
 
-        // Submit one registration per child
         const results = [];
         const errors  = [];
 
         for (const child of selectedChildren) {
-            // Check for duplicate (per child, not per family)
             const alreadyReg = await checkExistingRegistration(parentEmail, targetMonthKey, child.name);
             if (alreadyReg) {
                 errors.push(`${child.name} is already registered for ${win.targetLabel}.`);
@@ -823,8 +821,8 @@ async function handleSubmit(e) {
                     child:  { name: child.name, ageMonths: calcAgeMonths(child.dob), dob: child.dob },
                     roomId: child.room.id,
                     confirmedDates,
-                    waitlistDates,
-                    status: regStatus,
+                    waitlistDates: [],
+                    status: 'confirmed',
                 });
                 results.push({ child, reg });
             } catch (childErr) {
@@ -835,18 +833,17 @@ async function handleSubmit(e) {
         if (!results.length) {
             errors.forEach(err => showToast('⚠️ ' + err));
             btn.disabled    = false;
-            btn.textContent = win.mode === 'waitlist' ? 'Submit to Waitlist' : 'Submit Registration';
+            btn.textContent = 'Submit Registration';
             return;
         }
 
-        // Mark as submitted in localStorage
         localStorage.setItem(`childcare_submitted_${targetMonthKey}`, 'true');
 
         // Build itemized receipt
-        const confirmedSorted = confirmedDates.slice().sort((a, b) => a.date.localeCompare(b.date));
+        const sortedDates = confirmedDates.slice().sort((a, b) => a.date.localeCompare(b.date));
         let receiptHtml = '';
-        if (confirmedSorted.length) {
-            const receiptRows = confirmedSorted.map(({ date, dayType }) => {
+        if (sortedDates.length) {
+            const receiptRows = sortedDates.map(({ date, dayType }) => {
                 const typeLabel  = dayType === 'half' ? 'Half Day' : 'Full Day';
                 const lineTotal  = results.reduce((s, { child }) =>
                     s + (dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0)), 0);
@@ -858,7 +855,7 @@ async function handleSubmit(e) {
             }).join('');
 
             const grandTotal = results.reduce((s, { child }) =>
-                confirmedSorted.reduce((ss, { dayType }) =>
+                sortedDates.reduce((ss, { dayType }) =>
                     ss + (dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0)), s), 0);
 
             receiptHtml = `
@@ -880,21 +877,30 @@ async function handleSubmit(e) {
 
         let details = `<p>Registration for ${childList}.</p>`;
         details += receiptHtml;
-        if (win.mode === 'waitlist') {
-            details += `<p class="receipt-waitlist-note">⏳ <strong>Waitlist submission</strong> — all ${waitlistDates.length} day(s) are pending admin approval. We'll contact you at <strong>${parentEmail}</strong> once approved.</p>`;
-        } else if (waitlistDates.length) {
-            details += `<p class="receipt-waitlist-note"><strong>${waitlistDates.length}</strong> day(s) on waitlist — we'll contact you at <strong>${parentEmail}</strong> if a spot opens.</p>`;
-        }
         if (errors.length) {
             details += `<p class="receipt-error-note">⚠️ Note: ${escStr(errors.join('; '))}</p>`;
         }
 
+        // Build mailto: link so parent can email themselves their schedule
+        const emailSubject = encodeURIComponent(`${win.targetLabel} Care Schedule — ${parentName}`);
+        const emailBody = encodeURIComponent(
+            `Hi ${parentName},\n\nHere is your confirmed care schedule for ${win.targetLabel}:\n\n` +
+            sortedDates.map(({ date, dayType }) =>
+                `• ${friendlyDate(date)} — ${dayType === 'half' ? 'Half Day' : 'Full Day'}`
+            ).join('\n') +
+            `\n\nChildren registered: ${results.map(r => r.child.name).join(', ')}\n\nThank you!`
+        );
+        details += `<div style="margin-top:18px;text-align:center;">
+            <a href="mailto:${parentEmail}?subject=${emailSubject}&body=${emailBody}" class="btn-email-schedule">
+                📧 Email Me My Schedule
+            </a>
+        </div>`;
+
         document.getElementById('successDetails').innerHTML = details;
         document.getElementById('successModal').style.display = 'flex';
 
-        // Reset form (keep family selected so parent can re-register next period)
+        // Reset form (keep family selected)
         document.getElementById('registrationForm').reset();
-        // Re-prefill parent fields since form.reset() clears them
         setPrefilled('parentName',  selectedFamily.parent_name);
         setPrefilled('parentEmail', selectedFamily.parent_email);
         setPrefilled('parentPhone', selectedFamily.parent_phone);
@@ -902,16 +908,14 @@ async function handleSubmit(e) {
         selectedDates    = new Map();
         capacityCache    = {};
         hideCalendar();
-        renderChildSection();   // Re-render family's child cards (unchecked)
+        renderChildSection();
         renderSelectedDates();
 
-        // Update banner/button
+        // Update banner + button
         const postBanner = document.getElementById('regWindowBanner');
         if (postBanner) {
             postBanner.className = 'reg-window-banner submitted';
-            postBanner.innerHTML = win.mode === 'waitlist'
-                ? `✅ Your waitlist request for <strong>${win.targetLabel}</strong> has been submitted. We'll be in touch soon.`
-                : `✅ Your registration for <strong>${win.targetLabel}</strong> has been submitted. Contact us to make any changes.`;
+            postBanner.innerHTML = `✅ Your registration for <strong>${win.targetLabel}</strong> has been submitted. Contact us to make any changes.`;
         }
         btn.disabled    = true;
         btn.textContent = 'Already Submitted';
@@ -924,7 +928,7 @@ async function handleSubmit(e) {
             showToast('❌ Error: ' + (err?.message || JSON.stringify(err)));
         }
         btn.disabled    = false;
-        btn.textContent = win.mode === 'waitlist' ? 'Submit to Waitlist' : 'Submit Registration';
+        btn.textContent = 'Submit Registration';
     }
 }
 

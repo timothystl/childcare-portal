@@ -731,6 +731,132 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 
 /* ============================================================
+   ROOM OVERRIDE DROPDOWN (in family directory)
+   ============================================================ */
+.room-override-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+.room-override-label {
+    font-size: .78em;
+    color: #888;
+    white-space: nowrap;
+}
+.room-override-select {
+    padding: 4px 8px;
+    border: 1.5px solid #d6d0f5;
+    border-radius: 6px;
+    font-size: .78em;
+    background: #f8f9ff;
+    color: #444;
+    cursor: pointer;
+    transition: border-color .2s;
+    max-width: 180px;
+}
+.room-override-select:focus { outline: none; border-color: #667eea; }
+
+.family-student-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .86em;
+    color: #555;
+    flex-wrap: wrap;
+}
+
+/* ============================================================
+   MESSAGES SECTION
+   ============================================================ */
+.messages-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+.unread-badge {
+    background: #e53e3e;
+    color: #fff;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: .8em;
+    font-weight: 700;
+}
+.messages-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 600px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.message-item {
+    background: #fff;
+    border-radius: 9px;
+    padding: 14px 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    border-left: 4px solid #e0e0e0;
+}
+.message-unread {
+    border-left-color: #667eea;
+    background: #f8f9ff;
+}
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.message-from {
+    font-weight: 700;
+    color: #333;
+    font-size: .95em;
+}
+.message-email {
+    color: #667eea;
+    font-size: .85em;
+    text-decoration: none;
+}
+.message-email:hover { text-decoration: underline; }
+.message-time {
+    color: #aaa;
+    font-size: .78em;
+    margin-left: auto;
+    white-space: nowrap;
+}
+.message-new-badge {
+    background: #667eea;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: .72em;
+    font-weight: 700;
+}
+.message-body {
+    color: #444;
+    font-size: .9em;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    margin-bottom: 8px;
+}
+.btn-mark-read {
+    background: #fff;
+    color: #667eea;
+    border: 1.5px solid #667eea;
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .78em;
+    font-weight: 600;
+    transition: all .2s;
+}
+.btn-mark-read:hover { background: #667eea; color: #fff; }
+
+/* ============================================================
    RESPONSIVE ADMIN
    ============================================================ */
 @media (max-width: 700px) {

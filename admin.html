@@ -47,7 +47,6 @@
             <select id="statusFilter">
                 <option value="">All statuses</option>
                 <option value="confirmed">Confirmed only</option>
-                <option value="waitlist">Waitlist only</option>
             </select>
         </div>
 
@@ -81,7 +80,7 @@
             </div>
         </section>
 
-        <!-- Monthly Billing Report (Item 5) -->
+        <!-- Monthly Billing Report -->
         <section class="admin-section">
             <h2>📊 Monthly Billing Report</h2>
             <p class="section-desc">Attendance and billing totals for a selected month across all rooms.</p>
@@ -103,10 +102,10 @@
         <!-- Registration Window Override -->
         <section class="admin-section">
             <h2>🔓 Registration Window Override</h2>
-            <p class="section-desc">Manually open or close the registration window regardless of the normal date rules (auto: open days 1–20 and last day of month).</p>
+            <p class="section-desc">Manually open or close the registration window regardless of the normal date rules (auto: open days 1–20, closed days 21+).</p>
             <div class="override-row">
                 <select id="windowOverrideSelect" class="override-select">
-                    <option value="auto">Auto — follow normal rules</option>
+                    <option value="auto">Auto — open days 1–20, closed days 21+</option>
                     <option value="open">Force Open — allow registration right now</option>
                     <option value="closed">Force Closed — block registration right now</option>
                 </select>
@@ -118,7 +117,7 @@
         <!-- Families & Students -->
         <section class="admin-section" id="familiesSection">
             <h2>👨‍👩‍👧 Families &amp; Students</h2>
-            <p class="section-desc">Import from a ProCare or custom Excel / CSV file, or browse the family directory used for parent look-up.</p>
+            <p class="section-desc">Import from a ProCare or custom Excel / CSV file, or browse the family directory used for parent look-up. You can also force-assign a child to a specific room.</p>
 
             <div class="families-import-row">
                 <label class="file-upload-label" for="familiesFileInput">📂 Choose File</label>
@@ -134,6 +133,19 @@
             </div>
             <div id="familiesList">
                 <p class="empty-hint">Click Refresh to load families.</p>
+            </div>
+        </section>
+
+        <!-- Messages -->
+        <section class="admin-section" id="messagesSection">
+            <h2>💬 Parent Messages</h2>
+            <p class="section-desc">Messages sent by parents via the Contact Us button on the registration portal.</p>
+            <div class="messages-header">
+                <button id="refreshMessagesBtn" class="btn-secondary">&#8635; Refresh</button>
+                <span id="unreadBadge" class="unread-badge hidden"></span>
+            </div>
+            <div id="messagesList">
+                <p class="empty-hint">Click Refresh to load messages.</p>
             </div>
         </section>
 
@@ -188,7 +200,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=10"></script>
-    <script src="js/admin.js?v=8"></script>
+    <script src="js/supabase.js?v=11"></script>
+    <script src="js/admin.js?v=9"></script>
 </body>
 </html>

@@ -106,7 +106,7 @@ async function deleteClosure(closeDate) {
 // ============================================================
 // REGISTRATION SUBMIT
 // ============================================================
-async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates, status = 'confirmed' }) {
+async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates = [], status = 'confirmed' }) {
     if (!sbClient) throw new Error('Supabase is not configured yet.');
 
     const { data: reg, error: regError } = await sbClient
@@ -134,7 +134,7 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
             waitlisted:      false,
             day_type:        dayType,
         })),
-        ...waitlistDates.map(({ date, dayType }) => ({
+        ...(waitlistDates || []).map(({ date, dayType }) => ({
             registration_id: reg.id,
             room_id:         roomId,
             care_date:       date,
@@ -173,13 +173,11 @@ async function fetchAllRegistrations() {
 
 async function approveRegistration(id) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    // Mark the registration as confirmed
     const { error: regErr } = await sbClient
         .from('registrations')
         .update({ status: 'confirmed' })
         .eq('id', id);
     if (regErr) throw regErr;
-    // Unmark all its dates as waitlisted
     const { error: datesErr } = await sbClient
         .from('registration_dates')
         .update({ waitlisted: false })
@@ -220,11 +218,8 @@ async function upsertSetting(key, value) {
 }
 
 // ============================================================
-// DUPLICATE REGISTRATION CHECK  (Item 7)
-// Returns true if this email already has confirmed dates in the given month.
-// monthKey format: 'YYYY-MM'
+// DUPLICATE REGISTRATION CHECK
 // ============================================================
-// childName is optional — when provided, only checks that specific child's registrations
 async function checkExistingRegistration(email, monthKey, childName = null) {
     if (!sbClient) return false;
     try {
@@ -253,35 +248,84 @@ async function checkExistingRegistration(email, monthKey, childName = null) {
 }
 
 // ============================================================
-// FAMILIES & STUDENTS  (Items 1, 8, 9)
+// FAMILIES & STUDENTS
 // ============================================================
+
+// Try the families table first (ProCare import); fall back to searching registrations
 async function searchFamilies(query) {
     if (!sbClient || !query) return [];
-    const { data, error } = await sbClient
-        .from('families')
-        .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob)')
-        .or(`parent_name.ilike.%${query}%,parent_email.ilike.%${query}%`)
-        .order('parent_name')
-        .limit(8);
-    if (error) { console.error('searchFamilies:', error); return []; }
-    return data || [];
+    try {
+        const { data, error } = await sbClient
+            .from('families')
+            .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override)')
+            .or(`parent_name.ilike.%${query}%,parent_email.ilike.%${query}%`)
+            .order('parent_name')
+            .limit(8);
+        if (!error && data?.length) return data;
+    } catch (_) { /* families table may not exist yet */ }
+    // Fall back to building family-like records from existing registrations
+    return searchFamiliesFromRegistrations(query);
+}
+
+// Build family-like objects from the registrations table (works before ProCare import)
+async function searchFamiliesFromRegistrations(query) {
+    if (!sbClient || !query) return [];
+    try {
+        const { data, error } = await sbClient
+            .from('registrations')
+            .select('parent_name, parent_email, parent_phone, child_name, child_dob')
+            .or(`parent_name.ilike.%${query}%,parent_email.ilike.%${query}%`)
+            .order('created_at', { ascending: false });
+        if (error || !data?.length) return [];
+
+        const map = new Map();
+        for (const r of data) {
+            const key = (r.parent_email || r.parent_name || '').toLowerCase().trim();
+            if (!key) continue;
+            if (!map.has(key)) {
+                map.set(key, {
+                    id:           'reg_' + key,
+                    parent_name:  r.parent_name,
+                    parent_email: r.parent_email,
+                    parent_phone: r.parent_phone,
+                    pin:          null,
+                    students:     [],
+                });
+            }
+            const fam = map.get(key);
+            if (r.child_name && !fam.students.some(s => s.child_name === r.child_name)) {
+                fam.students.push({
+                    id:            `reg_${key}_${r.child_name}`,
+                    child_name:    r.child_name,
+                    child_dob:     r.child_dob,
+                    room_override: null,
+                });
+            }
+        }
+        return [...map.values()];
+    } catch (_) {
+        return [];
+    }
 }
 
 async function lookupFamilyByPin(pin) {
     if (!sbClient) return null;
-    const { data, error } = await sbClient
-        .from('families')
-        .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob)')
-        .eq('pin', parseInt(pin, 10))
-        .maybeSingle();
-    if (error) { console.error('lookupFamilyByPin:', error); return null; }
-    return data || null;
+    try {
+        const { data, error } = await sbClient
+            .from('families')
+            .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override)')
+            .eq('pin', parseInt(pin, 10))
+            .maybeSingle();
+        if (error) { console.error('lookupFamilyByPin:', error); return null; }
+        return data || null;
+    } catch (_) {
+        return null;
+    }
 }
 
 async function createFamily({ parentName, parentEmail, parentPhone }) {
     if (!sbClient) throw new Error('Supabase not configured.');
 
-    // If email provided, upsert by email
     if (parentEmail) {
         const { data: existing } = await sbClient
             .from('families').select('id, pin')
@@ -292,13 +336,12 @@ async function createFamily({ parentName, parentEmail, parentPhone }) {
                 .eq('id', existing.id);
             const { data: updated } = await sbClient
                 .from('families')
-                .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob)')
+                .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override)')
                 .eq('id', existing.id).single();
             return updated;
         }
     }
 
-    // Generate unique 4-digit PIN
     let pin = null;
     for (let i = 0; i < 10; i++) {
         const candidate = Math.floor(1000 + Math.random() * 9000);
@@ -318,7 +361,6 @@ async function createFamily({ parentName, parentEmail, parentPhone }) {
 
 async function addStudent({ familyId, childName, childDob }) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    // Skip if already exists
     const { data: existing } = await sbClient
         .from('students').select('id')
         .eq('family_id', familyId).eq('child_name', childName).maybeSingle();
@@ -335,15 +377,23 @@ async function fetchAllFamilies() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, pin, created_at, students(id, child_name, child_dob)')
+        .select('id, parent_name, parent_email, parent_phone, pin, created_at, students(id, child_name, child_dob, room_override)')
         .order('parent_name');
     if (error) throw error;
     return data || [];
 }
 
+async function updateStudentRoomOverride(studentId, roomOverride) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('students')
+        .update({ room_override: roomOverride || null })
+        .eq('id', studentId);
+    if (error) throw error;
+}
+
 async function importFamiliesData(rows) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    // Group rows by email (or name if no email)
     const byKey = {};
     rows.forEach(r => {
         if (!r.parentName) return;
@@ -366,4 +416,34 @@ async function importFamiliesData(rows) {
         } catch (e) { console.warn('Import row failed:', e); }
     }
     return { familiesImported, studentsImported };
+}
+
+// ============================================================
+// MESSAGES  (Contact Us from parent portal)
+// ============================================================
+async function addMessage({ parentName, parentEmail, message }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('messages')
+        .insert({ parent_name: parentName, parent_email: parentEmail, message });
+    if (error) throw error;
+}
+
+async function fetchMessages() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('messages')
+        .select('id, parent_name, parent_email, message, created_at, is_read')
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+async function markMessageRead(id, isRead = true) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('messages')
+        .update({ is_read: isRead })
+        .eq('id', id);
+    if (error) throw error;
 }

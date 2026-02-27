@@ -97,7 +97,7 @@
                             <div class="legend">
                                 <span class="legend-item"><span class="dot available"></span> Available</span>
                                 <span class="legend-item"><span class="dot limited"></span> &le;3 spots left</span>
-                                <span class="legend-item"><span class="dot full"></span> Full (waitlist)</span>
+                                <span class="legend-item"><span class="dot full"></span> Not available</span>
                                 <span class="legend-item"><span class="dot selected"></span> Your selection</span>
                             </div>
                         </div>
@@ -127,7 +127,36 @@
                 <div class="modal-icon">&#10003;</div>
                 <h2>Registration Submitted!</h2>
                 <div id="successDetails"></div>
-                <button id="closeModal" class="btn-primary">Done</button>
+                <button id="closeModal" class="btn-primary" style="margin-top:18px;">Done</button>
+            </div>
+        </div>
+
+        <!-- Contact Us Modal -->
+        <div id="contactModal" class="modal" role="dialog" aria-modal="true">
+            <div class="modal-content contact-modal-content">
+                <div class="modal-icon contact-modal-icon">✉️</div>
+                <h2>Contact Us</h2>
+                <p style="color:#666;margin-bottom:18px;font-size:.93em;">Have a question or need help? Send us a message and we'll get back to you soon.</p>
+                <form id="contactForm" novalidate>
+                    <div class="contact-form-grid">
+                        <div class="form-group">
+                            <label for="contactName">Your Name</label>
+                            <input type="text" id="contactName" placeholder="Jane Smith" autocomplete="name">
+                        </div>
+                        <div class="form-group">
+                            <label for="contactEmail">Your Email</label>
+                            <input type="email" id="contactEmail" placeholder="jane@example.com" autocomplete="email">
+                        </div>
+                        <div class="form-group contact-msg-group">
+                            <label for="contactMessage">Message <span class="req">*</span></label>
+                            <textarea id="contactMessage" rows="4" placeholder="What can we help you with?" required></textarea>
+                        </div>
+                    </div>
+                    <div class="contact-form-actions">
+                        <button type="button" id="closeContactModal" class="btn-ghost">Cancel</button>
+                        <button type="submit" class="btn-primary">Send Message</button>
+                    </div>
+                </form>
             </div>
         </div>
 
@@ -135,9 +164,14 @@
         <div id="errorToast" class="toast error hidden"></div>
     </div>
 
+    <!-- Floating Contact Us button -->
+    <button id="contactUsBtn" class="btn-contact-float" title="Contact Us">
+        💬 Contact Us
+    </button>
+
     <!-- Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase.js?v=10"></script>
-    <script src="js/app.js?v=14"></script>
+    <script src="js/supabase.js?v=11"></script>
+    <script src="js/app.js?v=15"></script>
 </body>
 </html>

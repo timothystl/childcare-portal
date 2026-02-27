@@ -198,8 +198,9 @@ main { padding: 32px 36px; }
 .cal-day.limited      { background: #fffaf0; border-color: #f6ad55; }
 .cal-day.limited:hover{ background: #feebc8; transform: scale(1.06); }
 
-.cal-day.full         { background: #fff5f5; border-color: #fc8181; }
-.cal-day.full:hover   { background: #fed7d7; transform: scale(1.06); }
+/* Full dates: same visual treatment as closed — not clickable */
+.cal-day.full         { background: #f5f5f5; border-color: #ddd; cursor: not-allowed; opacity: 0.65; }
+.cal-day.full .day-num { color: #bbb; }
 
 .cal-day.selected     { background: #667eea !important; border-color: #667eea !important; color: #fff; }
 .cal-day.selected .spot-badge { color: #fff; }
@@ -213,6 +214,9 @@ main { padding: 32px 36px; }
 }
 .full-badge    { color: #e53e3e; }
 .limited-badge { color: #c05621; }
+
+/* Legend — update dot.full to match grey/unavailable look */
+.dot.full      { background: #f5f5f5; border-color: #ccc; }
 
 /* Legend */
 .legend {
@@ -1010,6 +1014,113 @@ input.prefilled {
     font-size: .82em !important;
     color: #e53e3e !important;
     margin-top: 8px !important;
+}
+
+/* ============================================================
+   ADMIN OVERRIDE NOTE ON CHILD CARD
+   ============================================================ */
+.child-card-override {
+    display: inline-block;
+    margin-top: 3px;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: .72em;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 10px;
+    border: 1px solid #f6ad55;
+}
+
+/* ============================================================
+   EMAIL SCHEDULE BUTTON (in success modal)
+   ============================================================ */
+.btn-email-schedule {
+    display: inline-block;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    border: none;
+    padding: 11px 24px;
+    font-size: .95em;
+    border-radius: 8px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity .2s;
+}
+.btn-email-schedule:hover { opacity: .85; color: #fff; }
+
+/* ============================================================
+   FLOATING CONTACT US BUTTON
+   ============================================================ */
+.btn-contact-float {
+    position: fixed;
+    bottom: 28px;
+    right: 24px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    border: none;
+    padding: 12px 22px;
+    font-size: .92em;
+    font-weight: 600;
+    border-radius: 30px;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(102,126,234,.45);
+    transition: transform .2s, box-shadow .2s;
+    z-index: 300;
+    white-space: nowrap;
+}
+.btn-contact-float:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(102,126,234,.55);
+}
+
+/* ============================================================
+   CONTACT US MODAL
+   ============================================================ */
+.contact-modal-content {
+    max-width: 520px !important;
+    text-align: left !important;
+}
+.contact-modal-icon {
+    background: #667eea !important;
+    font-size: 1.4em !important;
+    text-align: center;
+}
+
+.contact-form-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.contact-form-grid .form-group input,
+.contact-form-grid .form-group textarea {
+    padding: 10px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 7px;
+    font-size: .95em;
+    font-family: inherit;
+    transition: border-color .2s;
+    width: 100%;
+}
+.contact-form-grid .form-group input:focus,
+.contact-form-grid .form-group textarea:focus {
+    outline: none;
+    border-color: #667eea;
+}
+.contact-form-grid .form-group label {
+    font-weight: 500;
+    color: #555;
+    font-size: .93em;
+    margin-bottom: 4px;
+    display: block;
+}
+.contact-msg-group { grid-column: 1 / -1; }
+
+.contact-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
 }
 
 /* ============================================================

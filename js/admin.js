@@ -47,6 +47,7 @@ async function initDashboard() {
     setupMonthlyReport();
     setupWindowOverride();
     setupFamilies();
+    setupMessages();
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
     document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
@@ -101,7 +102,7 @@ async function loadRegistrations() {
     } catch (err) {
         console.error(err);
         document.getElementById('regTableBody').innerHTML =
-            '<tr><td colspan="9" class="loading-cell error">Failed to load — check Supabase config.</td></tr>';
+            '<tr><td colspan="10" class="loading-cell error">Failed to load — check Supabase config.</td></tr>';
     }
 }
 
@@ -135,12 +136,11 @@ function renderTable(data) {
                 { month: 'short', day: 'numeric', year: 'numeric' })
             : (reg.child_age != null ? reg.child_age + ' mo' : '—');
 
-        const bill      = calcRegistrationBill(reg);
-        const isPending = reg.status === 'pending_approval';
+        const bill = calcRegistrationBill(reg);
 
         return `
-            <tr data-id="${reg.id}" data-room="${reg.room_id}"${isPending ? ' class="pending-approval"' : ''}>
-                <td>${submitted}${isPending ? '<br><span class="reg-status-badge pending">⏳ Waitlist</span>' : ''}</td>
+            <tr data-id="${reg.id}" data-room="${reg.room_id}">
+                <td>${submitted}</td>
                 <td>${escHtml(reg.parent_name)}</td>
                 <td><a href="mailto:${escHtml(reg.parent_email)}">${escHtml(reg.parent_email)}</a></td>
                 <td>${escHtml(reg.parent_phone)}</td>
@@ -150,29 +150,10 @@ function renderTable(data) {
                 <td class="dates-cell">${datesHtml}</td>
                 <td class="bill-cell">$${bill.toFixed(2)}</td>
                 <td class="actions-cell">
-                    ${isPending ? `<button class="btn-approve" data-id="${reg.id}">✓ Approve</button>` : ''}
                     <button class="btn-delete" data-id="${reg.id}">Delete</button>
                 </td>
             </tr>`;
     }).join('');
-
-    tbody.querySelectorAll('.btn-approve').forEach(btn => {
-        btn.addEventListener('click', async e => {
-            const id  = e.currentTarget.getAttribute('data-id');
-            const reg = allRegistrations.find(r => String(r.id) === id);
-            if (!confirm(`Approve waitlist registration for ${reg?.child_name ?? 'this child'}?\n\nThis will confirm all their dates and include them in billing.`)) return;
-            btn.disabled    = true;
-            btn.textContent = 'Approving…';
-            try {
-                await approveRegistration(id);
-                await loadRegistrations();
-            } catch (err) {
-                alert('Approve failed: ' + err.message);
-                btn.disabled    = false;
-                btn.textContent = '✓ Approve';
-            }
-        });
-    });
 
     tbody.querySelectorAll('.btn-delete').forEach(btn => {
         btn.addEventListener('click', async e => {
@@ -222,7 +203,7 @@ function renderCapacityOverview() {
 }
 
 // ============================================================
-// DAILY ROSTER  (Item 2: simplified to just names per room)
+// DAILY ROSTER
 // ============================================================
 function setupRoster() {
     document.getElementById('viewRosterBtn').addEventListener('click', viewRoster);
@@ -254,7 +235,6 @@ function getRosterForDate(date, roomId) {
         .sort((a, b) => a.roomId.localeCompare(b.roomId) || a.childName.localeCompare(b.childName));
 }
 
-// Item 2: Simplified view — just child names per room with day type chip
 function viewRoster() {
     const date   = document.getElementById('rosterDate').value;
     const roomId = document.getElementById('rosterRoomFilter').value;
@@ -268,7 +248,6 @@ function viewRoster() {
         return;
     }
 
-    // Group by room
     const byRoom = {};
     roster.forEach(r => {
         if (!byRoom[r.roomLabel]) byRoom[r.roomLabel] = [];
@@ -292,7 +271,6 @@ function viewRoster() {
             </div>`).join('')}`;
 }
 
-// Item 2: Export as a clean printable page (user prints to PDF)
 function exportRoster() {
     const date   = document.getElementById('rosterDate').value;
     const roomId = document.getElementById('rosterRoomFilter').value;
@@ -304,7 +282,6 @@ function exportRoster() {
     const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US',
         { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-    // Group by room
     const byRoom = {};
     roster.forEach(r => {
         if (!byRoom[r.roomLabel]) byRoom[r.roomLabel] = [];
@@ -402,7 +379,6 @@ function exportRoster() {
 // REGISTRATION WINDOW OVERRIDE
 // ============================================================
 async function setupWindowOverride() {
-    // Load current setting and pre-select dropdown
     try {
         const current = await fetchSetting('reg_window_override') || 'auto';
         document.getElementById('windowOverrideSelect').value = current;
@@ -431,7 +407,7 @@ async function setupWindowOverride() {
 function showOverrideStatus(val, saved) {
     const el = document.getElementById('overrideStatus');
     const labels = {
-        auto:   '⚙️ Auto — normal date rules in effect.',
+        auto:   '⚙️ Auto — open days 1–20, closed days 21+ each month.',
         open:   '🟢 Force Open — registration is open for all parents right now.',
         closed: '🔴 Force Closed — registration is blocked for all parents right now.',
     };
@@ -440,7 +416,7 @@ function showOverrideStatus(val, saved) {
 }
 
 // ============================================================
-// MONTHLY BILLING REPORT  (Item 5)
+// MONTHLY BILLING REPORT
 // ============================================================
 const MONTH_NAMES_ADMIN = ['January','February','March','April','May','June',
                            'July','August','September','October','November','December'];
@@ -449,7 +425,6 @@ function setupMonthlyReport() {
     document.getElementById('generateReportBtn').addEventListener('click', generateMonthlyReport);
     document.getElementById('exportReportBtn').addEventListener('click', exportMonthlyReport);
 
-    // Default to current month
     const now = new Date();
     const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     document.getElementById('reportMonth').value = monthStr;
@@ -461,26 +436,18 @@ function generateMonthlyReport() {
 
     const breakdown = {};
     ROOMS.forEach(r => {
-        breakdown[r.id] = {
-            roomLabel: r.label,
-            full: 0, half: 0,
-            waitlistFull: 0, waitlistHalf: 0,
-            revenue: 0,
-        };
+        breakdown[r.id] = { roomLabel: r.label, full: 0, half: 0, revenue: 0 };
     });
 
-    let totalFull = 0, totalHalf = 0, totalRevenue = 0, totalWaitlist = 0;
+    let totalFull = 0, totalHalf = 0, totalRevenue = 0;
 
     allRegistrations.forEach(reg => {
         const room = ROOMS.find(r => r.id === reg.room_id);
         if (!room) return;
         (reg.registration_dates || []).forEach(d => {
             if (!d.care_date.startsWith(monthVal)) return;
-            if (d.waitlisted) {
-                if (d.day_type === 'half') breakdown[reg.room_id].waitlistHalf++;
-                else                       breakdown[reg.room_id].waitlistFull++;
-                totalWaitlist++;
-            } else if (d.day_type === 'half') {
+            if (d.waitlisted) return;
+            if (d.day_type === 'half') {
                 breakdown[reg.room_id].half++;
                 breakdown[reg.room_id].revenue += room.halfDayRate || 0;
                 totalHalf++;
@@ -497,8 +464,7 @@ function generateMonthlyReport() {
     const [y, m] = monthVal.split('-').map(Number);
     const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
 
-    renderMonthlyReport(monthLabel, monthVal, breakdown,
-        { totalFull, totalHalf, totalRevenue, totalWaitlist });
+    renderMonthlyReport(monthLabel, monthVal, breakdown, { totalFull, totalHalf, totalRevenue });
 }
 
 function renderMonthlyReport(monthLabel, monthVal, breakdown, totals) {
@@ -507,7 +473,6 @@ function renderMonthlyReport(monthLabel, monthVal, breakdown, totals) {
     const rows = ROOMS.map(room => {
         const b         = breakdown[room.id];
         const totalDays = b.full + b.half;
-        const waitlist  = b.waitlistFull + b.waitlistHalf;
         return `
             <tr>
                 <td>${room.label}</td>
@@ -515,11 +480,10 @@ function renderMonthlyReport(monthLabel, monthVal, breakdown, totals) {
                 <td class="report-num">${b.half}</td>
                 <td class="report-num"><strong>${totalDays}</strong></td>
                 <td class="report-num report-revenue">$${b.revenue.toFixed(2)}</td>
-                <td class="report-num">${waitlist > 0 ? waitlist : '—'}</td>
             </tr>`;
     }).join('');
 
-    if (totals.totalFull === 0 && totals.totalHalf === 0 && totals.totalWaitlist === 0) {
+    if (totals.totalFull === 0 && totals.totalHalf === 0) {
         container.innerHTML = `<p class="empty-hint">No registrations found for ${monthLabel}.</p>`;
         return;
     }
@@ -535,7 +499,6 @@ function renderMonthlyReport(monthLabel, monthVal, breakdown, totals) {
                         <th>Half Days</th>
                         <th>Total Days</th>
                         <th>Revenue</th>
-                        <th>Waitlisted</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -546,7 +509,6 @@ function renderMonthlyReport(monthLabel, monthVal, breakdown, totals) {
                         <td class="report-num"><strong>${totals.totalHalf}</strong></td>
                         <td class="report-num"><strong>${totals.totalFull + totals.totalHalf}</strong></td>
                         <td class="report-num report-revenue"><strong>$${totals.totalRevenue.toFixed(2)}</strong></td>
-                        <td class="report-num"><strong>${totals.totalWaitlist > 0 ? totals.totalWaitlist : '—'}</strong></td>
                     </tr>
                 </tfoot>
             </table>
@@ -559,12 +521,12 @@ function exportMonthlyReport() {
 
     const rows = [];
     ROOMS.forEach(room => {
-        let full = 0, half = 0, waitlist = 0, revenue = 0;
+        let full = 0, half = 0, revenue = 0;
         allRegistrations.forEach(reg => {
             if (reg.room_id !== room.id) return;
             (reg.registration_dates || []).forEach(d => {
                 if (!d.care_date.startsWith(monthVal)) return;
-                if (d.waitlisted) { waitlist++; return; }
+                if (d.waitlisted) return;
                 if (d.day_type === 'half') { half++; revenue += room.halfDayRate || 0; }
                 else                       { full++; revenue += room.fullDayRate || 0; }
             });
@@ -575,7 +537,6 @@ function exportMonthlyReport() {
             'Half Days':   half,
             'Total Days':  full + half,
             'Revenue':     `$${revenue.toFixed(2)}`,
-            'Waitlisted':  waitlist,
         });
     });
 
@@ -667,7 +628,7 @@ function applyFilters() {
             reg.child_name.toLowerCase().includes(search);
         const matchRoom   = !room   || reg.room_id === room;
         const matchStatus = !status || (reg.registration_dates || []).some(d =>
-            status === 'waitlist' ? d.waitlisted : !d.waitlisted);
+            status === 'confirmed' ? !d.waitlisted : d.waitlisted);
         return matchSearch && matchRoom && matchStatus;
     });
     renderTable(filtered);
@@ -734,9 +695,9 @@ function baseRow(reg, roomLabel, date, status, dayType) {
 }
 
 // ============================================================
-// FAMILIES & STUDENTS  (Items 1, 8, 9)
+// FAMILIES & STUDENTS
 // ============================================================
-let importRows = [];   // rows parsed from uploaded file
+let importRows = [];
 
 function setupFamilies() {
     const fileInput  = document.getElementById('familiesFileInput');
@@ -791,7 +752,6 @@ function parseUploadedFile(file) {
                 const data = new Uint8Array(e.target.result);
                 const wb   = XLSX.read(data, { type: 'array', cellDates: true });
                 const ws   = wb.Sheets[wb.SheetNames[0]];
-                // Use raw: false so dates come as strings; defval: '' fills blanks
                 const rows = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' });
                 resolve(rows);
             } catch (err) { reject(err); }
@@ -812,10 +772,8 @@ function normalizeImportRow(rawRow) {
         return key ? String(rawRow[key] ?? '').trim() : '';
     };
 
-    // ── ProCare format detection ─────────────────────────────────────────────
-    // ProCare roster export has "Parent1 Name" for the parent and
-    // "First Name" / "Last Name" for the CHILD (student). Detect by checking
-    // for "Parent1 Name" which is unique to ProCare exports.
+    // ProCare format: "Parent1 Name" is unique to ProCare exports
+    // "First Name" / "Last Name" are the CHILD's names in ProCare
     const isProCare = keys.includes('Parent1 Name');
 
     if (isProCare) {
@@ -824,17 +782,14 @@ function normalizeImportRow(rawRow) {
         const childName  = childFirst && childLast
             ? `${childFirst} ${childLast}`.trim()
             : (childFirst || childLast || '');
-
         const childDob    = normalizeDobStr(get('Birthdate'));
         const parentName  = get('Parent1 Name');
         const parentEmail = get('Parent1 Email');
         const parentPhone = get('Parent1 Phone');
-
         return { parentName, parentEmail, parentPhone, childName, childDob };
     }
 
-    // ── Generic auto-detect (non-ProCare files) ──────────────────────────────
-    // In generic files "First Name" / "Last Name" are assumed to be the parent.
+    // Generic auto-detect (non-ProCare files)
     let parentName = findCol('parent name', 'guardian name', 'primary contact');
     if (!parentName) {
         const f = findCol('parent first', 'guardian first');
@@ -947,6 +902,11 @@ function renderFamiliesList(families) {
         container.innerHTML = '<p class="empty-hint">No families yet. Import from Excel or submit a registration.</p>';
         return;
     }
+
+    const roomOptions = ROOMS.map(r =>
+        `<option value="${r.id}">${r.label}</option>`
+    ).join('');
+
     container.innerHTML = `
         <p class="families-count">${families.length} famil${families.length !== 1 ? 'ies' : 'y'}</p>
         <ul class="families-list">
@@ -970,16 +930,113 @@ function renderFamiliesList(families) {
                                         ? new Date(s.child_dob + 'T00:00:00').toLocaleDateString('en-US',
                                             { month: 'short', day: 'numeric', year: 'numeric' })
                                         : '';
-                                    return `<li class="family-student-item">
+                                    return `<li class="family-student-item" data-student-id="${s.id}">
                                         <span class="student-bullet">└</span>
                                         <span class="student-name">${escHtml(s.child_name)}</span>
                                         ${dobStr ? `<span class="student-dob">${dobStr}</span>` : ''}
+                                        <div class="room-override-wrap">
+                                            <label class="room-override-label">Room:</label>
+                                            <select class="room-override-select" data-student-id="${s.id}">
+                                                <option value="">Auto (age-based)</option>
+                                                ${roomOptions}
+                                            </select>
+                                        </div>
                                     </li>`;
                                 }).join('')}
                             </ul>` : ''}
                     </li>`;
             }).join('')}
         </ul>`;
+
+    // Set current room override values + bind change events
+    families.forEach(f => {
+        (f.students || []).forEach(s => {
+            const sel = container.querySelector(`.room-override-select[data-student-id="${s.id}"]`);
+            if (sel) {
+                sel.value = s.room_override || '';
+                sel.addEventListener('change', async () => {
+                    const newVal = sel.value || null;
+                    try {
+                        await updateStudentRoomOverride(s.id, newVal);
+                        sel.style.borderColor = '#68d391';
+                        setTimeout(() => { sel.style.borderColor = ''; }, 2000);
+                    } catch (err) {
+                        alert('Failed to update room: ' + err.message);
+                        sel.value = s.room_override || '';
+                    }
+                });
+            }
+        });
+    });
+}
+
+// ============================================================
+// MESSAGES
+// ============================================================
+function setupMessages() {
+    document.getElementById('refreshMessagesBtn')?.addEventListener('click', loadMessages);
+}
+
+async function loadMessages() {
+    const container = document.getElementById('messagesList');
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const messages = await fetchMessages();
+        renderMessagesList(messages);
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Failed to load messages: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function renderMessagesList(messages) {
+    const container    = document.getElementById('messagesList');
+    const unreadBadge  = document.getElementById('unreadBadge');
+    const unreadCount  = messages.filter(m => !m.is_read).length;
+
+    if (unreadBadge) {
+        if (unreadCount > 0) {
+            unreadBadge.textContent = `${unreadCount} unread`;
+            unreadBadge.classList.remove('hidden');
+        } else {
+            unreadBadge.classList.add('hidden');
+        }
+    }
+
+    if (!messages.length) {
+        container.innerHTML = '<p class="empty-hint">No messages yet.</p>';
+        return;
+    }
+
+    container.innerHTML = `
+        <ul class="messages-list">
+            ${messages.map(m => {
+                const ts = new Date(m.created_at).toLocaleString('en-US',
+                    { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+                return `
+                    <li class="message-item${m.is_read ? '' : ' message-unread'}" data-id="${m.id}">
+                        <div class="message-header">
+                            <span class="message-from">${escHtml(m.parent_name || 'Unknown')}</span>
+                            ${m.parent_email ? `<a href="mailto:${escHtml(m.parent_email)}" class="message-email">${escHtml(m.parent_email)}</a>` : ''}
+                            <span class="message-time">${ts}</span>
+                            ${!m.is_read ? '<span class="message-new-badge">New</span>' : ''}
+                        </div>
+                        <div class="message-body">${escHtml(m.message)}</div>
+                        ${!m.is_read ? `<button class="btn-mark-read" data-id="${m.id}">Mark as Read</button>` : ''}
+                    </li>`;
+            }).join('')}
+        </ul>`;
+
+    container.querySelectorAll('.btn-mark-read').forEach(btn => {
+        btn.addEventListener('click', async e => {
+            const id = e.currentTarget.getAttribute('data-id');
+            try {
+                await markMessageRead(id);
+                await loadMessages();
+            } catch (err) {
+                alert('Failed to mark read: ' + err.message);
+            }
+        });
+    });
 }
 
 // ============================================================
