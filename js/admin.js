@@ -803,15 +803,38 @@ function parseUploadedFile(file) {
 
 // Auto-detect ProCare / custom column mapping
 function normalizeImportRow(rawRow) {
-    const keys     = Object.keys(rawRow);
-    const findCol  = (...keywords) => {
+    const keys   = Object.keys(rawRow);
+    const get    = key => String(rawRow[key] ?? '').trim();
+    const findCol = (...keywords) => {
         const key = keys.find(k =>
             keywords.some(kw => k.toLowerCase().replace(/[^a-z ]/g, ' ').includes(kw))
         );
         return key ? String(rawRow[key] ?? '').trim() : '';
     };
 
-    // Parent name — "parent name", "guardian", "primary contact", or first+last
+    // ── ProCare format detection ─────────────────────────────────────────────
+    // ProCare roster export has "Parent1 Name" for the parent and
+    // "First Name" / "Last Name" for the CHILD (student). Detect by checking
+    // for "Parent1 Name" which is unique to ProCare exports.
+    const isProCare = keys.includes('Parent1 Name');
+
+    if (isProCare) {
+        const childFirst = get('First Name');
+        const childLast  = get('Last Name');
+        const childName  = childFirst && childLast
+            ? `${childFirst} ${childLast}`.trim()
+            : (childFirst || childLast || '');
+
+        const childDob    = normalizeDobStr(get('Birthdate'));
+        const parentName  = get('Parent1 Name');
+        const parentEmail = get('Parent1 Email');
+        const parentPhone = get('Parent1 Phone');
+
+        return { parentName, parentEmail, parentPhone, childName, childDob };
+    }
+
+    // ── Generic auto-detect (non-ProCare files) ──────────────────────────────
+    // In generic files "First Name" / "Last Name" are assumed to be the parent.
     let parentName = findCol('parent name', 'guardian name', 'primary contact');
     if (!parentName) {
         const f = findCol('parent first', 'guardian first');
@@ -819,7 +842,6 @@ function normalizeImportRow(rawRow) {
         if (f && l) parentName = `${f} ${l}`.trim();
         else if (f) parentName = f;
     }
-    // Fall back to generic first+last only if no other match found
     if (!parentName) {
         const f = findCol('first name', 'first');
         const l = findCol('last name',  'last');
@@ -830,7 +852,6 @@ function normalizeImportRow(rawRow) {
     const parentEmail = findCol('email', 'e-mail', 'e mail');
     const parentPhone = findCol('phone', 'cell', 'mobile', 'telephone');
 
-    // Child name — "student", "child name"
     let childName = findCol('student name', 'child name', 'student first name');
     if (!childName) {
         const f = findCol('student first', 'child first');
@@ -839,7 +860,7 @@ function normalizeImportRow(rawRow) {
         else if (f) childName = f;
     }
 
-    const childDobRaw = findCol('dob', 'birth date', 'birthday', 'date of birth');
+    const childDobRaw = findCol('dob', 'birth date', 'birthday', 'date of birth', 'birthdate');
     const childDob    = normalizeDobStr(childDobRaw);
 
     return { parentName, parentEmail, parentPhone, childName, childDob };

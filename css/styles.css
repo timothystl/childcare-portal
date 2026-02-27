@@ -824,6 +824,28 @@ input.prefilled {
     font-weight: 500;
 }
 
+/* Locked state shown before family is selected */
+.lookup-required-msg {
+    padding: 18px 22px;
+    background: #f8f9ff;
+    border: 2px dashed #c5bef5;
+    border-radius: 10px;
+    color: #888;
+    font-size: .95em;
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+/* No children found for family */
+.child-empty-msg {
+    padding: 14px 18px;
+    background: #fffbeb;
+    border: 1.5px solid #f6ad55;
+    border-radius: 8px;
+    color: #7b4a00;
+    font-size: .9em;
+}
+
 /* ============================================================
    CHILDREN SECTION  (Item 8)
    ============================================================ */

@@ -96,12 +96,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Set max date on child DOB input
-    const dobInput = document.getElementById('newChildDob');
-    if (dobInput) dobInput.max = new Date().toISOString().split('T')[0];
-
     setupFamilyLookup();
-    setupChildSection();
     setupFormListeners();
 
     const closures = await fetchClosures();
@@ -199,7 +194,7 @@ async function runPinLookup() {
 function renderFamilySearchResults(families, query) {
     const resultsEl = document.getElementById('familySearchResults');
     if (!families.length) {
-        resultsEl.innerHTML = `<div class="lookup-no-results">No family found for "<strong>${escStr(query)}</strong>". Fill in the form below to register as a new family.</div>`;
+        resultsEl.innerHTML = `<div class="lookup-no-results">No family found for "<strong>${escStr(query)}</strong>". Please contact the office to be added to the system.</div>`;
         return;
     }
     resultsEl.innerHTML = families.map(f => {
@@ -238,6 +233,10 @@ function selectFamily(family) {
         pinEl.style.display = family.pin ? '' : 'none';
     }
 
+    // Unlock registration steps
+    document.getElementById('lookupRequiredMsg')?.classList.add('hidden');
+    document.getElementById('registrationSteps')?.classList.remove('hidden');
+
     // Render child section with family's existing children
     renderChildSection();
 }
@@ -255,14 +254,16 @@ function resetFamilyLookup() {
 
     document.getElementById('familySelectedBar')?.classList.add('hidden');
 
+    // Lock registration steps again
+    document.getElementById('lookupRequiredMsg')?.classList.remove('hidden');
+    document.getElementById('registrationSteps')?.classList.add('hidden');
+
     clearPrefilled('parentName');
     clearPrefilled('parentEmail');
     clearPrefilled('parentPhone');
 
-    renderChildSection();
     hideCalendar();
     selectedDates = new Map();
-    renderSelectedDates();
 }
 
 function setPrefilled(id, value) {
@@ -284,45 +285,6 @@ function clearPrefilled(id) {
 // ============================================================
 // CHILD SECTION  (Item 8 — multi-child same dates)
 // ============================================================
-function setupChildSection() {
-    document.getElementById('newChildDob')?.addEventListener('change', onNewChildDobChange);
-    document.getElementById('addChildBtn')?.addEventListener('click', onAddChildClick);
-}
-
-function onNewChildDobChange() {
-    const dob   = document.getElementById('newChildDob')?.value;
-    const room  = getRoomFromDob(dob);
-    const label = document.getElementById('newChildRoomAssign');
-    if (!label) return;
-    if (room) {
-        label.innerHTML   = `&rarr; <strong>${room.label}</strong> &nbsp;·&nbsp; ${room.ages}`;
-        label.className   = 'child-room-assign';
-        label.classList.remove('hidden');
-    } else if (dob) {
-        label.textContent = '→ Date of birth not recognised';
-        label.className   = 'child-room-assign error';
-        label.classList.remove('hidden');
-    } else {
-        label.classList.add('hidden');
-    }
-}
-
-function onAddChildClick() {
-    const name = document.getElementById('newChildName')?.value.trim();
-    const dob  = document.getElementById('newChildDob')?.value;
-    if (!name) { showToast('Please enter the child\'s name.'); return; }
-    if (!dob)  { showToast('Please enter the child\'s date of birth.'); return; }
-    const room = getRoomFromDob(dob);
-    if (!room) { showToast('Could not determine a room for this date of birth.'); return; }
-
-    addChild({ name, dob, room, isNew: true, studentId: null });
-
-    // Clear the add-child form
-    document.getElementById('newChildName').value = '';
-    document.getElementById('newChildDob').value  = '';
-    document.getElementById('newChildRoomAssign')?.classList.add('hidden');
-}
-
 function addChild(child) {
     if (selectedChildren.some(c => c.name === child.name && c.dob === child.dob)) {
         showToast(`${child.name} is already added.`);
@@ -343,49 +305,33 @@ function renderChildSection() {
     const section = document.getElementById('childSection');
     if (!section) return;
 
-    // Family children as checkboxes (shown when a family is selected)
-    let familyCards = '';
-    if (selectedFamily && (selectedFamily.students || []).length > 0) {
-        familyCards = `
-            <p class="child-select-label">Select which children to register — they'll all share the same care days:</p>
-            <div class="child-cards-row">
-                ${selectedFamily.students.map(s => {
-                    const room       = getRoomFromDob(s.child_dob);
-                    const isSelected = selectedChildren.some(c => c.studentId === s.id);
-                    const dobLabel   = s.child_dob
-                        ? new Date(s.child_dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                        : '';
-                    return `<label class="child-card-label${isSelected ? ' selected' : ''}" data-student-id="${s.id}">
-                        <input type="checkbox" class="child-card-checkbox"
-                               data-student-id="${s.id}"
-                               data-name="${escStr(s.child_name)}"
-                               data-dob="${escStr(s.child_dob || '')}"
-                               ${isSelected ? 'checked' : ''}>
-                        <span class="child-card-name">${escStr(s.child_name)}</span>
-                        ${dobLabel ? `<span class="child-card-dob">${dobLabel}</span>` : ''}
-                        ${room ? `<span class="child-card-room">${room.label}</span>` : ''}
-                    </label>`;
-                }).join('')}
-            </div>`;
+    const students = (selectedFamily?.students || []);
+
+    if (!students.length) {
+        section.innerHTML = '<p class="child-empty-msg">No children found for this family. Please contact the office to update your records.</p>';
+        return;
     }
 
-    // Selected new children chips
-    const newChildren = selectedChildren.filter(c => c.isNew);
-    let selectedChips = '';
-    if (newChildren.length) {
-        selectedChips = `<div class="selected-children-chips">
-            ${newChildren.map(c => {
-                const idx = selectedChildren.indexOf(c);
-                return `<div class="child-chip">
-                    <span class="child-chip-name">${escStr(c.name)}</span>
-                    <span class="child-chip-room">${c.room.label}</span>
-                    <button type="button" class="child-chip-remove" data-index="${idx}" title="Remove">&times;</button>
-                </div>`;
+    section.innerHTML = `
+        <div class="child-cards-row">
+            ${students.map(s => {
+                const room       = getRoomFromDob(s.child_dob);
+                const isSelected = selectedChildren.some(c => c.studentId === s.id);
+                const dobLabel   = s.child_dob
+                    ? new Date(s.child_dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    : '';
+                return `<label class="child-card-label${isSelected ? ' selected' : ''}" data-student-id="${s.id}">
+                    <input type="checkbox" class="child-card-checkbox"
+                           data-student-id="${s.id}"
+                           data-name="${escStr(s.child_name)}"
+                           data-dob="${escStr(s.child_dob || '')}"
+                           ${isSelected ? 'checked' : ''}>
+                    <span class="child-card-name">${escStr(s.child_name)}</span>
+                    ${dobLabel ? `<span class="child-card-dob">${dobLabel}</span>` : ''}
+                    ${room ? `<span class="child-card-room">${room.label}</span>` : '<span class="child-card-room" style="background:#fff5f5;color:#e53e3e;">Age not set</span>'}
+                </label>`;
             }).join('')}
         </div>`;
-    }
-
-    section.innerHTML = familyCards + selectedChips;
 
     // Bind checkboxes
     section.querySelectorAll('.child-card-checkbox').forEach(cb => {
@@ -399,20 +345,17 @@ function renderChildSection() {
                 showToast(`Could not assign a room for ${childName} — please check their date of birth.`);
                 return;
             }
-            // Update label selected state
             cb.closest('.child-card-label').classList.toggle('selected', cb.checked);
             if (cb.checked) {
-                addChild({ name: childName, dob: childDob, room, isNew: false, studentId });
+                if (!selectedChildren.some(c => c.studentId === studentId)) {
+                    selectedChildren.push({ name: childName, dob: childDob, room, isNew: false, studentId });
+                    onChildrenChanged();
+                }
             } else {
                 const idx = selectedChildren.findIndex(c => c.studentId === studentId);
-                if (idx !== -1) removeChild(idx);
+                if (idx !== -1) { selectedChildren.splice(idx, 1); onChildrenChanged(); }
             }
         });
-    });
-
-    // Bind remove chips
-    section.querySelectorAll('.child-chip-remove').forEach(btn => {
-        btn.addEventListener('click', () => removeChild(Number(btn.dataset.index)));
     });
 }
 
@@ -815,6 +758,11 @@ async function handleSubmit(e) {
         return;
     }
 
+    if (!selectedFamily) {
+        showToast('Please find your family using the lookup above to continue.');
+        return;
+    }
+
     if (localStorage.getItem(`childcare_submitted_${targetMonthKey}`) === 'true') {
         showToast(`✅ You've already registered for ${win.targetLabel}. Contact us to make changes.`);
         return;
@@ -894,23 +842,6 @@ async function handleSubmit(e) {
         // Mark as submitted in localStorage
         localStorage.setItem(`childcare_submitted_${targetMonthKey}`, 'true');
 
-        // Save / update family record (non-fatal)
-        try {
-            if (!selectedFamily) {
-                const fam = await createFamily({ parentName, parentEmail, parentPhone });
-                for (const child of selectedChildren) {
-                    await addStudent({ familyId: fam.id, childName: child.name, childDob: child.dob });
-                }
-            } else {
-                // Add any newly entered children to the existing family
-                for (const child of selectedChildren.filter(c => c.isNew)) {
-                    await addStudent({ familyId: selectedFamily.id, childName: child.name, childDob: child.dob });
-                }
-            }
-        } catch (famErr) {
-            console.warn('Family record save failed (non-fatal):', famErr);
-        }
-
         // Build itemized receipt
         const confirmedSorted = confirmedDates.slice().sort((a, b) => a.date.localeCompare(b.date));
         let receiptHtml = '';
@@ -961,8 +892,12 @@ async function handleSubmit(e) {
         document.getElementById('successDetails').innerHTML = details;
         document.getElementById('successModal').style.display = 'flex';
 
-        // Reset form (keep family selected so parent can register next child)
+        // Reset form (keep family selected so parent can re-register next period)
         document.getElementById('registrationForm').reset();
+        // Re-prefill parent fields since form.reset() clears them
+        setPrefilled('parentName',  selectedFamily.parent_name);
+        setPrefilled('parentEmail', selectedFamily.parent_email);
+        setPrefilled('parentPhone', selectedFamily.parent_phone);
         selectedChildren = [];
         selectedDates    = new Map();
         capacityCache    = {};

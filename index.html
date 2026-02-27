@@ -19,10 +19,10 @@
 
             <form id="registrationForm" novalidate>
 
-                <!-- Family Lookup (no step badge) -->
+                <!-- Family Lookup — REQUIRED to proceed -->
                 <section class="form-section lookup-section">
-                    <h2>👨‍👩‍👧 Returning Family?</h2>
-                    <p class="hint">Search for your family to pre-fill your information, or fill in the form below to register as a new family.</p>
+                    <h2>🔍 Find Your Family</h2>
+                    <p class="hint">Search by name or email address, or enter your 4-digit family PIN. If you don't appear in the system, please contact the office.</p>
 
                     <div class="lookup-row">
                         <div class="lookup-search-row">
@@ -48,87 +48,76 @@
                     </div>
                 </section>
 
-                <!-- Step 1: Parent Information -->
-                <section class="form-section">
-                    <h2><span class="step-badge">1</span> Parent &amp; Guardian Information</h2>
-                    <div class="field-grid">
-                        <div class="form-group">
-                            <label for="parentName">Parent / Guardian Name <span class="req">*</span></label>
-                            <input type="text" id="parentName" required placeholder="Jane Smith">
-                        </div>
-                        <div class="form-group">
-                            <label for="parentEmail">Email <span class="req">*</span></label>
-                            <input type="email" id="parentEmail" required placeholder="jane@example.com">
-                        </div>
-                        <div class="form-group">
-                            <label for="parentPhone">Phone <span class="req">*</span></label>
-                            <input type="tel" id="parentPhone" required placeholder="(555) 000-0000">
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Step 2: Children -->
-                <section class="form-section">
-                    <h2><span class="step-badge">2</span> Children</h2>
-                    <p class="hint">All selected children will share the same care days. Rooms are assigned automatically based on date of birth.</p>
-
-                    <!-- Existing family children (checkboxes) + new-child chips rendered here by app.js -->
-                    <div id="childSection"></div>
-
-                    <!-- Add new child form -->
-                    <div class="add-child-form">
-                        <h3 class="add-child-heading">Add a Child</h3>
-                        <div class="field-grid field-grid-3">
-                            <div class="form-group">
-                                <label for="newChildName">Child's Name</label>
-                                <input type="text" id="newChildName" placeholder="Alex Smith">
-                            </div>
-                            <div class="form-group">
-                                <label for="newChildDob">Date of Birth</label>
-                                <input type="date" id="newChildDob" max="">
-                            </div>
-                            <div class="form-group form-group-btn">
-                                <label>&nbsp;</label>
-                                <button type="button" id="addChildBtn" class="btn-secondary">+ Add Child</button>
-                            </div>
-                        </div>
-                        <div id="newChildRoomAssign" class="child-room-assign hidden"></div>
-                    </div>
-                </section>
-
-                <!-- Step 3: Calendar -->
-                <section class="form-section">
-                    <h2><span class="step-badge">3</span> Select Care Days</h2>
-                    <p class="hint" id="calendarHint">Add at least one child above to enable the calendar.</p>
-
-                    <div id="calendarWrapper" class="calendar-wrapper hidden">
-                        <div class="calendar-controls">
-                            <button type="button" id="prevMonth">&larr; Prev</button>
-                            <h3 id="currentMonthLabel"></h3>
-                            <button type="button" id="nextMonth">Next &rarr;</button>
-                        </div>
-                        <div id="calendar" class="calendar"></div>
-                        <div class="legend">
-                            <span class="legend-item"><span class="dot available"></span> Available</span>
-                            <span class="legend-item"><span class="dot limited"></span> &le;3 spots left</span>
-                            <span class="legend-item"><span class="dot full"></span> Full (waitlist)</span>
-                            <span class="legend-item"><span class="dot selected"></span> Your selection</span>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Step 4: Review -->
-                <section class="form-section">
-                    <h2><span class="step-badge">4</span> Review Selection</h2>
-                    <div id="selectedDates" class="selected-dates">
-                        <p class="empty-state">No dates selected yet.</p>
-                    </div>
-                </section>
-
-                <!-- Submit -->
-                <div class="form-actions">
-                    <button type="submit" id="submitBtn" class="btn-primary">Submit Registration</button>
+                <!-- Locked message — visible until family is found -->
+                <div id="lookupRequiredMsg" class="lookup-required-msg">
+                    🔒 Find your family above to begin your registration.
                 </div>
+
+                <!-- Steps 1–4 + Submit — hidden until family is selected -->
+                <div id="registrationSteps" class="hidden">
+
+                    <!-- Step 1: Parent Information (pre-filled read-only from family) -->
+                    <section class="form-section">
+                        <h2><span class="step-badge">1</span> Parent &amp; Guardian Information</h2>
+                        <div class="field-grid">
+                            <div class="form-group">
+                                <label for="parentName">Parent / Guardian Name <span class="req">*</span></label>
+                                <input type="text" id="parentName" required placeholder="Jane Smith">
+                            </div>
+                            <div class="form-group">
+                                <label for="parentEmail">Email <span class="req">*</span></label>
+                                <input type="email" id="parentEmail" required placeholder="jane@example.com">
+                            </div>
+                            <div class="form-group">
+                                <label for="parentPhone">Phone <span class="req">*</span></label>
+                                <input type="tel" id="parentPhone" required placeholder="(555) 000-0000">
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Step 2: Children (existing family children only) -->
+                    <section class="form-section">
+                        <h2><span class="step-badge">2</span> Children</h2>
+                        <p class="hint">Select which children to register — all selected children will share the same care days.</p>
+                        <div id="childSection"></div>
+                    </section>
+
+                    <!-- Step 3: Calendar -->
+                    <section class="form-section">
+                        <h2><span class="step-badge">3</span> Select Care Days</h2>
+                        <p class="hint" id="calendarHint">Select at least one child above to enable the calendar.</p>
+
+                        <div id="calendarWrapper" class="calendar-wrapper hidden">
+                            <div class="calendar-controls">
+                                <button type="button" id="prevMonth">&larr; Prev</button>
+                                <h3 id="currentMonthLabel"></h3>
+                                <button type="button" id="nextMonth">Next &rarr;</button>
+                            </div>
+                            <div id="calendar" class="calendar"></div>
+                            <div class="legend">
+                                <span class="legend-item"><span class="dot available"></span> Available</span>
+                                <span class="legend-item"><span class="dot limited"></span> &le;3 spots left</span>
+                                <span class="legend-item"><span class="dot full"></span> Full (waitlist)</span>
+                                <span class="legend-item"><span class="dot selected"></span> Your selection</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Step 4: Review -->
+                    <section class="form-section">
+                        <h2><span class="step-badge">4</span> Review Selection</h2>
+                        <div id="selectedDates" class="selected-dates">
+                            <p class="empty-state">No dates selected yet.</p>
+                        </div>
+                    </section>
+
+                    <!-- Submit -->
+                    <div class="form-actions">
+                        <button type="submit" id="submitBtn" class="btn-primary">Submit Registration</button>
+                    </div>
+
+                </div><!-- /#registrationSteps -->
+
             </form>
         </main>
 
@@ -149,6 +138,6 @@
     <!-- Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/supabase.js?v=10"></script>
-    <script src="js/app.js?v=13"></script>
+    <script src="js/app.js?v=14"></script>
 </body>
 </html>
