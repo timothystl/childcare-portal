@@ -20,33 +20,33 @@ let regWindowOverride   = 'auto';      // 'auto' | 'open' | 'closed' — loaded 
 // ============================================================
 // REGISTRATION WINDOW  (Items 6 & 7)
 // - Target: always the NEXT calendar month
-// - Open: day 1–20 of current month  OR  last day of current month
-// - Locked: day 21 through penultimate day of current month
+// - mode 'confirmed' : day 1–20  → form enabled, dates saved as confirmed
+// - mode 'waitlist'  : day 21+   → form enabled, ALL dates saved as waitlisted
+// - mode 'closed'    : admin override only — hard disables form
 // ============================================================
 function getRegistrationWindow() {
-    const today          = new Date();
+    const today  = new Date();
     today.setHours(0, 0, 0, 0);
-    const day            = today.getDate();
-    const year           = today.getFullYear();
-    const month          = today.getMonth();
-    const lastDay        = new Date(year, month + 1, 0).getDate();
-    const isLastDay      = (day === lastDay);
+    const day    = today.getDate();
+    const year   = today.getFullYear();
+    const month  = today.getMonth();
 
     // Target: always the NEXT calendar month
     const targetDate  = new Date(year, month + 1, 1);
     const targetLabel = MONTH_NAMES[targetDate.getMonth()] + ' ' + targetDate.getFullYear();
 
-    // Open if today <= 20th OR today is the last day of the month
-    let isOpen = day <= 20 || isLastDay;
+    // Deadline label: "February 20" (20th of the current month)
+    const deadlineDate  = new Date(year, month, 20);
+    const deadlineLabel = deadlineDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+
+    // mode: confirmed (1-20), waitlist (21+)
+    let mode = day <= 20 ? 'confirmed' : 'waitlist';
 
     // Admin override takes precedence
-    if (regWindowOverride === 'open')   isOpen = true;
-    if (regWindowOverride === 'closed') isOpen = false;
+    if (regWindowOverride === 'open')   mode = 'confirmed';
+    if (regWindowOverride === 'closed') mode = 'closed';
 
-    const reopenDate  = new Date(year, month, lastDay);
-    const reopenLabel = reopenDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-
-    return { isOpen, targetDate, targetLabel, reopenDate, reopenLabel };
+    return { mode, targetDate, targetLabel, deadlineLabel };
 }
 
 function getTargetMonthKey() {
@@ -76,21 +76,33 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (alreadySubmitted) {
             banner.className = 'reg-window-banner submitted';
             banner.innerHTML = `✅ Your registration for <strong>${win.targetLabel}</strong> has been submitted. Please contact us to make any changes.`;
-        } else if (!win.isOpen) {
+        } else if (win.mode === 'closed') {
             banner.className = 'reg-window-banner locked';
-            banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed. It reopens on <strong>${win.reopenLabel}</strong>.`;
+            banner.innerHTML = `🔒 Registration is currently closed by admin.`;
+        } else if (win.mode === 'waitlist') {
+            banner.className = 'reg-window-banner waitlist';
+            banner.innerHTML = `⚠️ The deadline has passed for <strong>${win.targetLabel}</strong>. You can still submit — your registration will be placed on the <strong>waitlist</strong> for admin review.`;
         } else {
             banner.className = 'reg-window-banner open';
-            banner.innerHTML = `📅 Now accepting registrations for <strong>${win.targetLabel}</strong>.`;
+            banner.innerHTML = `📅 Now accepting registrations for <strong>${win.targetLabel}</strong>. Deadline: <strong>${win.deadlineLabel}</strong>.`;
         }
     }
 
-    // Disable submit button if window is closed or already submitted
-    if (!win.isOpen || alreadySubmitted) {
-        const btn = document.getElementById('submitBtn');
-        if (btn) {
+    // Update submit button based on mode
+    const btn = document.getElementById('submitBtn');
+    if (btn) {
+        if (alreadySubmitted) {
             btn.disabled    = true;
-            btn.textContent = alreadySubmitted ? 'Already Submitted' : 'Registration Closed';
+            btn.textContent = 'Already Submitted';
+        } else if (win.mode === 'closed') {
+            btn.disabled    = true;
+            btn.textContent = 'Registration Closed';
+        } else if (win.mode === 'waitlist') {
+            btn.disabled    = false;
+            btn.textContent = 'Submit to Waitlist';
+        } else {
+            btn.disabled    = false;
+            btn.textContent = 'Submit Registration';
         }
     }
 
@@ -543,9 +555,9 @@ async function handleSubmit(e) {
     const win            = getRegistrationWindow();
     const targetMonthKey = getTargetMonthKey();
 
-    // Guard: registration window closed?
-    if (!win.isOpen) {
-        showToast(`🔒 Registration for ${win.targetLabel} is closed. It reopens on ${win.reopenLabel}.`);
+    // Guard: registration window closed by admin?
+    if (win.mode === 'closed') {
+        showToast(`🔒 Registration is currently closed by admin.`);
         return;
     }
 
@@ -588,12 +600,22 @@ async function handleSubmit(e) {
             return;
         }
 
-        const confirmedDates = [...selectedDates.entries()]
-            .filter(([, en]) => en.status === 'confirmed')
-            .map(([d, en]) => ({ date: d, dayType: en.dayType }));
-        const waitlistDates = [...selectedDates.entries()]
-            .filter(([, en]) => en.status === 'waitlist')
-            .map(([d, en]) => ({ date: d, dayType: en.dayType }));
+        // In waitlist mode ALL dates go on the waitlist regardless of room availability
+        let confirmedDates, waitlistDates, regStatus;
+        if (win.mode === 'waitlist') {
+            confirmedDates = [];
+            waitlistDates  = [...selectedDates.entries()]
+                .map(([d, en]) => ({ date: d, dayType: en.dayType }));
+            regStatus = 'pending_approval';
+        } else {
+            confirmedDates = [...selectedDates.entries()]
+                .filter(([, en]) => en.status === 'confirmed')
+                .map(([d, en]) => ({ date: d, dayType: en.dayType }));
+            waitlistDates = [...selectedDates.entries()]
+                .filter(([, en]) => en.status === 'waitlist')
+                .map(([d, en]) => ({ date: d, dayType: en.dayType }));
+            regStatus = 'confirmed';
+        }
 
         const total     = calcTotal();
         const ageMonths = calcAgeMonths(childDob);
@@ -604,6 +626,7 @@ async function handleSubmit(e) {
             roomId: selectedRoom.id,
             confirmedDates,
             waitlistDates,
+            status: regStatus,
         });
 
         // Mark as submitted in localStorage (Item 7)
@@ -643,7 +666,9 @@ async function handleSubmit(e) {
 
         let details = `<p>Registration for <strong>${childName}</strong> in <strong>${selectedRoom.label}</strong>.</p>`;
         details += receiptHtml;
-        if (waitlistDates.length) {
+        if (win.mode === 'waitlist') {
+            details += `<p class="receipt-waitlist-note">⏳ <strong>Waitlist submission</strong> — all ${waitlistDates.length} day(s) are pending admin approval. We'll contact you at <strong>${parentEmail}</strong> once approved.</p>`;
+        } else if (waitlistDates.length) {
             details += `<p class="receipt-waitlist-note"><strong>${waitlistDates.length}</strong> day(s) on waitlist — we'll contact you at <strong>${parentEmail}</strong> if a spot opens.</p>`;
         }
 
@@ -665,10 +690,12 @@ async function handleSubmit(e) {
         renderSelectedDates();
 
         // Update UI to show submitted state (Item 7)
-        const banner = document.getElementById('regWindowBanner');
-        if (banner) {
-            banner.className = 'reg-window-banner submitted';
-            banner.innerHTML = `✅ Your registration for <strong>${win.targetLabel}</strong> has been submitted. Contact us to make any changes.`;
+        const postBanner = document.getElementById('regWindowBanner');
+        if (postBanner) {
+            postBanner.className = 'reg-window-banner submitted';
+            postBanner.innerHTML = win.mode === 'waitlist'
+                ? `✅ Your waitlist request for <strong>${win.targetLabel}</strong> has been submitted. We'll be in touch soon.`
+                : `✅ Your registration for <strong>${win.targetLabel}</strong> has been submitted. Contact us to make any changes.`;
         }
         btn.disabled    = true;
         btn.textContent = 'Already Submitted';

@@ -106,7 +106,7 @@ async function deleteClosure(closeDate) {
 // ============================================================
 // REGISTRATION SUBMIT
 // ============================================================
-async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates }) {
+async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates, status = 'confirmed' }) {
     if (!sbClient) throw new Error('Supabase is not configured yet.');
 
     const { data: reg, error: regError } = await sbClient
@@ -119,6 +119,7 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
             child_age:    child.ageMonths,
             child_dob:    child.dob,
             room_id:      roomId,
+            status:       status,
         })
         .select()
         .single();
@@ -160,7 +161,7 @@ async function fetchAllRegistrations() {
     const { data, error } = await sbClient
         .from('registrations')
         .select(`
-            id, created_at,
+            id, created_at, status,
             parent_name, parent_email, parent_phone,
             child_name, child_age, child_dob, room_id,
             registration_dates ( care_date, waitlisted, day_type )
@@ -168,6 +169,22 @@ async function fetchAllRegistrations() {
         .order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
+}
+
+async function approveRegistration(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    // Mark the registration as confirmed
+    const { error: regErr } = await sbClient
+        .from('registrations')
+        .update({ status: 'confirmed' })
+        .eq('id', id);
+    if (regErr) throw regErr;
+    // Unmark all its dates as waitlisted
+    const { error: datesErr } = await sbClient
+        .from('registration_dates')
+        .update({ waitlisted: false })
+        .eq('registration_id', id);
+    if (datesErr) throw datesErr;
 }
 
 async function deleteRegistration(id) {

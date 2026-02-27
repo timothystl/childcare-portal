@@ -134,11 +134,12 @@ function renderTable(data) {
                 { month: 'short', day: 'numeric', year: 'numeric' })
             : (reg.child_age != null ? reg.child_age + ' mo' : '—');
 
-        const bill = calcRegistrationBill(reg);
+        const bill      = calcRegistrationBill(reg);
+        const isPending = reg.status === 'pending_approval';
 
         return `
-            <tr data-id="${reg.id}" data-room="${reg.room_id}">
-                <td>${submitted}</td>
+            <tr data-id="${reg.id}" data-room="${reg.room_id}"${isPending ? ' class="pending-approval"' : ''}>
+                <td>${submitted}${isPending ? '<br><span class="reg-status-badge pending">⏳ Waitlist</span>' : ''}</td>
                 <td>${escHtml(reg.parent_name)}</td>
                 <td><a href="mailto:${escHtml(reg.parent_email)}">${escHtml(reg.parent_email)}</a></td>
                 <td>${escHtml(reg.parent_phone)}</td>
@@ -147,11 +148,30 @@ function renderTable(data) {
                 <td>${room.label}</td>
                 <td class="dates-cell">${datesHtml}</td>
                 <td class="bill-cell">$${bill.toFixed(2)}</td>
-                <td>
+                <td class="actions-cell">
+                    ${isPending ? `<button class="btn-approve" data-id="${reg.id}">✓ Approve</button>` : ''}
                     <button class="btn-delete" data-id="${reg.id}">Delete</button>
                 </td>
             </tr>`;
     }).join('');
+
+    tbody.querySelectorAll('.btn-approve').forEach(btn => {
+        btn.addEventListener('click', async e => {
+            const id  = e.currentTarget.getAttribute('data-id');
+            const reg = allRegistrations.find(r => String(r.id) === id);
+            if (!confirm(`Approve waitlist registration for ${reg?.child_name ?? 'this child'}?\n\nThis will confirm all their dates and include them in billing.`)) return;
+            btn.disabled    = true;
+            btn.textContent = 'Approving…';
+            try {
+                await approveRegistration(id);
+                await loadRegistrations();
+            } catch (err) {
+                alert('Approve failed: ' + err.message);
+                btn.disabled    = false;
+                btn.textContent = '✓ Approve';
+            }
+        });
+    });
 
     tbody.querySelectorAll('.btn-delete').forEach(btn => {
         btn.addEventListener('click', async e => {

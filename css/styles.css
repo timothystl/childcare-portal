@@ -580,6 +580,11 @@ main { padding: 32px 36px; }
     border: 1.5px solid #fc8181;
     color: #9b2c2c;
 }
+.reg-window-banner.waitlist {
+    background: #fffbeb;
+    border: 1.5px solid #f6ad55;
+    color: #7b4a00;
+}
 .reg-window-banner.submitted {
     background: #ebf8ff;
     border: 1.5px solid #63b3ed;

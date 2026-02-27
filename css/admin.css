@@ -222,6 +222,44 @@
 }
 .btn-delete:hover { background: #e53e3e; color: #fff; }
 
+.btn-approve {
+    background: #fff;
+    color: #276749;
+    border: 2px solid #38a169;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .82em;
+    font-weight: 600;
+    transition: all .2s;
+    white-space: nowrap;
+    margin-bottom: 4px;
+    display: block;
+}
+.btn-approve:hover { background: #38a169; color: #fff; }
+.btn-approve:disabled { opacity: .6; cursor: default; }
+
+.actions-cell { white-space: nowrap; vertical-align: middle; }
+
+/* Pending-approval row gets a subtle amber tint */
+tr.pending-approval { background: #fffbeb; }
+tr.pending-approval:hover { background: #fef3c7; }
+
+.reg-status-badge {
+    display: inline-block;
+    font-size: .72em;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    margin-top: 3px;
+    letter-spacing: .02em;
+}
+.reg-status-badge.pending {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #f6ad55;
+}
+
 /* ============================================================
    SHARED ADMIN SECTION
    ============================================================ */
