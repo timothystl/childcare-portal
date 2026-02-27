@@ -1,9 +1,5 @@
 // ============================================================
 // ADMIN PASSWORD
-// Change this to your desired password.
-// For extra security you can move this to an environment
-// variable (see README) — but for a small childcare centre
-// this is sufficient.
 // ============================================================
 const ADMIN_PASSWORD = 'childcare2024';
 
@@ -42,9 +38,12 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 // ============================================================
 async function initDashboard() {
     populateRoomFilter();
-    await loadRegistrations();
+    populateRosterRoomFilter();
+    await Promise.all([loadRegistrations(), loadClosureList()]);
     renderCapacityOverview();
     setupFilters();
+    setupRoster();
+    setupClosures();
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
     document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
@@ -54,14 +53,24 @@ function populateRoomFilter() {
     const sel = document.getElementById('roomFilter');
     ROOMS.forEach(r => {
         const opt = document.createElement('option');
-        opt.value = r.id;
+        opt.value       = r.id;
+        opt.textContent = r.label;
+        sel.appendChild(opt);
+    });
+}
+
+function populateRosterRoomFilter() {
+    const sel = document.getElementById('rosterRoomFilter');
+    ROOMS.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value       = r.id;
         opt.textContent = r.label;
         sel.appendChild(opt);
     });
 }
 
 // ============================================================
-// LOAD DATA
+// LOAD REGISTRATIONS
 // ============================================================
 async function loadRegistrations() {
     document.getElementById('regTableBody').innerHTML =
@@ -75,7 +84,7 @@ async function loadRegistrations() {
     } catch (err) {
         console.error(err);
         document.getElementById('regTableBody').innerHTML =
-            '<tr><td colspan="9" class="loading-cell error">Failed to load — check your Supabase config.</td></tr>';
+            '<tr><td colspan="9" class="loading-cell error">Failed to load — check Supabase config.</td></tr>';
     }
 }
 
@@ -90,19 +99,24 @@ function renderTable(data) {
     }
 
     tbody.innerHTML = data.map(reg => {
-        const room   = ROOMS.find(r => r.id === reg.room_id) || { label: reg.room_id };
-        const dates  = (reg.registration_dates || [])
+        const room  = ROOMS.find(r => r.id === reg.room_id) || { label: reg.room_id };
+        const dates = (reg.registration_dates || [])
             .sort((a, b) => a.care_date.localeCompare(b.care_date));
 
         const datesHtml = dates.map(d => {
-            const cls  = d.waitlisted ? 'badge-waitlist' : 'badge-confirmed';
-            const label = d.waitlisted ? 'W' : 'C';
-            return `<span class="date-chip ${cls}" title="${d.waitlisted ? 'Waitlist' : 'Confirmed'}">${friendlyShort(d.care_date)} <em>${label}</em></span>`;
+            const cls      = d.waitlisted ? 'badge-waitlist' : 'badge-confirmed';
+            const typeChar = d.day_type === 'half' ? '½' : 'F';
+            const status   = d.waitlisted ? 'W' : 'C';
+            return `<span class="date-chip ${cls}" title="${d.waitlisted ? 'Waitlist' : 'Confirmed'} · ${d.day_type === 'half' ? 'Half Day' : 'Full Day'}">${friendlyShort(d.care_date)} <em>${typeChar}·${status}</em></span>`;
         }).join('');
 
-        const submitted = new Date(reg.created_at).toLocaleDateString('en-US', {
-            month: 'short', day: 'numeric', year: 'numeric'
-        });
+        const submitted = new Date(reg.created_at).toLocaleDateString('en-US',
+            { month: 'short', day: 'numeric', year: 'numeric' });
+
+        const dobDisplay = reg.child_dob
+            ? new Date(reg.child_dob + 'T00:00:00').toLocaleDateString('en-US',
+                { month: 'short', day: 'numeric', year: 'numeric' })
+            : (reg.child_age != null ? reg.child_age + ' mo' : '—');
 
         return `
             <tr data-id="${reg.id}" data-room="${reg.room_id}">
@@ -111,7 +125,7 @@ function renderTable(data) {
                 <td><a href="mailto:${escHtml(reg.parent_email)}">${escHtml(reg.parent_email)}</a></td>
                 <td>${escHtml(reg.parent_phone)}</td>
                 <td>${escHtml(reg.child_name)}</td>
-                <td>${reg.child_age}</td>
+                <td>${dobDisplay}</td>
                 <td>${room.label}</td>
                 <td class="dates-cell">${datesHtml}</td>
                 <td>
@@ -120,13 +134,11 @@ function renderTable(data) {
             </tr>`;
     }).join('');
 
-    // Delete handlers
     tbody.querySelectorAll('.btn-delete').forEach(btn => {
         btn.addEventListener('click', async e => {
-            const id = e.currentTarget.getAttribute('data-id');
+            const id  = e.currentTarget.getAttribute('data-id');
             const reg = allRegistrations.find(r => String(r.id) === id);
-            const name = reg ? reg.child_name : 'this registration';
-            if (!confirm(`Delete registration for ${name}? This cannot be undone.`)) return;
+            if (!confirm(`Delete registration for ${reg?.child_name ?? 'this child'}? This cannot be undone.`)) return;
             try {
                 await deleteRegistration(id);
                 await loadRegistrations();
@@ -141,39 +153,198 @@ function renderTable(data) {
 // CAPACITY OVERVIEW
 // ============================================================
 function renderCapacityOverview() {
-    const grid = document.getElementById('capacityGrid');
-    const today = new Date(); today.setHours(0,0,0,0);
-
-    // Count confirmed registrations per room over next 30 days
+    const grid  = document.getElementById('capacityGrid');
+    const today = new Date(); today.setHours(0, 0, 0, 0);
     const counts = {};
     ROOMS.forEach(r => { counts[r.id] = 0; });
 
     allRegistrations.forEach(reg => {
         (reg.registration_dates || []).forEach(d => {
             if (d.waitlisted) return;
-            const dateVal = new Date(d.care_date + 'T00:00:00');
-            const diff    = (dateVal - today) / 86400000;
-            if (diff >= 0 && diff <= 30) {
-                counts[reg.room_id] = (counts[reg.room_id] || 0) + 1;
-            }
+            const diff = (new Date(d.care_date + 'T00:00:00') - today) / 86400000;
+            if (diff >= 0 && diff <= 30) counts[reg.room_id] = (counts[reg.room_id] || 0) + 1;
         });
     });
 
     grid.innerHTML = ROOMS.map(room => {
         const used  = counts[room.id] || 0;
-        const cap   = room.capacity * 30; // rough max over 30 days
+        const cap   = room.capacity * 30;
         const pct   = Math.min(100, Math.round((used / cap) * 100));
         const color = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
         return `
             <div class="cap-card">
                 <h3>${room.label}</h3>
                 <p class="cap-meta">Max ${room.capacity}/day &middot; ${used} bookings next 30d</p>
-                <div class="progress-bar">
-                    <div class="progress-fill ${color}" style="width:${pct}%"></div>
-                </div>
+                <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
                 <p class="cap-pct">${pct}% utilisation</p>
             </div>`;
     }).join('');
+}
+
+// ============================================================
+// DAILY ROSTER
+// ============================================================
+function setupRoster() {
+    document.getElementById('viewRosterBtn').addEventListener('click', viewRoster);
+    document.getElementById('exportRosterBtn').addEventListener('click', exportRoster);
+}
+
+function getRosterForDate(date, roomId) {
+    return allRegistrations
+        .filter(reg => {
+            if (roomId && reg.room_id !== roomId) return false;
+            return (reg.registration_dates || []).some(d => d.care_date === date && !d.waitlisted);
+        })
+        .map(reg => {
+            const d    = (reg.registration_dates || []).find(d => d.care_date === date && !d.waitlisted);
+            const room = ROOMS.find(r => r.id === reg.room_id);
+            const rate = d?.day_type === 'half' ? room?.halfDayRate : room?.fullDayRate;
+            return {
+                roomLabel:   room?.label || reg.room_id,
+                roomId:      reg.room_id,
+                childName:   reg.child_name,
+                childDob:    reg.child_dob,
+                parentName:  reg.parent_name,
+                parentPhone: reg.parent_phone,
+                parentEmail: reg.parent_email,
+                dayType:     d?.day_type || 'full',
+                rate:        rate || 0,
+            };
+        })
+        .sort((a, b) => a.roomId.localeCompare(b.roomId) || a.childName.localeCompare(b.childName));
+}
+
+function viewRoster() {
+    const date   = document.getElementById('rosterDate').value;
+    const roomId = document.getElementById('rosterRoomFilter').value;
+    if (!date) { alert('Please select a date.'); return; }
+
+    const roster    = getRosterForDate(date, roomId || null);
+    const container = document.getElementById('rosterContent');
+
+    if (!roster.length) {
+        container.innerHTML = `<p class="empty-hint">No confirmed registrations for ${friendlyShort(date)}.</p>`;
+        return;
+    }
+
+    // Group by room
+    const byRoom = {};
+    roster.forEach(r => {
+        if (!byRoom[r.roomLabel]) byRoom[r.roomLabel] = [];
+        byRoom[r.roomLabel].push(r);
+    });
+
+    container.innerHTML = Object.entries(byRoom).map(([roomLabel, kids]) => `
+        <div class="roster-group">
+            <h3 class="roster-room-title">${roomLabel}
+                <span class="roster-count">${kids.length} child${kids.length !== 1 ? 'ren' : ''}</span>
+            </h3>
+            <table class="roster-table">
+                <thead>
+                    <tr>
+                        <th>Child</th>
+                        <th>DOB</th>
+                        <th>Day</th>
+                        <th>Rate</th>
+                        <th>Parent</th>
+                        <th>Phone</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${kids.map(k => `
+                        <tr>
+                            <td>${escHtml(k.childName)}</td>
+                            <td>${k.childDob ? new Date(k.childDob + 'T00:00:00').toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+                            <td><span class="day-chip ${k.dayType}">${k.dayType === 'half' ? 'Half' : 'Full'}</span></td>
+                            <td>$${k.rate}</td>
+                            <td>${escHtml(k.parentName)}</td>
+                            <td>${escHtml(k.parentPhone)}</td>
+                        </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`).join('');
+}
+
+function exportRoster() {
+    const date   = document.getElementById('rosterDate').value;
+    const roomId = document.getElementById('rosterRoomFilter').value;
+    if (!date) { alert('Please select a date first.'); return; }
+
+    const roster = getRosterForDate(date, roomId || null);
+    if (!roster.length) { alert('No confirmed registrations for this date.'); return; }
+
+    const rows = roster.map(r => ({
+        'Date':         date,
+        'Room':         r.roomLabel,
+        'Child Name':   r.childName,
+        'DOB':          r.childDob || '',
+        'Day Type':     r.dayType === 'half' ? 'Half Day' : 'Full Day',
+        'Rate':         `$${r.rate}`,
+        'Parent Name':  r.parentName,
+        'Phone':        r.parentPhone,
+        'Email':        r.parentEmail,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `Roster ${date}`);
+    ws['!cols'] = Object.keys(rows[0]).map(k => ({
+        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
+    }));
+    XLSX.writeFile(wb, `roster-${date}.xlsx`);
+}
+
+// ============================================================
+// CLOSURES
+// ============================================================
+function setupClosures() {
+    document.getElementById('addClosureBtn').addEventListener('click', async () => {
+        const date   = document.getElementById('closureDate').value;
+        const reason = document.getElementById('closureReason').value.trim();
+        if (!date) { alert('Please select a date to block.'); return; }
+        try {
+            await addClosure(date, reason);
+            document.getElementById('closureDate').value   = '';
+            document.getElementById('closureReason').value = '';
+            await loadClosureList();
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
+    });
+}
+
+async function loadClosureList() {
+    try {
+        const closures  = await fetchClosures();
+        const container = document.getElementById('closureList');
+        if (!closures.length) {
+            container.innerHTML = '<p class="empty-hint">No closures set.</p>';
+            return;
+        }
+        container.innerHTML = `
+            <ul class="closure-list">
+                ${closures.map(c => `
+                    <li class="closure-item">
+                        <span class="closure-date-lbl">${friendlyShort(c.close_date)}</span>
+                        <span class="closure-reason-lbl">${escHtml(c.reason || '')}</span>
+                        <button class="btn-remove-closure" data-date="${c.close_date}">Remove</button>
+                    </li>`).join('')}
+            </ul>`;
+        container.querySelectorAll('.btn-remove-closure').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                const d = e.currentTarget.getAttribute('data-date');
+                if (!confirm(`Remove closure for ${friendlyShort(d)}?`)) return;
+                try {
+                    await deleteClosure(d);
+                    await loadClosureList();
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            });
+        });
+    } catch (err) {
+        console.error('loadClosureList:', err);
+    }
 }
 
 // ============================================================
@@ -195,113 +366,96 @@ function applyFilters() {
             reg.parent_name.toLowerCase().includes(search)  ||
             reg.parent_email.toLowerCase().includes(search) ||
             reg.child_name.toLowerCase().includes(search);
-
-        const matchRoom = !room || reg.room_id === room;
-
+        const matchRoom   = !room   || reg.room_id === room;
         const matchStatus = !status || (reg.registration_dates || []).some(d =>
-            status === 'waitlist' ? d.waitlisted : !d.waitlisted
-        );
-
+            status === 'waitlist' ? d.waitlisted : !d.waitlisted);
         return matchSearch && matchRoom && matchStatus;
     });
-
     renderTable(filtered);
 }
 
 // ============================================================
-// EXPORT — CSV
+// EXPORT — CSV / EXCEL
 // ============================================================
 function exportCSV() {
-    const rows = flattenForExport(allRegistrations);
+    const rows    = flattenForExport(allRegistrations);
     const headers = Object.keys(rows[0] || {});
-    const csv = [
-        headers.join(','),
-        ...rows.map(r => headers.map(h => csvCell(r[h])).join(','))
-    ].join('\n');
-
+    const csv     = [headers.join(','), ...rows.map(r => headers.map(h => csvCell(r[h])).join(','))].join('\n');
     downloadFile('registrations.csv', 'text/csv', csv);
 }
 
-// ============================================================
-// EXPORT — EXCEL (.xlsx via SheetJS)
-// ============================================================
 function exportExcel() {
     const rows = flattenForExport(allRegistrations);
     const ws   = XLSX.utils.json_to_sheet(rows);
     const wb   = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Registrations');
-
-    // Auto-width columns
-    const colWidths = Object.keys(rows[0] || {}).map(key => ({
-        wch: Math.max(key.length, ...rows.map(r => String(r[key] || '').length))
+    ws['!cols'] = Object.keys(rows[0] || {}).map(k => ({
+        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
     }));
-    ws['!cols'] = colWidths;
-
     XLSX.writeFile(wb, 'registrations.xlsx');
 }
 
-// ============================================================
-// HELPERS
-// ============================================================
 function flattenForExport(data) {
     const rows = [];
     data.forEach(reg => {
-        const room = ROOMS.find(r => r.id === reg.room_id)?.label || reg.room_id;
+        const room  = ROOMS.find(r => r.id === reg.room_id)?.label || reg.room_id;
         const dates = (reg.registration_dates || [])
             .sort((a, b) => a.care_date.localeCompare(b.care_date));
-
         if (!dates.length) {
-            rows.push(baseRow(reg, room, '', ''));
+            rows.push(baseRow(reg, room, '', '', ''));
         } else {
             dates.forEach(d => {
-                rows.push(baseRow(reg, room, d.care_date, d.waitlisted ? 'Waitlist' : 'Confirmed'));
+                rows.push(baseRow(reg, room, d.care_date,
+                    d.waitlisted ? 'Waitlist' : 'Confirmed',
+                    d.day_type === 'half' ? 'Half Day' : 'Full Day'));
             });
         }
     });
     return rows;
 }
 
-function baseRow(reg, roomLabel, date, status) {
+function baseRow(reg, roomLabel, date, status, dayType) {
+    const room = ROOMS.find(r => r.label === roomLabel);
+    const rate = dayType === 'Half Day' ? room?.halfDayRate : room?.fullDayRate;
     return {
-        'Submitted':    new Date(reg.created_at).toLocaleDateString('en-US'),
-        'Parent Name':  reg.parent_name,
-        'Email':        reg.parent_email,
-        'Phone':        reg.parent_phone,
-        'Child Name':   reg.child_name,
-        'Child Age':    reg.child_age,
-        'Room':         roomLabel,
-        'Care Date':    date,
-        'Status':       status,
+        'Submitted':   new Date(reg.created_at).toLocaleDateString('en-US'),
+        'Parent Name': reg.parent_name,
+        'Email':       reg.parent_email,
+        'Phone':       reg.parent_phone,
+        'Child Name':  reg.child_name,
+        'DOB':         reg.child_dob || '',
+        'Room':        roomLabel,
+        'Care Date':   date,
+        'Day Type':    dayType,
+        'Status':      status,
+        'Rate':        date && rate ? `$${rate}` : '',
     };
 }
 
+// ============================================================
+// HELPERS
+// ============================================================
 function csvCell(val) {
     const str = String(val ?? '');
     return str.includes(',') || str.includes('"') || str.includes('\n')
-        ? `"${str.replace(/"/g, '""')}"`
-        : str;
+        ? `"${str.replace(/"/g, '""')}"` : str;
 }
 
 function downloadFile(name, type, content) {
     const blob = new Blob([content], { type });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href     = url;
-    a.download = name;
-    a.click();
+    a.href = url; a.download = name; a.click();
     URL.revokeObjectURL(url);
 }
 
 function friendlyShort(dateStr) {
-    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric'
-    });
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US',
+        { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function escHtml(str) {
     return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

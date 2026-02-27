@@ -54,8 +54,52 @@
         <!-- Capacity Overview -->
         <section class="capacity-section">
             <h2>Capacity Overview <span class="hint-small">(next 30 days)</span></h2>
-            <div id="capacityGrid" class="capacity-grid">
-                <!-- rendered by admin.js -->
+            <div id="capacityGrid" class="capacity-grid"></div>
+        </section>
+
+        <!-- Daily Roster -->
+        <section class="admin-section">
+            <h2>📋 Daily Classroom Roster</h2>
+            <div class="roster-controls">
+                <div class="roster-field">
+                    <label for="rosterDate">Date</label>
+                    <input type="date" id="rosterDate">
+                </div>
+                <div class="roster-field">
+                    <label for="rosterRoomFilter">Room</label>
+                    <select id="rosterRoomFilter">
+                        <option value="">All Rooms</option>
+                    </select>
+                </div>
+                <div class="roster-btns">
+                    <button id="viewRosterBtn" class="btn-secondary">View Roster</button>
+                    <button id="exportRosterBtn" class="btn-primary">&#8595; Export Excel</button>
+                </div>
+            </div>
+            <div id="rosterContent">
+                <p class="empty-hint">Select a date above and click View Roster.</p>
+            </div>
+        </section>
+
+        <!-- Closed Days -->
+        <section class="admin-section">
+            <h2>🚫 Closed Days</h2>
+            <p class="section-desc">Blocked dates appear as unavailable on the parent registration calendar.</p>
+            <div class="closure-add-row">
+                <div class="roster-field">
+                    <label for="closureDate">Date to block</label>
+                    <input type="date" id="closureDate">
+                </div>
+                <div class="roster-field closure-reason-field">
+                    <label for="closureReason">Reason (optional)</label>
+                    <input type="text" id="closureReason" placeholder="e.g. Thanksgiving, Snow day">
+                </div>
+                <div class="roster-btns">
+                    <button id="addClosureBtn" class="btn-primary">Block Date</button>
+                </div>
+            </div>
+            <div id="closureList">
+                <p class="empty-hint">No closures set.</p>
             </div>
         </section>
 
@@ -71,7 +115,7 @@
                             <th>Email</th>
                             <th>Phone</th>
                             <th>Child</th>
-                            <th>Age</th>
+                            <th>DOB</th>
                             <th>Room</th>
                             <th>Dates</th>
                             <th>Actions</th>
@@ -85,11 +129,9 @@
         </section>
     </div>
 
-    <!-- Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- SheetJS for Excel export -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=3"></script>
-    <script src="js/admin.js?v=2"></script>
+    <script src="js/supabase.js?v=5"></script>
+    <script src="js/admin.js?v=3"></script>
 </body>
 </html>

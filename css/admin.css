@@ -223,6 +223,156 @@
 .btn-delete:hover { background: #e53e3e; color: #fff; }
 
 /* ============================================================
+   SHARED ADMIN SECTION
+   ============================================================ */
+.admin-section {
+    padding: 28px 32px;
+    border-top: 1px solid #eee;
+}
+.admin-section h2 {
+    font-size: 1.2em;
+    color: #333;
+    margin-bottom: 6px;
+}
+.section-desc {
+    color: #888;
+    font-size: .88em;
+    margin-bottom: 18px;
+}
+.empty-hint {
+    color: #aaa;
+    font-style: italic;
+    padding: 12px 0;
+    font-size: .9em;
+}
+
+/* ============================================================
+   DAILY ROSTER
+   ============================================================ */
+.roster-controls {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 20px;
+}
+.roster-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.roster-field label { font-size: .85em; font-weight: 600; color: #555; }
+.roster-field input,
+.roster-field select {
+    padding: 9px 13px;
+    border: 2px solid #e0e0e0;
+    border-radius: 7px;
+    font-size: .95em;
+    transition: border-color .2s;
+}
+.roster-field input:focus,
+.roster-field select:focus { outline: none; border-color: #667eea; }
+.roster-btns {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+.roster-group { margin-bottom: 28px; }
+.roster-room-title {
+    font-size: 1.05em;
+    color: #333;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.roster-count {
+    font-size: .78em;
+    color: #888;
+    font-weight: 400;
+    background: #f0f0f0;
+    padding: 2px 10px;
+    border-radius: 12px;
+}
+.roster-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    font-size: .9em;
+}
+.roster-table thead th {
+    background: #667eea;
+    color: #fff;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+}
+.roster-table tbody tr { border-bottom: 1px solid #f0f0f0; }
+.roster-table tbody tr:hover { background: #f8f9ff; }
+.roster-table tbody td { padding: 10px 14px; }
+
+.day-chip {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 10px;
+    font-size: .8em;
+    font-weight: 600;
+}
+.day-chip.full { background: #e9d8fd; color: #553c9a; }
+.day-chip.half { background: #bee3f8; color: #2a69ac; }
+
+/* ============================================================
+   CLOSURES
+   ============================================================ */
+.closure-add-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 18px;
+}
+.closure-reason-field { flex: 1; min-width: 200px; }
+.closure-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 600px;
+}
+.closure-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    background: #fff;
+    border-left: 4px solid #e53e3e;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.closure-date-lbl {
+    font-weight: 600;
+    color: #333;
+    min-width: 110px;
+}
+.closure-reason-lbl { color: #888; flex: 1; font-size: .9em; }
+.btn-remove-closure {
+    background: #fff;
+    color: #e53e3e;
+    border: 2px solid #e53e3e;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .82em;
+    transition: all .2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.btn-remove-closure:hover { background: #e53e3e; color: #fff; }
+
+/* ============================================================
    RESPONSIVE ADMIN
    ============================================================ */
 @media (max-width: 700px) {

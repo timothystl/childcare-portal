@@ -37,8 +37,8 @@
                             <input type="text" id="childName" required placeholder="Alex Smith">
                         </div>
                         <div class="form-group">
-                            <label for="childAge">Child's Age (years) <span class="req">*</span></label>
-                            <input type="number" id="childAge" required min="0" max="12" placeholder="3">
+                            <label for="childDob">Child's Date of Birth <span class="req">*</span></label>
+                            <input type="date" id="childDob" required max="">
                         </div>
                     </div>
                 </section>
@@ -46,6 +46,7 @@
                 <!-- Step 2: Room Selection -->
                 <section class="form-section">
                     <h2><span class="step-badge">2</span> Select Age Group / Room</h2>
+                    <p class="hint room-hint">Enter your child's date of birth above — the correct room will be highlighted automatically.</p>
                     <div id="roomGrid" class="room-grid">
                         <!-- Rendered by app.js -->
                         <p class="loading-text">Loading rooms…</p>
@@ -104,7 +105,11 @@
 
     <!-- Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase.js?v=4"></script>
-    <script src="js/app.js?v=8"></script>
+    <script src="js/supabase.js?v=5"></script>
+    <script src="js/app.js?v=9"></script>
+    <script>
+        // Prevent future dates in the DOB picker
+        document.getElementById('childDob').max = new Date().toISOString().split('T')[0];
+    </script>
 </body>
 </html>

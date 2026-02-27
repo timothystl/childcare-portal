@@ -1,8 +1,5 @@
 // ============================================================
 // ROOM CONFIG
-// Edit capacity limits and rates here to match your rooms.
-// Defined first so the UI always loads, even before Supabase
-// is configured.
 // ============================================================
 const ROOMS = [
     {
@@ -10,7 +7,7 @@ const ROOMS = [
         label:        '🐻 Bear Room',
         ages:         'Birth – 12 months',
         capacity:     6,
-        fullDayOnly:  true,      // infants: no half-day option
+        fullDayOnly:  true,
         fullDayRate:  80,
         halfDayRate:  null,
     },
@@ -54,28 +51,21 @@ const SUPABASE_CONFIGURED = SUPABASE_URL !== 'YOUR_SUPABASE_URL';
 try {
     sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 } catch (e) {
-    console.warn('Supabase not yet configured — running in preview mode. Registrations will not be saved.');
+    console.warn('Supabase not yet configured — running in preview mode.');
 }
 
 // ============================================================
-// API HELPERS
+// CAPACITY
 // ============================================================
-
-// Fetch confirmed (non-waitlist) booking counts for a room
-// across a list of date strings ['YYYY-MM-DD', ...]
 async function fetchCapacityForDates(roomId, dateStrings) {
-    if (!dateStrings.length) return {};
-    if (!sbClient) return {};
-
+    if (!dateStrings.length || !sbClient) return {};
     const { data, error } = await sbClient
         .from('registration_dates')
-        .select('care_date, waitlisted')
+        .select('care_date')
         .eq('room_id', roomId)
         .eq('waitlisted', false)
         .in('care_date', dateStrings);
-
-    if (error) { console.error('fetchCapacityForDates error:', error); return {}; }
-
+    if (error) { console.error('fetchCapacityForDates:', error); return {}; }
     const counts = {};
     (data || []).forEach(row => {
         counts[row.care_date] = (counts[row.care_date] || 0) + 1;
@@ -83,12 +73,42 @@ async function fetchCapacityForDates(roomId, dateStrings) {
     return counts;
 }
 
-// Submit a full registration (parent info + all selected dates)
-// confirmedDates / waitlistDates are arrays of { date, dayType }
-async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates }) {
-    if (!sbClient) throw new Error('Supabase is not configured yet. Please follow the setup steps in README.md to connect your database.');
+// ============================================================
+// CLOSURES
+// ============================================================
+async function fetchClosures() {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('closures')
+        .select('close_date, reason')
+        .order('close_date', { ascending: true });
+    if (error) { console.error('fetchClosures:', error); return []; }
+    return data || [];
+}
 
-    // 1. Insert parent/child record
+async function addClosure(closeDate, reason) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('closures')
+        .insert({ close_date: closeDate, reason: reason || '' });
+    if (error) throw error;
+}
+
+async function deleteClosure(closeDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('closures')
+        .delete()
+        .eq('close_date', closeDate);
+    if (error) throw error;
+}
+
+// ============================================================
+// REGISTRATION SUBMIT
+// ============================================================
+async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates }) {
+    if (!sbClient) throw new Error('Supabase is not configured yet.');
+
     const { data: reg, error: regError } = await sbClient
         .from('registrations')
         .insert({
@@ -96,7 +116,8 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
             parent_email: parent.email,
             parent_phone: parent.phone,
             child_name:   child.name,
-            child_age:    child.age,
+            child_age:    child.ageMonths,
+            child_dob:    child.dob,
             room_id:      roomId,
         })
         .select()
@@ -104,7 +125,6 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
 
     if (regError) throw regError;
 
-    // 2. Build date rows — includes day_type ('full' or 'half')
     const dateRows = [
         ...confirmedDates.map(({ date, dayType }) => ({
             registration_id: reg.id,
@@ -132,26 +152,26 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
     return reg;
 }
 
-// Admin: fetch all registrations with their dates
+// ============================================================
+// ADMIN HELPERS
+// ============================================================
 async function fetchAllRegistrations() {
-    if (!sbClient) throw new Error('Supabase is not configured yet.');
+    if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
         .from('registrations')
         .select(`
             id, created_at,
             parent_name, parent_email, parent_phone,
-            child_name, child_age, room_id,
+            child_name, child_age, child_dob, room_id,
             registration_dates ( care_date, waitlisted, day_type )
         `)
         .order('created_at', { ascending: false });
-
     if (error) throw error;
     return data || [];
 }
 
-// Admin: delete a registration and its dates (cascade set in DB)
 async function deleteRegistration(id) {
-    if (!sbClient) throw new Error('Supabase is not configured yet.');
+    if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
         .from('registrations')
         .delete()
