@@ -147,20 +147,24 @@ function renderTable(data) {
         const dates = (reg.registration_dates || [])
             .sort((a, b) => a.care_date.localeCompare(b.care_date));
 
+        // Date chips — show ½ day or Full, no ·C suffix (all confirmed, waitlist removed)
         const datesHtml = dates.map(d => {
-            const cls      = d.waitlisted ? 'badge-waitlist' : 'badge-confirmed';
-            const typeChar = d.day_type === 'half' ? '½' : 'F';
-            const status   = d.waitlisted ? 'W' : 'C';
-            return `<span class="date-chip ${cls}" title="${d.waitlisted ? 'Waitlist' : 'Confirmed'} · ${d.day_type === 'half' ? 'Half Day' : 'Full Day'}">${friendlyShort(d.care_date)} <em>${typeChar}·${status}</em></span>`;
+            const cls       = d.waitlisted ? 'badge-waitlist' : 'badge-confirmed';
+            const typeLabel = d.day_type === 'half' ? '½ day' : 'Full';
+            return `<span class="date-chip ${cls}" title="${d.day_type === 'half' ? 'Half Day' : 'Full Day'}">${friendlyShort(d.care_date)} <em>${typeLabel}</em></span>`;
         }).join('');
+
+        // Full / Half tally
+        const confirmed = dates.filter(d => !d.waitlisted);
+        const fullCount = confirmed.filter(d => d.day_type !== 'half').length;
+        const halfCount = confirmed.filter(d => d.day_type === 'half').length;
+        const tallyParts = [];
+        if (fullCount) tallyParts.push(`<span class="tally-full">${fullCount} Full</span>`);
+        if (halfCount) tallyParts.push(`<span class="tally-half">${halfCount} Half</span>`);
+        const tallyHtml = tallyParts.join('<br>') || '—';
 
         const submitted = new Date(reg.created_at).toLocaleDateString('en-US',
             { month: 'short', day: 'numeric', year: 'numeric' });
-
-        const dobDisplay = reg.child_dob
-            ? new Date(reg.child_dob + 'T00:00:00').toLocaleDateString('en-US',
-                { month: 'short', day: 'numeric', year: 'numeric' })
-            : (reg.child_age != null ? reg.child_age + ' mo' : '—');
 
         const bill = calcRegistrationBill(reg);
 
@@ -171,9 +175,9 @@ function renderTable(data) {
                 <td><a href="mailto:${escHtml(reg.parent_email)}">${escHtml(reg.parent_email)}</a></td>
                 <td>${escHtml(reg.parent_phone)}</td>
                 <td>${escHtml(reg.child_name)}</td>
-                <td>${dobDisplay}</td>
                 <td>${room.label}</td>
                 <td class="dates-cell">${datesHtml}</td>
+                <td class="tally-cell">${tallyHtml}</td>
                 <td class="bill-cell">$${bill.toFixed(2)}</td>
                 <td class="actions-cell">
                     <button class="btn-delete" data-id="${reg.id}">Delete</button>
@@ -648,7 +652,7 @@ function applyFilters() {
     const careMonth = document.getElementById('careMonthFilter').value;   // 'YYYY-MM' or ''
     const status    = document.getElementById('statusFilter').value;
 
-    const filtered = allRegistrations.filter(reg => {
+    let filtered = allRegistrations.filter(reg => {
         const matchSearch = !search ||
             (reg.parent_name  || '').toLowerCase().includes(search) ||
             (reg.parent_email || '').toLowerCase().includes(search) ||
@@ -660,6 +664,17 @@ function applyFilters() {
             status === 'confirmed' ? !d.waitlisted : d.waitlisted);
         return matchSearch && matchRoom && matchCareMonth && matchStatus;
     });
+
+    // When a care month is selected, sort by earliest care date in that month
+    if (careMonth) {
+        filtered = filtered.slice().sort((a, b) => {
+            const earliest = regs => (regs || [])
+                .filter(d => d.care_date?.startsWith(careMonth))
+                .map(d => d.care_date).sort()[0] || '';
+            return earliest(a.registration_dates).localeCompare(earliest(b.registration_dates));
+        });
+    }
+
     renderTable(filtered);
 }
 
@@ -1050,7 +1065,10 @@ function renderMessagesList(messages) {
                             ${!m.is_read ? '<span class="message-new-badge">New</span>' : ''}
                         </div>
                         <div class="message-body">${escHtml(m.message)}</div>
-                        ${!m.is_read ? `<button class="btn-mark-read" data-id="${m.id}">Mark as Read</button>` : ''}
+                        <div class="message-actions">
+                            ${!m.is_read ? `<button class="btn-mark-read" data-id="${m.id}">Mark as Read</button>` : ''}
+                            <button class="btn-delete-msg" data-id="${m.id}" title="Delete message">🗑 Delete</button>
+                        </div>
                     </li>`;
             }).join('')}
         </ul>`;
@@ -1063,6 +1081,19 @@ function renderMessagesList(messages) {
                 await loadMessages();
             } catch (err) {
                 alert('Failed to mark read: ' + err.message);
+            }
+        });
+    });
+
+    container.querySelectorAll('.btn-delete-msg').forEach(btn => {
+        btn.addEventListener('click', async e => {
+            const id = e.currentTarget.getAttribute('data-id');
+            if (!confirm('Delete this message? It cannot be recovered.')) return;
+            try {
+                await deleteMessage(id);
+                await loadMessages();
+            } catch (err) {
+                alert('Failed to delete: ' + err.message);
             }
         });
     });

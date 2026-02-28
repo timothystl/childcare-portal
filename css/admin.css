@@ -856,6 +856,30 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 .btn-mark-read:hover { background: #667eea; color: #fff; }
 
+.message-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+}
+.btn-delete-msg {
+    background: #fff;
+    color: #e53e3e;
+    border: 1.5px solid #e53e3e;
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .78em;
+    font-weight: 600;
+    transition: all .2s;
+}
+.btn-delete-msg:hover { background: #e53e3e; color: #fff; }
+
+/* Full / Half tally column */
+.tally-cell { white-space: nowrap; font-size: .88em; }
+.tally-full  { color: #276749; font-weight: 600; display: block; }
+.tally-half  { color: #c05621; font-weight: 600; display: block; }
+
 /* ============================================================
    RESPONSIVE ADMIN
    ============================================================ */

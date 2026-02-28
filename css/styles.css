@@ -1033,9 +1033,9 @@ input.prefilled {
 }
 
 /* ============================================================
-   EMAIL SCHEDULE BUTTON (in success modal)
+   PRINT SCHEDULE BUTTON (in success modal, replaces email)
    ============================================================ */
-.btn-email-schedule {
+.btn-print-schedule {
     display: inline-block;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: #fff;
@@ -1046,8 +1046,9 @@ input.prefilled {
     cursor: pointer;
     text-decoration: none;
     transition: opacity .2s;
+    font-weight: 600;
 }
-.btn-email-schedule:hover { opacity: .85; color: #fff; }
+.btn-print-schedule:hover { opacity: .85; }
 
 /* ============================================================
    FLOATING CONTACT US BUTTON

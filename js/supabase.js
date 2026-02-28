@@ -462,3 +462,12 @@ async function markMessageRead(id, isRead = true) {
         .eq('id', id);
     if (error) throw error;
 }
+
+async function deleteMessage(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('messages')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+}

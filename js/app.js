@@ -676,11 +676,39 @@ function renderSelectedDates() {
 // ============================================================
 // FORM LISTENERS
 // ============================================================
+// Fully resets the page for the next family (called when success modal closes)
+function resetForNextFamily() {
+    document.getElementById('successModal').style.display = 'none';
+    resetFamilyLookup();   // clears family, children, dates, calendar
+
+    // Re-enable submit button
+    const btn = document.getElementById('submitBtn');
+    const win = getRegistrationWindow();
+    if (btn) {
+        btn.disabled    = win.mode === 'closed';
+        btn.textContent = win.mode === 'closed' ? 'Registration Closed' : 'Submit Registration';
+    }
+
+    // Restore banner to open/closed state
+    const banner = document.getElementById('regWindowBanner');
+    if (banner) {
+        if (win.mode === 'closed') {
+            banner.className = 'reg-window-banner locked';
+            banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed.`;
+        } else {
+            banner.className = 'reg-window-banner open';
+            banner.innerHTML = `📅 Now accepting registrations for <strong>${win.targetLabel}</strong>. Deadline: <strong>${win.deadlineLabel}</strong>.`;
+        }
+    }
+}
+
 function setupFormListeners() {
     document.getElementById('registrationForm').addEventListener('submit', handleSubmit);
 
-    document.getElementById('closeModal').addEventListener('click', () => {
-        document.getElementById('successModal').style.display = 'none';
+    // Closing the success modal fully resets for the next family
+    document.getElementById('closeModal').addEventListener('click', resetForNextFamily);
+    document.getElementById('successModal')?.addEventListener('click', e => {
+        if (e.target === document.getElementById('successModal')) resetForNextFamily();
     });
 
     document.getElementById('prevMonth').addEventListener('click', async () => {
@@ -888,44 +916,24 @@ async function handleSubmit(e) {
             details += `<p class="receipt-error-note">⚠️ Note: ${escStr(errors.join('; '))}</p>`;
         }
 
-        // Build mailto: link so parent can email themselves their schedule
-        const emailSubject = encodeURIComponent(`${win.targetLabel} Care Schedule — ${parentName}`);
-        const emailBody = encodeURIComponent(
-            `Hi ${parentName},\n\nHere is your confirmed care schedule for ${win.targetLabel}:\n\n` +
-            sortedDates.map(({ date, dayType }) =>
-                `• ${friendlyDate(date)} — ${dayType === 'half' ? 'Half Day' : 'Full Day'}`
-            ).join('\n') +
-            `\n\nChildren registered: ${results.map(r => r.child.name).join(', ')}\n\nThank you!`
-        );
+        // Print schedule button (no mailto — opens a print-friendly popup in-browser)
         details += `<div style="margin-top:18px;text-align:center;">
-            <a href="mailto:${parentEmail}?subject=${emailSubject}&body=${emailBody}" class="btn-email-schedule">
-                📧 Email Me My Schedule
-            </a>
+            <button type="button" id="printScheduleBtn" class="btn-print-schedule">🖨️ Print / Save Schedule</button>
         </div>`;
 
         document.getElementById('successDetails').innerHTML = details;
+
+        // Wire up the print button now that the HTML is in the DOM
+        document.getElementById('printScheduleBtn')?.addEventListener('click', () => {
+            openPrintSchedule({
+                sortedDates,
+                childNames: results.map(r => r.child.name),
+                monthLabel: win.targetLabel,
+                parentName,
+            });
+        });
+
         document.getElementById('successModal').style.display = 'flex';
-
-        // Reset form (keep family selected)
-        document.getElementById('registrationForm').reset();
-        setPrefilled('parentName',  selectedFamily.parent_name);
-        setPrefilled('parentEmail', selectedFamily.parent_email);
-        setPrefilled('parentPhone', selectedFamily.parent_phone);
-        selectedChildren = [];
-        selectedDates    = new Map();
-        capacityCache    = {};
-        hideCalendar();
-        renderChildSection();
-        renderSelectedDates();
-
-        // Update banner + button
-        const postBanner = document.getElementById('regWindowBanner');
-        if (postBanner) {
-            postBanner.className = 'reg-window-banner submitted';
-            postBanner.innerHTML = `✅ Your registration for <strong>${win.targetLabel}</strong> has been submitted. Contact us to make any changes.`;
-        }
-        btn.disabled    = true;
-        btn.textContent = 'Already Submitted';
 
     } catch (err) {
         console.error(err);
@@ -959,3 +967,50 @@ function escStr(str) {
     return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function setupListeners() {}   // kept for compatibility
+
+// ============================================================
+// PRINT SCHEDULE POPUP
+// ============================================================
+function openPrintSchedule({ sortedDates, childNames, monthLabel, parentName }) {
+    const rows = sortedDates.map(({ date, dayType }) => {
+        const label = dayType === 'half' ? 'Half Day' : 'Full Day';
+        const d = new Date(date + 'T00:00:00').toLocaleDateString('en-US',
+            { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        return `<tr><td>${d}</td><td class="dt">${label}</td></tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${monthLabel} Care Schedule — ${parentName}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; padding: 48px; max-width: 600px; margin: 0 auto; color: #222; }
+  h1 { font-size: 1.3em; font-weight: 700; margin-bottom: 4px; }
+  .sub { font-size: .9em; color: #555; margin-bottom: 28px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: #f0f0f0; padding: 9px 14px; text-align: left; font-size: .9em; font-weight: 600; }
+  tbody td { padding: 9px 14px; border-bottom: 1px solid #eee; font-size: .95em; }
+  td.dt { font-weight: 500; width: 120px; }
+  .footer { margin-top: 36px; font-size: .75em; color: #aaa; text-align: center; }
+  @media print { body { padding: 24px; } @page { margin: .75in; } }
+</style>
+</head>
+<body>
+  <h1>${monthLabel} — Confirmed Care Schedule</h1>
+  <p class="sub">Family: <strong>${parentName}</strong> &nbsp;·&nbsp; Children: ${childNames.join(', ')}</p>
+  <table>
+    <thead><tr><th>Date</th><th>Type</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="footer">Printed ${new Date().toLocaleString('en-US')}</div>
+  <script>window.addEventListener('load', function(){ window.print(); });<\/script>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) { showToast('Pop-up blocked — please allow pop-ups and try again.'); return; }
+    w.document.write(html);
+    w.document.close();
+}
