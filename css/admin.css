@@ -862,10 +862,10 @@ tr.pending-approval:hover { background: #fef3c7; }
     align-items: center;
     margin-top: 8px;
 }
-.btn-delete-msg {
+.btn-archive-msg {
     background: #fff;
-    color: #e53e3e;
-    border: 1.5px solid #e53e3e;
+    color: #718096;
+    border: 1.5px solid #cbd5e0;
     padding: 4px 12px;
     border-radius: 6px;
     cursor: pointer;
@@ -873,7 +873,38 @@ tr.pending-approval:hover { background: #fef3c7; }
     font-weight: 600;
     transition: all .2s;
 }
-.btn-delete-msg:hover { background: #e53e3e; color: #fff; }
+.btn-archive-msg:hover { background: #718096; color: #fff; border-color: #718096; }
+
+.btn-restore-msg {
+    background: #fff;
+    color: #667eea;
+    border: 1.5px solid #667eea;
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .78em;
+    font-weight: 600;
+    transition: all .2s;
+}
+.btn-restore-msg:hover { background: #667eea; color: #fff; }
+
+.message-archived { opacity: .65; background: #f7fafc !important; }
+.message-archived-badge {
+    background: #718096;
+    color: #fff;
+    font-size: .68em;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: .04em;
+}
+
+/* "Show Archived" active state */
+.btn-active {
+    background: #667eea !important;
+    color: #fff !important;
+    border-color: #667eea !important;
+}
 
 /* Full / Half tally column */
 .tally-cell { white-space: nowrap; font-size: .88em; }

@@ -1,0 +1,325 @@
+/* ============================================================
+   PARENT PORTAL — My Schedule Lookup
+   ============================================================ */
+
+.lookup-body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 24px 16px;
+}
+
+/* -------- Lookup Card -------- */
+.lookup-screen {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding-top: 48px;
+}
+
+.lookup-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 44px 40px;
+    max-width: 440px;
+    width: 100%;
+    box-shadow: 0 16px 56px rgba(0,0,0,.22);
+    text-align: center;
+}
+
+.lookup-logo {
+    font-size: 2.4em;
+    margin-bottom: 10px;
+}
+
+.lookup-card h1 {
+    font-size: 1.45em;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 6px;
+}
+
+.lookup-sub {
+    color: #718096;
+    font-size: .93em;
+    margin-bottom: 24px;
+}
+
+/* -------- Tabs -------- */
+.lookup-tabs {
+    display: flex;
+    border-radius: 10px;
+    background: #f0f4ff;
+    padding: 4px;
+    margin-bottom: 22px;
+    gap: 4px;
+}
+
+.lookup-tab {
+    flex: 1;
+    padding: 9px 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #667eea;
+    font-weight: 600;
+    font-size: .9em;
+    cursor: pointer;
+    transition: all .2s;
+}
+
+.lookup-tab.active {
+    background: #fff;
+    color: #553c9a;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+}
+
+/* -------- Input section -------- */
+.lookup-input-section { text-align: left; }
+
+.lookup-hint {
+    font-size: .8em;
+    color: #a0aec0;
+    margin-top: -8px;
+    margin-bottom: 12px;
+}
+
+.lookup-btn { width: 100%; margin-top: 8px; }
+
+.lookup-footer-links {
+    margin-top: 20px;
+    font-size: .82em;
+}
+.lookup-footer-links a { color: #a0aec0; text-decoration: none; }
+.lookup-footer-links a:hover { color: #667eea; }
+
+/* -------- Results Wrapper -------- */
+.lookup-results-wrap {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 0 0 48px;
+}
+
+.lookup-results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    background: rgba(255,255,255,.12);
+    border-radius: 14px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+    gap: 16px;
+}
+
+.lookup-results-header h1 {
+    font-size: 1.3em;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 4px;
+}
+
+.lookup-parent-email {
+    font-size: .85em;
+    color: rgba(255,255,255,.7);
+    margin: 0;
+}
+
+.lookup-header-actions {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+/* -------- Child Card -------- */
+.lookup-child-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.12);
+    margin-bottom: 18px;
+    overflow: hidden;
+}
+
+.lookup-child-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 22px;
+    background: #f7f9ff;
+    border-bottom: 1px solid #e8edf5;
+}
+
+.lookup-child-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.lookup-child-name {
+    font-weight: 700;
+    font-size: 1.05em;
+    color: #1a202c;
+}
+
+.lookup-child-room {
+    font-size: .82em;
+    color: #718096;
+}
+
+.lookup-child-total {
+    font-size: 1.2em;
+    font-weight: 700;
+    color: #276749;
+}
+
+/* -------- Month Block -------- */
+.lookup-month-block {
+    padding: 16px 22px;
+    border-bottom: 1px solid #f0f4ff;
+}
+.lookup-month-block:last-of-type { border-bottom: none; }
+
+.lookup-month-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    gap: 8px;
+}
+
+.lookup-month-label {
+    font-weight: 700;
+    font-size: .95em;
+    color: #2d3748;
+}
+
+.lookup-month-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.lookup-tally {
+    font-size: .78em;
+    color: #718096;
+    display: flex;
+    gap: 6px;
+}
+.lookup-tally-full { color: #276749; font-weight: 600; }
+.lookup-tally-half { color: #c05621; font-weight: 600; }
+
+.lookup-month-bill {
+    font-weight: 700;
+    color: #276749;
+    font-size: .95em;
+    white-space: nowrap;
+}
+
+/* -------- Date Chips -------- */
+.lookup-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.lookup-date-chip {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    background: #e8f4fd;
+    border: 1.5px solid #bee3f8;
+    border-radius: 8px;
+    padding: 5px 10px;
+    min-width: 58px;
+    font-size: .78em;
+    text-align: center;
+    line-height: 1.3;
+}
+.lookup-date-chip.lookup-half {
+    background: #fffbeb;
+    border-color: #fde68a;
+}
+
+.lookup-chip-dow {
+    font-size: .75em;
+    color: #a0aec0;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.lookup-chip-date {
+    font-weight: 700;
+    color: #2b6cb0;
+}
+.lookup-date-chip.lookup-half .lookup-chip-date { color: #92400e; }
+
+.lookup-chip-type {
+    font-size: .7em;
+    color: #718096;
+    font-weight: 600;
+}
+
+/* -------- Grand Total -------- */
+.lookup-grand-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 22px;
+    background: #f0fff4;
+    border-top: 2px solid #c6f6d5;
+    font-weight: 700;
+}
+.lookup-grand-label {
+    font-size: .9em;
+    color: #276749;
+}
+.lookup-grand-amount {
+    font-size: 1.15em;
+    color: #276749;
+}
+
+.lookup-no-dates {
+    padding: 20px 22px;
+    color: #a0aec0;
+    font-size: .9em;
+}
+
+/* -------- Empty / Disclaimer -------- */
+.lookup-empty-state {
+    color: rgba(255,255,255,.8);
+    text-align: center;
+    padding: 32px;
+}
+
+.lookup-disclaimer {
+    text-align: center;
+    font-size: .82em;
+    color: rgba(255,255,255,.65);
+    margin-top: 8px;
+    padding: 0 8px;
+}
+
+.lookup-register-link {
+    display: inline-block;
+    margin-top: 8px;
+    color: rgba(255,255,255,.85);
+    text-decoration: underline;
+}
+.lookup-register-link:hover { color: #fff; }
+
+/* -------- Print -------- */
+@media print {
+    .lookup-body { background: #fff !important; }
+    .lookup-results-header { background: #f0f0f0 !important; }
+    .lookup-results-header h1 { color: #000 !important; }
+    .lookup-parent-email { color: #555 !important; }
+    .lookup-header-actions,
+    .lookup-disclaimer { display: none !important; }
+    .lookup-child-card { box-shadow: none !important; border: 1px solid #ddd; }
+}
+
+/* -------- Responsive -------- */
+@media (max-width: 520px) {
+    .lookup-card { padding: 32px 20px; }
+    .lookup-results-header { flex-direction: column; padding: 18px; }
+    .lookup-month-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+}

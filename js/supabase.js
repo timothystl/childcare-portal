@@ -444,12 +444,14 @@ async function addMessage({ parentName, parentEmail, message }) {
     if (error) throw error;
 }
 
-async function fetchMessages() {
+async function fetchMessages(showArchived = false) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
+    let query = sbClient
         .from('messages')
-        .select('id, parent_name, parent_email, message, created_at, is_read')
+        .select('id, parent_name, parent_email, message, created_at, is_read, is_archived')
         .order('created_at', { ascending: false });
+    if (!showArchived) query = query.eq('is_archived', false);
+    const { data, error } = await query;
     if (error) throw error;
     return data || [];
 }
@@ -463,11 +465,28 @@ async function markMessageRead(id, isRead = true) {
     if (error) throw error;
 }
 
-async function deleteMessage(id) {
+async function archiveMessage(id, archived = true) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
         .from('messages')
-        .delete()
+        .update({ is_archived: archived })
         .eq('id', id);
     if (error) throw error;
+}
+
+// fetchRegistrationsByEmail — used by parent lookup portal
+async function fetchRegistrationsByEmail(email) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('registrations')
+        .select(`
+            id, created_at, status,
+            parent_name, parent_email, parent_phone,
+            child_name, room_id,
+            registration_dates ( care_date, waitlisted, day_type )
+        `)
+        .ilike('parent_email', email)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
 }

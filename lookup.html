@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>My Schedule — Childcare Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/lookup.css">
+</head>
+<body class="lookup-body">
+
+    <!-- Lookup Screen -->
+    <div id="lookupScreen" class="lookup-screen">
+        <div class="lookup-card">
+            <div class="lookup-logo">🏫</div>
+            <h1>My Childcare Schedule</h1>
+            <p class="lookup-sub">Look up your registered care days and billed amount.</p>
+
+            <div class="lookup-tabs">
+                <button class="lookup-tab active" data-tab="email">By Email</button>
+                <button class="lookup-tab" data-tab="pin">By PIN</button>
+            </div>
+
+            <div id="lookupByEmail" class="lookup-input-section">
+                <div class="form-group">
+                    <label for="lookupEmail">Email Address</label>
+                    <input type="email" id="lookupEmail" placeholder="your@email.com" autocomplete="email">
+                </div>
+            </div>
+
+            <div id="lookupByPin" class="lookup-input-section hidden">
+                <div class="form-group">
+                    <label for="lookupPin">Family PIN</label>
+                    <input type="text" id="lookupPin" placeholder="4-digit PIN" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
+                </div>
+                <p class="lookup-hint">Your PIN was provided by the childcare centre when your family was registered.</p>
+            </div>
+
+            <button id="lookupBtn" class="btn-primary lookup-btn">Look Up My Schedule</button>
+            <p id="lookupError" class="login-error hidden"></p>
+
+            <div class="lookup-footer-links">
+                <a href="index.html">← Back to Registration</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Screen -->
+    <div id="lookupResults" class="hidden">
+        <div class="lookup-results-wrap">
+            <div class="lookup-results-header">
+                <div>
+                    <h1 id="lookupParentName"></h1>
+                    <p id="lookupParentEmail" class="lookup-parent-email"></p>
+                </div>
+                <div class="lookup-header-actions">
+                    <button id="lookupPrintBtn" class="btn-secondary">🖨️ Print</button>
+                    <button id="lookupBackBtn" class="btn-ghost">← New Lookup</button>
+                </div>
+            </div>
+
+            <div id="lookupContent"></div>
+
+            <div class="lookup-disclaimer">
+                <p>These are your confirmed care days based on our registration system. Contact us if you notice any discrepancies.</p>
+                <a href="index.html" class="lookup-register-link">Register for additional days →</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase.js?v=14"></script>
+    <script src="js/lookup.js?v=1"></script>
+</body>
+</html>

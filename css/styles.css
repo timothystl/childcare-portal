@@ -1075,6 +1075,32 @@ input.prefilled {
     box-shadow: 0 8px 24px rgba(102,126,234,.55);
 }
 
+/* My Schedule floating link — sits just above the Contact Us button */
+.btn-view-schedule-float {
+    position: fixed;
+    bottom: 82px;
+    right: 24px;
+    background: #fff;
+    color: #553c9a;
+    border: 2px solid #667eea;
+    padding: 10px 20px;
+    font-size: .88em;
+    font-weight: 600;
+    border-radius: 30px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(102,126,234,.25);
+    transition: transform .2s, box-shadow .2s, background .2s;
+    z-index: 300;
+    white-space: nowrap;
+    text-decoration: none;
+    display: inline-block;
+}
+.btn-view-schedule-float:hover {
+    transform: translateY(-2px);
+    background: #f0f4ff;
+    box-shadow: 0 6px 20px rgba(102,126,234,.4);
+}
+
 /* ============================================================
    CONTACT US MODAL
    ============================================================ */
