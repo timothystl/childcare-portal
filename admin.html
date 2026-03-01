@@ -41,21 +41,6 @@
             </div>
         </header>
 
-        <!-- Filters -->
-        <div class="filters">
-            <input type="text" id="searchInput" placeholder="Search by parent, child, or email…">
-            <select id="roomFilter">
-                <option value="">All rooms</option>
-            </select>
-            <select id="careMonthFilter">
-                <option value="">All care months</option>
-            </select>
-            <select id="statusFilter">
-                <option value="">All statuses</option>
-                <option value="confirmed">Confirmed only</option>
-            </select>
-        </div>
-
         <!-- Capacity Overview -->
         <section class="capacity-section">
             <h2>Capacity Overview <span class="hint-small">(next 30 days)</span></h2>
@@ -181,6 +166,19 @@
         <!-- Registrations Table -->
         <section class="table-section">
             <h2>All Registrations</h2>
+            <div class="filters">
+                <input type="text" id="searchInput" placeholder="Search by parent, child, or email…">
+                <select id="roomFilter">
+                    <option value="">All rooms</option>
+                </select>
+                <select id="careMonthFilter">
+                    <option value="">All care months</option>
+                </select>
+                <select id="statusFilter">
+                    <option value="">All statuses</option>
+                    <option value="confirmed">Confirmed only</option>
+                </select>
+            </div>
             <div class="table-wrapper">
                 <table id="regTable">
                     <thead>

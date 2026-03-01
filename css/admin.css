@@ -89,25 +89,24 @@
 }
 .btn-ghost:hover { background: #f5f6fa; color: #333; }
 
-/* Filters */
+/* Filters — sits inside the All Registrations section */
 .filters {
-    padding: 20px 32px;
     display: flex;
-    gap: 14px;
+    gap: 12px;
     flex-wrap: wrap;
-    background: #fff;
-    border-bottom: 1px solid #eee;
+    margin-bottom: 18px;
 }
 
 .filters input,
 .filters select {
-    padding: 10px 14px;
+    padding: 9px 13px;
     border: 2px solid #e0e0e0;
     border-radius: 7px;
-    font-size: .95em;
+    font-size: .93em;
     flex: 1;
-    min-width: 180px;
+    min-width: 170px;
     transition: border-color .2s;
+    background: #fff;
 }
 .filters input:focus,
 .filters select:focus { outline: none; border-color: #667eea; }
