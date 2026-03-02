@@ -446,13 +446,25 @@ async function addMessage({ parentName, parentEmail, message }) {
 
 async function fetchMessages(showArchived = false) {
     if (!sbClient) throw new Error('Supabase not configured.');
+    // Try with is_archived column; fall back gracefully if it hasn't been added yet
     let query = sbClient
         .from('messages')
         .select('id, parent_name, parent_email, message, created_at, is_read, is_archived')
         .order('created_at', { ascending: false });
     if (!showArchived) query = query.eq('is_archived', false);
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+        // Column doesn't exist yet — fetch without it and default is_archived to false
+        if (error.message && error.message.includes('is_archived')) {
+            const fallback = await sbClient
+                .from('messages')
+                .select('id, parent_name, parent_email, message, created_at, is_read')
+                .order('created_at', { ascending: false });
+            if (fallback.error) throw fallback.error;
+            return (fallback.data || []).map(m => ({ ...m, is_archived: false }));
+        }
+        throw error;
+    }
     return data || [];
 }
 

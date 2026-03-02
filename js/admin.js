@@ -205,29 +205,56 @@ function renderTable(data) {
 // ============================================================
 function renderCapacityOverview() {
     const grid  = document.getElementById('capacityGrid');
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const counts = {};
-    ROOMS.forEach(r => { counts[r.id] = 0; });
+    const today = new Date();
 
-    allRegistrations.forEach(reg => {
-        (reg.registration_dates || []).forEach(d => {
-            if (d.waitlisted) return;
-            const diff = (new Date(d.care_date + 'T00:00:00') - today) / 86400000;
-            if (diff >= 0 && diff <= 30) counts[reg.room_id] = (counts[reg.room_id] || 0) + 1;
+    // Build current-month and next-month descriptors
+    const months = [0, 1].map(offset => {
+        const d = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+        const y = d.getFullYear();
+        const m = d.getMonth();
+        const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+
+        // Count Mon–Fri working days in the month (closures not excluded for simplicity)
+        const daysInMonth = new Date(y, m + 1, 0).getDate();
+        let workingDays = 0;
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dow = new Date(y, m, day).getDay();
+            if (dow !== 0 && dow !== 6) workingDays++;
+        }
+
+        // Count confirmed bookings per room for this month
+        const counts = {};
+        ROOMS.forEach(r => { counts[r.id] = 0; });
+        allRegistrations.forEach(reg => {
+            (reg.registration_dates || []).forEach(d => {
+                if (d.waitlisted || !d.care_date) return;
+                if (d.care_date.startsWith(key)) {
+                    counts[reg.room_id] = (counts[reg.room_id] || 0) + 1;
+                }
+            });
         });
+
+        return { label: MONTH_NAMES_ADMIN[m] + ' ' + y, key, counts, workingDays };
     });
 
-    grid.innerHTML = ROOMS.map(room => {
-        const used  = counts[room.id] || 0;
-        const cap   = room.capacity * 30;
-        const pct   = Math.min(100, Math.round((used / cap) * 100));
-        const color = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
+    grid.innerHTML = months.map(({ label, counts, workingDays }) => {
+        const cards = ROOMS.map(room => {
+            const used  = counts[room.id] || 0;
+            const cap   = room.capacity * workingDays;
+            const pct   = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+            const color = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
+            return `
+                <div class="cap-card">
+                    <h3>${room.label}</h3>
+                    <p class="cap-meta">Max ${room.capacity}/day &middot; ${used} booking${used !== 1 ? 's' : ''}</p>
+                    <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
+                    <p class="cap-pct">${pct}% utilisation</p>
+                </div>`;
+        }).join('');
         return `
-            <div class="cap-card">
-                <h3>${room.label}</h3>
-                <p class="cap-meta">Max ${room.capacity}/day &middot; ${used} bookings next 30d</p>
-                <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
-                <p class="cap-pct">${pct}% utilisation</p>
+            <div class="cap-month-group">
+                <h3 class="cap-month-heading">${label}</h3>
+                <div class="capacity-grid">${cards}</div>
             </div>`;
     }).join('');
 }

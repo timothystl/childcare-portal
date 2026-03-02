@@ -124,6 +124,21 @@
 }
 .hint-small { font-size: .78em; color: #aaa; font-weight: 400; }
 
+/* Month group wrapper inside capacity overview */
+.cap-month-group {
+    margin-bottom: 28px;
+}
+.cap-month-heading {
+    font-size: 1em;
+    font-weight: 700;
+    color: #553c9a;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 14px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #e9e3ff;
+}
+
 .capacity-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

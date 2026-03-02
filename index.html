@@ -62,15 +62,18 @@
                         <div class="field-grid">
                             <div class="form-group">
                                 <label for="parentName">Parent / Guardian Name <span class="req">*</span></label>
-                                <input type="text" id="parentName" required placeholder="Jane Smith">
+                                <input type="text" id="parentName" required placeholder="Jane Smith"
+                                       autocomplete="name" data-1p-ignore data-lpignore="true">
                             </div>
                             <div class="form-group">
                                 <label for="parentEmail">Email <span class="req">*</span></label>
-                                <input type="email" id="parentEmail" required placeholder="jane@example.com">
+                                <input type="email" id="parentEmail" required placeholder="jane@example.com"
+                                       autocomplete="email" data-1p-ignore data-lpignore="true">
                             </div>
                             <div class="form-group">
                                 <label for="parentPhone">Phone <span class="req">*</span></label>
-                                <input type="tel" id="parentPhone" required placeholder="(555) 000-0000">
+                                <input type="tel" id="parentPhone" required placeholder="(555) 000-0000"
+                                       autocomplete="tel" data-1p-ignore data-lpignore="true">
                             </div>
                         </div>
                     </section>
@@ -78,7 +81,7 @@
                     <!-- Step 2: Children (existing family children only) -->
                     <section class="form-section">
                         <h2><span class="step-badge">2</span> Children</h2>
-                        <p class="hint">Select which children to register — all selected children will share the same care days.</p>
+                        <p class="hint">Select which children to register — all selected children will share the same care days. If children need different schedules, select each child separately and submit one at a time.</p>
                         <div id="childSection"></div>
                     </section>
 
@@ -176,7 +179,7 @@
 
     <!-- Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase.js?v=14"></script>
+    <script src="js/supabase.js?v=15"></script>
     <script src="js/app.js?v=18"></script>
 </body>
 </html>
