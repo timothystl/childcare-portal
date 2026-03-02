@@ -28,11 +28,49 @@ a { color: #667eea; }
 header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: #fff;
-    padding: 32px 36px;
+    padding: 28px 36px 32px;
     text-align: center;
 }
 header h1 { font-size: 2em; margin-bottom: 6px; }
 header p  { opacity: .88; font-size: 1.05em; }
+
+/* ============================================================
+   SITE LOGO
+   ============================================================ */
+/* Main registration page header */
+.site-logo {
+    display: block;
+    margin: 0 auto 14px;
+    max-height: 90px;
+    max-width: 220px;
+    width: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,.18));
+}
+
+/* Admin login card */
+.site-logo-login {
+    max-height: 70px;
+    max-width: 180px;
+    margin-bottom: 16px;
+}
+
+/* Admin dashboard header (inline with text) */
+.site-logo-admin {
+    max-height: 48px;
+    max-width: 120px;
+    margin: 0;
+    filter: none;
+    flex-shrink: 0;
+}
+
+/* Lookup / portal card */
+.site-logo-lookup {
+    max-height: 72px;
+    max-width: 180px;
+    margin: 0 auto;
+    filter: none;
+}
 
 main { padding: 32px 36px; }
 

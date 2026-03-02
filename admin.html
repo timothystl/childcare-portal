@@ -15,6 +15,8 @@
     <!-- Login Screen -->
     <div id="loginScreen" class="login-screen">
         <div class="login-card">
+            <img src="images/logo.png" alt="Timothy Lutheran Church" class="site-logo site-logo-login"
+                 onerror="this.style.display='none'">
             <h1>Admin Login</h1>
             <p>Timothy Lutheran Church Mother's Day Out</p>
             <div class="form-group">
@@ -29,9 +31,13 @@
     <!-- Admin Dashboard -->
     <div id="dashboard" class="hidden">
         <header class="admin-header">
-            <div>
-                <h1>Registrations Dashboard</h1>
-                <p id="regCount" class="sub-label">Loading…</p>
+            <div class="admin-header-left">
+                <img src="images/logo.png" alt="" class="site-logo site-logo-admin"
+                     onerror="this.style.display='none'">
+                <div>
+                    <h1>Registrations Dashboard</h1>
+                    <p id="regCount" class="sub-label">Loading…</p>
+                </div>
             </div>
             <div class="header-actions">
                 <button id="refreshBtn" class="btn-secondary">&#8635; Refresh</button>
