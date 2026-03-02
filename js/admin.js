@@ -846,7 +846,7 @@ function parseUploadedFile(file) {
                 const data = new Uint8Array(e.target.result);
                 const wb   = XLSX.read(data, { type: 'array', cellDates: true });
                 const ws   = wb.Sheets[wb.SheetNames[0]];
-                const rows = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' });
+                const rows = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '', range: 2 });
                 resolve(rows);
             } catch (err) { reject(err); }
         };
@@ -873,14 +873,23 @@ function normalizeImportRow(rawRow) {
     if (isProCare) {
         const childFirst = get('First Name');
         const childLast  = get('Last Name');
-        const childName  = childFirst && childLast
-            ? `${childFirst} ${childLast}`.trim()
-            : (childFirst || childLast || '');
-        const childDob    = normalizeDobStr(get('Birthdate'));
-        const parentName  = get('Parent1 Name');
-        const parentEmail = get('Parent1 Email');
-        const parentPhone = get('Parent1 Phone');
-        return { parentName, parentEmail, parentPhone, childName, childDob };
+        const childName  = [childFirst, childLast].filter(Boolean).join(' ').trim();
+        const childDob   = normalizeDobStr(get('Birthdate'));
+
+        // Prefer whichever parent has an email; fall back to Parent2 if Parent1 has none
+        let parentName  = get('Parent1 Name');
+        let parentEmail = get('Parent1 Email');
+        let parentPhone = get('Parent1 Phone');
+        let parentPin   = get('Parent1 Sign-In Code');
+
+        if (!parentEmail && get('Parent2 Email')) {
+            parentName  = get('Parent2 Name')  || parentName;
+            parentEmail = get('Parent2 Email');
+            parentPhone = get('Parent2 Phone') || parentPhone;
+            parentPin   = get('Parent2 Sign-In Code') || parentPin;
+        }
+
+        return { parentName, parentEmail, parentPhone, parentPin, childName, childDob };
     }
 
     // Generic auto-detect (non-ProCare files)
@@ -920,6 +929,12 @@ function normalizeDobStr(raw) {
     const str = String(raw).trim();
     if (!str) return null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    // Excel serial date (e.g. 44289 → 2021-04-03)
+    const num = Number(str);
+    if (!isNaN(num) && num > 10000 && num < 60000) {
+        const d = new Date(Math.round((num - 25569) * 86400000));
+        return d.toISOString().split('T')[0];
+    }
     const d = new Date(str);
     if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
     return null;
@@ -934,6 +949,7 @@ function renderImportPreview(rows) {
             <td>${escHtml(r.parentName)}</td>
             <td>${escHtml(r.parentEmail)}</td>
             <td>${escHtml(r.parentPhone)}</td>
+            <td>${escHtml(r.parentPin || '')}</td>
             <td>${escHtml(r.childName)}</td>
             <td>${escHtml(r.childDob || '')}</td>
         </tr>`).join('');
@@ -948,7 +964,7 @@ function renderImportPreview(rows) {
                 <thead>
                     <tr>
                         <th>Parent Name</th><th>Email</th><th>Phone</th>
-                        <th>Child Name</th><th>Child DOB</th>
+                        <th>PIN</th><th>Child Name</th><th>Child DOB</th>
                     </tr>
                 </thead>
                 <tbody>${tableRows}</tbody>
