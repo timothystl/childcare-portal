@@ -73,16 +73,6 @@ async function initDashboard() {
     setupFamilies();
     setupMessages();
     setupRoomCalendar();
-    document.getElementById('capacityGrid').addEventListener('click', e => {
-        const card = e.target.closest('.cap-card[data-room-id]');
-        if (card) openRoomCalendar(card.dataset.roomId, card.dataset.monthKey);
-    });
-    document.getElementById('capacityGrid').addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            const card = e.target.closest('.cap-card[data-room-id]');
-            if (card) { e.preventDefault(); openRoomCalendar(card.dataset.roomId, card.dataset.monthKey); }
-        }
-    });
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
     document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
@@ -302,30 +292,49 @@ let rcalRoomId    = null;
 let rcalMonthDate = null; // JS Date set to 1st of displayed month
 
 function setupRoomCalendar() {
-    document.getElementById('rcalClose').addEventListener('click', closeRoomCalendar);
-    document.getElementById('rcalPrev').addEventListener('click', () => {
+    // Wire up modal buttons (null-safe in case modal HTML is missing/cached)
+    document.getElementById('rcalClose')?.addEventListener('click', closeRoomCalendar);
+    document.getElementById('rcalPrev')?.addEventListener('click', () => {
         rcalMonthDate = new Date(rcalMonthDate.getFullYear(), rcalMonthDate.getMonth() - 1, 1);
         drawRoomCalendar();
     });
-    document.getElementById('rcalNext').addEventListener('click', () => {
+    document.getElementById('rcalNext')?.addEventListener('click', () => {
         rcalMonthDate = new Date(rcalMonthDate.getFullYear(), rcalMonthDate.getMonth() + 1, 1);
         drawRoomCalendar();
     });
-    document.getElementById('roomCalModal').addEventListener('click', e => {
+    document.getElementById('roomCalModal')?.addEventListener('click', e => {
         if (e.target === e.currentTarget) closeRoomCalendar();
     });
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') closeRoomCalendar();
     });
+
+    // Cap-card click delegation — use document so it always works
+    document.addEventListener('click', e => {
+        const card = e.target.closest('.cap-card[data-room-id]');
+        if (card) openRoomCalendar(card.dataset.roomId, card.dataset.monthKey);
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            const card = e.target.closest('.cap-card[data-room-id]');
+            if (card) { e.preventDefault(); openRoomCalendar(card.dataset.roomId, card.dataset.monthKey); }
+        }
+    });
 }
 
 function openRoomCalendar(roomId, monthKey) {
-    rcalRoomId    = roomId;
-    const [y, m]  = monthKey.split('-').map(Number);
-    rcalMonthDate = new Date(y, m - 1, 1);
-    drawRoomCalendar();
-    document.getElementById('roomCalModal').classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
+    try {
+        rcalRoomId    = roomId;
+        const [y, m]  = monthKey.split('-').map(Number);
+        rcalMonthDate = new Date(y, m - 1, 1);
+        drawRoomCalendar();
+        const modal = document.getElementById('roomCalModal');
+        if (!modal) { console.error('roomCalModal element not found'); return; }
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    } catch (err) {
+        console.error('openRoomCalendar error:', err);
+    }
 }
 
 function closeRoomCalendar() {
