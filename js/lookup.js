@@ -11,17 +11,6 @@ const MONTH_NAMES_LOOKUP = [
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Tab switching
-    document.querySelectorAll('.lookup-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            document.querySelectorAll('.lookup-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            const which = tab.dataset.tab;
-            document.getElementById('lookupByEmail').classList.toggle('hidden', which !== 'email');
-            document.getElementById('lookupByPin').classList.toggle('hidden', which !== 'pin');
-        });
-    });
-
     document.getElementById('lookupBtn').addEventListener('click', doLookup);
     document.getElementById('lookupEmail')?.addEventListener('keydown', e => {
         if (e.key === 'Enter') doLookup();
@@ -40,53 +29,47 @@ function resetToLookup() {
     document.getElementById('lookupError').classList.add('hidden');
     document.getElementById('lookupEmail').value = '';
     document.getElementById('lookupPin').value   = '';
+    document.getElementById('lookupEmail').focus();
 }
 
 // ============================================================
-// LOOKUP
+// LOOKUP  — requires BOTH email AND PIN
 // ============================================================
 async function doLookup() {
-    const activeTab = document.querySelector('.lookup-tab.active')?.dataset.tab;
-    const errorEl   = document.getElementById('lookupError');
-    const btn       = document.getElementById('lookupBtn');
+    const email   = document.getElementById('lookupEmail').value.trim();
+    const pin     = document.getElementById('lookupPin').value.trim();
+    const errorEl = document.getElementById('lookupError');
+    const btn     = document.getElementById('lookupBtn');
 
     errorEl.classList.add('hidden');
+
+    if (!email) {
+        showError('Please enter your email address.');
+        return;
+    }
+    if (!/^\d{4}$/.test(pin)) {
+        showError('Please enter your 4-digit PIN.');
+        return;
+    }
+
     btn.disabled    = true;
     btn.textContent = 'Looking up…';
 
     try {
-        let registrations = [];
-        let parentInfo    = { name: '', email: '' };
-
-        if (activeTab === 'email') {
-            const email = document.getElementById('lookupEmail').value.trim();
-            if (!email) {
-                showError('Please enter your email address.');
-                return;
-            }
-            registrations = await fetchRegistrationsByEmail(email);
-            if (registrations.length) {
-                parentInfo = { name: registrations[0].parent_name, email };
-            }
-        } else {
-            const pin = document.getElementById('lookupPin').value.trim();
-            if (!pin || !/^\d{4}$/.test(pin)) {
-                showError('Please enter your 4-digit PIN.');
-                return;
-            }
-            const family = await lookupFamilyByPin(pin);
-            if (family && family.parent_email) {
-                registrations = await fetchRegistrationsByEmail(family.parent_email);
-                parentInfo    = { name: family.parent_name, email: family.parent_email };
-            }
-        }
-
-        if (!registrations.length) {
-            showError('No registrations found. Please check your email address or PIN and try again.');
+        // Verify BOTH email AND PIN match — neither alone is sufficient
+        const family = await lookupFamilyByEmailAndPin(email, pin);
+        if (!family) {
+            showError('Email and PIN do not match. Please contact the office if you need help.');
             return;
         }
 
-        showResults(registrations, parentInfo);
+        const registrations = await fetchRegistrationsByEmail(family.parent_email);
+        if (!registrations.length) {
+            showError('No registrations found for your account.');
+            return;
+        }
+
+        showResults(registrations, { name: family.parent_name, email: family.parent_email });
 
     } catch (err) {
         console.error('Lookup error:', err);

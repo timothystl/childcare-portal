@@ -20,11 +20,15 @@
             <h1>Admin Login</h1>
             <p>Timothy Lutheran Church Mother's Day Out</p>
             <div class="form-group">
+                <label for="adminEmail">Email</label>
+                <input type="email" id="adminEmail" placeholder="admin@example.com" autocomplete="email">
+            </div>
+            <div class="form-group">
                 <label for="adminPassword">Password</label>
-                <input type="password" id="adminPassword" placeholder="Enter admin password">
+                <input type="password" id="adminPassword" placeholder="Password" autocomplete="current-password">
             </div>
             <button id="loginBtn" class="btn-primary">Login</button>
-            <p id="loginError" class="login-error hidden">Incorrect password.</p>
+            <p id="loginError" class="login-error hidden"></p>
         </div>
     </div>
 
@@ -211,8 +215,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=15"></script>
-    <script src="js/admin.js?v=13"></script>
+    <script src="js/supabase.js?v=16"></script>
+    <script src="js/admin.js?v=14"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 </body>
 </html>

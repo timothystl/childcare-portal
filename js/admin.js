@@ -1,37 +1,60 @@
 // ============================================================
-// ADMIN PASSWORD
-// ============================================================
-const ADMIN_PASSWORD = 'childcare2024';
-
-// ============================================================
 // STATE
 // ============================================================
 let allRegistrations = [];
 
 // ============================================================
-// LOGIN
+// LOGIN  (Supabase Auth — server-validated)
 // ============================================================
 document.getElementById('loginBtn').addEventListener('click', attemptLogin);
 document.getElementById('adminPassword').addEventListener('keydown', e => {
     if (e.key === 'Enter') attemptLogin();
 });
+document.getElementById('adminEmail').addEventListener('keydown', e => {
+    if (e.key === 'Enter') attemptLogin();
+});
 
-function attemptLogin() {
-    const pwd = document.getElementById('adminPassword').value;
-    if (pwd === ADMIN_PASSWORD) {
-        document.getElementById('loginScreen').classList.add('hidden');
-        document.getElementById('dashboard').classList.remove('hidden');
-        initDashboard();
-    } else {
-        document.getElementById('loginError').classList.remove('hidden');
+async function attemptLogin() {
+    const email = document.getElementById('adminEmail').value.trim();
+    const pwd   = document.getElementById('adminPassword').value;
+    const errEl = document.getElementById('loginError');
+    const btn   = document.getElementById('loginBtn');
+
+    errEl.classList.add('hidden');
+    btn.disabled    = true;
+    btn.textContent = 'Signing in…';
+
+    try {
+        await loginAdmin(email, pwd);
+        showDashboard();
+    } catch (_) {
+        errEl.textContent = 'Incorrect email or password.';
+        errEl.classList.remove('hidden');
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = 'Login';
     }
 }
 
-document.getElementById('logoutBtn').addEventListener('click', () => {
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await logoutAdmin();
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('dashboard').classList.add('hidden');
     document.getElementById('adminPassword').value = '';
+    document.getElementById('adminEmail').value    = '';
 });
+
+function showDashboard() {
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    initDashboard();
+}
+
+// Auto-restore session if already logged in
+(async () => {
+    const session = await getAdminSession();
+    if (session) showDashboard();
+})();
 
 // ============================================================
 // DASHBOARD INIT

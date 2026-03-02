@@ -20,27 +20,19 @@
                      onerror="this.outerHTML='🏫'">
             </div>
             <h1>My Schedule</h1>
-            <p class="lookup-sub">Look up your registered care days and billed amount.</p>
+            <p class="lookup-sub">Enter your email and family PIN to view your registered care days.</p>
 
-            <div class="lookup-tabs">
-                <button class="lookup-tab active" data-tab="email">By Email</button>
-                <button class="lookup-tab" data-tab="pin">By PIN</button>
+            <div class="form-group">
+                <label for="lookupEmail">Email Address</label>
+                <input type="email" id="lookupEmail" placeholder="your@email.com" autocomplete="email">
             </div>
 
-            <div id="lookupByEmail" class="lookup-input-section">
-                <div class="form-group">
-                    <label for="lookupEmail">Email Address</label>
-                    <input type="email" id="lookupEmail" placeholder="your@email.com" autocomplete="email">
-                </div>
+            <div class="form-group">
+                <label for="lookupPin">Family PIN</label>
+                <input type="text" id="lookupPin" placeholder="4-digit PIN" maxlength="4"
+                       inputmode="numeric" pattern="[0-9]{4}" autocomplete="off">
             </div>
-
-            <div id="lookupByPin" class="lookup-input-section hidden">
-                <div class="form-group">
-                    <label for="lookupPin">Family PIN</label>
-                    <input type="text" id="lookupPin" placeholder="4-digit PIN" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
-                </div>
-                <p class="lookup-hint">Your PIN was provided by the childcare centre when your family was registered.</p>
-            </div>
+            <p class="lookup-hint">Your PIN is provided by the office. Contact us if you need yours.</p>
 
             <button id="lookupBtn" class="btn-primary lookup-btn">Look Up My Schedule</button>
             <p id="lookupError" class="login-error hidden"></p>
@@ -75,7 +67,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase.js?v=14"></script>
-    <script src="js/lookup.js?v=1"></script>
+    <script src="js/supabase.js?v=16"></script>
+    <script src="js/lookup.js?v=2"></script>
 </body>
 </html>

@@ -502,3 +502,43 @@ async function fetchRegistrationsByEmail(email) {
     if (error) throw error;
     return data || [];
 }
+
+// ============================================================
+// ADMIN AUTH  (Supabase Auth — server-validated)
+// ============================================================
+async function loginAdmin(email, password) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
+}
+
+async function logoutAdmin() {
+    if (!sbClient) return;
+    await sbClient.auth.signOut();
+}
+
+async function getAdminSession() {
+    if (!sbClient) return null;
+    const { data: { session } } = await sbClient.auth.getSession();
+    return session;
+}
+
+// ============================================================
+// LOOKUP — requires BOTH email AND PIN (from families table)
+// ============================================================
+async function lookupFamilyByEmailAndPin(email, pin) {
+    if (!sbClient) return null;
+    try {
+        const { data, error } = await sbClient
+            .from('families')
+            .select('id, parent_name, parent_email, parent_phone, pin')
+            .ilike('parent_email', email)
+            .eq('pin', parseInt(pin, 10))
+            .maybeSingle();
+        if (error) { console.error('lookupFamilyByEmailAndPin:', error); return null; }
+        return data || null;
+    } catch (_) {
+        return null;
+    }
+}
