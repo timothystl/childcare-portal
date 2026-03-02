@@ -365,10 +365,11 @@ function drawRoomCalendar() {
     const cap        = room?.capacity || 0;
     const daysInMonth = new Date(y, m + 1, 0).getDate();
 
-    // Mon-offset for first day (0=Mon … 4=Fri; weekends skip)
-    const firstDow = new Date(y, m, 1).getDay(); // 0=Sun
-    const firstMon = firstDow === 0 ? 6 : firstDow - 1; // Mon-based offset
-    const leadEmpties = Math.min(firstMon, 5);
+    // Mon-offset for first day of month in a Mon–Fri 5-column grid.
+    // If month starts Sat or Sun, first weekday is Mon the 2nd/3rd → 0 lead empties.
+    const firstDow  = new Date(y, m, 1).getDay(); // 0=Sun … 6=Sat
+    const monBased  = firstDow === 0 ? 6 : firstDow - 1; // 0=Mon … 4=Fri, 5=Sat, 6=Sun
+    const leadEmpties = monBased < 5 ? monBased : 0; // Sat/Sun → 0, weekday → its Mon-based offset
 
     // Build cell data
     const cells = [];
