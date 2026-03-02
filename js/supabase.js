@@ -229,10 +229,37 @@ async function upsertSetting(key, value) {
 }
 
 // ============================================================
-// DUPLICATE REGISTRATION CHECK
-// Returns the existing registration object { id, created_at } if found, or null.
-// Uses ilike for case-insensitive email/name comparison to catch mis-cased duplicates.
+// DUPLICATE / CONFLICT CHECK
+// Returns an array of care_date strings that already have a confirmed
+// registration for this parent+child — so the caller can show specifics.
 // ============================================================
+async function checkDateConflicts(email, childName, dateStrings) {
+    if (!sbClient || !dateStrings.length) return [];
+    try {
+        // Find every registration row for this parent+child
+        const { data: regs, error: regErr } = await sbClient
+            .from('registrations')
+            .select('id')
+            .ilike('parent_email', email)
+            .ilike('child_name', childName);
+        if (regErr || !regs?.length) return [];
+
+        const ids = regs.map(r => r.id);
+        // Return which of the requested dates are already booked (non-waitlisted)
+        const { data: dates, error: datesErr } = await sbClient
+            .from('registration_dates')
+            .select('care_date')
+            .in('registration_id', ids)
+            .in('care_date', dateStrings)
+            .eq('waitlisted', false);
+        if (datesErr) return [];
+        return (dates || []).map(d => d.care_date);
+    } catch {
+        return [];
+    }
+}
+
+// Legacy month-level check kept for any callers outside handleSubmit
 async function checkExistingRegistration(email, monthKey, childName = null) {
     if (!sbClient) return null;
     try {
@@ -255,7 +282,6 @@ async function checkExistingRegistration(email, monthKey, childName = null) {
             .limit(1);
         if (datesErr) return null;
         if (!(dates && dates.length > 0)) return null;
-        // Return the matched registration so the caller can show the submission date
         return regs[0];
     } catch {
         return null;

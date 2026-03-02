@@ -838,16 +838,19 @@ async function handleSubmit(e) {
         const confirmedDates = [...selectedDates.entries()]
             .map(([d, en]) => ({ date: d, dayType: en.dayType }));
 
-        const results = [];
-        const errors  = [];
+        const results    = [];
+        const errors     = [];
+        const dateStrings = confirmedDates.map(d => d.date);
 
         for (const child of selectedChildren) {
-            const existingReg = await checkExistingRegistration(parentEmail, targetMonthKey, child.name);
-            if (existingReg) {
-                const submittedOn = existingReg.created_at
-                    ? ` (submitted ${new Date(existingReg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`
-                    : '';
-                errors.push(`${child.name} is already registered for ${win.targetLabel}${submittedOn}.`);
+            // Check for specific date conflicts — shows exactly which dates are already booked
+            const conflictDates = await checkDateConflicts(parentEmail, child.name, dateStrings);
+            if (conflictDates.length > 0) {
+                const conflictLabels = conflictDates
+                    .sort()
+                    .map(d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+                    .join(', ');
+                errors.push(`${child.name} is already registered for: ${conflictLabels}. Contact the office to make changes.`);
                 continue;
             }
             try {
