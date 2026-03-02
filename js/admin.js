@@ -2,6 +2,7 @@
 // STATE
 // ============================================================
 let allRegistrations = [];
+let allClosureDates  = new Set(); // YYYY-MM-DD strings
 
 // ============================================================
 // LOGIN  (Supabase Auth — server-validated)
@@ -71,6 +72,17 @@ async function initDashboard() {
     setupWindowOverride();
     setupFamilies();
     setupMessages();
+    setupRoomCalendar();
+    document.getElementById('capacityGrid').addEventListener('click', e => {
+        const card = e.target.closest('.cap-card[data-room-id]');
+        if (card) openRoomCalendar(card.dataset.roomId, card.dataset.monthKey);
+    });
+    document.getElementById('capacityGrid').addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            const card = e.target.closest('.cap-card[data-room-id]');
+            if (card) { e.preventDefault(); openRoomCalendar(card.dataset.roomId, card.dataset.monthKey); }
+        }
+    });
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
     document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
@@ -260,18 +272,19 @@ function renderCapacityOverview() {
         return { label: MONTH_NAMES_ADMIN[m] + ' ' + y, key, counts, workingDays };
     });
 
-    grid.innerHTML = months.map(({ label, counts, workingDays }) => {
+    grid.innerHTML = months.map(({ label, key, counts, workingDays }) => {
         const cards = ROOMS.map(room => {
             const used  = counts[room.id] || 0;
             const cap   = room.capacity * workingDays;
             const pct   = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
             const color = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
             return `
-                <div class="cap-card">
+                <div class="cap-card" data-room-id="${room.id}" data-month-key="${key}" role="button" tabindex="0" title="View ${room.label} calendar">
                     <h3>${room.label}</h3>
                     <p class="cap-meta">Max ${room.capacity}/day &middot; ${used} booking${used !== 1 ? 's' : ''}</p>
                     <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
                     <p class="cap-pct">${pct}% utilisation</p>
+                    <p class="cap-card-hint">Click to view calendar →</p>
                 </div>`;
         }).join('');
         return `
@@ -280,6 +293,121 @@ function renderCapacityOverview() {
                 <div class="capacity-grid">${cards}</div>
             </div>`;
     }).join('');
+}
+
+// ============================================================
+// ROOM CAPACITY CALENDAR MODAL
+// ============================================================
+let rcalRoomId    = null;
+let rcalMonthDate = null; // JS Date set to 1st of displayed month
+
+function setupRoomCalendar() {
+    document.getElementById('rcalClose').addEventListener('click', closeRoomCalendar);
+    document.getElementById('rcalPrev').addEventListener('click', () => {
+        rcalMonthDate = new Date(rcalMonthDate.getFullYear(), rcalMonthDate.getMonth() - 1, 1);
+        drawRoomCalendar();
+    });
+    document.getElementById('rcalNext').addEventListener('click', () => {
+        rcalMonthDate = new Date(rcalMonthDate.getFullYear(), rcalMonthDate.getMonth() + 1, 1);
+        drawRoomCalendar();
+    });
+    document.getElementById('roomCalModal').addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeRoomCalendar();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeRoomCalendar();
+    });
+}
+
+function openRoomCalendar(roomId, monthKey) {
+    rcalRoomId    = roomId;
+    const [y, m]  = monthKey.split('-').map(Number);
+    rcalMonthDate = new Date(y, m - 1, 1);
+    drawRoomCalendar();
+    document.getElementById('roomCalModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeRoomCalendar() {
+    document.getElementById('roomCalModal').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+function drawRoomCalendar() {
+    const room  = ROOMS.find(r => r.id === rcalRoomId);
+    const y     = rcalMonthDate.getFullYear();
+    const m     = rcalMonthDate.getMonth(); // 0-based
+    const monthKey = `${y}-${String(m + 1).padStart(2, '0')}`;
+
+    document.getElementById('rcalRoomName').textContent  = room?.label || rcalRoomId;
+    document.getElementById('rcalMonthLabel').textContent = MONTH_NAMES_ADMIN[m] + ' ' + y;
+
+    // Build dayMap: 'YYYY-MM-DD' → [{ childName, dayType }]
+    const dayMap = {};
+    allRegistrations.forEach(reg => {
+        if (reg.room_id !== rcalRoomId) return;
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date || !d.care_date.startsWith(monthKey)) return;
+            if (!dayMap[d.care_date]) dayMap[d.care_date] = [];
+            dayMap[d.care_date].push({ childName: reg.child_name, dayType: d.day_type });
+        });
+    });
+
+    const cap        = room?.capacity || 0;
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+    // Mon-offset for first day (0=Mon … 4=Fri; weekends skip)
+    const firstDow = new Date(y, m, 1).getDay(); // 0=Sun
+    const firstMon = firstDow === 0 ? 6 : firstDow - 1; // Mon-based offset
+    const leadEmpties = Math.min(firstMon, 5);
+
+    // Build cell data
+    const cells = [];
+    for (let i = 0; i < leadEmpties; i++) cells.push(null);
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dow = new Date(y, m, day).getDay();
+        if (dow === 0 || dow === 6) continue;
+        const dateStr  = `${monthKey}-${String(day).padStart(2, '0')}`;
+        const enrolled = (dayMap[dateStr] || []).slice().sort((a, b) => a.childName.localeCompare(b.childName));
+        const isClosed = allClosureDates.has(dateStr);
+        cells.push({ day, dateStr, enrolled, cap, isClosed });
+    }
+
+    // Render day-of-week header
+    const dowHtml = ['Mon','Tue','Wed','Thu','Fri']
+        .map(d => `<div class="rcal-dow-cell">${d}</div>`).join('');
+
+    // Render cells
+    const cellsHtml = cells.map(cell => {
+        if (!cell) return `<div class="rcal-cell rcal-cell-empty"></div>`;
+        const { day, enrolled, cap, isClosed } = cell;
+        if (isClosed) return `
+            <div class="rcal-cell rcal-cell-closed">
+                <div class="rcal-day-num">${day}</div>
+                <div class="rcal-closed-label">Closed</div>
+            </div>`;
+        const count    = enrolled.length;
+        const pct      = cap > 0 ? count / cap : 0;
+        const cls      = pct >= 1 ? 'rcal-cell-full' : pct >= 0.75 ? 'rcal-cell-near' : 'rcal-cell-open';
+        const countLbl = cap ? `${count}/${cap}` : `${count}`;
+        const SHOW_MAX = 6;
+        const childrenHtml = enrolled.slice(0, SHOW_MAX).map(e => {
+            const half = e.dayType === 'half';
+            return `<span class="rcal-child${half ? ' rcal-child-half' : ''}">${escHtml(e.childName)}${half ? ' ½' : ''}</span>`;
+        }).join('');
+        const moreHtml = enrolled.length > SHOW_MAX
+            ? `<span class="rcal-more">+${enrolled.length - SHOW_MAX} more</span>` : '';
+        return `
+            <div class="rcal-cell ${cls}">
+                <div class="rcal-day-num">${day}</div>
+                <div class="rcal-count">${countLbl}</div>
+                <div class="rcal-children">${childrenHtml}${moreHtml}</div>
+            </div>`;
+    }).join('');
+
+    document.getElementById('rcalBody').innerHTML = `
+        <div class="rcal-dow-row">${dowHtml}</div>
+        <div class="rcal-grid">${cellsHtml}</div>`;
 }
 
 // ============================================================
@@ -656,6 +784,7 @@ function setupClosures() {
 async function loadClosureList() {
     try {
         const closures  = await fetchClosures();
+        allClosureDates = new Set(closures.map(c => c.close_date));
         const container = document.getElementById('closureList');
         if (!closures.length) {
             container.innerHTML = '<p class="empty-hint">No closures set.</p>';

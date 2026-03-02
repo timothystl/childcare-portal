@@ -215,10 +215,34 @@
         </section>
     </div>
 
+    <!-- Room Capacity Calendar Modal -->
+    <div id="roomCalModal" class="rcal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="rcal-dialog">
+            <div class="rcal-header">
+                <div class="rcal-title-group">
+                    <span id="rcalRoomName" class="rcal-room-name"></span>
+                    <span id="rcalMonthLabel" class="rcal-month-label"></span>
+                </div>
+                <div class="rcal-nav">
+                    <button id="rcalPrev" class="rcal-nav-btn" title="Previous month">&#8592;</button>
+                    <button id="rcalNext" class="rcal-nav-btn" title="Next month">&#8594;</button>
+                    <button id="rcalClose" class="rcal-close-btn" title="Close">&#10005;</button>
+                </div>
+            </div>
+            <div class="rcal-legend">
+                <span class="rcal-leg rcal-leg-open">Open</span>
+                <span class="rcal-leg rcal-leg-near">Near Full (75%+)</span>
+                <span class="rcal-leg rcal-leg-full">Full</span>
+                <span class="rcal-leg rcal-leg-closed">Closed</span>
+            </div>
+            <div id="rcalBody" class="rcal-body"></div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="js/supabase.js?v=20"></script>
-    <script src="js/admin.js?v=16"></script>
+    <script src="js/admin.js?v=17"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 </body>
 </html>
