@@ -791,7 +791,8 @@ function baseRow(reg, roomLabel, date, status, dayType) {
 // ============================================================
 // FAMILIES & STUDENTS
 // ============================================================
-let importRows = [];
+let importRows    = [];
+let allFamiliesData = [];
 
 function setupFamilies() {
     const fileInput  = document.getElementById('familiesFileInput');
@@ -801,6 +802,21 @@ function setupFamilies() {
     fileInput?.addEventListener('change', onFamiliesFileChange);
     importBtn?.addEventListener('click', onImportFamilies);
     refreshBtn?.addEventListener('click', loadFamilies);
+    document.getElementById('familyChildSearch')?.addEventListener('input', onFamilySearch);
+}
+
+function onFamilySearch() {
+    const q = (document.getElementById('familyChildSearch')?.value || '').toLowerCase().trim();
+    if (!q) {
+        renderFamiliesList(allFamiliesData);
+        return;
+    }
+    const filtered = allFamiliesData.filter(f =>
+        (f.students || []).some(s => s.child_name && s.child_name.toLowerCase().includes(q)) ||
+        (f.parent_name  && f.parent_name.toLowerCase().includes(q)) ||
+        (f.parent2_name && f.parent2_name.toLowerCase().includes(q))
+    );
+    renderFamiliesList(filtered);
 }
 
 async function onFamiliesFileChange(e) {
@@ -876,20 +892,31 @@ function normalizeImportRow(rawRow) {
         const childName  = [childFirst, childLast].filter(Boolean).join(' ').trim();
         const childDob   = normalizeDobStr(get('Birthdate'));
 
-        // Prefer whichever parent has an email; fall back to Parent2 if Parent1 has none
-        let parentName  = get('Parent1 Name');
-        let parentEmail = get('Parent1 Email');
-        let parentPhone = get('Parent1 Phone');
-        let parentPin   = get('Parent1 Sign-In Code');
+        const p1Name  = get('Parent1 Name');
+        const p1Email = get('Parent1 Email');
+        const p1Phone = get('Parent1 Phone');
+        const p1Pin   = get('Parent1 Sign-In Code');
 
-        if (!parentEmail && get('Parent2 Email')) {
-            parentName  = get('Parent2 Name')  || parentName;
-            parentEmail = get('Parent2 Email');
-            parentPhone = get('Parent2 Phone') || parentPhone;
-            parentPin   = get('Parent2 Sign-In Code') || parentPin;
+        const p2Name  = get('Parent2 Name');
+        const p2Email = get('Parent2 Email');
+        const p2Phone = get('Parent2 Phone');
+        const p2Pin   = get('Parent2 Sign-In Code');
+
+        // Primary parent must have an email for lookup; swap if Parent1 has none
+        let parentName, parentEmail, parentPhone, parentPin;
+        let parent2Name, parent2Email, parent2Phone, parent2Pin;
+
+        if (p1Email || !p2Email) {
+            parentName = p1Name;  parentEmail = p1Email;  parentPhone = p1Phone;  parentPin = p1Pin;
+            parent2Name = p2Name; parent2Email = p2Email; parent2Phone = p2Phone; parent2Pin = p2Pin;
+        } else {
+            parentName = p2Name;  parentEmail = p2Email;  parentPhone = p2Phone;  parentPin = p2Pin;
+            parent2Name = p1Name; parent2Email = p1Email; parent2Phone = p1Phone; parent2Pin = p1Pin;
         }
 
-        return { parentName, parentEmail, parentPhone, parentPin, childName, childDob };
+        return { parentName, parentEmail, parentPhone, parentPin,
+                 parent2Name, parent2Email, parent2Phone, parent2Pin,
+                 childName, childDob };
     }
 
     // Generic auto-detect (non-ProCare files)
@@ -999,8 +1026,10 @@ async function loadFamilies() {
     const container = document.getElementById('familiesList');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
-        const families = await fetchAllFamilies();
-        renderFamiliesList(families);
+        allFamiliesData = await fetchAllFamilies();
+        const searchEl = document.getElementById('familyChildSearch');
+        if (searchEl) searchEl.value = '';
+        renderFamiliesList(allFamiliesData);
     } catch (err) {
         container.innerHTML = `<p class="import-error">Failed to load families: ${escHtml(err.message)}</p>`;
     }
@@ -1017,6 +1046,16 @@ function renderFamiliesList(families) {
         `<option value="${r.id}">${r.label}</option>`
     ).join('');
 
+    const parentRow = (name, email, phone, pin) => {
+        if (!name && !email) return '';
+        const meta = [email, phone].filter(Boolean).join(' &middot; ');
+        return `<div class="family-parent-row">
+            <span class="family-row-name">${escHtml(name || '')}</span>
+            ${pin ? `<span class="family-pin-badge">PIN: ${pin}</span>` : ''}
+            ${meta ? `<span class="family-row-meta">${escHtml(email || '')}${email && phone ? ' &middot; ' : ''}${escHtml(phone || '')}</span>` : ''}
+        </div>`;
+    };
+
     container.innerHTML = `
         <p class="families-count">${families.length} famil${families.length !== 1 ? 'ies' : 'y'}</p>
         <ul class="families-list">
@@ -1028,9 +1067,8 @@ function renderFamiliesList(families) {
                 return `
                     <li class="family-row">
                         <div class="family-row-top">
-                            <span class="family-row-name">${escHtml(f.parent_name)}</span>
-                            ${f.pin ? `<span class="family-pin-badge">PIN: ${f.pin}</span>` : ''}
-                            <span class="family-row-meta">${escHtml(f.parent_email || '')}${f.parent_email && f.parent_phone ? ' &middot; ' : ''}${escHtml(f.parent_phone || '')}</span>
+                            ${parentRow(f.parent_name, f.parent_email, f.parent_phone, f.pin)}
+                            ${parentRow(f.parent2_name, f.parent2_email, f.parent2_phone, f.parent2_pin)}
                             ${since ? `<span class="family-row-since">Since ${since}</span>` : ''}
                         </div>
                         ${kids.length ? `

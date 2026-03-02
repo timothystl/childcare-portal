@@ -644,9 +644,9 @@ tr.pending-approval:hover { background: #fef3c7; }
 .families-list-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
     margin-bottom: 14px;
-    padding-top: 4px;
     border-top: 1.5px solid #eee;
     padding-top: 18px;
 }
@@ -654,7 +654,18 @@ tr.pending-approval:hover { background: #fef3c7; }
     font-size: 1em;
     color: #333;
     font-weight: 700;
+    margin-right: auto;
 }
+.family-search-input {
+    border: 1.5px solid #ddd;
+    border-radius: 7px;
+    padding: 6px 12px;
+    font-size: .87em;
+    width: 220px;
+    outline: none;
+    transition: border-color .2s;
+}
+.family-search-input:focus { border-color: #667eea; }
 
 .families-count {
     font-size: .85em;
@@ -683,10 +694,15 @@ tr.pending-approval:hover { background: #fef3c7; }
 
 .family-row-top {
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+.family-parent-row {
+    display: flex;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
-    margin-bottom: 6px;
 }
 
 .family-row-name {

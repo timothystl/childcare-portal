@@ -368,7 +368,8 @@ async function lookupFamilyByPin(pin) {
     }
 }
 
-async function createFamily({ parentName, parentEmail, parentPhone, pin: providedPin = null }) {
+async function createFamily({ parentName, parentEmail, parentPhone, pin: providedPin = null,
+                              parent2Name = null, parent2Email = null, parent2Phone = null, parent2Pin = null }) {
     if (!sbClient) throw new Error('Supabase not configured.');
 
     if (parentEmail) {
@@ -378,10 +379,14 @@ async function createFamily({ parentName, parentEmail, parentPhone, pin: provide
         if (existing) {
             const updateData = { parent_name: parentName, parent_phone: parentPhone || '' };
             if (providedPin !== null) updateData.pin = providedPin;
+            if (parent2Name !== null) updateData.parent2_name = parent2Name || null;
+            if (parent2Email !== null) updateData.parent2_email = parent2Email || null;
+            if (parent2Phone !== null) updateData.parent2_phone = parent2Phone || null;
+            if (parent2Pin !== null) updateData.parent2_pin = parent2Pin || null;
             await sbClient.from('families').update(updateData).eq('id', existing.id);
             const { data: updated } = await sbClient
                 .from('families')
-                .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override)')
+                .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, students(id, child_name, child_dob, room_override)')
                 .eq('id', existing.id).single();
             return updated;
         }
@@ -399,8 +404,10 @@ async function createFamily({ parentName, parentEmail, parentPhone, pin: provide
 
     const { data, error } = await sbClient
         .from('families')
-        .insert({ parent_name: parentName, parent_email: parentEmail || '', parent_phone: parentPhone || '', pin })
-        .select('id, parent_name, parent_email, parent_phone, pin')
+        .insert({ parent_name: parentName, parent_email: parentEmail || '', parent_phone: parentPhone || '', pin,
+                  parent2_name: parent2Name || null, parent2_email: parent2Email || null,
+                  parent2_phone: parent2Phone || null, parent2_pin: parent2Pin || null })
+        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin')
         .single();
     if (error) throw error;
     return data;
@@ -424,7 +431,7 @@ async function fetchAllFamilies() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, pin, created_at, students(id, child_name, child_dob, room_override)')
+        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, created_at, students(id, child_name, child_dob, room_override)')
         .order('parent_name');
     if (error) throw error;
     return data || [];
@@ -446,7 +453,10 @@ async function importFamiliesData(rows) {
         if (!r.parentName) return;
         const key = (r.parentEmail || r.parentName).toLowerCase().trim();
         if (!byKey[key]) {
-            byKey[key] = { parentName: r.parentName, parentEmail: r.parentEmail || '', parentPhone: r.parentPhone || '', pin: r.parentPin || null, children: [] };
+            byKey[key] = { parentName: r.parentName, parentEmail: r.parentEmail || '', parentPhone: r.parentPhone || '', pin: r.parentPin || null,
+                           parent2Name: r.parent2Name || null, parent2Email: r.parent2Email || null,
+                           parent2Phone: r.parent2Phone || null, parent2Pin: r.parent2Pin || null,
+                           children: [] };
         }
         if (r.childName) byKey[key].children.push({ childName: r.childName, childDob: r.childDob || null });
     });
@@ -454,7 +464,9 @@ async function importFamiliesData(rows) {
     let familiesImported = 0, studentsImported = 0;
     for (const group of Object.values(byKey)) {
         try {
-            const fam = await createFamily({ parentName: group.parentName, parentEmail: group.parentEmail, parentPhone: group.parentPhone, pin: group.pin });
+            const fam = await createFamily({ parentName: group.parentName, parentEmail: group.parentEmail, parentPhone: group.parentPhone, pin: group.pin,
+                                             parent2Name: group.parent2Name, parent2Email: group.parent2Email,
+                                             parent2Phone: group.parent2Phone, parent2Pin: group.parent2Pin });
             familiesImported++;
             for (const child of group.children) {
                 await addStudent({ familyId: fam.id, childName: child.childName, childDob: child.childDob });
