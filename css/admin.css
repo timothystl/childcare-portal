@@ -1139,6 +1139,296 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 
 /* ============================================================
+   FAMILY CRUD — BADGES, BUTTONS, ARCHIVED STATE
+   ============================================================ */
+
+.btn-warning {
+    background: #ed8936;
+    color: #fff;
+    border: 2px solid #dd6b20;
+    padding: 9px 18px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: .9em;
+    font-weight: 600;
+    transition: all .2s;
+    white-space: nowrap;
+}
+.btn-warning:hover { background: #dd6b20; }
+
+/* Family row action area */
+.family-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+
+/* Edit / Archive / Restore inline buttons */
+.fm-edit-btn, .fm-archive-btn, .fm-restore-btn {
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: .78em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    white-space: nowrap;
+}
+.fm-edit-btn {
+    background: #fff;
+    color: #667eea;
+    border: 1.5px solid #667eea;
+}
+.fm-edit-btn:hover { background: #667eea; color: #fff; }
+
+.fm-archive-btn {
+    background: #fff;
+    color: #718096;
+    border: 1.5px solid #cbd5e0;
+}
+.fm-archive-btn:hover { background: #718096; color: #fff; border-color: #718096; }
+
+.fm-restore-btn {
+    background: #fff;
+    color: #276749;
+    border: 1.5px solid #38a169;
+}
+.fm-restore-btn:hover { background: #38a169; color: #fff; }
+
+/* Archived family row */
+.family-row-archived {
+    opacity: .6;
+    background: #f7fafc !important;
+    border-left-color: #a0aec0 !important;
+}
+
+/* Summer / archived / discount badges */
+.family-badge-summer {
+    display: inline-block;
+    background: #feebc8;
+    color: #c05621;
+    border: 1px solid #f6ad55;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: .72em;
+    font-weight: 700;
+    letter-spacing: .03em;
+}
+.family-badge-archived {
+    display: inline-block;
+    background: #e2e8f0;
+    color: #718096;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: .72em;
+    font-weight: 700;
+    letter-spacing: .03em;
+}
+.family-badge-discount {
+    display: inline-block;
+    background: #bee3f8;
+    color: #2a69ac;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: .72em;
+    font-weight: 700;
+    letter-spacing: .03em;
+    flex-shrink: 0;
+}
+
+/* ============================================================
+   FAMILY MODAL
+   ============================================================ */
+.fm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.fm-overlay.hidden { display: none; }
+
+.fm-dialog {
+    background: #fff;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 720px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    overflow: hidden;
+}
+
+.fm-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1.5px solid #eee;
+    flex-shrink: 0;
+}
+.fm-dialog-header h3 {
+    font-size: 1.15em;
+    color: #2d3748;
+    font-weight: 700;
+}
+
+.fm-dialog-body {
+    overflow-y: auto;
+    padding: 20px 24px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.fm-dialog-footer {
+    padding: 14px 24px;
+    border-top: 1.5px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-shrink: 0;
+    background: #fafafa;
+}
+
+/* Section dividers inside modal */
+.fm-section {
+    padding: 14px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+.fm-section:last-child { border-bottom: none; }
+
+.fm-section-label {
+    font-size: .8em;
+    font-weight: 700;
+    color: #553c9a;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 10px;
+}
+.fm-optional {
+    font-size: .85em;
+    font-weight: 400;
+    color: #aaa;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+/* Row and field layout */
+.fm-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.fm-row:last-child { margin-bottom: 0; }
+
+.fm-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 120px;
+}
+.fm-field label {
+    font-size: .8em;
+    font-weight: 600;
+    color: #555;
+}
+.fm-field input,
+.fm-field select {
+    padding: 8px 11px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 7px;
+    font-size: .92em;
+    transition: border-color .2s;
+    background: #fff;
+}
+.fm-field input:focus,
+.fm-field select:focus { outline: none; border-color: #667eea; }
+
+.fm-field-grow { flex: 1; }
+
+/* PIN row */
+.fm-field-pin { min-width: 120px; }
+.fm-pin-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.fm-pin-input { width: 80px; text-align: center; letter-spacing: .1em; font-weight: 700; }
+.fm-pin-btn   { padding: 6px 10px; font-size: .9em; }
+
+/* Radio row */
+.fm-radio-row {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+.fm-radio-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .9em;
+    cursor: pointer;
+    color: #333;
+}
+
+/* Child rows */
+.fm-no-children {
+    color: #aaa;
+    font-style: italic;
+    font-size: .88em;
+    padding: 8px 0;
+}
+.fm-child-row {
+    background: #f8f9ff;
+    border: 1.5px solid #e0e6ff;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    position: relative;
+}
+.fm-child-main,
+.fm-child-discount {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.fm-child-discount { margin-bottom: 0; }
+
+.fmc-remove-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #fff;
+    color: #e53e3e;
+    border: 1.5px solid #e53e3e;
+    border-radius: 6px;
+    width: 26px;
+    height: 26px;
+    font-size: .8em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .2s;
+}
+.fmc-remove-btn:hover { background: #e53e3e; color: #fff; }
+
+.fm-add-child-btn {
+    margin-top: 4px;
+    font-size: .85em;
+    padding: 7px 14px;
+}
+
+/* ============================================================
    RESPONSIVE ADMIN
    ============================================================ */
 @media (max-width: 700px) {

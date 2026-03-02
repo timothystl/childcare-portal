@@ -338,7 +338,9 @@ function openRoomCalendar(roomId, monthKey) {
 }
 
 function closeRoomCalendar() {
-    document.getElementById('roomCalModal').classList.add('hidden');
+    const modal = document.getElementById('roomCalModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    modal.classList.add('hidden');
     document.body.style.overflow = '';
 }
 
@@ -930,8 +932,11 @@ function baseRow(reg, roomLabel, date, status, dayType) {
 // ============================================================
 // FAMILIES & STUDENTS
 // ============================================================
-let importRows    = [];
-let allFamiliesData = [];
+let importRows        = [];
+let allFamiliesData   = [];
+let editingFamilyId   = null;   // null = adding new, string = editing existing
+let familyModalChildren = [];   // working copy of children in the modal
+let showArchivedFamilies = false;
 
 function setupFamilies() {
     const fileInput  = document.getElementById('familiesFileInput');
@@ -942,6 +947,57 @@ function setupFamilies() {
     importBtn?.addEventListener('click', onImportFamilies);
     refreshBtn?.addEventListener('click', loadFamilies);
     document.getElementById('familyChildSearch')?.addEventListener('input', onFamilySearch);
+
+    // New family management buttons
+    document.getElementById('addFamilyBtn')?.addEventListener('click', () => openFamilyModal());
+    document.getElementById('archiveSummerBtn')?.addEventListener('click', onArchiveSummerFamilies);
+    document.getElementById('familiesToggleArchivedBtn')?.addEventListener('click', () => {
+        showArchivedFamilies = !showArchivedFamilies;
+        const btn = document.getElementById('familiesToggleArchivedBtn');
+        btn.textContent = showArchivedFamilies ? 'Hide Archived' : 'Show Archived';
+        btn.classList.toggle('btn-active', showArchivedFamilies);
+        loadFamilies();
+    });
+
+    // Family modal buttons
+    document.getElementById('fmCloseBtn')?.addEventListener('click', closeFamilyModal);
+    document.getElementById('fmCancelBtn')?.addEventListener('click', closeFamilyModal);
+    document.getElementById('fmSaveBtn')?.addEventListener('click', saveFamilyModal);
+    document.getElementById('fmAddChildBtn')?.addEventListener('click', addModalChildRow);
+    document.getElementById('fmNewPinBtn')?.addEventListener('click', () => {
+        document.getElementById('fmPin').value = generateLocalPin();
+    });
+    document.getElementById('fmNewPin2Btn')?.addEventListener('click', () => {
+        document.getElementById('fmParent2Pin').value = generateLocalPin();
+    });
+    document.getElementById('familyModal')?.addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeFamilyModal();
+    });
+
+    // Document-level delegation for Edit / Archive / Restore buttons in family rows
+    document.addEventListener('click', e => {
+        const editBtn = e.target.closest('.fm-edit-btn[data-family-id]');
+        if (editBtn) {
+            const fam = allFamiliesData.find(f => f.id === editBtn.dataset.familyId);
+            if (fam) openFamilyModal(fam);
+            return;
+        }
+        const archiveBtn = e.target.closest('.fm-archive-btn[data-family-id]');
+        if (archiveBtn) {
+            confirmArchiveFamily(archiveBtn.dataset.familyId, archiveBtn.dataset.familyName);
+            return;
+        }
+        const restoreBtn = e.target.closest('.fm-restore-btn[data-family-id]');
+        if (restoreBtn) { doRestoreFamily(restoreBtn.dataset.familyId); return; }
+    });
+
+    // Escape closes family modal (visibility-safe)
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            const fm = document.getElementById('familyModal');
+            if (fm && !fm.classList.contains('hidden')) closeFamilyModal();
+        }
+    });
 }
 
 function onFamilySearch() {
@@ -1165,7 +1221,7 @@ async function loadFamilies() {
     const container = document.getElementById('familiesList');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
-        allFamiliesData = await fetchAllFamilies();
+        allFamiliesData = await fetchAllFamilies({ includeArchived: showArchivedFamilies });
         const searchEl = document.getElementById('familyChildSearch');
         if (searchEl) searchEl.value = '';
         renderFamiliesList(allFamiliesData);
@@ -1177,7 +1233,9 @@ async function loadFamilies() {
 function renderFamiliesList(families) {
     const container = document.getElementById('familiesList');
     if (!families.length) {
-        container.innerHTML = '<p class="empty-hint">No families yet. Import from Excel or submit a registration.</p>';
+        container.innerHTML = showArchivedFamilies
+            ? '<p class="empty-hint">No archived families.</p>'
+            : '<p class="empty-hint">No families yet. Use + Add Family or import from Excel.</p>';
         return;
     }
 
@@ -1187,28 +1245,49 @@ function renderFamiliesList(families) {
 
     const parentRow = (name, email, phone, pin) => {
         if (!name && !email) return '';
-        const meta = [email, phone].filter(Boolean).join(' &middot; ');
         return `<div class="family-parent-row">
             <span class="family-row-name">${escHtml(name || '')}</span>
             ${pin ? `<span class="family-pin-badge">PIN: ${pin}</span>` : ''}
-            ${meta ? `<span class="family-row-meta">${escHtml(email || '')}${email && phone ? ' &middot; ' : ''}${escHtml(phone || '')}</span>` : ''}
+            ${email || phone ? `<span class="family-row-meta">${escHtml(email || '')}${email && phone ? ' &middot; ' : ''}${escHtml(phone || '')}</span>` : ''}
         </div>`;
     };
 
+    const discountBadge = s => {
+        if (!s.discount_type || s.discount_type === 'none') return '';
+        const label = s.discount_type === 'staff'
+            ? 'Staff (free)'
+            : `${s.discount_value || 0}% off`;
+        return `<span class="family-badge-discount">${label}</span>`;
+    };
+
     container.innerHTML = `
-        <p class="families-count">${families.length} famil${families.length !== 1 ? 'ies' : 'y'}</p>
+        <p class="families-count">${families.length} famil${families.length !== 1 ? 'ies' : 'y'}${showArchivedFamilies ? ' (including archived)' : ''}</p>
         <ul class="families-list">
             ${families.map(f => {
-                const kids  = (f.students || []);
-                const since = f.created_at
+                const kids     = (f.students || []);
+                const archived = f.active === false;
+                const since    = f.created_at
                     ? new Date(f.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
                     : '';
                 return `
-                    <li class="family-row">
+                    <li class="family-row${archived ? ' family-row-archived' : ''}">
                         <div class="family-row-top">
-                            ${parentRow(f.parent_name, f.parent_email, f.parent_phone, f.pin)}
-                            ${parentRow(f.parent2_name, f.parent2_email, f.parent2_phone, f.parent2_pin)}
-                            ${since ? `<span class="family-row-since">Since ${since}</span>` : ''}
+                            <div class="family-parent-row">
+                                <span class="family-row-name">${escHtml(f.parent_name || '')}</span>
+                                ${f.pin ? `<span class="family-pin-badge">PIN: ${f.pin}</span>` : ''}
+                                ${f.parent_email || f.parent_phone ? `<span class="family-row-meta">${escHtml(f.parent_email || '')}${f.parent_email && f.parent_phone ? ' &middot; ' : ''}${escHtml(f.parent_phone || '')}</span>` : ''}
+                                ${f.group === 'summer' ? '<span class="family-badge-summer">Summer</span>' : ''}
+                                ${archived ? '<span class="family-badge-archived">Archived</span>' : ''}
+                            </div>
+                            ${(f.parent2_name || f.parent2_email) ? parentRow(f.parent2_name, f.parent2_email, f.parent2_phone, f.parent2_pin) : ''}
+                            <div class="family-row-actions">
+                                ${since ? `<span class="family-row-since">Since ${since}</span>` : ''}
+                                ${!archived
+                                    ? `<button class="fm-edit-btn" data-family-id="${f.id}" title="Edit family">✏ Edit</button>
+                                       <button class="fm-archive-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Archive family">Archive</button>`
+                                    : `<button class="fm-restore-btn" data-family-id="${f.id}" title="Restore family">↩ Restore</button>`
+                                }
+                            </div>
                         </div>
                         ${kids.length ? `
                             <ul class="family-students">
@@ -1221,6 +1300,7 @@ function renderFamiliesList(families) {
                                         <span class="student-bullet">└</span>
                                         <span class="student-name">${escHtml(s.child_name)}</span>
                                         ${dobStr ? `<span class="student-dob">${dobStr}</span>` : ''}
+                                        ${discountBadge(s)}
                                         <div class="room-override-wrap">
                                             <label class="room-override-label">Room:</label>
                                             <select class="room-override-select" data-student-id="${s.id}">
@@ -1255,6 +1335,320 @@ function renderFamiliesList(families) {
             }
         });
     });
+}
+
+// ============================================================
+// FAMILY MODAL — Add / Edit
+// ============================================================
+function generateLocalPin() {
+    return Math.floor(1000 + Math.random() * 9000);
+}
+
+function openFamilyModal(family = null) {
+    editingFamilyId = family ? family.id : null;
+
+    // Set title
+    document.getElementById('fmTitle').textContent = family ? 'Edit Family' : 'Add Family';
+
+    if (family) {
+        // Populate parent fields
+        document.getElementById('fmParentName').value    = family.parent_name  || '';
+        document.getElementById('fmParentEmail').value   = family.parent_email || '';
+        document.getElementById('fmParentPhone').value   = family.parent_phone || '';
+        document.getElementById('fmPin').value           = family.pin          || '';
+        document.getElementById('fmParent2Name').value   = family.parent2_name  || '';
+        document.getElementById('fmParent2Email').value  = family.parent2_email || '';
+        document.getElementById('fmParent2Phone').value  = family.parent2_phone || '';
+        document.getElementById('fmParent2Pin').value    = family.parent2_pin   || '';
+        // Group radio
+        const grp = family.group || 'regular';
+        document.querySelectorAll('input[name="fmGroup"]').forEach(r => {
+            r.checked = (r.value === grp);
+        });
+        // Children
+        familyModalChildren = (family.students || []).map(s => ({ ...s }));
+    } else {
+        // Clear all fields
+        ['fmParentName','fmParentEmail','fmParentPhone',
+         'fmParent2Name','fmParent2Email','fmParent2Phone','fmParent2Pin'].forEach(id => {
+            document.getElementById(id).value = '';
+        });
+        document.getElementById('fmPin').value = generateLocalPin();
+        document.querySelectorAll('input[name="fmGroup"]').forEach(r => {
+            r.checked = (r.value === 'regular');
+        });
+        familyModalChildren = [];
+    }
+
+    renderModalChildRows();
+
+    const modal = document.getElementById('familyModal');
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    document.getElementById('fmParentName').focus();
+}
+
+function closeFamilyModal() {
+    const modal = document.getElementById('familyModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+    editingFamilyId     = null;
+    familyModalChildren = [];
+}
+
+function renderModalChildRows() {
+    const container = document.getElementById('fmChildRows');
+    if (!container) return;
+
+    if (!familyModalChildren.length) {
+        container.innerHTML = '<p class="fm-no-children">No children added yet. Click + Add Child below.</p>';
+        return;
+    }
+
+    const roomOptions = ROOMS.map(r => `<option value="${r.id}">${r.label}</option>`).join('');
+
+    container.innerHTML = familyModalChildren.map((child, i) => {
+        const dt = child.discount_type || 'none';
+        const dv = (child.discount_value != null) ? child.discount_value : 0;
+        const selectedRoom = child.room_override || '';
+        return `
+            <div class="fm-child-row" data-index="${i}">
+                <div class="fm-child-main">
+                    <div class="fm-field fm-field-grow">
+                        <label>Name *</label>
+                        <input type="text" class="fmc-name" value="${escHtml(child.child_name || '')}" placeholder="Child's full name">
+                    </div>
+                    <div class="fm-field">
+                        <label>Date of Birth</label>
+                        <input type="date" class="fmc-dob" value="${child.child_dob || ''}">
+                    </div>
+                    <div class="fm-field">
+                        <label>Room</label>
+                        <select class="fmc-room">
+                            <option value="" ${!selectedRoom ? 'selected' : ''}>Auto (age-based)</option>
+                            ${ROOMS.map(r => `<option value="${r.id}" ${selectedRoom === r.id ? 'selected' : ''}>${r.label}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <div class="fm-child-discount">
+                    <div class="fm-field">
+                        <label>Discount</label>
+                        <select class="fmc-discount-type">
+                            <option value="none"   ${dt === 'none'   ? 'selected' : ''}>None</option>
+                            <option value="staff"  ${dt === 'staff'  ? 'selected' : ''}>Staff (100% free)</option>
+                            <option value="custom" ${dt === 'custom' ? 'selected' : ''}>Custom %</option>
+                        </select>
+                    </div>
+                    <div class="fm-field discount-value-wrap" ${dt !== 'custom' ? 'style="display:none"' : ''}>
+                        <label>% Off</label>
+                        <input type="number" class="fmc-discount-value" value="${dv}" min="0" max="100" step="1" style="width:70px">
+                    </div>
+                    <div class="fm-field fm-field-grow">
+                        <label>Note</label>
+                        <input type="text" class="fmc-discount-note" value="${escHtml(child.discount_note || '')}" placeholder="Optional note">
+                    </div>
+                </div>
+                <button type="button" class="fmc-remove-btn" data-index="${i}" title="Remove child">✕</button>
+            </div>`;
+    }).join('');
+
+    // Bind discount-type toggles
+    container.querySelectorAll('.fmc-discount-type').forEach(sel => {
+        sel.addEventListener('change', () => {
+            const wrap = sel.closest('.fm-child-discount').querySelector('.discount-value-wrap');
+            if (wrap) wrap.style.display = sel.value === 'custom' ? '' : 'none';
+        });
+    });
+
+    // Bind remove buttons
+    container.querySelectorAll('.fmc-remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => removeModalChildRow(parseInt(btn.dataset.index)));
+    });
+}
+
+function addModalChildRow() {
+    familyModalChildren.push({
+        id: null, child_name: '', child_dob: null,
+        room_override: null, discount_type: 'none', discount_value: 0, discount_note: null,
+    });
+    renderModalChildRows();
+    // Focus the new name input
+    const rows = document.querySelectorAll('#fmChildRows .fm-child-row');
+    if (rows.length) rows[rows.length - 1].querySelector('.fmc-name')?.focus();
+}
+
+function removeModalChildRow(index) {
+    familyModalChildren.splice(index, 1);
+    renderModalChildRows();
+}
+
+function readModalChildrenFromDom() {
+    const children = [];
+    document.querySelectorAll('#fmChildRows .fm-child-row').forEach(row => {
+        const idx  = parseInt(row.dataset.index);
+        const name = row.querySelector('.fmc-name').value.trim();
+        if (!name) return;
+        children.push({
+            originalId:     familyModalChildren[idx]?.id || null,
+            child_name:     name,
+            child_dob:      row.querySelector('.fmc-dob').value || null,
+            room_override:  row.querySelector('.fmc-room').value  || null,
+            discount_type:  row.querySelector('.fmc-discount-type').value || 'none',
+            discount_value: parseFloat(row.querySelector('.fmc-discount-value').value) || 0,
+            discount_note:  row.querySelector('.fmc-discount-note').value.trim() || null,
+        });
+    });
+    return children;
+}
+
+async function saveFamilyModal() {
+    const saveBtn = document.getElementById('fmSaveBtn');
+    if (!saveBtn) return;
+    saveBtn.disabled    = true;
+    saveBtn.textContent = 'Saving…';
+
+    try {
+        const parentName  = document.getElementById('fmParentName').value.trim();
+        const parentEmail = document.getElementById('fmParentEmail').value.trim();
+        const parentPhone = document.getElementById('fmParentPhone').value.trim();
+        const pinVal      = document.getElementById('fmPin').value.trim();
+        const pin         = pinVal ? parseInt(pinVal, 10) : null;
+        const p2Name      = document.getElementById('fmParent2Name').value.trim()  || null;
+        const p2Email     = document.getElementById('fmParent2Email').value.trim() || null;
+        const p2Phone     = document.getElementById('fmParent2Phone').value.trim() || null;
+        const p2PinVal    = document.getElementById('fmParent2Pin').value.trim();
+        const p2Pin       = p2PinVal ? parseInt(p2PinVal, 10) : null;
+        const group       = document.querySelector('input[name="fmGroup"]:checked')?.value || 'regular';
+
+        if (!parentName) { alert('Parent name is required.'); return; }
+
+        const children = readModalChildrenFromDom();
+
+        if (!editingFamilyId) {
+            // ---- CREATE ----
+            const fam = await createFamily({
+                parentName, parentEmail, parentPhone, pin: pin || null,
+                parent2Name: p2Name, parent2Email: p2Email,
+                parent2Phone: p2Phone, parent2Pin: p2Pin,
+            });
+            // Set group (createFamily doesn't set it)
+            await updateFamily(fam.id, { group });
+
+            for (const child of children) {
+                const student = await addStudent({
+                    familyId: fam.id,
+                    childName: child.child_name,
+                    childDob:  child.child_dob,
+                });
+                await updateStudent(student.id, {
+                    room_override:  child.room_override,
+                    discount_type:  child.discount_type,
+                    discount_value: child.discount_value,
+                    discount_note:  child.discount_note,
+                });
+            }
+        } else {
+            // ---- UPDATE ----
+            await updateFamily(editingFamilyId, {
+                parent_name:  parentName,
+                parent_email: parentEmail,
+                parent_phone: parentPhone,
+                pin:          pin || null,
+                parent2_name:  p2Name,
+                parent2_email: p2Email,
+                parent2_phone: p2Phone,
+                parent2_pin:   p2Pin,
+                group,
+            });
+
+            // Reconcile children
+            const origIds = familyModalChildren.map(c => c.id).filter(Boolean);
+            const keptIds = children.map(c => c.originalId).filter(Boolean);
+
+            // Delete removed children
+            for (const origId of origIds) {
+                if (!keptIds.includes(origId)) await deleteStudent(origId);
+            }
+
+            // Update existing / add new children
+            for (const child of children) {
+                if (child.originalId) {
+                    await updateStudent(child.originalId, {
+                        child_name:     child.child_name,
+                        child_dob:      child.child_dob,
+                        room_override:  child.room_override,
+                        discount_type:  child.discount_type,
+                        discount_value: child.discount_value,
+                        discount_note:  child.discount_note,
+                    });
+                } else {
+                    const student = await addStudent({
+                        familyId: editingFamilyId,
+                        childName: child.child_name,
+                        childDob:  child.child_dob,
+                    });
+                    await updateStudent(student.id, {
+                        room_override:  child.room_override,
+                        discount_type:  child.discount_type,
+                        discount_value: child.discount_value,
+                        discount_note:  child.discount_note,
+                    });
+                }
+            }
+        }
+
+        closeFamilyModal();
+        await loadFamilies();
+
+    } catch (err) {
+        alert('Save failed: ' + err.message);
+        console.error('saveFamilyModal:', err);
+    } finally {
+        saveBtn.disabled    = false;
+        saveBtn.textContent = 'Save Family';
+    }
+}
+
+// ---- Archive / Restore ----
+async function confirmArchiveFamily(id, name) {
+    if (!confirm(`Archive ${name}?\n\nThey'll be hidden from the active roster. Their registration history is preserved and you can restore them at any time.`)) return;
+    await doArchiveFamily(id);
+}
+
+async function doArchiveFamily(id) {
+    try {
+        await archiveFamily(id);
+        await loadFamilies();
+    } catch (err) {
+        alert('Archive failed: ' + err.message);
+    }
+}
+
+async function doRestoreFamily(id) {
+    try {
+        await restoreFamily(id);
+        await loadFamilies();
+    } catch (err) {
+        alert('Restore failed: ' + err.message);
+    }
+}
+
+async function onArchiveSummerFamilies() {
+    // Count summer families first
+    const summerFamilies = allFamiliesData.filter(f => f.group === 'summer' && f.active !== false);
+    if (!summerFamilies.length) {
+        alert('No active summer families found.');
+        return;
+    }
+    if (!confirm(`Archive all ${summerFamilies.length} summer program families?\n\nThey'll be hidden from the active roster but can be restored individually. Registration history is preserved.`)) return;
+    try {
+        const count = await archiveSummerFamilies();
+        await loadFamilies();
+        alert(`✅ ${count} summer famil${count !== 1 ? 'ies' : 'y'} archived.`);
+    } catch (err) {
+        alert('Archive failed: ' + err.message);
+    }
 }
 
 // ============================================================

@@ -427,14 +427,57 @@ async function addStudent({ familyId, childName, childDob }) {
     return data;
 }
 
-async function fetchAllFamilies() {
+async function fetchAllFamilies({ includeArchived = false } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    let query = sbClient
+        .from('families')
+        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, created_at, active, group, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
+        .order('parent_name');
+    if (!includeArchived) query = query.eq('active', true);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+}
+
+// ---- Family CRUD ----
+async function updateFamily(id, updates) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('families').update(updates).eq('id', id);
+    if (error) throw error;
+}
+
+async function archiveFamily(id) {
+    return updateFamily(id, { active: false });
+}
+
+async function restoreFamily(id) {
+    return updateFamily(id, { active: true });
+}
+
+// ---- Student CRUD ----
+async function updateStudent(id, updates) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('students').update(updates).eq('id', id);
+    if (error) throw error;
+}
+
+async function deleteStudent(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('students').delete().eq('id', id);
+    if (error) throw error;
+}
+
+// ---- Bulk summer archive ----
+async function archiveSummerFamilies() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, created_at, students(id, child_name, child_dob, room_override)')
-        .order('parent_name');
+        .update({ active: false })
+        .eq('group', 'summer')
+        .eq('active', true)
+        .select('id');
     if (error) throw error;
-    return data || [];
+    return (data || []).length;
 }
 
 async function updateStudentRoomOverride(studentId, roomOverride) {

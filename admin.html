@@ -132,6 +132,9 @@
                 <h3>Family Directory</h3>
                 <input type="search" id="familyChildSearch" class="family-search-input"
                        placeholder="Search by child or parent name…" autocomplete="off">
+                <button id="addFamilyBtn" class="btn-primary">+ Add Family</button>
+                <button id="archiveSummerBtn" class="btn-warning">Archive Summer</button>
+                <button id="familiesToggleArchivedBtn" class="btn-ghost">Show Archived</button>
                 <button id="refreshFamiliesBtn" class="btn-secondary">&#8635; Refresh</button>
             </div>
             <div id="familiesList">
@@ -239,10 +242,103 @@
         </div>
     </div>
 
+    <!-- Family Add / Edit Modal -->
+    <div id="familyModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog">
+            <div class="fm-dialog-header">
+                <h3 id="fmTitle">Add Family</h3>
+                <button id="fmCloseBtn" class="rcal-close-btn" title="Close (Esc)">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+
+                <!-- Parent 1 -->
+                <div class="fm-section">
+                    <div class="fm-section-label">Parent 1</div>
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="fmParentName">Name *</label>
+                            <input type="text" id="fmParentName" placeholder="Full name" autocomplete="off">
+                        </div>
+                        <div class="fm-field fm-field-pin">
+                            <label>PIN</label>
+                            <div class="fm-pin-row">
+                                <input type="text" id="fmPin" class="fm-pin-input" maxlength="4" placeholder="4-digit">
+                                <button type="button" id="fmNewPinBtn" class="btn-ghost fm-pin-btn" title="Generate new PIN">&#8635;</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="fmParentEmail">Email *</label>
+                            <input type="email" id="fmParentEmail" placeholder="parent@email.com" autocomplete="off">
+                        </div>
+                        <div class="fm-field fm-field-grow">
+                            <label for="fmParentPhone">Phone</label>
+                            <input type="tel" id="fmParentPhone" placeholder="555-123-4567" autocomplete="off">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parent 2 -->
+                <div class="fm-section">
+                    <div class="fm-section-label">Parent 2 <span class="fm-optional">(optional)</span></div>
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="fmParent2Name">Name</label>
+                            <input type="text" id="fmParent2Name" placeholder="Full name" autocomplete="off">
+                        </div>
+                        <div class="fm-field fm-field-pin">
+                            <label>PIN</label>
+                            <div class="fm-pin-row">
+                                <input type="text" id="fmParent2Pin" class="fm-pin-input" maxlength="4" placeholder="4-digit">
+                                <button type="button" id="fmNewPin2Btn" class="btn-ghost fm-pin-btn" title="Generate new PIN">&#8635;</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="fmParent2Email">Email</label>
+                            <input type="email" id="fmParent2Email" placeholder="parent2@email.com" autocomplete="off">
+                        </div>
+                        <div class="fm-field fm-field-grow">
+                            <label for="fmParent2Phone">Phone</label>
+                            <input type="tel" id="fmParent2Phone" placeholder="555-123-4567" autocomplete="off">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Group -->
+                <div class="fm-section">
+                    <div class="fm-section-label">Program Group</div>
+                    <div class="fm-radio-row">
+                        <label class="fm-radio-label">
+                            <input type="radio" name="fmGroup" value="regular" checked> Regular
+                        </label>
+                        <label class="fm-radio-label">
+                            <input type="radio" name="fmGroup" value="summer"> Summer Program
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Children -->
+                <div class="fm-section">
+                    <div class="fm-section-label">Children</div>
+                    <div id="fmChildRows"></div>
+                    <button type="button" id="fmAddChildBtn" class="btn-secondary fm-add-child-btn">+ Add Child</button>
+                </div>
+
+            </div><!-- end fm-dialog-body -->
+            <div class="fm-dialog-footer">
+                <button type="button" id="fmCancelBtn" class="btn-ghost">Cancel</button>
+                <button type="button" id="fmSaveBtn" class="btn-primary">Save Family</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=20"></script>
-    <script src="js/admin.js?v=19"></script>
+    <script src="js/supabase.js?v=21"></script>
+    <script src="js/admin.js?v=20"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 </body>
 </html>
