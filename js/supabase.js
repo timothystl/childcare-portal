@@ -272,12 +272,16 @@ async function checkExistingRegistration(email, monthKey, childName = null) {
         if (regErr || !regs || !regs.length) return null;
 
         const ids = regs.map(r => r.id);
+        const [yr, mo] = monthKey.split('-');
+        const nextMo = mo === '12'
+            ? `${parseInt(yr) + 1}-01`
+            : `${yr}-${String(parseInt(mo) + 1).padStart(2, '0')}`;
         const { data: dates, error: datesErr } = await sbClient
             .from('registration_dates')
             .select('id')
             .in('registration_id', ids)
             .gte('care_date', monthKey + '-01')
-            .lte('care_date', monthKey + '-31')
+            .lt('care_date', nextMo + '-01')
             .eq('waitlisted', false)
             .limit(1);
         if (datesErr) return null;
