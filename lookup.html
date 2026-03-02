@@ -20,19 +20,19 @@
                      onerror="this.outerHTML='🏫'">
             </div>
             <h1>My Schedule</h1>
-            <p class="lookup-sub">Enter your email and family PIN to view your registered care days.</p>
+            <p class="lookup-sub">Enter your parent email and PIN to view your registered care days.</p>
 
             <div class="form-group">
-                <label for="lookupEmail">Email Address</label>
+                <label for="lookupEmail">Parent Email Address</label>
                 <input type="email" id="lookupEmail" placeholder="your@email.com" autocomplete="email">
             </div>
 
             <div class="form-group">
-                <label for="lookupPin">Family PIN</label>
+                <label for="lookupPin">Parent PIN</label>
                 <input type="text" id="lookupPin" placeholder="4-digit PIN" maxlength="4"
                        inputmode="numeric" pattern="[0-9]{4}" autocomplete="off">
             </div>
-            <p class="lookup-hint">Your PIN is provided by the office. Contact us if you need yours.</p>
+            <p class="lookup-hint">Each parent has a unique PIN provided by the office. Contact us if you need yours.</p>
 
             <button id="lookupBtn" class="btn-primary lookup-btn">Look Up My Schedule</button>
             <p id="lookupError" class="login-error hidden"></p>
@@ -67,7 +67,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase.js?v=18"></script>
-    <script src="js/lookup.js?v=2"></script>
+    <script src="js/supabase.js?v=20"></script>
+    <script src="js/lookup.js?v=3"></script>
 </body>
 </html>

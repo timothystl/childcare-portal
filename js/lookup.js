@@ -96,8 +96,14 @@ function showResults(registrations, parentInfo) {
     document.getElementById('lookupParentName').textContent  = parentInfo.name || 'Your Schedule';
     document.getElementById('lookupParentEmail').textContent = parentInfo.email;
 
+    // Only show current month and next month
+    const now   = new Date();
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const nextDate  = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const nextMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+    const visibleMonths = new Set([thisMonth, nextMonth]);
+
     // Group all registrations by child_name
-    // A parent may have multiple registrations for the same child (different months)
     const byChild = {};
     registrations.forEach(reg => {
         const key = reg.child_name || 'Unknown Child';
@@ -109,7 +115,9 @@ function showResults(registrations, parentInfo) {
             };
         }
         (reg.registration_dates || []).forEach(d => {
-            if (!d.waitlisted) byChild[key].dates.push(d);
+            if (!d.waitlisted && visibleMonths.has((d.care_date || '').substring(0, 7))) {
+                byChild[key].dates.push(d);
+            }
         });
     });
 

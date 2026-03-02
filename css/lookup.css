@@ -80,8 +80,8 @@
 .lookup-hint {
     font-size: .8em;
     color: #a0aec0;
-    margin-top: -8px;
-    margin-bottom: 12px;
+    margin-top: 6px;
+    margin-bottom: 16px;
 }
 
 .lookup-btn { width: 100%; margin-top: 8px; }
