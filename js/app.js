@@ -931,7 +931,17 @@ async function handleSubmit(e) {
         const results = [];
         const errors  = [];
 
+        // Build list of student IDs that actually belong to this family
+        const familyStudentIds = (selectedFamily?.students || []).map(s => String(s.id));
+
         for (const child of selectedChildren) {
+            // Guard: child must still belong to the currently selected family.
+            // Catches the edge-case where a user switches families mid-session.
+            if (child.studentId && !familyStudentIds.includes(String(child.studentId))) {
+                errors.push(`${child.name} is not registered to this family. Please re-select your family and try again.`);
+                continue;
+            }
+
             // Hard block: one submission per child per month, across all devices.
             // Checks Supabase directly so a different computer cannot bypass it.
             const existingReg = await checkExistingRegistration(parentEmail, targetMonthKey, child.name);

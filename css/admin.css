@@ -1461,14 +1461,13 @@ tr.pending-approval:hover { background: #fef3c7; }
    DAY ROSTER DETAIL PANEL (inside room-cal modal)
    ============================================================ */
 .day-detail-panel {
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,.45);
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10;
-    border-radius: inherit;
+    z-index: 3000;
 }
 .day-detail-panel.hidden { display: none; }
 

@@ -325,8 +325,12 @@ function renderCapacityOverview() {
 // ============================================================
 let rcalRoomId    = null;
 let rcalMonthDate = null; // JS Date set to 1st of displayed month
+let rcalSetupDone = false; // guard against double-registration if initDashboard runs twice
 
 function setupRoomCalendar() {
+    if (rcalSetupDone) return;
+    rcalSetupDone = true;
+
     // Wire up modal buttons (null-safe in case modal HTML is missing/cached)
     document.getElementById('rcalClose')?.addEventListener('click', closeRoomCalendar);
     document.getElementById('rcalPrev')?.addEventListener('click', () => {
@@ -347,16 +351,8 @@ function setupRoomCalendar() {
         }
     });
 
-    // Cap-card click delegation — use document so it always works
+    // Cap-card click/keyboard delegation (capacity overview → open room calendar)
     document.addEventListener('click', e => {
-        // Day cell click → show full roster for that day
-        const cell = e.target.closest('.rcal-cell[data-date]');
-        if (cell) {
-            e.stopPropagation();
-            showDayRosterDetail(cell.dataset.date, rcalRoomId,
-                JSON.parse(cell.dataset.enrolled || '[]'), parseInt(cell.dataset.cap || '0'));
-            return;
-        }
         const card = e.target.closest('.cap-card[data-room-id]');
         if (card) openRoomCalendar(card.dataset.roomId, card.dataset.monthKey);
     });
@@ -521,6 +517,17 @@ function drawRoomCalendar() {
     document.getElementById('rcalBody').innerHTML = `
         <div class="rcal-dow-row">${dowHtml}</div>
         <div class="rcal-grid">${cellsHtml}</div>`;
+
+    // Attach click listeners directly to each cell via closure data (avoids JSON
+    // attribute parsing and stopPropagation conflicts with the modal overlay).
+    cells.forEach(cell => {
+        if (!cell || cell.isClosed) return;
+        const el = document.querySelector(`#rcalBody [data-date="${cell.dateStr}"]`);
+        if (el) {
+            el.addEventListener('click', () =>
+                showDayRosterDetail(cell.dateStr, rcalRoomId, cell.enrolled, cell.cap));
+        }
+    });
 }
 
 // ============================================================
