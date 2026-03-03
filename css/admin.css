@@ -1525,6 +1525,74 @@ tr.pending-approval:hover { background: #fef3c7; }
 .rcal-dialog { position: relative; }
 
 /* ============================================================
+   TAB NAVIGATION
+   ============================================================ */
+.admin-tabs {
+    display: flex;
+    gap: 0;
+    background: #fff;
+    border-bottom: 2px solid #e8e8f0;
+    padding: 0 24px;
+    position: sticky;
+    top: 73px;   /* sits flush below the sticky admin-header */
+    z-index: 90;
+    box-shadow: 0 2px 6px rgba(0,0,0,.05);
+}
+
+.admin-tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 14px 22px 12px;
+    font-size: .92em;
+    font-weight: 600;
+    color: #888;
+    cursor: pointer;
+    transition: color .2s, border-color .2s;
+    white-space: nowrap;
+    margin-bottom: -2px; /* overlap the nav border-bottom */
+}
+.admin-tab-btn:hover { color: #667eea; }
+.admin-tab-btn.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+}
+
+/* ============================================================
+   COLLAPSIBLE SECTIONS
+   ============================================================ */
+.collapsible-section h2 {
+    display: flex;
+    align-items: center;
+}
+
+.collapse-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    margin-left: auto;
+    flex-shrink: 0;
+    line-height: 1;
+    transition: background .15s;
+}
+.collapse-toggle:hover { background: rgba(102,126,234,.1); }
+
+/* Chevron — CSS only, no icon font */
+.collapse-chevron {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 7px solid #667eea;
+    transition: transform .2s ease;
+    vertical-align: middle;
+}
+.is-collapsed .collapse-chevron { transform: rotate(-90deg); }
+
+/* ============================================================
    RATES & SETTINGS SECTION
    ============================================================ */
 .rates-table {

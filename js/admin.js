@@ -76,6 +76,8 @@ async function initDashboard() {
     setupMessages();
     setupRoomCalendar();
     setupRates();
+    setupTabs();
+    setupCollapsibles();
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
     document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
@@ -2022,6 +2024,64 @@ function renderMessagesList(messages) {
                 alert('Failed to restore: ' + err.message);
             }
         });
+    });
+}
+
+// ============================================================
+// TABS
+// ============================================================
+function setupTabs() {
+    const btns  = document.querySelectorAll('#adminTabs .admin-tab-btn');
+    const panes = document.querySelectorAll('.tab-pane');
+
+    function activate(tab) {
+        btns.forEach(b  => b.classList.toggle('active', b.dataset.tab === tab));
+        panes.forEach(p => p.classList.toggle('hidden', p.id !== 'tab-' + tab));
+        localStorage.setItem('adminActiveTab', tab);
+    }
+
+    btns.forEach(btn => btn.addEventListener('click', () => activate(btn.dataset.tab)));
+
+    // Restore last-used tab, defaulting to 'daily'
+    const saved = localStorage.getItem('adminActiveTab') || 'daily';
+    activate(saved);
+}
+
+// ============================================================
+// COLLAPSIBLES  (Settings tab sections)
+// ============================================================
+function setupCollapsibles() {
+    document.querySelectorAll('.collapsible-section').forEach(section => {
+        const id = section.id;
+        const h2 = section.querySelector('h2');
+        if (!h2 || !id) return;
+
+        // Wrap all content after h2 in a collapsible body div
+        const body = document.createElement('div');
+        body.className = 'collapsible-body';
+        while (h2.nextSibling) body.appendChild(h2.nextSibling);
+        section.appendChild(body);
+
+        // Add toggle button inside h2
+        const btn = document.createElement('button');
+        btn.type      = 'button';
+        btn.className = 'collapse-toggle';
+        btn.setAttribute('aria-expanded', 'true');
+        btn.title     = 'Collapse / expand';
+        btn.innerHTML = '<span class="collapse-chevron" aria-hidden="true"></span>';
+        h2.appendChild(btn);
+
+        function setCollapsed(collapsed) {
+            body.hidden = collapsed;
+            section.classList.toggle('is-collapsed', collapsed);
+            btn.setAttribute('aria-expanded', String(!collapsed));
+            localStorage.setItem('adminCollapse_' + id, collapsed ? '1' : '0');
+        }
+
+        btn.addEventListener('click', () => setCollapsed(!section.classList.contains('is-collapsed')));
+
+        // Restore saved state (default: open)
+        if (localStorage.getItem('adminCollapse_' + id) === '1') setCollapsed(true);
     });
 }
 

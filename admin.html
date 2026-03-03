@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=4">
+    <link rel="stylesheet" href="css/admin.css?v=5">
 </head>
 <body class="admin-body">
 
@@ -51,188 +51,217 @@
             </div>
         </header>
 
-        <!-- Capacity Overview -->
-        <section class="capacity-section">
-            <h2>Capacity Overview</h2>
-            <div id="capacityGrid"></div>
-        </section>
+        <!-- Tab Navigation -->
+        <nav class="admin-tabs" id="adminTabs">
+            <button class="admin-tab-btn" data-tab="daily">📋 Daily</button>
+            <button class="admin-tab-btn" data-tab="families">👨‍👩‍👧 Families</button>
+            <button class="admin-tab-btn" data-tab="settings">⚙️ Settings</button>
+            <button class="admin-tab-btn" data-tab="reports">📊 Reports</button>
+        </nav>
 
-        <!-- Daily Roster -->
-        <section class="admin-section">
-            <h2>📋 Daily Classroom Roster</h2>
-            <div class="roster-controls">
-                <div class="roster-field">
-                    <label for="rosterDate">Date</label>
-                    <input type="date" id="rosterDate">
+        <!-- ── Tab: Daily ─────────────────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-daily">
+
+            <!-- Capacity Overview -->
+            <section class="capacity-section">
+                <h2>Capacity Overview</h2>
+                <div id="capacityGrid"></div>
+            </section>
+
+            <!-- Daily Roster -->
+            <section class="admin-section">
+                <h2>📋 Daily Classroom Roster</h2>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="rosterDate">Date</label>
+                        <input type="date" id="rosterDate">
+                    </div>
+                    <div class="roster-field">
+                        <label for="rosterRoomFilter">Room</label>
+                        <select id="rosterRoomFilter">
+                            <option value="">All Rooms</option>
+                        </select>
+                    </div>
+                    <div class="roster-btns">
+                        <button id="viewRosterBtn" class="btn-secondary">View Roster</button>
+                        <button id="exportRosterBtn" class="btn-primary">&#128438; Print / PDF</button>
+                    </div>
                 </div>
-                <div class="roster-field">
-                    <label for="rosterRoomFilter">Room</label>
-                    <select id="rosterRoomFilter">
-                        <option value="">All Rooms</option>
+                <div id="rosterContent">
+                    <p class="empty-hint">Select a date above and click View Roster.</p>
+                </div>
+            </section>
+
+            <!-- Registrations Table -->
+            <section class="table-section">
+                <h2>All Registrations</h2>
+                <div class="filters">
+                    <input type="text" id="searchInput" placeholder="Search by parent, child, or email…">
+                    <select id="roomFilter">
+                        <option value="">All rooms</option>
+                    </select>
+                    <select id="careMonthFilter">
+                        <option value="">All care months</option>
                     </select>
                 </div>
-                <div class="roster-btns">
-                    <button id="viewRosterBtn" class="btn-secondary">View Roster</button>
-                    <button id="exportRosterBtn" class="btn-primary">&#128438; Print / PDF</button>
+                <div class="table-wrapper">
+                    <table id="regTable">
+                        <thead>
+                            <tr>
+                                <th data-col="submitted" class="sortable">Submitted</th>
+                                <th data-col="parent" class="sortable">Parent</th>
+                                <th data-col="email" class="sortable">Email</th>
+                                <th>Phone</th>
+                                <th data-col="child" class="sortable">Child</th>
+                                <th data-col="room" class="sortable">Room</th>
+                                <th>Dates</th>
+                                <th data-col="tally" class="sortable">Full/Half</th>
+                                <th data-col="bill" class="sortable">Bill</th>
+                                <th>Discount</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="regTableBody">
+                            <tr><td colspan="10" class="loading-cell">Loading registrations…</td></tr>
+                        </tbody>
+                    </table>
                 </div>
-            </div>
-            <div id="rosterContent">
-                <p class="empty-hint">Select a date above and click View Roster.</p>
-            </div>
-        </section>
+            </section>
 
-        <!-- Monthly Billing Report -->
-        <section class="admin-section">
-            <h2>📊 Monthly Billing Report</h2>
-            <p class="section-desc">Attendance and billing totals for a selected month across all rooms.</p>
-            <div class="roster-controls">
-                <div class="roster-field">
-                    <label for="reportMonth">Month</label>
-                    <input type="month" id="reportMonth">
+        </div><!-- /#tab-daily -->
+
+        <!-- ── Tab: Families ──────────────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-families">
+
+            <!-- Families & Students -->
+            <section class="admin-section" id="familiesSection">
+                <h2>👨‍👩‍👧 Families &amp; Students</h2>
+                <p class="section-desc">Import from a ProCare or custom Excel / CSV file, or browse the family directory used for parent look-up. You can also force-assign a child to a specific room.</p>
+
+                <div class="families-import-row">
+                    <label class="file-upload-label" for="familiesFileInput">📂 Choose File</label>
+                    <input type="file" id="familiesFileInput" accept=".xlsx,.xls,.csv" class="hidden-file-input">
+                    <span id="familiesFileName" class="families-file-name">No file chosen</span>
+                    <button id="importFamiliesBtn" class="btn-primary" disabled>⬆ Import</button>
                 </div>
-                <div class="roster-btns">
-                    <button id="generateReportBtn" class="btn-secondary">Generate Report</button>
-                    <button id="exportReportBtn" class="btn-primary">&#8595; Export Excel</button>
+                <div id="importPreview" class="import-preview"></div>
+
+                <div class="families-list-header">
+                    <h3>Family Directory</h3>
+                    <input type="search" id="familyChildSearch" class="family-search-input"
+                           placeholder="Search by child or parent name…" autocomplete="off">
+                    <select id="familySortBy" class="family-search-input" style="flex:0 0 auto;width:auto;">
+                        <option value="name">Sort: Name A–Z</option>
+                        <option value="room">Sort: Room</option>
+                        <option value="discount">Sort: Discount first</option>
+                        <option value="age_asc">Sort: Age (youngest first)</option>
+                        <option value="age_desc">Sort: Age (oldest first)</option>
+                    </select>
+                    <button id="addFamilyBtn" class="btn-primary">+ Add Family</button>
+                    <button id="archiveSummerBtn" class="btn-warning">Archive Summer</button>
+                    <button id="familiesToggleArchivedBtn" class="btn-ghost">Show Archived</button>
+                    <button id="refreshFamiliesBtn" class="btn-secondary">&#8635; Refresh</button>
                 </div>
-            </div>
-            <div id="reportContent">
-                <p class="empty-hint">Select a month above and click Generate Report.</p>
-            </div>
-        </section>
-
-        <!-- Registration Window Override -->
-        <section class="admin-section">
-            <h2>🔓 Registration Window Override</h2>
-            <p class="section-desc">Manually open or close the registration window regardless of the normal date rules (auto: open days 1–20, closed days 21+).</p>
-            <div class="override-row">
-                <select id="windowOverrideSelect" class="override-select">
-                    <option value="auto">Auto — open days 1–20, closed days 21+</option>
-                    <option value="open">Force Open — allow registration right now</option>
-                    <option value="closed">Force Closed — block registration right now</option>
-                </select>
-                <button id="saveOverrideBtn" class="btn-primary">Save</button>
-            </div>
-            <p id="overrideStatus" class="override-status"></p>
-        </section>
-
-        <!-- Families & Students -->
-        <section class="admin-section" id="familiesSection">
-            <h2>👨‍👩‍👧 Families &amp; Students</h2>
-            <p class="section-desc">Import from a ProCare or custom Excel / CSV file, or browse the family directory used for parent look-up. You can also force-assign a child to a specific room.</p>
-
-            <div class="families-import-row">
-                <label class="file-upload-label" for="familiesFileInput">📂 Choose File</label>
-                <input type="file" id="familiesFileInput" accept=".xlsx,.xls,.csv" class="hidden-file-input">
-                <span id="familiesFileName" class="families-file-name">No file chosen</span>
-                <button id="importFamiliesBtn" class="btn-primary" disabled>⬆ Import</button>
-            </div>
-            <div id="importPreview" class="import-preview"></div>
-
-            <div class="families-list-header">
-                <h3>Family Directory</h3>
-                <input type="search" id="familyChildSearch" class="family-search-input"
-                       placeholder="Search by child or parent name…" autocomplete="off">
-                <select id="familySortBy" class="family-search-input" style="flex:0 0 auto;width:auto;">
-                    <option value="name">Sort: Name A–Z</option>
-                    <option value="room">Sort: Room</option>
-                    <option value="discount">Sort: Discount first</option>
-                    <option value="age_asc">Sort: Age (youngest first)</option>
-                    <option value="age_desc">Sort: Age (oldest first)</option>
-                </select>
-                <button id="addFamilyBtn" class="btn-primary">+ Add Family</button>
-                <button id="archiveSummerBtn" class="btn-warning">Archive Summer</button>
-                <button id="familiesToggleArchivedBtn" class="btn-ghost">Show Archived</button>
-                <button id="refreshFamiliesBtn" class="btn-secondary">&#8635; Refresh</button>
-            </div>
-            <div id="familiesList">
-                <p class="empty-hint">Click Refresh to load families.</p>
-            </div>
-        </section>
-
-        <!-- Messages -->
-        <section class="admin-section" id="messagesSection">
-            <h2>💬 Parent Messages</h2>
-            <p class="section-desc">Messages sent by parents via the Contact Us button on the registration portal.</p>
-            <div class="messages-header">
-                <button id="refreshMessagesBtn" class="btn-secondary">&#8635; Refresh</button>
-                <button id="toggleArchivedBtn" class="btn-secondary">Show Archived</button>
-                <span id="unreadBadge" class="unread-badge hidden"></span>
-            </div>
-            <div id="messagesList">
-                <p class="empty-hint">Click Refresh to load messages.</p>
-            </div>
-        </section>
-
-        <!-- Closed Days -->
-        <section class="admin-section">
-            <h2>🚫 Closed Days</h2>
-            <p class="section-desc">Blocked dates appear as unavailable on the parent registration calendar.</p>
-            <div class="closure-add-row">
-                <div class="roster-field">
-                    <label for="closureDate">Date to block</label>
-                    <input type="date" id="closureDate">
+                <div id="familiesList">
+                    <p class="empty-hint">Click Refresh to load families.</p>
                 </div>
-                <div class="roster-field closure-reason-field">
-                    <label for="closureReason">Reason (optional)</label>
-                    <input type="text" id="closureReason" placeholder="e.g. Thanksgiving, Snow day">
-                </div>
-                <div class="roster-btns">
-                    <button id="addClosureBtn" class="btn-primary">Block Date</button>
-                </div>
-            </div>
-            <div id="closureList">
-                <p class="empty-hint">No closures set.</p>
-            </div>
-        </section>
+            </section>
 
-        <!-- Room Rates & Settings -->
-        <section class="admin-section" id="ratesSection">
-            <h2>⚙️ Room Rates &amp; Settings</h2>
-            <p class="section-desc">Set daily and weekly rates per room. Changes take effect immediately for new registrations. Leave weekly rate blank to disable the 5-day weekly discount for that room.</p>
-            <div id="ratesTableWrap">
-                <p class="empty-hint">Loading rates…</p>
-            </div>
-            <div class="rates-actions">
-                <button id="saveRatesBtn" class="btn-primary">💾 Save Rates</button>
-                <span id="ratesStatus" class="rates-status"></span>
-            </div>
-        </section>
+            <!-- Messages -->
+            <section class="admin-section" id="messagesSection">
+                <h2>💬 Parent Messages</h2>
+                <p class="section-desc">Messages sent by parents via the Contact Us button on the registration portal.</p>
+                <div class="messages-header">
+                    <button id="refreshMessagesBtn" class="btn-secondary">&#8635; Refresh</button>
+                    <button id="toggleArchivedBtn" class="btn-secondary">Show Archived</button>
+                    <span id="unreadBadge" class="unread-badge hidden"></span>
+                </div>
+                <div id="messagesList">
+                    <p class="empty-hint">Click Refresh to load messages.</p>
+                </div>
+            </section>
 
-        <!-- Registrations Table -->
-        <section class="table-section">
-            <h2>All Registrations</h2>
-            <div class="filters">
-                <input type="text" id="searchInput" placeholder="Search by parent, child, or email…">
-                <select id="roomFilter">
-                    <option value="">All rooms</option>
-                </select>
-                <select id="careMonthFilter">
-                    <option value="">All care months</option>
-                </select>
-            </div>
-            <div class="table-wrapper">
-                <table id="regTable">
-                    <thead>
-                        <tr>
-                            <th data-col="submitted" class="sortable">Submitted</th>
-                            <th data-col="parent" class="sortable">Parent</th>
-                            <th data-col="email" class="sortable">Email</th>
-                            <th>Phone</th>
-                            <th data-col="child" class="sortable">Child</th>
-                            <th data-col="room" class="sortable">Room</th>
-                            <th>Dates</th>
-                            <th data-col="tally" class="sortable">Full/Half</th>
-                            <th data-col="bill" class="sortable">Bill</th>
-                            <th>Discount</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="regTableBody">
-                        <tr><td colspan="10" class="loading-cell">Loading registrations…</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
+        </div><!-- /#tab-families -->
+
+        <!-- ── Tab: Settings ──────────────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-settings">
+
+            <!-- Registration Window Override -->
+            <section class="admin-section collapsible-section" id="regWindowSection">
+                <h2>🔓 Registration Window Override</h2>
+                <p class="section-desc">Manually open or close the registration window regardless of the normal date rules (auto: open days 1–20, closed days 21+).</p>
+                <div class="override-row">
+                    <select id="windowOverrideSelect" class="override-select">
+                        <option value="auto">Auto — open days 1–20, closed days 21+</option>
+                        <option value="open">Force Open — allow registration right now</option>
+                        <option value="closed">Force Closed — block registration right now</option>
+                    </select>
+                    <button id="saveOverrideBtn" class="btn-primary">Save</button>
+                </div>
+                <p id="overrideStatus" class="override-status"></p>
+            </section>
+
+            <!-- Closed Days -->
+            <section class="admin-section collapsible-section" id="closedDaysSection">
+                <h2>🚫 Closed Days</h2>
+                <p class="section-desc">Blocked dates appear as unavailable on the parent registration calendar.</p>
+                <div class="closure-add-row">
+                    <div class="roster-field">
+                        <label for="closureDate">Date to block</label>
+                        <input type="date" id="closureDate">
+                    </div>
+                    <div class="roster-field closure-reason-field">
+                        <label for="closureReason">Reason (optional)</label>
+                        <input type="text" id="closureReason" placeholder="e.g. Thanksgiving, Snow day">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="addClosureBtn" class="btn-primary">Block Date</button>
+                    </div>
+                </div>
+                <div id="closureList">
+                    <p class="empty-hint">No closures set.</p>
+                </div>
+            </section>
+
+            <!-- Room Rates & Settings -->
+            <section class="admin-section collapsible-section" id="ratesSection">
+                <h2>⚙️ Room Rates &amp; Settings</h2>
+                <p class="section-desc">Set daily and weekly rates per room. Changes take effect immediately for new registrations. Leave weekly rate blank to disable the 5-day weekly discount for that room.</p>
+                <div id="ratesTableWrap">
+                    <p class="empty-hint">Loading rates…</p>
+                </div>
+                <div class="rates-actions">
+                    <button id="saveRatesBtn" class="btn-primary">💾 Save Rates</button>
+                    <span id="ratesStatus" class="rates-status"></span>
+                </div>
+            </section>
+
+        </div><!-- /#tab-settings -->
+
+        <!-- ── Tab: Reports ───────────────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-reports">
+
+            <!-- Monthly Billing Report -->
+            <section class="admin-section">
+                <h2>📊 Monthly Billing Report</h2>
+                <p class="section-desc">Attendance and billing totals for a selected month across all rooms.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="reportMonth">Month</label>
+                        <input type="month" id="reportMonth">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateReportBtn" class="btn-secondary">Generate Report</button>
+                        <button id="exportReportBtn" class="btn-primary">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="reportContent">
+                    <p class="empty-hint">Select a month above and click Generate Report.</p>
+                </div>
+            </section>
+
+        </div><!-- /#tab-reports -->
+
     </div>
 
     <!-- Room Capacity Calendar Modal -->
@@ -355,7 +384,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="js/supabase.js?v=24"></script>
-    <script src="js/admin.js?v=24"></script>
+    <script src="js/admin.js?v=25"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 </body>
 </html>
