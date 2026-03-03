@@ -65,7 +65,7 @@ function showDashboard() {
 async function initDashboard() {
     populateRoomFilter();
     populateRosterRoomFilter();
-    await Promise.all([loadRegistrations(), loadClosureList(), loadFamilies()]);
+    await Promise.all([loadRegistrations(), loadClosureList(), loadFamilies(), loadRateSettings()]);
     renderCapacityOverview();
     setupFilters();
     setupRoster();
@@ -75,6 +75,7 @@ async function initDashboard() {
     setupFamilies();
     setupMessages();
     setupRoomCalendar();
+    setupRates();
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
     document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
@@ -118,11 +119,14 @@ function effectiveAdminRate(baseRate, discountType, discountValue) {
 function buildDiscountMap() {
     const map = new Map();
     (allFamiliesData || []).forEach(f => {
-        const email = (f.parent_email || '').toLowerCase();
         (f.students || []).forEach(s => {
             if (!s.discount_type || s.discount_type === 'none') return;
-            const key = `${email}:${(s.child_name || '').toLowerCase()}`;
-            map.set(key, { type: s.discount_type, value: s.discount_value || 0 });
+            const childKey = (s.child_name || '').toLowerCase();
+            const disc = { type: s.discount_type, value: s.discount_value || 0 };
+            // Index by both parent emails so registrations by either parent get the discount
+            [f.parent_email, f.parent2_email].filter(Boolean).forEach(email => {
+                map.set(`${email.toLowerCase()}:${childKey}`, disc);
+            });
         });
     });
     return map;
@@ -240,8 +244,8 @@ function renderTable(data) {
 
         const bill = calcRegistrationBill(reg);
 
-        // Discount info from discount map
-        const discKey = `${(reg.parent_email || '').toLowerCase()}-${(reg.child_name || '').toLowerCase()}`;
+        // Discount info — try reg email first, fall back to searching all family emails
+        const discKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
         const disc    = getDiscountMap().get(discKey);
         const discLabel = disc
             ? (disc.type === 'staff' ? 'Staff (free)' : `${disc.value}% off`)
@@ -2019,6 +2023,104 @@ function renderMessagesList(messages) {
             }
         });
     });
+}
+
+// ============================================================
+// RATES & SETTINGS
+// ============================================================
+function setupRates() {
+    renderRatesTable();
+    document.getElementById('saveRatesBtn')?.addEventListener('click', onSaveRates);
+}
+
+function renderRatesTable() {
+    const wrap = document.getElementById('ratesTableWrap');
+    if (!wrap) return;
+    wrap.innerHTML = `
+        <table class="rates-table">
+            <thead>
+                <tr>
+                    <th>Room</th>
+                    <th>Full Day Rate ($)</th>
+                    <th>Half Day Rate ($)</th>
+                    <th>Weekly Full ($)<br><small>All 5 weekdays full</small></th>
+                    <th>Weekly Half ($)<br><small>All 5 weekdays half</small></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${ROOMS.map(room => `
+                    <tr data-room-id="${room.id}">
+                        <td class="rates-room-label">
+                            <strong>${escHtml(room.label)}</strong>
+                            <span class="rates-ages">${escHtml(room.ages)}</span>
+                        </td>
+                        <td>
+                            <input type="number" class="rate-input" data-field="fullDayRate"
+                                value="${room.fullDayRate ?? ''}" min="0" step="0.01" placeholder="0.00">
+                        </td>
+                        <td>
+                            ${room.fullDayOnly
+                                ? '<span class="rates-na">Full day only</span>'
+                                : `<input type="number" class="rate-input" data-field="halfDayRate"
+                                    value="${room.halfDayRate ?? ''}" min="0" step="0.01" placeholder="0.00">`
+                            }
+                        </td>
+                        <td>
+                            <input type="number" class="rate-input" data-field="weeklyFullRate"
+                                value="${room.weeklyFullRate ?? ''}" min="0" step="0.01" placeholder="— disabled">
+                        </td>
+                        <td>
+                            ${room.fullDayOnly
+                                ? '<span class="rates-na">—</span>'
+                                : `<input type="number" class="rate-input" data-field="weeklyHalfRate"
+                                    value="${room.weeklyHalfRate ?? ''}" min="0" step="0.01" placeholder="— disabled">`
+                            }
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        <p class="rates-hint">💡 Weekly rates apply when a child books all 5 Mon–Fri days in a single week with the same day type. Leave blank to disable the discount for that room.</p>`;
+}
+
+async function onSaveRates() {
+    const btn      = document.getElementById('saveRatesBtn');
+    const statusEl = document.getElementById('ratesStatus');
+    if (!btn) return;
+    btn.disabled    = true;
+    btn.textContent = 'Saving…';
+    if (statusEl) { statusEl.textContent = ''; }
+
+    try {
+        const rates = {};
+        document.querySelectorAll('#ratesTableWrap tbody tr[data-room-id]').forEach(row => {
+            const id = row.dataset.roomId;
+            rates[id] = {};
+            row.querySelectorAll('.rate-input[data-field]').forEach(input => {
+                const val = input.value.trim();
+                rates[id][input.dataset.field] = val === '' ? null : parseFloat(val);
+            });
+        });
+
+        await saveRateSettings(rates);
+        await loadRateSettings(); // re-merge saved values into ROOMS
+        renderRatesTable();       // redraw inputs with freshly merged values
+
+        if (statusEl) {
+            statusEl.textContent   = '✓ Saved!';
+            statusEl.style.color   = '#2e7d32';
+            setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+    } catch (err) {
+        if (statusEl) {
+            statusEl.textContent = '⚠️ ' + err.message;
+            statusEl.style.color = '#c62828';
+        }
+        console.error('onSaveRates:', err);
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = '💾 Save Rates';
+    }
 }
 
 // ============================================================

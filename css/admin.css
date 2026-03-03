@@ -1523,3 +1523,79 @@ tr.pending-approval:hover { background: #fef3c7; }
 
 /* Make rcal-dialog position:relative so the detail panel anchors to it */
 .rcal-dialog { position: relative; }
+
+/* ============================================================
+   RATES & SETTINGS SECTION
+   ============================================================ */
+.rates-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .9em;
+    margin-bottom: 12px;
+}
+.rates-table th {
+    background: #f3f4f6;
+    color: #555;
+    font-weight: 600;
+    font-size: .82em;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 2px solid #e5e7eb;
+}
+.rates-table th small {
+    display: block;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: #888;
+    margin-top: 2px;
+}
+.rates-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    vertical-align: middle;
+}
+.rates-table tbody tr:last-child td { border-bottom: none; }
+.rates-table tbody tr:hover td { background: #fafbff; }
+
+.rates-room-label { min-width: 140px; }
+.rates-room-label strong { display: block; color: #333; }
+.rates-ages { display: block; font-size: .8em; color: #999; margin-top: 2px; }
+
+.rate-input {
+    width: 100px;
+    padding: 6px 10px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 7px;
+    font-size: .9em;
+    color: #333;
+    background: #fff;
+    transition: border-color .2s;
+}
+.rate-input:focus { outline: none; border-color: #667eea; }
+.rate-input::-webkit-inner-spin-button { opacity: .5; }
+
+.rates-na {
+    color: #bbb;
+    font-size: .85em;
+    font-style: italic;
+}
+
+.rates-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 10px;
+}
+.rates-status {
+    font-size: .9em;
+    font-weight: 600;
+}
+.rates-hint {
+    font-size: .83em;
+    color: #888;
+    margin-top: 6px;
+    margin-bottom: 0;
+}

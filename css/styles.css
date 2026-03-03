@@ -360,10 +360,11 @@ main { padding: 32px 36px; }
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,.5);
-    justify-content: center;
+    justify-content: flex-start;  /* allows tall content to scroll from top */
     align-items: center;
     z-index: 1000;
     padding: 20px;
+    overflow-y: auto;             /* enables scrolling when content is tall */
 }
 .modal[style*="flex"] { display: flex !important; }
 
@@ -375,6 +376,7 @@ main { padding: 32px 36px; }
     width: 100%;
     text-align: center;
     box-shadow: 0 12px 48px rgba(0,0,0,.25);
+    margin: auto;                 /* centers when content is short; pushes to top when tall */
 }
 .modal-icon {
     width: 56px; height: 56px;

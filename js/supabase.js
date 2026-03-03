@@ -1,42 +1,57 @@
 // ============================================================
 // ROOM CONFIG
 // ============================================================
+// ROOMS — base config. Rates can be overridden by admin via the Settings section
+// (stored in Supabase `settings` table, key = 'room_rates').
+// To enable the settings table, run in Supabase SQL Editor:
+//   CREATE TABLE IF NOT EXISTS settings (key text PRIMARY KEY, value jsonb NOT NULL);
+//   ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+//   CREATE POLICY "Public read"  ON settings FOR SELECT USING (true);
+//   CREATE POLICY "Auth write"   ON settings FOR ALL USING (auth.role() = 'authenticated');
 const ROOMS = [
     {
-        id:           'bear',
-        label:        '🐻 Bear Room',
-        ages:         'Birth – 12 months',
-        capacity:     8,
-        fullDayOnly:  true,
-        fullDayRate:  80,
-        halfDayRate:  null,
+        id:             'bear',
+        label:          '🐻 Bear Room',
+        ages:           'Birth – 12 months',
+        capacity:       8,
+        fullDayOnly:    true,
+        fullDayRate:    80,
+        halfDayRate:    null,
+        weeklyFullRate: null,   // set in admin → overrides 5×fullDayRate when all 5 weekdays booked
+        weeklyHalfRate: null,
     },
     {
-        id:           'bee',
-        label:        '🐝 Bee Room',
-        ages:         '12 – 24 months',
-        capacity:     16,
-        fullDayOnly:  false,
-        fullDayRate:  75,
-        halfDayRate:  55,
+        id:             'bee',
+        label:          '🐝 Bee Room',
+        ages:           '12 – 24 months',
+        capacity:       16,
+        fullDayOnly:    false,
+        fullDayRate:    75,
+        halfDayRate:    55,
+        weeklyFullRate: null,
+        weeklyHalfRate: null,
     },
     {
-        id:           'turtle',
-        label:        '🐢 Turtle Room',
-        ages:         '2 years',
-        capacity:     11,
-        fullDayOnly:  false,
-        fullDayRate:  75,
-        halfDayRate:  45,
+        id:             'turtle',
+        label:          '🐢 Turtle Room',
+        ages:           '2 years',
+        capacity:       11,
+        fullDayOnly:    false,
+        fullDayRate:    75,
+        halfDayRate:    45,
+        weeklyFullRate: null,
+        weeklyHalfRate: null,
     },
     {
-        id:           'owl',
-        label:        '🦉 Owl Room',
-        ages:         '3+ years',
-        capacity:     11,
-        fullDayOnly:  false,
-        fullDayRate:  75,
-        halfDayRate:  45,
+        id:             'owl',
+        label:          '🦉 Owl Room',
+        ages:           '3+ years',
+        capacity:       11,
+        fullDayOnly:    false,
+        fullDayRate:    75,
+        halfDayRate:    45,
+        weeklyFullRate: null,
+        weeklyHalfRate: null,
     },
 ];
 
@@ -629,4 +644,44 @@ async function lookupFamilyByEmailAndPin(email, pin) {
     } catch (_) {
         return null;
     }
+}
+
+// ============================================================
+// SETTINGS — room rates, weekly rates (stored in `settings` table)
+// ============================================================
+
+// Load room rates from Supabase and merge into ROOMS array.
+// Returns true if settings were loaded, false if table doesn't exist yet.
+async function loadRateSettings() {
+    if (!sbClient) return false;
+    try {
+        const { data, error } = await sbClient
+            .from('settings')
+            .select('value')
+            .eq('key', 'room_rates')
+            .maybeSingle();
+        if (error || !data) return false;
+        const rates = data.value;
+        // Merge fetched rates into ROOMS array
+        ROOMS.forEach(room => {
+            const r = rates[room.id];
+            if (!r) return;
+            if (r.fullDayRate   != null) room.fullDayRate   = r.fullDayRate;
+            if (r.halfDayRate   != null) room.halfDayRate   = r.halfDayRate;
+            if (r.weeklyFullRate != null) room.weeklyFullRate = r.weeklyFullRate;
+            if (r.weeklyHalfRate != null) room.weeklyHalfRate = r.weeklyHalfRate;
+        });
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+// Save room rates to Supabase.
+async function saveRateSettings(rates) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'room_rates', value: rates }, { onConflict: 'key' });
+    if (error) throw error;
 }

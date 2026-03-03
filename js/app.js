@@ -52,6 +52,9 @@ function getTargetMonthKey() {
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
+    // Load room rates from admin settings (no-op if settings table not yet created)
+    await loadRateSettings();
+
     regWindowOverride = (await fetchSetting('reg_window_override')) || 'auto';
 
     const win            = getRegistrationWindow();
@@ -234,12 +237,15 @@ function selectFamily(family, enteredPin = null) {
 
     const bar = document.getElementById('familySelectedBar');
     if (bar) bar.classList.remove('hidden');
+    // Show the correct parent's name and PIN in the "family selected" bar
+    const displayName = useParent2 ? (family.parent2_name || family.parent_name) : family.parent_name;
+    const displayPin  = enteredPin || (useParent2 ? family.parent2_pin : family.pin);
     const nameEl = document.getElementById('selectedFamilyName');
-    if (nameEl) nameEl.textContent = family.parent_name;
+    if (nameEl) nameEl.textContent = displayName;
     const pinEl = document.getElementById('selectedFamilyPin');
     if (pinEl) {
-        pinEl.textContent = family.pin ? `PIN: ${family.pin}` : '';
-        pinEl.style.display = family.pin ? '' : 'none';
+        pinEl.textContent = displayPin ? `PIN: ${displayPin}` : '';
+        pinEl.style.display = displayPin ? '' : 'none';
     }
 
     document.getElementById('lookupRequiredMsg')?.classList.add('hidden');
@@ -697,11 +703,55 @@ function calcDayTotal(dayType) {
     return getChildDayAmounts(dayType).reduce((s, e) => s + e.finalAmount, 0);
 }
 
+// Returns the ISO date string for the Monday of the week containing dateStr
+function getWeekMonday(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const dow = d.getDay(); // 0=Sun … 6=Sat
+    const toMon = dow === 0 ? -6 : 1 - dow;
+    const mon = new Date(d);
+    mon.setDate(d.getDate() + toMon);
+    return mon.toISOString().slice(0, 10);
+}
+
 function calcTotal() {
     if (!selectedChildren.length) return 0;
+
+    // Group dates by calendar week (Mon–Fri)
+    const byWeek = new Map();
+    for (const [dateStr, entry] of selectedDates) {
+        const wk = getWeekMonday(dateStr);
+        if (!byWeek.has(wk)) byWeek.set(wk, []);
+        byWeek.get(wk).push({ dateStr, dayType: entry.dayType });
+    }
+
     let total = 0;
-    for (const [, entry] of selectedDates) {
-        total += calcDayTotal(entry.dayType);
+    for (const [, days] of byWeek) {
+        const isFullWeek = days.length === 5;
+        const allFull    = isFullWeek && days.every(d => d.dayType === 'full');
+        const allHalf    = isFullWeek && days.every(d => d.dayType === 'half');
+
+        // Weekly rate applies only when all 5 weekdays are booked with the same day type
+        if (allFull || allHalf) {
+            const weeklyChildren = selectedChildren.map(c => {
+                const weeklyRate = allFull ? c.room.weeklyFullRate : c.room.weeklyHalfRate;
+                if (weeklyRate != null) {
+                    return effectiveRate(weeklyRate, c.discountType, c.discountValue);
+                }
+                return null; // no weekly rate for this room
+            });
+
+            if (weeklyChildren.every(v => v !== null)) {
+                // All children have a weekly rate — apply it
+                const sorted = [...weeklyChildren].sort((a, b) => b - a);
+                total += sorted.reduce((s, v, i) => s + Math.max(0, v - (i > 0 ? 10 : 0)), 0);
+                continue;
+            }
+        }
+
+        // Partial week or mixed types — sum individual days
+        for (const { dayType } of days) {
+            total += calcDayTotal(dayType);
+        }
     }
     return total;
 }
