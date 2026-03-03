@@ -176,7 +176,7 @@ async function runPinLookup() {
         const family = await lookupFamilyByPin(pin);
         if (family) {
             document.getElementById('familySearchResults').innerHTML = '';
-            selectFamily(family);
+            selectFamily(family, pin);
         } else {
             showToast(`No family found for PIN ${pin}. Please check and try again.`);
         }
@@ -209,7 +209,7 @@ function renderFamilySearchResults(families, query) {
     });
 }
 
-function selectFamily(family) {
+function selectFamily(family, enteredPin = null) {
     // Reset any state from a previous family lookup
     selectedChildren = [];
     selectedDates    = new Map();
@@ -220,9 +220,17 @@ function selectFamily(family) {
     selectedFamily = family;
     document.getElementById('familySearchResults').innerHTML = '';
 
-    setPrefilled('parentName',  family.parent_name);
-    setPrefilled('parentEmail', family.parent_email);
-    setPrefilled('parentPhone', family.parent_phone);
+    // If the entered PIN matches parent 2's PIN, prefill with parent 2 contact info
+    const useParent2 = enteredPin && family.parent2_pin &&
+        String(family.parent2_pin) === String(enteredPin) &&
+        (family.parent2_name || family.parent2_email);
+    const prefillName  = useParent2 ? (family.parent2_name  || family.parent_name)  : family.parent_name;
+    const prefillEmail = useParent2 ? (family.parent2_email || family.parent_email) : family.parent_email;
+    const prefillPhone = useParent2 ? (family.parent2_phone || family.parent_phone) : family.parent_phone;
+
+    setPrefilled('parentName',  prefillName);
+    setPrefilled('parentEmail', prefillEmail);
+    setPrefilled('parentPhone', prefillPhone);
 
     const bar = document.getElementById('familySelectedBar');
     if (bar) bar.classList.remove('hidden');
@@ -313,7 +321,6 @@ function renderChildSection() {
                            ${isSelected ? 'checked' : ''}>
                     <span class="child-card-name">${escStr(s.child_name)}</span>
                     ${dobLabel ? `<span class="child-card-dob">${dobLabel}</span>` : ''}
-                    ${room ? `<span class="child-card-room">${room.label}</span>` : '<span class="child-card-room" style="background:#fff5f5;color:#e53e3e;">Age not set</span>'}
                 </label>`;
             }).join('')}
         </div>`;
@@ -1142,25 +1149,28 @@ function openPrintSchedule({ sortedDates, childNames, monthLabel, parentName }) 
 function generateIcal(sortedDates, childNames, parentName) {
     const now = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + 'Z';
     const uid = () => `childcare-${Date.now()}-${Math.random().toString(36).slice(2,7)}@tlcmdo`;
-    const summary = `Care Day — ${childNames.join(', ')}`;
-    const desc = `Timothy Lutheran Church Mother's Day Out — ${childNames.join(', ')} (${parentName})`;
+    const desc = `Timothy Lutheran Church Mother's Day Out (${parentName})`;
 
-    const events = sortedDates.map(({ date, dayType }) => {
-        const dtStart = date.replace(/-/g, '');
+    // One calendar event per child per date
+    const events = [];
+    sortedDates.forEach(({ date, dayType }) => {
+        const dtStart  = date.replace(/-/g, '');
         const [y, m, d] = date.split('-').map(Number);
-        const nextDay   = new Date(y, m - 1, d + 1);
-        const dtEnd     = `${nextDay.getFullYear()}${String(nextDay.getMonth() + 1).padStart(2, '0')}${String(nextDay.getDate()).padStart(2, '0')}`;
-        const dayLabel  = dayType === 'half' ? '(Half Day)' : '(Full Day)';
-        return [
-            'BEGIN:VEVENT',
-            `UID:${uid()}`,
-            `DTSTAMP:${now}`,
-            `DTSTART;VALUE=DATE:${dtStart}`,
-            `DTEND;VALUE=DATE:${dtEnd}`,
-            `SUMMARY:${summary} ${dayLabel}`,
-            `DESCRIPTION:${desc}`,
-            'END:VEVENT',
-        ].join('\r\n');
+        const nextDay  = new Date(y, m - 1, d + 1);
+        const dtEnd    = `${nextDay.getFullYear()}${String(nextDay.getMonth() + 1).padStart(2, '0')}${String(nextDay.getDate()).padStart(2, '0')}`;
+        const dayLabel = dayType === 'half' ? 'Half Day' : 'Full Day';
+        childNames.forEach(childName => {
+            events.push([
+                'BEGIN:VEVENT',
+                `UID:${uid()}`,
+                `DTSTAMP:${now}`,
+                `DTSTART;VALUE=DATE:${dtStart}`,
+                `DTEND;VALUE=DATE:${dtEnd}`,
+                `SUMMARY:MDO \u2014 ${childName} \u2014 ${dayLabel}`,
+                `DESCRIPTION:${desc}`,
+                'END:VEVENT',
+            ].join('\r\n'));
+        });
     });
 
     return [

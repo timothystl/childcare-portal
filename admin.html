@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=2">
+    <link rel="stylesheet" href="css/admin.css?v=3">
 </head>
 <body class="admin-body">
 
@@ -132,6 +132,13 @@
                 <h3>Family Directory</h3>
                 <input type="search" id="familyChildSearch" class="family-search-input"
                        placeholder="Search by child or parent name…" autocomplete="off">
+                <select id="familySortBy" class="family-search-input" style="flex:0 0 auto;width:auto;">
+                    <option value="name">Sort: Name A–Z</option>
+                    <option value="room">Sort: Room</option>
+                    <option value="discount">Sort: Discount first</option>
+                    <option value="age_asc">Sort: Age (youngest first)</option>
+                    <option value="age_desc">Sort: Age (oldest first)</option>
+                </select>
                 <button id="addFamilyBtn" class="btn-primary">+ Add Family</button>
                 <button id="archiveSummerBtn" class="btn-warning">Archive Summer</button>
                 <button id="familiesToggleArchivedBtn" class="btn-ghost">Show Archived</button>
@@ -189,24 +196,21 @@
                 <select id="careMonthFilter">
                     <option value="">All care months</option>
                 </select>
-                <select id="statusFilter">
-                    <option value="">All statuses</option>
-                    <option value="confirmed">Confirmed only</option>
-                </select>
             </div>
             <div class="table-wrapper">
                 <table id="regTable">
                     <thead>
                         <tr>
-                            <th>Submitted</th>
-                            <th>Parent</th>
-                            <th>Email</th>
+                            <th data-col="submitted" class="sortable">Submitted</th>
+                            <th data-col="parent" class="sortable">Parent</th>
+                            <th data-col="email" class="sortable">Email</th>
                             <th>Phone</th>
-                            <th>Child</th>
-                            <th>Room</th>
+                            <th data-col="child" class="sortable">Child</th>
+                            <th data-col="room" class="sortable">Room</th>
                             <th>Dates</th>
-                            <th>Full/Half</th>
-                            <th>Bill</th>
+                            <th data-col="tally" class="sortable">Full/Half</th>
+                            <th data-col="bill" class="sortable">Bill</th>
+                            <th>Discount</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -338,7 +342,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="js/supabase.js?v=23"></script>
-    <script src="js/admin.js?v=22"></script>
+    <script src="js/admin.js?v=23"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 </body>
 </html>

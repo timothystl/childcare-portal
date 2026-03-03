@@ -3,6 +3,8 @@
 // ============================================================
 let allRegistrations = [];
 let allClosureDates  = new Set(); // YYYY-MM-DD strings
+let tableSortState   = { col: 'submitted', dir: 'desc' }; // default: newest first
+let familiesSortBy   = 'name'; // 'name' | 'room' | 'discount' | 'age_asc' | 'age_desc'
 
 // ============================================================
 // LOGIN  (Supabase Auth — server-validated)
@@ -196,9 +198,19 @@ function populateCareMonthFilter() {
 // TABLE RENDER
 // ============================================================
 function renderTable(data) {
+    // Update sort indicators on column headers
+    document.querySelectorAll('#regTable thead th[data-col]').forEach(th => {
+        const col = th.dataset.col;
+        const isActive = col === tableSortState.col;
+        th.classList.toggle('sort-active', isActive);
+        // Strip old indicator then re-add
+        th.textContent = th.textContent.replace(/\s*[▲▼]$/, '');
+        if (isActive) th.textContent += tableSortState.dir === 'asc' ? ' ▲' : ' ▼';
+    });
+
     const tbody = document.getElementById('regTableBody');
     if (!data.length) {
-        tbody.innerHTML = '<tr><td colspan="10" class="loading-cell">No registrations found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="loading-cell">No registrations found.</td></tr>';
         return;
     }
 
@@ -207,7 +219,7 @@ function renderTable(data) {
         const dates = (reg.registration_dates || [])
             .sort((a, b) => a.care_date.localeCompare(b.care_date));
 
-        // Date chips — show ½ day or Full, no ·C suffix (all confirmed, waitlist removed)
+        // Date chips — show ½ day or Full
         const datesHtml = dates.map(d => {
             const cls       = d.waitlisted ? 'badge-waitlist' : 'badge-confirmed';
             const typeLabel = d.day_type === 'half' ? '½ day' : 'Full';
@@ -228,6 +240,13 @@ function renderTable(data) {
 
         const bill = calcRegistrationBill(reg);
 
+        // Discount info from discount map
+        const discKey = `${(reg.parent_email || '').toLowerCase()}-${(reg.child_name || '').toLowerCase()}`;
+        const disc    = getDiscountMap().get(discKey);
+        const discLabel = disc
+            ? (disc.type === 'staff' ? 'Staff (free)' : `${disc.value}% off`)
+            : '—';
+
         return `
             <tr data-id="${reg.id}" data-room="${reg.room_id}">
                 <td>${submitted}</td>
@@ -239,6 +258,7 @@ function renderTable(data) {
                 <td class="dates-cell">${datesHtml}</td>
                 <td class="tally-cell">${tallyHtml}</td>
                 <td class="bill-cell">$${bill.toFixed(2)}</td>
+                <td class="discount-cell">${discLabel}</td>
                 <td class="actions-cell">
                     <button class="btn-delete" data-id="${reg.id}">Delete</button>
                 </td>
@@ -494,23 +514,15 @@ function drawRoomCalendar() {
         const pct      = cap > 0 ? count / cap : 0;
         const cls      = pct >= 1 ? 'rcal-cell-full' : pct >= 0.75 ? 'rcal-cell-near' : 'rcal-cell-open';
         const countLbl = cap ? `${count}/${cap}` : `${count}`;
-        const SHOW_MAX = 6;
-        const childrenHtml = enrolled.slice(0, SHOW_MAX).map(e => {
-            const half = e.dayType === 'half';
-            return `<span class="rcal-child${half ? ' rcal-child-half' : ''}">${escHtml(e.childName)}${half ? ' ½' : ''}</span>`;
-        }).join('');
-        const moreHtml = enrolled.length > SHOW_MAX
-            ? `<span class="rcal-more">+${enrolled.length - SHOW_MAX} more — click to see all</span>` : '';
-        // Embed enrolled data as JSON so the click handler can read it without another lookup
-        const enrolledJson = escHtml(JSON.stringify(enrolled));
+        const spotsLeft = Math.max(0, cap - count);
+        const slotLabel = spotsLeft === 0 ? 'Full' : `${spotsLeft} open`;
         return `
             <div class="rcal-cell ${cls} rcal-cell-clickable"
-                 data-date="${dateStr}" data-cap="${cap}"
-                 data-enrolled="${enrolledJson}"
-                 role="button" tabindex="0" title="Click to see full roster for this day">
+                 data-date="${dateStr}"
+                 role="button" tabindex="0" title="Click to view roster for this day">
                 <div class="rcal-day-num">${day}</div>
                 <div class="rcal-count">${countLbl}</div>
-                <div class="rcal-children">${childrenHtml}${moreHtml}</div>
+                <div class="rcal-slots-label">${slotLabel}</div>
             </div>`;
     }).join('');
 
@@ -940,16 +952,63 @@ async function loadClosureList() {
 // FILTERS
 // ============================================================
 function setupFilters() {
-    ['searchInput', 'roomFilter', 'careMonthFilter', 'statusFilter'].forEach(id => {
-        document.getElementById(id).addEventListener('input', applyFilters);
+    ['searchInput', 'roomFilter', 'careMonthFilter'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', applyFilters);
+    });
+
+    // Sortable column headers
+    document.querySelectorAll('#regTable thead th[data-col]').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.title = 'Click to sort';
+        th.addEventListener('click', () => {
+            const col = th.dataset.col;
+            if (tableSortState.col === col) {
+                tableSortState.dir = tableSortState.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                tableSortState = { col, dir: 'asc' };
+            }
+            applyFilters();
+        });
+    });
+}
+
+function sortRegistrations(data) {
+    const { col, dir } = tableSortState;
+    const mult = dir === 'asc' ? 1 : -1;
+    return [...data].sort((a, b) => {
+        let va, vb;
+        switch (col) {
+            case 'submitted':
+                va = a.created_at || ''; vb = b.created_at || '';
+                return mult * va.localeCompare(vb);
+            case 'parent':
+                va = (a.parent_name || '').toLowerCase(); vb = (b.parent_name || '').toLowerCase();
+                return mult * va.localeCompare(vb);
+            case 'email':
+                va = (a.parent_email || '').toLowerCase(); vb = (b.parent_email || '').toLowerCase();
+                return mult * va.localeCompare(vb);
+            case 'child':
+                va = (a.child_name || '').toLowerCase(); vb = (b.child_name || '').toLowerCase();
+                return mult * va.localeCompare(vb);
+            case 'room':
+                va = a.room_id || ''; vb = b.room_id || '';
+                return mult * va.localeCompare(vb);
+            case 'tally': {
+                const tally = reg => (reg.registration_dates || []).filter(d => !d.waitlisted).length;
+                return mult * (tally(a) - tally(b));
+            }
+            case 'bill':
+                return mult * (calcRegistrationBill(a) - calcRegistrationBill(b));
+            default:
+                return 0;
+        }
     });
 }
 
 function applyFilters() {
     const search    = document.getElementById('searchInput').value.toLowerCase();
     const room      = document.getElementById('roomFilter').value;
-    const careMonth = document.getElementById('careMonthFilter').value;   // 'YYYY-MM' or ''
-    const status    = document.getElementById('statusFilter').value;
+    const careMonth = document.getElementById('careMonthFilter').value; // 'YYYY-MM' or ''
 
     let filtered = allRegistrations.filter(reg => {
         const matchSearch = !search ||
@@ -959,19 +1018,20 @@ function applyFilters() {
         const matchRoom      = !room      || reg.room_id === room;
         const matchCareMonth = !careMonth || (reg.registration_dates || []).some(d =>
             d.care_date && d.care_date.startsWith(careMonth));
-        const matchStatus    = !status    || (reg.registration_dates || []).some(d =>
-            status === 'confirmed' ? !d.waitlisted : d.waitlisted);
-        return matchSearch && matchRoom && matchCareMonth && matchStatus;
+        return matchSearch && matchRoom && matchCareMonth;
     });
 
-    // When a care month is selected, sort by earliest care date in that month
-    if (careMonth) {
+    // When a specific care month is selected also sort by earliest care date in that month
+    // (overrides column sort for that scenario for clarity)
+    if (careMonth && tableSortState.col === 'submitted') {
         filtered = filtered.slice().sort((a, b) => {
             const earliest = regs => (regs || [])
                 .filter(d => d.care_date?.startsWith(careMonth))
                 .map(d => d.care_date).sort()[0] || '';
             return earliest(a.registration_dates).localeCompare(earliest(b.registration_dates));
         });
+    } else {
+        filtered = sortRegistrations(filtered);
     }
 
     renderTable(filtered);
@@ -1055,6 +1115,10 @@ function setupFamilies() {
     importBtn?.addEventListener('click', onImportFamilies);
     refreshBtn?.addEventListener('click', loadFamilies);
     document.getElementById('familyChildSearch')?.addEventListener('input', onFamilySearch);
+    document.getElementById('familySortBy')?.addEventListener('change', e => {
+        familiesSortBy = e.target.value;
+        onFamilySearch(); // re-render with new sort
+    });
 
     // New family management buttons
     document.getElementById('addFamilyBtn')?.addEventListener('click', () => openFamilyModal());
@@ -1339,6 +1403,43 @@ async function loadFamilies() {
     }
 }
 
+function sortFamilies(families) {
+    const sorted = [...families];
+    switch (familiesSortBy) {
+        case 'room':
+            sorted.sort((a, b) => {
+                const roomA = ((a.students || [])[0]?.room_override || '') ;
+                const roomB = ((b.students || [])[0]?.room_override || '') ;
+                return roomA.localeCompare(roomB) || (a.parent_name || '').localeCompare(b.parent_name || '');
+            });
+            break;
+        case 'discount':
+            sorted.sort((a, b) => {
+                const hasDisc = f => (f.students || []).some(s => s.discount_type && s.discount_type !== 'none');
+                return (hasDisc(b) ? 1 : 0) - (hasDisc(a) ? 1 : 0)
+                    || (a.parent_name || '').localeCompare(b.parent_name || '');
+            });
+            break;
+        case 'age_asc': // youngest first = most recent DOB first
+            sorted.sort((a, b) => {
+                const newestDob = f => (f.students || [])
+                    .map(s => s.child_dob || '').filter(Boolean).sort().reverse()[0] || '';
+                return newestDob(b).localeCompare(newestDob(a));
+            });
+            break;
+        case 'age_desc': // oldest first = earliest DOB first
+            sorted.sort((a, b) => {
+                const oldestDob = f => (f.students || [])
+                    .map(s => s.child_dob || '').filter(Boolean).sort()[0] || '';
+                return oldestDob(a).localeCompare(oldestDob(b));
+            });
+            break;
+        default: // 'name'
+            sorted.sort((a, b) => (a.parent_name || '').localeCompare(b.parent_name || ''));
+    }
+    return sorted;
+}
+
 function renderFamiliesList(families) {
     const container = document.getElementById('familiesList');
     if (!families.length) {
@@ -1348,6 +1449,7 @@ function renderFamiliesList(families) {
         return;
     }
 
+    const sorted      = sortFamilies(families);
     const roomOptions = ROOMS.map(r =>
         `<option value="${r.id}">${r.label}</option>`
     ).join('');
@@ -1361,23 +1463,12 @@ function renderFamiliesList(families) {
         </div>`;
     };
 
-    const discountBadge = s => {
-        if (!s.discount_type || s.discount_type === 'none') return '';
-        const label = s.discount_type === 'staff'
-            ? 'Staff (free)'
-            : `${s.discount_value || 0}% off`;
-        return `<span class="family-badge-discount">${label}</span>`;
-    };
-
     container.innerHTML = `
-        <p class="families-count">${families.length} famil${families.length !== 1 ? 'ies' : 'y'}${showArchivedFamilies ? ' (including archived)' : ''}</p>
+        <p class="families-count">${sorted.length} famil${sorted.length !== 1 ? 'ies' : 'y'}${showArchivedFamilies ? ' (including archived)' : ''}</p>
         <ul class="families-list">
-            ${families.map(f => {
+            ${sorted.map(f => {
                 const kids     = (f.students || []);
                 const archived = f.active === false;
-                const since    = f.created_at
-                    ? new Date(f.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                    : '';
                 return `
                     <li class="family-row${archived ? ' family-row-archived' : ''}">
                         <div class="family-row-top">
@@ -1390,7 +1481,6 @@ function renderFamiliesList(families) {
                             </div>
                             ${(f.parent2_name || f.parent2_email) ? parentRow(f.parent2_name, f.parent2_email, f.parent2_phone, f.parent2_pin) : ''}
                             <div class="family-row-actions">
-                                ${since ? `<span class="family-row-since">Since ${since}</span>` : ''}
                                 ${!archived
                                     ? `<button class="fm-edit-btn" data-family-id="${f.id}" title="Edit family">✏ Edit</button>
                                        <button class="fm-archive-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Archive family">Archive</button>`
@@ -1405,17 +1495,30 @@ function renderFamiliesList(families) {
                                         ? new Date(s.child_dob + 'T00:00:00').toLocaleDateString('en-US',
                                             { month: 'short', day: 'numeric', year: 'numeric' })
                                         : '';
+                                    const dt = s.discount_type || 'none';
+                                    const dv = s.discount_value || 0;
                                     return `<li class="family-student-item" data-student-id="${s.id}">
                                         <span class="student-bullet">└</span>
                                         <span class="student-name">${escHtml(s.child_name)}</span>
                                         ${dobStr ? `<span class="student-dob">${dobStr}</span>` : ''}
-                                        ${discountBadge(s)}
                                         <div class="room-override-wrap">
                                             <label class="room-override-label">Room:</label>
                                             <select class="room-override-select" data-student-id="${s.id}">
                                                 <option value="">Auto (age-based)</option>
                                                 ${roomOptions}
                                             </select>
+                                        </div>
+                                        <div class="room-override-wrap">
+                                            <label class="room-override-label">Discount:</label>
+                                            <select class="discount-type-inline" data-student-id="${s.id}">
+                                                <option value="none"   ${dt === 'none'   ? 'selected' : ''}>None</option>
+                                                <option value="staff"  ${dt === 'staff'  ? 'selected' : ''}>Staff (free)</option>
+                                                <option value="custom" ${dt === 'custom' ? 'selected' : ''}>Custom %</option>
+                                            </select>
+                                            <input type="number" class="discount-value-inline"
+                                                   data-student-id="${s.id}"
+                                                   value="${dv}" min="0" max="100" step="1"
+                                                   placeholder="%" style="width:52px;${dt !== 'custom' ? 'display:none' : ''}">
                                         </div>
                                     </li>`;
                                 }).join('')}
@@ -1424,21 +1527,53 @@ function renderFamiliesList(families) {
             }).join('')}
         </ul>`;
 
-    // Set current room override values + bind change events
-    families.forEach(f => {
+    // Bind room override + discount change events
+    sorted.forEach(f => {
         (f.students || []).forEach(s => {
-            const sel = container.querySelector(`.room-override-select[data-student-id="${s.id}"]`);
-            if (sel) {
-                sel.value = s.room_override || '';
-                sel.addEventListener('change', async () => {
-                    const newVal = sel.value || null;
+            // Room override
+            const roomSel = container.querySelector(`.room-override-select[data-student-id="${s.id}"]`);
+            if (roomSel) {
+                roomSel.value = s.room_override || '';
+                roomSel.addEventListener('change', async () => {
                     try {
-                        await updateStudentRoomOverride(s.id, newVal);
-                        sel.style.borderColor = '#68d391';
-                        setTimeout(() => { sel.style.borderColor = ''; }, 2000);
+                        await updateStudentRoomOverride(s.id, roomSel.value || null);
+                        roomSel.style.borderColor = '#68d391';
+                        setTimeout(() => { roomSel.style.borderColor = ''; }, 2000);
                     } catch (err) {
                         alert('Failed to update room: ' + err.message);
-                        sel.value = s.room_override || '';
+                        roomSel.value = s.room_override || '';
+                    }
+                });
+            }
+
+            // Inline discount
+            const discSel = container.querySelector(`.discount-type-inline[data-student-id="${s.id}"]`);
+            const discVal = container.querySelector(`.discount-value-inline[data-student-id="${s.id}"]`);
+            if (discSel) {
+                discSel.addEventListener('change', async () => {
+                    if (discVal) discVal.style.display = discSel.value === 'custom' ? '' : 'none';
+                    if (discSel.value !== 'custom') {
+                        try {
+                            await updateStudent(s.id, { discount_type: discSel.value, discount_value: null });
+                            _discountMap = null;
+                            discSel.style.borderColor = '#68d391';
+                            setTimeout(() => { discSel.style.borderColor = ''; }, 2000);
+                        } catch (err) {
+                            alert('Failed to update discount: ' + err.message);
+                        }
+                    }
+                });
+            }
+            if (discVal) {
+                discVal.addEventListener('change', async () => {
+                    const val = parseFloat(discVal.value) || 0;
+                    try {
+                        await updateStudent(s.id, { discount_type: 'custom', discount_value: val });
+                        _discountMap = null;
+                        discVal.style.borderColor = '#68d391';
+                        setTimeout(() => { discVal.style.borderColor = ''; }, 2000);
+                    } catch (err) {
+                        alert('Failed to update discount: ' + err.message);
                     }
                 });
             }

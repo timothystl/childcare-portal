@@ -201,6 +201,10 @@
     font-weight: 600;
     white-space: nowrap;
 }
+#regTable thead th.sortable { cursor: pointer; user-select: none; }
+#regTable thead th.sortable:hover { background: #5a6fd6; }
+#regTable thead th.sort-active { background: #4c5fc4; }
+.discount-cell { font-size: .85em; color: #553c9a; font-weight: 500; }
 
 #regTable tbody tr { border-bottom: 1px solid #f0f0f0; }
 #regTable tbody tr:hover { background: #f8f9ff; }
@@ -1116,25 +1120,10 @@ tr.pending-approval:hover { background: #fef3c7; }
     color: #a0aec0;
     font-style: italic;
 }
-.rcal-children {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
+.rcal-slots-label {
+    font-size: .72em;
+    color: #718096;
     margin-top: 2px;
-    overflow: hidden;
-}
-.rcal-child {
-    font-size: .68em;
-    color: #4a5568;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.4;
-}
-.rcal-child-half { color: #c05621; }
-.rcal-more {
-    font-size: .65em;
-    color: #a0aec0;
     font-style: italic;
 }
 
