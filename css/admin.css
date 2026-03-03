@@ -644,21 +644,33 @@ tr.pending-approval:hover { background: #fef3c7; }
     font-size: .88em;
 }
 
-/* Family list header */
-.families-list-header {
+/* Family directory controls bar */
+.families-dir-controls {
     display: flex;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
-    margin-bottom: 14px;
-    border-top: 1.5px solid #eee;
-    padding-top: 18px;
+    margin-bottom: 16px;
 }
-.families-list-header h3 {
-    font-size: 1em;
-    color: #333;
-    font-weight: 700;
-    margin-right: auto;
+
+/* Import divider */
+.families-import-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 24px 0 14px;
+    color: #aaa;
+    font-size: .8em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+.families-import-divider::before,
+.families-import-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e8e8f0;
 }
 .family-search-input {
     border: 1.5px solid #ddd;
@@ -683,8 +695,6 @@ tr.pending-approval:hover { background: #fef3c7; }
     display: flex;
     flex-direction: column;
     gap: 10px;
-    max-height: 600px;
-    overflow-y: auto;
     padding-right: 4px;
 }
 
@@ -737,57 +747,64 @@ tr.pending-approval:hover { background: #fef3c7; }
     white-space: nowrap;
 }
 
-/* Students nested list */
+/* Students nested list — CSS grid for column alignment */
 .family-students {
     list-style: none;
-    margin-top: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding-left: 8px;
-}
-
-.family-student-item {
-    display: flex;
+    margin-top: 8px;
+    padding-left: 0;
+    display: grid;
+    /* bullet | name | dob | room | discount */
+    grid-template-columns: 18px minmax(100px, 1fr) 110px 215px 230px;
     align-items: center;
-    gap: 8px;
+    row-gap: 6px;
+    column-gap: 10px;
     font-size: .86em;
     color: #555;
 }
 
+/* Each <li> participates in the parent grid directly */
+.family-student-item {
+    display: contents;
+}
+
 .student-bullet {
-    color: #bbb;
+    color: #ccc;
     font-size: .9em;
-    flex-shrink: 0;
+    text-align: center;
 }
 
 .student-name {
     font-weight: 500;
     color: #444;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .student-dob {
     color: #aaa;
     font-size: .9em;
+    white-space: nowrap;
 }
 
 /* ============================================================
-   ROOM OVERRIDE DROPDOWN (in family directory)
+   ROOM OVERRIDE & DISCOUNT DROPDOWNS (family directory)
    ============================================================ */
-.room-override-wrap {
+.room-override-wrap,
+.discount-wrap {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-left: auto;
-    flex-shrink: 0;
+    gap: 5px;
 }
 .room-override-label {
     font-size: .78em;
     color: #888;
     white-space: nowrap;
+    flex-shrink: 0;
 }
-.room-override-select {
-    padding: 4px 8px;
+.room-override-select,
+.discount-type-inline {
+    padding: 4px 6px;
     border: 1.5px solid #d6d0f5;
     border-radius: 6px;
     font-size: .78em;
@@ -795,18 +812,11 @@ tr.pending-approval:hover { background: #fef3c7; }
     color: #444;
     cursor: pointer;
     transition: border-color .2s;
-    max-width: 180px;
+    flex: 1;
+    min-width: 0;
 }
-.room-override-select:focus { outline: none; border-color: #667eea; }
-
-.family-student-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: .86em;
-    color: #555;
-    flex-wrap: wrap;
-}
+.room-override-select:focus,
+.discount-type-inline:focus { outline: none; border-color: #667eea; }
 
 /* ============================================================
    MESSAGES SECTION

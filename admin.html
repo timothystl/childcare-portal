@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=5">
+    <link rel="stylesheet" href="css/admin.css?v=6">
 </head>
 <body class="admin-body">
 
@@ -45,7 +45,6 @@
             </div>
             <div class="header-actions">
                 <button id="refreshBtn" class="btn-secondary">&#8635; Refresh</button>
-                <button id="exportCsvBtn" class="btn-secondary">&#8595; Export CSV</button>
                 <button id="exportXlsxBtn" class="btn-primary">&#8595; Export Excel</button>
                 <button id="logoutBtn" class="btn-ghost">Logout</button>
             </div>
@@ -133,25 +132,31 @@
         <!-- ── Tab: Families ──────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-families">
 
-            <!-- Families & Students -->
-            <section class="admin-section" id="familiesSection">
-                <h2>👨‍👩‍👧 Families &amp; Students</h2>
-                <p class="section-desc">Import from a ProCare or custom Excel / CSV file, or browse the family directory used for parent look-up. You can also force-assign a child to a specific room.</p>
-
-                <div class="families-import-row">
-                    <label class="file-upload-label" for="familiesFileInput">📂 Choose File</label>
-                    <input type="file" id="familiesFileInput" accept=".xlsx,.xls,.csv" class="hidden-file-input">
-                    <span id="familiesFileName" class="families-file-name">No file chosen</span>
-                    <button id="importFamiliesBtn" class="btn-primary" disabled>⬆ Import</button>
+            <!-- Messages (top) -->
+            <section class="admin-section" id="messagesSection">
+                <h2>💬 Parent Messages</h2>
+                <p class="section-desc">Messages sent by parents via the Contact Us button on the registration portal.</p>
+                <div class="messages-header">
+                    <button id="refreshMessagesBtn" class="btn-secondary">&#8635; Refresh</button>
+                    <button id="toggleArchivedBtn" class="btn-secondary">Show Archived</button>
+                    <span id="unreadBadge" class="unread-badge hidden"></span>
                 </div>
-                <div id="importPreview" class="import-preview"></div>
+                <div id="messagesList">
+                    <p class="empty-hint">Click Refresh to load messages.</p>
+                </div>
+            </section>
 
-                <div class="families-list-header">
-                    <h3>Family Directory</h3>
+            <!-- Family Directory -->
+            <section class="admin-section" id="familiesSection">
+                <h2>👨‍👩‍👧 Family Directory</h2>
+                <p class="section-desc">Browse and manage the family roster used for parent look-up. You can force-assign a child to a specific room or set per-child discounts inline.</p>
+
+                <div class="families-dir-controls">
                     <input type="search" id="familyChildSearch" class="family-search-input"
                            placeholder="Search by child or parent name…" autocomplete="off">
                     <select id="familySortBy" class="family-search-input" style="flex:0 0 auto;width:auto;">
-                        <option value="name">Sort: Name A–Z</option>
+                        <option value="name">Sort: Family Name A–Z</option>
+                        <option value="child_name">Sort: Child Name A–Z</option>
                         <option value="room">Sort: Room</option>
                         <option value="discount">Sort: Discount first</option>
                         <option value="age_asc">Sort: Age (youngest first)</option>
@@ -165,20 +170,19 @@
                 <div id="familiesList">
                     <p class="empty-hint">Click Refresh to load families.</p>
                 </div>
-            </section>
 
-            <!-- Messages -->
-            <section class="admin-section" id="messagesSection">
-                <h2>💬 Parent Messages</h2>
-                <p class="section-desc">Messages sent by parents via the Contact Us button on the registration portal.</p>
-                <div class="messages-header">
-                    <button id="refreshMessagesBtn" class="btn-secondary">&#8635; Refresh</button>
-                    <button id="toggleArchivedBtn" class="btn-secondary">Show Archived</button>
-                    <span id="unreadBadge" class="unread-badge hidden"></span>
+                <!-- Import — bottom of section -->
+                <div class="families-import-divider">
+                    <span>Import from Excel / CSV</span>
                 </div>
-                <div id="messagesList">
-                    <p class="empty-hint">Click Refresh to load messages.</p>
+                <div class="families-import-row">
+                    <label class="file-upload-label" for="familiesFileInput">📂 Choose File</label>
+                    <input type="file" id="familiesFileInput" accept=".xlsx,.xls,.csv" class="hidden-file-input">
+                    <span id="familiesFileName" class="families-file-name">No file chosen</span>
+                    <button id="importFamiliesBtn" class="btn-primary" disabled>⬆ Import</button>
                 </div>
+                <p class="section-desc" style="margin-top:6px;">Supports ProCare and custom Excel/CSV exports. Existing families matched by email are updated; new emails are added. No records are deleted.</p>
+                <div id="importPreview" class="import-preview"></div>
             </section>
 
         </div><!-- /#tab-families -->
@@ -384,7 +388,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="js/supabase.js?v=24"></script>
-    <script src="js/admin.js?v=25"></script>
+    <script src="js/admin.js?v=26"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 </body>
 </html>

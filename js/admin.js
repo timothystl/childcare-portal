@@ -79,7 +79,6 @@ async function initDashboard() {
     setupTabs();
     setupCollapsibles();
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
-    document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
 }
 
@@ -167,7 +166,7 @@ async function loadRegistrations() {
         renderTable(allRegistrations);
         renderCapacityOverview();
         document.getElementById('regCount').textContent =
-            `${allRegistrations.length} registration${allRegistrations.length !== 1 ? 's' : ''} total`;
+            `${allRegistrations.length} submission${allRegistrations.length !== 1 ? 's' : ''} total (one per child per form)`;
     } catch (err) {
         console.error(err);
         document.getElementById('regTableBody').innerHTML =
@@ -1440,6 +1439,13 @@ function sortFamilies(families) {
                 return oldestDob(a).localeCompare(oldestDob(b));
             });
             break;
+        case 'child_name':
+            sorted.sort((a, b) => {
+                const firstChild = f => ((f.students || [])[0]?.child_name || '').toLowerCase();
+                return firstChild(a).localeCompare(firstChild(b))
+                    || (a.parent_name || '').localeCompare(b.parent_name || '');
+            });
+            break;
         default: // 'name'
             sorted.sort((a, b) => (a.parent_name || '').localeCompare(b.parent_name || ''));
     }
@@ -1506,7 +1512,7 @@ function renderFamiliesList(families) {
                                     return `<li class="family-student-item" data-student-id="${s.id}">
                                         <span class="student-bullet">└</span>
                                         <span class="student-name">${escHtml(s.child_name)}</span>
-                                        ${dobStr ? `<span class="student-dob">${dobStr}</span>` : ''}
+                                        <span class="student-dob">${dobStr}</span>
                                         <div class="room-override-wrap">
                                             <label class="room-override-label">Room:</label>
                                             <select class="room-override-select" data-student-id="${s.id}">
@@ -1514,7 +1520,7 @@ function renderFamiliesList(families) {
                                                 ${roomOptions}
                                             </select>
                                         </div>
-                                        <div class="room-override-wrap">
+                                        <div class="discount-wrap">
                                             <label class="room-override-label">Discount:</label>
                                             <select class="discount-type-inline" data-student-id="${s.id}">
                                                 <option value="none"   ${dt === 'none'   ? 'selected' : ''}>None</option>
