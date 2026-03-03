@@ -198,7 +198,9 @@ main { padding: 32px 36px; }
 
 .calendar {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    /* minmax(0,1fr) lets columns shrink below content min-width —
+       prevents grid from overflowing the container and clipping Friday */
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 6px;
     margin-bottom: 16px;
 }
@@ -225,6 +227,8 @@ main { padding: 32px 36px; }
     transition: transform .15s, box-shadow .15s;
     position: relative;
     padding: 4px;
+    min-width: 0;      /* allow cell to shrink below content natural width */
+    overflow: hidden;  /* clip any text that still won't fit */
 }
 .cal-day.empty        { border: none; cursor: default; }
 .cal-day.past         { opacity: .3; cursor: default; }
@@ -1046,6 +1050,13 @@ input.prefilled {
     margin-top: 2px;
 }
 
+/* Inline discount note shown after a rate, e.g. "$0 (staff)" */
+.disc-note {
+    font-size: .82em;
+    color: #667eea;
+    font-style: italic;
+}
+
 /* ============================================================
    RECEIPT ERROR NOTE
    ============================================================ */
@@ -1201,7 +1212,7 @@ input.prefilled {
     .cal-day  { border-radius: 4px; }
     .day-num  { font-size: .85em; }
     /* Show spot counts on mobile — smaller font but visible */
-    .spot-badge { font-size: .58em; white-space: nowrap; }
+    .spot-badge { font-size: .58em; }
     .date-row { flex-direction: column; align-items: flex-start; }
     .date-controls { width: 100%; justify-content: space-between; }
     .lookup-row { flex-direction: column; }

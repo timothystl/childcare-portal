@@ -302,7 +302,7 @@ async function searchFamilies(query) {
     try {
         const { data, error } = await sbClient
             .from('families')
-            .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override)')
+            .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
             .or(`parent_name.ilike.%${query}%,parent_email.ilike.%${query}%`)
             .order('parent_name')
             .limit(8);
@@ -358,7 +358,7 @@ async function lookupFamilyByPin(pin) {
     try {
         const { data, error } = await sbClient
             .from('families')
-            .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override)')
+            .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
             .eq('pin', parseInt(pin, 10))
             .maybeSingle();
         if (error) { console.error('lookupFamilyByPin:', error); return null; }

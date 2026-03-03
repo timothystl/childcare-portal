@@ -303,6 +303,8 @@ function renderChildSection() {
                            data-name="${escStr(s.child_name)}"
                            data-dob="${escStr(s.child_dob || '')}"
                            data-room-override="${escStr(s.room_override || '')}"
+                           data-discount-type="${escStr(s.discount_type || 'none')}"
+                           data-discount-value="${escStr(String(s.discount_value || 0))}"
                            ${isSelected ? 'checked' : ''}>
                     <span class="child-card-name">${escStr(s.child_name)}</span>
                     ${dobLabel ? `<span class="child-card-dob">${dobLabel}</span>` : ''}
@@ -327,7 +329,11 @@ function renderChildSection() {
             cb.closest('.child-card-label').classList.toggle('selected', cb.checked);
             if (cb.checked) {
                 if (!selectedChildren.some(c => c.studentId === studentId)) {
-                    selectedChildren.push({ name: childName, dob: childDob, room, isNew: false, studentId });
+                    selectedChildren.push({
+                        name: childName, dob: childDob, room, isNew: false, studentId,
+                        discountType:  cb.dataset.discountType  || 'none',
+                        discountValue: parseFloat(cb.dataset.discountValue || '0'),
+                    });
                     onChildrenChanged();
                 }
             } else {
@@ -606,6 +612,31 @@ function outsideClickHandler(e) {
 }
 
 // ============================================================
+// DISCOUNT HELPERS
+// ============================================================
+// Returns the discounted rate for one child on one day.
+// discountType: 'none' | 'staff' | 'custom'
+// discountValue: percentage (0–100)
+function effectiveRate(baseRate, discountType, discountValue) {
+    if (!baseRate) return 0;
+    if (discountType === 'staff') return 0;
+    if (discountType === 'custom' && discountValue > 0)
+        return Math.round(baseRate * (1 - discountValue / 100) * 100) / 100;
+    return baseRate;
+}
+
+// Returns an HTML string showing the discounted rate with an inline note.
+function formatChildRate(child, dayType) {
+    const base = dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0);
+    const rate = effectiveRate(base, child.discountType, child.discountValue);
+    if (child.discountType === 'staff')
+        return `$0<span class="disc-note"> (staff)</span>`;
+    if (child.discountType === 'custom' && child.discountValue > 0)
+        return `$${rate}<span class="disc-note"> (${child.discountValue}% off)</span>`;
+    return `$${rate}`;
+}
+
+// ============================================================
 // SELECTED DATES + BILLING TOTAL (multi-child aware)
 // ============================================================
 function calcTotal() {
@@ -613,9 +644,10 @@ function calcTotal() {
     let total = 0;
     for (const [, entry] of selectedDates) {
         for (const child of selectedChildren) {
-            total += entry.dayType === 'half'
+            const base = entry.dayType === 'half'
                 ? (child.room.halfDayRate || 0)
                 : (child.room.fullDayRate || 0);
+            total += effectiveRate(base, child.discountType, child.discountValue);
         }
     }
     return total;
@@ -633,13 +665,16 @@ function renderSelectedDates() {
         let dayTypeLabel = '';
         if (selectedChildren.length) {
             const typeText  = entry.dayType === 'half' ? 'Half Day' : 'Full Day';
-            const lineTotal = selectedChildren.reduce((s, c) =>
-                s + (entry.dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0)), 0);
+            const lineTotal = selectedChildren.reduce((s, c) => {
+                const base = entry.dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
+                return s + effectiveRate(base, c.discountType, c.discountValue);
+            }, 0);
             if (selectedChildren.length === 1) {
-                dayTypeLabel = `<span class="day-type-label">${typeText} — $${lineTotal}</span>`;
+                const child = selectedChildren[0];
+                dayTypeLabel = `<span class="day-type-label">${typeText} — ${formatChildRate(child, entry.dayType)}</span>`;
             } else {
                 const breakdown = selectedChildren
-                    .map(c => `${escStr(c.name)}: $${entry.dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0)}`)
+                    .map(c => `${escStr(c.name)}: ${formatChildRate(c, entry.dayType)}`)
                     .join(' · ');
                 dayTypeLabel = `<span class="day-type-label">${typeText} — $${lineTotal}</span><span class="rate-breakdown">${breakdown}</span>`;
             }
@@ -658,10 +693,14 @@ function renderSelectedDates() {
     }).join('');
 
     const total = calcTotal();
+    const hasDiscount = selectedChildren.some(c => c.discountType && c.discountType !== 'none');
+    const discountNote = hasDiscount
+        ? `<span class="billing-note">Discount(s) applied — confirm exact amount with office.</span>`
+        : '';
     container.innerHTML = `
         <ul class="date-list">${rows}</ul>
         <div class="billing-total">
-            Estimated total: <strong>$${total.toFixed(2)}</strong>
+            Estimated total: <strong>$${total.toFixed(2)}</strong>${discountNote}
         </div>`;
 
     container.querySelectorAll('.remove-btn').forEach(btn => {
@@ -882,8 +921,10 @@ async function handleSubmit(e) {
         if (sortedDates.length) {
             const receiptRows = sortedDates.map(({ date, dayType }) => {
                 const typeLabel  = dayType === 'half' ? 'Half Day' : 'Full Day';
-                const lineTotal  = results.reduce((s, { child }) =>
-                    s + (dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0)), 0);
+                const lineTotal  = results.reduce((s, { child }) => {
+                    const base = dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0);
+                    return s + effectiveRate(base, child.discountType, child.discountValue);
+                }, 0);
                 return `<tr>
                     <td>${friendlyDate(date)}</td>
                     <td>${typeLabel}</td>
@@ -892,8 +933,10 @@ async function handleSubmit(e) {
             }).join('');
 
             const grandTotal = results.reduce((s, { child }) =>
-                sortedDates.reduce((ss, { dayType }) =>
-                    ss + (dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0)), s), 0);
+                sortedDates.reduce((ss, { dayType }) => {
+                    const base = dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0);
+                    return ss + effectiveRate(base, child.discountType, child.discountValue);
+                }, s), 0);
 
             receiptHtml = `
                 <table class="receipt-table">
