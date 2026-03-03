@@ -1200,7 +1200,8 @@ input.prefilled {
     .calendar { gap: 3px; }
     .cal-day  { border-radius: 4px; }
     .day-num  { font-size: .85em; }
-    .spot-badge { display: none; }
+    /* Show spot counts on mobile — smaller font but visible */
+    .spot-badge { font-size: .58em; white-space: nowrap; }
     .date-row { flex-direction: column; align-items: flex-start; }
     .date-controls { width: 100%; justify-content: space-between; }
     .lookup-row { flex-direction: column; }
@@ -1210,4 +1211,41 @@ input.prefilled {
     .field-grid-3 .form-group-btn { grid-column: 1 / -1; }
     .child-cards-row { gap: 8px; }
     .child-card-label { min-width: 130px; }
+
+    /* ---- Floating action button fixes ---------------------------------- */
+    /* Add bottom padding so the last calendar row can always scroll        */
+    /* above the fixed buttons.                                              */
+    body { padding-bottom: 130px; }
+
+    /* Hide the text label — show icon only so buttons are compact          */
+    .fab-label { display: none; }
+
+    /* Move buttons to the LEFT side so they never cover the Friday column. */
+    /* Icon-only circles: 44 × 44 px (minimum comfortable tap target).      */
+    .btn-contact-float {
+        left: 12px;
+        right: auto;
+        bottom: 16px;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25em;
+    }
+    .btn-view-schedule-float {
+        left: 12px;
+        right: auto;
+        bottom: 68px;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25em;
+    }
 }
