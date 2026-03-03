@@ -356,10 +356,11 @@ async function searchFamiliesFromRegistrations(query) {
 async function lookupFamilyByPin(pin) {
     if (!sbClient) return null;
     try {
+        const parsedPin = parseInt(pin, 10);
         const { data, error } = await sbClient
             .from('families')
-            .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
-            .eq('pin', parseInt(pin, 10))
+            .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
+            .or(`pin.eq.${parsedPin},parent2_pin.eq.${parsedPin}`)
             .maybeSingle();
         if (error) { console.error('lookupFamilyByPin:', error); return null; }
         return data || null;

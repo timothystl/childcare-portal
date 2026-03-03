@@ -210,6 +210,13 @@ function renderFamilySearchResults(families, query) {
 }
 
 function selectFamily(family) {
+    // Reset any state from a previous family lookup
+    selectedChildren = [];
+    selectedDates    = new Map();
+    capacityCache    = {};
+    closeDayPicker();
+    hideCalendar();
+
     selectedFamily = family;
     document.getElementById('familySearchResults').innerHTML = '';
 
@@ -295,8 +302,6 @@ function renderChildSection() {
                 const dobLabel   = s.child_dob
                     ? new Date(s.child_dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                     : '';
-                const overrideNote = s.room_override
-                    ? `<span class="child-card-override">Assigned by office</span>` : '';
                 return `<label class="child-card-label${isSelected ? ' selected' : ''}" data-student-id="${s.id}">
                     <input type="checkbox" class="child-card-checkbox"
                            data-student-id="${s.id}"
@@ -309,7 +314,6 @@ function renderChildSection() {
                     <span class="child-card-name">${escStr(s.child_name)}</span>
                     ${dobLabel ? `<span class="child-card-dob">${dobLabel}</span>` : ''}
                     ${room ? `<span class="child-card-room">${room.label}</span>` : '<span class="child-card-room" style="background:#fff5f5;color:#e53e3e;">Age not set</span>'}
-                    ${overrideNote}
                 </label>`;
             }).join('')}
         </div>`;
@@ -335,6 +339,17 @@ function renderChildSection() {
                         discountValue: parseFloat(cb.dataset.discountValue || '0'),
                     });
                     onChildrenChanged();
+                    // Non-blocking: warn if already registered for the target month
+                    const monthKey = getTargetMonthKey();
+                    const email    = selectedFamily?.parent_email;
+                    if (email) {
+                        checkExistingRegistration(email, monthKey, childName).then(existing => {
+                            if (existing) {
+                                const { targetLabel } = getRegistrationWindow();
+                                showToast(`⚠️ ${childName} may already be registered for ${targetLabel}. Verify before submitting.`);
+                            }
+                        }).catch(() => {});
+                    }
                 }
             } else {
                 const idx = selectedChildren.findIndex(c => c.studentId === studentId);
@@ -391,22 +406,36 @@ async function loadMonthCapacity() {
 
 function getDateStatus(dateStr) {
     if (!selectedChildren.length) return 'disabled';
-    let worstStatus = 'available';
+    // Count how many selected children share each room (siblings each need a spot)
+    const spotsNeeded = {};
     for (const child of selectedChildren) {
-        const booked   = (capacityCache[child.room.id] || {})[dateStr] || 0;
-        const capacity = child.room.capacity;
-        if (booked >= capacity)     return 'full';
-        if (booked >= capacity - 3) worstStatus = 'limited';
+        spotsNeeded[child.room.id] = (spotsNeeded[child.room.id] || 0) + 1;
+    }
+    let worstStatus = 'available';
+    for (const [roomId, needed] of Object.entries(spotsNeeded)) {
+        const room      = ROOMS.find(r => r.id === roomId);
+        const booked    = (capacityCache[roomId] || {})[dateStr] || 0;
+        const available = (room?.capacity || 0) - booked;
+        if (available < needed)           return 'full';
+        if (available - needed < 3)       worstStatus = 'limited';
     }
     return worstStatus;
 }
 
 function spotsLeft(dateStr) {
     if (!selectedChildren.length) return 0;
-    return Math.min(...selectedChildren.map(child => {
-        const booked = (capacityCache[child.room.id] || {})[dateStr] || 0;
-        return Math.max(0, child.room.capacity - booked);
-    }));
+    const spotsNeeded = {};
+    for (const child of selectedChildren) {
+        spotsNeeded[child.room.id] = (spotsNeeded[child.room.id] || 0) + 1;
+    }
+    let minEffective = Infinity;
+    for (const [roomId, needed] of Object.entries(spotsNeeded)) {
+        const room      = ROOMS.find(r => r.id === roomId);
+        const booked    = (capacityCache[roomId] || {})[dateStr] || 0;
+        const available = Math.max(0, (room?.capacity || 0) - booked);
+        minEffective    = Math.min(minEffective, Math.max(0, available - needed + 1));
+    }
+    return minEffective === Infinity ? 0 : minEffective;
 }
 
 // ============================================================
@@ -639,16 +668,33 @@ function formatChildRate(child, dayType) {
 // ============================================================
 // SELECTED DATES + BILLING TOTAL (multi-child aware)
 // ============================================================
+
+// Returns per-child amounts for a given day type, applying:
+//   1. Per-child individual discount (staff / custom %)
+//   2. Multi-child discount: 2nd+ children get $10 off (sorted highest-rate first)
+function getChildDayAmounts(dayType) {
+    const entries = selectedChildren.map(c => {
+        const base = dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
+        return { child: c, eff: effectiveRate(base, c.discountType, c.discountValue) };
+    }).sort((a, b) => b.eff - a.eff);   // highest payer first
+
+    return entries.map((entry, i) => ({
+        child:         entry.child,
+        preMulti:      entry.eff,               // rate after individual discount
+        multiDiscount: i > 0 ? Math.min(10, entry.eff) : 0,
+        finalAmount:   Math.max(0, entry.eff - (i > 0 ? 10 : 0)),
+    }));
+}
+
+function calcDayTotal(dayType) {
+    return getChildDayAmounts(dayType).reduce((s, e) => s + e.finalAmount, 0);
+}
+
 function calcTotal() {
     if (!selectedChildren.length) return 0;
     let total = 0;
     for (const [, entry] of selectedDates) {
-        for (const child of selectedChildren) {
-            const base = entry.dayType === 'half'
-                ? (child.room.halfDayRate || 0)
-                : (child.room.fullDayRate || 0);
-            total += effectiveRate(base, child.discountType, child.discountValue);
-        }
+        total += calcDayTotal(entry.dayType);
     }
     return total;
 }
@@ -660,23 +706,28 @@ function renderSelectedDates() {
         return;
     }
 
+    const hasIndivDiscount  = selectedChildren.some(c => c.discountType && c.discountType !== 'none');
+    const hasMultiDiscount  = selectedChildren.length > 1;
+    const hasAnyDiscount    = hasIndivDiscount || hasMultiDiscount;
+
     const sorted = [...selectedDates.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     const rows = sorted.map(([dateStr, entry]) => {
         let dayTypeLabel = '';
         if (selectedChildren.length) {
-            const typeText  = entry.dayType === 'half' ? 'Half Day' : 'Full Day';
-            const lineTotal = selectedChildren.reduce((s, c) => {
-                const base = entry.dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
-                return s + effectiveRate(base, c.discountType, c.discountValue);
-            }, 0);
+            const typeText   = entry.dayType === 'half' ? 'Half Day' : 'Full Day';
+            const dayAmounts = getChildDayAmounts(entry.dayType);
+            const lineTotal  = dayAmounts.reduce((s, e) => s + e.finalAmount, 0);
+
             if (selectedChildren.length === 1) {
-                const child = selectedChildren[0];
-                dayTypeLabel = `<span class="day-type-label">${typeText} — ${formatChildRate(child, entry.dayType)}</span>`;
+                const amt = dayAmounts[0];
+                dayTypeLabel = `<span class="day-type-label">${typeText} — ${formatChildRate(amt.child, entry.dayType)}</span>`;
             } else {
-                const breakdown = selectedChildren
-                    .map(c => `${escStr(c.name)}: ${formatChildRate(c, entry.dayType)}`)
-                    .join(' · ');
-                dayTypeLabel = `<span class="day-type-label">${typeText} — $${lineTotal}</span><span class="rate-breakdown">${breakdown}</span>`;
+                const breakdown = dayAmounts.map(amt => {
+                    const multiNote = amt.multiDiscount > 0
+                        ? `<span class="disc-note"> (−$${amt.multiDiscount} sibling)</span>` : '';
+                    return `${escStr(amt.child.name)}: $${amt.finalAmount.toFixed(2)}${multiNote}`;
+                }).join(' · ');
+                dayTypeLabel = `<span class="day-type-label">${typeText} — $${lineTotal.toFixed(2)}</span><span class="rate-breakdown">${breakdown}</span>`;
             }
         }
 
@@ -692,15 +743,15 @@ function renderSelectedDates() {
             </li>`;
     }).join('');
 
-    const total = calcTotal();
-    const hasDiscount = selectedChildren.some(c => c.discountType && c.discountType !== 'none');
-    const discountNote = hasDiscount
-        ? `<span class="billing-note">Discount(s) applied — confirm exact amount with office.</span>`
+    const total      = calcTotal();
+    const totalLabel = hasAnyDiscount ? 'Total' : 'Estimated total';
+    const discountNote = hasAnyDiscount
+        ? `<span class="billing-note">Discount(s) applied.</span>`
         : '';
     container.innerHTML = `
         <ul class="date-list">${rows}</ul>
         <div class="billing-total">
-            Estimated total: <strong>$${total.toFixed(2)}</strong>${discountNote}
+            ${totalLabel}: <strong>$${total.toFixed(2)}</strong>${discountNote}
         </div>`;
 
     container.querySelectorAll('.remove-btn').forEach(btn => {
@@ -915,28 +966,37 @@ async function handleSubmit(e) {
 
         localStorage.setItem(`childcare_submitted_${targetMonthKey}`, 'true');
 
-        // Build itemized receipt
+        // Build itemized receipt (uses multi-child + individual discounts)
         const sortedDates = confirmedDates.slice().sort((a, b) => a.date.localeCompare(b.date));
         let receiptHtml = '';
         if (sortedDates.length) {
+            // Build per-day amounts using same logic as renderSelectedDates
+            // results[].child mirrors selectedChildren at submit time
+            const submitChildren = results.map(r => r.child);
+            const calcSubmitDayAmounts = (dayType) => {
+                const entries = submitChildren.map(c => {
+                    const base = dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
+                    return { child: c, eff: effectiveRate(base, c.discountType, c.discountValue) };
+                }).sort((a, b) => b.eff - a.eff);
+                return entries.map((entry, i) => ({
+                    child:       entry.child,
+                    finalAmount: Math.max(0, entry.eff - (i > 0 ? 10 : 0)),
+                }));
+            };
+
             const receiptRows = sortedDates.map(({ date, dayType }) => {
                 const typeLabel  = dayType === 'half' ? 'Half Day' : 'Full Day';
-                const lineTotal  = results.reduce((s, { child }) => {
-                    const base = dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0);
-                    return s + effectiveRate(base, child.discountType, child.discountValue);
-                }, 0);
+                const dayAmts    = calcSubmitDayAmounts(dayType);
+                const lineTotal  = dayAmts.reduce((s, e) => s + e.finalAmount, 0);
                 return `<tr>
                     <td>${friendlyDate(date)}</td>
                     <td>${typeLabel}</td>
-                    <td class="receipt-amount">$${lineTotal}</td>
+                    <td class="receipt-amount">$${lineTotal.toFixed(2)}</td>
                 </tr>`;
             }).join('');
 
-            const grandTotal = results.reduce((s, { child }) =>
-                sortedDates.reduce((ss, { dayType }) => {
-                    const base = dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0);
-                    return ss + effectiveRate(base, child.discountType, child.discountValue);
-                }, s), 0);
+            const grandTotal = sortedDates.reduce((s, { dayType }) =>
+                s + calcSubmitDayAmounts(dayType).reduce((ss, e) => ss + e.finalAmount, 0), 0);
 
             receiptHtml = `
                 <table class="receipt-table">
@@ -961,9 +1021,10 @@ async function handleSubmit(e) {
             details += `<p class="receipt-error-note">⚠️ Note: ${escStr(errors.join('; '))}</p>`;
         }
 
-        // Print schedule button (no mailto — opens a print-friendly popup in-browser)
-        details += `<div style="margin-top:18px;text-align:center;">
+        // Action buttons: Print and iCal download
+        details += `<div style="margin-top:18px;text-align:center;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
             <button type="button" id="printScheduleBtn" class="btn-print-schedule">🖨️ Print / Save Schedule</button>
+            <button type="button" id="icalDownloadBtn" class="btn-print-schedule" style="background:#f0f4ff;color:#667eea;border:1px solid #c7d2fe;">📅 Download iCal (.ics)</button>
         </div>`;
 
         document.getElementById('successDetails').innerHTML = details;
@@ -976,6 +1037,11 @@ async function handleSubmit(e) {
                 monthLabel: win.targetLabel,
                 parentName,
             });
+        });
+
+        // Wire up the iCal download button
+        document.getElementById('icalDownloadBtn')?.addEventListener('click', () => {
+            downloadIcal(sortedDates, results.map(r => r.child.name), parentName, win.targetLabel);
         });
 
         document.getElementById('successModal').style.display = 'flex';
@@ -1058,4 +1124,57 @@ function openPrintSchedule({ sortedDates, childNames, monthLabel, parentName }) 
     if (!w) { showToast('Pop-up blocked — please allow pop-ups and try again.'); return; }
     w.document.write(html);
     w.document.close();
+}
+
+// ============================================================
+// iCAL DOWNLOAD
+// ============================================================
+function generateIcal(sortedDates, childNames, parentName) {
+    const now = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + 'Z';
+    const uid = () => `childcare-${Date.now()}-${Math.random().toString(36).slice(2,7)}@tlcmdo`;
+    const summary = `Care Day — ${childNames.join(', ')}`;
+    const desc = `Timothy Lutheran Church Mother's Day Out — ${childNames.join(', ')} (${parentName})`;
+
+    const events = sortedDates.map(({ date, dayType }) => {
+        const dtStart = date.replace(/-/g, '');
+        const [y, m, d] = date.split('-').map(Number);
+        const nextDay   = new Date(y, m - 1, d + 1);
+        const dtEnd     = `${nextDay.getFullYear()}${String(nextDay.getMonth() + 1).padStart(2, '0')}${String(nextDay.getDate()).padStart(2, '0')}`;
+        const dayLabel  = dayType === 'half' ? '(Half Day)' : '(Full Day)';
+        return [
+            'BEGIN:VEVENT',
+            `UID:${uid()}`,
+            `DTSTAMP:${now}`,
+            `DTSTART;VALUE=DATE:${dtStart}`,
+            `DTEND;VALUE=DATE:${dtEnd}`,
+            `SUMMARY:${summary} ${dayLabel}`,
+            `DESCRIPTION:${desc}`,
+            'END:VEVENT',
+        ].join('\r\n');
+    });
+
+    return [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Timothy Lutheran Church MDO//Childcare Registration//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        ...events,
+        'END:VCALENDAR',
+    ].join('\r\n');
+}
+
+function downloadIcal(sortedDates, childNames, parentName) {
+    if (!sortedDates.length) { showToast('No dates to export.'); return; }
+    const ical     = generateIcal(sortedDates, childNames, parentName);
+    const blob     = new Blob([ical], { type: 'text/calendar;charset=utf-8' });
+    const url      = URL.createObjectURL(blob);
+    const a        = document.createElement('a');
+    const safeName = childNames.join('-').replace(/\s+/g, '').slice(0, 24);
+    a.href         = url;
+    a.download     = `care-schedule-${safeName}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }

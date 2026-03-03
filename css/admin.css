@@ -1439,3 +1439,99 @@ tr.pending-approval:hover { background: #fef3c7; }
     .families-import-row { gap: 8px; }
     .families-list { max-height: 400px; }
 }
+
+/* ============================================================
+   ROOM CALENDAR — CLICKABLE DAY CELLS
+   ============================================================ */
+.rcal-cell-clickable {
+    cursor: pointer;
+    transition: box-shadow .15s, border-color .15s;
+}
+.rcal-cell-clickable:hover {
+    box-shadow: 0 0 0 2px #667eea;
+    border-color: #667eea;
+    z-index: 1;
+}
+.rcal-cell-clickable:focus {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
+}
+
+/* ============================================================
+   DAY ROSTER DETAIL PANEL (inside room-cal modal)
+   ============================================================ */
+.day-detail-panel {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    border-radius: inherit;
+}
+.day-detail-panel.hidden { display: none; }
+
+.day-detail-inner {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.2);
+    width: min(360px, 90%);
+    max-height: 70vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.day-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8f9ff;
+    border-radius: 12px 12px 0 0;
+}
+.day-detail-title {
+    font-weight: 700;
+    font-size: .97em;
+    color: #2d3748;
+}
+.day-detail-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1em;
+    color: #718096;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1;
+}
+.day-detail-close:hover { background: #f7fafc; color: #2d3748; }
+
+.day-detail-body {
+    overflow-y: auto;
+    padding: 14px 18px;
+}
+.day-detail-count {
+    font-size: .85em;
+    color: #718096;
+    margin-bottom: 10px;
+}
+.day-detail-list {
+    list-style: none;
+    margin: 0; padding: 0;
+}
+.day-detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: .9em;
+}
+.day-detail-item:last-child { border-bottom: none; }
+.day-detail-name { font-weight: 500; color: #2d3748; }
+
+/* Make rcal-dialog position:relative so the detail panel anchors to it */
+.rcal-dialog { position: relative; }

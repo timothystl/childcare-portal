@@ -1231,11 +1231,11 @@ input.prefilled {
     /* Hide the text label — show icon only so buttons are compact          */
     .fab-label { display: none; }
 
-    /* Move buttons to the LEFT side so they never cover the Friday column. */
-    /* Icon-only circles: 44 × 44 px (minimum comfortable tap target).      */
+    /* Icon-only circles on mobile: 44 × 44 px (minimum comfortable tap target). */
+    /* Kept on the RIGHT to match desktop layout.                                 */
     .btn-contact-float {
-        left: 12px;
-        right: auto;
+        right: 12px;
+        left: auto;
         bottom: 16px;
         width: 44px;
         height: 44px;
@@ -1247,8 +1247,8 @@ input.prefilled {
         font-size: 1.25em;
     }
     .btn-view-schedule-float {
-        left: 12px;
-        right: auto;
+        right: 12px;
+        left: auto;
         bottom: 68px;
         width: 44px;
         height: 44px;

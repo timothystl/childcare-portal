@@ -63,7 +63,7 @@ function showDashboard() {
 async function initDashboard() {
     populateRoomFilter();
     populateRosterRoomFilter();
-    await Promise.all([loadRegistrations(), loadClosureList()]);
+    await Promise.all([loadRegistrations(), loadClosureList(), loadFamilies()]);
     renderCapacityOverview();
     setupFilters();
     setupRoster();
@@ -101,14 +101,49 @@ function populateRosterRoomFilter() {
 // ============================================================
 // BILLING HELPER
 // ============================================================
+
+// Applies an individual student discount (same logic as app.js effectiveRate)
+function effectiveAdminRate(baseRate, discountType, discountValue) {
+    if (!baseRate) return 0;
+    if (discountType === 'staff') return 0;
+    if (discountType === 'custom' && discountValue > 0)
+        return Math.round(baseRate * (1 - discountValue / 100) * 100) / 100;
+    return baseRate;
+}
+
+// Build a fast lookup: `${parentEmail}:${childName}` (lower-cased) → {type, value}
+// Uses allFamiliesData if already loaded (populated by loadFamilies())
+function buildDiscountMap() {
+    const map = new Map();
+    (allFamiliesData || []).forEach(f => {
+        const email = (f.parent_email || '').toLowerCase();
+        (f.students || []).forEach(s => {
+            if (!s.discount_type || s.discount_type === 'none') return;
+            const key = `${email}:${(s.child_name || '').toLowerCase()}`;
+            map.set(key, { type: s.discount_type, value: s.discount_value || 0 });
+        });
+    });
+    return map;
+}
+
+// Cached discount map — rebuilt whenever families are loaded
+let _discountMap = null;
+function getDiscountMap() {
+    if (!_discountMap) _discountMap = buildDiscountMap();
+    return _discountMap;
+}
+
 function calcRegistrationBill(reg) {
     const room = ROOMS.find(r => r.id === reg.room_id);
     if (!room) return 0;
+    const dmap  = getDiscountMap();
+    const key   = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
+    const disc  = dmap.get(key) || { type: 'none', value: 0 };
     return (reg.registration_dates || [])
         .filter(d => !d.waitlisted)
         .reduce((sum, d) => {
             const rate = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
-            return sum + rate;
+            return sum + effectiveAdminRate(rate, disc.type, disc.value);
         }, 0);
 }
 
@@ -306,11 +341,22 @@ function setupRoomCalendar() {
         if (e.target === e.currentTarget) closeRoomCalendar();
     });
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') closeRoomCalendar();
+        if (e.key === 'Escape') {
+            closeDayRosterDetail();
+            closeRoomCalendar();
+        }
     });
 
     // Cap-card click delegation — use document so it always works
     document.addEventListener('click', e => {
+        // Day cell click → show full roster for that day
+        const cell = e.target.closest('.rcal-cell[data-date]');
+        if (cell) {
+            e.stopPropagation();
+            showDayRosterDetail(cell.dataset.date, rcalRoomId,
+                JSON.parse(cell.dataset.enrolled || '[]'), parseInt(cell.dataset.cap || '0'));
+            return;
+        }
         const card = e.target.closest('.cap-card[data-room-id]');
         if (card) openRoomCalendar(card.dataset.roomId, card.dataset.monthKey);
     });
@@ -320,6 +366,56 @@ function setupRoomCalendar() {
             if (card) { e.preventDefault(); openRoomCalendar(card.dataset.roomId, card.dataset.monthKey); }
         }
     });
+}
+
+// ---- Day Roster Detail popup (inside room calendar) ----
+function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
+    // Lazy-create the detail panel
+    let panel = document.getElementById('dayDetailPanel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id        = 'dayDetailPanel';
+        panel.className = 'day-detail-panel';
+        panel.innerHTML = `
+            <div class="day-detail-inner">
+                <div class="day-detail-header">
+                    <span id="dayDetailTitle" class="day-detail-title"></span>
+                    <button id="dayDetailClose" class="day-detail-close" title="Close">✕</button>
+                </div>
+                <div id="dayDetailBody" class="day-detail-body"></div>
+            </div>`;
+        // Append inside the room-cal modal so it scrolls with it
+        document.getElementById('roomCalModal')?.querySelector('.rcal-dialog')?.appendChild(panel)
+            || document.body.appendChild(panel);
+        document.getElementById('dayDetailClose').addEventListener('click', closeDayRosterDetail);
+    }
+
+    const room = ROOMS.find(r => r.id === roomId);
+    document.getElementById('dayDetailTitle').textContent =
+        `${room?.label || roomId} — ${friendlyShort(dateStr)}`;
+
+    const bodyEl = document.getElementById('dayDetailBody');
+    if (!enrolled.length) {
+        bodyEl.innerHTML = '<p class="empty-hint" style="padding:12px 0;">No children booked for this day.</p>';
+    } else {
+        bodyEl.innerHTML = `
+            <p class="day-detail-count">${enrolled.length} / ${cap} spots filled</p>
+            <ul class="day-detail-list">
+                ${enrolled.map(e => `
+                    <li class="day-detail-item">
+                        <span class="day-detail-name">${escHtml(e.childName)}</span>
+                        <span class="day-chip ${e.dayType}">${e.dayType === 'half' ? 'Half Day' : 'Full Day'}</span>
+                    </li>`).join('')}
+            </ul>`;
+    }
+
+    panel.classList.remove('hidden');
+    panel.classList.add('visible');
+}
+
+function closeDayRosterDetail() {
+    const panel = document.getElementById('dayDetailPanel');
+    if (panel) { panel.classList.remove('visible'); panel.classList.add('hidden'); }
 }
 
 function openRoomCalendar(roomId, monthKey) {
@@ -392,7 +488,7 @@ function drawRoomCalendar() {
     // Render cells
     const cellsHtml = cells.map(cell => {
         if (!cell) return `<div class="rcal-cell rcal-cell-empty"></div>`;
-        const { day, enrolled, cap, isClosed } = cell;
+        const { day, dateStr, enrolled, cap, isClosed } = cell;
         if (isClosed) return `
             <div class="rcal-cell rcal-cell-closed">
                 <div class="rcal-day-num">${day}</div>
@@ -408,9 +504,14 @@ function drawRoomCalendar() {
             return `<span class="rcal-child${half ? ' rcal-child-half' : ''}">${escHtml(e.childName)}${half ? ' ½' : ''}</span>`;
         }).join('');
         const moreHtml = enrolled.length > SHOW_MAX
-            ? `<span class="rcal-more">+${enrolled.length - SHOW_MAX} more</span>` : '';
+            ? `<span class="rcal-more">+${enrolled.length - SHOW_MAX} more — click to see all</span>` : '';
+        // Embed enrolled data as JSON so the click handler can read it without another lookup
+        const enrolledJson = escHtml(JSON.stringify(enrolled));
         return `
-            <div class="rcal-cell ${cls}">
+            <div class="rcal-cell ${cls} rcal-cell-clickable"
+                 data-date="${dateStr}" data-cap="${cap}"
+                 data-enrolled="${enrolledJson}"
+                 role="button" tabindex="0" title="Click to see full roster for this day">
                 <div class="rcal-day-num">${day}</div>
                 <div class="rcal-count">${countLbl}</div>
                 <div class="rcal-children">${childrenHtml}${moreHtml}</div>
@@ -1219,14 +1320,15 @@ async function onImportFamilies() {
 
 async function loadFamilies() {
     const container = document.getElementById('familiesList');
-    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    if (container) container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
         allFamiliesData = await fetchAllFamilies({ includeArchived: showArchivedFamilies });
+        _discountMap = null; // invalidate cached discount map
         const searchEl = document.getElementById('familyChildSearch');
         if (searchEl) searchEl.value = '';
-        renderFamiliesList(allFamiliesData);
+        if (container) renderFamiliesList(allFamiliesData);
     } catch (err) {
-        container.innerHTML = `<p class="import-error">Failed to load families: ${escHtml(err.message)}</p>`;
+        if (container) container.innerHTML = `<p class="import-error">Failed to load families: ${escHtml(err.message)}</p>`;
     }
 }
 
@@ -1468,6 +1570,20 @@ function renderModalChildRows() {
 }
 
 function addModalChildRow() {
+    // Sync any values already typed in the DOM back to familyModalChildren
+    // before re-rendering (prevents wiping unsaved inputs).
+    document.querySelectorAll('#fmChildRows .fm-child-row').forEach(row => {
+        const idx = parseInt(row.dataset.index);
+        if (!isNaN(idx) && familyModalChildren[idx]) {
+            familyModalChildren[idx].child_name    = row.querySelector('.fmc-name')?.value.trim() || '';
+            familyModalChildren[idx].child_dob     = row.querySelector('.fmc-dob')?.value || null;
+            familyModalChildren[idx].room_override = row.querySelector('.fmc-room')?.value || null;
+            familyModalChildren[idx].discount_type = row.querySelector('.fmc-discount-type')?.value || 'none';
+            familyModalChildren[idx].discount_value = parseFloat(row.querySelector('.fmc-discount-value')?.value) || 0;
+            familyModalChildren[idx].discount_note = row.querySelector('.fmc-discount-note')?.value.trim() || null;
+        }
+    });
+
     familyModalChildren.push({
         id: null, child_name: '', child_dob: null,
         room_override: null, discount_type: 'none', discount_value: 0, discount_note: null,
