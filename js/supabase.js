@@ -822,6 +822,7 @@ async function fetchStaffByPin(pin) {
     return data; // null if not found
 }
 
+// Returns the most recent open (clocked-in, not yet clocked-out) event for today, or null.
 async function getClockStatus(staffId, workDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
@@ -829,38 +830,42 @@ async function getClockStatus(staffId, workDate) {
         .select('id, clock_in, clock_out')
         .eq('staff_id', staffId)
         .eq('work_date', workDate)
+        .is('clock_out', null)
+        .order('clock_in', { ascending: false })
+        .limit(1)
         .maybeSingle();
     if (error) throw error;
-    return data;
+    return data; // null = not currently clocked in
 }
 
+// Each call inserts a new event row — supports multiple shifts per day.
 async function clockIn(staffId, workDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const now = new Date().toISOString();
     const { error } = await sbClient
         .from('staff_clock_events')
-        .upsert(
-            { staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null },
-            { onConflict: 'staff_id,work_date' }
-        );
+        .insert({ staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null });
     if (error) throw error;
 }
 
+// Closes the most recent open event for this staff/day.
 async function clockOut(staffId, workDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const now = new Date().toISOString();
-    const { data: existing } = await sbClient
+    const { data: open } = await sbClient
         .from('staff_clock_events')
         .select('id')
         .eq('staff_id', staffId)
         .eq('work_date', workDate)
+        .is('clock_out', null)
+        .order('clock_in', { ascending: false })
+        .limit(1)
         .maybeSingle();
-    if (!existing) throw new Error('No clock-in record found. Please clock in first.');
+    if (!open) throw new Error('No clock-in record found. Please clock in first.');
     const { error } = await sbClient
         .from('staff_clock_events')
         .update({ clock_out: now })
-        .eq('staff_id', staffId)
-        .eq('work_date', workDate);
+        .eq('id', open.id);
     if (error) throw error;
 }
 
