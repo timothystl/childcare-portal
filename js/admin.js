@@ -3995,7 +3995,10 @@ function renderWaitlistAdmin() {
                 renderWaitlistAdmin();
             } catch (err) {
                 // If only the email failed, status was already saved — note this in the alert
-                alert('Offer saved, but email failed: ' + err.message + '\n\nYou can email the parent manually at ' + parentEmail);
+                let detail = err.message;
+                try { const ctx = await err.context?.json(); detail += '\n' + JSON.stringify(ctx); } catch {}
+                console.error('Email error full detail:', err);
+                alert('Offer saved, but email failed: ' + detail + '\n\nYou can email the parent manually at ' + parentEmail);
                 const app = _allWaitlistApps.find(a => a.id === Number(id));
                 if (app && app.status !== 'offered') { btn.disabled = false; btn.textContent = 'Send & Email Parent'; }
                 else renderWaitlistAdmin();
