@@ -33,6 +33,16 @@ header {
 }
 header h1 { font-size: 2em; margin-bottom: 6px; }
 header p  { opacity: .88; font-size: 1.05em; }
+.header-program-link {
+    display: inline-block;
+    margin-top: 10px;
+    color: rgba(255,255,255,.8);
+    font-size: .82em;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255,255,255,.4);
+    transition: color .15s;
+}
+.header-program-link:hover { color: #fff; border-bottom-color: #fff; }
 
 /* ============================================================
    SITE LOGO
