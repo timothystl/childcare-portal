@@ -706,6 +706,13 @@ tr.pending-approval:hover { background: #fef3c7; }
     border-left: 4px solid #667eea;
 }
 
+.family-heading {
+    font-weight: 700;
+    font-size: 1.05em;
+    color: #2d3748;
+    margin-bottom: 6px;
+}
+
 .family-row-top {
     display: flex;
     flex-direction: column;
@@ -754,7 +761,7 @@ tr.pending-approval:hover { background: #fef3c7; }
     padding-left: 0;
     display: grid;
     /* bullet | name | dob | room | discount */
-    grid-template-columns: 18px minmax(100px, 1fr) 110px 215px 230px;
+    grid-template-columns: max-content minmax(100px, 1fr) 110px 215px 230px;
     align-items: center;
     row-gap: 6px;
     column-gap: 10px;
@@ -768,9 +775,12 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 
 .student-bullet {
-    color: #ccc;
-    font-size: .9em;
-    text-align: center;
+    color: #888;
+    font-size: .75em;
+    font-weight: 600;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: .03em;
 }
 
 .student-name {
@@ -1436,7 +1446,26 @@ tr.pending-approval:hover { background: #fef3c7; }
     .header-actions { gap: 6px; }
     .btn-secondary, .btn-ghost, .btn-primary { padding: 8px 12px; font-size: .82em; }
     .families-import-row { gap: 8px; }
-    .families-list { max-height: 400px; }
+    .families-list { max-height: none; }
+
+    /* Family directory — stack grid into readable rows on narrow screens */
+    .family-students {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .family-student-item {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        padding-top: 6px;
+        border-top: 1px solid #f0f0f0;
+    }
+    .room-override-wrap,
+    .discount-wrap {
+        flex-basis: 100%;
+    }
 }
 
 /* ============================================================
