@@ -3933,7 +3933,7 @@ function renderWaitlistAdmin() {
                     <label>Offer deadline: <input type="date" class="wl-deadline-input" id="wl-deadline-${app.id}"
                         value="${new Date(Date.now() + 14*86400000).toISOString().split('T')[0]}"></label>
                     <label style="flex:1">Notes (optional): <input type="text" class="wl-notes-input" id="wl-ofnotes-${app.id}" placeholder="e.g. Bear room opening Sept 1"></label>
-                    <button class="btn-primary wl-offer-send" data-id="${app.id}">Send</button>
+                    <button class="btn-primary wl-offer-send" data-id="${app.id}" data-name="${escHtml(app.parent_name)}" data-email="${escHtml(app.parent_email)}" data-child="${escHtml(app.child_name)}">Send &amp; Email Parent</button>
                     <button class="btn-ghost wl-offer-cancel" data-id="${app.id}">Cancel</button>
                 </div>
             </div>
@@ -3971,22 +3971,35 @@ function renderWaitlistAdmin() {
 
     container.querySelectorAll('.wl-offer-send').forEach(btn =>
         btn.addEventListener('click', async () => {
-            const id       = btn.dataset.id;
-            const deadline = document.getElementById(`wl-deadline-${id}`)?.value;
-            const notes    = document.getElementById(`wl-ofnotes-${id}`)?.value || '';
+            const id          = btn.dataset.id;
+            const deadline    = document.getElementById(`wl-deadline-${id}`)?.value;
+            const notes       = document.getElementById(`wl-ofnotes-${id}`)?.value || '';
+            const parentName  = btn.dataset.name;
+            const parentEmail = btn.dataset.email;
+            const childName   = btn.dataset.child;
             if (!deadline) { alert('Please set an offer deadline.'); return; }
-            btn.disabled = true;
+            btn.disabled    = true;
+            btn.textContent = 'Sending…';
             try {
+                // Save status first
                 await updateWaitlistApplication(Number(id), {
                     status:         'offered',
                     offered_at:     new Date().toISOString(),
                     offer_deadline: deadline,
                     offer_notes:    notes || null,
                 });
+                // Send email
+                await sendWaitlistOfferEmail({ parentName, parentEmail, childName, offerDeadline: deadline, offerNotes: notes || null });
                 const app = _allWaitlistApps.find(a => a.id === Number(id));
                 if (app) { app.status = 'offered'; app.offered_at = new Date().toISOString(); app.offer_deadline = deadline; app.offer_notes = notes || null; }
                 renderWaitlistAdmin();
-            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
+            } catch (err) {
+                // If only the email failed, status was already saved — note this in the alert
+                alert('Offer saved, but email failed: ' + err.message + '\n\nYou can email the parent manually at ' + parentEmail);
+                const app = _allWaitlistApps.find(a => a.id === Number(id));
+                if (app && app.status !== 'offered') { btn.disabled = false; btn.textContent = 'Send & Email Parent'; }
+                else renderWaitlistAdmin();
+            }
         }));
 
     container.querySelectorAll('.wl-accept').forEach(btn =>
