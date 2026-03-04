@@ -284,9 +284,9 @@ function showError(msg) {
 }
 
 function showScreen(name) {
-    document.getElementById('pinScreen').style.display    = name === 'pin'     ? '' : 'none';
-    document.getElementById('loadingScreen').style.display = name === 'loading' ? '' : 'none';
-    document.getElementById('clockScreen').style.display   = name === 'clock'   ? '' : 'none';
+    document.getElementById('pinScreen').style.display     = name === 'pin'     ? 'block' : 'none';
+    document.getElementById('loadingScreen').style.display = name === 'loading' ? 'block' : 'none';
+    document.getElementById('clockScreen').style.display   = name === 'clock'   ? 'block' : 'none';
 }
 
 // Numpad handlers
