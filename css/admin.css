@@ -483,6 +483,12 @@ tr.pending-approval:hover { background: #fef3c7; }
 .report-table-wrap {
     max-width: 720px;
 }
+/* Staff schedule needs full width — no max-width cap */
+.staff-table-wrap {
+    overflow-x: auto;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+}
 
 .report-table {
     width: 100%;
@@ -1860,7 +1866,17 @@ tr.pending-approval:hover { background: #fef3c7; }
 /* ============================================================
    STAFF ROSTER TABLE
    ============================================================ */
-.staff-roster-table { width: 100%; }
+.staff-roster-table { width: 100%; table-layout: auto; }
+/* Override the global right-align for non-first headers — roster uses left-align throughout */
+.staff-roster-table thead th { text-align: left !important; white-space: nowrap; }
+.staff-roster-table tbody td { vertical-align: middle; white-space: nowrap; }
+.sr-col-name    { min-width: 140px; }
+.sr-col-role    { min-width: 130px; }
+.sr-col-room    { min-width: 100px; }
+.sr-col-pay     { min-width: 160px; }
+.sr-col-hire    { min-width: 100px; }
+.sr-col-status  { min-width: 80px; }
+.sr-col-actions { min-width: 160px; }
 .staff-inactive-row td { color: #aaa; }
 .staff-inactive-row strong { color: #bbb; }
 
@@ -1880,6 +1896,33 @@ tr.pending-approval:hover { background: #fef3c7; }
     margin-bottom: 10px;
     align-items: flex-end;
 }
+
+/* AM / PM shift column shading */
+.staff-shift-head {
+    text-align: center;
+    font-size: .8em;
+    font-weight: 700;
+    padding: 5px 8px;
+}
+.staff-shift-am { background: #e8f4f8; color: #1a5276; border-left: 2px solid #aed6f1; }
+.staff-shift-pm { background: #fef9e7; color: #7d6608; border-left: 2px solid #f9e79f; }
+.shift-am { background: rgba(174,214,241,.15); border-left: 1px solid #d6eaf8; }
+.shift-pm { background: rgba(249,231,159,.15); border-left: 1px solid #fdebd0; }
+.shift-am-chip {
+    display: inline-block; padding: 1px 6px; border-radius: 4px;
+    background: #e8f4f8; color: #1a5276; font-size: .8em; font-weight: 700;
+}
+.shift-pm-chip {
+    display: inline-block; padding: 1px 6px; border-radius: 4px;
+    background: #fef9e7; color: #7d6608; font-size: .8em; font-weight: 700;
+}
+
+/* Pay type chips */
+.pay-type-chip {
+    display: inline-block; padding: 1px 7px; border-radius: 10px;
+    font-size: .75em; font-weight: 700; margin-right: 4px; vertical-align: middle;
+}
+.pay-salary { background: #e8d5f5; color: #6b21a8; }
 
 /* ============================================================
    HOURS ENTRY TABLE

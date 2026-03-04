@@ -746,7 +746,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('staff')
-        .select('id, name, role, hourly_rate, room_id, active, hire_date, created_at')
+        .select('id, name, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, staff_pin, created_at')
         .order('name');
     if (!includeInactive) query = query.eq('active', true);
     const { data, error } = await query;
@@ -754,14 +754,17 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     return data || [];
 }
 
-async function upsertStaffMember({ id = null, name, role, hourlyRate, roomId, hireDate }) {
+async function upsertStaffMember({ id = null, name, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const record = {
         name,
-        role:        role || null,
-        hourly_rate: hourlyRate || 0,
-        room_id:     roomId || null,
-        hire_date:   hireDate || null,
+        role:             role || null,
+        pay_type:         payType || 'hourly',
+        hourly_rate:      payType === 'salary' ? 0 : (hourlyRate || 0),
+        salary_biweekly:  payType === 'salary' ? (salaryBiweekly || 0) : 0,
+        room_id:          roomId || null,
+        hire_date:        hireDate || null,
+        staff_pin:        staffPin ? parseInt(staffPin, 10) : null,
     };
     if (id) {
         const { error } = await sbClient.from('staff').update(record).eq('id', id);
@@ -802,4 +805,71 @@ async function upsertStaffHours(staffId, workDate, hoursWorked, notes) {
             { onConflict: 'staff_id,work_date' }
         );
     if (error) throw error;
+}
+
+// ============================================================
+// STAFF CLOCK EVENTS  (teacher clock-in/out)
+// ============================================================
+async function fetchStaffByPin(pin) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff')
+        .select('id, name, role, room_id, pay_type')
+        .eq('staff_pin', parseInt(pin, 10))
+        .eq('active', true)
+        .maybeSingle();
+    if (error) throw error;
+    return data; // null if not found
+}
+
+async function getClockStatus(staffId, workDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_clock_events')
+        .select('id, clock_in, clock_out')
+        .eq('staff_id', staffId)
+        .eq('work_date', workDate)
+        .maybeSingle();
+    if (error) throw error;
+    return data;
+}
+
+async function clockIn(staffId, workDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const now = new Date().toISOString();
+    const { error } = await sbClient
+        .from('staff_clock_events')
+        .upsert(
+            { staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null },
+            { onConflict: 'staff_id,work_date' }
+        );
+    if (error) throw error;
+}
+
+async function clockOut(staffId, workDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const now = new Date().toISOString();
+    const { data: existing } = await sbClient
+        .from('staff_clock_events')
+        .select('id')
+        .eq('staff_id', staffId)
+        .eq('work_date', workDate)
+        .maybeSingle();
+    if (!existing) throw new Error('No clock-in record found. Please clock in first.');
+    const { error } = await sbClient
+        .from('staff_clock_events')
+        .update({ clock_out: now })
+        .eq('staff_id', staffId)
+        .eq('work_date', workDate);
+    if (error) throw error;
+}
+
+async function fetchClockEventsForDate(workDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_clock_events')
+        .select('id, staff_id, clock_in, clock_out, work_date')
+        .eq('work_date', workDate);
+    if (error) throw error;
+    return data || [];
 }

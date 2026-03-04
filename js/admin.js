@@ -1116,6 +1116,25 @@ function _buildEnrollmentCounts(weekDates) {
     return counts;
 }
 
+function _buildShiftCounts(weekDates) {
+    const counts = {};
+    weekDates.forEach(d => {
+        counts[d] = {};
+        ROOMS.forEach(r => { counts[d][r.id] = { total: 0, halfDay: 0, fullDay: 0 }; });
+    });
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (!d.waitlisted && weekDates.includes(d.care_date)) {
+                const c = counts[d.care_date][reg.room_id];
+                if (!c) return;
+                c.total++;
+                if (d.day_type === 'half') c.halfDay++; else c.fullDay++;
+            }
+        });
+    });
+    return counts;
+}
+
 function generateStaffSchedule() {
     const weekOf = document.getElementById('staffWeekOf')?.value;
     if (!weekOf) { alert('Please select a week.'); return; }
@@ -1126,61 +1145,82 @@ function generateStaffSchedule() {
             '<p class="empty-hint">No school days in this week (all days are weekends or closures).</p>';
         return;
     }
-    const counts = _buildEnrollmentCounts(weekDates);
+    const counts = _buildShiftCounts(weekDates);
     renderStaffSchedule(weekDates, counts);
 }
 
 function renderStaffSchedule(weekDates, counts) {
     const container  = document.getElementById('staffContent');
     const dayNames   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    // Each room gets 4 columns: AM Kids, AM Staff, PM Kids, PM Staff
     const roomHeaders = ROOMS.map(r =>
-        `<th colspan="2" class="staff-room-header">${r.label}</th>`).join('');
-    const subHeaders  = ROOMS.map(() =>
-        '<th class="staff-sub-head">Kids</th><th class="staff-sub-head">Min Staff</th>').join('');
+        `<th colspan="4" class="staff-room-header">${r.label}</th>`).join('');
+    const shiftHeaders = ROOMS.map(() =>
+        `<th colspan="2" class="staff-shift-head staff-shift-am">AM 8:15–1:15</th>` +
+        `<th colspan="2" class="staff-shift-head staff-shift-pm">PM 1:00–5:00</th>`).join('');
+    const subHeaders = ROOMS.map(() =>
+        `<th class="staff-sub-head">Kids</th><th class="staff-sub-head">Staff</th>` +
+        `<th class="staff-sub-head">Kids</th><th class="staff-sub-head">Staff</th>`).join('');
 
     const dataRows = weekDates.map(d => {
         const dt    = new Date(d + 'T00:00:00');
         const label = `${dayNames[dt.getDay()]} ${friendlyShort(d)}`;
         const cells = ROOMS.map(room => {
-            const enrolled  = counts[d][room.id] || 0;
-            const ratio     = room.staffRatio || 10;
-            const minStaff  = enrolled > 0 ? Math.ceil(enrolled / ratio) : 0;
-            const staffCls  = minStaff >= 3 ? 'staff-high' : minStaff === 2 ? 'staff-mid' : '';
-            return `<td class="report-num">${enrolled || '—'}</td>` +
-                   `<td class="report-num ${staffCls}">${minStaff > 0 ? minStaff : '—'}</td>`;
+            const c       = counts[d][room.id] || { total: 0, halfDay: 0, fullDay: 0 };
+            const ratio   = room.staffRatio || 10;
+            // AM shift: all kids present (half-day + full-day)
+            const amKids  = c.total;
+            const amStaff = amKids > 0 ? Math.ceil(amKids / ratio) : 0;
+            // PM shift: full-day kids only
+            const pmKids  = c.fullDay;
+            const pmStaff = pmKids > 0 ? Math.ceil(pmKids / ratio) : 0;
+            const amCls   = amStaff >= 3 ? 'staff-high' : amStaff === 2 ? 'staff-mid' : '';
+            const pmCls   = pmStaff >= 3 ? 'staff-high' : pmStaff === 2 ? 'staff-mid' : '';
+            return `<td class="report-num shift-am">${amKids || '—'}</td>` +
+                   `<td class="report-num shift-am ${amCls}">${amStaff > 0 ? amStaff : '—'}</td>` +
+                   `<td class="report-num shift-pm">${pmKids || '—'}</td>` +
+                   `<td class="report-num shift-pm ${pmCls}">${pmStaff > 0 ? pmStaff : '—'}</td>`;
         }).join('');
         return `<tr><td class="staff-date-cell">${label}</td>${cells}</tr>`;
     }).join('');
 
     const totalCells = ROOMS.map(room => {
-        const ratio    = room.staffRatio || 10;
-        const avgKids  = weekDates.length
-            ? (weekDates.reduce((s, d) => s + (counts[d][room.id] || 0), 0) / weekDates.length).toFixed(1)
+        const ratio   = room.staffRatio || 10;
+        const avgAm   = weekDates.length
+            ? (weekDates.reduce((s, d) => s + ((counts[d][room.id] || {}).total || 0), 0) / weekDates.length).toFixed(1)
             : 0;
-        return `<td class="report-num"><em>avg ${avgKids}/day</em></td>` +
-               `<td class="report-num"><em>1:${ratio} ratio</em></td>`;
+        const avgPm   = weekDates.length
+            ? (weekDates.reduce((s, d) => s + ((counts[d][room.id] || {}).fullDay || 0), 0) / weekDates.length).toFixed(1)
+            : 0;
+        return `<td class="report-num shift-am"><em>avg ${avgAm}</em></td>` +
+               `<td class="report-num shift-am"><em>1:${ratio}</em></td>` +
+               `<td class="report-num shift-pm"><em>avg ${avgPm}</em></td>` +
+               `<td class="report-num shift-pm"><em>1:${ratio}</em></td>`;
     }).join('');
 
     container.innerHTML = `
         <div class="staff-legend">
             <span class="staff-legend-dot staff-high">●</span> 3+ staff &nbsp;
             <span class="staff-legend-dot staff-mid">●</span> 2 staff &nbsp;
-            <span class="staff-legend-dot">●</span> 0–1 staff
+            <span class="staff-legend-dot">●</span> 0–1 staff &nbsp;
+            <span class="shift-am-chip">AM</span> 8:15am–1:15pm (all kids) &nbsp;
+            <span class="shift-pm-chip">PM</span> 1:00pm–5:00pm (full-day only)
             <span class="staff-ratio-note">Ratios: ⚙️ Settings → Staff-to-Child Ratios</span>
         </div>
-        <div class="table-wrapper report-table-wrap">
+        <div class="table-wrapper staff-table-wrap">
             <table class="report-table staff-table">
                 <thead>
                     <tr>
-                        <th rowspan="2" class="staff-date-header">Date</th>
+                        <th rowspan="3" class="staff-date-header">Date</th>
                         ${roomHeaders}
                     </tr>
+                    <tr>${shiftHeaders}</tr>
                     <tr>${subHeaders}</tr>
                 </thead>
                 <tbody>${dataRows}</tbody>
                 <tfoot>
                     <tr class="report-total-row">
-                        <td><strong>Week Summary</strong></td>
+                        <td><strong>Week Avg</strong></td>
                         ${totalCells}
                     </tr>
                 </tfoot>
@@ -1195,14 +1235,16 @@ function exportStaffSchedule() {
     const weekDates = _buildWeekDates(weekOf);
     if (!weekDates.length) { alert('No school days in this week.'); return; }
 
-    const counts = _buildEnrollmentCounts(weekDates);
+    const counts = _buildShiftCounts(weekDates);
     const rows   = weekDates.map(d => {
         const row = { Date: friendlyShort(d) };
         ROOMS.forEach(room => {
-            const enrolled = counts[d][room.id] || 0;
-            const ratio    = room.staffRatio || 10;
-            row[`${room.label} – Kids`]      = enrolled;
-            row[`${room.label} – Min Staff`] = enrolled > 0 ? Math.ceil(enrolled / ratio) : 0;
+            const c     = counts[d][room.id] || { total: 0, halfDay: 0, fullDay: 0 };
+            const ratio = room.staffRatio || 10;
+            row[`${room.label} – AM Kids`]   = c.total;
+            row[`${room.label} – AM Staff`]  = c.total > 0 ? Math.ceil(c.total / ratio) : 0;
+            row[`${room.label} – PM Kids`]   = c.fullDay;
+            row[`${room.label} – PM Staff`]  = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
         });
         return row;
     });
@@ -2694,6 +2736,9 @@ function setupStaffRoster() {
         loadStaffList();
     });
 
+    // Pay type toggle
+    document.getElementById('sfPayType')?.addEventListener('change', e => _togglePayFields(e.target.value));
+
     // Populate room picker in the add/edit form
     const sel = document.getElementById('sfRoom');
     if (sel) {
@@ -2725,23 +2770,33 @@ function renderStaffList(staff) {
         return;
     }
     container.innerHTML = `
+        <div class="table-wrapper">
         <table class="report-table staff-roster-table">
             <thead>
                 <tr>
-                    <th>Name</th><th>Role</th><th>Room</th>
-                    <th>Rate</th><th>Hire Date</th><th>Status</th><th>Actions</th>
+                    <th class="sr-col-name">Name</th>
+                    <th class="sr-col-role">Role</th>
+                    <th class="sr-col-room">Room</th>
+                    <th class="sr-col-pay">Pay</th>
+                    <th class="sr-col-hire">Hire Date</th>
+                    <th class="sr-col-status">Status</th>
+                    <th class="sr-col-actions">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 ${staff.map(s => {
-                    const roomLabel = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
-                    const hireDate  = s.hire_date ? friendlyShort(s.hire_date) : '—';
+                    const roomLabel  = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
+                    const hireDate   = s.hire_date ? friendlyShort(s.hire_date) : '—';
+                    const isSalary   = s.pay_type === 'salary';
+                    const payDisplay = isSalary
+                        ? `<span class="pay-type-chip pay-salary">Salary</span> $${(s.salary_biweekly || 0).toFixed(2)}/period`
+                        : `$${(s.hourly_rate || 0).toFixed(2)}/hr`;
                     return `
                         <tr class="${s.active ? '' : 'staff-inactive-row'}" data-staff-id="${s.id}">
                             <td><strong>${escHtml(s.name)}</strong></td>
                             <td>${escHtml(s.role || '—')}</td>
                             <td>${escHtml(roomLabel)}</td>
-                            <td class="report-num">$${(s.hourly_rate || 0).toFixed(2)}/hr</td>
+                            <td>${payDisplay}</td>
                             <td>${hireDate}</td>
                             <td><span class="status-chip ${s.active ? 'chip-confirmed' : 'chip-waitlist'}">${s.active ? 'Active' : 'Inactive'}</span></td>
                             <td class="actions-cell">
@@ -2754,7 +2809,8 @@ function renderStaffList(staff) {
                         </tr>`;
                 }).join('')}
             </tbody>
-        </table>`;
+        </table>
+        </div>`;
 
     container.querySelectorAll('.staff-edit-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -2776,14 +2832,33 @@ function renderStaffList(staff) {
 function openStaffForm(staff = null) {
     editingStaffId = staff?.id || null;
     document.getElementById('staffFormTitle').textContent = staff ? 'Edit Staff Member' : 'Add Staff Member';
-    document.getElementById('sfName').value     = staff?.name || '';
-    document.getElementById('sfRole').value     = staff?.role || '';
-    document.getElementById('sfRate').value     = staff?.hourly_rate || '';
-    document.getElementById('sfRoom').value     = staff?.room_id || '';
-    document.getElementById('sfHireDate').value = staff?.hire_date || '';
+    document.getElementById('sfName').value      = staff?.name || '';
+    document.getElementById('sfRole').value      = staff?.role || '';
+    document.getElementById('sfRoom').value      = staff?.room_id || '';
+    document.getElementById('sfHireDate').value  = staff?.hire_date || '';
+    document.getElementById('sfPin').value       = staff?.staff_pin ?? '';
+
+    const payType = staff?.pay_type || 'hourly';
+    document.getElementById('sfPayType').value   = payType;
+    document.getElementById('sfRate').value      = staff?.hourly_rate || '';
+    document.getElementById('sfSalary').value    = staff?.salary_biweekly || '';
+    _togglePayFields(payType);
+
     document.getElementById('staffFormStatus').textContent = '';
     document.getElementById('staffEditForm').classList.remove('hidden');
     document.getElementById('sfName').focus();
+}
+
+function _togglePayFields(payType) {
+    const hourlyRow = document.getElementById('sfHourlyRow');
+    const salaryRow = document.getElementById('sfSalaryRow');
+    if (payType === 'salary') {
+        hourlyRow?.classList.add('hidden');
+        salaryRow?.classList.remove('hidden');
+    } else {
+        hourlyRow?.classList.remove('hidden');
+        salaryRow?.classList.add('hidden');
+    }
 }
 
 function closeStaffForm() {
@@ -2795,18 +2870,26 @@ async function onSaveStaffMember() {
     const name = document.getElementById('sfName').value.trim();
     if (!name) { alert('Name is required.'); return; }
 
+    const pinVal = document.getElementById('sfPin').value.trim();
+    if (pinVal && (!/^\d{4}$/.test(pinVal))) { alert('PIN must be exactly 4 digits.'); return; }
+
     const statusEl = document.getElementById('staffFormStatus');
     const btn      = document.getElementById('saveStaffBtn');
     btn.disabled = true; statusEl.textContent = '';
 
+    const payType = document.getElementById('sfPayType').value;
+
     try {
         await upsertStaffMember({
-            id:         editingStaffId,
+            id:              editingStaffId,
             name,
-            role:       document.getElementById('sfRole').value.trim(),
-            hourlyRate: parseFloat(document.getElementById('sfRate').value) || 0,
-            roomId:     document.getElementById('sfRoom').value || null,
-            hireDate:   document.getElementById('sfHireDate').value || null,
+            role:            document.getElementById('sfRole').value.trim(),
+            payType,
+            hourlyRate:      parseFloat(document.getElementById('sfRate').value) || 0,
+            salaryBiweekly:  parseFloat(document.getElementById('sfSalary').value) || 0,
+            roomId:          document.getElementById('sfRoom').value || null,
+            hireDate:        document.getElementById('sfHireDate').value || null,
+            staffPin:        pinVal || null,
         });
         closeStaffForm();
         await loadStaffList();
@@ -2824,6 +2907,37 @@ function setupHoursEntry() {
     if (el) el.value = new Date().toISOString().split('T')[0];
     document.getElementById('loadHoursBtn')?.addEventListener('click', loadHoursForDate);
     document.getElementById('saveHoursBtn')?.addEventListener('click', saveHoursForDate);
+    document.getElementById('syncClockBtn')?.addEventListener('click', syncFromClockEvents);
+}
+
+async function syncFromClockEvents() {
+    const date = document.getElementById('logHoursDate')?.value;
+    if (!date) { alert('Please select a date first.'); return; }
+
+    const btn = document.getElementById('syncClockBtn');
+    btn.disabled = true; btn.textContent = 'Syncing…';
+    try {
+        const events = await fetchClockEventsForDate(date);
+        if (!events.length) {
+            alert('No clock events found for this date.');
+            return;
+        }
+        const saves = [];
+        events.forEach(ev => {
+            if (!ev.clock_in || !ev.clock_out) return;
+            const msIn  = new Date(ev.clock_in).getTime();
+            const msOut = new Date(ev.clock_out).getTime();
+            const hrs   = Math.round(((msOut - msIn) / 3600000) * 4) / 4; // round to .25
+            if (hrs > 0) saves.push(upsertStaffHours(ev.staff_id, date, hrs, 'Synced from clock-in'));
+        });
+        await Promise.all(saves);
+        await loadHoursForDate();
+        btn.textContent = `✓ Synced ${saves.length} record(s)!`;
+        setTimeout(() => { btn.textContent = '⟳ Sync from Clock-In'; }, 3000);
+    } catch (err) {
+        alert('Sync failed: ' + err.message);
+        btn.textContent = '⟳ Sync from Clock-In';
+    } finally { btn.disabled = false; }
 }
 
 async function loadHoursForDate() {
@@ -2908,17 +3022,34 @@ function setupPayrollReport() {
     document.getElementById('generatePayrollBtn')?.addEventListener('click', generatePayrollReport);
     document.getElementById('exportPayrollBtn')?.addEventListener('click', exportPayrollReport);
 
-    // Default to most recently completed bi-weekly period ending last Friday
+    const fmt = d => d.toISOString().split('T')[0];
+
+    // Auto-calculate end date when start is picked (always Mon–Sun, 14-day period)
+    const se = document.getElementById('payrollStart');
+    const ee = document.getElementById('payrollEnd');
+    se?.addEventListener('change', () => {
+        if (!se.value) return;
+        const start = new Date(se.value + 'T00:00:00');
+        // Snap to Monday if not already
+        const dow = start.getDay();
+        if (dow !== 1) start.setDate(start.getDate() - (dow === 0 ? 6 : dow - 1));
+        se.value = fmt(start);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 13); // Mon + 13 days = Sunday
+        if (ee) ee.value = fmt(end);
+    });
+
+    // Default to most recently completed bi-weekly Mon–Sun period
     const today = new Date();
-    const dow   = today.getDay();
-    const endDate = new Date(today);
-    endDate.setDate(today.getDate() - (dow >= 5 ? dow - 5 : dow + 2));
+    const dow   = today.getDay(); // 0=Sun,1=Mon,...
+    // Find last Sunday
+    const lastSun = new Date(today);
+    lastSun.setDate(today.getDate() - (dow === 0 ? 0 : dow));
+    // Go back another week if that Sunday ended less than 2 weeks ago
+    const endDate = new Date(lastSun);
     const startDate = new Date(endDate);
     startDate.setDate(endDate.getDate() - 13);
 
-    const fmt = d => d.toISOString().split('T')[0];
-    const se = document.getElementById('payrollStart');
-    const ee = document.getElementById('payrollEnd');
     if (se) se.value = fmt(startDate);
     if (ee) ee.value = fmt(endDate);
 }
@@ -2956,6 +3087,15 @@ async function generatePayrollReport() {
     }
 }
 
+function _calcYtdPeriods(startVal, endVal) {
+    // Count how many complete 14-day periods from Jan 1 of end year through endVal
+    const year     = parseInt(endVal.substring(0, 4), 10);
+    const jan1     = new Date(`${year}-01-01T00:00:00`);
+    const end      = new Date(endVal + 'T00:00:00');
+    const days     = Math.round((end - jan1) / 86400000) + 1;
+    return Math.max(1, Math.ceil(days / 14));
+}
+
 function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap) {
     const container = document.getElementById('payrollContent');
     if (!staff.length) {
@@ -2963,27 +3103,49 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap) {
         return;
     }
 
-    let totPeriodHrs = 0, totPeriodPay = 0, totYtdHrs = 0, totYtdPay = 0;
+    let totPeriodPay = 0, totYtdPay = 0;
+    const ytdPeriods = _calcYtdPeriods(startVal, endVal);
 
     const rows = staff.map(s => {
-        const pHrs  = periodMap.get(s.id) || 0;
-        const yHrs  = ytdMap.get(s.id) || 0;
-        const rate  = s.hourly_rate || 0;
-        totPeriodHrs += pHrs; totPeriodPay += pHrs * rate;
-        totYtdHrs    += yHrs; totYtdPay    += yHrs * rate;
-        const roomLabel = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
-        const inactive  = !s.active ? ' <span class="chip-waitlist status-chip" style="font-size:.75em">Inactive</span>' : '';
+        const isSalary   = s.pay_type === 'salary';
+        const roomLabel  = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
+        const inactive   = !s.active ? ' <span class="chip-waitlist status-chip" style="font-size:.75em">Inactive</span>' : '';
+        let periodPayStr, ytdPayStr, rateStr, periodHrsStr, ytdHrsStr;
+
+        if (isSalary) {
+            const sal      = s.salary_biweekly || 0;
+            const ytdSal   = sal * ytdPeriods;
+            totPeriodPay  += sal;
+            totYtdPay     += ytdSal;
+            rateStr        = `<span class="pay-type-chip pay-salary">Salary</span>`;
+            periodHrsStr   = '—';
+            periodPayStr   = sal > 0 ? '$' + sal.toFixed(2) : '—';
+            ytdHrsStr      = '—';
+            ytdPayStr      = ytdSal > 0 ? '$' + ytdSal.toFixed(2) : '—';
+        } else {
+            const pHrs = periodMap.get(s.id) || 0;
+            const yHrs = ytdMap.get(s.id) || 0;
+            const rate = s.hourly_rate || 0;
+            totPeriodPay += pHrs * rate;
+            totYtdPay    += yHrs * rate;
+            rateStr       = `$${rate.toFixed(2)}/hr`;
+            periodHrsStr  = pHrs > 0 ? pHrs.toFixed(2) : '—';
+            periodPayStr  = pHrs > 0 ? '$' + (pHrs * rate).toFixed(2) : '—';
+            ytdHrsStr     = yHrs > 0 ? yHrs.toFixed(2) : '—';
+            ytdPayStr     = yHrs > 0 ? '$' + (yHrs * rate).toFixed(2) : '—';
+        }
+
         return `
             <tr>
                 <td>
                     <strong>${escHtml(s.name)}</strong>${inactive}
                     <br><small class="rates-ages">${escHtml(s.role || '')} · ${escHtml(roomLabel)}</small>
                 </td>
-                <td class="report-num">$${rate.toFixed(2)}/hr</td>
-                <td class="report-num payroll-hrs">${pHrs > 0 ? pHrs.toFixed(2) : '—'}</td>
-                <td class="report-num report-revenue">${pHrs > 0 ? '$' + (pHrs * rate).toFixed(2) : '—'}</td>
-                <td class="report-num payroll-hrs">${yHrs > 0 ? yHrs.toFixed(2) : '—'}</td>
-                <td class="report-num report-revenue">${yHrs > 0 ? '$' + (yHrs * rate).toFixed(2) : '—'}</td>
+                <td>${rateStr}</td>
+                <td class="report-num payroll-hrs">${periodHrsStr}</td>
+                <td class="report-num report-revenue">${periodPayStr}</td>
+                <td class="report-num payroll-hrs">${ytdHrsStr}</td>
+                <td class="report-num report-revenue">${ytdPayStr}</td>
             </tr>`;
     }).join('');
 
@@ -3010,10 +3172,10 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap) {
                 <tbody>${rows}</tbody>
                 <tfoot>
                     <tr class="report-total-row">
-                        <td colspan="2"><strong>Total</strong></td>
-                        <td class="report-num"><strong>${totPeriodHrs.toFixed(2)}</strong></td>
+                        <td colspan="2"><strong>Total Payroll</strong></td>
+                        <td class="report-num">—</td>
                         <td class="report-num report-revenue"><strong>$${totPeriodPay.toFixed(2)}</strong></td>
-                        <td class="report-num"><strong>${totYtdHrs.toFixed(2)}</strong></td>
+                        <td class="report-num">—</td>
                         <td class="report-num report-revenue"><strong>$${totYtdPay.toFixed(2)}</strong></td>
                     </tr>
                 </tfoot>
@@ -3027,19 +3189,36 @@ async function exportPayrollReport() {
     if (!startVal || !endVal) { alert('Please select a pay period first.'); return; }
 
     const { staff, periodMap, ytdMap } = await _buildPayrollData(startVal, endVal);
+    const ytdPeriods = _calcYtdPeriods(startVal, endVal);
     const rows = staff.map(s => {
-        const pHrs  = periodMap.get(s.id) || 0;
-        const yHrs  = ytdMap.get(s.id) || 0;
-        const rate  = s.hourly_rate || 0;
+        const isSalary = s.pay_type === 'salary';
+        if (isSalary) {
+            const sal    = s.salary_biweekly || 0;
+            return {
+                'Name':             s.name,
+                'Role':             s.role || '',
+                'Room':             ROOMS.find(r => r.id === s.room_id)?.label || 'Float',
+                'Pay Type':         'Salary',
+                'Rate':             `$${sal.toFixed(2)}/period`,
+                'Period Hours':     '—',
+                'Period Gross Pay': `$${sal.toFixed(2)}`,
+                'YTD Hours':        '—',
+                'YTD Gross Pay':    `$${(sal * ytdPeriods).toFixed(2)}`,
+            };
+        }
+        const pHrs = periodMap.get(s.id) || 0;
+        const yHrs = ytdMap.get(s.id) || 0;
+        const rate = s.hourly_rate || 0;
         return {
-            'Name':              s.name,
-            'Role':              s.role || '',
-            'Room':              ROOMS.find(r => r.id === s.room_id)?.label || 'Float',
-            'Hourly Rate':       `$${rate.toFixed(2)}`,
-            'Period Hours':      pHrs.toFixed(2),
-            'Period Gross Pay':  `$${(pHrs * rate).toFixed(2)}`,
-            'YTD Hours':         yHrs.toFixed(2),
-            'YTD Gross Pay':     `$${(yHrs * rate).toFixed(2)}`,
+            'Name':             s.name,
+            'Role':             s.role || '',
+            'Room':             ROOMS.find(r => r.id === s.room_id)?.label || 'Float',
+            'Pay Type':         'Hourly',
+            'Rate':             `$${rate.toFixed(2)}/hr`,
+            'Period Hours':     pHrs.toFixed(2),
+            'Period Gross Pay': `$${(pHrs * rate).toFixed(2)}`,
+            'YTD Hours':        yHrs.toFixed(2),
+            'YTD Gross Pay':    `$${(yHrs * rate).toFixed(2)}`,
         };
     });
 
