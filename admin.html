@@ -479,12 +479,10 @@
                 <p class="section-desc">Bi-weekly pay period summary with gross pay and year-to-date totals per staff member.</p>
                 <div class="roster-controls">
                     <div class="roster-field">
-                        <label for="payrollStart">Period Start</label>
-                        <input type="date" id="payrollStart">
-                    </div>
-                    <div class="roster-field">
-                        <label for="payrollEnd">Period End</label>
-                        <input type="date" id="payrollEnd">
+                        <label for="payrollPeriod">Pay Period</label>
+                        <select id="payrollPeriod" class="family-search-input" style="min-width:230px">
+                            <!-- populated by setupPayrollReport() -->
+                        </select>
                     </div>
                     <div class="roster-btns">
                         <button id="generatePayrollBtn" class="btn-secondary">Generate Report</button>

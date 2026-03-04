@@ -3103,11 +3103,14 @@ async function syncFromClockEvents() {
             return;
         }
         // Sum all events per staff (supports multiple shifts in one day)
+        // Shifts < 10 minutes are discarded (clock-in errors)
         const totals = new Map();
         events.forEach(ev => {
             if (!ev.clock_in || !ev.clock_out) return;
-            const hrs = Math.round(((new Date(ev.clock_out) - new Date(ev.clock_in)) / 3600000) * 4) / 4;
-            if (hrs > 0) totals.set(ev.staff_id, (totals.get(ev.staff_id) || 0) + hrs);
+            const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
+            if (ms < 10 * 60 * 1000) return;           // discard < 10 min
+            const hrs = Math.round(ms / 3600000 * 100) / 100;  // exact, 2 dp
+            totals.set(ev.staff_id, (totals.get(ev.staff_id) || 0) + hrs);
         });
         const saves = [...totals.entries()].map(([staffId, hrs]) =>
             upsertStaffHours(staffId, date, hrs, 'Synced from clock-in'));
@@ -3142,11 +3145,14 @@ async function loadHoursForDate() {
         const hoursMap = new Map(hoursList.map(h => [h.staff_id, h]));
 
         // Sum all clock events per staff (supports multiple shifts in one day)
+        // Shifts < 10 minutes are discarded (clock-in errors)
         const clockedMap = new Map(); // staff_id -> total clocked hours
         clockEvents.forEach(ev => {
             if (!ev.clock_in || !ev.clock_out) return;
-            const hrs = Math.round(((new Date(ev.clock_out) - new Date(ev.clock_in)) / 3600000) * 4) / 4;
-            if (hrs > 0) clockedMap.set(ev.staff_id, (clockedMap.get(ev.staff_id) || 0) + hrs);
+            const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
+            if (ms < 10 * 60 * 1000) return;           // discard < 10 min
+            const hrs = Math.round(ms / 3600000 * 100) / 100;  // exact, 2 dp
+            clockedMap.set(ev.staff_id, (clockedMap.get(ev.staff_id) || 0) + hrs);
         });
 
         container.innerHTML = `
@@ -3215,40 +3221,65 @@ async function saveHoursForDate() {
 // ============================================================
 // PAYROLL REPORT
 // ============================================================
+// Anchor: the pay period that ended 2026-03-01 (Sunday).
+// All bi-weekly periods are Mon–Sun, 14 days, on that fixed schedule.
+const PAYROLL_ANCHOR_END = '2026-03-01';
+
+function _buildPayrollPeriodList() {
+    const fmt   = d => d.toISOString().split('T')[0];
+    const anchor = new Date(PAYROLL_ANCHOR_END + 'T00:00:00');
+    const today  = new Date();
+
+    // Earliest period to show: 2 years back
+    const earliest = new Date(today);
+    earliest.setFullYear(earliest.getFullYear() - 2);
+
+    // Latest period to show: 6 months forward
+    const latest = new Date(today);
+    latest.setMonth(latest.getMonth() + 6);
+
+    // Walk anchor backwards until we're before 'earliest'
+    let endDate = new Date(anchor);
+    while (endDate > earliest) endDate.setDate(endDate.getDate() - 14);
+    endDate.setDate(endDate.getDate() + 14); // step into range
+
+    const periods = [];
+    while (endDate <= latest) {
+        const startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - 13);
+        periods.push({ start: fmt(startDate), end: fmt(endDate) });
+        endDate.setDate(endDate.getDate() + 14);
+    }
+    return periods;
+}
+
+function _payrollPeriodLabel(start, end) {
+    const [sy, sm, sd] = start.split('-').map(Number);
+    const [,   em, ed] = end.split('-').map(Number);
+    return `${MONTH_NAMES_ADMIN[sm-1]} ${sd} – ${MONTH_NAMES_ADMIN[em-1]} ${ed}, ${sy}`;
+}
+
 function setupPayrollReport() {
     document.getElementById('generatePayrollBtn')?.addEventListener('click', generatePayrollReport);
     document.getElementById('exportPayrollBtn')?.addEventListener('click', exportPayrollReport);
 
-    const fmt = d => d.toISOString().split('T')[0];
+    const sel = document.getElementById('payrollPeriod');
+    if (!sel) return;
 
-    // Auto-calculate end date when start is picked (always Mon–Sun, 14-day period)
-    const se = document.getElementById('payrollStart');
-    const ee = document.getElementById('payrollEnd');
-    se?.addEventListener('change', () => {
-        if (!se.value) return;
-        const start = new Date(se.value + 'T00:00:00');
-        // Snap to Monday if not already
-        const dow = start.getDay();
-        if (dow !== 1) start.setDate(start.getDate() - (dow === 0 ? 6 : dow - 1));
-        se.value = fmt(start);
-        const end = new Date(start);
-        end.setDate(start.getDate() + 13); // Mon + 13 days = Sunday
-        if (ee) ee.value = fmt(end);
+    const periods = _buildPayrollPeriodList();
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Find the most-recently-completed period (end ≤ today), default to it
+    let defaultIdx = 0;
+    periods.forEach((p, i) => { if (p.end <= todayStr) defaultIdx = i; });
+
+    periods.forEach((p, i) => {
+        const opt = document.createElement('option');
+        opt.value = `${p.start}|${p.end}`;
+        opt.textContent = _payrollPeriodLabel(p.start, p.end);
+        if (i === defaultIdx) opt.selected = true;
+        sel.appendChild(opt);
     });
-
-    // Default to most recently completed bi-weekly Mon–Sun period
-    const today = new Date();
-    const dow   = today.getDay(); // 0=Sun,1=Mon,...
-    // Find last Sunday
-    const lastSun = new Date(today);
-    lastSun.setDate(today.getDate() - (dow === 0 ? 0 : dow));
-    // Go back another week if that Sunday ended less than 2 weeks ago
-    const endDate = new Date(lastSun);
-    const startDate = new Date(endDate);
-    startDate.setDate(endDate.getDate() - 13);
-
-    if (se) se.value = fmt(startDate);
-    if (ee) ee.value = fmt(endDate);
 }
 
 async function _buildPayrollData(startVal, endVal) {
@@ -3268,7 +3299,9 @@ async function _buildPayrollData(startVal, endVal) {
 
     function calcClockHrs(ev) {
         if (!ev.clock_in || !ev.clock_out) return 0;
-        return Math.round(((new Date(ev.clock_out) - new Date(ev.clock_in)) / 3600000) * 4) / 4;
+        const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
+        if (ms < 10 * 60 * 1000) return 0;             // discard < 10 min
+        return Math.round(ms / 3600000 * 100) / 100;   // exact, 2 dp
     }
 
     // Sum manual hours
@@ -3296,10 +3329,9 @@ async function _buildPayrollData(startVal, endVal) {
 }
 
 async function generatePayrollReport() {
-    const startVal = document.getElementById('payrollStart')?.value;
-    const endVal   = document.getElementById('payrollEnd')?.value;
-    if (!startVal || !endVal) { alert('Please select both a start and end date.'); return; }
-    if (startVal > endVal) { alert('Start date must be before end date.'); return; }
+    const sel = document.getElementById('payrollPeriod');
+    if (!sel?.value) { alert('Please select a pay period.'); return; }
+    const [startVal, endVal] = sel.value.split('|');
 
     const container = document.getElementById('payrollContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
@@ -3408,9 +3440,9 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap) {
 }
 
 async function exportPayrollReport() {
-    const startVal = document.getElementById('payrollStart')?.value;
-    const endVal   = document.getElementById('payrollEnd')?.value;
-    if (!startVal || !endVal) { alert('Please select a pay period first.'); return; }
+    const sel = document.getElementById('payrollPeriod');
+    if (!sel?.value) { alert('Please select a pay period first.'); return; }
+    const [startVal, endVal] = sel.value.split('|');
 
     const { staff, periodMap, ytdMap } = await _buildPayrollData(startVal, endVal);
     const ytdPeriods = _calcYtdPeriods(startVal, endVal);
