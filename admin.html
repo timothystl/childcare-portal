@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=7">
+    <link rel="stylesheet" href="css/admin.css?v=8">
 </head>
 <body class="admin-body">
 
@@ -55,6 +55,7 @@
             <button class="admin-tab-btn" data-tab="families">👨‍👩‍👧 Families</button>
             <button class="admin-tab-btn" data-tab="settings">⚙️ Settings</button>
             <button class="admin-tab-btn" data-tab="reports">📊 Reports</button>
+            <button class="admin-tab-btn" data-tab="staffing">👷 Staffing</button>
         </nav>
 
         <!-- ── Tab: Daily ─────────────────────────────────────── -->
@@ -239,6 +240,19 @@
                 </div>
             </section>
 
+            <!-- Staff-to-Child Ratios -->
+            <section class="admin-section collapsible-section" id="ratiosSection">
+                <h2>👷 Staff-to-Child Ratios</h2>
+                <p class="section-desc">Maximum children per staff member for each room. Used by the Staffing tab to calculate minimum staff required each day.</p>
+                <div id="ratiosTableWrap">
+                    <p class="empty-hint">Loading ratios…</p>
+                </div>
+                <div class="rates-actions">
+                    <button id="saveRatiosBtn" class="btn-primary">💾 Save Ratios</button>
+                    <span id="ratiosStatus" class="rates-status"></span>
+                </div>
+            </section>
+
         </div><!-- /#tab-settings -->
 
         <!-- ── Tab: Reports ───────────────────────────────────── -->
@@ -263,7 +277,49 @@
                 </div>
             </section>
 
+            <!-- Family Billing Summary -->
+            <section class="admin-section">
+                <h2>👨‍👩‍👧 Family Billing Summary</h2>
+                <p class="section-desc">Per-family billing totals for a selected month, grouped by parent. Use this to generate invoices or billing statements. Discounts are applied automatically.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="familyBillingMonth">Month</label>
+                        <input type="month" id="familyBillingMonth">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateFamilyBillingBtn" class="btn-secondary">Generate</button>
+                        <button id="exportFamilyBillingBtn" class="btn-primary">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="familyBillingContent">
+                    <p class="empty-hint">Select a month above and click Generate.</p>
+                </div>
+            </section>
+
         </div><!-- /#tab-reports -->
+
+        <!-- ── Tab: Staffing ─────────────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-staffing">
+
+            <section class="admin-section">
+                <h2>📅 Staff Schedule Planner</h2>
+                <p class="section-desc">Shows minimum staff required per room per day based on confirmed enrollment and the ratios configured in ⚙️ Settings. Closed days are excluded automatically.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="staffWeekOf">Week of (Monday)</label>
+                        <input type="date" id="staffWeekOf">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateStaffBtn" class="btn-secondary">Generate Schedule</button>
+                        <button id="exportStaffBtn" class="btn-primary">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="staffContent">
+                    <p class="empty-hint">Select a week above and click Generate Schedule.</p>
+                </div>
+            </section>
+
+        </div><!-- /#tab-staffing -->
 
     </div>
 
@@ -402,8 +458,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=25"></script>
-    <script src="js/admin.js?v=27"></script>
+    <script src="js/supabase.js?v=26"></script>
+    <script src="js/admin.js?v=28"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 </body>
 </html>
