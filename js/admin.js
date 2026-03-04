@@ -1149,7 +1149,14 @@ function setupFamilies() {
         if (e.target === e.currentTarget) closeFamilyModal();
     });
 
-    // Document-level delegation for Edit / Archive / Restore buttons in family rows
+    // Merge modal
+    document.getElementById('mergeCancelBtn')?.addEventListener('click', closeMergeModal);
+    document.getElementById('mergeConfirmBtn')?.addEventListener('click', doMergeFamilies);
+    document.getElementById('mergeModal')?.addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeMergeModal();
+    });
+
+    // Document-level delegation for Edit / Archive / Restore / Delete / Merge buttons in family rows
     document.addEventListener('click', e => {
         const editBtn = e.target.closest('.fm-edit-btn[data-family-id]');
         if (editBtn) {
@@ -1164,6 +1171,18 @@ function setupFamilies() {
         }
         const restoreBtn = e.target.closest('.fm-restore-btn[data-family-id]');
         if (restoreBtn) { doRestoreFamily(restoreBtn.dataset.familyId); return; }
+
+        const deleteBtn = e.target.closest('.fm-delete-btn[data-family-id]');
+        if (deleteBtn) {
+            confirmDeleteFamily(deleteBtn.dataset.familyId, deleteBtn.dataset.familyName);
+            return;
+        }
+
+        const mergeBtn = e.target.closest('.fm-merge-btn[data-family-id]');
+        if (mergeBtn) {
+            openMergeModal(mergeBtn.dataset.familyId, mergeBtn.dataset.familyName);
+            return;
+        }
     });
 
     // Escape closes family modal (visibility-safe)
@@ -1446,8 +1465,13 @@ function sortFamilies(families) {
                     || (a.parent_name || '').localeCompare(b.parent_name || '');
             });
             break;
-        default: // 'name'
-            sorted.sort((a, b) => (a.parent_name || '').localeCompare(b.parent_name || ''));
+        default: { // 'name' — sort by family last name (as shown in heading)
+            const lname = n => (n || '').trim().split(/\s+/).pop()?.toLowerCase() || '';
+            sorted.sort((a, b) =>
+                lname(a.parent_name).localeCompare(lname(b.parent_name)) ||
+                (a.parent_name || '').localeCompare(b.parent_name || ''));
+            break;
+        }
     }
     return sorted;
 }
@@ -1461,7 +1485,15 @@ function renderFamiliesList(families) {
         return;
     }
 
-    const sorted      = sortFamilies(families);
+    // Deduplicate by family ID in case the DB ever returns the same row twice
+    const _seenIds = new Set();
+    const unique   = families.filter(f => {
+        if (_seenIds.has(f.id)) return false;
+        _seenIds.add(f.id);
+        return true;
+    });
+
+    const sorted      = sortFamilies(unique);
     const roomOptions = ROOMS.map(r =>
         `<option value="${r.id}">${r.label}</option>`
     ).join('');
@@ -1470,8 +1502,9 @@ function renderFamiliesList(families) {
         if (!name && !email) return '';
         return `<div class="family-parent-row">
             <span class="family-row-name">${escHtml(name || '')}</span>
-            ${pin ? `<span class="family-pin-badge">PIN: ${pin}</span>` : ''}
-            ${email || phone ? `<span class="family-row-meta">${escHtml(email || '')}${email && phone ? ' &middot; ' : ''}${escHtml(phone || '')}</span>` : ''}
+            <span class="family-pin-badge">${pin ? `PIN: ${pin}` : ''}</span>
+            <span class="family-row-meta">${escHtml(email || '')}${email && phone ? ' &middot; ' : ''}${escHtml(phone || '')}</span>
+            <span></span>
         </div>`;
     };
 
@@ -1488,19 +1521,21 @@ function renderFamiliesList(families) {
                         <div class="family-row-top">
                             <div class="family-parent-row">
                                 <span class="family-row-name">${escHtml(f.parent_name || '')}</span>
-                                ${f.pin ? `<span class="family-pin-badge">PIN: ${f.pin}</span>` : ''}
-                                ${f.parent_email || f.parent_phone ? `<span class="family-row-meta">${escHtml(f.parent_email || '')}${f.parent_email && f.parent_phone ? ' &middot; ' : ''}${escHtml(f.parent_phone || '')}</span>` : ''}
-                                ${f.group === 'summer' ? '<span class="family-badge-summer">Summer</span>' : ''}
-                                ${archived ? '<span class="family-badge-archived">Archived</span>' : ''}
+                                <span class="family-pin-badge">${f.pin ? `PIN: ${f.pin}` : ''}</span>
+                                <span class="family-row-meta">${escHtml(f.parent_email || '')}${f.parent_email && f.parent_phone ? ' &middot; ' : ''}${escHtml(f.parent_phone || '')}</span>
+                                <div class="family-row-actions">
+                                    ${f.group === 'summer' ? '<span class="family-badge-summer">Summer</span>' : ''}
+                                    ${archived ? '<span class="family-badge-archived">Archived</span>' : ''}
+                                    ${!archived
+                                        ? `<button class="fm-edit-btn" data-family-id="${f.id}" title="Edit family">✏ Edit</button>
+                                           <button class="fm-archive-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Archive family">Archive</button>`
+                                        : `<button class="fm-restore-btn" data-family-id="${f.id}" title="Restore family">↩ Restore</button>`
+                                    }
+                                    <button class="fm-merge-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Merge into another family">⇄ Merge</button>
+                                    <button class="fm-delete-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Permanently delete this family">🗑 Delete</button>
+                                </div>
                             </div>
                             ${(f.parent2_name || f.parent2_email) ? parentRow(f.parent2_name, f.parent2_email, f.parent2_phone, f.parent2_pin) : ''}
-                            <div class="family-row-actions">
-                                ${!archived
-                                    ? `<button class="fm-edit-btn" data-family-id="${f.id}" title="Edit family">✏ Edit</button>
-                                       <button class="fm-archive-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Archive family">Archive</button>`
-                                    : `<button class="fm-restore-btn" data-family-id="${f.id}" title="Restore family">↩ Restore</button>`
-                                }
-                            </div>
                         </div>
                         ${kids.length ? `
                             <ul class="family-students">
@@ -1903,6 +1938,60 @@ async function doRestoreFamily(id) {
         await loadFamilies();
     } catch (err) {
         alert('Restore failed: ' + err.message);
+    }
+}
+
+// ---- Delete ----
+function confirmDeleteFamily(id, name) {
+    if (!confirm(`Permanently delete the ${name} family and ALL their children?\n\nThis cannot be undone.`)) return;
+    doDeleteFamily(id);
+}
+
+async function doDeleteFamily(id) {
+    try {
+        await deleteFamily(id);
+        await loadFamilies();
+    } catch (err) {
+        alert('Delete failed: ' + err.message);
+    }
+}
+
+// ---- Merge ----
+let _mergingFamilyId = null;
+
+function openMergeModal(familyId, familyName) {
+    _mergingFamilyId = familyId;
+    document.getElementById('mergeFromName').textContent = familyName;
+    const select = document.getElementById('mergeIntoSelect');
+    select.innerHTML = allFamiliesData
+        .filter(f => f.id !== familyId)
+        .map(f => {
+            const ln = (f.parent_name || '').trim().split(/\s+/).pop() || '';
+            return `<option value="${escHtml(f.id)}">${escHtml(ln)} Family — ${escHtml(f.parent_name || '')}</option>`;
+        })
+        .join('');
+    document.getElementById('mergeModal').classList.remove('hidden');
+}
+
+function closeMergeModal() {
+    _mergingFamilyId = null;
+    document.getElementById('mergeModal').classList.add('hidden');
+}
+
+async function doMergeFamilies() {
+    const toId = document.getElementById('mergeIntoSelect').value;
+    if (!toId || !_mergingFamilyId) return;
+    const btn = document.getElementById('mergeConfirmBtn');
+    btn.disabled = true;
+    btn.textContent = 'Merging…';
+    try {
+        await mergeFamilies(_mergingFamilyId, toId);
+        closeMergeModal();
+        await loadFamilies();
+    } catch (err) {
+        alert('Merge failed: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Merge & Delete';
     }
 }
 

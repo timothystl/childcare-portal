@@ -483,6 +483,26 @@ async function deleteStudent(id) {
     if (error) throw error;
 }
 
+async function deleteFamily(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    // Delete children first, then the family record
+    const { error: sErr } = await sbClient.from('students').delete().eq('family_id', id);
+    if (sErr) throw sErr;
+    const { error } = await sbClient.from('families').delete().eq('id', id);
+    if (error) throw error;
+}
+
+async function mergeFamilies(fromId, toId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    // Reassign all students from the source family to the target family
+    const { error: sErr } = await sbClient
+        .from('students').update({ family_id: toId }).eq('family_id', fromId);
+    if (sErr) throw sErr;
+    // Delete the now-empty source family record
+    const { error } = await sbClient.from('families').delete().eq('id', fromId);
+    if (error) throw error;
+}
+
 // ---- Bulk summer archive ----
 async function archiveSummerFamilies() {
     if (!sbClient) throw new Error('Supabase not configured.');
