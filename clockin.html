@@ -335,24 +335,29 @@ async function verifyPin() {
         document.getElementById('dateLabel').textContent =
             new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
+        console.log('Calling refreshClockStatus for staffId:', staffId, 'workDate:', workDate);
         await refreshClockStatus();
+        console.log('refreshClockStatus succeeded, showing clock screen');
         showScreen('clock');
+        console.log('showScreen(clock) called, clockScreen display:', document.getElementById('clockScreen').style.display);
     } catch (err) {
         showScreen('pin');
         const msg = err?.message || String(err);
         showError('Error: ' + msg);
-        console.error(err);
+        console.error('verifyPin catch block:', err);
     }
 }
 
 // ── Clock Status ──────────────────────────────────────────────
 async function refreshClockStatus() {
+    console.log('refreshClockStatus: querying staff_clock_events...');
     const { data, error } = await sb
         .from('staff_clock_events')
         .select('clock_in, clock_out')
         .eq('staff_id', staffId)
         .eq('work_date', workDate)
         .maybeSingle();
+    console.log('refreshClockStatus result:', { data, error });
     if (error) throw error;
 
     const inTime  = data?.clock_in  || null;
