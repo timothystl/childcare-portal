@@ -132,6 +132,17 @@
     flex-shrink: 0;
 }
 
+/* Override btn-ghost for dark purple header background */
+.lookup-header-actions .btn-ghost {
+    color: rgba(255,255,255,.9);
+    border-color: rgba(255,255,255,.5);
+}
+.lookup-header-actions .btn-ghost:hover {
+    color: #fff;
+    border-color: #fff;
+    background: rgba(255,255,255,.12);
+}
+
 /* -------- Child Card -------- */
 .lookup-child-card {
     background: #fff;
