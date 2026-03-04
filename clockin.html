@@ -307,14 +307,26 @@ document.getElementById('delBtn').addEventListener('click', () => {
 async function verifyPin() {
     showScreen('loading');
     try {
+        // First test: can we reach the staff table at all?
+        const testResult = await sb.from('staff').select('count', { count: 'exact', head: true });
+        console.log('Table access test:', testResult);
+
         const { data, error } = await sb
             .from('staff')
-            .select('id, name, role')
+            .select('id, name, role, staff_pin, active')
             .eq('staff_pin', parseInt(pin, 10))
             .eq('active', true)
             .maybeSingle();
+        console.log('PIN lookup result:', { data, error, pinUsed: parseInt(pin, 10) });
         if (error) throw error;
-        if (!data) { showScreen('pin'); showError('Invalid PIN. Please try again.'); return; }
+        if (!data) {
+            // Show all active staff pins for debugging (remove in production)
+            const { data: allStaff } = await sb.from('staff').select('name, staff_pin, active').eq('active', true);
+            console.log('All active staff:', allStaff);
+            showScreen('pin');
+            showError('Invalid PIN. Please try again.');
+            return;
+        }
 
         staffId = data.id;
         document.getElementById('staffName').textContent = data.name;
