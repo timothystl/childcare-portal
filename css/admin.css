@@ -481,7 +481,7 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 
 .report-table-wrap {
-    max-width: 720px;
+    /* no max-width — table expands to fit all columns without horizontal scroll */
 }
 /* Staff schedule needs full width — no max-width cap */
 .staff-table-wrap {
@@ -1930,13 +1930,63 @@ tr.pending-approval:hover { background: #fef3c7; }
 .hours-entry-table { width: 100%; }
 .hours-entry-table td { vertical-align: middle; }
 /* Override the global right-align for non-first headers — all columns left-aligned here */
-.hours-entry-table thead th { text-align: left; }
+.hours-entry-table thead th { text-align: left !important; }
+.hours-entry-table tbody td { text-align: left; }
 
 /* ============================================================
    PAYROLL TABLE
    ============================================================ */
 .payroll-table { width: 100%; }
 .payroll-hrs { font-weight: 600; color: #2c5282; }
+
+/* ============================================================
+   AVAILABILITY DAYS  (staff form)
+   ============================================================ */
+.avail-days-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 4px;
+}
+.avail-days-group label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: .9em;
+    font-weight: 500;
+    cursor: pointer;
+    color: #444;
+}
+
+/* ============================================================
+   AUTO-FILL SCHEDULE TABLE
+   ============================================================ */
+.autofill-table { width: 100%; }
+.autofill-table thead th { text-align: left !important; white-space: nowrap; }
+.autofill-cell {
+    padding: 8px 12px;
+    vertical-align: top;
+    min-width: 120px;
+}
+.staff-name-chip {
+    display: inline-block;
+    background: #e8f4fd;
+    color: #1a5276;
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-size: .8em;
+    font-weight: 600;
+    margin: 2px 2px 2px 0;
+    white-space: nowrap;
+}
+.staff-unfilled {
+    color: #c62828;
+    font-size: .82em;
+    font-weight: 600;
+}
+.shift-am-th { background: #ebf8ff !important; color: #2c5282 !important; }
+.shift-pm-th { background: #fff8eb !important; color: #744210 !important; }
 
 /* ============================================================
    STATUS CHIPS  (reused across features)

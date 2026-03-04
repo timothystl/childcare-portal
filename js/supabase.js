@@ -889,3 +889,25 @@ async function fetchClockEventsForRange(startDate, endDate) {
     if (error) throw error;
     return data || [];
 }
+
+// ============================================================
+// STAFF AVAILABILITY  (stored in settings table as JSON blob)
+// ============================================================
+// Shape: { "<staff_id>": { days: ["Mon","Tue","Wed","Thu","Fri"], maxHours: 40 }, ... }
+async function fetchStaffAvailability() {
+    if (!sbClient) return {};
+    const { data } = await sbClient
+        .from('settings')
+        .select('value')
+        .eq('key', 'staff_availability')
+        .maybeSingle();
+    return data?.value || {};
+}
+
+async function saveStaffAvailability(availMap) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'staff_availability', value: availMap });
+    if (error) throw error;
+}
