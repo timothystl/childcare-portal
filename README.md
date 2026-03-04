@@ -56,6 +56,64 @@ CREATE POLICY "Allow public select" ON registration_dates FOR SELECT TO anon USI
 
 ---
 
+### Staff & Clock-In Tables (run separately after the above)
+
+```sql
+-- Staff roster (admin-managed)
+CREATE TABLE IF NOT EXISTS staff (
+    id              BIGSERIAL PRIMARY KEY,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    name            TEXT NOT NULL,
+    role            TEXT,
+    pay_type        TEXT DEFAULT 'hourly',
+    hourly_rate     NUMERIC DEFAULT 0,
+    salary_biweekly NUMERIC DEFAULT 0,
+    room_id         TEXT,
+    hire_date       DATE,
+    staff_pin       INT,
+    active          BOOLEAN DEFAULT TRUE
+);
+
+ALTER TABLE staff ENABLE ROW LEVEL SECURITY;
+-- Anon can read active staff (needed for PIN lookup on clock-in page)
+CREATE POLICY "anon read active staff"   ON staff FOR SELECT TO anon USING (active = true);
+-- Authenticated users (admin) have full access
+CREATE POLICY "auth full access staff"   ON staff FOR ALL    TO authenticated USING (true) WITH CHECK (true);
+
+-- Staff clock-in / clock-out events
+CREATE TABLE IF NOT EXISTS staff_clock_events (
+    id          BIGSERIAL PRIMARY KEY,
+    staff_id    BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+    work_date   DATE NOT NULL,
+    clock_in    TIMESTAMPTZ,
+    clock_out   TIMESTAMPTZ,
+    UNIQUE (staff_id, work_date)
+);
+
+ALTER TABLE staff_clock_events ENABLE ROW LEVEL SECURITY;
+-- Anon can read, insert, and update (needed for clock-in page using the anon key)
+CREATE POLICY "anon select clock events" ON staff_clock_events FOR SELECT TO anon USING (true);
+CREATE POLICY "anon insert clock events" ON staff_clock_events FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "anon update clock events" ON staff_clock_events FOR UPDATE TO anon USING (true) WITH CHECK (true);
+-- Authenticated users (admin) have full access
+CREATE POLICY "auth full access clock"   ON staff_clock_events FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Staff hours (manual payroll entry)
+CREATE TABLE IF NOT EXISTS staff_hours (
+    id           BIGSERIAL PRIMARY KEY,
+    staff_id     BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+    work_date    DATE NOT NULL,
+    hours_worked NUMERIC DEFAULT 0,
+    notes        TEXT DEFAULT '',
+    UNIQUE (staff_id, work_date)
+);
+
+ALTER TABLE staff_hours ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "auth full access hours" ON staff_hours FOR ALL TO authenticated USING (true) WITH CHECK (true);
+```
+
+---
+
 ## STEP 3 — Get Your Supabase Keys
 
 1. In your Supabase project, go to **Settings → API**.
