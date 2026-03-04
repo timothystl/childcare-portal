@@ -976,3 +976,12 @@ async function updateWaitlistApplication(id, fields) {
         .eq('id', id);
     if (error) throw error;
 }
+
+async function sendWaitlistOfferEmail({ parentName, parentEmail, childName, offerDeadline, offerNotes }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.functions.invoke('send-waitlist-offer', {
+        body: { parentName, parentEmail, childName, offerDeadline, offerNotes },
+    });
+    if (error) throw error;
+    return data;
+}
