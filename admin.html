@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=8">
+    <link rel="stylesheet" href="css/admin.css?v=9">
 </head>
 <body class="admin-body">
 
@@ -296,6 +296,44 @@
                 </div>
             </section>
 
+            <!-- Enrollment Trends -->
+            <section class="admin-section">
+                <h2>📈 Enrollment Trends</h2>
+                <p class="section-desc">Month-by-month enrollment count per room — useful for spotting growth patterns and planning ahead.</p>
+                <div class="roster-btns" style="margin-bottom:12px">
+                    <button id="generateTrendsBtn" class="btn-secondary">Generate Trends</button>
+                    <button id="exportTrendsBtn" class="btn-primary">&#8595; Export Excel</button>
+                </div>
+                <div id="trendsContent">
+                    <p class="empty-hint">Click Generate Trends to view enrollment history.</p>
+                </div>
+            </section>
+
+            <!-- Waitlist Demand -->
+            <section class="admin-section">
+                <h2>⏳ Waitlist Demand</h2>
+                <p class="section-desc">Rooms and months with the most waitlisted requests — shows unmet demand to guide capacity decisions.</p>
+                <div class="roster-btns" style="margin-bottom:12px">
+                    <button id="generateWaitlistBtn" class="btn-secondary">Generate Report</button>
+                </div>
+                <div id="waitlistContent">
+                    <p class="empty-hint">Click Generate Report to view waitlist demand.</p>
+                </div>
+            </section>
+
+            <!-- Year-to-Date Revenue -->
+            <section class="admin-section">
+                <h2>📅 Year-to-Date Revenue</h2>
+                <p class="section-desc">Rolling monthly revenue totals by room for the current calendar year.</p>
+                <div class="roster-btns" style="margin-bottom:12px">
+                    <button id="generateYtdBtn" class="btn-secondary">Generate YTD</button>
+                    <button id="exportYtdBtn" class="btn-primary">&#8595; Export Excel</button>
+                </div>
+                <div id="ytdContent">
+                    <p class="empty-hint">Click Generate YTD to view revenue by month.</p>
+                </div>
+            </section>
+
         </div><!-- /#tab-reports -->
 
         <!-- ── Tab: Staffing ─────────────────────────────────── -->
@@ -316,6 +354,97 @@
                 </div>
                 <div id="staffContent">
                     <p class="empty-hint">Select a week above and click Generate Schedule.</p>
+                </div>
+            </section>
+
+            <!-- Staff Roster -->
+            <section class="admin-section">
+                <h2>👥 Staff Roster</h2>
+                <p class="section-desc">Manage active staff members. Name, role, hourly rate, and room assignment are used for the payroll report.</p>
+                <div class="families-dir-controls">
+                    <button id="addStaffBtn" class="btn-primary">+ Add Staff Member</button>
+                    <button id="toggleInactiveStaffBtn" class="btn-ghost">Show Inactive</button>
+                    <button id="refreshStaffBtn" class="btn-secondary">&#8635; Refresh</button>
+                </div>
+                <!-- Inline add / edit form -->
+                <div id="staffEditForm" class="staff-edit-form hidden">
+                    <h4 id="staffFormTitle">Add Staff Member</h4>
+                    <div class="staff-form-row">
+                        <div class="fm-field fm-field-grow">
+                            <label>Name *</label>
+                            <input type="text" id="sfName" placeholder="Full name" autocomplete="off">
+                        </div>
+                        <div class="fm-field fm-field-grow">
+                            <label>Role</label>
+                            <input type="text" id="sfRole" placeholder="e.g. Lead Teacher, Assistant" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="staff-form-row">
+                        <div class="fm-field">
+                            <label>Hourly Rate ($)</label>
+                            <input type="number" id="sfRate" min="0" step="0.01" placeholder="0.00" class="rate-input">
+                        </div>
+                        <div class="fm-field">
+                            <label>Room</label>
+                            <select id="sfRoom" class="family-search-input" style="width:auto">
+                                <option value="">Float / All Rooms</option>
+                            </select>
+                        </div>
+                        <div class="fm-field">
+                            <label>Hire Date</label>
+                            <input type="date" id="sfHireDate">
+                        </div>
+                    </div>
+                    <div class="rates-actions" style="margin-top:10px">
+                        <button id="saveStaffBtn" class="btn-primary">Save</button>
+                        <button id="cancelStaffBtn" class="btn-ghost">Cancel</button>
+                        <span id="staffFormStatus" class="rates-status"></span>
+                    </div>
+                </div>
+                <div id="staffRosterContent">
+                    <p class="empty-hint">Click Refresh to load staff.</p>
+                </div>
+            </section>
+
+            <!-- Log Hours -->
+            <section class="admin-section">
+                <h2>⏱ Log Hours</h2>
+                <p class="section-desc">Record actual hours worked by each staff member for a given day. Re-open the same date to update entries.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="logHoursDate">Date</label>
+                        <input type="date" id="logHoursDate">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="loadHoursBtn" class="btn-secondary">Load</button>
+                        <button id="saveHoursBtn" class="btn-primary">💾 Save Hours</button>
+                    </div>
+                </div>
+                <div id="hoursEntryContent">
+                    <p class="empty-hint">Select a date and click Load to enter hours.</p>
+                </div>
+            </section>
+
+            <!-- Payroll Report -->
+            <section class="admin-section">
+                <h2>💵 Payroll Report</h2>
+                <p class="section-desc">Bi-weekly pay period summary with gross pay and year-to-date totals per staff member.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="payrollStart">Period Start</label>
+                        <input type="date" id="payrollStart">
+                    </div>
+                    <div class="roster-field">
+                        <label for="payrollEnd">Period End</label>
+                        <input type="date" id="payrollEnd">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generatePayrollBtn" class="btn-secondary">Generate Report</button>
+                        <button id="exportPayrollBtn" class="btn-primary">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="payrollContent">
+                    <p class="empty-hint">Select a pay period and click Generate Report.</p>
                 </div>
             </section>
 
@@ -458,8 +587,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=26"></script>
-    <script src="js/admin.js?v=28"></script>
+    <script src="js/supabase.js?v=27"></script>
+    <script src="js/admin.js?v=29"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 </body>
 </html>

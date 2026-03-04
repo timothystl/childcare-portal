@@ -1856,3 +1856,53 @@ tr.pending-approval:hover { background: #fef3c7; }
     font-style: italic;
 }
 
+
+/* ============================================================
+   STAFF ROSTER TABLE
+   ============================================================ */
+.staff-roster-table { width: 100%; }
+.staff-inactive-row td { color: #aaa; }
+.staff-inactive-row strong { color: #bbb; }
+
+/* Inline add/edit form */
+.staff-edit-form {
+    background: #f8f9ff;
+    border: 1.5px solid #d0d7f5;
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin: 14px 0;
+}
+.staff-edit-form h4 { margin: 0 0 14px; color: #333; font-size: 1em; }
+.staff-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 10px;
+    align-items: flex-end;
+}
+
+/* ============================================================
+   HOURS ENTRY TABLE
+   ============================================================ */
+.hours-entry-table { width: 100%; }
+.hours-entry-table td { vertical-align: middle; }
+
+/* ============================================================
+   PAYROLL TABLE
+   ============================================================ */
+.payroll-table { width: 100%; }
+.payroll-hrs { font-weight: 600; color: #2c5282; }
+
+/* ============================================================
+   STATUS CHIPS  (reused across features)
+   ============================================================ */
+.status-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: .78em;
+    font-weight: 600;
+    line-height: 1.6;
+}
+.chip-confirmed { background: #d4edda; color: #155724; }
+.chip-waitlist  { background: #fff3cd; color: #856404; }

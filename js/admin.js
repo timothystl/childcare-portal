@@ -79,6 +79,10 @@ async function initDashboard() {
     setupRates();
     setupRatios();
     setupStaffScheduling();
+    setupStaffRoster();
+    setupHoursEntry();
+    setupPayrollReport();
+    setupExtraReports();
     setupTabs();
     setupCollapsibles();
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
@@ -2668,6 +2672,616 @@ async function onSaveRates() {
         btn.disabled    = false;
         btn.textContent = '💾 Save Rates';
     }
+}
+
+// ============================================================
+// STAFF ROSTER
+// ============================================================
+let allStaffData     = [];
+let showInactiveStaff = false;
+let editingStaffId   = null;
+
+function setupStaffRoster() {
+    document.getElementById('addStaffBtn')?.addEventListener('click', () => openStaffForm());
+    document.getElementById('cancelStaffBtn')?.addEventListener('click', closeStaffForm);
+    document.getElementById('saveStaffBtn')?.addEventListener('click', onSaveStaffMember);
+    document.getElementById('refreshStaffBtn')?.addEventListener('click', loadStaffList);
+    document.getElementById('toggleInactiveStaffBtn')?.addEventListener('click', () => {
+        showInactiveStaff = !showInactiveStaff;
+        const btn = document.getElementById('toggleInactiveStaffBtn');
+        btn.textContent = showInactiveStaff ? 'Hide Inactive' : 'Show Inactive';
+        btn.classList.toggle('btn-active', showInactiveStaff);
+        loadStaffList();
+    });
+
+    // Populate room picker in the add/edit form
+    const sel = document.getElementById('sfRoom');
+    if (sel) {
+        ROOMS.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id; opt.textContent = r.label;
+            sel.appendChild(opt);
+        });
+    }
+
+    loadStaffList();
+}
+
+async function loadStaffList() {
+    const container = document.getElementById('staffRosterContent');
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        allStaffData = await fetchAllStaff({ includeInactive: showInactiveStaff });
+        renderStaffList(allStaffData);
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Failed to load staff: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function renderStaffList(staff) {
+    const container = document.getElementById('staffRosterContent');
+    if (!staff.length) {
+        container.innerHTML = '<p class="empty-hint">No staff members found. Click "+ Add Staff Member" to get started.</p>';
+        return;
+    }
+    container.innerHTML = `
+        <table class="report-table staff-roster-table">
+            <thead>
+                <tr>
+                    <th>Name</th><th>Role</th><th>Room</th>
+                    <th>Rate</th><th>Hire Date</th><th>Status</th><th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${staff.map(s => {
+                    const roomLabel = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
+                    const hireDate  = s.hire_date ? friendlyShort(s.hire_date) : '—';
+                    return `
+                        <tr class="${s.active ? '' : 'staff-inactive-row'}" data-staff-id="${s.id}">
+                            <td><strong>${escHtml(s.name)}</strong></td>
+                            <td>${escHtml(s.role || '—')}</td>
+                            <td>${escHtml(roomLabel)}</td>
+                            <td class="report-num">$${(s.hourly_rate || 0).toFixed(2)}/hr</td>
+                            <td>${hireDate}</td>
+                            <td><span class="status-chip ${s.active ? 'chip-confirmed' : 'chip-waitlist'}">${s.active ? 'Active' : 'Inactive'}</span></td>
+                            <td class="actions-cell">
+                                <button class="btn-secondary staff-edit-btn" data-staff-id="${s.id}">Edit</button>
+                                <button class="${s.active ? 'btn-warning' : 'btn-secondary'} staff-toggle-btn"
+                                    data-staff-id="${s.id}" data-active="${s.active}">
+                                    ${s.active ? 'Deactivate' : 'Restore'}
+                                </button>
+                            </td>
+                        </tr>`;
+                }).join('')}
+            </tbody>
+        </table>`;
+
+    container.querySelectorAll('.staff-edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const s = allStaffData.find(x => x.id === btn.dataset.staffId);
+            if (s) openStaffForm(s);
+        });
+    });
+    container.querySelectorAll('.staff-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const active = btn.dataset.active !== 'true';
+            try {
+                await setStaffActive(btn.dataset.staffId, active);
+                await loadStaffList();
+            } catch (err) { alert('Error: ' + err.message); }
+        });
+    });
+}
+
+function openStaffForm(staff = null) {
+    editingStaffId = staff?.id || null;
+    document.getElementById('staffFormTitle').textContent = staff ? 'Edit Staff Member' : 'Add Staff Member';
+    document.getElementById('sfName').value     = staff?.name || '';
+    document.getElementById('sfRole').value     = staff?.role || '';
+    document.getElementById('sfRate').value     = staff?.hourly_rate || '';
+    document.getElementById('sfRoom').value     = staff?.room_id || '';
+    document.getElementById('sfHireDate').value = staff?.hire_date || '';
+    document.getElementById('staffFormStatus').textContent = '';
+    document.getElementById('staffEditForm').classList.remove('hidden');
+    document.getElementById('sfName').focus();
+}
+
+function closeStaffForm() {
+    document.getElementById('staffEditForm').classList.add('hidden');
+    editingStaffId = null;
+}
+
+async function onSaveStaffMember() {
+    const name = document.getElementById('sfName').value.trim();
+    if (!name) { alert('Name is required.'); return; }
+
+    const statusEl = document.getElementById('staffFormStatus');
+    const btn      = document.getElementById('saveStaffBtn');
+    btn.disabled = true; statusEl.textContent = '';
+
+    try {
+        await upsertStaffMember({
+            id:         editingStaffId,
+            name,
+            role:       document.getElementById('sfRole').value.trim(),
+            hourlyRate: parseFloat(document.getElementById('sfRate').value) || 0,
+            roomId:     document.getElementById('sfRoom').value || null,
+            hireDate:   document.getElementById('sfHireDate').value || null,
+        });
+        closeStaffForm();
+        await loadStaffList();
+    } catch (err) {
+        statusEl.textContent = '⚠️ ' + err.message;
+        statusEl.style.color = '#c62828';
+    } finally { btn.disabled = false; }
+}
+
+// ============================================================
+// LOG HOURS
+// ============================================================
+function setupHoursEntry() {
+    const el = document.getElementById('logHoursDate');
+    if (el) el.value = new Date().toISOString().split('T')[0];
+    document.getElementById('loadHoursBtn')?.addEventListener('click', loadHoursForDate);
+    document.getElementById('saveHoursBtn')?.addEventListener('click', saveHoursForDate);
+}
+
+async function loadHoursForDate() {
+    const date = document.getElementById('logHoursDate')?.value;
+    if (!date) { alert('Please select a date.'); return; }
+
+    const container = document.getElementById('hoursEntryContent');
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        if (!allStaffData.length) await loadStaffList();
+        const active = allStaffData.filter(s => s.active);
+        if (!active.length) {
+            container.innerHTML = '<p class="empty-hint">No active staff. Add staff in the Staff Roster section above.</p>';
+            return;
+        }
+
+        const hoursList = await fetchStaffHours(date, date);
+        const hoursMap  = new Map(hoursList.map(h => [h.staff_id, h]));
+
+        container.innerHTML = `
+            <table class="report-table hours-entry-table">
+                <thead>
+                    <tr><th>Staff Member</th><th>Role</th><th>Room</th><th>Hours Worked</th><th>Notes</th></tr>
+                </thead>
+                <tbody>
+                    ${active.map(s => {
+                        const entry     = hoursMap.get(s.id);
+                        const roomLabel = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
+                        return `
+                            <tr data-staff-id="${s.id}">
+                                <td><strong>${escHtml(s.name)}</strong></td>
+                                <td>${escHtml(s.role || '—')}</td>
+                                <td>${escHtml(roomLabel)}</td>
+                                <td><input type="number" class="rate-input hours-input"
+                                    min="0" max="24" step="0.25" placeholder="0.00" style="width:80px"
+                                    value="${entry?.hours_worked ?? ''}"></td>
+                                <td><input type="text" class="hours-notes-input"
+                                    placeholder="Optional note" style="width:200px"
+                                    value="${escHtml(entry?.notes || '')}"></td>
+                            </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>`;
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+async function saveHoursForDate() {
+    const date = document.getElementById('logHoursDate')?.value;
+    if (!date) { alert('Please select a date first.'); return; }
+
+    const rows = document.querySelectorAll('#hoursEntryContent tbody tr[data-staff-id]');
+    if (!rows.length) { alert('Click Load first to bring up the staff list.'); return; }
+
+    const btn = document.getElementById('saveHoursBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+
+    try {
+        const saves = [];
+        rows.forEach(row => {
+            const staffId  = row.dataset.staffId;
+            const hoursVal = row.querySelector('.hours-input')?.value.trim();
+            const notes    = row.querySelector('.hours-notes-input')?.value.trim() || '';
+            if (hoursVal !== '' && !isNaN(parseFloat(hoursVal))) {
+                saves.push(upsertStaffHours(staffId, date, parseFloat(hoursVal), notes));
+            }
+        });
+        await Promise.all(saves);
+        btn.textContent = '✓ Saved!';
+        setTimeout(() => { btn.textContent = '💾 Save Hours'; }, 2000);
+    } catch (err) {
+        alert('Save failed: ' + err.message);
+        btn.textContent = '💾 Save Hours';
+    } finally { btn.disabled = false; }
+}
+
+// ============================================================
+// PAYROLL REPORT
+// ============================================================
+function setupPayrollReport() {
+    document.getElementById('generatePayrollBtn')?.addEventListener('click', generatePayrollReport);
+    document.getElementById('exportPayrollBtn')?.addEventListener('click', exportPayrollReport);
+
+    // Default to most recently completed bi-weekly period ending last Friday
+    const today = new Date();
+    const dow   = today.getDay();
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() - (dow >= 5 ? dow - 5 : dow + 2));
+    const startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - 13);
+
+    const fmt = d => d.toISOString().split('T')[0];
+    const se = document.getElementById('payrollStart');
+    const ee = document.getElementById('payrollEnd');
+    if (se) se.value = fmt(startDate);
+    if (ee) ee.value = fmt(endDate);
+}
+
+async function _buildPayrollData(startVal, endVal) {
+    const allStaff   = await fetchAllStaff({ includeInactive: true });
+    const periodHrs  = await fetchStaffHours(startVal, endVal);
+    const ytdStart   = `${endVal.substring(0, 4)}-01-01`;
+    const ytdHrs     = await fetchStaffHours(ytdStart, endVal);
+
+    const periodMap = new Map();
+    periodHrs.forEach(h => periodMap.set(h.staff_id, (periodMap.get(h.staff_id) || 0) + parseFloat(h.hours_worked)));
+    const ytdMap = new Map();
+    ytdHrs.forEach(h => ytdMap.set(h.staff_id, (ytdMap.get(h.staff_id) || 0) + parseFloat(h.hours_worked)));
+
+    // Include active staff + anyone with hours in the period
+    const staff = allStaff.filter(s => s.active || periodMap.has(s.id));
+    staff.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    return { staff, periodMap, ytdMap };
+}
+
+async function generatePayrollReport() {
+    const startVal = document.getElementById('payrollStart')?.value;
+    const endVal   = document.getElementById('payrollEnd')?.value;
+    if (!startVal || !endVal) { alert('Please select both a start and end date.'); return; }
+    if (startVal > endVal) { alert('Start date must be before end date.'); return; }
+
+    const container = document.getElementById('payrollContent');
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const { staff, periodMap, ytdMap } = await _buildPayrollData(startVal, endVal);
+        renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap);
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap) {
+    const container = document.getElementById('payrollContent');
+    if (!staff.length) {
+        container.innerHTML = '<p class="empty-hint">No staff data found.</p>';
+        return;
+    }
+
+    let totPeriodHrs = 0, totPeriodPay = 0, totYtdHrs = 0, totYtdPay = 0;
+
+    const rows = staff.map(s => {
+        const pHrs  = periodMap.get(s.id) || 0;
+        const yHrs  = ytdMap.get(s.id) || 0;
+        const rate  = s.hourly_rate || 0;
+        totPeriodHrs += pHrs; totPeriodPay += pHrs * rate;
+        totYtdHrs    += yHrs; totYtdPay    += yHrs * rate;
+        const roomLabel = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
+        const inactive  = !s.active ? ' <span class="chip-waitlist status-chip" style="font-size:.75em">Inactive</span>' : '';
+        return `
+            <tr>
+                <td>
+                    <strong>${escHtml(s.name)}</strong>${inactive}
+                    <br><small class="rates-ages">${escHtml(s.role || '')} · ${escHtml(roomLabel)}</small>
+                </td>
+                <td class="report-num">$${rate.toFixed(2)}/hr</td>
+                <td class="report-num payroll-hrs">${pHrs > 0 ? pHrs.toFixed(2) : '—'}</td>
+                <td class="report-num report-revenue">${pHrs > 0 ? '$' + (pHrs * rate).toFixed(2) : '—'}</td>
+                <td class="report-num payroll-hrs">${yHrs > 0 ? yHrs.toFixed(2) : '—'}</td>
+                <td class="report-num report-revenue">${yHrs > 0 ? '$' + (yHrs * rate).toFixed(2) : '—'}</td>
+            </tr>`;
+    }).join('');
+
+    const [sy, sm, sd] = startVal.split('-').map(Number);
+    const [ey, em, ed] = endVal.split('-').map(Number);
+    const periodLabel  = `${MONTH_NAMES_ADMIN[sm-1]} ${sd} – ${MONTH_NAMES_ADMIN[em-1]} ${ed}, ${ey}`;
+
+    container.innerHTML = `
+        <h3 class="report-month-title">Pay Period: ${periodLabel}</h3>
+        <div class="table-wrapper report-table-wrap">
+            <table class="report-table payroll-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2">Staff Member</th>
+                        <th rowspan="2">Rate</th>
+                        <th colspan="2" class="staff-room-header">This Period</th>
+                        <th colspan="2" class="staff-room-header">Year to Date (${ey})</th>
+                    </tr>
+                    <tr>
+                        <th class="staff-sub-head">Hours</th><th class="staff-sub-head">Gross Pay</th>
+                        <th class="staff-sub-head">Hours</th><th class="staff-sub-head">Gross Pay</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+                <tfoot>
+                    <tr class="report-total-row">
+                        <td colspan="2"><strong>Total</strong></td>
+                        <td class="report-num"><strong>${totPeriodHrs.toFixed(2)}</strong></td>
+                        <td class="report-num report-revenue"><strong>$${totPeriodPay.toFixed(2)}</strong></td>
+                        <td class="report-num"><strong>${totYtdHrs.toFixed(2)}</strong></td>
+                        <td class="report-num report-revenue"><strong>$${totYtdPay.toFixed(2)}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>`;
+}
+
+async function exportPayrollReport() {
+    const startVal = document.getElementById('payrollStart')?.value;
+    const endVal   = document.getElementById('payrollEnd')?.value;
+    if (!startVal || !endVal) { alert('Please select a pay period first.'); return; }
+
+    const { staff, periodMap, ytdMap } = await _buildPayrollData(startVal, endVal);
+    const rows = staff.map(s => {
+        const pHrs  = periodMap.get(s.id) || 0;
+        const yHrs  = ytdMap.get(s.id) || 0;
+        const rate  = s.hourly_rate || 0;
+        return {
+            'Name':              s.name,
+            'Role':              s.role || '',
+            'Room':              ROOMS.find(r => r.id === s.room_id)?.label || 'Float',
+            'Hourly Rate':       `$${rate.toFixed(2)}`,
+            'Period Hours':      pHrs.toFixed(2),
+            'Period Gross Pay':  `$${(pHrs * rate).toFixed(2)}`,
+            'YTD Hours':         yHrs.toFixed(2),
+            'YTD Gross Pay':     `$${(yHrs * rate).toFixed(2)}`,
+        };
+    });
+
+    if (!rows.length) { alert('No data to export.'); return; }
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Payroll');
+    ws['!cols'] = Object.keys(rows[0]).map(k => ({
+        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
+    }));
+    XLSX.writeFile(wb, `payroll-${startVal}-to-${endVal}.xlsx`);
+}
+
+// ============================================================
+// EXTRA REPORTS  (Enrollment Trends · Waitlist Demand · YTD Revenue)
+// ============================================================
+function setupExtraReports() {
+    document.getElementById('generateTrendsBtn')?.addEventListener('click', generateEnrollmentTrends);
+    document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
+    document.getElementById('generateWaitlistBtn')?.addEventListener('click', generateWaitlistReport);
+    document.getElementById('generateYtdBtn')?.addEventListener('click', generateYtdRevenue);
+    document.getElementById('exportYtdBtn')?.addEventListener('click', exportYtdRevenue);
+}
+
+// ── Enrollment Trends ──────────────────────────────────────
+function generateEnrollmentTrends() {
+    // Count distinct children enrolled per room per month
+    const trendMap = {}; // { 'YYYY-MM': { roomId: Set of reg IDs } }
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date) return;
+            const mo = d.care_date.substring(0, 7);
+            if (!trendMap[mo]) trendMap[mo] = {};
+            if (!trendMap[mo][reg.room_id]) trendMap[mo][reg.room_id] = new Set();
+            trendMap[mo][reg.room_id].add(reg.id);
+        });
+    });
+
+    const months = Object.keys(trendMap).sort();
+    const container = document.getElementById('trendsContent');
+    if (!months.length) {
+        container.innerHTML = '<p class="empty-hint">No enrollment data found.</p>';
+        return;
+    }
+
+    const roomHeaders = ROOMS.map(r => `<th>${r.label}</th>`).join('');
+    const rows = months.map(mo => {
+        const [y, m] = mo.split('-').map(Number);
+        const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+        const cells  = ROOMS.map(room => {
+            const count = trendMap[mo][room.id]?.size || 0;
+            return `<td class="report-num">${count || '—'}</td>`;
+        }).join('');
+        const total = ROOMS.reduce((s, r) => s + (trendMap[mo][r.id]?.size || 0), 0);
+        return `<tr><td class="staff-date-cell">${label}</td>${cells}<td class="report-num"><strong>${total}</strong></td></tr>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="table-wrapper report-table-wrap">
+            <table class="report-table">
+                <thead>
+                    <tr><th>Month</th>${roomHeaders}<th>Total</th></tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
+}
+
+function exportEnrollmentTrends() {
+    const trendMap = {};
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date) return;
+            const mo = d.care_date.substring(0, 7);
+            if (!trendMap[mo]) trendMap[mo] = {};
+            if (!trendMap[mo][reg.room_id]) trendMap[mo][reg.room_id] = new Set();
+            trendMap[mo][reg.room_id].add(reg.id);
+        });
+    });
+
+    const months = Object.keys(trendMap).sort();
+    if (!months.length) { alert('No data to export.'); return; }
+
+    const rows = months.map(mo => {
+        const [y, m] = mo.split('-').map(Number);
+        const row = { Month: MONTH_NAMES_ADMIN[m - 1] + ' ' + y };
+        ROOMS.forEach(r => { row[r.label] = trendMap[mo][r.id]?.size || 0; });
+        row['Total'] = ROOMS.reduce((s, r) => s + (trendMap[mo][r.id]?.size || 0), 0);
+        return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Enrollment Trends');
+    XLSX.writeFile(wb, 'enrollment-trends.xlsx');
+}
+
+// ── Waitlist Demand ────────────────────────────────────────
+function generateWaitlistReport() {
+    const demandMap = {}; // { 'YYYY-MM': { roomId: count } }
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (!d.waitlisted || !d.care_date) return;
+            const mo = d.care_date.substring(0, 7);
+            if (!demandMap[mo]) demandMap[mo] = {};
+            demandMap[mo][reg.room_id] = (demandMap[mo][reg.room_id] || 0) + 1;
+        });
+    });
+
+    const months = Object.keys(demandMap).sort();
+    const container = document.getElementById('waitlistContent');
+    if (!months.length) {
+        container.innerHTML = '<p class="empty-hint">No waitlisted registrations found.</p>';
+        return;
+    }
+
+    const roomHeaders = ROOMS.map(r => `<th>${r.label}</th>`).join('');
+    const rows = months.map(mo => {
+        const [y, m] = mo.split('-').map(Number);
+        const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+        const cells  = ROOMS.map(room => {
+            const count = demandMap[mo][room.id] || 0;
+            const cls   = count >= 5 ? 'staff-high' : count >= 2 ? 'staff-mid' : '';
+            return `<td class="report-num ${cls}">${count || '—'}</td>`;
+        }).join('');
+        const total = ROOMS.reduce((s, r) => s + (demandMap[mo][r.id] || 0), 0);
+        return `<tr><td class="staff-date-cell">${label}</td>${cells}<td class="report-num"><strong>${total}</strong></td></tr>`;
+    }).join('');
+
+    container.innerHTML = `
+        <p class="section-desc" style="margin-bottom:8px">Higher numbers = more unmet demand. Consider expanding capacity for those rooms.</p>
+        <div class="table-wrapper report-table-wrap">
+            <table class="report-table">
+                <thead>
+                    <tr><th>Month</th>${roomHeaders}<th>Total</th></tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
+}
+
+// ── Year-to-Date Revenue ───────────────────────────────────
+function generateYtdRevenue() {
+    const year     = new Date().getFullYear();
+    const yearKey  = String(year);
+    const revenueMap = {}; // { 'YYYY-MM': { roomId: revenue } }
+    const dmap     = getDiscountMap();
+
+    allRegistrations.forEach(reg => {
+        const room = ROOMS.find(r => r.id === reg.room_id);
+        if (!room) return;
+        const discKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
+        const disc    = dmap.get(discKey) || { type: 'none', value: 0 };
+
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date || !d.care_date.startsWith(yearKey)) return;
+            const mo   = d.care_date.substring(0, 7);
+            if (!revenueMap[mo]) revenueMap[mo] = {};
+            const rate = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
+            revenueMap[mo][reg.room_id] = (revenueMap[mo][reg.room_id] || 0) +
+                effectiveAdminRate(rate, disc.type, disc.value);
+        });
+    });
+
+    const months = Object.keys(revenueMap).sort();
+    const container = document.getElementById('ytdContent');
+    if (!months.length) {
+        container.innerHTML = `<p class="empty-hint">No revenue data found for ${year}.</p>`;
+        return;
+    }
+
+    const roomHeaders = ROOMS.map(r => `<th>${r.label}</th>`).join('');
+    let runningTotal = 0;
+    const rows = months.map(mo => {
+        const [y, m] = mo.split('-').map(Number);
+        const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+        const moTotal = ROOMS.reduce((s, r) => s + (revenueMap[mo][r.id] || 0), 0);
+        runningTotal += moTotal;
+        const cells = ROOMS.map(room =>
+            `<td class="report-num report-revenue">$${(revenueMap[mo][room.id] || 0).toFixed(2)}</td>`
+        ).join('');
+        return `
+            <tr>
+                <td class="staff-date-cell">${label}</td>
+                ${cells}
+                <td class="report-num report-revenue"><strong>$${moTotal.toFixed(2)}</strong></td>
+                <td class="report-num report-revenue">$${runningTotal.toFixed(2)}</td>
+            </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+        <h3 class="report-month-title">${year} Year to Date — $${runningTotal.toFixed(2)} total</h3>
+        <div class="table-wrapper report-table-wrap">
+            <table class="report-table">
+                <thead>
+                    <tr><th>Month</th>${roomHeaders}<th>Monthly Total</th><th>Running Total</th></tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
+}
+
+function exportYtdRevenue() {
+    const year    = new Date().getFullYear();
+    const yearKey = String(year);
+    const revenueMap = {};
+    const dmap    = getDiscountMap();
+
+    allRegistrations.forEach(reg => {
+        const room = ROOMS.find(r => r.id === reg.room_id);
+        if (!room) return;
+        const discKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
+        const disc    = dmap.get(discKey) || { type: 'none', value: 0 };
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date || !d.care_date.startsWith(yearKey)) return;
+            const mo   = d.care_date.substring(0, 7);
+            if (!revenueMap[mo]) revenueMap[mo] = {};
+            const rate = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
+            revenueMap[mo][reg.room_id] = (revenueMap[mo][reg.room_id] || 0) +
+                effectiveAdminRate(rate, disc.type, disc.value);
+        });
+    });
+
+    const months = Object.keys(revenueMap).sort();
+    if (!months.length) { alert('No data to export.'); return; }
+
+    let running = 0;
+    const rows = months.map(mo => {
+        const [y, m] = mo.split('-').map(Number);
+        const row = { Month: MONTH_NAMES_ADMIN[m - 1] + ' ' + y };
+        ROOMS.forEach(r => { row[r.label] = `$${(revenueMap[mo][r.id] || 0).toFixed(2)}`; });
+        const moTotal = ROOMS.reduce((s, r) => s + (revenueMap[mo][r.id] || 0), 0);
+        running += moTotal;
+        row['Monthly Total']  = `$${moTotal.toFixed(2)}`;
+        row['Running Total']  = `$${running.toFixed(2)}`;
+        return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `Revenue ${year}`);
+    XLSX.writeFile(wb, `ytd-revenue-${year}.xlsx`);
 }
 
 // ============================================================

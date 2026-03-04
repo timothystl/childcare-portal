@@ -738,3 +738,68 @@ async function saveRatioSettings(ratios) {
         .upsert({ key: 'staff_ratios', value: ratios }, { onConflict: 'key' });
     if (error) throw error;
 }
+
+// ============================================================
+// STAFF  (payroll)
+// ============================================================
+async function fetchAllStaff({ includeInactive = false } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    let query = sbClient
+        .from('staff')
+        .select('id, name, role, hourly_rate, room_id, active, hire_date, created_at')
+        .order('name');
+    if (!includeInactive) query = query.eq('active', true);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+}
+
+async function upsertStaffMember({ id = null, name, role, hourlyRate, roomId, hireDate }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const record = {
+        name,
+        role:        role || null,
+        hourly_rate: hourlyRate || 0,
+        room_id:     roomId || null,
+        hire_date:   hireDate || null,
+    };
+    if (id) {
+        const { error } = await sbClient.from('staff').update(record).eq('id', id);
+        if (error) throw error;
+    } else {
+        const { error } = await sbClient.from('staff').insert(record);
+        if (error) throw error;
+    }
+}
+
+async function setStaffActive(id, active) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('staff').update({ active }).eq('id', id);
+    if (error) throw error;
+}
+
+// ============================================================
+// STAFF HOURS  (payroll)
+// ============================================================
+async function fetchStaffHours(startDate, endDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_hours')
+        .select('id, staff_id, work_date, hours_worked, notes')
+        .gte('work_date', startDate)
+        .lte('work_date', endDate)
+        .order('work_date');
+    if (error) throw error;
+    return data || [];
+}
+
+async function upsertStaffHours(staffId, workDate, hoursWorked, notes) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('staff_hours')
+        .upsert(
+            { staff_id: staffId, work_date: workDate, hours_worked: hoursWorked, notes: notes || '' },
+            { onConflict: 'staff_id,work_date' }
+        );
+    if (error) throw error;
+}
