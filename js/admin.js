@@ -165,8 +165,6 @@ async function loadRegistrations() {
         populateCareMonthFilter();
         renderTable(allRegistrations);
         renderCapacityOverview();
-        document.getElementById('regCount').textContent =
-            `${allRegistrations.length} submission${allRegistrations.length !== 1 ? 's' : ''} total`;
     } catch (err) {
         console.error(err);
         document.getElementById('regTableBody').innerHTML =
