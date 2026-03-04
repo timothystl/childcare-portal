@@ -1036,6 +1036,8 @@ async function handleSubmit(e) {
         // Build itemized receipt (uses multi-child + individual discounts)
         const sortedDates = confirmedDates.slice().sort((a, b) => a.date.localeCompare(b.date));
         let receiptHtml = '';
+        let emailDatesWithAmounts = [];
+        let emailGrandTotal = 0;
         if (sortedDates.length) {
             // Build per-day amounts using same logic as renderSelectedDates
             // results[].child mirrors selectedChildren at submit time
@@ -1064,6 +1066,14 @@ async function handleSubmit(e) {
 
             const grandTotal = sortedDates.reduce((s, { dayType }) =>
                 s + calcSubmitDayAmounts(dayType).reduce((ss, e) => ss + e.finalAmount, 0), 0);
+
+            // Pre-compute for email (must happen here while calcSubmitDayAmounts is in scope)
+            emailGrandTotal = grandTotal;
+            emailDatesWithAmounts = sortedDates.map(({ date, dayType }) => ({
+                date,
+                dayType,
+                amount: calcSubmitDayAmounts(dayType).reduce((s, e) => s + e.finalAmount, 0),
+            }));
 
             receiptHtml = `
                 <table class="receipt-table">
@@ -1118,18 +1128,13 @@ async function handleSubmit(e) {
             btn.disabled = true;
             btn.textContent = 'Sending…';
             try {
-                const datesWithAmounts = sortedDates.map(({ date, dayType }) => ({
-                    date,
-                    dayType,
-                    amount: calcSubmitDayAmounts(dayType).reduce((s, e) => s + e.finalAmount, 0),
-                }));
                 await sendScheduleEmail({
                     parentName,
                     parentEmail,
                     monthLabel: win.targetLabel,
                     childNames: results.map(r => r.child.name),
-                    dates: datesWithAmounts,
-                    grandTotal,
+                    dates: emailDatesWithAmounts,
+                    grandTotal: emailGrandTotal,
                 });
                 btn.textContent = '✓ Email Sent!';
             } catch (err) {
