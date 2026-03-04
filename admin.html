@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=6">
+    <link rel="stylesheet" href="css/admin.css?v=7">
 </head>
 <body class="admin-body">
 
@@ -384,10 +384,26 @@
         </div>
     </div>
 
+    <!-- Merge Family Modal -->
+    <div id="mergeModal" class="merge-overlay hidden" role="dialog" aria-modal="true">
+        <div class="merge-dialog">
+            <h3>Merge Family</h3>
+            <p>Move all children from <strong id="mergeFromName"></strong> into another family, then permanently delete this record.</p>
+            <div class="merge-row">
+                <label for="mergeIntoSelect">Merge into:</label>
+                <select id="mergeIntoSelect" class="family-search-input"></select>
+            </div>
+            <div class="merge-footer">
+                <button type="button" id="mergeCancelBtn" class="btn-ghost">Cancel</button>
+                <button type="button" id="mergeConfirmBtn" class="btn-warning">Merge &amp; Delete</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=24"></script>
-    <script src="js/admin.js?v=26"></script>
+    <script src="js/supabase.js?v=25"></script>
+    <script src="js/admin.js?v=27"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 </body>
 </html>
