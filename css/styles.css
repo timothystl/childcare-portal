@@ -1300,7 +1300,7 @@ input.prefilled {
 /* Floating waitlist button */
 .btn-waitlist-float {
     position: fixed;
-    bottom: 120px;
+    bottom: 140px;
     right: 20px;
     background: #6f42c1;
     color: #fff;
@@ -1323,7 +1323,7 @@ input.prefilled {
     .btn-waitlist-float {
         right: 12px;
         left: auto;
-        bottom: 120px;
+        bottom: 128px;
         width: 44px;
         height: 44px;
         padding: 0;
