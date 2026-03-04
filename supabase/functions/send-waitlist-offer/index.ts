@@ -119,6 +119,8 @@ serve(async (req) => {
 
         const payload = await res.json();
 
+        console.log("Resend status:", res.status, "payload:", JSON.stringify(payload));
+
         if (!res.ok) {
             return new Response(
                 JSON.stringify({ error: payload }),
