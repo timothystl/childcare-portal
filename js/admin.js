@@ -3074,15 +3074,42 @@ function setupPayrollReport() {
 }
 
 async function _buildPayrollData(startVal, endVal) {
-    const allStaff   = await fetchAllStaff({ includeInactive: true });
-    const periodHrs  = await fetchStaffHours(startVal, endVal);
-    const ytdStart   = `${endVal.substring(0, 4)}-01-01`;
-    const ytdHrs     = await fetchStaffHours(ytdStart, endVal);
+    const ytdStart = `${endVal.substring(0, 4)}-01-01`;
+    const [allStaff, periodHrs, ytdHrs, periodClockEvents, ytdClockEvents] = await Promise.all([
+        fetchAllStaff({ includeInactive: true }),
+        fetchStaffHours(startVal, endVal),
+        fetchStaffHours(ytdStart, endVal),
+        fetchClockEventsForRange(startVal, endVal),
+        fetchClockEventsForRange(ytdStart, endVal),
+    ]);
 
+    // Build a set of (staff_id, work_date) keys that already have a manual hours entry
+    function manualKey(staffId, workDate) { return `${staffId}|${workDate}`; }
+    const manualPeriodKeys = new Set(periodHrs.map(h => manualKey(h.staff_id, h.work_date)));
+    const manualYtdKeys    = new Set(ytdHrs.map(h => manualKey(h.staff_id, h.work_date)));
+
+    function calcClockHrs(ev) {
+        if (!ev.clock_in || !ev.clock_out) return 0;
+        return Math.round(((new Date(ev.clock_out) - new Date(ev.clock_in)) / 3600000) * 4) / 4;
+    }
+
+    // Sum manual hours
     const periodMap = new Map();
     periodHrs.forEach(h => periodMap.set(h.staff_id, (periodMap.get(h.staff_id) || 0) + parseFloat(h.hours_worked)));
     const ytdMap = new Map();
     ytdHrs.forEach(h => ytdMap.set(h.staff_id, (ytdMap.get(h.staff_id) || 0) + parseFloat(h.hours_worked)));
+
+    // Add clock-calculated hours for any day without a manual entry
+    periodClockEvents.forEach(ev => {
+        if (manualPeriodKeys.has(manualKey(ev.staff_id, ev.work_date))) return;
+        const hrs = calcClockHrs(ev);
+        if (hrs > 0) periodMap.set(ev.staff_id, (periodMap.get(ev.staff_id) || 0) + hrs);
+    });
+    ytdClockEvents.forEach(ev => {
+        if (manualYtdKeys.has(manualKey(ev.staff_id, ev.work_date))) return;
+        const hrs = calcClockHrs(ev);
+        if (hrs > 0) ytdMap.set(ev.staff_id, (ytdMap.get(ev.staff_id) || 0) + hrs);
+    });
 
     // Include active staff + anyone with hours in the period
     const staff = allStaff.filter(s => s.active || periodMap.has(s.id));

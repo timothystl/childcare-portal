@@ -873,3 +873,14 @@ async function fetchClockEventsForDate(workDate) {
     if (error) throw error;
     return data || [];
 }
+
+async function fetchClockEventsForRange(startDate, endDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_clock_events')
+        .select('id, staff_id, clock_in, clock_out, work_date')
+        .gte('work_date', startDate)
+        .lte('work_date', endDate);
+    if (error) throw error;
+    return data || [];
+}
