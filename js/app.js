@@ -1088,10 +1088,11 @@ async function handleSubmit(e) {
             details += `<p class="receipt-error-note">⚠️ Note: ${escStr(errors.join('; '))}</p>`;
         }
 
-        // Action buttons: Print and iCal download
+        // Action buttons: Print, iCal, and Email
         details += `<div style="margin-top:18px;text-align:center;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
             <button type="button" id="printScheduleBtn" class="btn-print-schedule">🖨️ Print / Save Schedule</button>
             <button type="button" id="icalDownloadBtn" class="btn-print-schedule" style="background:#f0f4ff;color:#667eea;border:1px solid #c7d2fe;">📅 Download iCal (.ics)</button>
+            <button type="button" id="emailScheduleBtn" class="btn-print-schedule" style="background:#f0fdf4;color:#166534;border:1px solid #86efac;">📧 Email Schedule</button>
         </div>`;
 
         document.getElementById('successDetails').innerHTML = details;
@@ -1109,6 +1110,33 @@ async function handleSubmit(e) {
         // Wire up the iCal download button
         document.getElementById('icalDownloadBtn')?.addEventListener('click', () => {
             downloadIcal(sortedDates, results.map(r => r.child.name), parentName, win.targetLabel);
+        });
+
+        // Wire up the email schedule button
+        document.getElementById('emailScheduleBtn')?.addEventListener('click', async () => {
+            const btn = document.getElementById('emailScheduleBtn');
+            btn.disabled = true;
+            btn.textContent = 'Sending…';
+            try {
+                const datesWithAmounts = sortedDates.map(({ date, dayType }) => ({
+                    date,
+                    dayType,
+                    amount: calcSubmitDayAmounts(dayType).reduce((s, e) => s + e.finalAmount, 0),
+                }));
+                await sendScheduleEmail({
+                    parentName,
+                    parentEmail,
+                    monthLabel: win.targetLabel,
+                    childNames: results.map(r => r.child.name),
+                    dates: datesWithAmounts,
+                    grandTotal,
+                });
+                btn.textContent = '✓ Email Sent!';
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = '📧 Email Schedule';
+                showToast('Email failed: ' + err.message);
+            }
         });
 
         document.getElementById('successModal').style.display = 'flex';
