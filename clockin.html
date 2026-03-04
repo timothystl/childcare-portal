@@ -327,7 +327,8 @@ async function verifyPin() {
         showScreen('clock');
     } catch (err) {
         showScreen('pin');
-        showError('Connection error. Please try again.');
+        const msg = err?.message || String(err);
+        showError('Error: ' + msg);
         console.error(err);
     }
 }
