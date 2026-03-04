@@ -3228,15 +3228,12 @@ const PAYROLL_ANCHOR_END = '2026-03-01';
 function _buildPayrollPeriodList() {
     const fmt   = d => d.toISOString().split('T')[0];
     const anchor = new Date(PAYROLL_ANCHOR_END + 'T00:00:00');
-    const today  = new Date();
+    // Earliest period to show: Jan 1, 2026
+    const earliest = new Date('2026-01-01T00:00:00');
 
-    // Earliest period to show: 2 years back
-    const earliest = new Date(today);
-    earliest.setFullYear(earliest.getFullYear() - 2);
-
-    // Latest period to show: 6 months forward
-    const latest = new Date(today);
-    latest.setMonth(latest.getMonth() + 6);
+    // Latest period to show: 3 years forward from today
+    const latest = new Date();
+    latest.setFullYear(latest.getFullYear() + 3);
 
     // Walk anchor backwards until we're before 'earliest'
     let endDate = new Date(anchor);
