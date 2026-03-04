@@ -2954,26 +2954,45 @@ async function loadHoursForDate() {
             return;
         }
 
-        const hoursList = await fetchStaffHours(date, date);
+        const [hoursList, clockEvents] = await Promise.all([
+            fetchStaffHours(date, date),
+            fetchClockEventsForDate(date)
+        ]);
         const hoursMap  = new Map(hoursList.map(h => [h.staff_id, h]));
+        const clockMap  = new Map(clockEvents.map(e => [e.staff_id, e]));
+
+        function fmtT(iso) {
+            if (!iso) return '—';
+            return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        }
+        function calcHrs(ev) {
+            if (!ev?.clock_in || !ev?.clock_out) return null;
+            return Math.round(((new Date(ev.clock_out) - new Date(ev.clock_in)) / 3600000) * 4) / 4;
+        }
 
         container.innerHTML = `
             <table class="report-table hours-entry-table">
                 <thead>
-                    <tr><th>Staff Member</th><th>Role</th><th>Room</th><th>Hours Worked</th><th>Notes</th></tr>
+                    <tr><th>Staff Member</th><th>Role</th><th>Room</th><th>Clock In</th><th>Clock Out</th><th>Hours Worked</th><th>Notes</th></tr>
                 </thead>
                 <tbody>
                     ${active.map(s => {
                         const entry     = hoursMap.get(s.id);
+                        const ev        = clockMap.get(s.id);
                         const roomLabel = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
+                        const calcVal   = calcHrs(ev);
+                        // Use saved hours if present, otherwise fall back to calculated clock hours
+                        const hoursVal  = entry?.hours_worked ?? (calcVal !== null ? calcVal : '');
                         return `
                             <tr data-staff-id="${s.id}">
                                 <td><strong>${escHtml(s.name)}</strong></td>
                                 <td>${escHtml(s.role || '—')}</td>
                                 <td>${escHtml(roomLabel)}</td>
+                                <td>${fmtT(ev?.clock_in)}</td>
+                                <td>${fmtT(ev?.clock_out)}</td>
                                 <td><input type="number" class="rate-input hours-input"
                                     min="0" max="24" step="0.25" placeholder="0.00" style="width:80px"
-                                    value="${entry?.hours_worked ?? ''}"></td>
+                                    value="${hoursVal}"></td>
                                 <td><input type="text" class="hours-notes-input"
                                     placeholder="Optional note" style="width:200px"
                                     value="${escHtml(entry?.notes || '')}"></td>
