@@ -2922,14 +2922,15 @@ async function syncFromClockEvents() {
             alert('No clock events found for this date.');
             return;
         }
-        const saves = [];
+        // Sum all events per staff (supports multiple shifts in one day)
+        const totals = new Map();
         events.forEach(ev => {
             if (!ev.clock_in || !ev.clock_out) return;
-            const msIn  = new Date(ev.clock_in).getTime();
-            const msOut = new Date(ev.clock_out).getTime();
-            const hrs   = Math.round(((msOut - msIn) / 3600000) * 4) / 4; // round to .25
-            if (hrs > 0) saves.push(upsertStaffHours(ev.staff_id, date, hrs, 'Synced from clock-in'));
+            const hrs = Math.round(((new Date(ev.clock_out) - new Date(ev.clock_in)) / 3600000) * 4) / 4;
+            if (hrs > 0) totals.set(ev.staff_id, (totals.get(ev.staff_id) || 0) + hrs);
         });
+        const saves = [...totals.entries()].map(([staffId, hrs]) =>
+            upsertStaffHours(staffId, date, hrs, 'Synced from clock-in'));
         await Promise.all(saves);
         await loadHoursForDate();
         btn.textContent = `✓ Synced ${saves.length} record(s)!`;
@@ -2958,38 +2959,35 @@ async function loadHoursForDate() {
             fetchStaffHours(date, date),
             fetchClockEventsForDate(date)
         ]);
-        const hoursMap  = new Map(hoursList.map(h => [h.staff_id, h]));
-        const clockMap  = new Map(clockEvents.map(e => [e.staff_id, e]));
+        const hoursMap = new Map(hoursList.map(h => [h.staff_id, h]));
 
-        function fmtT(iso) {
-            if (!iso) return '—';
-            return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        }
-        function calcHrs(ev) {
-            if (!ev?.clock_in || !ev?.clock_out) return null;
-            return Math.round(((new Date(ev.clock_out) - new Date(ev.clock_in)) / 3600000) * 4) / 4;
-        }
+        // Sum all clock events per staff (supports multiple shifts in one day)
+        const clockedMap = new Map(); // staff_id -> total clocked hours
+        clockEvents.forEach(ev => {
+            if (!ev.clock_in || !ev.clock_out) return;
+            const hrs = Math.round(((new Date(ev.clock_out) - new Date(ev.clock_in)) / 3600000) * 4) / 4;
+            if (hrs > 0) clockedMap.set(ev.staff_id, (clockedMap.get(ev.staff_id) || 0) + hrs);
+        });
 
         container.innerHTML = `
             <table class="report-table hours-entry-table">
                 <thead>
-                    <tr><th>Staff Member</th><th>Role</th><th>Room</th><th>Clock In</th><th>Clock Out</th><th>Hours Worked</th><th>Notes</th></tr>
+                    <tr><th>Staff Member</th><th>Role</th><th>Room</th><th>Clocked Hrs</th><th>Hours Worked</th><th>Notes</th></tr>
                 </thead>
                 <tbody>
                     ${active.map(s => {
                         const entry     = hoursMap.get(s.id);
-                        const ev        = clockMap.get(s.id);
+                        const clocked   = clockedMap.get(s.id);
                         const roomLabel = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
-                        const calcVal   = calcHrs(ev);
-                        // Use saved hours if present, otherwise fall back to calculated clock hours
-                        const hoursVal  = entry?.hours_worked ?? (calcVal !== null ? calcVal : '');
+                        // Use saved hours if present, otherwise fall back to total clocked hours
+                        const hoursVal  = entry?.hours_worked ?? (clocked != null ? clocked : '');
+                        const clockedDisplay = clocked != null ? clocked.toFixed(2) : '—';
                         return `
                             <tr data-staff-id="${s.id}">
                                 <td><strong>${escHtml(s.name)}</strong></td>
                                 <td>${escHtml(s.role || '—')}</td>
                                 <td>${escHtml(roomLabel)}</td>
-                                <td>${fmtT(ev?.clock_in)}</td>
-                                <td>${fmtT(ev?.clock_out)}</td>
+                                <td>${clockedDisplay}</td>
                                 <td><input type="number" class="rate-input hours-input"
                                     min="0" max="24" step="0.25" placeholder="0.00" style="width:80px"
                                     value="${hoursVal}"></td>

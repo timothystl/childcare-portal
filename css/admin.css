@@ -1929,6 +1929,8 @@ tr.pending-approval:hover { background: #fef3c7; }
    ============================================================ */
 .hours-entry-table { width: 100%; }
 .hours-entry-table td { vertical-align: middle; }
+/* Override the global right-align for non-first headers — all columns left-aligned here */
+.hours-entry-table thead th { text-align: left; }
 
 /* ============================================================
    PAYROLL TABLE
