@@ -988,3 +988,13 @@ async function sendWaitlistOfferEmail({ parentName, parentEmail, childName, offe
     if (error) throw error;
     return data;
 }
+
+async function sendScheduleEmail({ parentName, parentEmail, monthLabel, childNames, dates, grandTotal }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.functions.invoke('send-schedule-confirmation', {
+        body: { parentName, parentEmail, monthLabel, childNames, dates, grandTotal },
+        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    if (error) throw error;
+    return data;
+}
