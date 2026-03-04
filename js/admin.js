@@ -1073,6 +1073,7 @@ function exportFamilyBillingReport() {
 // ============================================================
 function setupStaffScheduling() {
     document.getElementById('generateStaffBtn')?.addEventListener('click', generateStaffSchedule);
+    document.getElementById('autoFillStaffBtn')?.addEventListener('click', autoFillStaffSchedule);
     document.getElementById('exportStaffBtn')?.addEventListener('click', exportStaffSchedule);
 
     // Default to the Monday of the current week
@@ -1256,6 +1257,161 @@ function exportStaffSchedule() {
         wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
     }));
     XLSX.writeFile(wb, `staff-schedule-${weekOf}.xlsx`);
+}
+
+// ============================================================
+// AUTO-FILL STAFF SCHEDULE
+// ============================================================
+// AM shift ≈ 5 hrs (8:15–1:15), PM shift ≈ 4 hrs (1:00–5:00)
+const SHIFT_HRS = { am: 5, pm: 4 };
+const DAY_ABBR  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+async function autoFillStaffSchedule() {
+    const weekOf = document.getElementById('staffWeekOf')?.value;
+    if (!weekOf) { alert('Please select a week first.'); return; }
+
+    const btn = document.getElementById('autoFillStaffBtn');
+    btn.disabled = true; btn.textContent = 'Filling…';
+    try {
+        // Ensure staff + availability are loaded
+        if (!allStaffData.length) await loadStaffList();
+        else staffAvailability = await fetchStaffAvailability();
+
+        const weekDates = _buildWeekDates(weekOf);
+        if (!weekDates.length) {
+            document.getElementById('staffContent').innerHTML =
+                '<p class="empty-hint">No school days in this week (all days are weekends or closures).</p>';
+            return;
+        }
+
+        const counts = _buildShiftCounts(weekDates);
+        const active = allStaffData.filter(s => s.active);
+
+        // Track weekly hours used per staff
+        const weeklyHours = new Map(active.map(s => [s.id, 0]));
+
+        // Build assignment map: { date: { roomId: { am: [names], pm: [names] } } }
+        const assignments = {};
+        weekDates.forEach(d => {
+            assignments[d] = {};
+            ROOMS.forEach(r => { assignments[d][r.id] = { am: [], pm: [] }; });
+        });
+
+        weekDates.forEach(d => {
+            const dayName = DAY_ABBR[new Date(d + 'T00:00:00').getDay()];
+
+            ROOMS.forEach(room => {
+                const c       = counts[d][room.id] || { total: 0, fullDay: 0 };
+                const ratio   = room.staffRatio || 10;
+                const amNeed  = c.total  > 0 ? Math.ceil(c.total  / ratio) : 0;
+                const pmNeed  = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
+
+                // Candidates: active staff available today and assigned to this room (or float)
+                const candidates = active.filter(s => {
+                    const avail = staffAvailability[s.id];
+                    const days  = avail?.days ?? ['Mon','Tue','Wed','Thu','Fri'];
+                    return days.includes(dayName) &&
+                        (s.room_id === room.id || !s.room_id); // room match or float
+                });
+
+                // Sort by hours used ascending so we spread load evenly
+                candidates.sort((a, b) => (weeklyHours.get(a.id) || 0) - (weeklyHours.get(b.id) || 0));
+
+                // Assign AM
+                let amFilled = 0;
+                for (const s of candidates) {
+                    if (amFilled >= amNeed) break;
+                    const max  = staffAvailability[s.id]?.maxHours ?? 40;
+                    const used = weeklyHours.get(s.id) || 0;
+                    if (used + SHIFT_HRS.am > max) continue;
+                    assignments[d][room.id].am.push(s.name);
+                    weeklyHours.set(s.id, used + SHIFT_HRS.am);
+                    amFilled++;
+                }
+
+                // Assign PM (prefer staff already on AM shift first, then others)
+                const pmCandidates = [
+                    ...candidates.filter(s => assignments[d][room.id].am.includes(s.name)),
+                    ...candidates.filter(s => !assignments[d][room.id].am.includes(s.name)),
+                ];
+                let pmFilled = 0;
+                for (const s of pmCandidates) {
+                    if (pmFilled >= pmNeed) break;
+                    if (assignments[d][room.id].pm.includes(s.name)) continue;
+                    const max  = staffAvailability[s.id]?.maxHours ?? 40;
+                    const used = weeklyHours.get(s.id) || 0;
+                    // AM staff already had their hours added; PM is additional only if not already on AM
+                    const alreadyOnAm = assignments[d][room.id].am.includes(s.name);
+                    const addHrs = alreadyOnAm ? 0 : SHIFT_HRS.pm; // covering full day counts once
+                    if (used + addHrs > max) continue;
+                    assignments[d][room.id].pm.push(s.name);
+                    if (!alreadyOnAm) weeklyHours.set(s.id, used + SHIFT_HRS.pm);
+                    pmFilled++;
+                }
+            });
+        });
+
+        renderAutoFillSchedule(weekDates, assignments, counts);
+    } catch (err) {
+        alert('Auto-fill failed: ' + err.message);
+    } finally {
+        btn.disabled = false; btn.textContent = '🪄 Auto-Fill Names';
+    }
+}
+
+function renderAutoFillSchedule(weekDates, assignments, counts) {
+    const container = document.getElementById('staffContent');
+
+    // Keep the existing staffing-needs table, then append the name assignment table below
+    const existingHtml = container.innerHTML;
+
+    const roomHeaders = ROOMS.map(r => `<th colspan="2" class="staff-room-header">${r.label}</th>`).join('');
+    const subHeaders  = ROOMS.map(() =>
+        `<th class="staff-sub-head shift-am-th">AM Staff</th><th class="staff-sub-head shift-pm-th">PM Staff</th>`
+    ).join('');
+
+    const rows = weekDates.map(d => {
+        const dt    = new Date(d + 'T00:00:00');
+        const label = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
+        const cells = ROOMS.map(room => {
+            const slot   = assignments[d][room.id];
+            const c      = counts[d][room.id] || { total: 0, fullDay: 0 };
+            const ratio  = room.staffRatio || 10;
+            const amNeed = c.total  > 0 ? Math.ceil(c.total  / ratio) : 0;
+            const pmNeed = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
+
+            const amNames = slot.am.length
+                ? slot.am.map(n => `<span class="staff-name-chip">${escHtml(n)}</span>`).join(' ')
+                : (amNeed > 0 ? `<span class="staff-unfilled">⚠ ${amNeed} needed</span>` : '—');
+            const pmNames = slot.pm.length
+                ? slot.pm.map(n => `<span class="staff-name-chip">${escHtml(n)}</span>`).join(' ')
+                : (pmNeed > 0 ? `<span class="staff-unfilled">⚠ ${pmNeed} needed</span>` : '—');
+
+            return `<td class="autofill-cell">${amNames}</td><td class="autofill-cell">${pmNames}</td>`;
+        }).join('');
+        return `<tr><td class="staff-date-cell"><strong>${label}</strong></td>${cells}</tr>`;
+    }).join('');
+
+    const fillTable = `
+        <h4 style="margin:24px 0 8px;color:#333">Staff Name Assignment</h4>
+        <p style="font-size:.85em;color:#888;margin-bottom:10px">
+            Based on room assignment, availability days, and max hrs/week set on each staff member.
+            Edit in Staff Roster → Save to update assignments.
+        </p>
+        <div class="table-wrapper staff-table-wrap">
+            <table class="report-table autofill-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="staff-date-header">Date</th>
+                        ${roomHeaders}
+                    </tr>
+                    <tr>${subHeaders}</tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
+
+    container.innerHTML = existingHtml + fillTable;
 }
 
 // ============================================================
@@ -2719,9 +2875,10 @@ async function onSaveRates() {
 // ============================================================
 // STAFF ROSTER
 // ============================================================
-let allStaffData     = [];
-let showInactiveStaff = false;
-let editingStaffId   = null;
+let allStaffData       = [];
+let showInactiveStaff  = false;
+let editingStaffId     = null;
+let staffAvailability  = {};   // { staffId: { days: [...], maxHours: 40 } }
 
 function setupStaffRoster() {
     document.getElementById('addStaffBtn')?.addEventListener('click', () => openStaffForm());
@@ -2756,7 +2913,10 @@ async function loadStaffList() {
     const container = document.getElementById('staffRosterContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
-        allStaffData = await fetchAllStaff({ includeInactive: showInactiveStaff });
+        [allStaffData, staffAvailability] = await Promise.all([
+            fetchAllStaff({ includeInactive: showInactiveStaff }),
+            fetchStaffAvailability(),
+        ]);
         renderStaffList(allStaffData);
     } catch (err) {
         container.innerHTML = `<p class="import-error">Failed to load staff: ${escHtml(err.message)}</p>`;
@@ -2844,6 +3004,14 @@ function openStaffForm(staff = null) {
     document.getElementById('sfSalary').value    = staff?.salary_biweekly || '';
     _togglePayFields(payType);
 
+    // Availability
+    const avail = staff ? (staffAvailability[staff.id] || {}) : {};
+    const availDays = avail.days || ['Mon','Tue','Wed','Thu','Fri'];
+    document.querySelectorAll('.sfAvailDay').forEach(cb => {
+        cb.checked = availDays.includes(cb.value);
+    });
+    document.getElementById('sfMaxHours').value = avail.maxHours != null ? avail.maxHours : 40;
+
     document.getElementById('staffFormStatus').textContent = '';
     document.getElementById('staffEditForm').classList.remove('hidden');
     document.getElementById('sfName').focus();
@@ -2891,6 +3059,18 @@ async function onSaveStaffMember() {
             hireDate:        document.getElementById('sfHireDate').value || null,
             staffPin:        pinVal || null,
         });
+
+        // Refresh staff list to get the ID of newly inserted record
+        const freshStaff = await fetchAllStaff({ includeInactive: true });
+        const saved = freshStaff.find(s => s.name === name) || freshStaff[0];
+        const staffId = editingStaffId || saved?.id;
+        if (staffId) {
+            const availDays  = [...document.querySelectorAll('.sfAvailDay:checked')].map(cb => cb.value);
+            const maxHours   = parseFloat(document.getElementById('sfMaxHours').value) || 40;
+            const newAvail   = { ...staffAvailability, [staffId]: { days: availDays, maxHours } };
+            await saveStaffAvailability(newAvail);
+        }
+
         closeStaffForm();
         await loadStaffList();
     } catch (err) {
