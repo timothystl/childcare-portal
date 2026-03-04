@@ -1102,6 +1102,56 @@ input.prefilled {
 .btn-print-schedule:hover { opacity: .85; }
 
 /* ============================================================
+   WAITLIST CALLOUT BANNER
+   ============================================================ */
+.waitlist-callout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+    border: 1.5px solid #c4b5fd;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+.waitlist-callout-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: #4c1d95;
+    font-size: .92em;
+    line-height: 1.4;
+}
+.waitlist-callout-text strong {
+    font-size: 1em;
+    color: #3b0764;
+}
+.btn-waitlist-callout {
+    background: #7c3aed;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: .93em;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(124,58,237,.35);
+    transition: background .15s, transform .15s;
+    flex-shrink: 0;
+}
+.btn-waitlist-callout:hover {
+    background: #6d28d9;
+    transform: translateY(-1px);
+}
+@media (max-width: 600px) {
+    .waitlist-callout { flex-direction: column; align-items: flex-start; }
+    .btn-waitlist-callout { width: 100%; text-align: center; }
+}
+
+/* ============================================================
    FLOATING CONTACT US BUTTON
    ============================================================ */
 .btn-contact-float {
