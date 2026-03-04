@@ -83,6 +83,7 @@ async function initDashboard() {
     setupHoursEntry();
     setupPayrollReport();
     setupExtraReports();
+    setupWaitlistAdmin();
     setupTabs();
     setupCollapsibles();
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
@@ -3570,47 +3571,58 @@ function exportEnrollmentTrends() {
 }
 
 // ── Waitlist Demand ────────────────────────────────────────
-function generateWaitlistReport() {
-    const demandMap = {}; // { 'YYYY-MM': { roomId: count } }
-    allRegistrations.forEach(reg => {
-        (reg.registration_dates || []).forEach(d => {
-            if (!d.waitlisted || !d.care_date) return;
-            const mo = d.care_date.substring(0, 7);
-            if (!demandMap[mo]) demandMap[mo] = {};
-            demandMap[mo][reg.room_id] = (demandMap[mo][reg.room_id] || 0) + 1;
-        });
-    });
+let _wlDemandCache = [];
 
-    const months = Object.keys(demandMap).sort();
+async function generateWaitlistReport() {
     const container = document.getElementById('waitlistContent');
-    if (!months.length) {
-        container.innerHTML = '<p class="empty-hint">No waitlisted registrations found.</p>';
-        return;
-    }
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const apps = await fetchWaitlistApplications();
+        _wlDemandCache = apps;
+        // Active = pending | offered | accepted
+        const active = apps.filter(a => ['pending','offered','accepted'].includes(a.status));
+        const demandMap = {}; // { 'YYYY-MM': { roomId: count } }
+        active.forEach(a => {
+            const mo   = (a.desired_start_date || '').substring(0, 7);
+            if (!mo) return;
+            const room = wlDeriveRoom(a) || 'tbd';
+            if (!demandMap[mo]) demandMap[mo] = {};
+            demandMap[mo][room] = (demandMap[mo][room] || 0) + 1;
+        });
 
-    const roomHeaders = ROOMS.map(r => `<th>${r.label}</th>`).join('');
-    const rows = months.map(mo => {
-        const [y, m] = mo.split('-').map(Number);
-        const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
-        const cells  = ROOMS.map(room => {
-            const count = demandMap[mo][room.id] || 0;
-            const cls   = count >= 5 ? 'staff-high' : count >= 2 ? 'staff-mid' : '';
-            return `<td class="report-num ${cls}">${count || '—'}</td>`;
+        const months = Object.keys(demandMap).sort();
+        if (!months.length) {
+            container.innerHTML = '<p class="empty-hint">No active waitlist applications found.</p>';
+            return;
+        }
+
+        const allRooms = [...ROOMS, { id: 'tbd', label: 'TBD/Unborn' }];
+        const roomHeaders = allRooms.map(r => `<th>${r.label}</th>`).join('');
+        const rows = months.map(mo => {
+            const [y, m] = mo.split('-').map(Number);
+            const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            const cells  = allRooms.map(room => {
+                const count = demandMap[mo][room.id] || 0;
+                const cls   = count >= 5 ? 'staff-high' : count >= 2 ? 'staff-mid' : '';
+                return `<td class="report-num ${cls}">${count || '—'}</td>`;
+            }).join('');
+            const total = allRooms.reduce((s, r) => s + (demandMap[mo][r.id] || 0), 0);
+            return `<tr><td class="staff-date-cell">${label}</td>${cells}<td class="report-num"><strong>${total}</strong></td></tr>`;
         }).join('');
-        const total = ROOMS.reduce((s, r) => s + (demandMap[mo][r.id] || 0), 0);
-        return `<tr><td class="staff-date-cell">${label}</td>${cells}<td class="report-num"><strong>${total}</strong></td></tr>`;
-    }).join('');
 
-    container.innerHTML = `
-        <p class="section-desc" style="margin-bottom:8px">Higher numbers = more unmet demand. Consider expanding capacity for those rooms.</p>
-        <div class="table-wrapper report-table-wrap">
-            <table class="report-table">
-                <thead>
-                    <tr><th>Month</th>${roomHeaders}<th>Total</th></tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </div>`;
+        container.innerHTML = `
+            <p class="section-desc" style="margin-bottom:8px">Active applications (pending + offered + accepted) by desired start month. Higher numbers = more unmet demand.</p>
+            <div class="table-wrapper report-table-wrap">
+                <table class="report-table">
+                    <thead>
+                        <tr><th>Desired Start</th>${roomHeaders}<th>Total</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    } catch (err) {
+        container.innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
+    }
 }
 
 // ── Year-to-Date Revenue ───────────────────────────────────
@@ -3714,6 +3726,360 @@ function exportYtdRevenue() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Revenue ${year}`);
     XLSX.writeFile(wb, `ytd-revenue-${year}.xlsx`);
+}
+
+// ============================================================
+// WAITLIST MANAGEMENT (admin)
+// ============================================================
+
+// Derive room from a waitlist application record
+function wlDeriveRoom(app) {
+    const dobStr = app.child_dob || app.expected_due_date;
+    if (!dobStr || !app.desired_start_date) return null;
+    const dob   = new Date(dobStr + 'T00:00:00');
+    const start = new Date(app.desired_start_date + 'T00:00:00');
+    const months = (start.getFullYear() - dob.getFullYear()) * 12 +
+                   (start.getMonth() - dob.getMonth());
+    if (months < 12)  return 'bear';
+    if (months < 24)  return 'bee';
+    if (months < 36)  return 'turtle';
+    return 'owl';
+}
+
+function wlRoomLabel(roomId) {
+    const map = { bear: '🐻 Bear', bee: '🐝 Bee', turtle: '🐢 Turtle', owl: '🦉 Owl' };
+    return map[roomId] || '—';
+}
+
+function wlStatusBadge(app) {
+    const today = new Date().toISOString().split('T')[0];
+    if (app.status === 'offered' && app.offer_deadline && app.offer_deadline < today) {
+        return '<span class="wl-badge wl-badge-expired">Offer Expired</span>';
+    }
+    const map = {
+        pending:  '<span class="wl-badge wl-badge-pending">Pending</span>',
+        offered:  '<span class="wl-badge wl-badge-offered">Offer Sent</span>',
+        accepted: '<span class="wl-badge wl-badge-accepted">Accepted</span>',
+        enrolled: '<span class="wl-badge wl-badge-enrolled">Enrolled</span>',
+        declined: '<span class="wl-badge wl-badge-archived">Declined</span>',
+        expired:  '<span class="wl-badge wl-badge-archived">Expired</span>',
+        archived: '<span class="wl-badge wl-badge-archived">Archived</span>',
+    };
+    return map[app.status] || `<span class="wl-badge">${escHtml(app.status)}</span>`;
+}
+
+function wlFlexLabel(f) {
+    return { exact: 'Exact date', within_month: 'Within a month', within_quarter: 'Within a few months', flexible: 'Very flexible' }[f] || f;
+}
+
+function wlDaysWaiting(appliedAt) {
+    const ms = Date.now() - new Date(appliedAt).getTime();
+    const d  = Math.floor(ms / 86400000);
+    if (d === 0) return 'today';
+    if (d === 1) return '1 day ago';
+    if (d < 7)   return `${d} days ago`;
+    const w = Math.floor(d / 7);
+    return w === 1 ? '1 week ago' : `${w} weeks ago`;
+}
+
+let _allWaitlistApps = [];
+
+async function loadWaitlistApplications() {
+    const container = document.getElementById('waitlistAdminContent');
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        _allWaitlistApps = await fetchWaitlistApplications();
+        renderWaitlistAdmin();
+    } catch (err) {
+        container.innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function renderWaitlistAdmin() {
+    const statusFilter = document.getElementById('wlStatusFilter').value;
+    const roomFilter   = document.getElementById('wlRoomFilter').value;
+    const container    = document.getElementById('waitlistAdminContent');
+    const today        = new Date().toISOString().split('T')[0];
+
+    let apps = _allWaitlistApps.slice();
+
+    // Status filter
+    if (statusFilter === 'active') {
+        apps = apps.filter(a => ['pending','offered','accepted'].includes(a.status));
+    } else if (statusFilter === 'enrolled') {
+        apps = apps.filter(a => a.status === 'enrolled');
+    } else if (statusFilter === 'archived') {
+        apps = apps.filter(a => ['declined','expired','archived'].includes(a.status));
+    }
+
+    // Room filter
+    if (roomFilter) {
+        apps = apps.filter(a => {
+            if (roomFilter === 'tbd') return !a.child_dob && !a.expected_due_date;
+            return wlDeriveRoom(a) === roomFilter;
+        });
+    }
+
+    // Priority sort: sibling first (tier 1 vs 2), then desired_start_date, then applied_at
+    apps.sort((a, b) => {
+        const sibA = a.has_sibling ? 0 : 1;
+        const sibB = b.has_sibling ? 0 : 1;
+        if (sibA !== sibB) return sibA - sibB;
+        const startA = a.desired_start_date || '';
+        const startB = b.desired_start_date || '';
+        if (startA !== startB) return startA < startB ? -1 : 1;
+        return new Date(a.applied_at) - new Date(b.applied_at);
+    });
+
+    document.getElementById('wlCount').textContent = `${apps.length} application${apps.length !== 1 ? 's' : ''}`;
+
+    if (!apps.length) {
+        container.innerHTML = '<p class="empty-hint">No applications match the current filter.</p>';
+        return;
+    }
+
+    const cards = apps.map(app => {
+        const room     = wlDeriveRoom(app);
+        const isUnborn = !!app.expected_due_date && !app.child_dob;
+        const dobInfo  = isUnborn
+            ? `Due ${app.expected_due_date}`
+            : app.child_dob ? `DOB ${app.child_dob}` : '';
+        const daysStr  = (app.days_of_week || '').split(',').filter(Boolean).join(', ');
+        const offerExpired = app.status === 'offered' && app.offer_deadline && app.offer_deadline < today;
+
+        const priorityBadges = [
+            app.has_sibling ? '<span class="wl-pri-badge wl-sib">👨‍👩‍👧 Sibling</span>' : '',
+            isUnborn        ? '<span class="wl-pri-badge wl-prenatal">👶 Prenatal</span>' : '',
+            offerExpired    ? '<span class="wl-pri-badge wl-expired-warn">⚠️ Offer Expired</span>' : '',
+        ].filter(Boolean).join(' ');
+
+        // Checklist (shown once accepted)
+        const checklistHtml = ['accepted','enrolled'].includes(app.status) ? `
+            <div class="wl-checklist">
+                <label class="wl-check-item">
+                    <input type="checkbox" class="wl-paperwork" data-id="${app.id}" ${app.paperwork_received ? 'checked' : ''}>
+                    Paperwork received
+                </label>
+                <label class="wl-check-item">
+                    <input type="checkbox" class="wl-deposit" data-id="${app.id}" ${app.deposit_paid ? 'checked' : ''}>
+                    Deposit paid
+                </label>
+                ${(app.paperwork_received && app.deposit_paid && app.status !== 'enrolled') ? `
+                    <button class="btn-primary wl-action wl-enroll" data-id="${app.id}" style="margin-left:10px;">✓ Mark Enrolled</button>
+                ` : ''}
+            </div>` : '';
+
+        // Action buttons
+        const actionBtns = (() => {
+            const id = app.id;
+            if (['declined','expired','archived','enrolled'].includes(app.status)) {
+                return `<button class="btn-ghost wl-action wl-unarchive" data-id="${id}">↩ Restore</button>`;
+            }
+            const offer = app.status === 'pending' || offerExpired
+                ? `<button class="btn-secondary wl-action wl-offer" data-id="${id}">📨 Make Offer</button>`
+                : '';
+            const accept = app.status === 'offered'
+                ? `<button class="btn-secondary wl-action wl-accept" data-id="${id}">✓ Mark Accepted</button>`
+                : '';
+            const archive = `<button class="btn-ghost wl-action wl-archive" data-id="${id}">Archive ▾</button>`;
+            return [offer, accept, archive].filter(Boolean).join(' ');
+        })();
+
+        // Offer details row
+        const offerRow = app.status === 'offered' && app.offer_deadline ? `
+            <div class="wl-offer-row">
+                Offer sent ${app.offered_at ? new Date(app.offered_at).toLocaleDateString() : ''}
+                · Deadline: <strong>${app.offer_deadline}</strong>
+                ${app.offer_notes ? `· <em>${escHtml(app.offer_notes)}</em>` : ''}
+            </div>` : '';
+
+        return `
+        <div class="wl-card" data-id="${app.id}">
+            <div class="wl-card-header">
+                <div class="wl-card-title">
+                    <strong>${escHtml(app.child_name)}</strong>
+                    ${dobInfo ? `<span class="wl-dob">${escHtml(dobInfo)}</span>` : ''}
+                    ${room ? `<span class="wl-room">${wlRoomLabel(room)}</span>` : '<span class="wl-room">Room TBD</span>'}
+                    ${priorityBadges}
+                </div>
+                <div class="wl-card-status">${wlStatusBadge(app)}</div>
+            </div>
+            <div class="wl-card-body">
+                <div class="wl-detail-row">
+                    <span class="wl-detail-label">Start:</span>
+                    ${escHtml(app.desired_start_date)} <em class="wl-flex">(${wlFlexLabel(app.start_flexibility)})</em>
+                </div>
+                <div class="wl-detail-row">
+                    <span class="wl-detail-label">Days:</span>
+                    ${escHtml(daysStr)} · ${app.day_type === 'half' ? 'Half Day' : 'Full Day'}
+                </div>
+                <div class="wl-detail-row">
+                    <span class="wl-detail-label">Parent:</span>
+                    ${escHtml(app.parent_name)}
+                    · <a href="mailto:${escHtml(app.parent_email)}">${escHtml(app.parent_email)}</a>
+                    ${app.parent_phone ? `· ${escHtml(app.parent_phone)}` : ''}
+                </div>
+                ${app.has_sibling ? `<div class="wl-detail-row"><span class="wl-detail-label">Sibling:</span> ${escHtml(app.sibling_child_name || '—')} ${app.sibling_room_id ? `(${wlRoomLabel(app.sibling_room_id)})` : ''}</div>` : ''}
+                ${app.notes ? `<div class="wl-detail-row"><span class="wl-detail-label">Notes:</span> <em>${escHtml(app.notes)}</em></div>` : ''}
+                <div class="wl-detail-row wl-applied">Applied ${wlDaysWaiting(app.applied_at)} (${new Date(app.applied_at).toLocaleDateString()})</div>
+            </div>
+            ${offerRow}
+            ${checklistHtml}
+            <div class="wl-card-actions">${actionBtns}</div>
+
+            <!-- Offer form (hidden by default) -->
+            <div class="wl-offer-form hidden" id="wl-offer-form-${app.id}">
+                <div class="wl-offer-fields">
+                    <label>Offer deadline: <input type="date" class="wl-deadline-input" id="wl-deadline-${app.id}"
+                        value="${new Date(Date.now() + 14*86400000).toISOString().split('T')[0]}"></label>
+                    <label style="flex:1">Notes (optional): <input type="text" class="wl-notes-input" id="wl-ofnotes-${app.id}" placeholder="e.g. Bear room opening Sept 1"></label>
+                    <button class="btn-primary wl-offer-send" data-id="${app.id}">Send</button>
+                    <button class="btn-ghost wl-offer-cancel" data-id="${app.id}">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Archive dropdown (hidden by default) -->
+            <div class="wl-archive-form hidden" id="wl-archive-form-${app.id}">
+                <div class="wl-offer-fields">
+                    <span>Archive reason:</span>
+                    <select id="wl-archive-reason-${app.id}">
+                        <option value="declined">Family declined</option>
+                        <option value="no_response">No response to offer</option>
+                        <option value="enrolled_elsewhere">Enrolled elsewhere</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <button class="btn-warning wl-archive-confirm" data-id="${app.id}">Archive</button>
+                    <button class="btn-ghost wl-archive-cancel" data-id="${app.id}">Cancel</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+
+    container.innerHTML = `<div class="wl-list">${cards}</div>`;
+
+    // Wire up all event handlers
+    container.querySelectorAll('.wl-offer').forEach(btn =>
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            document.getElementById(`wl-offer-form-${id}`)?.classList.remove('hidden');
+        }));
+
+    container.querySelectorAll('.wl-offer-cancel').forEach(btn =>
+        btn.addEventListener('click', () => {
+            document.getElementById(`wl-offer-form-${btn.dataset.id}`)?.classList.add('hidden');
+        }));
+
+    container.querySelectorAll('.wl-offer-send').forEach(btn =>
+        btn.addEventListener('click', async () => {
+            const id       = btn.dataset.id;
+            const deadline = document.getElementById(`wl-deadline-${id}`)?.value;
+            const notes    = document.getElementById(`wl-ofnotes-${id}`)?.value || '';
+            if (!deadline) { alert('Please set an offer deadline.'); return; }
+            btn.disabled = true;
+            try {
+                await updateWaitlistApplication(Number(id), {
+                    status:         'offered',
+                    offered_at:     new Date().toISOString(),
+                    offer_deadline: deadline,
+                    offer_notes:    notes || null,
+                });
+                const app = _allWaitlistApps.find(a => a.id === Number(id));
+                if (app) { app.status = 'offered'; app.offered_at = new Date().toISOString(); app.offer_deadline = deadline; app.offer_notes = notes || null; }
+                renderWaitlistAdmin();
+            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
+        }));
+
+    container.querySelectorAll('.wl-accept').forEach(btn =>
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                const id = Number(btn.dataset.id);
+                await updateWaitlistApplication(id, { status: 'accepted' });
+                const app = _allWaitlistApps.find(a => a.id === id);
+                if (app) app.status = 'accepted';
+                renderWaitlistAdmin();
+            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
+        }));
+
+    container.querySelectorAll('.wl-enroll').forEach(btn =>
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                const id = Number(btn.dataset.id);
+                await updateWaitlistApplication(id, { status: 'enrolled' });
+                const app = _allWaitlistApps.find(a => a.id === id);
+                if (app) app.status = 'enrolled';
+                renderWaitlistAdmin();
+            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
+        }));
+
+    container.querySelectorAll('.wl-paperwork').forEach(cb =>
+        cb.addEventListener('change', async () => {
+            const id = Number(cb.dataset.id);
+            try {
+                await updateWaitlistApplication(id, { paperwork_received: cb.checked });
+                const app = _allWaitlistApps.find(a => a.id === id);
+                if (app) app.paperwork_received = cb.checked;
+                renderWaitlistAdmin();
+            } catch (err) { alert('Error: ' + err.message); cb.checked = !cb.checked; }
+        }));
+
+    container.querySelectorAll('.wl-deposit').forEach(cb =>
+        cb.addEventListener('change', async () => {
+            const id = Number(cb.dataset.id);
+            try {
+                await updateWaitlistApplication(id, { deposit_paid: cb.checked });
+                const app = _allWaitlistApps.find(a => a.id === id);
+                if (app) app.deposit_paid = cb.checked;
+                renderWaitlistAdmin();
+            } catch (err) { alert('Error: ' + err.message); cb.checked = !cb.checked; }
+        }));
+
+    container.querySelectorAll('.wl-archive').forEach(btn =>
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            document.getElementById(`wl-archive-form-${id}`)?.classList.remove('hidden');
+        }));
+
+    container.querySelectorAll('.wl-archive-cancel').forEach(btn =>
+        btn.addEventListener('click', () => {
+            document.getElementById(`wl-archive-form-${btn.dataset.id}`)?.classList.add('hidden');
+        }));
+
+    container.querySelectorAll('.wl-archive-confirm').forEach(btn =>
+        btn.addEventListener('click', async () => {
+            const id     = Number(btn.dataset.id);
+            const reason = document.getElementById(`wl-archive-reason-${id}`)?.value || 'other';
+            btn.disabled = true;
+            try {
+                await updateWaitlistApplication(id, {
+                    status:         'archived',
+                    archive_reason: reason,
+                    archived_at:    new Date().toISOString(),
+                });
+                const app = _allWaitlistApps.find(a => a.id === id);
+                if (app) { app.status = 'archived'; app.archive_reason = reason; }
+                renderWaitlistAdmin();
+            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
+        }));
+
+    container.querySelectorAll('.wl-unarchive').forEach(btn =>
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                const id = Number(btn.dataset.id);
+                await updateWaitlistApplication(id, { status: 'pending', archived_at: null, archive_reason: null });
+                const app = _allWaitlistApps.find(a => a.id === id);
+                if (app) { app.status = 'pending'; app.archived_at = null; app.archive_reason = null; }
+                renderWaitlistAdmin();
+            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
+        }));
+}
+
+function setupWaitlistAdmin() {
+    document.getElementById('refreshWaitlistBtn')?.addEventListener('click', loadWaitlistApplications);
+    document.getElementById('wlStatusFilter')?.addEventListener('change', renderWaitlistAdmin);
+    document.getElementById('wlRoomFilter')?.addEventListener('change', renderWaitlistAdmin);
 }
 
 // ============================================================

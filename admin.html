@@ -53,6 +53,7 @@
         <nav class="admin-tabs" id="adminTabs">
             <button class="admin-tab-btn" data-tab="daily">📋 Daily</button>
             <button class="admin-tab-btn" data-tab="families">👨‍👩‍👧 Families</button>
+            <button class="admin-tab-btn" data-tab="waitlist">⏳ Waitlist</button>
             <button class="admin-tab-btn" data-tab="settings">⚙️ Settings</button>
             <button class="admin-tab-btn" data-tab="reports">📊 Reports</button>
             <button class="admin-tab-btn" data-tab="staffing">👷 Staffing</button>
@@ -187,6 +188,39 @@
 
         </div><!-- /#tab-families -->
 
+        <!-- ── Tab: Waitlist ─────────────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-waitlist">
+
+            <section class="admin-section">
+                <h2>⏳ Enrollment Waitlist</h2>
+                <p class="section-desc">Families waiting for an enrollment spot. Sorted by priority: siblings first, then by desired start date, then by application date (oldest first).</p>
+
+                <div class="families-dir-controls" style="margin-bottom:12px;">
+                    <select id="wlStatusFilter" class="family-search-input" style="width:auto;">
+                        <option value="active">Active (pending / offered / accepted)</option>
+                        <option value="enrolled">Enrolled</option>
+                        <option value="archived">Archived</option>
+                        <option value="all">All</option>
+                    </select>
+                    <select id="wlRoomFilter" class="family-search-input" style="width:auto;">
+                        <option value="">All Rooms</option>
+                        <option value="bear">🐻 Bear (0–12 mo)</option>
+                        <option value="bee">🐝 Bee (12–24 mo)</option>
+                        <option value="turtle">🐢 Turtle (2 yrs)</option>
+                        <option value="owl">🦉 Owl (3+ yrs)</option>
+                        <option value="tbd">TBD / Unborn</option>
+                    </select>
+                    <button id="refreshWaitlistBtn" class="btn-secondary">&#8635; Refresh</button>
+                    <span id="wlCount" class="rates-status"></span>
+                </div>
+
+                <div id="waitlistAdminContent">
+                    <p class="empty-hint">Click Refresh to load the waitlist.</p>
+                </div>
+            </section>
+
+        </div><!-- /#tab-waitlist -->
+
         <!-- ── Tab: Settings ──────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-settings">
 
@@ -312,7 +346,7 @@
             <!-- Waitlist Demand -->
             <section class="admin-section">
                 <h2>⏳ Waitlist Demand</h2>
-                <p class="section-desc">Rooms and months with the most waitlisted requests — shows unmet demand to guide capacity decisions.</p>
+                <p class="section-desc">Active waitlist applications by room and desired start month — shows real unmet demand to guide capacity decisions.</p>
                 <div class="roster-btns" style="margin-bottom:12px">
                     <button id="generateWaitlistBtn" class="btn-secondary">Generate Report</button>
                 </div>
@@ -633,8 +667,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="js/supabase.js?v=29"></script>
-    <script src="js/admin.js?v=32"></script>
+    <script src="js/supabase.js?v=30"></script>
+    <script src="js/admin.js?v=33"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 </body>
 </html>
