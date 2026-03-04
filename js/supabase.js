@@ -979,8 +979,11 @@ async function updateWaitlistApplication(id, fields) {
 
 async function sendWaitlistOfferEmail({ parentName, parentEmail, childName, offerDeadline, offerNotes }) {
     if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token || SUPABASE_ANON_KEY;
     const { data, error } = await sbClient.functions.invoke('send-waitlist-offer', {
         body: { parentName, parentEmail, childName, offerDeadline, offerNotes },
+        headers: { Authorization: `Bearer ${token}` },
     });
     if (error) throw error;
     return data;
