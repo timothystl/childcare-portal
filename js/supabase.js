@@ -19,6 +19,7 @@ const ROOMS = [
         halfDayRate:    null,
         weeklyFullRate: null,   // set in admin → overrides 5×fullDayRate when all 5 weekdays booked
         weeklyHalfRate: null,
+        staffRatio:     4,      // max children per 1 staff member
     },
     {
         id:             'bee',
@@ -30,6 +31,7 @@ const ROOMS = [
         halfDayRate:    55,
         weeklyFullRate: null,
         weeklyHalfRate: null,
+        staffRatio:     5,
     },
     {
         id:             'turtle',
@@ -41,6 +43,7 @@ const ROOMS = [
         halfDayRate:    45,
         weeklyFullRate: null,
         weeklyHalfRate: null,
+        staffRatio:     8,
     },
     {
         id:             'owl',
@@ -52,6 +55,7 @@ const ROOMS = [
         halfDayRate:    45,
         weeklyFullRate: null,
         weeklyHalfRate: null,
+        staffRatio:     10,
     },
 ];
 
@@ -703,5 +707,34 @@ async function saveRateSettings(rates) {
     const { error } = await sbClient
         .from('settings')
         .upsert({ key: 'room_rates', value: rates }, { onConflict: 'key' });
+    if (error) throw error;
+}
+
+// Load staff-to-child ratios from Supabase and merge into ROOMS array.
+async function loadRatioSettings() {
+    if (!sbClient) return false;
+    try {
+        const { data, error } = await sbClient
+            .from('settings')
+            .select('value')
+            .eq('key', 'staff_ratios')
+            .maybeSingle();
+        if (error || !data) return false;
+        const ratios = data.value;
+        ROOMS.forEach(room => {
+            if (ratios[room.id] != null) room.staffRatio = ratios[room.id];
+        });
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+// Save staff-to-child ratios to Supabase.
+async function saveRatioSettings(ratios) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'staff_ratios', value: ratios }, { onConflict: 'key' });
     if (error) throw error;
 }

@@ -65,17 +65,20 @@ function showDashboard() {
 async function initDashboard() {
     populateRoomFilter();
     populateRosterRoomFilter();
-    await Promise.all([loadRegistrations(), loadClosureList(), loadFamilies(), loadRateSettings()]);
+    await Promise.all([loadRegistrations(), loadClosureList(), loadFamilies(), loadRateSettings(), loadRatioSettings()]);
     renderCapacityOverview();
     setupFilters();
     setupRoster();
     setupClosures();
     setupMonthlyReport();
+    setupFamilyBilling();
     setupWindowOverride();
     setupFamilies();
     setupMessages();
     setupRoomCalendar();
     setupRates();
+    setupRatios();
+    setupStaffScheduling();
     setupTabs();
     setupCollapsibles();
     document.getElementById('refreshBtn').addEventListener('click', loadRegistrations);
@@ -895,6 +898,393 @@ function exportMonthlyReport() {
         wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
     }));
     XLSX.writeFile(wb, `billing-report-${monthVal}.xlsx`);
+}
+
+// ============================================================
+// FAMILY BILLING REPORT
+// ============================================================
+function setupFamilyBilling() {
+    document.getElementById('generateFamilyBillingBtn')?.addEventListener('click', generateFamilyBillingReport);
+    document.getElementById('exportFamilyBillingBtn')?.addEventListener('click', exportFamilyBillingReport);
+    const now = new Date();
+    const el = document.getElementById('familyBillingMonth');
+    if (el) el.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function _buildFamilyBillingData(monthVal) {
+    const dmap      = getDiscountMap();
+    const familyMap = new Map();
+
+    allRegistrations.forEach(reg => {
+        const dates = (reg.registration_dates || []).filter(d =>
+            !d.waitlisted && d.care_date && d.care_date.startsWith(monthVal));
+        if (!dates.length) return;
+
+        const key = (reg.parent_email || reg.parent_name || '').toLowerCase().trim();
+        if (!familyMap.has(key)) {
+            familyMap.set(key, {
+                parentName:  reg.parent_name,
+                parentEmail: reg.parent_email,
+                parentPhone: reg.parent_phone,
+                children: [],
+            });
+        }
+        const fam      = familyMap.get(key);
+        const room     = ROOMS.find(r => r.id === reg.room_id);
+        const discKey  = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
+        const disc     = dmap.get(discKey) || { type: 'none', value: 0 };
+        let fullDays = 0, halfDays = 0, subtotal = 0;
+        dates.forEach(d => {
+            const rate = d.day_type === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+            subtotal += effectiveAdminRate(rate, disc.type, disc.value);
+            if (d.day_type === 'half') halfDays++; else fullDays++;
+        });
+
+        // Merge if child already present (multiple reg rows for same child + month)
+        const existing = fam.children.find(c => c.childName === reg.child_name);
+        if (existing) {
+            existing.fullDays += fullDays;
+            existing.halfDays += halfDays;
+            existing.subtotal += subtotal;
+        } else {
+            fam.children.push({
+                childName: reg.child_name,
+                roomLabel: room?.label || reg.room_id,
+                fullDays,
+                halfDays,
+                subtotal,
+                discLabel: disc.type === 'staff'  ? 'Staff (free)' :
+                           disc.type === 'custom' ? `${disc.value}% off` : '—',
+            });
+        }
+    });
+
+    return [...familyMap.values()].sort((a, b) => {
+        const la = (a.parentName || '').split(' ').pop().toLowerCase();
+        const lb = (b.parentName || '').split(' ').pop().toLowerCase();
+        return la.localeCompare(lb);
+    });
+}
+
+function generateFamilyBillingReport() {
+    const monthVal = document.getElementById('familyBillingMonth')?.value;
+    if (!monthVal) { alert('Please select a month.'); return; }
+
+    const [y, m]    = monthVal.split('-').map(Number);
+    const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+    const families   = _buildFamilyBillingData(monthVal);
+
+    const container = document.getElementById('familyBillingContent');
+    if (!families.length) {
+        container.innerHTML = `<p class="empty-hint">No registrations found for ${monthLabel}.</p>`;
+        return;
+    }
+
+    let grandTotal = 0;
+    const rows = families.map(fam => {
+        const familyTotal = fam.children.reduce((s, c) => s + c.subtotal, 0);
+        grandTotal += familyTotal;
+        const childRows = fam.children.map(c => `
+            <tr class="billing-child-row">
+                <td class="billing-indent">${escHtml(c.childName)}</td>
+                <td>${escHtml(c.roomLabel)}</td>
+                <td class="report-num">${c.fullDays || '—'}</td>
+                <td class="report-num">${c.halfDays || '—'}</td>
+                <td class="report-num">${c.discLabel}</td>
+                <td class="report-num report-revenue">$${c.subtotal.toFixed(2)}</td>
+            </tr>`).join('');
+        return `
+            <tr class="billing-family-row">
+                <td colspan="5">
+                    <strong>${escHtml(fam.parentName)}</strong>
+                    <span class="billing-contact">${escHtml(fam.parentEmail)}${fam.parentPhone ? ' · ' + escHtml(fam.parentPhone) : ''}</span>
+                </td>
+                <td class="report-num report-revenue billing-family-total"><strong>$${familyTotal.toFixed(2)}</strong></td>
+            </tr>
+            ${childRows}`;
+    }).join('');
+
+    container.innerHTML = `
+        <h3 class="report-month-title">${monthLabel} — ${families.length} famil${families.length !== 1 ? 'ies' : 'y'}</h3>
+        <div class="table-wrapper report-table-wrap">
+            <table class="report-table billing-table">
+                <thead>
+                    <tr>
+                        <th>Family / Child</th>
+                        <th>Room</th>
+                        <th>Full Days</th>
+                        <th>Half Days</th>
+                        <th>Discount</th>
+                        <th>Amount Due</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+                <tfoot>
+                    <tr class="report-total-row">
+                        <td colspan="5"><strong>Grand Total — ${families.length} famil${families.length !== 1 ? 'ies' : 'y'}</strong></td>
+                        <td class="report-num report-revenue"><strong>$${grandTotal.toFixed(2)}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>`;
+}
+
+function exportFamilyBillingReport() {
+    const monthVal = document.getElementById('familyBillingMonth')?.value;
+    if (!monthVal) { alert('Please select a month first.'); return; }
+
+    const families = _buildFamilyBillingData(monthVal);
+    if (!families.length) { alert('No data to export.'); return; }
+
+    const rows = [];
+    families.forEach(fam => {
+        fam.children.forEach(c => {
+            rows.push({
+                'Parent Name':  fam.parentName,
+                'Email':        fam.parentEmail,
+                'Phone':        fam.parentPhone,
+                'Child Name':   c.childName,
+                'Room':         c.roomLabel,
+                'Full Days':    c.fullDays,
+                'Half Days':    c.halfDays,
+                'Discount':     c.discLabel,
+                'Amount Due':   `$${c.subtotal.toFixed(2)}`,
+            });
+        });
+    });
+
+    const [y, m] = monthVal.split('-').map(Number);
+    const label  = MONTH_NAMES_ADMIN[m - 1] + '-' + y;
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, label);
+    ws['!cols'] = Object.keys(rows[0]).map(k => ({
+        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
+    }));
+    XLSX.writeFile(wb, `family-billing-${monthVal}.xlsx`);
+}
+
+// ============================================================
+// STAFF SCHEDULING
+// ============================================================
+function setupStaffScheduling() {
+    document.getElementById('generateStaffBtn')?.addEventListener('click', generateStaffSchedule);
+    document.getElementById('exportStaffBtn')?.addEventListener('click', exportStaffSchedule);
+
+    // Default to the Monday of the current week
+    const el = document.getElementById('staffWeekOf');
+    if (el) {
+        const today = new Date();
+        const dow   = today.getDay(); // 0=Sun
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+        el.value = monday.toISOString().split('T')[0];
+    }
+}
+
+function _buildWeekDates(weekOf) {
+    const start = new Date(weekOf + 'T00:00:00');
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const dow = d.getDay();
+        if (dow === 0 || dow === 6) continue;
+        const str = d.toISOString().split('T')[0];
+        if (!allClosureDates.has(str)) dates.push(str);
+    }
+    return dates;
+}
+
+function _buildEnrollmentCounts(weekDates) {
+    const counts = {};
+    weekDates.forEach(d => {
+        counts[d] = {};
+        ROOMS.forEach(r => { counts[d][r.id] = 0; });
+    });
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (!d.waitlisted && weekDates.includes(d.care_date)) {
+                counts[d.care_date][reg.room_id] = (counts[d.care_date][reg.room_id] || 0) + 1;
+            }
+        });
+    });
+    return counts;
+}
+
+function generateStaffSchedule() {
+    const weekOf = document.getElementById('staffWeekOf')?.value;
+    if (!weekOf) { alert('Please select a week.'); return; }
+
+    const weekDates = _buildWeekDates(weekOf);
+    if (!weekDates.length) {
+        document.getElementById('staffContent').innerHTML =
+            '<p class="empty-hint">No school days in this week (all days are weekends or closures).</p>';
+        return;
+    }
+    const counts = _buildEnrollmentCounts(weekDates);
+    renderStaffSchedule(weekDates, counts);
+}
+
+function renderStaffSchedule(weekDates, counts) {
+    const container  = document.getElementById('staffContent');
+    const dayNames   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const roomHeaders = ROOMS.map(r =>
+        `<th colspan="2" class="staff-room-header">${r.label}</th>`).join('');
+    const subHeaders  = ROOMS.map(() =>
+        '<th class="staff-sub-head">Kids</th><th class="staff-sub-head">Min Staff</th>').join('');
+
+    const dataRows = weekDates.map(d => {
+        const dt    = new Date(d + 'T00:00:00');
+        const label = `${dayNames[dt.getDay()]} ${friendlyShort(d)}`;
+        const cells = ROOMS.map(room => {
+            const enrolled  = counts[d][room.id] || 0;
+            const ratio     = room.staffRatio || 10;
+            const minStaff  = enrolled > 0 ? Math.ceil(enrolled / ratio) : 0;
+            const staffCls  = minStaff >= 3 ? 'staff-high' : minStaff === 2 ? 'staff-mid' : '';
+            return `<td class="report-num">${enrolled || '—'}</td>` +
+                   `<td class="report-num ${staffCls}">${minStaff > 0 ? minStaff : '—'}</td>`;
+        }).join('');
+        return `<tr><td class="staff-date-cell">${label}</td>${cells}</tr>`;
+    }).join('');
+
+    const totalCells = ROOMS.map(room => {
+        const ratio    = room.staffRatio || 10;
+        const avgKids  = weekDates.length
+            ? (weekDates.reduce((s, d) => s + (counts[d][room.id] || 0), 0) / weekDates.length).toFixed(1)
+            : 0;
+        return `<td class="report-num"><em>avg ${avgKids}/day</em></td>` +
+               `<td class="report-num"><em>1:${ratio} ratio</em></td>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="staff-legend">
+            <span class="staff-legend-dot staff-high">●</span> 3+ staff &nbsp;
+            <span class="staff-legend-dot staff-mid">●</span> 2 staff &nbsp;
+            <span class="staff-legend-dot">●</span> 0–1 staff
+            <span class="staff-ratio-note">Ratios: ⚙️ Settings → Staff-to-Child Ratios</span>
+        </div>
+        <div class="table-wrapper report-table-wrap">
+            <table class="report-table staff-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="staff-date-header">Date</th>
+                        ${roomHeaders}
+                    </tr>
+                    <tr>${subHeaders}</tr>
+                </thead>
+                <tbody>${dataRows}</tbody>
+                <tfoot>
+                    <tr class="report-total-row">
+                        <td><strong>Week Summary</strong></td>
+                        ${totalCells}
+                    </tr>
+                </tfoot>
+            </table>
+        </div>`;
+}
+
+function exportStaffSchedule() {
+    const weekOf = document.getElementById('staffWeekOf')?.value;
+    if (!weekOf) { alert('Please select a week first.'); return; }
+
+    const weekDates = _buildWeekDates(weekOf);
+    if (!weekDates.length) { alert('No school days in this week.'); return; }
+
+    const counts = _buildEnrollmentCounts(weekDates);
+    const rows   = weekDates.map(d => {
+        const row = { Date: friendlyShort(d) };
+        ROOMS.forEach(room => {
+            const enrolled = counts[d][room.id] || 0;
+            const ratio    = room.staffRatio || 10;
+            row[`${room.label} – Kids`]      = enrolled;
+            row[`${room.label} – Min Staff`] = enrolled > 0 ? Math.ceil(enrolled / ratio) : 0;
+        });
+        return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Staff Schedule');
+    ws['!cols'] = Object.keys(rows[0]).map(k => ({
+        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
+    }));
+    XLSX.writeFile(wb, `staff-schedule-${weekOf}.xlsx`);
+}
+
+// ============================================================
+// STAFF RATIOS SETTINGS
+// ============================================================
+function setupRatios() {
+    renderRatiosTable();
+    document.getElementById('saveRatiosBtn')?.addEventListener('click', onSaveRatios);
+}
+
+function renderRatiosTable() {
+    const wrap = document.getElementById('ratiosTableWrap');
+    if (!wrap) return;
+    wrap.innerHTML = `
+        <table class="rates-table">
+            <thead>
+                <tr>
+                    <th>Room</th>
+                    <th>Age Group</th>
+                    <th>Max Children per Staff</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${ROOMS.map(room => `
+                    <tr data-room-id="${room.id}">
+                        <td class="rates-room-label">
+                            <strong>${escHtml(room.label)}</strong>
+                        </td>
+                        <td class="rates-ages">${escHtml(room.ages)}</td>
+                        <td>
+                            <input type="number" class="ratio-input rate-input"
+                                value="${room.staffRatio ?? ''}" min="1" step="1" placeholder="e.g. 4"
+                                style="width:80px;">
+                        </td>
+                    </tr>`).join('')}
+            </tbody>
+        </table>
+        <p class="rates-hint">💡 Enter the maximum number of children one staff member may supervise. Typical state minimums: infants 4, young toddlers 5, 2-year-olds 8, 3-year-olds 10.</p>`;
+}
+
+async function onSaveRatios() {
+    const btn      = document.getElementById('saveRatiosBtn');
+    const statusEl = document.getElementById('ratiosStatus');
+    if (!btn) return;
+    btn.disabled    = true;
+    btn.textContent = 'Saving…';
+    if (statusEl) statusEl.textContent = '';
+
+    try {
+        const ratios = {};
+        document.querySelectorAll('#ratiosTableWrap tbody tr[data-room-id]').forEach(row => {
+            const id  = row.dataset.roomId;
+            const val = row.querySelector('.ratio-input')?.value.trim();
+            ratios[id] = val === '' ? null : parseInt(val, 10);
+        });
+
+        await saveRatioSettings(ratios);
+        await loadRatioSettings();
+        renderRatiosTable();
+
+        if (statusEl) {
+            statusEl.textContent = '✓ Saved!';
+            statusEl.style.color = '#2e7d32';
+            setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+    } catch (err) {
+        if (statusEl) {
+            statusEl.textContent = '⚠️ ' + err.message;
+            statusEl.style.color = '#c62828';
+        }
+        console.error('onSaveRatios:', err);
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = '💾 Save Ratios';
+    }
 }
 
 // ============================================================
