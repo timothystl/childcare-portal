@@ -1461,7 +1461,15 @@ function renderFamiliesList(families) {
         return;
     }
 
-    const sorted      = sortFamilies(families);
+    // Deduplicate by family ID in case the DB ever returns the same row twice
+    const _seenIds = new Set();
+    const unique   = families.filter(f => {
+        if (_seenIds.has(f.id)) return false;
+        _seenIds.add(f.id);
+        return true;
+    });
+
+    const sorted      = sortFamilies(unique);
     const roomOptions = ROOMS.map(r =>
         `<option value="${r.id}">${r.label}</option>`
     ).join('');

@@ -708,9 +708,12 @@ tr.pending-approval:hover { background: #fef3c7; }
 
 .family-heading {
     font-weight: 700;
-    font-size: 1.05em;
-    color: #2d3748;
-    margin-bottom: 6px;
+    font-size: 1.1em;
+    color: #667eea;
+    margin-bottom: 10px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid #eef0f8;
+    letter-spacing: .01em;
 }
 
 .family-row-top {
@@ -724,11 +727,12 @@ tr.pending-approval:hover { background: #fef3c7; }
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
+    padding-left: 3px;
 }
 
 .family-row-name {
-    font-weight: 700;
-    color: #333;
+    font-weight: 400;
+    color: #555;
     font-size: .97em;
 }
 
