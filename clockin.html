@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>Staff Clock In / Out</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 20px;
+            padding: 32px 28px;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: 0 20px 60px rgba(0,0,0,.25);
+            text-align: center;
+        }
+
+        .logo { font-size: 2.2em; margin-bottom: 4px; }
+        h1 { font-size: 1.3em; color: #333; margin-bottom: 4px; }
+        .subtitle { color: #888; font-size: .9em; margin-bottom: 28px; }
+
+        /* PIN Screen */
+        #pinScreen {}
+        .pin-label { font-size: .85em; color: #666; margin-bottom: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+
+        .pin-display {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .pin-dot {
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            border: 2px solid #ccc;
+            background: transparent;
+            transition: background .15s, border-color .15s;
+        }
+        .pin-dot.filled { background: #667eea; border-color: #667eea; }
+
+        .numpad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .num-btn {
+            background: #f5f5f5;
+            border: none;
+            border-radius: 14px;
+            padding: 18px 10px;
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #333;
+            cursor: pointer;
+            transition: background .15s, transform .1s;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        .num-btn:active { background: #667eea; color: #fff; transform: scale(.94); }
+        .num-btn.del-btn { font-size: 1.1em; color: #999; }
+        .num-btn.zero-btn { grid-column: 2; }
+
+        .pin-error {
+            color: #e53e3e;
+            font-size: .88em;
+            min-height: 20px;
+            margin-bottom: 6px;
+        }
+
+        /* Clock Screen */
+        #clockScreen { display: none; }
+
+        .welcome-name {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 2px;
+        }
+        .welcome-role {
+            font-size: .88em;
+            color: #888;
+            margin-bottom: 20px;
+        }
+
+        .date-label {
+            font-size: .85em;
+            color: #888;
+            margin-bottom: 14px;
+        }
+
+        .status-box {
+            background: #f8f9ff;
+            border-radius: 14px;
+            padding: 18px;
+            margin-bottom: 22px;
+            border: 1.5px solid #e0e6ff;
+        }
+        .status-line {
+            display: flex;
+            justify-content: space-between;
+            font-size: .9em;
+            color: #555;
+            padding: 4px 0;
+        }
+        .status-line span:last-child { font-weight: 600; color: #333; }
+        .status-none { color: #aaa; font-style: italic; }
+
+        .hours-total {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e0e6ff;
+            font-size: 1em;
+            font-weight: 700;
+            color: #667eea;
+            text-align: right;
+        }
+
+        .btn-clock {
+            width: 100%;
+            padding: 18px;
+            border: none;
+            border-radius: 16px;
+            font-size: 1.2em;
+            font-weight: 700;
+            cursor: pointer;
+            margin-bottom: 12px;
+            transition: opacity .2s, transform .1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .btn-clock:active { transform: scale(.97); }
+        .btn-clock:disabled { opacity: .5; cursor: not-allowed; }
+        .btn-in  { background: #48bb78; color: #fff; }
+        .btn-out { background: #667eea; color: #fff; }
+
+        .btn-signout {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: .85em;
+            cursor: pointer;
+            padding: 6px 12px;
+            text-decoration: underline;
+        }
+
+        .msg {
+            font-size: .88em;
+            min-height: 22px;
+            margin-bottom: 8px;
+        }
+        .msg-ok  { color: #2e7d32; }
+        .msg-err { color: #c62828; }
+
+        /* Loading spinner */
+        .spinner {
+            display: inline-block;
+            width: 22px; height: 22px;
+            border: 3px solid #eee;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #loadingScreen { display: none; }
+        .loading-wrap { padding: 24px 0; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div class="logo">🏫</div>
+    <h1>Staff Clock In / Out</h1>
+    <p class="subtitle">Enter your 4-digit PIN to continue</p>
+
+    <!-- PIN Entry -->
+    <div id="pinScreen">
+        <div class="pin-label">Your PIN</div>
+        <div class="pin-display">
+            <div class="pin-dot" id="d0"></div>
+            <div class="pin-dot" id="d1"></div>
+            <div class="pin-dot" id="d2"></div>
+            <div class="pin-dot" id="d3"></div>
+        </div>
+        <div class="numpad">
+            <button class="num-btn" data-n="1">1</button>
+            <button class="num-btn" data-n="2">2</button>
+            <button class="num-btn" data-n="3">3</button>
+            <button class="num-btn" data-n="4">4</button>
+            <button class="num-btn" data-n="5">5</button>
+            <button class="num-btn" data-n="6">6</button>
+            <button class="num-btn" data-n="7">7</button>
+            <button class="num-btn" data-n="8">8</button>
+            <button class="num-btn" data-n="9">9</button>
+            <button class="num-btn del-btn" id="delBtn">⌫</button>
+            <button class="num-btn zero-btn" data-n="0">0</button>
+        </div>
+        <div class="pin-error" id="pinError"></div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loadingScreen">
+        <div class="loading-wrap"><span class="spinner"></span></div>
+    </div>
+
+    <!-- Clock In/Out Screen -->
+    <div id="clockScreen">
+        <div class="welcome-name" id="staffName"></div>
+        <div class="welcome-role" id="staffRole"></div>
+        <div class="date-label" id="dateLabel"></div>
+        <div class="status-box">
+            <div class="status-line">
+                <span>Clocked In</span>
+                <span id="clockInTime" class="status-none">—</span>
+            </div>
+            <div class="status-line">
+                <span>Clocked Out</span>
+                <span id="clockOutTime" class="status-none">—</span>
+            </div>
+            <div class="hours-total" id="hoursTotal"></div>
+        </div>
+        <div class="msg" id="clockMsg"></div>
+        <button class="btn-clock btn-in"  id="btnClockIn">Clock In</button>
+        <button class="btn-clock btn-out" id="btnClockOut">Clock Out</button>
+        <button class="btn-signout" id="btnSignOut">Sign Out</button>
+    </div>
+</div>
+
+<script>
+// ── Supabase ──────────────────────────────────────────────────
+const SUPABASE_URL      = 'https://dahdstopsumxnqvdclmy.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── State ─────────────────────────────────────────────────────
+let pin        = '';
+let staffId    = null;
+let workDate   = todayStr();
+
+// ── Helpers ───────────────────────────────────────────────────
+function todayStr() {
+    return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+}
+
+function fmtTime(iso) {
+    if (!iso) return null;
+    return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function fmtHours(clockIn, clockOut) {
+    if (!clockIn || !clockOut) return '';
+    const hrs = (new Date(clockOut) - new Date(clockIn)) / 3600000;
+    return `${hrs.toFixed(2)} hrs worked`;
+}
+
+// ── PIN UI ─────────────────────────────────────────────────────
+function updateDots() {
+    for (let i = 0; i < 4; i++) {
+        document.getElementById('d' + i).classList.toggle('filled', i < pin.length);
+    }
+}
+
+function showError(msg) {
+    document.getElementById('pinError').textContent = msg;
+    // shake animation
+    const dots = document.querySelector('.pin-display');
+    dots.style.animation = 'none';
+    setTimeout(() => { dots.style.animation = ''; }, 10);
+    pin = '';
+    updateDots();
+}
+
+function showScreen(name) {
+    document.getElementById('pinScreen').style.display    = name === 'pin'     ? '' : 'none';
+    document.getElementById('loadingScreen').style.display = name === 'loading' ? '' : 'none';
+    document.getElementById('clockScreen').style.display   = name === 'clock'   ? '' : 'none';
+}
+
+// Numpad handlers
+document.querySelectorAll('.num-btn[data-n]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        if (pin.length >= 4) return;
+        pin += btn.dataset.n;
+        document.getElementById('pinError').textContent = '';
+        updateDots();
+        if (pin.length === 4) await verifyPin();
+    });
+});
+document.getElementById('delBtn').addEventListener('click', () => {
+    if (pin.length > 0) { pin = pin.slice(0, -1); updateDots(); }
+});
+
+// ── Verify PIN ────────────────────────────────────────────────
+async function verifyPin() {
+    showScreen('loading');
+    try {
+        const { data, error } = await sb
+            .from('staff')
+            .select('id, name, role')
+            .eq('staff_pin', parseInt(pin, 10))
+            .eq('active', true)
+            .maybeSingle();
+        if (error) throw error;
+        if (!data) { showScreen('pin'); showError('Invalid PIN. Please try again.'); return; }
+
+        staffId = data.id;
+        document.getElementById('staffName').textContent = data.name;
+        document.getElementById('staffRole').textContent = data.role || '';
+        workDate = todayStr();
+        document.getElementById('dateLabel').textContent =
+            new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+
+        await refreshClockStatus();
+        showScreen('clock');
+    } catch (err) {
+        showScreen('pin');
+        showError('Connection error. Please try again.');
+        console.error(err);
+    }
+}
+
+// ── Clock Status ──────────────────────────────────────────────
+async function refreshClockStatus() {
+    const { data, error } = await sb
+        .from('staff_clock_events')
+        .select('clock_in, clock_out')
+        .eq('staff_id', staffId)
+        .eq('work_date', workDate)
+        .maybeSingle();
+    if (error) throw error;
+
+    const inTime  = data?.clock_in  || null;
+    const outTime = data?.clock_out || null;
+
+    document.getElementById('clockInTime').textContent  = fmtTime(inTime)  || '—';
+    document.getElementById('clockInTime').className    = inTime  ? '' : 'status-none';
+    document.getElementById('clockOutTime').textContent = fmtTime(outTime) || '—';
+    document.getElementById('clockOutTime').className   = outTime ? '' : 'status-none';
+    document.getElementById('hoursTotal').textContent   = fmtHours(inTime, outTime);
+
+    // Show/hide buttons based on state
+    const btnIn  = document.getElementById('btnClockIn');
+    const btnOut = document.getElementById('btnClockOut');
+    if (!inTime) {
+        // Not yet clocked in
+        btnIn.style.display  = '';
+        btnOut.style.display = 'none';
+    } else if (inTime && !outTime) {
+        // Clocked in, not yet out
+        btnIn.style.display  = 'none';
+        btnOut.style.display = '';
+    } else {
+        // Already clocked out for today
+        btnIn.style.display  = 'none';
+        btnOut.style.display = 'none';
+        setMsg('You\'re all done for today! See you next time.', 'ok');
+    }
+}
+
+// ── Clock In ─────────────────────────────────────────────────
+document.getElementById('btnClockIn').addEventListener('click', async () => {
+    setMsg('', '');
+    const btn = document.getElementById('btnClockIn');
+    btn.disabled = true; btn.textContent = 'Clocking in…';
+    try {
+        const now = new Date().toISOString();
+        const { error } = await sb.from('staff_clock_events').upsert(
+            { staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null },
+            { onConflict: 'staff_id,work_date' }
+        );
+        if (error) throw error;
+        setMsg('Clocked in successfully!', 'ok');
+        await refreshClockStatus();
+    } catch (err) {
+        setMsg('Error: ' + err.message, 'err');
+    } finally { btn.disabled = false; btn.textContent = 'Clock In'; }
+});
+
+// ── Clock Out ─────────────────────────────────────────────────
+document.getElementById('btnClockOut').addEventListener('click', async () => {
+    setMsg('', '');
+    const btn = document.getElementById('btnClockOut');
+    btn.disabled = true; btn.textContent = 'Clocking out…';
+    try {
+        const now = new Date().toISOString();
+        const { error } = await sb.from('staff_clock_events')
+            .update({ clock_out: now })
+            .eq('staff_id', staffId)
+            .eq('work_date', workDate);
+        if (error) throw error;
+        setMsg('Clocked out. Have a great rest of your day!', 'ok');
+        await refreshClockStatus();
+    } catch (err) {
+        setMsg('Error: ' + err.message, 'err');
+    } finally { btn.disabled = false; btn.textContent = 'Clock Out'; }
+});
+
+// ── Sign Out ──────────────────────────────────────────────────
+document.getElementById('btnSignOut').addEventListener('click', () => {
+    staffId = null; pin = '';
+    updateDots();
+    document.getElementById('pinError').textContent = '';
+    document.getElementById('clockMsg').textContent = '';
+    showScreen('pin');
+});
+
+function setMsg(text, type) {
+    const el = document.getElementById('clockMsg');
+    el.textContent = text;
+    el.className   = 'msg' + (type ? ' msg-' + type : '');
+}
+</script>
+</body>
+</html>
