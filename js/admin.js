@@ -166,7 +166,7 @@ async function loadRegistrations() {
         renderTable(allRegistrations);
         renderCapacityOverview();
         document.getElementById('regCount').textContent =
-            `${allRegistrations.length} submission${allRegistrations.length !== 1 ? 's' : ''} total (one per child per form)`;
+            `${allRegistrations.length} submission${allRegistrations.length !== 1 ? 's' : ''} total`;
     } catch (err) {
         console.error(err);
         document.getElementById('regTableBody').innerHTML =
@@ -1441,7 +1441,9 @@ function sortFamilies(families) {
             break;
         case 'child_name':
             sorted.sort((a, b) => {
-                const firstChild = f => ((f.students || [])[0]?.child_name || '').toLowerCase();
+                const firstChild = f => (f.students || [])
+                    .map(s => (s.child_name || '').toLowerCase())
+                    .sort()[0] || '';
                 return firstChild(a).localeCompare(firstChild(b))
                     || (a.parent_name || '').localeCompare(b.parent_name || '');
             });
@@ -1481,8 +1483,10 @@ function renderFamiliesList(families) {
             ${sorted.map(f => {
                 const kids     = (f.students || []);
                 const archived = f.active === false;
+                const lastName = (f.parent_name || '').trim().split(/\s+/).pop() || '';
                 return `
                     <li class="family-row${archived ? ' family-row-archived' : ''}">
+                        <div class="family-heading">${escHtml(lastName)} Family</div>
                         <div class="family-row-top">
                             <div class="family-parent-row">
                                 <span class="family-row-name">${escHtml(f.parent_name || '')}</span>
@@ -1510,7 +1514,7 @@ function renderFamiliesList(families) {
                                     const dt = s.discount_type || 'none';
                                     const dv = s.discount_value || 0;
                                     return `<li class="family-student-item" data-student-id="${s.id}">
-                                        <span class="student-bullet">└</span>
+                                        <span class="student-bullet">Child</span>
                                         <span class="student-name">${escHtml(s.child_name)}</span>
                                         <span class="student-dob">${dobStr}</span>
                                         <div class="room-override-wrap">
