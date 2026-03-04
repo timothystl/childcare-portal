@@ -1262,3 +1262,76 @@ input.prefilled {
         font-size: 1.25em;
     }
 }
+
+/* ============================================================
+   WAITLIST MODAL  (parent-facing)
+   ============================================================ */
+.waitlist-modal-content {
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    text-align: left;
+}
+.waitlist-modal-content h2 { text-align: center; }
+.wl-section-label {
+    font-weight: 700;
+    font-size: .82em;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #888;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+}
+.wl-days-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+.wl-days-row label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+/* Floating waitlist button */
+.btn-waitlist-float {
+    position: fixed;
+    bottom: 120px;
+    right: 20px;
+    background: #6f42c1;
+    color: #fff;
+    border: none;
+    border-radius: 28px;
+    padding: 10px 18px;
+    font-size: .92em;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,.22);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 90;
+    transition: background .15s;
+}
+.btn-waitlist-float:hover { background: #5a2d9c; }
+
+@media (max-width: 600px) {
+    .btn-waitlist-float {
+        right: 12px;
+        left: auto;
+        bottom: 120px;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25em;
+    }
+    .btn-waitlist-float .fab-label { display: none; }
+}

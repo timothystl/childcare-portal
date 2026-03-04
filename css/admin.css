@@ -2001,3 +2001,115 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 .chip-confirmed { background: #d4edda; color: #155724; }
 .chip-waitlist  { background: #fff3cd; color: #856404; }
+
+/* ============================================================
+   WAITLIST ADMIN — Cards
+   ============================================================ */
+.wl-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.wl-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.wl-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.wl-card-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 1.02em;
+}
+.wl-dob  { color: #888; font-size: .85em; }
+.wl-room { background: #eef6ff; color: #1a56a8; border-radius: 6px; padding: 1px 8px; font-size: .82em; font-weight: 600; }
+.wl-flex { color: #aaa; font-size: .88em; }
+
+/* Priority badges */
+.wl-pri-badge { border-radius: 6px; padding: 1px 8px; font-size: .78em; font-weight: 700; }
+.wl-sib       { background: #fef3c7; color: #78350f; }
+.wl-prenatal  { background: #ede9fe; color: #5b21b6; }
+.wl-expired-warn { background: #fee2e2; color: #991b1b; }
+
+/* Status badges */
+.wl-badge         { border-radius: 12px; padding: 2px 9px; font-size: .78em; font-weight: 700; white-space: nowrap; }
+.wl-badge-pending  { background: #e0e7ff; color: #3730a3; }
+.wl-badge-offered  { background: #fff3cd; color: #856404; }
+.wl-badge-accepted { background: #d1fae5; color: #065f46; }
+.wl-badge-enrolled { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+.wl-badge-expired  { background: #fee2e2; color: #991b1b; }
+.wl-badge-archived { background: #f1f5f9; color: #64748b; }
+
+/* Detail rows */
+.wl-card-body { display: flex; flex-direction: column; gap: 3px; font-size: .88em; }
+.wl-detail-row { color: #444; }
+.wl-detail-label { font-weight: 600; color: #666; display: inline-block; width: 52px; }
+.wl-applied { color: #aaa; font-size: .85em; margin-top: 4px; }
+
+/* Offer row */
+.wl-offer-row {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 7px;
+    padding: 6px 12px;
+    font-size: .85em;
+    color: #78350f;
+    margin-top: 8px;
+}
+
+/* Checklist */
+.wl-checklist {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border-radius: 7px;
+    font-size: .88em;
+}
+.wl-check-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+/* Actions */
+.wl-card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+/* Inline offer / archive forms */
+.wl-offer-form,
+.wl-archive-form {
+    margin-top: 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+.wl-offer-fields {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: .88em;
+}
+.wl-offer-fields label { display: flex; align-items: center; gap: 6px; }
+.wl-deadline-input { width: 140px; padding: 4px 8px; border: 1px solid #cbd5e0; border-radius: 5px; }
+.wl-notes-input { flex: 1; min-width: 160px; padding: 4px 8px; border: 1px solid #cbd5e0; border-radius: 5px; }

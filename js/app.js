@@ -1248,3 +1248,97 @@ function downloadIcal(sortedDates, childNames, parentName) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
+
+// ============================================================
+// WAITLIST APPLICATION FORM
+// ============================================================
+(function setupWaitlistForm() {
+    const openBtn   = document.getElementById('waitlistBtn');
+    const modal     = document.getElementById('waitlistModal');
+    const closeBtn  = document.getElementById('closeWaitlistModal');
+    const form      = document.getElementById('waitlistForm');
+    const successM  = document.getElementById('waitlistSuccessModal');
+    const successCl = document.getElementById('closeWaitlistSuccessModal');
+    const isUnborn  = document.getElementById('wlIsUnborn');
+    const dobRow    = document.getElementById('wlDobRow');
+    const dueRow    = document.getElementById('wlDueRow');
+    const hasSib    = document.getElementById('wlHasSibling');
+    const sibFields = document.getElementById('wlSiblingFields');
+
+    if (!openBtn) return; // guard
+
+    openBtn.addEventListener('click', () => { modal.style.display = 'flex'; });
+    closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+    modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
+
+    isUnborn.addEventListener('change', () => {
+        const unborn = isUnborn.checked;
+        dobRow.classList.toggle('hidden', unborn);
+        dueRow.classList.toggle('hidden', !unborn);
+        document.getElementById('wlChildDob').required = !unborn;
+        document.getElementById('wlDueDate').required  = unborn;
+    });
+
+    hasSib.addEventListener('change', () => {
+        sibFields.classList.toggle('hidden', !hasSib.checked);
+    });
+
+    successCl.addEventListener('click', () => { successM.style.display = 'none'; });
+
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn = document.getElementById('wlSubmitBtn');
+
+        // Validate days
+        const days = [...document.querySelectorAll('.wlDay:checked')].map(cb => cb.value);
+        if (!days.length) { showToast('Please select at least one day.'); return; }
+
+        btn.disabled = true;
+        btn.textContent = 'Submitting…';
+
+        const isUnbornChecked = isUnborn.checked;
+        const childDob  = isUnbornChecked ? null : (document.getElementById('wlChildDob').value || null);
+        const dueDate   = isUnbornChecked ? (document.getElementById('wlDueDate').value || null) : null;
+        const startDate = document.getElementById('wlStartDate').value;
+        const dayType   = document.querySelector('input[name="wlDayType"]:checked').value;
+
+        const payload = {
+            parent_name:        document.getElementById('wlParentName').value.trim(),
+            parent_email:       document.getElementById('wlParentEmail').value.trim(),
+            parent_phone:       document.getElementById('wlParentPhone').value.trim() || null,
+            child_name:         document.getElementById('wlChildName').value.trim(),
+            child_dob:          childDob,
+            expected_due_date:  dueDate,
+            desired_start_date: startDate,
+            start_flexibility:  document.getElementById('wlFlexibility').value,
+            days_of_week:       days.join(','),
+            day_type:           dayType,
+            has_sibling:        hasSib.checked,
+            sibling_child_name: hasSib.checked ? (document.getElementById('wlSiblingName').value.trim() || null) : null,
+            sibling_room_id:    hasSib.checked ? (document.getElementById('wlSiblingRoom').value || null) : null,
+            notes:              document.getElementById('wlNotes').value.trim() || null,
+            status:             'pending',
+        };
+
+        try {
+            await submitWaitlistApplication(payload);
+            modal.style.display = 'none';
+            form.reset();
+            dobRow.classList.remove('hidden');
+            dueRow.classList.add('hidden');
+            sibFields.classList.add('hidden');
+
+            const dobInfo = isUnbornChecked
+                ? `(expected ${dueDate})`
+                : childDob ? `(DOB ${childDob})` : '';
+            document.getElementById('waitlistSuccessDetails').textContent =
+                `${payload.child_name} ${dobInfo} has been added to the waitlist for a start around ${startDate}. We'll contact you at ${payload.parent_email}.`;
+            successM.style.display = 'flex';
+        } catch (err) {
+            showToast('Submission failed: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Join Waitlist';
+        }
+    });
+})();

@@ -911,3 +911,68 @@ async function saveStaffAvailability(availMap) {
         .upsert({ key: 'staff_availability', value: availMap });
     if (error) throw error;
 }
+
+// ============================================================
+// WAITLIST APPLICATIONS
+// ============================================================
+// SQL — run once in Supabase SQL Editor to create the table:
+//
+//   CREATE TABLE IF NOT EXISTS waitlist_applications (
+//       id                 BIGSERIAL PRIMARY KEY,
+//       applied_at         TIMESTAMPTZ DEFAULT NOW(),
+//       status             TEXT        DEFAULT 'pending',
+//       parent_name        TEXT        NOT NULL,
+//       parent_email       TEXT        NOT NULL,
+//       parent_phone       TEXT,
+//       child_name         TEXT        NOT NULL,
+//       child_dob          DATE,
+//       expected_due_date  DATE,
+//       desired_start_date DATE        NOT NULL,
+//       start_flexibility  TEXT        DEFAULT 'flexible',
+//       days_of_week       TEXT,
+//       day_type           TEXT        DEFAULT 'full',
+//       has_sibling        BOOLEAN     DEFAULT FALSE,
+//       sibling_child_name TEXT,
+//       sibling_room_id    TEXT,
+//       notes              TEXT,
+//       offered_at         TIMESTAMPTZ,
+//       offer_deadline     DATE,
+//       offer_notes        TEXT,
+//       paperwork_received BOOLEAN     DEFAULT FALSE,
+//       deposit_paid       BOOLEAN     DEFAULT FALSE,
+//       archived_at        TIMESTAMPTZ,
+//       archive_reason     TEXT
+//   );
+//   ALTER TABLE waitlist_applications ENABLE ROW LEVEL SECURITY;
+//   CREATE POLICY "Public insert" ON waitlist_applications FOR INSERT WITH CHECK (true);
+//   CREATE POLICY "Auth all"     ON waitlist_applications FOR ALL  USING (auth.role() = 'authenticated');
+
+async function submitWaitlistApplication(data) {
+    if (!sbClient) throw new Error('Supabase is not configured yet.');
+    const { data: result, error } = await sbClient
+        .from('waitlist_applications')
+        .insert(data)
+        .select()
+        .single();
+    if (error) throw error;
+    return result;
+}
+
+async function fetchWaitlistApplications() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('waitlist_applications')
+        .select('*')
+        .order('applied_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+}
+
+async function updateWaitlistApplication(id, fields) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('waitlist_applications')
+        .update(fields)
+        .eq('id', id);
+    if (error) throw error;
+}
