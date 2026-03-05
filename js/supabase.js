@@ -712,7 +712,7 @@ async function saveRateSettings(rates) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
         .from('settings')
-        .upsert({ key: 'room_rates', value: rates }, { onConflict: 'key' });
+        .upsert({ key: 'room_rates', value: rates });
     if (error) throw error;
 }
 
@@ -741,7 +741,7 @@ async function saveRatioSettings(ratios) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
         .from('settings')
-        .upsert({ key: 'staff_ratios', value: ratios }, { onConflict: 'key' });
+        .upsert({ key: 'staff_ratios', value: ratios });
     if (error) throw error;
 }
 

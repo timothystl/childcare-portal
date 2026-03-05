@@ -3896,7 +3896,7 @@ function wlStatusBadge(app) {
     }
     const map = {
         pending:  '<span class="wl-badge wl-badge-pending">Pending</span>',
-        offered:  '<span class="wl-badge wl-badge-offered">Offer Sent</span>',
+        offered:  '<span class="wl-badge wl-badge-offered">Spot Offered</span>',
         accepted: '<span class="wl-badge wl-badge-accepted">Accepted</span>',
         enrolled: '<span class="wl-badge wl-badge-enrolled">Enrolled</span>',
         declined: '<span class="wl-badge wl-badge-archived">Declined</span>',
@@ -4014,7 +4014,7 @@ function renderWaitlistAdmin() {
                 return `<button class="btn-ghost wl-action wl-unarchive" data-id="${id}">↩ Restore</button>`;
             }
             const offer = app.status === 'pending' || offerExpired
-                ? `<button class="btn-secondary wl-action wl-offer" data-id="${id}">📨 Make Offer</button>`
+                ? `<button class="btn-secondary wl-action wl-offer" data-id="${id}">🎉 Offer a Spot</button>`
                 : '';
             const accept = app.status === 'offered'
                 ? `<button class="btn-secondary wl-action wl-accept" data-id="${id}">✓ Mark Accepted</button>`
@@ -4026,7 +4026,7 @@ function renderWaitlistAdmin() {
         // Offer details row
         const offerRow = app.status === 'offered' && app.offer_deadline ? `
             <div class="wl-offer-row">
-                Offer sent ${app.offered_at ? new Date(app.offered_at).toLocaleDateString() : ''}
+                Spot offered ${app.offered_at ? new Date(app.offered_at).toLocaleDateString() : ''}
                 · Deadline: <strong>${app.offer_deadline}</strong>
                 ${app.offer_notes ? `· <em>${escHtml(app.offer_notes)}</em>` : ''}
             </div>` : '';
@@ -4079,7 +4079,7 @@ function renderWaitlistAdmin() {
                         <input type="text" class="wl-procare-link" id="wl-procare-${app.id}" placeholder="https://app.procaresoftware.com/..."></label>
                 </div>
                 <div class="wl-offer-fields" style="margin-top:8px;">
-                    <button class="btn-primary wl-offer-send" data-id="${app.id}" data-name="${escHtml(app.parent_name)}" data-email="${escHtml(app.parent_email)}" data-child="${escHtml(app.child_name)}">Send &amp; Email Parent</button>
+                    <button class="btn-primary wl-offer-send" data-id="${app.id}" data-name="${escHtml(app.parent_name)}" data-email="${escHtml(app.parent_email)}" data-child="${escHtml(app.child_name)}">🎉 Send Spot Offer</button>
                     <button class="btn-ghost wl-offer-cancel" data-id="${app.id}">Cancel</button>
                 </div>
             </div>
