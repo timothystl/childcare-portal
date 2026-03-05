@@ -33,16 +33,18 @@ header {
 }
 header h1 { font-size: 2em; margin-bottom: 6px; }
 header p  { opacity: .88; font-size: 1.05em; }
-.header-program-link {
-    display: inline-block;
-    margin-top: 10px;
-    color: rgba(255,255,255,.8);
-    font-size: .82em;
+.site-footer {
+    text-align: center;
+    padding: 18px 0 10px;
+}
+.footer-program-link {
+    color: #999;
+    font-size: .78em;
     text-decoration: none;
-    border-bottom: 1px solid rgba(255,255,255,.4);
+    border-bottom: 1px solid #ddd;
     transition: color .15s;
 }
-.header-program-link:hover { color: #fff; border-bottom-color: #fff; }
+.footer-program-link:hover { color: #555; border-bottom-color: #999; }
 
 /* ============================================================
    SITE LOGO
