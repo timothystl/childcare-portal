@@ -82,8 +82,7 @@ serve(async (req) => {
             <p style="margin:0 0 16px;color:#333;font-size:16px;">Dear ${parentName},</p>
 
             <p style="color:#333;font-size:15px;line-height:1.6;">
-              Great news — <strong>a spot has opened up for ${childName}</strong> at Timothy Lutheran Church Mother's Day Out!
-              We'd love to have your family join us.
+              We're so excited to let you know — <strong>a spot has opened up for ${childName}</strong> at Timothy Lutheran Church Mother's Day Out, and we'd love to have your family join us!
             </p>
 
             ${notesBlock}
@@ -134,7 +133,7 @@ serve(async (req) => {
                 from:     fromEmail,
                 to:       [parentEmail],
                 reply_to: replyTo,
-                subject:  `Enrollment Offer for ${childName} — Timothy Lutheran MDO`,
+                subject:  `A Spot is Available for ${childName} — Timothy Lutheran MDO`,
                 html,
             }),
         });
