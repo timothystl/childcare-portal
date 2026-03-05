@@ -314,6 +314,8 @@ async function checkExistingRegistration(email, monthKey, childName = null) {
 // ============================================================
 // FAMILIES & STUDENTS
 // ============================================================
+// SQL migration — run once to add registration lock column:
+//   ALTER TABLE families ADD COLUMN IF NOT EXISTS registration_locked BOOLEAN DEFAULT FALSE;
 
 // Try the families table first (ProCare import); fall back to searching registrations
 async function searchFamilies(query) {
@@ -378,7 +380,7 @@ async function lookupFamilyByPin(pin) {
         const parsedPin = parseInt(pin, 10);
         const { data, error } = await sbClient
             .from('families')
-            .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
+            .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, registration_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
             .or(`pin.eq.${parsedPin},parent2_pin.eq.${parsedPin}`)
             .maybeSingle();
         if (error) { console.error('lookupFamilyByPin:', error); return null; }
@@ -451,7 +453,7 @@ async function fetchAllFamilies({ includeArchived = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, created_at, active, group, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
+        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, created_at, active, group, registration_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
         .order('parent_name');
     if (!includeArchived) query = query.eq('active', true);
     const { data, error } = await query;
@@ -472,6 +474,10 @@ async function archiveFamily(id) {
 
 async function restoreFamily(id) {
     return updateFamily(id, { active: true });
+}
+
+async function setFamilyRegistrationLock(id, locked) {
+    return updateFamily(id, { registration_locked: locked });
 }
 
 // ---- Student CRUD ----
@@ -769,10 +775,18 @@ async function upsertStaffMember({ id = null, name, role, payType, hourlyRate, s
     if (id) {
         const { error } = await sbClient.from('staff').update(record).eq('id', id);
         if (error) throw error;
+        return id;
     } else {
-        const { error } = await sbClient.from('staff').insert(record);
+        const { data, error } = await sbClient.from('staff').insert(record).select('id').single();
         if (error) throw error;
+        return data?.id || null;
     }
+}
+
+async function deleteStaff(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('staff').delete().eq('id', id);
+    if (error) throw error;
 }
 
 async function setStaffActive(id, active) {
@@ -977,12 +991,12 @@ async function updateWaitlistApplication(id, fields) {
     if (error) throw error;
 }
 
-async function sendWaitlistOfferEmail({ parentName, parentEmail, childName, offerDeadline, offerNotes }) {
+async function sendWaitlistOfferEmail({ parentName, parentEmail, childName, offerDeadline, offerNotes, papeworkLinks, procareLink }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: { session } } = await sbClient.auth.getSession();
     const token = session?.access_token || SUPABASE_ANON_KEY;
     const { data, error } = await sbClient.functions.invoke('send-waitlist-offer', {
-        body: { parentName, parentEmail, childName, offerDeadline, offerNotes },
+        body: { parentName, parentEmail, childName, offerDeadline, offerNotes, papeworkLinks, procareLink },
         headers: { Authorization: `Bearer ${token}` },
     });
     if (error) throw error;

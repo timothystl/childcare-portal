@@ -1267,6 +1267,11 @@ function exportStaffSchedule() {
 const SHIFT_HRS = { am: 5, pm: 4 };
 const DAY_ABBR  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
+// Module-level storage for current auto-fill assignments (enables manual editing)
+let _autoFillAssignments = null;
+let _autoFillWeekDates   = null;
+let _autoFillCounts      = null;
+
 async function autoFillStaffSchedule() {
     const weekOf = document.getElementById('staffWeekOf')?.value;
     if (!weekOf) { alert('Please select a week first.'); return; }
@@ -1286,7 +1291,8 @@ async function autoFillStaffSchedule() {
         }
 
         const counts = _buildShiftCounts(weekDates);
-        const active = allStaffData.filter(s => s.active);
+        // Exclude administrators from auto-assignment
+        const active = allStaffData.filter(s => s.active && !/^admin(istrator)?$/i.test((s.role || '').trim()));
 
         // Track weekly hours used per staff
         const weeklyHours = new Map(active.map(s => [s.id, 0]));
@@ -1308,9 +1314,10 @@ async function autoFillStaffSchedule() {
                 const pmNeed  = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
 
                 // Candidates: active staff available today and assigned to this room (or float)
+                // Also respect AM/PM period availability if set
                 const candidates = active.filter(s => {
-                    const avail = staffAvailability[s.id];
-                    const days  = avail?.days ?? ['Mon','Tue','Wed','Thu','Fri'];
+                    const avail   = staffAvailability[s.id];
+                    const days    = avail?.days    ?? ['Mon','Tue','Wed','Thu','Fri'];
                     return days.includes(dayName) &&
                         (s.room_id === room.id || !s.room_id); // room match or float
                 });
@@ -1318,9 +1325,13 @@ async function autoFillStaffSchedule() {
                 // Sort by hours used ascending so we spread load evenly
                 candidates.sort((a, b) => (weeklyHours.get(a.id) || 0) - (weeklyHours.get(b.id) || 0));
 
-                // Assign AM
+                // Assign AM — respect AM period availability
+                const amCandidates = candidates.filter(s => {
+                    const periods = staffAvailability[s.id]?.periods;
+                    return !periods || periods.includes('am');
+                });
                 let amFilled = 0;
-                for (const s of candidates) {
+                for (const s of amCandidates) {
                     if (amFilled >= amNeed) break;
                     const max  = staffAvailability[s.id]?.maxHours ?? 40;
                     const used = weeklyHours.get(s.id) || 0;
@@ -1331,9 +1342,14 @@ async function autoFillStaffSchedule() {
                 }
 
                 // Assign PM (prefer staff already on AM shift first, then others)
+                // Respect PM period availability
+                const pmAvail = candidates.filter(s => {
+                    const periods = staffAvailability[s.id]?.periods;
+                    return !periods || periods.includes('pm');
+                });
                 const pmCandidates = [
-                    ...candidates.filter(s => assignments[d][room.id].am.includes(s.name)),
-                    ...candidates.filter(s => !assignments[d][room.id].am.includes(s.name)),
+                    ...pmAvail.filter(s => assignments[d][room.id].am.includes(s.name)),
+                    ...pmAvail.filter(s => !assignments[d][room.id].am.includes(s.name)),
                 ];
                 let pmFilled = 0;
                 for (const s of pmCandidates) {
@@ -1352,6 +1368,9 @@ async function autoFillStaffSchedule() {
             });
         });
 
+        _autoFillAssignments = assignments;
+        _autoFillWeekDates   = weekDates;
+        _autoFillCounts      = counts;
         renderAutoFillSchedule(weekDates, assignments, counts);
     } catch (err) {
         alert('Auto-fill failed: ' + err.message);
@@ -1381,26 +1400,37 @@ function renderAutoFillSchedule(weekDates, assignments, counts) {
             const amNeed = c.total  > 0 ? Math.ceil(c.total  / ratio) : 0;
             const pmNeed = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
 
-            const amNames = slot.am.length
-                ? slot.am.map(n => `<span class="staff-name-chip">${escHtml(n)}</span>`).join(' ')
+            const amChips = slot.am.map(n =>
+                `<span class="staff-name-chip">${escHtml(n)}<button class="chip-remove" data-date="${d}" data-room="${room.id}" data-shift="am" data-name="${escHtml(n)}" title="Remove">×</button></span>`
+            ).join(' ');
+            const pmChips = slot.pm.map(n =>
+                `<span class="staff-name-chip">${escHtml(n)}<button class="chip-remove" data-date="${d}" data-room="${room.id}" data-shift="pm" data-name="${escHtml(n)}" title="Remove">×</button></span>`
+            ).join(' ');
+
+            const amContent = slot.am.length
+                ? amChips
                 : (amNeed > 0 ? `<span class="staff-unfilled">⚠ ${amNeed} needed</span>` : '—');
-            const pmNames = slot.pm.length
-                ? slot.pm.map(n => `<span class="staff-name-chip">${escHtml(n)}</span>`).join(' ')
+            const pmContent = slot.pm.length
+                ? pmChips
                 : (pmNeed > 0 ? `<span class="staff-unfilled">⚠ ${pmNeed} needed</span>` : '—');
 
-            return `<td class="autofill-cell">${amNames}</td><td class="autofill-cell">${pmNames}</td>`;
+            return `<td class="autofill-cell">${amContent}<button class="chip-add-staff" data-date="${d}" data-room="${room.id}" data-shift="am" title="Add staff to AM slot">+</button></td>` +
+                   `<td class="autofill-cell">${pmContent}<button class="chip-add-staff" data-date="${d}" data-room="${room.id}" data-shift="pm" title="Add staff to PM slot">+</button></td>`;
         }).join('');
         return `<tr><td class="staff-date-cell"><strong>${label}</strong></td>${cells}</tr>`;
     }).join('');
 
     const fillTable = `
-        <h4 style="margin:24px 0 8px;color:#333">Staff Name Assignment</h4>
+        <div style="display:flex;align-items:center;gap:10px;margin:24px 0 8px;">
+            <h4 style="margin:0;color:#333">Staff Name Assignment</h4>
+            <button id="printStaffAssignBtn" class="btn-secondary" style="margin-left:auto;">🖨 Print</button>
+            <button id="exportStaffAssignBtn" class="btn-secondary">⬇ Export XLSX</button>
+        </div>
         <p style="font-size:.85em;color:#888;margin-bottom:10px">
-            Based on room assignment, availability days, and max hrs/week set on each staff member.
-            Edit in Staff Roster → Save to update assignments.
+            Based on room assignment, availability days, and max hrs/week. Click <strong>+</strong> to manually add staff to a slot. Click <strong>×</strong> to remove.
         </p>
-        <div class="table-wrapper staff-table-wrap">
-            <table class="report-table autofill-table">
+        <div class="table-wrapper staff-table-wrap" id="autoFillTableWrap">
+            <table class="report-table autofill-table" id="autoFillTable">
                 <thead>
                     <tr>
                         <th rowspan="2" class="staff-date-header">Date</th>
@@ -1413,6 +1443,74 @@ function renderAutoFillSchedule(weekDates, assignments, counts) {
         </div>`;
 
     container.innerHTML = existingHtml + fillTable;
+
+    // Wire up print
+    document.getElementById('printStaffAssignBtn')?.addEventListener('click', () => {
+        const weekOf = document.getElementById('staffWeekOf')?.value || '';
+        const tbl = document.getElementById('autoFillTable');
+        if (!tbl) return;
+        // Build a clean printable copy without the +/× buttons
+        const cleanHtml = tbl.outerHTML
+            .replace(/<button class="chip-remove"[^>]*>×<\/button>/g, '')
+            .replace(/<button class="chip-add-staff"[^>]*>\+<\/button>/g, '');
+        const win = window.open('', '_blank');
+        win.document.write(`<!DOCTYPE html><html><head><title>Staff Schedule – ${weekOf}</title>
+            <style>body{font-family:Arial,sans-serif;font-size:12px}table{border-collapse:collapse;width:100%}
+            th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}
+            th{background:#f0f0f0}.staff-name-chip{display:inline-block;background:#e0e7ff;padding:2px 6px;border-radius:4px;margin:2px}
+            .staff-unfilled{color:#c00}</style></head><body>
+            <h2>Staff Name Assignment – Week of ${weekOf}</h2>${cleanHtml}</body></html>`);
+        win.document.close();
+        win.print();
+    });
+
+    // Wire up XLSX export
+    document.getElementById('exportStaffAssignBtn')?.addEventListener('click', () => {
+        const weekOf = document.getElementById('staffWeekOf')?.value || 'schedule';
+        if (!_autoFillAssignments || !_autoFillWeekDates) return;
+        const headers = ['Date', ...ROOMS.flatMap(r => [`${r.label} AM`, `${r.label} PM`])];
+        const dataRows = _autoFillWeekDates.map(d => {
+            const dt    = new Date(d + 'T00:00:00');
+            const label = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
+            return [label, ...ROOMS.flatMap(r => [
+                (_autoFillAssignments[d][r.id].am || []).join(', ') || '—',
+                (_autoFillAssignments[d][r.id].pm || []).join(', ') || '—',
+            ])];
+        });
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+        ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length, 16) }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Staff Assignment');
+        XLSX.writeFile(wb, `staff-assignment-${weekOf}.xlsx`);
+    });
+
+    // Wire up + (add staff) buttons
+    container.querySelectorAll('.chip-add-staff').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const { date, room, shift } = btn.dataset;
+            const names = allStaffData.filter(s => s.active).map(s => s.name);
+            if (!names.length) { alert('No active staff found.'); return; }
+            const chosen = prompt(`Add staff to ${room.toUpperCase()} ${shift.toUpperCase()} on ${date}:\n\nType a name (partial match OK):\n${names.join(', ')}`);
+            if (!chosen) return;
+            const match = allStaffData.find(s => s.active && s.name.toLowerCase().includes(chosen.toLowerCase().trim()));
+            if (!match) { alert('No matching active staff member found for "' + chosen + '".'); return; }
+            if (!_autoFillAssignments[date][room][shift].includes(match.name)) {
+                _autoFillAssignments[date][room][shift].push(match.name);
+            }
+            renderAutoFillSchedule(_autoFillWeekDates, _autoFillAssignments, _autoFillCounts);
+        });
+    });
+
+    // Wire up × (remove staff) buttons
+    container.querySelectorAll('.chip-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const { date, room, shift, name } = btn.dataset;
+            const arr = _autoFillAssignments[date][room][shift];
+            const idx = arr.indexOf(name);
+            if (idx !== -1) arr.splice(idx, 1);
+            renderAutoFillSchedule(_autoFillWeekDates, _autoFillAssignments, _autoFillCounts);
+        });
+    });
 }
 
 // ============================================================
@@ -1776,6 +1874,17 @@ function setupFamilies() {
             openMergeModal(mergeBtn.dataset.familyId, mergeBtn.dataset.familyName);
             return;
         }
+
+        const lockBtn = e.target.closest('.fm-lock-btn[data-family-id]');
+        if (lockBtn) {
+            doSetFamilyLock(lockBtn.dataset.familyId, true);
+            return;
+        }
+        const unlockBtn = e.target.closest('.fm-unlock-btn[data-family-id]');
+        if (unlockBtn) {
+            doSetFamilyLock(unlockBtn.dataset.familyId, false);
+            return;
+        }
     });
 
     // Escape closes family modal (visibility-safe)
@@ -2119,10 +2228,15 @@ function renderFamiliesList(families) {
                                 <div class="family-row-actions">
                                     ${f.group === 'summer' ? '<span class="family-badge-summer">Summer</span>' : ''}
                                     ${archived ? '<span class="family-badge-archived">Archived</span>' : ''}
+                                    ${f.registration_locked ? '<span class="family-badge-locked" title="Registration locked for nonpayment">🔒 Locked</span>' : ''}
                                     ${!archived
                                         ? `<button class="fm-edit-btn" data-family-id="${f.id}" title="Edit family">✏ Edit</button>
                                            <button class="fm-archive-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Archive family">Archive</button>`
                                         : `<button class="fm-restore-btn" data-family-id="${f.id}" title="Restore family">↩ Restore</button>`
+                                    }
+                                    ${f.registration_locked
+                                        ? `<button class="fm-unlock-btn btn-secondary" data-family-id="${f.id}" title="Unlock registration">🔓 Unlock Reg</button>`
+                                        : `<button class="fm-lock-btn btn-warning" data-family-id="${f.id}" title="Lock registration for nonpayment">🔒 Lock Reg</button>`
                                     }
                                     <button class="fm-merge-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Merge into another family">⇄ Merge</button>
                                     <button class="fm-delete-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Permanently delete this family">🗑 Delete</button>
@@ -2535,6 +2649,17 @@ async function doRestoreFamily(id) {
 }
 
 // ---- Delete ----
+async function doSetFamilyLock(id, locked) {
+    try {
+        await setFamilyRegistrationLock(id, locked);
+        const fam = allFamiliesData.find(f => f.id === id);
+        if (fam) fam.registration_locked = locked;
+        renderFamiliesList(allFamiliesData);
+    } catch (err) {
+        alert((locked ? 'Lock' : 'Unlock') + ' failed: ' + err.message);
+    }
+}
+
 function confirmDeleteFamily(id, name) {
     if (!confirm(`Permanently delete the ${name} family and ALL their children?\n\nThis cannot be undone.`)) return;
     doDeleteFamily(id);
@@ -2966,6 +3091,7 @@ function renderStaffList(staff) {
                                     data-staff-id="${s.id}" data-active="${s.active}">
                                     ${s.active ? 'Deactivate' : 'Restore'}
                                 </button>
+                                <button class="btn-danger staff-delete-btn" data-staff-id="${s.id}" data-staff-name="${escHtml(s.name)}" title="Permanently delete staff member">🗑 Delete</button>
                             </td>
                         </tr>`;
                 }).join('')}
@@ -2988,6 +3114,16 @@ function renderStaffList(staff) {
             } catch (err) { alert('Error: ' + err.message); }
         });
     });
+    container.querySelectorAll('.staff-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const name = btn.dataset.staffName;
+            if (!confirm(`Permanently delete ${name}?\n\nThis will remove all their records and cannot be undone.`)) return;
+            try {
+                await deleteStaff(btn.dataset.staffId);
+                await loadStaffList();
+            } catch (err) { alert('Delete failed: ' + err.message); }
+        });
+    });
 }
 
 function openStaffForm(staff = null) {
@@ -3007,9 +3143,13 @@ function openStaffForm(staff = null) {
 
     // Availability
     const avail = staff ? (staffAvailability[staff.id] || {}) : {};
-    const availDays = avail.days || ['Mon','Tue','Wed','Thu','Fri'];
+    const availDays    = avail.days    || ['Mon','Tue','Wed','Thu','Fri'];
+    const availPeriods = avail.periods || ['am','pm'];
     document.querySelectorAll('.sfAvailDay').forEach(cb => {
         cb.checked = availDays.includes(cb.value);
+    });
+    document.querySelectorAll('.sfAvailPeriod').forEach(cb => {
+        cb.checked = availPeriods.includes(cb.value);
     });
     document.getElementById('sfMaxHours').value = avail.maxHours != null ? avail.maxHours : 40;
 
@@ -3049,7 +3189,7 @@ async function onSaveStaffMember() {
     const payType = document.getElementById('sfPayType').value;
 
     try {
-        await upsertStaffMember({
+        const returnedId = await upsertStaffMember({
             id:              editingStaffId,
             name,
             role:            document.getElementById('sfRole').value.trim(),
@@ -3061,14 +3201,12 @@ async function onSaveStaffMember() {
             staffPin:        pinVal || null,
         });
 
-        // Refresh staff list to get the ID of newly inserted record
-        const freshStaff = await fetchAllStaff({ includeInactive: true });
-        const saved = freshStaff.find(s => s.name === name) || freshStaff[0];
-        const staffId = editingStaffId || saved?.id;
+        const staffId = editingStaffId || returnedId;
         if (staffId) {
-            const availDays  = [...document.querySelectorAll('.sfAvailDay:checked')].map(cb => cb.value);
-            const maxHours   = parseFloat(document.getElementById('sfMaxHours').value) || 40;
-            const newAvail   = { ...staffAvailability, [staffId]: { days: availDays, maxHours } };
+            const availDays    = [...document.querySelectorAll('.sfAvailDay:checked')].map(cb => cb.value);
+            const availPeriods = [...document.querySelectorAll('.sfAvailPeriod:checked')].map(cb => cb.value);
+            const maxHours     = parseFloat(document.getElementById('sfMaxHours').value) || 40;
+            const newAvail     = { ...staffAvailability, [staffId]: { days: availDays, periods: availPeriods, maxHours } };
             await saveStaffAvailability(newAvail);
         }
 
@@ -3933,6 +4071,14 @@ function renderWaitlistAdmin() {
                     <label>Offer deadline: <input type="date" class="wl-deadline-input" id="wl-deadline-${app.id}"
                         value="${new Date(Date.now() + 14*86400000).toISOString().split('T')[0]}"></label>
                     <label style="flex:1">Notes (optional): <input type="text" class="wl-notes-input" id="wl-ofnotes-${app.id}" placeholder="e.g. Bear room opening Sept 1"></label>
+                </div>
+                <div class="wl-offer-fields" style="margin-top:8px;">
+                    <label style="flex:1">Paperwork link(s) (optional, comma-separated URLs):
+                        <input type="text" class="wl-paperwork-links" id="wl-paperwk-${app.id}" placeholder="https://docs.google.com/..."></label>
+                    <label style="flex:1">Procare enrollment link (optional):
+                        <input type="text" class="wl-procare-link" id="wl-procare-${app.id}" placeholder="https://app.procaresoftware.com/..."></label>
+                </div>
+                <div class="wl-offer-fields" style="margin-top:8px;">
                     <button class="btn-primary wl-offer-send" data-id="${app.id}" data-name="${escHtml(app.parent_name)}" data-email="${escHtml(app.parent_email)}" data-child="${escHtml(app.child_name)}">Send &amp; Email Parent</button>
                     <button class="btn-ghost wl-offer-cancel" data-id="${app.id}">Cancel</button>
                 </div>
@@ -3977,6 +4123,9 @@ function renderWaitlistAdmin() {
             const parentName  = btn.dataset.name;
             const parentEmail = btn.dataset.email;
             const childName   = btn.dataset.child;
+            const paperwkRaw  = document.getElementById(`wl-paperwk-${id}`)?.value || '';
+            const procareLink = document.getElementById(`wl-procare-${id}`)?.value.trim() || null;
+            const papeworkLinks = paperwkRaw.split(',').map(s => s.trim()).filter(Boolean);
             if (!deadline) { alert('Please set an offer deadline.'); return; }
             btn.disabled    = true;
             btn.textContent = 'Sending…';
@@ -3989,7 +4138,7 @@ function renderWaitlistAdmin() {
                     offer_notes:    notes || null,
                 });
                 // Send email
-                await sendWaitlistOfferEmail({ parentName, parentEmail, childName, offerDeadline: deadline, offerNotes: notes || null });
+                await sendWaitlistOfferEmail({ parentName, parentEmail, childName, offerDeadline: deadline, offerNotes: notes || null, papeworkLinks, procareLink });
                 const app = _allWaitlistApps.find(a => a.id === Number(id));
                 if (app) { app.status = 'offered'; app.offered_at = new Date().toISOString(); app.offer_deadline = deadline; app.offer_notes = notes || null; }
                 renderWaitlistAdmin();
