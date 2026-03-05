@@ -1249,6 +1249,86 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 .fm-delete-btn:hover { background: #c53030; color: #fff; border-color: #c53030; }
 
+.fm-lock-btn {
+    background: #fff;
+    color: #c05621;
+    border: 1.5px solid #fbd38d;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: .78em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    white-space: nowrap;
+}
+.fm-lock-btn:hover { background: #c05621; color: #fff; border-color: #c05621; }
+
+.fm-unlock-btn {
+    background: #fff;
+    color: #276749;
+    border: 1.5px solid #9ae6b4;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: .78em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    white-space: nowrap;
+}
+.fm-unlock-btn:hover { background: #276749; color: #fff; border-color: #276749; }
+
+.family-badge-locked {
+    display: inline-block;
+    background: #feebc8;
+    color: #744210;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: .72em;
+    font-weight: 700;
+    letter-spacing: .03em;
+}
+
+.btn-danger {
+    background: #fff5f5;
+    color: #c53030;
+    border: 1.5px solid #feb2b2;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: .78em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    white-space: nowrap;
+}
+.btn-danger:hover { background: #c53030; color: #fff; border-color: #c53030; }
+
+.chip-remove {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 1em;
+    padding: 0 2px;
+    margin-left: 2px;
+    line-height: 1;
+    vertical-align: middle;
+}
+.chip-remove:hover { color: #c53030; }
+
+.chip-add-staff {
+    background: none;
+    border: 1px dashed #aaa;
+    color: #667eea;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: .85em;
+    padding: 1px 5px;
+    margin-left: 4px;
+    vertical-align: middle;
+    line-height: 1.4;
+}
+.chip-add-staff:hover { background: #667eea; color: #fff; border-color: #667eea; }
+
 /* Merge modal */
 .merge-overlay {
     position: fixed;

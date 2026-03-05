@@ -11,7 +11,7 @@ serve(async (req) => {
     }
 
     try {
-        const { parentName, parentEmail, childName, offerDeadline, offerNotes } =
+        const { parentName, parentEmail, childName, offerDeadline, offerNotes, papeworkLinks, procareLink } =
             await req.json();
 
         if (!parentEmail || !childName || !offerDeadline) {
@@ -38,6 +38,25 @@ serve(async (req) => {
 
         const notesBlock = offerNotes
             ? `<p style="background:#fffbeb;border-left:4px solid #f59e0b;padding:10px 14px;border-radius:4px;color:#444;margin:20px 0;">${offerNotes}</p>`
+            : "";
+
+        const links: string[] = Array.isArray(papeworkLinks) ? papeworkLinks : [];
+        const paperwkBlock = links.length > 0
+            ? `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px 20px;margin:20px 0;">
+                 <p style="margin:0 0 10px;font-weight:700;color:#0369a1;font-size:14px;">📄 Enrollment Paperwork</p>
+                 <p style="margin:0 0 8px;color:#444;font-size:14px;">Please complete the following form(s) before your child's start date:</p>
+                 <ul style="margin:0;padding-left:20px;">
+                   ${links.map(url => `<li style="margin-bottom:6px;"><a href="${url}" style="color:#4f46e5;">${url}</a></li>`).join('')}
+                 </ul>
+               </div>`
+            : "";
+
+        const procareBlock = procareLink
+            ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px 20px;margin:20px 0;">
+                 <p style="margin:0 0 10px;font-weight:700;color:#166534;font-size:14px;">📱 Procare Parent App</p>
+                 <p style="margin:0 0 8px;color:#444;font-size:14px;">We use Procare to manage attendance, billing, and communication. Please enroll using the link below:</p>
+                 <a href="${procareLink}" style="display:inline-block;background:#4f46e5;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:700;font-size:14px;">Enroll in Procare</a>
+               </div>`
             : "";
 
         const html = `
@@ -80,8 +99,11 @@ serve(async (req) => {
             </table>
 
             <p style="color:#333;font-size:15px;line-height:1.6;">
-              To accept this offer, simply <strong>reply to this email</strong>. Once we hear from you, we'll send the enrollment paperwork and deposit information.
+              To accept this offer, simply <strong>reply to this email</strong>. Once we hear from you, we'll confirm your child's start date and share any remaining information.
             </p>
+
+            ${paperwkBlock}
+            ${procareBlock}
 
             <p style="color:#555;font-size:14px;line-height:1.6;margin-top:16px;">
               If we don't hear back by the deadline above, we'll need to offer the spot to the next family on our waitlist. If you need a bit more time or have any questions at all, please don't hesitate to reach out — we're happy to work with you.

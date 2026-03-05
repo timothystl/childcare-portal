@@ -213,6 +213,12 @@ function renderFamilySearchResults(families, query) {
 }
 
 function selectFamily(family, enteredPin = null) {
+    // Check if registration is locked for nonpayment
+    if (family.registration_locked) {
+        showToast('Registration is currently unavailable for this family. Please contact the office to resolve your account balance.');
+        return;
+    }
+
     // Reset any state from a previous family lookup
     selectedChildren = [];
     selectedDates    = new Map();
