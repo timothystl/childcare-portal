@@ -4,6 +4,19 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // Handle CORS preflight for /sb/* FIRST, before the proxy block
+    if (request.method === 'OPTIONS' && url.pathname.startsWith('/sb/')) {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin':  url.origin,
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'apikey, Authorization, Content-Type, Prefer, X-Client-Info',
+          'Access-Control-Max-Age':       '86400',
+        },
+      });
+    }
+
     // Proxy /sb/* → Supabase (same-origin workaround for CORS)
     if (url.pathname.startsWith('/sb/')) {
       const supabasePath = url.pathname.slice(3); // strip /sb (keep leading /)
@@ -15,8 +28,25 @@ export default {
         body:    ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
       });
 
-      const supabaseRes = await fetch(proxyReq);
-      const resHeaders  = new Headers(supabaseRes.headers);
+      let supabaseRes;
+      try {
+        supabaseRes = await Promise.race([
+          fetch(proxyReq),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Supabase request timed out')), 25000)
+          ),
+        ]);
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 504,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': url.origin,
+          },
+        });
+      }
+
+      const resHeaders = new Headers(supabaseRes.headers);
       resHeaders.set('Access-Control-Allow-Origin', url.origin);
       resHeaders.set('Access-Control-Allow-Credentials', 'true');
 
@@ -24,19 +54,6 @@ export default {
         status:     supabaseRes.status,
         statusText: supabaseRes.statusText,
         headers:    resHeaders,
-      });
-    }
-
-    // Handle CORS preflight for /sb/*
-    if (request.method === 'OPTIONS' && url.pathname.startsWith('/sb/')) {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          'Access-Control-Allow-Origin':  url.origin,
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'apikey, Authorization, Content-Type, Prefer, X-Client-Info',
-          'Access-Control-Max-Age':       '86400',
-        },
       });
     }
 
