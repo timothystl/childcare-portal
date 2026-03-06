@@ -3990,20 +3990,26 @@ function setupExtraReports() {
 }
 
 // ── Enrollment Trends ──────────────────────────────────────
-function generateEnrollmentTrends() {
-    // Count distinct children enrolled per room per month
-    const trendMap = {}; // { 'YYYY-MM': { roomId: Set of reg IDs } }
+function _buildTrendMap() {
+    // Returns { 'YYYY-MM': { roomId: Set<regId>, _full: N, _half: N } }
+    const trendMap = {};
     allRegistrations.forEach(reg => {
         (reg.registration_dates || []).forEach(d => {
             if (d.waitlisted || !d.care_date) return;
             const mo = d.care_date.substring(0, 7);
-            if (!trendMap[mo]) trendMap[mo] = {};
+            if (!trendMap[mo]) trendMap[mo] = { _full: 0, _half: 0 };
             if (!trendMap[mo][reg.room_id]) trendMap[mo][reg.room_id] = new Set();
             trendMap[mo][reg.room_id].add(reg.id);
+            if (d.day_type === 'half') trendMap[mo]._half++;
+            else                       trendMap[mo]._full++;
         });
     });
+    return trendMap;
+}
 
-    const months = Object.keys(trendMap).sort();
+function generateEnrollmentTrends() {
+    const trendMap = _buildTrendMap();
+    const months   = Object.keys(trendMap).sort();
     const container = document.getElementById('trendsContent');
     if (!months.length) {
         container.innerHTML = '<p class="empty-hint">No enrollment data found.</p>';
@@ -4018,41 +4024,47 @@ function generateEnrollmentTrends() {
             const count = trendMap[mo][room.id]?.size || 0;
             return `<td class="report-num">${count || '—'}</td>`;
         }).join('');
-        const total = ROOMS.reduce((s, r) => s + (trendMap[mo][r.id]?.size || 0), 0);
-        return `<tr><td class="staff-date-cell">${label}</td>${cells}<td class="report-num"><strong>${total}</strong></td></tr>`;
+        const total    = ROOMS.reduce((s, r) => s + (trendMap[mo][r.id]?.size || 0), 0);
+        const fullDays = trendMap[mo]._full;
+        const halfDays = trendMap[mo]._half;
+        return `<tr>
+            <td class="staff-date-cell">${label}</td>
+            ${cells}
+            <td class="report-num"><strong>${total}</strong></td>
+            <td class="report-num">${fullDays || '—'}</td>
+            <td class="report-num">${halfDays || '—'}</td>
+        </tr>`;
     }).join('');
 
     container.innerHTML = `
         <div class="table-wrapper report-table-wrap">
             <table class="report-table">
                 <thead>
-                    <tr><th>Month</th>${roomHeaders}<th>Total</th></tr>
+                    <tr>
+                        <th>Month</th>${roomHeaders}
+                        <th>Total Children</th>
+                        <th>Full-Day Care Days</th>
+                        <th>Half-Day Care Days</th>
+                    </tr>
                 </thead>
                 <tbody>${rows}</tbody>
             </table>
-        </div>`;
+        </div>
+        <p style="font-size:.8em;color:#888;margin-top:6px">Children = unique enrollments per room · Care Days = total confirmed day bookings</p>`;
 }
 
 function exportEnrollmentTrends() {
-    const trendMap = {};
-    allRegistrations.forEach(reg => {
-        (reg.registration_dates || []).forEach(d => {
-            if (d.waitlisted || !d.care_date) return;
-            const mo = d.care_date.substring(0, 7);
-            if (!trendMap[mo]) trendMap[mo] = {};
-            if (!trendMap[mo][reg.room_id]) trendMap[mo][reg.room_id] = new Set();
-            trendMap[mo][reg.room_id].add(reg.id);
-        });
-    });
-
-    const months = Object.keys(trendMap).sort();
+    const trendMap = _buildTrendMap();
+    const months   = Object.keys(trendMap).sort();
     if (!months.length) { alert('No data to export.'); return; }
 
     const rows = months.map(mo => {
         const [y, m] = mo.split('-').map(Number);
         const row = { Month: MONTH_NAMES_ADMIN[m - 1] + ' ' + y };
         ROOMS.forEach(r => { row[r.label] = trendMap[mo][r.id]?.size || 0; });
-        row['Total'] = ROOMS.reduce((s, r) => s + (trendMap[mo][r.id]?.size || 0), 0);
+        row['Total Children']      = ROOMS.reduce((s, r) => s + (trendMap[mo][r.id]?.size || 0), 0);
+        row['Full-Day Care Days']  = trendMap[mo]._full;
+        row['Half-Day Care Days']  = trendMap[mo]._half;
         return row;
     });
 
@@ -4118,30 +4130,33 @@ async function generateWaitlistReport() {
 }
 
 // ── Year-to-Date Revenue ───────────────────────────────────
-function generateYtdRevenue() {
-    const year     = new Date().getFullYear();
-    const yearKey  = String(year);
-    const revenueMap = {}; // { 'YYYY-MM': { roomId: revenue } }
-    const dmap     = getDiscountMap();
-
+function _buildYtdRevenueMap(yearKey) {
+    // Returns { 'YYYY-MM': { roomId: actualRevenue, _discounts: totalDiscounted } }
+    const map  = {};
+    const dmap = getDiscountMap();
     allRegistrations.forEach(reg => {
         const room = ROOMS.find(r => r.id === reg.room_id);
         if (!room) return;
         const discKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
         const disc    = dmap.get(discKey) || { type: 'none', value: 0 };
-
         (reg.registration_dates || []).forEach(d => {
             if (d.waitlisted || !d.care_date || !d.care_date.startsWith(yearKey)) return;
-            const mo   = d.care_date.substring(0, 7);
-            if (!revenueMap[mo]) revenueMap[mo] = {};
-            const rate = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
-            revenueMap[mo][reg.room_id] = (revenueMap[mo][reg.room_id] || 0) +
-                effectiveAdminRate(rate, disc.type, disc.value);
+            const mo       = d.care_date.substring(0, 7);
+            if (!map[mo]) map[mo] = { _discounts: 0 };
+            const baseRate   = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
+            const actual     = effectiveAdminRate(baseRate, disc.type, disc.value);
+            map[mo][reg.room_id] = (map[mo][reg.room_id] || 0) + actual;
+            map[mo]._discounts  += Math.max(0, baseRate - actual);
         });
     });
+    return map;
+}
 
-    const months = Object.keys(revenueMap).sort();
-    const container = document.getElementById('ytdContent');
+function generateYtdRevenue() {
+    const year       = new Date().getFullYear();
+    const revenueMap = _buildYtdRevenueMap(String(year));
+    const months     = Object.keys(revenueMap).sort();
+    const container  = document.getElementById('ytdContent');
     if (!months.length) {
         container.innerHTML = `<p class="empty-hint">No revenue data found for ${year}.</p>`;
         return;
@@ -4149,11 +4164,14 @@ function generateYtdRevenue() {
 
     const roomHeaders = ROOMS.map(r => `<th>${r.label}</th>`).join('');
     let runningTotal = 0;
+    let totalDiscounts = 0;
     const rows = months.map(mo => {
-        const [y, m] = mo.split('-').map(Number);
-        const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+        const [y, m]  = mo.split('-').map(Number);
+        const label   = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
         const moTotal = ROOMS.reduce((s, r) => s + (revenueMap[mo][r.id] || 0), 0);
-        runningTotal += moTotal;
+        const moDisc  = revenueMap[mo]._discounts || 0;
+        runningTotal  += moTotal;
+        totalDiscounts += moDisc;
         const cells = ROOMS.map(room =>
             `<td class="report-num report-revenue">$${(revenueMap[mo][room.id] || 0).toFixed(2)}</td>`
         ).join('');
@@ -4162,16 +4180,17 @@ function generateYtdRevenue() {
                 <td class="staff-date-cell">${label}</td>
                 ${cells}
                 <td class="report-num report-revenue"><strong>$${moTotal.toFixed(2)}</strong></td>
+                <td class="report-num ytd-discount-cell">${moDisc > 0 ? `-$${moDisc.toFixed(2)}` : '—'}</td>
                 <td class="report-num report-revenue">$${runningTotal.toFixed(2)}</td>
             </tr>`;
     }).join('');
 
     container.innerHTML = `
-        <h3 class="report-month-title">${year} Year to Date — $${runningTotal.toFixed(2)} total</h3>
+        <h3 class="report-month-title">${year} Year to Date — $${runningTotal.toFixed(2)} collected · <span class="ytd-discount-total">-$${totalDiscounts.toFixed(2)} discounted</span></h3>
         <div class="table-wrapper report-table-wrap">
             <table class="report-table">
                 <thead>
-                    <tr><th>Month</th>${roomHeaders}<th>Monthly Total</th><th>Running Total</th></tr>
+                    <tr><th>Month</th>${roomHeaders}<th>Monthly Revenue</th><th>Discounts Given</th><th>Running Total</th></tr>
                 </thead>
                 <tbody>${rows}</tbody>
             </table>
@@ -4179,38 +4198,21 @@ function generateYtdRevenue() {
 }
 
 function exportYtdRevenue() {
-    const year    = new Date().getFullYear();
-    const yearKey = String(year);
-    const revenueMap = {};
-    const dmap    = getDiscountMap();
-
-    allRegistrations.forEach(reg => {
-        const room = ROOMS.find(r => r.id === reg.room_id);
-        if (!room) return;
-        const discKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
-        const disc    = dmap.get(discKey) || { type: 'none', value: 0 };
-        (reg.registration_dates || []).forEach(d => {
-            if (d.waitlisted || !d.care_date || !d.care_date.startsWith(yearKey)) return;
-            const mo   = d.care_date.substring(0, 7);
-            if (!revenueMap[mo]) revenueMap[mo] = {};
-            const rate = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
-            revenueMap[mo][reg.room_id] = (revenueMap[mo][reg.room_id] || 0) +
-                effectiveAdminRate(rate, disc.type, disc.value);
-        });
-    });
-
-    const months = Object.keys(revenueMap).sort();
+    const year       = new Date().getFullYear();
+    const revenueMap = _buildYtdRevenueMap(String(year));
+    const months     = Object.keys(revenueMap).sort();
     if (!months.length) { alert('No data to export.'); return; }
 
     let running = 0;
     const rows = months.map(mo => {
         const [y, m] = mo.split('-').map(Number);
-        const row = { Month: MONTH_NAMES_ADMIN[m - 1] + ' ' + y };
+        const row    = { Month: MONTH_NAMES_ADMIN[m - 1] + ' ' + y };
         ROOMS.forEach(r => { row[r.label] = `$${(revenueMap[mo][r.id] || 0).toFixed(2)}`; });
         const moTotal = ROOMS.reduce((s, r) => s + (revenueMap[mo][r.id] || 0), 0);
         running += moTotal;
-        row['Monthly Total']  = `$${moTotal.toFixed(2)}`;
-        row['Running Total']  = `$${running.toFixed(2)}`;
+        row['Monthly Revenue']  = `$${moTotal.toFixed(2)}`;
+        row['Discounts Given']  = revenueMap[mo]._discounts > 0 ? `-$${revenueMap[mo]._discounts.toFixed(2)}` : '$0.00';
+        row['Running Total']    = `$${running.toFixed(2)}`;
         return row;
     });
 
