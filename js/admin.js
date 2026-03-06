@@ -3194,21 +3194,29 @@ function renderStaffList(staff) {
     });
     container.querySelectorAll('.staff-toggle-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
+            btn.disabled = true;
             const active = btn.dataset.active !== 'true';
             try {
                 await setStaffActive(btn.dataset.staffId, active);
                 await loadStaffList();
-            } catch (err) { alert('Error: ' + err.message); }
+            } catch (err) {
+                alert('Error: ' + err.message);
+                btn.disabled = false;
+            }
         });
     });
     container.querySelectorAll('.staff-delete-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const name = btn.dataset.staffName;
             if (!confirm(`Permanently delete ${name}?\n\nThis will remove all their records and cannot be undone.`)) return;
+            btn.disabled = true;
             try {
                 await deleteStaff(btn.dataset.staffId);
                 await loadStaffList();
-            } catch (err) { alert('Delete failed: ' + err.message); }
+            } catch (err) {
+                alert('Delete failed: ' + err.message);
+                btn.disabled = false;
+            }
         });
     });
 }
@@ -3312,7 +3320,7 @@ async function onSaveStaffMember() {
         }
 
         closeStaffForm();
-        loadStaffList();
+        await loadStaffList();
     } catch (err) {
         statusEl.textContent = '⚠️ ' + err.message;
         statusEl.style.color = '#c62828';
