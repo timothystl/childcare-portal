@@ -68,7 +68,12 @@ async function initDashboard() {
     dashboardInitDone = true;
     populateRoomFilter();
     populateRosterRoomFilter();
-    await Promise.all([loadRegistrations(), loadClosureList(), loadFamilies(), loadRateSettings(), loadRatioSettings(), loadOfferLinks().then(v => { window._globalOfferLinks = v; })]);
+    try {
+        await Promise.all([loadRegistrations(), loadClosureList(), loadFamilies(), loadRateSettings(), loadRatioSettings(), loadOfferLinks().then(v => { window._globalOfferLinks = v; })]);
+    } catch (err) {
+        console.error('initDashboard: initial data load failed —', err);
+        // Continue setup so the tab structure is always rendered
+    }
     renderCapacityOverview();
     setupFilters();
     setupRoster();
