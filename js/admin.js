@@ -71,7 +71,7 @@ async function initDashboard() {
     populateRoomFilter();
     populateRosterRoomFilter();
     try {
-        await Promise.all([loadRegistrations(), loadClosureList(), loadFamilies(), loadRateSettings(), loadRatioSettings(), loadOfferLinks().then(v => { window._globalOfferLinks = v; })]);
+        await Promise.all([loadRegistrations(), loadClosureList(), loadRateSettings(), loadRatioSettings(), loadOfferLinks().then(v => { window._globalOfferLinks = v; })]);
     } catch (err) {
         console.error('initDashboard: initial data load failed —', err);
         // Continue setup so the tab structure is always rendered
@@ -920,7 +920,10 @@ function exportMonthlyReport() {
 // FAMILY BILLING REPORT
 // ============================================================
 function setupFamilyBilling() {
-    document.getElementById('generateFamilyBillingBtn')?.addEventListener('click', generateFamilyBillingReport);
+    document.getElementById('generateFamilyBillingBtn')?.addEventListener('click', async () => {
+        if (allFamiliesData.length === 0) await loadFamilies();
+        generateFamilyBillingReport();
+    });
     document.getElementById('exportFamilyBillingBtn')?.addEventListener('click', exportFamilyBillingReport);
     const now = new Date();
     const el = document.getElementById('familyBillingMonth');
@@ -2929,6 +2932,9 @@ function setupTabs() {
         btns.forEach(b  => b.classList.toggle('active', b.dataset.tab === tab));
         panes.forEach(p => p.classList.toggle('hidden', p.id !== 'tab-' + tab));
         localStorage.setItem('adminActiveTab', tab);
+        // Lazy-load heavy data the first time each tab is opened
+        if (tab === 'families' && allFamiliesData.length === 0) loadFamilies();
+        if (tab === 'staffing' && allStaffData.length === 0) loadStaffList();
     }
 
     btns.forEach(btn => btn.addEventListener('click', () => activate(btn.dataset.tab)));
@@ -3118,8 +3124,6 @@ function setupStaffRoster() {
             sel.appendChild(opt);
         });
     }
-
-    loadStaffList();
 }
 
 async function loadStaffList() {
