@@ -712,7 +712,7 @@ async function saveRateSettings(rates) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
         .from('settings')
-        .upsert({ key: 'room_rates', value: rates });
+        .upsert({ key: 'room_rates', value: rates }, { onConflict: 'key' });
     if (error) throw error;
 }
 
@@ -741,7 +741,7 @@ async function saveRatioSettings(ratios) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
         .from('settings')
-        .upsert({ key: 'staff_ratios', value: ratios });
+        .upsert({ key: 'staff_ratios', value: ratios }, { onConflict: 'key' });
     if (error) throw error;
 }
 
@@ -766,7 +766,7 @@ async function saveOfferLinks(links) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
         .from('settings')
-        .upsert({ key: 'offer_links', value: links });
+        .upsert({ key: 'offer_links', value: links }, { onConflict: 'key' });
     if (error) throw error;
 }
 
@@ -950,14 +950,21 @@ async function fetchStaffAvailability() {
         .select('value')
         .eq('key', 'staff_availability')
         .maybeSingle();
-    return data?.value || {};
+    // Guard: value column may be text instead of jsonb, in which case data.value
+    // is a JSON string. Parse it so callers always receive a plain object.
+    const raw = data?.value;
+    if (!raw) return {};
+    if (typeof raw === 'string') {
+        try { return JSON.parse(raw); } catch { return {}; }
+    }
+    return (typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
 }
 
 async function saveStaffAvailability(availMap) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
         .from('settings')
-        .upsert({ key: 'staff_availability', value: availMap });
+        .upsert({ key: 'staff_availability', value: availMap }, { onConflict: 'key' });
     if (error) throw error;
 }
 
