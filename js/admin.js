@@ -1948,7 +1948,7 @@ function setupFamilies() {
 function onFamilySearch() {
     const q = (document.getElementById('familyChildSearch')?.value || '').toLowerCase().trim();
     if (!q) {
-        renderFamiliesList(allFamiliesData);
+        renderFamiliesList(allFamiliesData.slice(0, 50), allFamiliesData.length);
         return;
     }
     const filtered = allFamiliesData.filter(f =>
@@ -2170,7 +2170,7 @@ async function loadFamilies() {
         _discountMap = null; // invalidate cached discount map
         const searchEl = document.getElementById('familyChildSearch');
         if (searchEl) searchEl.value = '';
-        if (container) renderFamiliesList(allFamiliesData);
+        if (container) renderFamiliesList(allFamiliesData.slice(0, 50), allFamiliesData.length);
     } catch (err) {
         if (container) container.innerHTML = `<p class="import-error">Failed to load families: ${escHtml(err.message)}</p>`;
     }
@@ -2227,7 +2227,7 @@ function sortFamilies(families) {
     return sorted;
 }
 
-function renderFamiliesList(families) {
+function renderFamiliesList(families, totalCount = null) {
     const container = document.getElementById('familiesList');
     if (!families.length) {
         container.innerHTML = showArchivedFamilies
@@ -2260,7 +2260,9 @@ function renderFamiliesList(families) {
     };
 
     container.innerHTML = `
-        <p class="families-count">${sorted.length} famil${sorted.length !== 1 ? 'ies' : 'y'}${showArchivedFamilies ? ' (including archived)' : ''}</p>
+        <p class="families-count">${totalCount != null && totalCount > sorted.length
+            ? `Showing ${sorted.length} of ${totalCount} famil${totalCount !== 1 ? 'ies' : 'y'}${showArchivedFamilies ? ' (including archived)' : ''} — search above to find others`
+            : `${sorted.length} famil${sorted.length !== 1 ? 'ies' : 'y'}${showArchivedFamilies ? ' (including archived)' : ''}`}</p>
         <ul class="families-list">
             ${sorted.map(f => {
                 const kids     = (f.students || []);
@@ -2703,7 +2705,7 @@ async function doSetFamilyLock(id, locked) {
         await setFamilyRegistrationLock(id, locked);
         const fam = allFamiliesData.find(f => f.id === id);
         if (fam) fam.registration_locked = locked;
-        renderFamiliesList(allFamiliesData);
+        onFamilySearch();
     } catch (err) {
         alert((locked ? 'Lock' : 'Unlock') + ' failed: ' + err.message);
     }

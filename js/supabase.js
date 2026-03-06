@@ -190,11 +190,15 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
 // ============================================================
 // ADMIN HELPERS
 // ============================================================
-async function fetchAllRegistrations({ sinceDate = null } = {}) {
+async function fetchAllRegistrations({ sinceDate = null, untilDate = null } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    // Default: only load the past 12 months to keep the query fast as data accumulates.
-    // Pass sinceDate: '2020-01-01' to load older records when needed.
-    const since = sinceDate || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    // Default: only load this month and next month (filtered by submission date).
+    // Pass sinceDate / untilDate to load a custom range when needed (e.g. for reports).
+    const now = new Date();
+    const defaultSince = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const defaultUntil = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59).toISOString();
+    const since = sinceDate || defaultSince;
+    const until = untilDate || defaultUntil;
     const { data, error } = await sbClient
         .from('registrations')
         .select(`
@@ -204,6 +208,7 @@ async function fetchAllRegistrations({ sinceDate = null } = {}) {
             registration_dates ( care_date, waitlisted, day_type )
         `)
         .gte('created_at', since)
+        .lte('created_at', until)
         .order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
@@ -598,7 +603,7 @@ async function fetchMessages(showArchived = false) {
         .from('messages')
         .select('id, parent_name, parent_email, message, created_at, is_read, is_archived')
         .order('created_at', { ascending: false })
-        .limit(500);
+        .limit(75);
     if (!showArchived) query = query.eq('is_archived', false);
     const { data, error } = await query;
     if (error) {
@@ -608,7 +613,7 @@ async function fetchMessages(showArchived = false) {
                 .from('messages')
                 .select('id, parent_name, parent_email, message, created_at, is_read')
                 .order('created_at', { ascending: false })
-                .limit(500);
+                .limit(75);
             if (fallback.error) throw fallback.error;
             return (fallback.data || []).map(m => ({ ...m, is_archived: false }));
         }
