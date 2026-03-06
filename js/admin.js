@@ -1948,7 +1948,8 @@ function setupFamilies() {
 function onFamilySearch() {
     const q = (document.getElementById('familyChildSearch')?.value || '').toLowerCase().trim();
     if (!q) {
-        renderFamiliesList(allFamiliesData.slice(0, 50), allFamiliesData.length);
+        const container = document.getElementById('familiesList');
+        if (container) container.innerHTML = `<p class="empty-hint">Search above to find families (${allFamiliesData.length} loaded).</p>`;
         return;
     }
     const filtered = allFamiliesData.filter(f =>
@@ -2170,7 +2171,7 @@ async function loadFamilies() {
         _discountMap = null; // invalidate cached discount map
         const searchEl = document.getElementById('familyChildSearch');
         if (searchEl) searchEl.value = '';
-        if (container) renderFamiliesList(allFamiliesData.slice(0, 50), allFamiliesData.length);
+        if (container) container.innerHTML = `<p class="empty-hint">Search above to find families (${allFamiliesData.length} loaded).</p>`;
     } catch (err) {
         if (container) container.innerHTML = `<p class="import-error">Failed to load families: ${escHtml(err.message)}</p>`;
     }
