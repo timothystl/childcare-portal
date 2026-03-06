@@ -968,6 +968,23 @@ async function fetchClockEventsForRange(startDate, endDate) {
     return data || [];
 }
 
+async function insertManualClockEvent(staffId, workDate, clockInISO, clockOutISO) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('staff_clock_events')
+        .insert({ staff_id: staffId, work_date: workDate, clock_in: clockInISO, clock_out: clockOutISO || null });
+    if (error) throw error;
+}
+
+async function updateClockEventOut(eventId, clockOutISO) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('staff_clock_events')
+        .update({ clock_out: clockOutISO })
+        .eq('id', eventId);
+    if (error) throw error;
+}
+
 // ============================================================
 // STAFF AVAILABILITY  (stored in settings table as JSON blob)
 // ============================================================

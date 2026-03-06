@@ -2045,6 +2045,14 @@ tr.pending-approval:hover { background: #fef3c7; }
 .hours-entry-table thead th { text-align: left !important; }
 .hours-entry-table tbody td { text-align: left; }
 
+.clock-events-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 200px; }
+.clock-event-item  { font-size: 0.85rem; color: #444; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.clock-event-open .clock-event-label { color: #b45309; font-weight: 600; }
+.clock-event-open input[type="time"] { font-size: 0.82rem; padding: 2px 4px; }
+.clock-add-form    { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.85rem; margin-top: 2px; }
+.clock-add-form input[type="time"] { font-size: 0.82rem; padding: 2px 4px; }
+.show-add-clock-btn { font-size: 0.8rem; margin-top: 2px; align-self: flex-start; }
+
 /* ============================================================
    PAYROLL TABLE
    ============================================================ */
