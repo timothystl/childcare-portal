@@ -1396,9 +1396,6 @@ async function autoFillStaffSchedule() {
 function renderAutoFillSchedule(weekDates, assignments, counts) {
     const container = document.getElementById('staffContent');
 
-    // Keep the existing staffing-needs table, then append the name assignment table below
-    const existingHtml = container.innerHTML;
-
     const roomHeaders = ROOMS.map(r => `<th colspan="2" class="staff-room-header">${r.label}</th>`).join('');
     const subHeaders  = ROOMS.map(() =>
         `<th class="staff-sub-head shift-am-th">AM Staff</th><th class="staff-sub-head shift-pm-th">PM Staff</th>`
@@ -1434,7 +1431,7 @@ function renderAutoFillSchedule(weekDates, assignments, counts) {
         return `<tr><td class="staff-date-cell"><strong>${label}</strong></td>${cells}</tr>`;
     }).join('');
 
-    const fillTable = `
+    const fillHtml = `
         <div style="display:flex;align-items:center;gap:10px;margin:24px 0 8px;">
             <h4 style="margin:0;color:#333">Staff Name Assignment</h4>
             <button id="printStaffAssignBtn" class="btn-secondary" style="margin-left:auto;">🖨 Print</button>
@@ -1456,14 +1453,24 @@ function renderAutoFillSchedule(weekDates, assignments, counts) {
             </table>
         </div>`;
 
-    container.innerHTML = existingHtml + fillTable;
+    // Replace the existing section in-place, or append it — prevents stacking duplicate copies
+    const existing = document.getElementById('autoFillSection');
+    if (existing) {
+        existing.innerHTML = fillHtml;
+    } else {
+        const section = document.createElement('div');
+        section.id = 'autoFillSection';
+        section.innerHTML = fillHtml;
+        container.appendChild(section);
+    }
+
+    const section = document.getElementById('autoFillSection');
 
     // Wire up print
-    document.getElementById('printStaffAssignBtn')?.addEventListener('click', () => {
+    section.querySelector('#printStaffAssignBtn')?.addEventListener('click', () => {
         const weekOf = document.getElementById('staffWeekOf')?.value || '';
         const tbl = document.getElementById('autoFillTable');
         if (!tbl) return;
-        // Build a clean printable copy without the +/× buttons
         const cleanHtml = tbl.outerHTML
             .replace(/<button class="chip-remove"[^>]*>×<\/button>/g, '')
             .replace(/<button class="chip-add-staff"[^>]*>\+<\/button>/g, '');
@@ -1479,7 +1486,7 @@ function renderAutoFillSchedule(weekDates, assignments, counts) {
     });
 
     // Wire up XLSX export
-    document.getElementById('exportStaffAssignBtn')?.addEventListener('click', () => {
+    section.querySelector('#exportStaffAssignBtn')?.addEventListener('click', () => {
         const weekOf = document.getElementById('staffWeekOf')?.value || 'schedule';
         if (!_autoFillAssignments || !_autoFillWeekDates) return;
         const headers = ['Date', ...ROOMS.flatMap(r => [`${r.label} AM`, `${r.label} PM`])];
@@ -1498,33 +1505,65 @@ function renderAutoFillSchedule(weekDates, assignments, counts) {
         XLSX.writeFile(wb, `staff-assignment-${weekOf}.xlsx`);
     });
 
-    // Wire up + (add staff) buttons
-    container.querySelectorAll('.chip-add-staff').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const { date, room, shift } = btn.dataset;
-            const names = allStaffData.filter(s => s.active).map(s => s.name);
-            if (!names.length) { alert('No active staff found.'); return; }
-            const chosen = prompt(`Add staff to ${room.toUpperCase()} ${shift.toUpperCase()} on ${date}:\n\nType a name (partial match OK):\n${names.join(', ')}`);
-            if (!chosen) return;
-            const match = allStaffData.find(s => s.active && s.name.toLowerCase().includes(chosen.toLowerCase().trim()));
-            if (!match) { alert('No matching active staff member found for "' + chosen + '".'); return; }
-            if (!_autoFillAssignments[date][room][shift].includes(match.name)) {
-                _autoFillAssignments[date][room][shift].push(match.name);
-            }
-            renderAutoFillSchedule(_autoFillWeekDates, _autoFillAssignments, _autoFillCounts);
-        });
-    });
-
-    // Wire up × (remove staff) buttons
-    container.querySelectorAll('.chip-remove').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const { date, room, shift, name } = btn.dataset;
+    // Event delegation for + and × — one listener on the section, no re-attachment on re-render
+    section.addEventListener('click', e => {
+        const addBtn = e.target.closest('.chip-add-staff');
+        if (addBtn) {
+            e.stopPropagation();
+            _showStaffPicker(addBtn, addBtn.dataset.date, addBtn.dataset.room, addBtn.dataset.shift);
+            return;
+        }
+        const removeBtn = e.target.closest('.chip-remove');
+        if (removeBtn) {
+            const { date, room, shift, name } = removeBtn.dataset;
             const arr = _autoFillAssignments[date][room][shift];
             const idx = arr.indexOf(name);
             if (idx !== -1) arr.splice(idx, 1);
             renderAutoFillSchedule(_autoFillWeekDates, _autoFillAssignments, _autoFillCounts);
-        });
+        }
     });
+}
+
+function _showStaffPicker(anchorBtn, date, room, shift) {
+    document.getElementById('_staffPickerPopup')?.remove();
+
+    const already = _autoFillAssignments[date][room][shift] || [];
+    const staff   = allStaffData.filter(s => s.active);
+    if (!staff.length) { alert('No active staff found.'); return; }
+
+    const popup = document.createElement('div');
+    popup.id = '_staffPickerPopup';
+    popup.className = 'staff-picker-popup';
+    popup.innerHTML = staff.map(s => {
+        const assigned = already.includes(s.name);
+        return `<button class="staff-picker-item${assigned ? ' staff-picker-assigned' : ''}" data-name="${escHtml(s.name)}">${escHtml(s.name)}${assigned ? ' ✓' : ''}</button>`;
+    }).join('');
+
+    const rect = anchorBtn.getBoundingClientRect();
+    popup.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+    popup.style.left = (rect.left  + window.scrollX) + 'px';
+    document.body.appendChild(popup);
+
+    popup.addEventListener('click', e => {
+        const item = e.target.closest('.staff-picker-item');
+        if (!item || item.classList.contains('staff-picker-assigned')) return;
+        const name = item.dataset.name;
+        if (!_autoFillAssignments[date][room][shift].includes(name)) {
+            _autoFillAssignments[date][room][shift].push(name);
+        }
+        popup.remove();
+        renderAutoFillSchedule(_autoFillWeekDates, _autoFillAssignments, _autoFillCounts);
+    });
+
+    // Close when clicking outside
+    setTimeout(() => {
+        document.addEventListener('click', function close(e) {
+            if (!popup.contains(e.target)) {
+                popup.remove();
+                document.removeEventListener('click', close);
+            }
+        });
+    }, 0);
 }
 
 // ============================================================
