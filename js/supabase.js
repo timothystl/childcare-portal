@@ -31,7 +31,7 @@ const ROOMS = [
         halfDayRate:    55,
         weeklyFullRate: null,
         weeklyHalfRate: null,
-        staffRatio:     5,
+        staffRatio:     4,
     },
     {
         id:             'turtle',
@@ -55,7 +55,7 @@ const ROOMS = [
         halfDayRate:    45,
         weeklyFullRate: null,
         weeklyHalfRate: null,
-        staffRatio:     10,
+        staffRatio:     8,
     },
 ];
 

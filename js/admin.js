@@ -1569,7 +1569,10 @@ async function onSaveRatios() {
         });
 
         await saveRatioSettings(ratios);
-        await loadRatioSettings();
+        // Merge directly into ROOMS to avoid a silent DB round-trip failure.
+        ROOMS.forEach(room => {
+            if (ratios[room.id] != null) room.staffRatio = ratios[room.id];
+        });
         renderRatiosTable();
 
         if (statusEl) {
@@ -3016,8 +3019,17 @@ async function onSaveRates() {
         });
 
         await saveRateSettings(rates);
-        await loadRateSettings(); // re-merge saved values into ROOMS
-        renderRatesTable();       // redraw inputs with freshly merged values
+        // Merge saved values directly into ROOMS (avoids a DB round-trip that can
+        // silently fail and revert the display back to hardcoded defaults).
+        ROOMS.forEach(room => {
+            const r = rates[room.id];
+            if (!r) return;
+            if (r.fullDayRate   != null) room.fullDayRate   = r.fullDayRate;
+            if (r.halfDayRate   != null) room.halfDayRate   = r.halfDayRate;
+            if (r.weeklyFullRate != null) room.weeklyFullRate = r.weeklyFullRate;
+            if (r.weeklyHalfRate != null) room.weeklyHalfRate = r.weeklyHalfRate;
+        });
+        renderRatesTable();
 
         if (statusEl) {
             statusEl.textContent   = '✓ Saved!';
