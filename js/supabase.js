@@ -190,8 +190,11 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
 // ============================================================
 // ADMIN HELPERS
 // ============================================================
-async function fetchAllRegistrations() {
+async function fetchAllRegistrations({ sinceDate = null } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
+    // Default: only load the past 12 months to keep the query fast as data accumulates.
+    // Pass sinceDate: '2020-01-01' to load older records when needed.
+    const since = sinceDate || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await sbClient
         .from('registrations')
         .select(`
@@ -200,6 +203,7 @@ async function fetchAllRegistrations() {
             child_name, child_age, child_dob, room_id,
             registration_dates ( care_date, waitlisted, day_type )
         `)
+        .gte('created_at', since)
         .order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
@@ -593,7 +597,8 @@ async function fetchMessages(showArchived = false) {
     let query = sbClient
         .from('messages')
         .select('id, parent_name, parent_email, message, created_at, is_read, is_archived')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(500);
     if (!showArchived) query = query.eq('is_archived', false);
     const { data, error } = await query;
     if (error) {
@@ -602,7 +607,8 @@ async function fetchMessages(showArchived = false) {
             const fallback = await sbClient
                 .from('messages')
                 .select('id, parent_name, parent_email, message, created_at, is_read')
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(500);
             if (fallback.error) throw fallback.error;
             return (fallback.data || []).map(m => ({ ...m, is_archived: false }));
         }
@@ -641,7 +647,8 @@ async function fetchRegistrationsByEmail(email) {
             registration_dates ( care_date, waitlisted, day_type )
         `)
         .ilike('parent_email', email)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(50);
     if (error) throw error;
     return data || [];
 }
