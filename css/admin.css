@@ -1181,6 +1181,19 @@ tr.pending-approval:hover { background: #fef3c7; }
     white-space: nowrap;
 }
 .btn-warning:hover { background: #dd6b20; }
+.btn-danger {
+    background: #fff;
+    color: #c62828;
+    border: 2px solid #c62828;
+    padding: 9px 18px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: .9em;
+    font-weight: 600;
+    transition: all .2s;
+    white-space: nowrap;
+}
+.btn-danger:hover { background: #c62828; color: #fff; }
 
 /* Family row action area */
 .family-row-actions {
@@ -1863,6 +1876,25 @@ tr.pending-approval:hover { background: #fef3c7; }
     color: #888;
     margin-top: 6px;
     margin-bottom: 0;
+}
+.offer-links-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: .93em;
+    font-weight: 500;
+    color: #555;
+}
+.offer-links-fields input {
+    padding: 8px 10px;
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+    font-size: .95em;
+    font-family: inherit;
+}
+.offer-links-fields input:focus {
+    outline: none;
+    border-color: #4f46e5;
 }
 
 /* ============================================================

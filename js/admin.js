@@ -65,7 +65,7 @@ function showDashboard() {
 async function initDashboard() {
     populateRoomFilter();
     populateRosterRoomFilter();
-    await Promise.all([loadRegistrations(), loadClosureList(), loadFamilies(), loadRateSettings(), loadRatioSettings()]);
+    await Promise.all([loadRegistrations(), loadClosureList(), loadFamilies(), loadRateSettings(), loadRatioSettings(), loadOfferLinks().then(v => { window._globalOfferLinks = v; })]);
     renderCapacityOverview();
     setupFilters();
     setupRoster();
@@ -78,6 +78,7 @@ async function initDashboard() {
     setupRoomCalendar();
     setupRates();
     setupRatios();
+    setupOfferLinks();
     setupStaffScheduling();
     setupStaffRoster();
     setupHoursEntry();
@@ -1586,6 +1587,43 @@ async function onSaveRatios() {
         btn.disabled    = false;
         btn.textContent = '💾 Save Ratios';
     }
+}
+
+// ============================================================
+// OFFER EMAIL LINKS (global settings)
+// ============================================================
+function setupOfferLinks() {
+    const g = window._globalOfferLinks || {};
+    const procareEl   = document.getElementById('globalProcareLink');
+    const paperworkEl = document.getElementById('globalPaperworkLinks');
+    if (procareEl)   procareEl.value   = g.procareLink   || '';
+    if (paperworkEl) paperworkEl.value = (g.paperworkLinks || []).join(', ');
+
+    document.getElementById('saveOfferLinksBtn')?.addEventListener('click', async () => {
+        const btn      = document.getElementById('saveOfferLinksBtn');
+        const statusEl = document.getElementById('offerLinksStatus');
+        btn.disabled    = true;
+        btn.textContent = 'Saving…';
+        if (statusEl) statusEl.textContent = '';
+        try {
+            const procareLink   = procareEl?.value.trim() || null;
+            const paperworkLinks = (paperworkEl?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+            const payload = { procareLink, paperworkLinks };
+            await saveOfferLinks(payload);
+            window._globalOfferLinks = payload;
+            if (statusEl) {
+                statusEl.textContent = '✓ Saved!';
+                statusEl.style.color = '#2e7d32';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+        } catch (err) {
+            if (statusEl) { statusEl.textContent = '⚠️ ' + err.message; statusEl.style.color = '#c62828'; }
+            console.error('saveOfferLinks:', err);
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = '💾 Save Links';
+        }
+    });
 }
 
 // ============================================================
@@ -4011,7 +4049,8 @@ function renderWaitlistAdmin() {
         const actionBtns = (() => {
             const id = app.id;
             if (['declined','expired','archived','enrolled'].includes(app.status)) {
-                return `<button class="btn-ghost wl-action wl-unarchive" data-id="${id}">↩ Restore</button>`;
+                return `<button class="btn-ghost wl-action wl-unarchive" data-id="${id}">↩ Restore</button>
+                        <button class="btn-danger wl-action wl-delete" data-id="${id}" data-child="${escHtml(app.child_name)}">🗑 Delete</button>`;
             }
             const offer = app.status === 'pending' || offerExpired
                 ? `<button class="btn-secondary wl-action wl-offer" data-id="${id}">🎉 Offer a Spot</button>`
@@ -4107,6 +4146,11 @@ function renderWaitlistAdmin() {
     container.querySelectorAll('.wl-offer').forEach(btn =>
         btn.addEventListener('click', () => {
             const id = btn.dataset.id;
+            const g = window._globalOfferLinks || {};
+            const procareEl   = document.getElementById(`wl-procare-${id}`);
+            const paperwkEl   = document.getElementById(`wl-paperwk-${id}`);
+            if (procareEl && !procareEl.value)   procareEl.value   = g.procareLink   || '';
+            if (paperwkEl && !paperwkEl.value)   paperwkEl.value   = (g.paperworkLinks || []).join(', ');
             document.getElementById(`wl-offer-form-${id}`)?.classList.remove('hidden');
         }));
 
@@ -4236,6 +4280,19 @@ function renderWaitlistAdmin() {
                 await updateWaitlistApplication(id, { status: 'pending', archived_at: null, archive_reason: null });
                 const app = _allWaitlistApps.find(a => a.id === id);
                 if (app) { app.status = 'pending'; app.archived_at = null; app.archive_reason = null; }
+                renderWaitlistAdmin();
+            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
+        }));
+
+    container.querySelectorAll('.wl-delete').forEach(btn =>
+        btn.addEventListener('click', async () => {
+            const id    = Number(btn.dataset.id);
+            const child = btn.dataset.child || 'this entry';
+            if (!confirm(`Permanently delete the waitlist entry for ${child}? This cannot be undone.`)) return;
+            btn.disabled = true;
+            try {
+                await deleteWaitlistApplication(id);
+                _allWaitlistApps = _allWaitlistApps.filter(a => a.id !== id);
                 renderWaitlistAdmin();
             } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
         }));

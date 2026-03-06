@@ -745,6 +745,41 @@ async function saveRatioSettings(ratios) {
     if (error) throw error;
 }
 
+// Load global offer email links from Supabase.
+async function loadOfferLinks() {
+    if (!sbClient) return { procareLink: null, paperworkLinks: [] };
+    try {
+        const { data, error } = await sbClient
+            .from('settings')
+            .select('value')
+            .eq('key', 'offer_links')
+            .maybeSingle();
+        if (error || !data) return { procareLink: null, paperworkLinks: [] };
+        return data.value;
+    } catch (_) {
+        return { procareLink: null, paperworkLinks: [] };
+    }
+}
+
+// Save global offer email links to Supabase.
+async function saveOfferLinks(links) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'offer_links', value: links });
+    if (error) throw error;
+}
+
+// Delete a waitlist application permanently.
+async function deleteWaitlistApplication(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('waitlist_applications')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+}
+
 // ============================================================
 // STAFF  (payroll)
 // ============================================================

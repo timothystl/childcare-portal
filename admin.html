@@ -287,6 +287,24 @@
                 </div>
             </section>
 
+            <!-- Offer Email Links -->
+            <section class="admin-section collapsible-section" id="offerLinksSection">
+                <h2>🔗 Offer Email Links</h2>
+                <p class="section-desc">These links are pre-filled into the "Offer a Spot" form for every waitlist applicant. You can still override them per offer. Changes here do not affect already-sent emails.</p>
+                <div class="offer-links-fields">
+                    <label>Procare Enrollment Link (optional)
+                        <input type="url" id="globalProcareLink" placeholder="https://app.procaresoftware.com/…" style="width:100%;margin-top:4px;">
+                    </label>
+                    <label>Paperwork / Document Links (optional, comma-separated)
+                        <input type="text" id="globalPaperworkLinks" placeholder="https://docs.google.com/…, https://…" style="width:100%;margin-top:4px;">
+                    </label>
+                </div>
+                <div class="rates-actions" style="margin-top:12px;">
+                    <button id="saveOfferLinksBtn" class="btn-primary">💾 Save Links</button>
+                    <span id="offerLinksStatus" class="rates-status"></span>
+                </div>
+            </section>
+
         </div><!-- /#tab-settings -->
 
         <!-- ── Tab: Reports ───────────────────────────────────── -->
