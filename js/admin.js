@@ -3294,15 +3294,17 @@ async function onSaveStaffMember() {
     const pinVal = document.getElementById('sfPin').value.trim();
     if (pinVal && (!/^\d{4}$/.test(pinVal))) { alert('PIN must be exactly 4 digits.'); return; }
 
-    const statusEl = document.getElementById('staffFormStatus');
-    const btn      = document.getElementById('saveStaffBtn');
-    btn.disabled = true; statusEl.textContent = '';
-
     const payType = document.getElementById('sfPayType').value;
+
+    // Capture availability before closing the form
+    const availDays    = [...document.querySelectorAll('.sfAvailDay:checked')].map(cb => cb.value);
+    const availPeriods = [...document.querySelectorAll('.sfAvailPeriod:checked')].map(cb => cb.value);
+    const maxHours     = parseFloat(document.getElementById('sfMaxHours').value) || 40;
+    const savingId     = editingStaffId;
 
     try {
         const returnedId = await upsertStaffMember({
-            id:              editingStaffId,
+            id:              savingId,
             name,
             role:            document.getElementById('sfRole').value.trim(),
             payType,
@@ -3313,24 +3315,22 @@ async function onSaveStaffMember() {
             staffPin:        pinVal || null,
         });
 
-        const staffId = editingStaffId || returnedId;
+        // Close immediately — don't make the user wait for the list to reload
+        closeStaffForm();
+
+        // Save availability and refresh the list in the background
+        const staffId = savingId || returnedId;
         if (staffId) {
-            const availDays    = [...document.querySelectorAll('.sfAvailDay:checked')].map(cb => cb.value);
-            const availPeriods = [...document.querySelectorAll('.sfAvailPeriod:checked')].map(cb => cb.value);
-            const maxHours     = parseFloat(document.getElementById('sfMaxHours').value) || 40;
             if (typeof staffAvailability !== 'object' || Array.isArray(staffAvailability) || staffAvailability === null) {
                 staffAvailability = {};
             }
             staffAvailability[staffId] = { days: availDays, periods: availPeriods, maxHours };
-            await saveStaffAvailability(staffAvailability);
+            saveStaffAvailability(staffAvailability).catch(console.error);
         }
-
-        closeStaffForm();
-        await loadStaffList();
+        loadStaffList();
     } catch (err) {
-        statusEl.textContent = '⚠️ ' + err.message;
-        statusEl.style.color = '#c62828';
-    } finally { btn.disabled = false; }
+        alert('Save failed: ' + err.message);
+    }
 }
 
 // ============================================================
