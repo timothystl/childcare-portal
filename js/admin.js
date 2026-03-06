@@ -2813,6 +2813,7 @@ async function onArchiveSummerFamilies() {
 // MESSAGES
 // ============================================================
 let showArchivedMessages = false;
+let _messagesLoaded      = false;
 
 function setupMessages() {
     document.getElementById('refreshMessagesBtn')?.addEventListener('click', loadMessages);
@@ -2933,8 +2934,9 @@ function setupTabs() {
         panes.forEach(p => p.classList.toggle('hidden', p.id !== 'tab-' + tab));
         localStorage.setItem('adminActiveTab', tab);
         // Lazy-load heavy data the first time each tab is opened
-        if (tab === 'families' && allFamiliesData.length === 0) loadFamilies();
-        if (tab === 'staffing' && allStaffData.length === 0) loadStaffList();
+        if (tab === 'families'  && allFamiliesData.length === 0) loadFamilies();
+        if (tab === 'staffing'  && allStaffData.length === 0)    loadStaffList();
+        if (tab === 'messages'  && !_messagesLoaded)             { _messagesLoaded = true; loadMessages(); }
     }
 
     btns.forEach(btn => btn.addEventListener('click', () => activate(btn.dataset.tab)));
