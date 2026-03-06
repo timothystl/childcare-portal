@@ -5,6 +5,8 @@ let allRegistrations = [];
 let allClosureDates  = new Set(); // YYYY-MM-DD strings
 let tableSortState   = { col: 'submitted', dir: 'desc' }; // default: newest first
 let familiesSortBy   = 'name'; // 'name' | 'room' | 'discount' | 'age_asc' | 'age_desc'
+let familiesPage     = 0;
+const FAMILIES_PAGE_SIZE = 20;
 
 // ============================================================
 // LOGIN  (Supabase Auth — server-validated)
@@ -1947,9 +1949,9 @@ function setupFamilies() {
 
 function onFamilySearch() {
     const q = (document.getElementById('familyChildSearch')?.value || '').toLowerCase().trim();
+    familiesPage = 0;
     if (!q) {
-        const container = document.getElementById('familiesList');
-        if (container) container.innerHTML = `<p class="empty-hint">Search above to find families (${allFamiliesData.length} loaded).</p>`;
+        renderFamiliesList(allFamiliesData);
         return;
     }
     const filtered = allFamiliesData.filter(f =>
@@ -2171,7 +2173,8 @@ async function loadFamilies() {
         _discountMap = null; // invalidate cached discount map
         const searchEl = document.getElementById('familyChildSearch');
         if (searchEl) searchEl.value = '';
-        if (container) container.innerHTML = `<p class="empty-hint">Search above to find families (${allFamiliesData.length} loaded).</p>`;
+        familiesPage = 0;
+        renderFamiliesList(allFamiliesData);
     } catch (err) {
         if (container) container.innerHTML = `<p class="import-error">Failed to load families: ${escHtml(err.message)}</p>`;
     }
@@ -2228,7 +2231,7 @@ function sortFamilies(families) {
     return sorted;
 }
 
-function renderFamiliesList(families, totalCount = null) {
+function renderFamiliesList(families) {
     const container = document.getElementById('familiesList');
     if (!families.length) {
         container.innerHTML = showArchivedFamilies
@@ -2246,6 +2249,11 @@ function renderFamiliesList(families, totalCount = null) {
     });
 
     const sorted      = sortFamilies(unique);
+    const totalCount  = sorted.length;
+    const totalPages  = Math.ceil(totalCount / FAMILIES_PAGE_SIZE);
+    if (familiesPage >= totalPages) familiesPage = Math.max(0, totalPages - 1);
+    const pageStart   = familiesPage * FAMILIES_PAGE_SIZE;
+    const pageFamilies = sorted.slice(pageStart, pageStart + FAMILIES_PAGE_SIZE);
     const roomOptions = ROOMS.map(r =>
         `<option value="${r.id}">${r.label}</option>`
     ).join('');
@@ -2260,12 +2268,19 @@ function renderFamiliesList(families, totalCount = null) {
         </div>`;
     };
 
+    const pageEnd = Math.min(pageStart + FAMILIES_PAGE_SIZE, totalCount);
+    const paginationHtml = totalPages > 1 ? `
+        <div class="families-pagination">
+            <button class="btn-secondary families-prev-btn" ${familiesPage === 0 ? 'disabled' : ''}>&#8592; Prev</button>
+            <span class="families-page-info">Page ${familiesPage + 1} of ${totalPages}</span>
+            <button class="btn-secondary families-next-btn" ${familiesPage >= totalPages - 1 ? 'disabled' : ''}>Next &#8594;</button>
+        </div>` : '';
+
     container.innerHTML = `
-        <p class="families-count">${totalCount != null && totalCount > sorted.length
-            ? `Showing ${sorted.length} of ${totalCount} famil${totalCount !== 1 ? 'ies' : 'y'}${showArchivedFamilies ? ' (including archived)' : ''} — search above to find others`
-            : `${sorted.length} famil${sorted.length !== 1 ? 'ies' : 'y'}${showArchivedFamilies ? ' (including archived)' : ''}`}</p>
+        <p class="families-count">Showing ${pageStart + 1}–${pageEnd} of ${totalCount} famil${totalCount !== 1 ? 'ies' : 'y'}${showArchivedFamilies ? ' (including archived)' : ''}</p>
+        ${paginationHtml}
         <ul class="families-list">
-            ${sorted.map(f => {
+            ${pageFamilies.map(f => {
                 const kids     = (f.students || []);
                 const archived = f.active === false;
                 const lastName = (f.parent_name || '').trim().split(/\s+/).pop() || '';
@@ -2333,10 +2348,19 @@ function renderFamiliesList(families, totalCount = null) {
                             </ul>` : ''}
                     </li>`;
             }).join('')}
-        </ul>`;
+        </ul>
+        ${paginationHtml}`;
+
+    // Pagination button events
+    container.querySelector('.families-prev-btn')?.addEventListener('click', () => {
+        if (familiesPage > 0) { familiesPage--; renderFamiliesList(families); container.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+    container.querySelector('.families-next-btn')?.addEventListener('click', () => {
+        if (familiesPage < totalPages - 1) { familiesPage++; renderFamiliesList(families); container.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
 
     // Bind room override + discount change events
-    sorted.forEach(f => {
+    pageFamilies.forEach(f => {
         (f.students || []).forEach(s => {
             // Room override
             const roomSel = container.querySelector(`.room-override-select[data-student-id="${s.id}"]`);
@@ -3127,7 +3151,7 @@ function renderStaffList(staff) {
                     <th class="sr-col-role">Role</th>
                     <th class="sr-col-room">Room</th>
                     <th class="sr-col-pay">Pay</th>
-                    <th class="sr-col-hire">Hire Date</th>
+                    <th class="sr-col-pin">PIN</th>
                     <th class="sr-col-status">Status</th>
                     <th class="sr-col-actions">Actions</th>
                 </tr>
@@ -3135,7 +3159,7 @@ function renderStaffList(staff) {
             <tbody>
                 ${staff.map(s => {
                     const roomLabel  = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
-                    const hireDate   = s.hire_date ? friendlyShort(s.hire_date) : '—';
+                    const pinDisplay = s.staff_pin != null ? String(s.staff_pin).padStart(4, '0') : '—';
                     const isSalary   = s.pay_type === 'salary';
                     const payDisplay = isSalary
                         ? `<span class="pay-type-chip pay-salary">Salary</span> $${(s.salary_biweekly || 0).toFixed(2)}/period`
@@ -3146,7 +3170,7 @@ function renderStaffList(staff) {
                             <td>${escHtml(s.role || '—')}</td>
                             <td>${escHtml(roomLabel)}</td>
                             <td>${payDisplay}</td>
-                            <td>${hireDate}</td>
+                            <td><code>${pinDisplay}</code></td>
                             <td><span class="status-chip ${s.active ? 'chip-confirmed' : 'chip-waitlist'}">${s.active ? 'Active' : 'Inactive'}</span></td>
                             <td class="actions-cell">
                                 <button class="btn-secondary staff-edit-btn" data-staff-id="${s.id}">Edit</button>
