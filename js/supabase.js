@@ -74,6 +74,15 @@ try {
     console.warn('Supabase not yet configured — running in preview mode.');
 }
 
+// Converts raw Supabase/Cloudflare errors into readable messages.
+function friendlyError(err) {
+    const msg = err?.message || String(err);
+    if (msg.includes('<!DOCTYPE') || msg.includes('522') || msg.toLowerCase().includes('timed out') || msg.toLowerCase().includes('connection timed')) {
+        return new Error('Cannot reach the database (Supabase may be paused — visit supabase.com/dashboard to restore your project).');
+    }
+    return err instanceof Error ? err : new Error(msg);
+}
+
 // ============================================================
 // CAPACITY
 // ============================================================
@@ -799,7 +808,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
         .order('name');
     if (!includeInactive) query = query.eq('active', true);
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) throw friendlyError(error);
     return data || [];
 }
 
