@@ -755,7 +755,14 @@ async function loadOfferLinks() {
             .eq('key', 'offer_links')
             .maybeSingle();
         if (error || !data) return { procareLink: null, paperworkLinks: [] };
-        return data.value;
+        // Guard: value column may be text instead of jsonb — parse if so.
+        const raw = data.value;
+        if (typeof raw === 'string') {
+            try { return JSON.parse(raw); } catch { return { procareLink: null, paperworkLinks: [] }; }
+        }
+        return (raw && typeof raw === 'object' && !Array.isArray(raw))
+            ? raw
+            : { procareLink: null, paperworkLinks: [] };
     } catch (_) {
         return { procareLink: null, paperworkLinks: [] };
     }
