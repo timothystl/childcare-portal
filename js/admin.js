@@ -3267,7 +3267,7 @@ async function onSaveStaffMember() {
         }
 
         closeStaffForm();
-        await loadStaffList();
+        loadStaffList(); // intentionally not awaited — avoids blocking finally if DB is slow
     } catch (err) {
         statusEl.textContent = '⚠️ ' + err.message;
         statusEl.style.color = '#c62828';

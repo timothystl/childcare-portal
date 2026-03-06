@@ -69,7 +69,7 @@
             </section>
 
             <!-- Daily Roster -->
-            <section class="admin-section">
+            <section class="admin-section collapsible-section" id="dailyRosterSection">
                 <h2>📋 Daily Classroom Roster</h2>
                 <div class="roster-controls">
                     <div class="roster-field">
@@ -93,7 +93,7 @@
             </section>
 
             <!-- Registrations Table -->
-            <section class="table-section">
+            <section class="table-section collapsible-section" id="allRegistrationsSection">
                 <h2>All Registrations</h2>
                 <div class="filters">
                     <input type="text" id="searchInput" placeholder="Search by parent, child, or email…">
@@ -134,7 +134,7 @@
         <div class="tab-pane hidden" id="tab-families">
 
             <!-- Messages (top) -->
-            <section class="admin-section" id="messagesSection">
+            <section class="admin-section collapsible-section" id="messagesSection">
                 <h2>💬 Parent Messages</h2>
                 <p class="section-desc">Messages sent by parents via the Contact Us button on the registration portal.</p>
                 <div class="messages-header">
@@ -148,7 +148,7 @@
             </section>
 
             <!-- Family Directory -->
-            <section class="admin-section" id="familiesSection">
+            <section class="admin-section collapsible-section" id="familiesSection">
                 <h2>👨‍👩‍👧 Family Directory</h2>
                 <p class="section-desc">Browse and manage the family roster used for parent look-up. You can force-assign a child to a specific room or set per-child discounts inline.</p>
 
@@ -191,7 +191,7 @@
         <!-- ── Tab: Waitlist ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-waitlist">
 
-            <section class="admin-section">
+            <section class="admin-section collapsible-section" id="waitlistSection">
                 <h2>⏳ Enrollment Waitlist</h2>
                 <p class="section-desc">Families waiting for an enrollment spot. Sorted by priority: siblings first, then by desired start date, then by application date (oldest first).</p>
 
@@ -311,7 +311,7 @@
         <div class="tab-pane hidden" id="tab-reports">
 
             <!-- Monthly Billing Report -->
-            <section class="admin-section">
+            <section class="admin-section collapsible-section" id="monthlyBillingSection">
                 <h2>📊 Monthly Billing Report</h2>
                 <p class="section-desc">Attendance and billing totals for a selected month across all rooms.</p>
                 <div class="roster-controls">
@@ -330,7 +330,7 @@
             </section>
 
             <!-- Family Billing Summary -->
-            <section class="admin-section">
+            <section class="admin-section collapsible-section" id="familyBillingSection">
                 <h2>👨‍👩‍👧 Family Billing Summary</h2>
                 <p class="section-desc">Per-family billing totals for a selected month, grouped by parent. Use this to generate invoices or billing statements. Discounts are applied automatically.</p>
                 <div class="roster-controls">
@@ -349,7 +349,7 @@
             </section>
 
             <!-- Enrollment Trends -->
-            <section class="admin-section">
+            <section class="admin-section collapsible-section" id="enrollmentTrendsSection">
                 <h2>📈 Enrollment Trends</h2>
                 <p class="section-desc">Month-by-month enrollment count per room — useful for spotting growth patterns and planning ahead.</p>
                 <div class="roster-btns" style="margin-bottom:12px">
@@ -362,7 +362,7 @@
             </section>
 
             <!-- Waitlist Demand -->
-            <section class="admin-section">
+            <section class="admin-section collapsible-section" id="waitlistDemandSection">
                 <h2>⏳ Waitlist Demand</h2>
                 <p class="section-desc">Active waitlist applications by room and desired start month — shows real unmet demand to guide capacity decisions.</p>
                 <div class="roster-btns" style="margin-bottom:12px">
@@ -374,7 +374,7 @@
             </section>
 
             <!-- Year-to-Date Revenue -->
-            <section class="admin-section">
+            <section class="admin-section collapsible-section" id="ytdRevenueSection">
                 <h2>📅 Year-to-Date Revenue</h2>
                 <p class="section-desc">Rolling monthly revenue totals by room for the current calendar year.</p>
                 <div class="roster-btns" style="margin-bottom:12px">
@@ -391,7 +391,7 @@
         <!-- ── Tab: Staffing ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-staffing">
 
-            <section class="admin-section">
+            <section class="admin-section collapsible-section" id="staffScheduleSection">
                 <h2>📅 Staff Schedule Planner</h2>
                 <p class="section-desc">Shows minimum staff required per room per day based on confirmed enrollment and the ratios configured in ⚙️ Settings. Closed days are excluded automatically.</p>
                 <div class="roster-controls">
@@ -411,7 +411,7 @@
             </section>
 
             <!-- Staff Roster -->
-            <section class="admin-section">
+            <section class="admin-section collapsible-section" id="staffRosterSection">
                 <h2>👥 Staff Roster</h2>
                 <p class="section-desc">Manage active staff members. Name, role, pay rate, and room assignment are used for the payroll report. Assign a 4-digit PIN so staff can clock in/out from the mobile clock-in page.</p>
                 <div class="families-dir-controls">
@@ -513,7 +513,7 @@
             </section>
 
             <!-- Log Hours -->
-            <section class="admin-section">
+            <section class="admin-section collapsible-section" id="logHoursSection">
                 <h2>⏱ Log Hours</h2>
                 <p class="section-desc">Record actual hours worked by each staff member for a given day. Re-open the same date to update entries.</p>
                 <div class="roster-controls">
@@ -533,7 +533,7 @@
             </section>
 
             <!-- Payroll Report -->
-            <section class="admin-section">
+            <section class="admin-section collapsible-section" id="payrollSection">
                 <h2>💵 Payroll Report</h2>
                 <p class="section-desc">Bi-weekly pay period summary with gross pay and year-to-date totals per staff member.</p>
                 <div class="roster-controls">
