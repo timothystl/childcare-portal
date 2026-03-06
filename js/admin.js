@@ -62,7 +62,10 @@ function showDashboard() {
 // ============================================================
 // DASHBOARD INIT
 // ============================================================
+let dashboardInitDone = false;
 async function initDashboard() {
+    if (dashboardInitDone) return;
+    dashboardInitDone = true;
     populateRoomFilter();
     populateRosterRoomFilter();
     await Promise.all([loadRegistrations(), loadClosureList(), loadFamilies(), loadRateSettings(), loadRatioSettings(), loadOfferLinks().then(v => { window._globalOfferLinks = v; })]);
@@ -2911,6 +2914,8 @@ function setupCollapsibles() {
         const id = section.id;
         const h2 = section.querySelector('h2');
         if (!h2 || !id) return;
+        // Skip if already processed (guards against double-init)
+        if (section.querySelector(':scope > .collapsible-body')) return;
 
         // Wrap all content after h2 in a collapsible body div
         const body = document.createElement('div');
@@ -3177,6 +3182,16 @@ function renderStaffList(staff) {
 }
 
 function openStaffForm(staff = null) {
+    // Ensure the Staff Roster section is expanded before showing the form
+    const rosterSection = document.getElementById('staffRosterSection');
+    if (rosterSection?.classList.contains('is-collapsed')) {
+        const body = rosterSection.querySelector(':scope > .collapsible-body');
+        if (body) body.hidden = false;
+        rosterSection.classList.remove('is-collapsed');
+        rosterSection.querySelector('.collapse-toggle')?.setAttribute('aria-expanded', 'true');
+        localStorage.setItem('adminCollapse_staffRosterSection', '0');
+    }
+
     editingStaffId = staff?.id || null;
     document.getElementById('staffFormTitle').textContent = staff ? 'Edit Staff Member' : 'Add Staff Member';
     document.getElementById('sfName').value      = staff?.name || '';
