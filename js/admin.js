@@ -3256,8 +3256,14 @@ async function onSaveStaffMember() {
             const availDays    = [...document.querySelectorAll('.sfAvailDay:checked')].map(cb => cb.value);
             const availPeriods = [...document.querySelectorAll('.sfAvailPeriod:checked')].map(cb => cb.value);
             const maxHours     = parseFloat(document.getElementById('sfMaxHours').value) || 40;
-            const newAvail     = { ...staffAvailability, [staffId]: { days: availDays, periods: availPeriods, maxHours } };
-            await saveStaffAvailability(newAvail);
+            // Mutate in-place rather than spreading — spreading a non-plain-object
+            // (e.g. a string returned when the DB value column is text) would create
+            // one key per character and trigger a RangeError ("Too many properties").
+            if (typeof staffAvailability !== 'object' || Array.isArray(staffAvailability) || staffAvailability === null) {
+                staffAvailability = {};
+            }
+            staffAvailability[staffId] = { days: availDays, periods: availPeriods, maxHours };
+            await saveStaffAvailability(staffAvailability);
         }
 
         closeStaffForm();
