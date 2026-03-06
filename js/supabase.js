@@ -62,7 +62,8 @@ const ROOMS = [
 // ============================================================
 // SUPABASE CONFIGURATION
 // ============================================================
-const SUPABASE_URL      = 'https://dahdstopsumxnqvdclmy.supabase.co';
+// Requests proxied through Cloudflare Worker (/sb/*) to avoid CORS issues.
+const SUPABASE_URL      = (typeof window !== 'undefined' ? window.location.origin : '') + '/sb';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
 
 let sbClient = null;
