@@ -3203,7 +3203,8 @@ function openStaffForm(staff = null) {
     document.getElementById('sfRole').value      = staff?.role || '';
     document.getElementById('sfRoom').value      = staff?.room_id || '';
     document.getElementById('sfHireDate').value  = staff?.hire_date || '';
-    document.getElementById('sfPin').value       = staff?.staff_pin ?? '';
+    const rawPin = staff?.staff_pin;
+    document.getElementById('sfPin').value = rawPin != null ? String(rawPin).padStart(4, '0') : '';
 
     const payType = staff?.pay_type || 'hourly';
     document.getElementById('sfPayType').value   = payType;
@@ -3280,9 +3281,7 @@ async function onSaveStaffMember() {
                 staffAvailability = {};
             }
             staffAvailability[staffId] = { days: availDays, periods: availPeriods, maxHours };
-            // Fire-and-forget — availability is used for auto-scheduling only.
-            // Don't block the form close or button re-enable on this secondary save.
-            saveStaffAvailability(staffAvailability).catch(e => console.warn('saveStaffAvailability:', e));
+            await saveStaffAvailability(staffAvailability);
         }
 
         closeStaffForm();
