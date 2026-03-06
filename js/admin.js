@@ -2353,10 +2353,10 @@ function renderFamiliesList(families) {
 
     // Pagination button events
     container.querySelector('.families-prev-btn')?.addEventListener('click', () => {
-        if (familiesPage > 0) { familiesPage--; renderFamiliesList(families); container.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        if (familiesPage > 0) { familiesPage--; renderFamiliesList(families); }
     });
     container.querySelector('.families-next-btn')?.addEventListener('click', () => {
-        if (familiesPage < totalPages - 1) { familiesPage++; renderFamiliesList(families); container.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        if (familiesPage < totalPages - 1) { familiesPage++; renderFamiliesList(families); }
     });
 
     // Bind room override + discount change events
