@@ -5,9 +5,9 @@ export default {
     newHeaders.set(
       'Content-Security-Policy',
       "default-src 'self'; " +
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; " +
       "style-src 'self' 'unsafe-inline'; " +
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co; " +
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com; " +
       "img-src 'self' data:; " +
       "font-src 'self' data:"
     );
