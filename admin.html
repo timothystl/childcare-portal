@@ -202,11 +202,22 @@
         <!-- ── Tab: Waitlist ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-waitlist">
 
+            <!-- Quick List -->
+            <section class="admin-section collapsible-section" id="wlQuickListSection">
+                <h2>📋 Waitlist Quick List</h2>
+                <p class="section-desc">All active applications at a glance — child, desired start date, age &amp; room at start time.</p>
+                <div id="wlQuickListContent">
+                    <p class="empty-hint">Load the waitlist below to populate this summary.</p>
+                </div>
+            </section>
+
+            <!-- Management -->
             <section class="admin-section collapsible-section" id="waitlistSection">
                 <h2>⏳ Enrollment Waitlist</h2>
                 <p class="section-desc">Families waiting for an enrollment spot. Sorted by priority: siblings first, then by desired start date, then by application date (oldest first).</p>
 
                 <div class="families-dir-controls" style="margin-bottom:12px;">
+                    <button id="addToWaitlistBtn" class="btn-primary">+ Add to Waitlist</button>
                     <select id="wlStatusFilter" class="family-search-input" style="width:auto;">
                         <option value="active">Active (pending / offered / accepted)</option>
                         <option value="enrolled">Enrolled</option>
@@ -229,6 +240,129 @@
                     <p class="empty-hint">Click Refresh to load the waitlist.</p>
                 </div>
             </section>
+
+            <!-- Demand Report (moved from Reports tab) -->
+            <section class="admin-section collapsible-section" id="waitlistDemandSection">
+                <h2>📊 Waitlist Demand by Month</h2>
+                <p class="section-desc">Active applications by room and desired start month — shows real unmet demand to guide capacity decisions.</p>
+                <div class="roster-btns" style="margin-bottom:12px">
+                    <button id="generateWaitlistBtn" class="btn-secondary">Generate Report</button>
+                </div>
+                <div id="waitlistContent">
+                    <p class="empty-hint">Click Generate Report to view waitlist demand.</p>
+                </div>
+            </section>
+
+            <!-- Manual Entry Modal -->
+            <div id="adminWlOverlay" class="admin-wl-overlay hidden">
+                <div class="admin-wl-dialog">
+                    <h3>Add Child to Waitlist</h3>
+                    <p style="color:#666;font-size:.9em;margin:0 0 18px">Use this to add a family who called or stopped by. They will appear on the waitlist just like an online application.</p>
+                    <form id="adminWlForm" autocomplete="off">
+
+                        <div class="admin-wl-section-label">Parent / Guardian</div>
+                        <div class="admin-wl-row">
+                            <label>Name <span class="req">*</span></label>
+                            <input type="text" id="adminWlParentName" required placeholder="Full name">
+                        </div>
+                        <div class="admin-wl-row">
+                            <label>Email <span class="req">*</span></label>
+                            <input type="email" id="adminWlParentEmail" required placeholder="email@example.com">
+                        </div>
+                        <div class="admin-wl-row">
+                            <label>Phone</label>
+                            <input type="tel" id="adminWlParentPhone" placeholder="(555) 555-5555">
+                        </div>
+
+                        <div class="admin-wl-section-label" style="margin-top:14px">Child</div>
+                        <div class="admin-wl-row">
+                            <label>Child's Name <span class="req">*</span></label>
+                            <input type="text" id="adminWlChildName" required placeholder="Child's full name">
+                        </div>
+                        <div class="admin-wl-row">
+                            <label></label>
+                            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;cursor:pointer">
+                                <input type="checkbox" id="adminWlIsUnborn"> Not yet born (expecting)
+                            </label>
+                        </div>
+                        <div class="admin-wl-row" id="adminWlDobRow">
+                            <label>Date of Birth <span class="req">*</span></label>
+                            <input type="date" id="adminWlDob">
+                        </div>
+                        <div class="admin-wl-row hidden" id="adminWlDueRow">
+                            <label>Expected Due Date <span class="req">*</span></label>
+                            <input type="date" id="adminWlDueDate">
+                        </div>
+
+                        <div class="admin-wl-section-label" style="margin-top:14px">Care Preferences</div>
+                        <div class="admin-wl-row">
+                            <label>Desired Start Date <span class="req">*</span></label>
+                            <input type="date" id="adminWlStartDate" required>
+                        </div>
+                        <div class="admin-wl-row">
+                            <label>Flexibility</label>
+                            <select id="adminWlFlexibility">
+                                <option value="exact">This date only</option>
+                                <option value="within_month">Within a month</option>
+                                <option value="within_quarter" selected>Within a few months</option>
+                                <option value="flexible">Very flexible</option>
+                            </select>
+                        </div>
+                        <div class="admin-wl-row">
+                            <label>Days Needed</label>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                                <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Mon" checked> Mon</label>
+                                <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Tue" checked> Tue</label>
+                                <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Wed" checked> Wed</label>
+                                <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Thu" checked> Thu</label>
+                                <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Fri" checked> Fri</label>
+                            </div>
+                        </div>
+                        <div class="admin-wl-row">
+                            <label>Schedule</label>
+                            <label style="font-weight:normal;cursor:pointer;margin-right:16px"><input type="radio" name="adminWlDayType" value="full" checked> Full day</label>
+                            <label style="font-weight:normal;cursor:pointer"><input type="radio" name="adminWlDayType" value="half"> Half day</label>
+                        </div>
+
+                        <div class="admin-wl-section-label" style="margin-top:14px">Sibling</div>
+                        <div class="admin-wl-row">
+                            <label></label>
+                            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;cursor:pointer">
+                                <input type="checkbox" id="adminWlHasSibling"> A sibling is already enrolled
+                            </label>
+                        </div>
+                        <div id="adminWlSibRow" class="hidden">
+                            <div class="admin-wl-row">
+                                <label>Sibling's Name</label>
+                                <input type="text" id="adminWlSibName" placeholder="Sibling's name">
+                            </div>
+                            <div class="admin-wl-row">
+                                <label>Sibling's Room</label>
+                                <select id="adminWlSibRoom">
+                                    <option value="">— select —</option>
+                                    <option value="bear">🐻 Bear (0–12 mo)</option>
+                                    <option value="bee">🐝 Bee (12–24 mo)</option>
+                                    <option value="turtle">🐢 Turtle (2 yrs)</option>
+                                    <option value="owl">🦉 Owl (3+ yrs)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="admin-wl-section-label" style="margin-top:14px">Notes</div>
+                        <div class="admin-wl-row">
+                            <label>Notes</label>
+                            <textarea id="adminWlNotes" rows="2" placeholder="Anything relevant from the call…" style="width:100%;resize:vertical;box-sizing:border-box"></textarea>
+                        </div>
+
+                        <p id="adminWlErr" class="import-error" style="margin:10px 0 0;min-height:1em"></p>
+
+                        <div class="admin-wl-footer">
+                            <button type="button" id="adminWlCancelBtn" class="btn-ghost">Cancel</button>
+                            <button type="button" id="adminWlSubmitBtn" class="btn-primary">Add to Waitlist</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
 
         </div><!-- /#tab-waitlist -->
 
@@ -369,18 +503,6 @@
                 </div>
                 <div id="trendsContent">
                     <p class="empty-hint">Click Generate Trends to view enrollment history.</p>
-                </div>
-            </section>
-
-            <!-- Waitlist Demand -->
-            <section class="admin-section collapsible-section" id="waitlistDemandSection">
-                <h2>⏳ Waitlist Demand</h2>
-                <p class="section-desc">Active waitlist applications by room and desired start month — shows real unmet demand to guide capacity decisions.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateWaitlistBtn" class="btn-secondary">Generate Report</button>
-                </div>
-                <div id="waitlistContent">
-                    <p class="empty-hint">Click Generate Report to view waitlist demand.</p>
                 </div>
             </section>
 

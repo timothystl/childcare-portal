@@ -2264,3 +2264,71 @@ tr.pending-approval:hover { background: #fef3c7; }
 .wl-offer-fields label { display: flex; align-items: center; gap: 6px; }
 .wl-deadline-input { width: 140px; padding: 4px 8px; border: 1px solid #cbd5e0; border-radius: 5px; }
 .wl-notes-input { flex: 1; min-width: 160px; padding: 4px 8px; border: 1px solid #cbd5e0; border-radius: 5px; }
+
+/* ============================================================
+   WAITLIST QUICK LIST TABLE
+   ============================================================ */
+.wl-quick-table { width: 100%; }
+.wl-quick-table th, .wl-quick-table td { text-align: left; vertical-align: top; }
+.wl-quick-table tbody tr:hover { background: #f7faff; }
+
+/* ============================================================
+   ADMIN MANUAL WAITLIST ENTRY MODAL
+   ============================================================ */
+.admin-wl-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 3000;
+    padding: 40px 16px;
+    overflow-y: auto;
+}
+.admin-wl-overlay.hidden { display: none; }
+.admin-wl-dialog {
+    background: #fff;
+    border-radius: 12px;
+    padding: 28px 32px;
+    width: min(560px, 96vw);
+    box-shadow: 0 8px 40px rgba(0,0,0,.18);
+}
+.admin-wl-dialog h3 { margin: 0 0 4px; font-size: 1.15em; color: #2d3748; }
+.admin-wl-section-label {
+    font-size: .75em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: #888;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+}
+.admin-wl-row {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.admin-wl-row label:first-child {
+    font-size: .88em;
+    font-weight: 600;
+    color: #4a5568;
+}
+.admin-wl-row input[type="text"],
+.admin-wl-row input[type="email"],
+.admin-wl-row input[type="tel"],
+.admin-wl-row input[type="date"],
+.admin-wl-row select { width: 100%; box-sizing: border-box; }
+.admin-wl-day-label { font-size: .88em; font-weight: normal; cursor: pointer; }
+.admin-wl-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+.req { color: #e53e3e; }

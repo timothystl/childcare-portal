@@ -3908,7 +3908,6 @@ async function exportPayrollReport() {
 function setupExtraReports() {
     document.getElementById('generateTrendsBtn')?.addEventListener('click', generateEnrollmentTrends);
     document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
-    document.getElementById('generateWaitlistBtn')?.addEventListener('click', generateWaitlistReport);
     document.getElementById('generateYtdBtn')?.addEventListener('click', generateYtdRevenue);
     document.getElementById('exportYtdBtn')?.addEventListener('click', exportYtdRevenue);
 }
@@ -4206,9 +4205,79 @@ async function loadWaitlistApplications() {
     try {
         _allWaitlistApps = await fetchWaitlistApplications();
         renderWaitlistAdmin();
+        renderWaitlistQuickList();
     } catch (err) {
         container.innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
     }
+}
+
+function renderWaitlistQuickList() {
+    const container = document.getElementById('wlQuickListContent');
+    if (!container) return;
+    const apps = (_allWaitlistApps || []).filter(a => ['pending','offered','accepted'].includes(a.status));
+    if (!apps.length) {
+        container.innerHTML = '<p class="empty-hint">No active applications on the waitlist.</p>';
+        return;
+    }
+
+    const sorted = [...apps].sort((a, b) => {
+        const sd = (a.desired_start_date || '').localeCompare(b.desired_start_date || '');
+        return sd !== 0 ? sd : new Date(a.applied_at) - new Date(b.applied_at);
+    });
+
+    const allRooms = [...ROOMS, { id: 'tbd', label: 'TBD / Unborn' }];
+
+    const rows = sorted.map((a, i) => {
+        const roomId  = wlDeriveRoom(a) || 'tbd';
+        const roomObj = allRooms.find(r => r.id === roomId);
+        const roomLabel = roomObj?.label || 'TBD';
+
+        const startStr = a.desired_start_date
+            ? new Date(a.desired_start_date + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+            : '—';
+
+        let ageLabel = '—';
+        const dobStr = a.child_dob || a.expected_due_date;
+        if (dobStr && a.desired_start_date) {
+            const dob    = new Date(dobStr + 'T00:00:00');
+            const start  = new Date(a.desired_start_date + 'T00:00:00');
+            const months = Math.round((start - dob) / (1000 * 60 * 60 * 24 * 30.44));
+            if (months < 0)       ageLabel = 'Unborn';
+            else if (months < 24) ageLabel = `${months} mo`;
+            else                  ageLabel = `${Math.floor(months / 12)} yr ${months % 12} mo`;
+        }
+
+        const sibling = a.has_sibling ? '👨‍👩‍👧 sibling' : '';
+        return `<tr>
+            <td class="report-num">${i + 1}</td>
+            <td><strong>${escHtml(a.child_name)}</strong>${sibling ? `<br><span style="font-size:.8em;color:#667eea">${sibling}</span>` : ''}</td>
+            <td>${startStr}</td>
+            <td>${escHtml(ageLabel)}</td>
+            <td>${escHtml(roomLabel)}</td>
+            <td>${wlStatusBadge(a)}</td>
+            <td>${escHtml(a.parent_name)}<br><a href="mailto:${escHtml(a.parent_email)}" style="font-size:.82em;color:#667eea">${escHtml(a.parent_email)}</a>${a.parent_phone ? `<br><span style="font-size:.82em;color:#888">${escHtml(a.parent_phone)}</span>` : ''}</td>
+            <td style="font-size:.85em;color:#888;white-space:nowrap">${wlDaysWaiting(a.applied_at)}</td>
+        </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="table-wrapper">
+            <table class="report-table wl-quick-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Child</th>
+                        <th>Desired Start</th>
+                        <th>Age at Start</th>
+                        <th>Room</th>
+                        <th>Status</th>
+                        <th>Parent / Contact</th>
+                        <th>Waiting Since</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
 }
 
 function renderWaitlistAdmin() {
@@ -4542,6 +4611,82 @@ function setupWaitlistAdmin() {
     document.getElementById('refreshWaitlistBtn')?.addEventListener('click', loadWaitlistApplications);
     document.getElementById('wlStatusFilter')?.addEventListener('change', renderWaitlistAdmin);
     document.getElementById('wlRoomFilter')?.addEventListener('change', renderWaitlistAdmin);
+    document.getElementById('addToWaitlistBtn')?.addEventListener('click', _openAdminWlModal);
+    document.getElementById('generateWaitlistBtn')?.addEventListener('click', generateWaitlistReport);
+
+    // Modal controls
+    document.getElementById('adminWlCancelBtn')?.addEventListener('click', _closeAdminWlModal);
+    document.getElementById('adminWlSubmitBtn')?.addEventListener('click', _submitAdminWlEntry);
+    document.getElementById('adminWlOverlay')?.addEventListener('click', e => {
+        if (e.target === document.getElementById('adminWlOverlay')) _closeAdminWlModal();
+    });
+    document.getElementById('adminWlIsUnborn')?.addEventListener('change', e => {
+        document.getElementById('adminWlDobRow').classList.toggle('hidden',  e.target.checked);
+        document.getElementById('adminWlDueRow').classList.toggle('hidden', !e.target.checked);
+    });
+    document.getElementById('adminWlHasSibling')?.addEventListener('change', e => {
+        document.getElementById('adminWlSibRow').classList.toggle('hidden', !e.target.checked);
+    });
+}
+
+function _openAdminWlModal() {
+    document.getElementById('adminWlForm').reset();
+    document.getElementById('adminWlDobRow').classList.remove('hidden');
+    document.getElementById('adminWlDueRow').classList.add('hidden');
+    document.getElementById('adminWlSibRow').classList.add('hidden');
+    document.getElementById('adminWlErr').textContent = '';
+    document.getElementById('adminWlSubmitBtn').disabled = false;
+    document.getElementById('adminWlSubmitBtn').textContent = 'Add to Waitlist';
+    document.getElementById('adminWlOverlay').classList.remove('hidden');
+    document.getElementById('adminWlParentName').focus();
+}
+
+function _closeAdminWlModal() {
+    document.getElementById('adminWlOverlay').classList.add('hidden');
+}
+
+async function _submitAdminWlEntry() {
+    const err = document.getElementById('adminWlErr');
+    err.textContent = '';
+
+    const unborn   = document.getElementById('adminWlIsUnborn').checked;
+    const hasSib   = document.getElementById('adminWlHasSibling').checked;
+    const days     = [...document.querySelectorAll('#adminWlForm .adminWlDay:checked')].map(c => c.value);
+    const dayType  = document.querySelector('#adminWlForm input[name="adminWlDayType"]:checked')?.value || 'full';
+
+    const payload = {
+        parent_name:        document.getElementById('adminWlParentName').value.trim(),
+        parent_email:       document.getElementById('adminWlParentEmail').value.trim(),
+        parent_phone:       document.getElementById('adminWlParentPhone').value.trim() || null,
+        child_name:         document.getElementById('adminWlChildName').value.trim(),
+        child_dob:          !unborn ? (document.getElementById('adminWlDob').value || null) : null,
+        expected_due_date:  unborn  ? (document.getElementById('adminWlDueDate').value || null) : null,
+        desired_start_date: document.getElementById('adminWlStartDate').value,
+        start_flexibility:  document.getElementById('adminWlFlexibility').value,
+        days_of_week:       days.length ? days.join(', ') : null,
+        day_type:           dayType,
+        has_sibling:        hasSib,
+        sibling_child_name: hasSib ? (document.getElementById('adminWlSibName').value.trim() || null) : null,
+        sibling_room_id:    hasSib ? (document.getElementById('adminWlSibRoom').value || null) : null,
+        notes:              document.getElementById('adminWlNotes').value.trim() || null,
+        status:             'pending',
+    };
+
+    if (!payload.parent_name || !payload.parent_email || !payload.child_name || !payload.desired_start_date) {
+        err.textContent = 'Please fill in the required fields: parent name, email, child name, and desired start date.';
+        return;
+    }
+
+    const btn = document.getElementById('adminWlSubmitBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+        await submitWaitlistApplication(payload);
+        _closeAdminWlModal();
+        await loadWaitlistApplications();
+    } catch (e) {
+        err.textContent = 'Error: ' + e.message;
+        btn.disabled = false; btn.textContent = 'Add to Waitlist';
+    }
 }
 
 // ============================================================
