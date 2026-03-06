@@ -53,7 +53,9 @@
         <!-- Tab Navigation -->
         <nav class="admin-tabs" id="adminTabs">
             <button class="admin-tab-btn" data-tab="daily">📋 Daily</button>
+            <button class="admin-tab-btn" data-tab="registrations">📝 Registrations</button>
             <button class="admin-tab-btn" data-tab="families">👨‍👩‍👧 Families</button>
+            <button class="admin-tab-btn" data-tab="messages">💬 Messages</button>
             <button class="admin-tab-btn" data-tab="waitlist">⏳ Waitlist</button>
             <button class="admin-tab-btn" data-tab="settings">⚙️ Settings</button>
             <button class="admin-tab-btn" data-tab="reports">📊 Reports</button>
@@ -93,7 +95,11 @@
                 </div>
             </section>
 
-            <!-- Registrations Table -->
+        </div><!-- /#tab-daily -->
+
+        <!-- ── Tab: Registrations ─────────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-registrations">
+
             <section class="table-section collapsible-section" id="allRegistrationsSection">
                 <h2>All Registrations</h2>
                 <div class="filters">
@@ -129,24 +135,10 @@
                 </div>
             </section>
 
-        </div><!-- /#tab-daily -->
+        </div><!-- /#tab-registrations -->
 
         <!-- ── Tab: Families ──────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-families">
-
-            <!-- Messages (top) -->
-            <section class="admin-section collapsible-section" id="messagesSection">
-                <h2>💬 Parent Messages</h2>
-                <p class="section-desc">Messages sent by parents via the Contact Us button on the registration portal.</p>
-                <div class="messages-header">
-                    <button id="refreshMessagesBtn" class="btn-secondary">&#8635; Refresh</button>
-                    <button id="toggleArchivedBtn" class="btn-secondary">Show Archived</button>
-                    <span id="unreadBadge" class="unread-badge hidden"></span>
-                </div>
-                <div id="messagesList">
-                    <p class="empty-hint">Click Refresh to load messages.</p>
-                </div>
-            </section>
 
             <!-- Family Directory -->
             <section class="admin-section collapsible-section" id="familiesSection">
@@ -188,6 +180,24 @@
             </section>
 
         </div><!-- /#tab-families -->
+
+        <!-- ── Tab: Messages ─────────────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-messages">
+
+            <section class="admin-section collapsible-section" id="messagesSection">
+                <h2>💬 Parent Messages</h2>
+                <p class="section-desc">Messages sent by parents via the Contact Us button on the registration portal.</p>
+                <div class="messages-header">
+                    <button id="refreshMessagesBtn" class="btn-secondary">&#8635; Refresh</button>
+                    <button id="toggleArchivedBtn" class="btn-secondary">Show Archived</button>
+                    <span id="unreadBadge" class="unread-badge hidden"></span>
+                </div>
+                <div id="messagesList">
+                    <p class="empty-hint">Loading messages…</p>
+                </div>
+            </section>
+
+        </div><!-- /#tab-messages -->
 
         <!-- ── Tab: Waitlist ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-waitlist">
