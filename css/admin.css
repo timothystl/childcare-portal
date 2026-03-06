@@ -2342,3 +2342,7 @@ tr.pending-approval:hover { background: #fef3c7; }
 .sched-legend      { font-size: .78em; color: #888; margin-top: 8px; }
 .sched-near-swatch { display: inline-block; width: 10px; height: 10px; background: #fef9c3; border: 1px solid #d97706; border-radius: 2px; vertical-align: middle; }
 .sched-full-swatch { display: inline-block; width: 10px; height: 10px; background: #fee2e2; border: 1px solid #dc2626; border-radius: 2px; vertical-align: middle; }
+
+/* YTD discount column */
+.ytd-discount-cell  { color: #b45309; }
+.ytd-discount-total { color: #b45309; font-weight: 600; font-size: .95em; }
