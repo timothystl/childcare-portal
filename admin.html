@@ -71,6 +71,24 @@
                 <div id="capacityGrid"></div>
             </section>
 
+            <!-- Room Schedule Planner -->
+            <section class="admin-section collapsible-section" id="roomSchedSection">
+                <h2>📅 Room Schedule Planner</h2>
+                <p class="section-desc">Weekly enrollment by classroom — shows how full each room is for each day. AM = all enrolled children, PM = full-day only.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="roomSchedWeekOf">Week of (Monday)</label>
+                        <input type="date" id="roomSchedWeekOf">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="viewRoomSchedBtn" class="btn-secondary">View Week</button>
+                    </div>
+                </div>
+                <div id="roomSchedContent">
+                    <p class="empty-hint">Select a week above and click View Week.</p>
+                </div>
+            </section>
+
             <!-- Daily Roster -->
             <section class="admin-section collapsible-section" id="dailyRosterSection">
                 <h2>📋 Daily Classroom Roster</h2>

@@ -404,6 +404,83 @@ function setupRoomCalendar() {
             if (card) { e.preventDefault(); openRoomCalendar(card.dataset.roomId, card.dataset.monthKey); }
         }
     });
+
+    // Default room schedule week to the current Monday
+    const rsWeekInput = document.getElementById('roomSchedWeekOf');
+    if (rsWeekInput) {
+        const today = new Date();
+        const day   = today.getDay();                         // 0=Sun … 6=Sat
+        const diff  = (day === 0 ? -6 : 1 - day);            // days back to Mon
+        const mon   = new Date(today);
+        mon.setDate(today.getDate() + diff);
+        rsWeekInput.value = mon.toISOString().split('T')[0];
+    }
+    document.getElementById('viewRoomSchedBtn')?.addEventListener('click', renderRoomSchedule);
+}
+
+async function renderRoomSchedule() {
+    const weekOf    = document.getElementById('roomSchedWeekOf')?.value;
+    if (!weekOf) { alert('Please select a week first.'); return; }
+
+    const btn       = document.getElementById('viewRoomSchedBtn');
+    const container = document.getElementById('roomSchedContent');
+    btn.disabled = true; btn.textContent = 'Loading…';
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+
+    try {
+        // Ensure registration data is loaded
+        if (!allRegistrations.length) allRegistrations = await fetchAllRegistrations();
+
+        const weekDates = _buildWeekDates(weekOf);
+        if (!weekDates.length) {
+            container.innerHTML = '<p class="empty-hint">No school days in this week (all weekends or closed days).</p>';
+            return;
+        }
+
+        const counts = _buildShiftCounts(weekDates);
+
+        const roomHeaders = ROOMS.map(r => `<th colspan="2" class="staff-room-header">${r.label}</th>`).join('');
+        const subHeaders  = ROOMS.map(() =>
+            `<th class="staff-sub-head shift-am-th">AM</th><th class="staff-sub-head shift-pm-th">PM</th>`
+        ).join('');
+
+        const rows = weekDates.map(d => {
+            const dt    = new Date(d + 'T00:00:00');
+            const label = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
+            const cells = ROOMS.map(room => {
+                const c   = counts[d][room.id] || { total: 0, fullDay: 0 };
+                const cap = room.capacity || 0;
+
+                const amCls = cap && c.total   >= cap ? 'sched-full' : cap && c.total   >= cap * .8 ? 'sched-near' : '';
+                const pmCls = cap && c.fullDay >= cap ? 'sched-full' : cap && c.fullDay >= cap * .8 ? 'sched-near' : '';
+
+                const amStr = cap ? `${c.total}/${cap}`    : (c.total   > 0 ? String(c.total)   : '—');
+                const pmStr = cap ? `${c.fullDay}/${cap}`  : (c.fullDay > 0 ? String(c.fullDay) : '—');
+
+                return `<td class="sched-cell ${amCls}">${amStr}</td><td class="sched-cell ${pmCls}">${pmStr}</td>`;
+            }).join('');
+            return `<tr><td class="staff-date-cell"><strong>${label}</strong></td>${cells}</tr>`;
+        }).join('');
+
+        container.innerHTML = `
+            <div class="table-wrapper staff-table-wrap">
+                <table class="report-table autofill-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="staff-date-header">Date</th>
+                            ${roomHeaders}
+                        </tr>
+                        <tr>${subHeaders}</tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            <p class="sched-legend">AM = all enrolled &nbsp;·&nbsp; PM = full-day only &nbsp;·&nbsp; <span class="sched-near-swatch"></span> ≥80% full &nbsp;·&nbsp; <span class="sched-full-swatch"></span> at/over capacity</p>`;
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    } finally {
+        btn.disabled = false; btn.textContent = 'View Week';
+    }
 }
 
 // ---- Day Roster Detail popup (inside room calendar) ----
