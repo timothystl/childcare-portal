@@ -640,6 +640,15 @@ async function archiveMessage(id, archived = true) {
     if (error) throw error;
 }
 
+async function deleteMessage(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('messages')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+}
+
 // fetchRegistrationsByEmail — used by parent lookup portal
 async function fetchRegistrationsByEmail(email) {
     if (!sbClient) throw new Error('Supabase not configured.');
