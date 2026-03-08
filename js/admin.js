@@ -4427,27 +4427,16 @@ function renderWaitlistQuickList() {
     container.innerHTML = `
         <div class="table-wrapper">
             <table class="report-table wl-quick-table">
-                <colgroup>
-                    <col style="width:38px">
-                    <col style="width:15%">
-                    <col style="width:12%">
-                    <col style="width:10%">
-                    <col style="width:14%">
-                    <col style="width:10%">
-                    <col style="width:22%">
-                    <col style="width:10%">
-                    <col style="width:110px">
-                </colgroup>
                 <thead>
                     <tr>
-                        <th class="wl-th" data-col="pos">#${sortArrow('pos')}</th>
-                        <th class="wl-th" data-col="child">Child${sortArrow('child')}</th>
-                        <th class="wl-th" data-col="start">Desired Start${sortArrow('start')}</th>
-                        <th class="wl-th" data-col="age">Age at Start${sortArrow('age')}</th>
-                        <th class="wl-th" data-col="room">Room${sortArrow('room')}</th>
-                        <th class="wl-th" data-col="status">Status${sortArrow('status')}</th>
+                        <th class="wl-th" data-col="pos"   style="width:36px">#${sortArrow('pos')}</th>
+                        <th class="wl-th" data-col="child" style="width:13%">Child${sortArrow('child')}</th>
+                        <th class="wl-th" data-col="start" style="width:108px">Desired Start${sortArrow('start')}</th>
+                        <th class="wl-th" data-col="age"   style="width:90px">Age at Start${sortArrow('age')}</th>
+                        <th class="wl-th" data-col="room"  style="width:13%">Room${sortArrow('room')}</th>
+                        <th class="wl-th" data-col="status" style="width:88px">Status${sortArrow('status')}</th>
                         <th class="wl-th" data-col="parent">Parent / Contact${sortArrow('parent')}</th>
-                        <th class="wl-th" data-col="waiting">Waiting Since${sortArrow('waiting')}</th>
+                        <th class="wl-th" data-col="waiting" style="width:90px">Waiting Since${sortArrow('waiting')}</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
