@@ -2282,14 +2282,14 @@ tr.pending-approval:hover { background: #fef3c7; }
    WAITLIST QUICK LIST TABLE
    ============================================================ */
 .wl-quick-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
-.wl-quick-table th, .wl-quick-table td { text-align: left; vertical-align: top; padding: 8px 10px; }
+.wl-quick-table th, .wl-quick-table td { text-align: left; vertical-align: top; padding: 8px 10px; overflow: hidden; }
 .wl-quick-table tbody tr:hover { background: #eef4f8; }
-.wl-quick-table .wl-th { white-space: nowrap; user-select: none; }
+.wl-quick-table .wl-th { white-space: nowrap; user-select: none; overflow: visible; }
 .wl-quick-table .wl-th:hover { background: #d0dde6; }
-.wl-td-pos    { width: 38px;  text-align: center; color: #888; font-size: .85em; }
+.wl-td-pos    { text-align: center; color: #888; font-size: .85em; }
 .wl-td-start,
 .wl-td-age,
-.wl-td-waiting { white-space: nowrap; font-size: .88em; }
+.wl-td-waiting { font-size: .88em; }
 .wl-td-status { white-space: nowrap; }
 .wl-td-actions { white-space: nowrap; }
 .wl-sib-tag   { font-size: .78em; color: #3d627c; }
