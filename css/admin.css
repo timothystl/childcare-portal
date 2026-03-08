@@ -207,7 +207,7 @@
 .discount-cell { font-size: .85em; color: #2d4f68; font-weight: 500; }
 
 #regTable tbody tr { border-bottom: 1px solid #f0f0f0; }
-#regTable tbody tr:hover { background: #f8f9ff; }
+#regTable tbody tr:hover { background: #f4f8fb; }
 #regTable tbody td { padding: 12px 14px; vertical-align: top; }
 
 .loading-cell {
@@ -374,7 +374,7 @@ tr.pending-approval:hover { background: #fef3c7; }
     font-weight: 600;
 }
 .roster-table tbody tr { border-bottom: 1px solid #f0f0f0; }
-.roster-table tbody tr:hover { background: #f8f9ff; }
+.roster-table tbody tr:hover { background: #f4f8fb; }
 .roster-table tbody td { padding: 10px 14px; }
 
 .day-chip {
@@ -506,7 +506,7 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 .report-table thead th:not(:first-child) { text-align: right; }
 .report-table tbody tr { border-bottom: 1px solid #f0f0f0; }
-.report-table tbody tr:hover { background: #f8f9ff; }
+.report-table tbody tr:hover { background: #f4f8fb; }
 .report-table tbody td { padding: 10px 14px; }
 .report-table tfoot td {
     padding: 11px 14px;
@@ -543,13 +543,13 @@ tr.pending-approval:hover { background: #fef3c7; }
     line-height: 1.5;
     padding: 8px 14px;
     border-radius: 7px;
-    background: #f8f9ff;
+    background: #f4f8fb;
     color: #555;
     max-width: 540px;
 }
 .override-status.override-open   { background: #f0fff4; color: #276749; }
 .override-status.override-closed { background: #fff5f5; color: #9b2c2c; }
-.override-status.override-auto   { background: #f8f9ff; color: #444; }
+.override-status.override-auto   { background: #f4f8fb; color: #444; }
 
 /* Bill column in All Registrations table */
 .bill-cell {
@@ -835,7 +835,7 @@ tr.pending-approval:hover { background: #fef3c7; }
     border: 1.5px solid #d0dde6;
     border-radius: 6px;
     font-size: .78em;
-    background: #f8f9ff;
+    background: #f4f8fb;
     color: #444;
     cursor: pointer;
     transition: border-color .2s;
@@ -880,7 +880,7 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 .message-unread {
     border-left-color: #3d627c;
-    background: #f8f9ff;
+    background: #f4f8fb;
 }
 .message-header {
     display: flex;
@@ -1602,8 +1602,8 @@ tr.pending-approval:hover { background: #fef3c7; }
     padding: 8px 0;
 }
 .fm-child-row {
-    background: #f8f9ff;
-    border: 1.5px solid #e0e6ff;
+    background: #f4f8fb;
+    border: 1.5px solid #d0dde6;
     border-radius: 8px;
     padding: 12px;
     margin-bottom: 10px;
@@ -1731,7 +1731,7 @@ tr.pending-approval:hover { background: #fef3c7; }
     align-items: center;
     padding: 14px 18px;
     border-bottom: 1px solid #e2e8f0;
-    background: #f8f9ff;
+    background: #f4f8fb;
     border-radius: 12px 12px 0 0;
 }
 .day-detail-title {
@@ -2038,7 +2038,7 @@ tr.pending-approval:hover { background: #fef3c7; }
 
 /* Inline add/edit form */
 .staff-edit-form {
-    background: #f8f9ff;
+    background: #f4f8fb;
     border: 1.5px solid #d0dde6;
     border-radius: 10px;
     padding: 18px 20px;
@@ -2281,9 +2281,34 @@ tr.pending-approval:hover { background: #fef3c7; }
 /* ============================================================
    WAITLIST QUICK LIST TABLE
    ============================================================ */
-.wl-quick-table { width: 100%; }
-.wl-quick-table th, .wl-quick-table td { text-align: left; vertical-align: top; }
-.wl-quick-table tbody tr:hover { background: #f7faff; }
+.wl-quick-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.wl-quick-table th, .wl-quick-table td { text-align: left; vertical-align: top; padding: 8px 10px; }
+.wl-quick-table tbody tr:hover { background: #eef4f8; }
+.wl-quick-table .wl-th { white-space: nowrap; user-select: none; }
+.wl-quick-table .wl-th:hover { background: #d0dde6; }
+.wl-td-pos    { width: 38px;  text-align: center; color: #888; font-size: .85em; }
+.wl-td-start,
+.wl-td-age,
+.wl-td-waiting { white-space: nowrap; font-size: .88em; }
+.wl-td-status { white-space: nowrap; }
+.wl-td-actions { white-space: nowrap; }
+.wl-sib-tag   { font-size: .78em; color: #3d627c; }
+.wl-email-link { font-size: .82em; color: #3d627c; }
+.wl-phone     { font-size: .82em; color: #888; }
+.sort-arrow   { font-size: .75em; color: #3d627c; }
+.sort-arrow-none { color: #bbb; }
+.btn-wl-offer-quick {
+    background: #d9a429;
+    color: #fff;
+    border: none;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: .78em;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.btn-wl-offer-quick:hover { background: #b8891f; }
 
 /* ============================================================
    ADMIN MANUAL WAITLIST ENTRY MODAL

@@ -65,6 +65,30 @@
         <!-- ── Tab: Daily ─────────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-daily">
 
+            <!-- Daily Roster (most-used — at top) -->
+            <section class="admin-section collapsible-section" id="dailyRosterSection">
+                <h2>📋 Daily Classroom Roster</h2>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="rosterDate">Date</label>
+                        <input type="date" id="rosterDate">
+                    </div>
+                    <div class="roster-field">
+                        <label for="rosterRoomFilter">Room</label>
+                        <select id="rosterRoomFilter">
+                            <option value="">All Rooms</option>
+                        </select>
+                    </div>
+                    <div class="roster-btns">
+                        <button id="viewRosterBtn" class="btn-secondary">View Roster</button>
+                        <button id="exportRosterBtn" class="btn-primary">&#128438; Print / PDF</button>
+                    </div>
+                </div>
+                <div id="rosterContent">
+                    <p class="empty-hint">Select a date above and click View Roster.</p>
+                </div>
+            </section>
+
             <!-- Capacity Overview -->
             <section class="capacity-section">
                 <h2>Capacity Overview</h2>
@@ -86,30 +110,6 @@
                 </div>
                 <div id="roomSchedContent">
                     <p class="empty-hint">Select a week above and click View Week.</p>
-                </div>
-            </section>
-
-            <!-- Daily Roster -->
-            <section class="admin-section collapsible-section" id="dailyRosterSection">
-                <h2>📋 Daily Classroom Roster</h2>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="rosterDate">Date</label>
-                        <input type="date" id="rosterDate">
-                    </div>
-                    <div class="roster-field">
-                        <label for="rosterRoomFilter">Room</label>
-                        <select id="rosterRoomFilter">
-                            <option value="">All Rooms</option>
-                        </select>
-                    </div>
-                    <div class="roster-btns">
-                        <button id="viewRosterBtn" class="btn-secondary">View Roster</button>
-                        <button id="exportRosterBtn" class="btn-primary">&#128438; Print / PDF</button>
-                    </div>
-                </div>
-                <div id="rosterContent">
-                    <p class="empty-hint">Select a date above and click View Roster.</p>
                 </div>
             </section>
 
@@ -220,19 +220,10 @@
         <!-- ── Tab: Waitlist ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-waitlist">
 
-            <!-- Quick List -->
+            <!-- Waitlist (Quick List is primary view) -->
             <section class="admin-section collapsible-section" id="wlQuickListSection">
-                <h2>📋 Waitlist Quick List</h2>
-                <p class="section-desc">All active applications at a glance — child, desired start date, age &amp; room at start time.</p>
-                <div id="wlQuickListContent">
-                    <p class="empty-hint">Load the waitlist below to populate this summary.</p>
-                </div>
-            </section>
-
-            <!-- Management -->
-            <section class="admin-section collapsible-section" id="waitlistSection">
                 <h2>⏳ Enrollment Waitlist</h2>
-                <p class="section-desc">Families waiting for an enrollment spot. Sorted by priority: siblings first, then by desired start date, then by application date (oldest first).</p>
+                <p class="section-desc">Active applications — click a column header to sort. Use <strong>Make Offer</strong> to send a spot offer by email.</p>
 
                 <div class="families-dir-controls" style="margin-bottom:12px;">
                     <button id="addToWaitlistBtn" class="btn-primary">+ Add to Waitlist</button>
@@ -254,9 +245,43 @@
                     <span id="wlCount" class="rates-status"></span>
                 </div>
 
-                <div id="waitlistAdminContent">
+                <div id="wlQuickListContent">
                     <p class="empty-hint">Click Refresh to load the waitlist.</p>
                 </div>
+            </section>
+
+            <!-- Offer Modal -->
+            <div id="wlOfferModal" class="admin-wl-overlay hidden">
+                <div class="admin-wl-dialog" style="max-width:480px">
+                    <h3>Make Enrollment Offer</h3>
+                    <p id="wlOfferModalDesc" style="color:#666;font-size:.9em;margin:0 0 16px"></p>
+                    <div class="admin-wl-row">
+                        <label>Offer Deadline <span class="req">*</span></label>
+                        <input type="date" id="wlOfferDeadline">
+                    </div>
+                    <div class="admin-wl-row">
+                        <label>Procare Link</label>
+                        <input type="url" id="wlOfferProcare" placeholder="https://…">
+                    </div>
+                    <div class="admin-wl-row">
+                        <label>Paperwork Links</label>
+                        <input type="text" id="wlOfferPaperwork" placeholder="comma-separated URLs">
+                    </div>
+                    <div class="admin-wl-row">
+                        <label>Notes</label>
+                        <textarea id="wlOfferNotes" rows="2" style="width:100%;resize:vertical;box-sizing:border-box" placeholder="Optional notes for the parent…"></textarea>
+                    </div>
+                    <p id="wlOfferErr" class="import-error" style="margin:8px 0 0;min-height:1em"></p>
+                    <div class="admin-wl-footer">
+                        <button type="button" id="wlOfferCancelBtn" class="btn-ghost">Cancel</button>
+                        <button type="button" id="wlOfferSendBtn" class="btn-primary">Send &amp; Email Parent</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed card view (for archive/restore/accept actions) -->
+            <section class="admin-section collapsible-section" id="waitlistSection" style="display:none">
+                <div id="waitlistAdminContent"></div>
             </section>
 
             <!-- Demand Report (moved from Reports tab) -->
@@ -561,8 +586,54 @@
                 </div>
             </section>
 
-            <!-- Staff Roster -->
-            <section class="admin-section collapsible-section" id="staffRosterSection">
+            <!-- Log Hours -->
+            <section class="admin-section collapsible-section" id="logHoursSection">
+                <h2>⏱ Log Hours</h2>
+                <p class="section-desc">Record actual hours worked by each staff member for a given day. Re-open the same date to update entries.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="logHoursDate">Date</label>
+                        <input type="date" id="logHoursDate">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="loadHoursBtn" class="btn-secondary">Load</button>
+                        <button id="saveHoursBtn" class="btn-primary">💾 Save Hours</button>
+                        <button id="syncClockBtn" class="btn-ghost">⟳ Sync from Clock-In</button>
+                    </div>
+                </div>
+                <div id="hoursEntryContent">
+                    <p class="empty-hint">Select a date and click Load to enter hours.</p>
+                </div>
+            </section>
+
+            <!-- Payroll Report -->
+            <section class="admin-section collapsible-section" id="payrollSection">
+                <h2>💵 Payroll Report</h2>
+                <p class="section-desc">Bi-weekly pay period summary with gross pay and year-to-date totals per staff member.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="payrollPeriod">Pay Period</label>
+                        <select id="payrollPeriod" class="family-search-input" style="min-width:230px">
+                            <!-- populated by setupPayrollReport() -->
+                        </select>
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generatePayrollBtn" class="btn-secondary">Generate Report</button>
+                        <button id="exportPayrollBtn" class="btn-primary">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="payrollContent">
+                    <p class="empty-hint">Select a pay period and click Generate Report.</p>
+                </div>
+            </section>
+
+            <!-- Staff Roster toggle button -->
+            <div style="padding:0 24px 8px">
+                <button id="toggleStaffRosterBtn" class="btn-ghost">👥 Show Staff Roster</button>
+            </div>
+
+            <!-- Staff Roster (less-frequently changed — toggled below Payroll) -->
+            <section class="admin-section collapsible-section" id="staffRosterSection" style="display:none">
                 <h2>👥 Staff Roster</h2>
                 <p class="section-desc">Manage active staff members. Name, role, pay rate, and room assignment are used for the payroll report. Assign a 4-digit PIN so staff can clock in/out from the mobile clock-in page.</p>
                 <div class="families-dir-controls">
@@ -660,47 +731,6 @@
                 </div>
                 <div id="staffRosterContent">
                     <p class="empty-hint">Click Refresh to load staff.</p>
-                </div>
-            </section>
-
-            <!-- Log Hours -->
-            <section class="admin-section collapsible-section" id="logHoursSection">
-                <h2>⏱ Log Hours</h2>
-                <p class="section-desc">Record actual hours worked by each staff member for a given day. Re-open the same date to update entries.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="logHoursDate">Date</label>
-                        <input type="date" id="logHoursDate">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="loadHoursBtn" class="btn-secondary">Load</button>
-                        <button id="saveHoursBtn" class="btn-primary">💾 Save Hours</button>
-                        <button id="syncClockBtn" class="btn-ghost">⟳ Sync from Clock-In</button>
-                    </div>
-                </div>
-                <div id="hoursEntryContent">
-                    <p class="empty-hint">Select a date and click Load to enter hours.</p>
-                </div>
-            </section>
-
-            <!-- Payroll Report -->
-            <section class="admin-section collapsible-section" id="payrollSection">
-                <h2>💵 Payroll Report</h2>
-                <p class="section-desc">Bi-weekly pay period summary with gross pay and year-to-date totals per staff member.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="payrollPeriod">Pay Period</label>
-                        <select id="payrollPeriod" class="family-search-input" style="min-width:230px">
-                            <!-- populated by setupPayrollReport() -->
-                        </select>
-                    </div>
-                    <div class="roster-btns">
-                        <button id="generatePayrollBtn" class="btn-secondary">Generate Report</button>
-                        <button id="exportPayrollBtn" class="btn-primary">&#8595; Export Excel</button>
-                    </div>
-                </div>
-                <div id="payrollContent">
-                    <p class="empty-hint">Select a pay period and click Generate Report.</p>
                 </div>
             </section>
 

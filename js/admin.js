@@ -3232,6 +3232,17 @@ let editingStaffId     = null;
 let staffAvailability  = {};   // { staffId: { days: [...], maxHours: 40 } }
 
 function setupStaffRoster() {
+    // Toggle Staff Roster visibility (shown below Payroll)
+    document.getElementById('toggleStaffRosterBtn')?.addEventListener('click', () => {
+        const section = document.getElementById('staffRosterSection');
+        const btn     = document.getElementById('toggleStaffRosterBtn');
+        const visible = section.style.display !== 'none';
+        section.style.display = visible ? 'none' : '';
+        btn.textContent = visible ? '👥 Show Staff Roster' : '👥 Hide Staff Roster';
+        btn.classList.toggle('btn-active', !visible);
+        if (!visible && !allStaffData.length) loadStaffList();
+    });
+
     document.getElementById('addStaffBtn')?.addEventListener('click', () => openStaffForm());
     document.getElementById('cancelStaffBtn')?.addEventListener('click', closeStaffForm);
     document.getElementById('saveStaffBtn')?.addEventListener('click', onSaveStaffMember);
@@ -4291,38 +4302,98 @@ function wlDaysWaiting(appliedAt) {
 }
 
 let _allWaitlistApps = [];
+let _wlSortCol = 'start';   // 'pos'|'child'|'start'|'age'|'room'|'status'|'parent'|'waiting'
+let _wlSortDir = 1;          // 1 = asc, -1 = desc
 
 async function loadWaitlistApplications() {
-    const container = document.getElementById('waitlistAdminContent');
+    const container = document.getElementById('wlQuickListContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
         _allWaitlistApps = await fetchWaitlistApplications();
         renderWaitlistAdmin();
         renderWaitlistQuickList();
     } catch (err) {
-        container.innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
+        document.getElementById('wlQuickListContent').innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
     }
 }
 
 function renderWaitlistQuickList() {
     const container = document.getElementById('wlQuickListContent');
     if (!container) return;
-    const apps = (_allWaitlistApps || []).filter(a => ['pending','offered','accepted'].includes(a.status));
+
+    const statusFilter = document.getElementById('wlStatusFilter')?.value || 'active';
+    const roomFilter   = document.getElementById('wlRoomFilter')?.value   || '';
+
+    let apps = (_allWaitlistApps || []).slice();
+
+    if (statusFilter === 'active') {
+        apps = apps.filter(a => ['pending','offered','accepted'].includes(a.status));
+    } else if (statusFilter === 'enrolled') {
+        apps = apps.filter(a => a.status === 'enrolled');
+    } else if (statusFilter === 'archived') {
+        apps = apps.filter(a => ['declined','expired','archived'].includes(a.status));
+    }
+
+    if (roomFilter) {
+        apps = apps.filter(a => {
+            if (roomFilter === 'tbd') return !a.child_dob && !a.expected_due_date;
+            return wlDeriveRoom(a) === roomFilter;
+        });
+    }
+
+    // Priority sort baseline (sibling priority stays as tiebreaker for position)
+    apps.sort((a, b) => {
+        const sibA = a.has_sibling ? 0 : 1, sibB = b.has_sibling ? 0 : 1;
+        if (sibA !== sibB) return sibA - sibB;
+        return new Date(a.applied_at) - new Date(b.applied_at);
+    });
+
+    // Numbered position before user sort
+    apps.forEach((a, i) => { a._pos = i + 1; });
+
+    // User-selected sort
+    apps.sort((a, b) => {
+        let va, vb;
+        switch (_wlSortCol) {
+            case 'pos':     va = a._pos; vb = b._pos; break;
+            case 'child':   va = a.child_name || ''; vb = b.child_name || ''; break;
+            case 'start':   va = a.desired_start_date || ''; vb = b.desired_start_date || ''; break;
+            case 'age': {
+                const ageMonths = x => {
+                    const dob = x.child_dob || x.expected_due_date;
+                    if (!dob || !x.desired_start_date) return 9999;
+                    return Math.round((new Date(x.desired_start_date+'T00:00:00') - new Date(dob+'T00:00:00')) / (1000*60*60*24*30.44));
+                };
+                va = ageMonths(a); vb = ageMonths(b); break;
+            }
+            case 'room':    va = wlDeriveRoom(a) || 'zzz'; vb = wlDeriveRoom(b) || 'zzz'; break;
+            case 'status':  va = a.status || ''; vb = b.status || ''; break;
+            case 'parent':  va = a.parent_name || ''; vb = b.parent_name || ''; break;
+            case 'waiting': va = a.applied_at || ''; vb = b.applied_at || ''; break;
+            default:        va = 0; vb = 0;
+        }
+        if (va < vb) return -1 * _wlSortDir;
+        if (va > vb) return  1 * _wlSortDir;
+        return 0;
+    });
+
+    document.getElementById('wlCount').textContent = `${apps.length} application${apps.length !== 1 ? 's' : ''}`;
+
     if (!apps.length) {
-        container.innerHTML = '<p class="empty-hint">No active applications on the waitlist.</p>';
+        container.innerHTML = '<p class="empty-hint">No applications match the current filter.</p>';
         return;
     }
 
-    const sorted = [...apps].sort((a, b) => {
-        const sd = (a.desired_start_date || '').localeCompare(b.desired_start_date || '');
-        return sd !== 0 ? sd : new Date(a.applied_at) - new Date(b.applied_at);
-    });
-
     const allRooms = [...ROOMS, { id: 'tbd', label: 'TBD / Unborn' }];
 
-    const rows = sorted.map((a, i) => {
-        const roomId  = wlDeriveRoom(a) || 'tbd';
-        const roomObj = allRooms.find(r => r.id === roomId);
+    const sortArrow = col => {
+        if (_wlSortCol !== col) return ' <span class="sort-arrow sort-arrow-none">⇅</span>';
+        return _wlSortDir === 1 ? ' <span class="sort-arrow">▲</span>' : ' <span class="sort-arrow">▼</span>';
+    };
+
+    const rows = apps.map((a, idx) => {
+        const roomId    = wlDeriveRoom(a) || 'tbd';
+        const roomObj   = allRooms.find(r => r.id === roomId);
         const roomLabel = roomObj?.label || 'TBD';
 
         const startStr = a.desired_start_date
@@ -4332,45 +4403,91 @@ function renderWaitlistQuickList() {
         let ageLabel = '—';
         const dobStr = a.child_dob || a.expected_due_date;
         if (dobStr && a.desired_start_date) {
-            const dob    = new Date(dobStr + 'T00:00:00');
-            const start  = new Date(a.desired_start_date + 'T00:00:00');
-            const months = Math.round((start - dob) / (1000 * 60 * 60 * 24 * 30.44));
+            const months = Math.round((new Date(a.desired_start_date+'T00:00:00') - new Date(dobStr+'T00:00:00')) / (1000*60*60*24*30.44));
             if (months < 0)       ageLabel = 'Unborn';
             else if (months < 24) ageLabel = `${months} mo`;
-            else                  ageLabel = `${Math.floor(months / 12)} yr ${months % 12} mo`;
+            else                  ageLabel = `${Math.floor(months/12)} yr ${months%12} mo`;
         }
 
-        const sibling = a.has_sibling ? '👨‍👩‍👧 sibling' : '';
+        const canOffer = ['pending','offered'].includes(a.status);
+
         return `<tr>
-            <td class="report-num">${i + 1}</td>
-            <td><strong>${escHtml(a.child_name)}</strong>${sibling ? `<br><span style="font-size:.8em;color:#667eea">${sibling}</span>` : ''}</td>
-            <td>${startStr}</td>
-            <td>${escHtml(ageLabel)}</td>
-            <td>${escHtml(roomLabel)}</td>
-            <td>${wlStatusBadge(a)}</td>
-            <td>${escHtml(a.parent_name)}<br><a href="mailto:${escHtml(a.parent_email)}" style="font-size:.82em;color:#667eea">${escHtml(a.parent_email)}</a>${a.parent_phone ? `<br><span style="font-size:.82em;color:#888">${escHtml(a.parent_phone)}</span>` : ''}</td>
-            <td style="font-size:.85em;color:#888;white-space:nowrap">${wlDaysWaiting(a.applied_at)}</td>
+            <td class="wl-td-pos">${a._pos}</td>
+            <td class="wl-td-child"><strong>${escHtml(a.child_name)}</strong>${a.has_sibling ? `<br><span class="wl-sib-tag">👨‍👩‍👧 sibling</span>` : ''}</td>
+            <td class="wl-td-start">${startStr}</td>
+            <td class="wl-td-age">${escHtml(ageLabel)}</td>
+            <td class="wl-td-room">${escHtml(roomLabel)}</td>
+            <td class="wl-td-status">${wlStatusBadge(a)}</td>
+            <td class="wl-td-parent">${escHtml(a.parent_name)}<br><a href="mailto:${escHtml(a.parent_email)}" class="wl-email-link">${escHtml(a.parent_email)}</a>${a.parent_phone ? `<br><span class="wl-phone">${escHtml(a.parent_phone)}</span>` : ''}</td>
+            <td class="wl-td-waiting">${wlDaysWaiting(a.applied_at)}</td>
+            <td class="wl-td-actions">${canOffer ? `<button class="btn-wl-offer-quick" data-id="${a.id}" data-name="${escHtml(a.parent_name)}" data-email="${escHtml(a.parent_email)}" data-child="${escHtml(a.child_name)}">Make Offer</button>` : ''}</td>
         </tr>`;
     }).join('');
 
     container.innerHTML = `
         <div class="table-wrapper">
             <table class="report-table wl-quick-table">
+                <colgroup>
+                    <col style="width:38px">
+                    <col style="width:15%">
+                    <col style="width:12%">
+                    <col style="width:10%">
+                    <col style="width:14%">
+                    <col style="width:10%">
+                    <col style="width:22%">
+                    <col style="width:10%">
+                    <col style="width:110px">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Child</th>
-                        <th>Desired Start</th>
-                        <th>Age at Start</th>
-                        <th>Room</th>
-                        <th>Status</th>
-                        <th>Parent / Contact</th>
-                        <th>Waiting Since</th>
+                        <th class="wl-th" data-col="pos">#${sortArrow('pos')}</th>
+                        <th class="wl-th" data-col="child">Child${sortArrow('child')}</th>
+                        <th class="wl-th" data-col="start">Desired Start${sortArrow('start')}</th>
+                        <th class="wl-th" data-col="age">Age at Start${sortArrow('age')}</th>
+                        <th class="wl-th" data-col="room">Room${sortArrow('room')}</th>
+                        <th class="wl-th" data-col="status">Status${sortArrow('status')}</th>
+                        <th class="wl-th" data-col="parent">Parent / Contact${sortArrow('parent')}</th>
+                        <th class="wl-th" data-col="waiting">Waiting Since${sortArrow('waiting')}</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
             </table>
         </div>`;
+
+    // Sort header clicks
+    container.querySelectorAll('.wl-th').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', () => {
+            const col = th.dataset.col;
+            if (_wlSortCol === col) _wlSortDir *= -1;
+            else { _wlSortCol = col; _wlSortDir = 1; }
+            renderWaitlistQuickList();
+        });
+    });
+
+    // Make Offer buttons
+    container.querySelectorAll('.btn-wl-offer-quick').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const modal = document.getElementById('wlOfferModal');
+            modal.dataset.appId      = btn.dataset.id;
+            modal.dataset.parentName = btn.dataset.name;
+            modal.dataset.parentEmail= btn.dataset.email;
+            modal.dataset.childName  = btn.dataset.child;
+            document.getElementById('wlOfferModalDesc').textContent = `Offering a spot to ${btn.dataset.child} — parent: ${btn.dataset.name} (${btn.dataset.email})`;
+            document.getElementById('wlOfferErr').textContent = '';
+            document.getElementById('wlOfferSendBtn').disabled = false;
+            document.getElementById('wlOfferSendBtn').textContent = 'Send & Email Parent';
+            // Pre-fill global links
+            fetchGlobalOfferLinks().then(g => {
+                const procareEl  = document.getElementById('wlOfferProcare');
+                const paperwkEl  = document.getElementById('wlOfferPaperwork');
+                if (procareEl && !procareEl.value) procareEl.value = g.procareLink || '';
+                if (paperwkEl && !paperwkEl.value) paperwkEl.value = (g.paperworkLinks || []).join(', ');
+            }).catch(() => {});
+            modal.classList.remove('hidden');
+        });
+    });
 }
 
 function renderWaitlistAdmin() {
@@ -4702,8 +4819,44 @@ function renderWaitlistAdmin() {
 
 function setupWaitlistAdmin() {
     document.getElementById('refreshWaitlistBtn')?.addEventListener('click', loadWaitlistApplications);
-    document.getElementById('wlStatusFilter')?.addEventListener('change', renderWaitlistAdmin);
-    document.getElementById('wlRoomFilter')?.addEventListener('change', renderWaitlistAdmin);
+    document.getElementById('wlStatusFilter')?.addEventListener('change', () => { renderWaitlistAdmin(); renderWaitlistQuickList(); });
+    document.getElementById('wlRoomFilter')?.addEventListener('change', () => { renderWaitlistAdmin(); renderWaitlistQuickList(); });
+
+    // Offer modal
+    document.getElementById('wlOfferCancelBtn')?.addEventListener('click', () => document.getElementById('wlOfferModal').classList.add('hidden'));
+    document.getElementById('wlOfferModal')?.addEventListener('click', e => { if (e.target === document.getElementById('wlOfferModal')) document.getElementById('wlOfferModal').classList.add('hidden'); });
+    document.getElementById('wlOfferSendBtn')?.addEventListener('click', async () => {
+        const modal     = document.getElementById('wlOfferModal');
+        const id        = Number(modal.dataset.appId);
+        const deadline  = document.getElementById('wlOfferDeadline').value;
+        const notes     = document.getElementById('wlOfferNotes').value || '';
+        const procareLink   = document.getElementById('wlOfferProcare').value.trim() || null;
+        const paperwkRaw    = document.getElementById('wlOfferPaperwork').value || '';
+        const papeworkLinks = paperwkRaw.split(',').map(s => s.trim()).filter(Boolean);
+        const parentName    = modal.dataset.parentName;
+        const parentEmail   = modal.dataset.parentEmail;
+        const childName     = modal.dataset.childName;
+        const errEl = document.getElementById('wlOfferErr');
+        if (!deadline) { errEl.textContent = 'Please set an offer deadline.'; return; }
+        const btn = document.getElementById('wlOfferSendBtn');
+        btn.disabled = true; btn.textContent = 'Sending…'; errEl.textContent = '';
+        try {
+            await updateWaitlistApplication(id, { status: 'offered', offered_at: new Date().toISOString(), offer_deadline: deadline, offer_notes: notes || null });
+            await sendWaitlistOfferEmail({ parentName, parentEmail, childName, offerDeadline: deadline, offerNotes: notes || null, papeworkLinks, procareLink });
+            const app = _allWaitlistApps.find(a => a.id === id);
+            if (app) { app.status = 'offered'; app.offered_at = new Date().toISOString(); app.offer_deadline = deadline; app.offer_notes = notes || null; }
+            modal.classList.add('hidden');
+            document.getElementById('wlOfferDeadline').value = '';
+            document.getElementById('wlOfferNotes').value = '';
+            renderWaitlistQuickList();
+            renderWaitlistAdmin();
+        } catch (err) {
+            errEl.textContent = 'Offer saved, but email failed: ' + err.message + '. Email parent manually at ' + parentEmail;
+            btn.disabled = false; btn.textContent = 'Send & Email Parent';
+            const app = _allWaitlistApps.find(a => a.id === id);
+            if (app) { app.status = 'offered'; renderWaitlistQuickList(); renderWaitlistAdmin(); }
+        }
+    });
     document.getElementById('addToWaitlistBtn')?.addEventListener('click', _openAdminWlModal);
     document.getElementById('generateWaitlistBtn')?.addEventListener('click', generateWaitlistReport);
 
