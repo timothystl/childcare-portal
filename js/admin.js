@@ -2996,6 +2996,7 @@ function renderMessagesList(messages) {
                                 ? `<button class="btn-restore-msg" data-id="${m.id}">↩ Restore</button>`
                                 : `<button class="btn-archive-msg" data-id="${m.id}" title="Archive message">📥 Archive</button>`
                             }
+                            <button class="btn-delete-msg" data-id="${m.id}" title="Delete message permanently">🗑 Delete</button>
                         </div>
                     </li>`;
             }).join('')}
@@ -3033,6 +3034,19 @@ function renderMessagesList(messages) {
                 await loadMessages();
             } catch (err) {
                 alert('Failed to restore: ' + err.message);
+            }
+        });
+    });
+
+    container.querySelectorAll('.btn-delete-msg').forEach(btn => {
+        btn.addEventListener('click', async e => {
+            const id = e.currentTarget.getAttribute('data-id');
+            if (!confirm('Permanently delete this message? This cannot be undone.')) return;
+            try {
+                await deleteMessage(id);
+                await loadMessages();
+            } catch (err) {
+                alert('Failed to delete: ' + err.message);
             }
         });
     });
