@@ -873,28 +873,28 @@ function setupRoster() {
 }
 
 function getRosterForDate(date, roomId) {
-    return allRegistrations
-        .filter(reg => {
-            if (roomId && reg.room_id !== roomId) return false;
-            return (reg.registration_dates || []).some(d => d.care_date === date && !d.waitlisted);
-        })
-        .map(reg => {
-            const d    = (reg.registration_dates || []).find(d => d.care_date === date && !d.waitlisted);
-            const room = ROOMS.find(r => r.id === reg.room_id);
-            const rate = d?.day_type === 'half' ? room?.halfDayRate : room?.fullDayRate;
-            return {
-                roomLabel:   room?.label || reg.room_id,
-                roomId:      reg.room_id,
-                childName:   reg.child_name,
-                childDob:    reg.child_dob,
-                parentName:  reg.parent_name,
-                parentPhone: reg.parent_phone,
-                parentEmail: reg.parent_email,
-                dayType:     d?.day_type || 'full',
-                rate:        rate || 0,
-            };
-        })
-        .sort((a, b) => a.roomId.localeCompare(b.roomId) || a.childName.localeCompare(b.childName));
+    const results = [];
+    allRegistrations.forEach(reg => {
+        const d = (reg.registration_dates || []).find(rd => rd.care_date === date && !rd.waitlisted);
+        if (!d) return;
+        // Use the per-day room_id (falls back to registration room_id for older records)
+        const effectiveRoomId = d.room_id || reg.room_id;
+        if (roomId && effectiveRoomId !== roomId) return;
+        const room = ROOMS.find(r => r.id === effectiveRoomId);
+        const rate = d.day_type === 'half' ? room?.halfDayRate : room?.fullDayRate;
+        results.push({
+            roomLabel:   room?.label || effectiveRoomId,
+            roomId:      effectiveRoomId,
+            childName:   reg.child_name,
+            childDob:    reg.child_dob,
+            parentName:  reg.parent_name,
+            parentPhone: reg.parent_phone,
+            parentEmail: reg.parent_email,
+            dayType:     d.day_type || 'full',
+            rate:        rate || 0,
+        });
+    });
+    return results.sort((a, b) => a.roomId.localeCompare(b.roomId) || a.childName.localeCompare(b.childName));
 }
 
 function viewRoster() {
