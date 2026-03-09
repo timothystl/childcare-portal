@@ -76,11 +76,13 @@ async function initDashboard() {
         console.error('initDashboard: initial data load failed —', err);
         // Continue setup so the tab structure is always rendered
     }
+    initCapacityMonthNav();
     renderCapacityOverview();
     setupFilters();
     setupRoster();
     setupClosures();
     setupMonthlyReport();
+    setupMonthlyRoster();
     setupFamilyBilling();
     setupWindowOverride();
     setupFamilies();
@@ -416,62 +418,104 @@ document.getElementById('editDaysAddBtn')?.addEventListener('click', async () =>
 // ============================================================
 // CAPACITY OVERVIEW
 // ============================================================
-function renderCapacityOverview() {
-    const grid  = document.getElementById('capacityGrid');
+let capOverviewDate = null; // JS Date set to 1st of currently displayed month
+
+function initCapacityMonthNav() {
     const today = new Date();
+    capOverviewDate = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    // Build current-month and next-month descriptors
-    const months = [0, 1].map(offset => {
-        const d = new Date(today.getFullYear(), today.getMonth() + offset, 1);
-        const y = d.getFullYear();
-        const m = d.getMonth();
-        const key = `${y}-${String(m + 1).padStart(2, '0')}`;
-
-        // Count Mon–Fri working days in the month (closures not excluded for simplicity)
-        const daysInMonth = new Date(y, m + 1, 0).getDate();
-        let workingDays = 0;
-        for (let day = 1; day <= daysInMonth; day++) {
-            const dow = new Date(y, m, day).getDay();
-            if (dow !== 0 && dow !== 6) workingDays++;
+    // Populate select: 6 months back → 12 months ahead
+    const sel = document.getElementById('capMonthSelect');
+    if (sel) {
+        sel.innerHTML = '';
+        for (let offset = -6; offset <= 12; offset++) {
+            const d = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = MONTH_NAMES_ADMIN[d.getMonth()] + ' ' + d.getFullYear();
+            if (offset === 0) opt.selected = true;
+            sel.appendChild(opt);
         }
-
-        // Count confirmed bookings per room for this month
-        const counts = {};
-        ROOMS.forEach(r => { counts[r.id] = 0; });
-        allRegistrations.forEach(reg => {
-            (reg.registration_dates || []).forEach(d => {
-                if (d.waitlisted || !d.care_date) return;
-                if (d.care_date.startsWith(key)) {
-                    const roomKey = d.room_id || reg.room_id; // use date-level room_id when available
-                    counts[roomKey] = (counts[roomKey] || 0) + 1;
-                }
-            });
+        sel.addEventListener('change', () => {
+            const [y, m] = sel.value.split('-').map(Number);
+            capOverviewDate = new Date(y, m - 1, 1);
+            renderCapacityOverview();
         });
+    }
 
-        return { label: MONTH_NAMES_ADMIN[m] + ' ' + y, key, counts, workingDays };
+    document.getElementById('capPrevMonth')?.addEventListener('click', () => {
+        capOverviewDate = new Date(capOverviewDate.getFullYear(), capOverviewDate.getMonth() - 1, 1);
+        _syncCapSelect();
+        renderCapacityOverview();
+    });
+    document.getElementById('capNextMonth')?.addEventListener('click', () => {
+        capOverviewDate = new Date(capOverviewDate.getFullYear(), capOverviewDate.getMonth() + 1, 1);
+        _syncCapSelect();
+        renderCapacityOverview();
+    });
+}
+
+function _syncCapSelect() {
+    const sel = document.getElementById('capMonthSelect');
+    if (!sel || !capOverviewDate) return;
+    const key = `${capOverviewDate.getFullYear()}-${String(capOverviewDate.getMonth() + 1).padStart(2, '0')}`;
+    // If the target month isn't in the select, add it
+    let opt = [...sel.options].find(o => o.value === key);
+    if (!opt) {
+        opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = MONTH_NAMES_ADMIN[capOverviewDate.getMonth()] + ' ' + capOverviewDate.getFullYear();
+        sel.appendChild(opt);
+    }
+    sel.value = key;
+}
+
+function renderCapacityOverview() {
+    const grid = document.getElementById('capacityGrid');
+    if (!capOverviewDate) capOverviewDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+    const y = capOverviewDate.getFullYear();
+    const m = capOverviewDate.getMonth();
+    const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+
+    // Count Mon–Fri working days in the month
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    let workingDays = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dow = new Date(y, m, day).getDay();
+        if (dow !== 0 && dow !== 6) workingDays++;
+    }
+
+    // Count confirmed bookings per room for this month
+    const counts = {};
+    ROOMS.forEach(r => { counts[r.id] = 0; });
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date) return;
+            if (d.care_date.startsWith(key)) {
+                const roomKey = d.room_id || reg.room_id;
+                counts[roomKey] = (counts[roomKey] || 0) + 1;
+            }
+        });
     });
 
-    grid.innerHTML = months.map(({ label, key, counts, workingDays }) => {
-        const cards = ROOMS.map(room => {
-            const used  = counts[room.id] || 0;
-            const cap   = room.capacity * workingDays;
-            const pct   = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
-            const color = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
-            return `
-                <div class="cap-card" data-room-id="${room.id}" data-month-key="${key}" role="button" tabindex="0" title="View ${room.label} calendar">
-                    <h3>${room.label}</h3>
-                    <p class="cap-meta">Max ${room.capacity}/day &middot; ${used} booking${used !== 1 ? 's' : ''}</p>
-                    <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
-                    <p class="cap-pct">${pct}% utilisation</p>
-                    <p class="cap-card-hint">Click to view calendar →</p>
-                </div>`;
-        }).join('');
+    const cards = ROOMS.map(room => {
+        const used  = counts[room.id] || 0;
+        const cap   = room.capacity * workingDays;
+        const pct   = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+        const color = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
         return `
-            <div class="cap-month-group">
-                <h3 class="cap-month-heading">${label}</h3>
-                <div class="capacity-grid">${cards}</div>
+            <div class="cap-card" data-room-id="${room.id}" data-month-key="${key}" role="button" tabindex="0" title="View ${room.label} calendar">
+                <h3>${room.label}</h3>
+                <p class="cap-meta">Max ${room.capacity}/day &middot; ${used} booking${used !== 1 ? 's' : ''}</p>
+                <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
+                <p class="cap-pct">${pct}% utilisation</p>
+                <p class="cap-card-hint">Click to view calendar →</p>
             </div>`;
     }).join('');
+
+    grid.innerHTML = `<div class="capacity-grid">${cards}</div>`;
 }
 
 // ============================================================
@@ -1170,6 +1214,113 @@ function exportMonthlyReport() {
         wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
     }));
     XLSX.writeFile(wb, `billing-report-${monthVal}.xlsx`);
+}
+
+// ============================================================
+// MONTHLY CLASSROOM ROSTER
+// ============================================================
+function setupMonthlyRoster() {
+    const now = new Date();
+    const el  = document.getElementById('rosterMonth');
+    if (el) el.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    document.getElementById('generateRosterBtn')?.addEventListener('click', generateMonthlyRoster);
+    document.getElementById('printRosterBtn')?.addEventListener('click', () => window.print());
+}
+
+function generateMonthlyRoster() {
+    const monthVal = document.getElementById('rosterMonth')?.value;
+    if (!monthVal) { alert('Please select a month.'); return; }
+
+    const [y, m] = monthVal.split('-').map(Number);
+    const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+    const daysInMonth = new Date(y, m, 0).getDate();
+
+    // Build list of working days in the month (Mon–Fri, excluding closures)
+    const workingDays = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+        const d   = new Date(y, m - 1, day);
+        const dow = d.getDay();
+        if (dow === 0 || dow === 6) continue;
+        const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        workingDays.push({ dateStr, label: `${DAY_ABBR[dow]} ${day}` });
+    }
+
+    if (!workingDays.length) {
+        document.getElementById('monthlyRosterContent').innerHTML = `<p class="empty-hint">No weekdays found for ${monthLabel}.</p>`;
+        return;
+    }
+
+    // Build per-room, per-day child lists
+    // childrenByRoomDate[roomId][dateStr] = [{ name, dayType, family }]
+    const childrenByRoomDate = {};
+    ROOMS.forEach(r => { childrenByRoomDate[r.id] = {}; });
+
+    allRegistrations.forEach(reg => {
+        const parentName = reg.families?.parent_name || '';
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date) return;
+            if (!d.care_date.startsWith(monthVal)) return;
+            const roomId  = d.room_id || reg.room_id;
+            if (!childrenByRoomDate[roomId]) childrenByRoomDate[roomId] = {};
+            if (!childrenByRoomDate[roomId][d.care_date]) childrenByRoomDate[roomId][d.care_date] = [];
+            childrenByRoomDate[roomId][d.care_date].push({
+                name:    reg.child_name || '—',
+                dayType: d.day_type || 'full',
+                family:  parentName,
+            });
+        });
+    });
+
+    // Generate HTML — one section per room
+    const roomSections = ROOMS.map(room => {
+        const dayRows = workingDays.map(({ dateStr, label }) => {
+            const children = (childrenByRoomDate[room.id]?.[dateStr] || [])
+                .sort((a, b) => a.name.localeCompare(b.name));
+            const count = children.length;
+            const cap   = room.capacity;
+            const fullFlag = count >= cap ? ' roster-day-full' : count >= cap * .8 ? ' roster-day-near' : '';
+            const childList = children.length
+                ? children.map(c =>
+                    `<span class="roster-child${c.dayType === 'half' ? ' roster-half' : ''}">${c.name}${c.dayType === 'half' ? ' ½' : ''}</span>`
+                  ).join('')
+                : '<span class="roster-empty-day">—</span>';
+            return `
+                <tr class="roster-day-row${fullFlag}">
+                    <td class="roster-date-cell">${label}</td>
+                    <td class="roster-count-cell">${count}/${cap}</td>
+                    <td class="roster-names-cell">${childList}</td>
+                </tr>`;
+        }).join('');
+
+        return `
+            <div class="roster-room-block print-page-break">
+                <div class="roster-room-header">
+                    <span class="roster-room-title">${room.label}</span>
+                    <span class="roster-room-meta">${monthLabel} &nbsp;·&nbsp; Max ${room.capacity}/day</span>
+                </div>
+                <table class="roster-day-table">
+                    <thead>
+                        <tr>
+                            <th class="roster-th-date">Date</th>
+                            <th class="roster-th-count">Count</th>
+                            <th class="roster-th-names">Enrolled Children</th>
+                        </tr>
+                    </thead>
+                    <tbody>${dayRows}</tbody>
+                </table>
+            </div>`;
+    }).join('');
+
+    document.getElementById('monthlyRosterContent').innerHTML = `
+        <div class="monthly-roster-wrap" id="monthlyRosterPrintArea">
+            <div class="roster-report-header">
+                <strong>Timothy Lutheran MDO</strong> — Monthly Classroom Roster
+                <span style="float:right;font-size:.85em;color:#888;">Generated ${new Date().toLocaleDateString()}</span>
+            </div>
+            ${roomSections}
+        </div>`;
+
+    document.getElementById('printRosterBtn').style.display = '';
 }
 
 // ============================================================

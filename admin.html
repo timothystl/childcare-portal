@@ -91,7 +91,14 @@
 
             <!-- Capacity Overview -->
             <section class="capacity-section">
-                <h2>Capacity Overview</h2>
+                <div class="capacity-header">
+                    <h2>Capacity Overview</h2>
+                    <div class="capacity-month-nav">
+                        <button id="capPrevMonth" class="btn-ghost" title="Previous month">&#8592;</button>
+                        <select id="capMonthSelect" class="cap-month-select"></select>
+                        <button id="capNextMonth" class="btn-ghost" title="Next month">&#8594;</button>
+                    </div>
+                </div>
                 <div id="capacityGrid"></div>
             </section>
 
@@ -522,6 +529,25 @@
 
         <!-- ── Tab: Reports ───────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-reports">
+
+            <!-- Monthly Classroom Roster -->
+            <section class="admin-section collapsible-section" id="monthlyRosterSection">
+                <h2>📋 Monthly Classroom Roster</h2>
+                <p class="section-desc">Full-month attendance roster for all rooms — one page per room, each day's enrolled children listed. Print after the registration window closes to have the complete month's roster on hand.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="rosterMonth">Month</label>
+                        <input type="month" id="rosterMonth">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateRosterBtn" class="btn-secondary">Generate Roster</button>
+                        <button id="printRosterBtn" class="btn-primary" style="display:none;">🖨️ Print Roster</button>
+                    </div>
+                </div>
+                <div id="monthlyRosterContent">
+                    <p class="empty-hint">Select a month above and click Generate Roster.</p>
+                </div>
+            </section>
 
             <!-- Monthly Billing Report -->
             <section class="admin-section collapsible-section" id="monthlyBillingSection">

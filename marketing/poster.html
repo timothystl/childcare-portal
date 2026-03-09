@@ -23,6 +23,7 @@
         — adjust ../images/logo.png if moved
     ══════════════════════════════════════════════════════
   -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Nunito:wght@400;600;700;800;900&display=swap');
 
@@ -377,7 +378,7 @@
           <div class="step-num">1</div>
           <div class="step-content">
             <h3>Find your family</h3>
-            <p>Search by name, email, or your 4-digit family PIN. No password needed.</p>
+            <p>Search by name, email, or your 4-digit PIN from ProCare (schools.procareconnect.com). No password needed.</p>
           </div>
         </div>
         <div class="step">
@@ -427,12 +428,9 @@
 
       <!-- QR code -->
       <div class="qr-box">
-        <!-- REPLACE THIS DIV with: <img src="qr.png" width="140" height="140" style="border-radius:8px;display:block;margin:0 auto 14px;"> -->
-        <div class="qr-placeholder">
-          [ Generate QR code<br>at qr-code-generator.com<br>pointing to<br>[PORTAL_URL] ]
-        </div>
+        <div id="posterQrCode" style="width:140px;height:140px;background:white;border-radius:8px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;overflow:hidden;"></div>
         <p>Scan to open the care day portal on your phone</p>
-        <p class="qr-url">[PORTAL_URL]</p>
+        <p class="qr-url" id="portalUrl">[PORTAL_URL]</p>
       </div>
 
       <!-- Hours / info -->
@@ -448,7 +446,7 @@
         </div>
         <div class="info-row">
           <div class="info-icon">📅</div>
-          <div class="info-text"><strong>Days</strong><br>Monday – Friday<br>(school year calendar)</div>
+          <div class="info-text"><strong>Days</strong><br>Monday – Friday<br>(year round care)</div>
         </div>
       </div>
 
@@ -473,5 +471,17 @@
 
 </div>
 
+<script>
+  // Generate QR code pointing to the portal URL
+  const portalUrl = document.getElementById('portalUrl').textContent.trim();
+  new QRCode(document.getElementById('posterQrCode'), {
+    text: portalUrl,
+    width: 140,
+    height: 140,
+    colorDark: '#1c3160',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+</script>
 </body>
 </html>

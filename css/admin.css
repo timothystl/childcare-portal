@@ -127,8 +127,33 @@
 .table-section h2 {
     font-size: 1.2em;
     color: #333;
+    margin-bottom: 0;
+}
+
+/* Capacity overview header row with month nav */
+.capacity-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
     margin-bottom: 16px;
 }
+.capacity-month-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.cap-month-select {
+    padding: 6px 10px;
+    border: 2px solid #d0dde6;
+    border-radius: 7px;
+    font-size: .9em;
+    background: #fff;
+    cursor: pointer;
+    color: #333;
+}
+.cap-month-select:focus { outline: none; border-color: #3d627c; }
 .hint-small { font-size: .78em; color: #aaa; font-weight: 400; }
 
 /* Month group wrapper inside capacity overview */
@@ -236,7 +261,9 @@
 
 .btn-edit-days {
     font-size: .82em;
-    padding: 5px 10px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 7px;
     white-space: nowrap;
 }
 
@@ -247,9 +274,10 @@
     color: #e53e3e;
     border: 2px solid #e53e3e;
     padding: 5px 12px;
-    border-radius: 6px;
+    border-radius: 7px;
     cursor: pointer;
     font-size: .82em;
+    font-weight: 600;
     transition: all .2s;
     white-space: nowrap;
 }
@@ -260,14 +288,12 @@
     color: #276749;
     border: 2px solid #38a169;
     padding: 5px 12px;
-    border-radius: 6px;
+    border-radius: 7px;
     cursor: pointer;
     font-size: .82em;
     font-weight: 600;
     transition: all .2s;
     white-space: nowrap;
-    margin-bottom: 4px;
-    display: block;
 }
 .btn-approve:hover { background: #38a169; color: #fff; }
 .btn-approve:disabled { opacity: .6; cursor: default; }
@@ -2417,3 +2443,101 @@ tr.pending-approval:hover { background: #fef3c7; }
 /* YTD discount column */
 .ytd-discount-cell  { color: #b45309; }
 .ytd-discount-total { color: #b45309; font-weight: 600; font-size: .95em; }
+
+
+/* ============================================================
+   MONTHLY CLASSROOM ROSTER
+   ============================================================ */
+.roster-report-header {
+    font-size: .9em;
+    color: #444;
+    padding: 8px 0 16px;
+    border-bottom: 2px solid #d0dde6;
+    margin-bottom: 24px;
+}
+
+.roster-room-block {
+    margin-bottom: 32px;
+}
+
+.roster-room-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    background: #1d2f5e;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 8px 8px 0 0;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.roster-room-title {
+    font-size: 1.05em;
+    font-weight: 700;
+}
+.roster-room-meta {
+    font-size: .82em;
+    color: rgba(255,255,255,.7);
+}
+
+.roster-day-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88em;
+    border: 1px solid #d0dde6;
+    border-top: none;
+}
+.roster-day-table th {
+    background: #f0f4f8;
+    padding: 7px 10px;
+    text-align: left;
+    font-size: .8em;
+    color: #555;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    border-bottom: 2px solid #d0dde6;
+}
+.roster-th-date  { width: 70px; }
+.roster-th-count { width: 60px; text-align: center; }
+.roster-day-row  { border-bottom: 1px solid #edf2f7; }
+.roster-day-row:hover { background: #f7fafc; }
+.roster-date-cell  { padding: 5px 10px; font-weight: 600; color: #2d4f68; white-space: nowrap; }
+.roster-count-cell { padding: 5px 10px; text-align: center; font-size: .82em; color: #666; }
+.roster-names-cell { padding: 5px 10px; line-height: 1.8; }
+
+.roster-day-full   { background: #fff5f5; }
+.roster-day-full .roster-count-cell { color: #c53030; font-weight: 700; }
+.roster-day-near   { background: #fffbeb; }
+.roster-day-near .roster-count-cell { color: #b45309; font-weight: 600; }
+
+.roster-child {
+    display: inline-block;
+    background: #e8f0f8;
+    color: #1d2f5e;
+    font-size: .82em;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 12px;
+    margin: 2px 3px 2px 0;
+}
+.roster-child.roster-half {
+    background: #fef3c7;
+    color: #92400e;
+}
+.roster-empty-day {
+    color: #ccc;
+    font-style: italic;
+    font-size: .85em;
+}
+
+/* Print styles for roster */
+@media print {
+    .print-page-break { page-break-before: always; }
+    .print-page-break:first-child { page-break-before: avoid; }
+    .roster-room-block { page-break-inside: avoid; }
+    #printRosterBtn, .admin-header, .admin-tabs, .tab-pane > section:not(.active),
+    .capacity-section, .roster-controls { display: none !important; }
+    body { background: white; }
+    .roster-day-table { font-size: .8em; }
+}

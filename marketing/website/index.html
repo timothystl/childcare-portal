@@ -297,8 +297,8 @@
       width: 170px;
       height: 170px;
       border-radius: 50%;
-      background: rgba(255,255,255,.08);
-      padding: 6px;
+      background: #fff;
+      padding: 8px;
       filter: drop-shadow(0 4px 20px rgba(0,0,0,.3));
     }
 
@@ -667,8 +667,8 @@
       width: 64px;
       height: 64px;
       border-radius: 50%;
-      padding: 2px;
-      background: rgba(255,255,255,.08);
+      padding: 4px;
+      background: #fff;
       margin-bottom: 14px;
     }
     .footer-brand p {
@@ -978,8 +978,9 @@
           <div class="step-num">1</div>
           <div>
             <h3>Find your family</h3>
-            <p>Search by name, email, or your 4-digit family PIN.
-               No username or password to remember.</p>
+            <p>Search by name, email, or your 4-digit family PIN from
+               <a href="https://schools.procareconnect.com/" target="_blank" rel="noopener">ProCare</a>.
+               No username or password needed for the portal.</p>
           </div>
         </div>
 
@@ -1004,6 +1005,14 @@
         <a href="[PORTAL_URL]" class="btn btn-navy" style="align-self:flex-start;margin-top:8px;">
           Open Care Day Portal →
         </a>
+
+        <div style="display:flex;align-items:center;gap:16px;margin-top:20px;background:var(--warm-gray);border-radius:12px;padding:14px 18px;">
+          <div id="siteQrCode" style="width:120px;height:120px;flex-shrink:0;"></div>
+          <div>
+            <p style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:4px;">Scan to open on your phone</p>
+            <p style="font-size:12px;color:var(--text-muted);line-height:1.5;">Point your camera at the QR code to go straight to the care day portal.</p>
+          </div>
+        </div>
 
       </div>
 
@@ -1133,9 +1142,11 @@
       </div>
       <div class="faq-item">
         <div class="faq-q">How do I get my 4-digit family PIN?</div>
-        <div class="faq-a">Your PIN is assigned when you enroll and shared with
-          you by the office. If you can't remember it, you can also look up your
-          family by name or email address in the portal.</div>
+        <div class="faq-a">Your PIN comes from <strong>ProCare</strong>, our child management system.
+          Log in at <a href="https://schools.procareconnect.com/" target="_blank" rel="noopener">schools.procareconnect.com</a>
+          to look up your family's PIN. You can also search the portal by name or email if you
+          don't have it handy. Contact us at <a href="mailto:mdo@timothystl.org">mdo@timothystl.org</a>
+          if you need help.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">My child is on the waitlist. What happens next?</div>
@@ -1184,10 +1195,24 @@
 </footer>
 
 <!-- Mobile nav toggle -->
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
   document.getElementById('navToggle').addEventListener('click', function () {
     document.getElementById('navLinks').classList.toggle('open');
   });
+
+  // Generate QR code for the portal
+  const qrPortalUrl = '[PORTAL_URL]'; // Replace with actual portal URL
+  if (document.getElementById('siteQrCode')) {
+    new QRCode(document.getElementById('siteQrCode'), {
+      text: qrPortalUrl,
+      width: 120,
+      height: 120,
+      colorDark: '#1c3160',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  }
 </script>
 
 </body>
