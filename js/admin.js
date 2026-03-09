@@ -269,6 +269,10 @@ function renderTable(data) {
             ? (disc.type === 'staff' ? 'Staff (free)' : `${disc.value}% off`)
             : '—';
 
+        const roomOptions = ROOMS.map(r =>
+            `<option value="${r.id}" ${r.id === reg.room_id ? 'selected' : ''}>${r.label}</option>`
+        ).join('');
+
         return `
             <tr data-id="${reg.id}" data-room="${reg.room_id}">
                 <td>${submitted}</td>
@@ -276,12 +280,13 @@ function renderTable(data) {
                 <td><a href="mailto:${escHtml(reg.parent_email)}">${escHtml(reg.parent_email)}</a></td>
                 <td>${escHtml(reg.parent_phone)}</td>
                 <td>${escHtml(reg.child_name)}</td>
-                <td>${room.label}</td>
+                <td><select class="room-change-select" data-id="${reg.id}">${roomOptions}</select></td>
                 <td class="dates-cell">${datesHtml}</td>
                 <td class="tally-cell">${tallyHtml}</td>
                 <td class="bill-cell">$${bill.toFixed(2)}</td>
                 <td class="discount-cell">${discLabel}</td>
                 <td class="actions-cell">
+                    <button class="btn-secondary btn-edit-days" data-id="${reg.id}">Edit Days</button>
                     <button class="btn-delete" data-id="${reg.id}">Delete</button>
                 </td>
             </tr>`;
@@ -300,7 +305,136 @@ function renderTable(data) {
             }
         });
     });
+
+    tbody.querySelectorAll('.room-change-select').forEach(sel => {
+        sel.addEventListener('change', async e => {
+            const id      = e.currentTarget.getAttribute('data-id');
+            const newRoom = e.currentTarget.value;
+            const reg     = allRegistrations.find(r => String(r.id) === id);
+            if (!confirm(`Move ${reg?.child_name ?? 'this child'} to ${ROOMS.find(r => r.id === newRoom)?.label ?? newRoom}?`)) {
+                e.currentTarget.value = reg?.room_id; // revert
+                return;
+            }
+            try {
+                await updateRegistrationRoom(id, newRoom);
+                await loadRegistrations();
+            } catch (err) {
+                alert('Room change failed: ' + err.message);
+                e.currentTarget.value = reg?.room_id;
+            }
+        });
+    });
+
+    tbody.querySelectorAll('.btn-edit-days').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const id  = e.currentTarget.getAttribute('data-id');
+            const reg = allRegistrations.find(r => String(r.id) === id);
+            if (reg) openEditDaysModal(reg);
+        });
+    });
 }
+
+// ============================================================
+// EDIT DAYS MODAL
+// ============================================================
+let editDaysReg = null;
+
+function openEditDaysModal(reg) {
+    editDaysReg = reg;
+    document.getElementById('editDaysTitle').textContent =
+        `Edit Days — ${reg.child_name}`;
+    document.getElementById('editDaysDate').value = '';
+    document.getElementById('editDaysDayType').value = 'full';
+    document.getElementById('editDaysWaitlist').checked = false;
+    document.getElementById('editDaysError').textContent = '';
+    renderEditDaysList();
+    document.getElementById('editDaysModal').classList.remove('hidden');
+}
+
+function renderEditDaysList() {
+    const reg   = editDaysReg;
+    const dates = (reg.registration_dates || [])
+        .slice()
+        .sort((a, b) => a.care_date.localeCompare(b.care_date));
+
+    const body = document.getElementById('editDaysBody');
+    if (!dates.length) {
+        body.innerHTML = '<p style="color:#888;font-size:.9em;padding:8px 0">No days scheduled.</p>';
+        return;
+    }
+    body.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto;margin-bottom:8px">
+        ${dates.map(d => {
+            const label    = friendlyShort(d.care_date);
+            const typeTag  = d.day_type === 'half' ? 'Half' : 'Full';
+            const wlTag    = d.waitlisted ? ' · Waitlist' : '';
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:#f8f9ff;border-radius:8px;font-size:.9em">
+                <span>${label} — <strong>${typeTag}</strong>${wlTag}</span>
+                <button class="btn-delete edit-days-remove-btn" data-date-id="${d.id}" style="padding:3px 10px;font-size:.82em">Remove</button>
+            </div>`;
+        }).join('')}
+    </div>`;
+
+    body.querySelectorAll('.edit-days-remove-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const dateId = btn.dataset.dateId;
+            btn.disabled = true;
+            try {
+                await deleteRegistrationDate(dateId);
+                // Update local state
+                editDaysReg.registration_dates = editDaysReg.registration_dates.filter(
+                    d => String(d.id) !== String(dateId)
+                );
+                allRegistrations = allRegistrations.map(r =>
+                    r.id === editDaysReg.id ? editDaysReg : r
+                );
+                renderEditDaysList();
+                renderTable(allRegistrations);
+            } catch (err) {
+                alert('Remove failed: ' + err.message);
+                btn.disabled = false;
+            }
+        });
+    });
+}
+
+document.getElementById('editDaysClose')?.addEventListener('click', () => {
+    document.getElementById('editDaysModal').classList.add('hidden');
+    editDaysReg = null;
+});
+
+document.getElementById('editDaysAddBtn')?.addEventListener('click', async () => {
+    const dateVal  = document.getElementById('editDaysDate').value;
+    const dayType  = document.getElementById('editDaysDayType').value;
+    const waitlist = document.getElementById('editDaysWaitlist').checked;
+    const errEl    = document.getElementById('editDaysError');
+
+    if (!dateVal) { errEl.textContent = 'Please select a date.'; return; }
+    if (!editDaysReg) return;
+
+    // Check for duplicate
+    if ((editDaysReg.registration_dates || []).some(d => d.care_date === dateVal)) {
+        errEl.textContent = 'That date is already on this registration.';
+        return;
+    }
+
+    errEl.textContent = '';
+    const btn = document.getElementById('editDaysAddBtn');
+    btn.disabled = true;
+    try {
+        await addRegistrationDate(editDaysReg.id, editDaysReg.room_id, dateVal, dayType, waitlist);
+        // Reload registration to get the new date's ID
+        const fresh = await fetchAllRegistrations();
+        allRegistrations = fresh;
+        editDaysReg = fresh.find(r => r.id === editDaysReg.id) || editDaysReg;
+        renderEditDaysList();
+        renderTable(allRegistrations);
+        document.getElementById('editDaysDate').value = '';
+    } catch (err) {
+        errEl.textContent = 'Add failed: ' + err.message;
+    } finally {
+        btn.disabled = false;
+    }
+});
 
 // ============================================================
 // CAPACITY OVERVIEW
@@ -3599,11 +3733,14 @@ async function loadHoursForDate() {
                 <div class="clock-add-form hidden">
                     <input type="time" class="new-clock-in-input">
                     <span>→</span>
-                    <input type="time" class="new-clock-out-input">
+                    <input type="time" class="new-clock-out-input" placeholder="(leave blank = open)">
                     <button class="btn-secondary confirm-add-clock-btn">Add</button>
                     <button class="btn-ghost cancel-add-clock-btn">Cancel</button>
                 </div>
-                <button class="btn-ghost show-add-clock-btn">+ Add Entry</button>
+                <div class="clock-action-btns">
+                    <button class="btn-ghost show-add-clock-btn">+ Add Entry</button>
+                    <button class="btn-secondary clock-in-now-btn">Clock In Now</button>
+                </div>
             </div>`;
         };
 
@@ -3662,13 +3799,29 @@ async function loadHoursForDate() {
         // Show/hide Add Entry form
         container.querySelectorAll('.show-add-clock-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                const form = btn.previousElementSibling;
+                const wrap = btn.closest('.clock-events-wrap');
+                const form = wrap.querySelector('.clock-add-form');
                 form.classList.remove('hidden');
-                btn.classList.add('hidden');
-                // Default: in = 9:00 AM, out = 5:00 PM
+                btn.closest('.clock-action-btns').classList.add('hidden');
                 form.querySelector('.new-clock-in-input').value  = '09:00';
-                form.querySelector('.new-clock-out-input').value = '17:00';
+                form.querySelector('.new-clock-out-input').value = '';
                 form.querySelector('.new-clock-in-input').focus();
+            });
+        });
+
+        // Clock In Now — creates an open event with current time, employee clocks out themselves
+        container.querySelectorAll('.clock-in-now-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const wrap    = btn.closest('.clock-events-wrap');
+                const staffId = wrap.dataset.staffId;
+                btn.disabled = true; btn.textContent = 'Clocking in…';
+                try {
+                    await insertManualClockEvent(staffId, date, new Date().toISOString(), null);
+                    await loadHoursForDate();
+                } catch (err) {
+                    alert('Clock-in failed: ' + err.message);
+                    btn.disabled = false; btn.textContent = 'Clock In Now';
+                }
             });
         });
 
@@ -3676,7 +3829,7 @@ async function loadHoursForDate() {
             btn.addEventListener('click', () => {
                 const form = btn.closest('.clock-add-form');
                 form.classList.add('hidden');
-                form.nextElementSibling.classList.remove('hidden');
+                form.closest('.clock-events-wrap').querySelector('.clock-action-btns').classList.remove('hidden');
             });
         });
 

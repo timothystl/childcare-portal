@@ -871,6 +871,32 @@
         </div>
     </div>
 
+    <!-- Edit Days Modal -->
+    <div id="editDaysModal" class="rcal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="rcal-dialog" style="max-width:520px">
+            <div class="rcal-header">
+                <h2 id="editDaysTitle" class="rcal-title">Edit Days of Care</h2>
+                <button id="editDaysClose" class="rcal-close">✕</button>
+            </div>
+            <div id="editDaysBody" style="padding:0 0 8px"></div>
+            <div style="border-top:1px solid #eee;padding-top:16px;margin-top:8px">
+                <h4 style="margin:0 0 10px;font-size:.9em;color:#555;text-transform:uppercase;letter-spacing:.04em">Add a Day</h4>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                    <input type="date" id="editDaysDate" style="padding:6px 8px;border:1px solid #ddd;border-radius:8px;font-size:.9em">
+                    <select id="editDaysDayType" style="padding:6px 8px;border:1px solid #ddd;border-radius:8px;font-size:.9em">
+                        <option value="full">Full Day</option>
+                        <option value="half">Half Day</option>
+                    </select>
+                    <label style="font-size:.9em;display:flex;align-items:center;gap:4px">
+                        <input type="checkbox" id="editDaysWaitlist"> Waitlisted
+                    </label>
+                    <button id="editDaysAddBtn" class="btn-secondary">Add Day</button>
+                </div>
+                <div id="editDaysError" style="color:#c62828;font-size:.85em;margin-top:6px;min-height:18px"></div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="js/supabase.js?v=35"></script>
