@@ -57,6 +57,18 @@ const ROOMS = [
         weeklyHalfRate: null,
         staffRatio:     8,
     },
+    {
+        id:             'summer',
+        label:          '☀️ Summer Camp',
+        ages:           '4–9 years',
+        capacity:       25,
+        fullDayOnly:    true,
+        fullDayRate:    75,
+        halfDayRate:    null,
+        weeklyFullRate: null,
+        weeklyHalfRate: null,
+        staffRatio:     11,
+    },
 ];
 
 // ============================================================
@@ -368,7 +380,7 @@ async function searchFamilies(query) {
     try {
         const { data, error } = await sbClient
             .from('families')
-            .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
+            .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
             .or(`parent_name.ilike.%${query}%,parent_email.ilike.%${query}%`)
             .order('parent_name')
             .limit(8);
@@ -425,7 +437,7 @@ async function lookupFamilyByPin(pin) {
         const parsedPin = parseInt(pin, 10);
         const { data, error } = await sbClient
             .from('families')
-            .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, registration_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
+            .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, registration_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
             .or(`pin.eq.${parsedPin},parent2_pin.eq.${parsedPin}`)
             .maybeSingle();
         if (error) { console.error('lookupFamilyByPin:', error); return null; }
@@ -453,7 +465,7 @@ async function createFamily({ parentName, parentEmail, parentPhone, pin: provide
             await sbClient.from('families').update(updateData).eq('id', existing.id);
             const { data: updated } = await sbClient
                 .from('families')
-                .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, students(id, child_name, child_dob, room_override)')
+                .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, students(id, child_name, child_dob, room_override, recurring_days)')
                 .eq('id', existing.id).single();
             return updated;
         }
@@ -498,7 +510,7 @@ async function fetchAllFamilies({ includeArchived = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, created_at, active, group, registration_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note)')
+        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, created_at, active, group, registration_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
         .order('parent_name');
     if (!includeArchived) query = query.eq('active', true);
     const { data, error } = await query;
