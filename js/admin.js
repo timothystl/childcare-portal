@@ -269,10 +269,6 @@ function renderTable(data) {
             ? (disc.type === 'staff' ? 'Staff (free)' : `${disc.value}% off`)
             : '—';
 
-        const roomOptions = ROOMS.map(r =>
-            `<option value="${r.id}" ${r.id === reg.room_id ? 'selected' : ''}>${r.label}</option>`
-        ).join('');
-
         return `
             <tr data-id="${reg.id}" data-room="${reg.room_id}">
                 <td>${submitted}</td>
@@ -280,7 +276,7 @@ function renderTable(data) {
                 <td><a href="mailto:${escHtml(reg.parent_email)}">${escHtml(reg.parent_email)}</a></td>
                 <td>${escHtml(reg.parent_phone)}</td>
                 <td>${escHtml(reg.child_name)}</td>
-                <td><select class="room-change-select" data-id="${reg.id}">${roomOptions}</select></td>
+                <td>${room.label}</td>
                 <td class="dates-cell">${datesHtml}</td>
                 <td class="tally-cell">${tallyHtml}</td>
                 <td class="bill-cell">$${bill.toFixed(2)}</td>
@@ -302,25 +298,6 @@ function renderTable(data) {
                 await loadRegistrations();
             } catch (err) {
                 alert('Delete failed: ' + err.message);
-            }
-        });
-    });
-
-    tbody.querySelectorAll('.room-change-select').forEach(sel => {
-        sel.addEventListener('change', async e => {
-            const id      = e.currentTarget.getAttribute('data-id');
-            const newRoom = e.currentTarget.value;
-            const reg     = allRegistrations.find(r => String(r.id) === id);
-            if (!confirm(`Move ${reg?.child_name ?? 'this child'} to ${ROOMS.find(r => r.id === newRoom)?.label ?? newRoom}?`)) {
-                e.currentTarget.value = reg?.room_id; // revert
-                return;
-            }
-            try {
-                await updateRegistrationRoom(id, newRoom);
-                await loadRegistrations();
-            } catch (err) {
-                alert('Room change failed: ' + err.message);
-                e.currentTarget.value = reg?.room_id;
             }
         });
     });
@@ -633,7 +610,6 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
                 </div>
                 <div id="dayDetailBody" class="day-detail-body"></div>
             </div>`;
-        // Append inside the room-cal modal so it scrolls with it
         document.getElementById('roomCalModal')?.querySelector('.rcal-dialog')?.appendChild(panel)
             || document.body.appendChild(panel);
         document.getElementById('dayDetailClose').addEventListener('click', closeDayRosterDetail);
@@ -643,19 +619,86 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
     document.getElementById('dayDetailTitle').textContent =
         `${room?.label || roomId} — ${friendlyShort(dateStr)}`;
 
+    // Build per-room enrollment counts for this date (for availability info in dropdown)
+    const roomCounts = {};
+    ROOMS.forEach(r => { roomCounts[r.id] = 0; });
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (d.care_date === dateStr && !d.waitlisted) {
+                roomCounts[d.room_id] = (roomCounts[d.room_id] || 0) + 1;
+            }
+        });
+    });
+
+    const otherRooms = ROOMS.filter(r => r.id !== roomId);
+    const isFull     = cap > 0 && enrolled.length >= cap;
+
     const bodyEl = document.getElementById('dayDetailBody');
     if (!enrolled.length) {
         bodyEl.innerHTML = '<p class="empty-hint" style="padding:12px 0;">No children booked for this day.</p>';
     } else {
+        const countBadge = isFull
+            ? `<span class="day-detail-full-badge">Room is full</span>`
+            : ``;
+        const moveOptions = otherRooms.map(r => {
+            const cnt       = roomCounts[r.id] || 0;
+            const spotsLeft = Math.max(0, r.capacity - cnt);
+            const avail     = spotsLeft === 0 ? 'Full' : `${spotsLeft} open`;
+            return `<option value="${r.id}">${r.label} — ${avail}</option>`;
+        }).join('');
+
         bodyEl.innerHTML = `
-            <p class="day-detail-count">${enrolled.length} / ${cap} spots filled</p>
+            <p class="day-detail-count">
+                ${enrolled.length} / ${cap} spots filled ${countBadge}
+            </p>
             <ul class="day-detail-list">
                 ${enrolled.map(e => `
                     <li class="day-detail-item">
                         <span class="day-detail-name">${escHtml(e.childName)}</span>
                         <span class="day-chip ${e.dayType}">${e.dayType === 'half' ? 'Half Day' : 'Full Day'}</span>
+                        <select class="day-move-select" data-date-id="${e.dateId}"
+                                data-child="${escHtml(e.childName)}"
+                                data-from-room="${roomId}"
+                                title="Move ${escHtml(e.childName)} to a different room for this day only">
+                            <option value="">Move to…</option>
+                            ${moveOptions}
+                        </select>
                     </li>`).join('')}
             </ul>`;
+
+        // Wire move dropdowns
+        bodyEl.querySelectorAll('.day-move-select').forEach(sel => {
+            sel.addEventListener('change', async () => {
+                const newRoomId   = sel.value;
+                if (!newRoomId) return;
+                const childName   = sel.dataset.child;
+                const dateId      = sel.dataset.dateId;
+                const fromRoom    = ROOMS.find(r => r.id === sel.dataset.fromRoom)?.label || sel.dataset.fromRoom;
+                const toRoom      = ROOMS.find(r => r.id === newRoomId)?.label || newRoomId;
+                if (!confirm(`Move ${childName} from ${fromRoom} to ${toRoom} for ${friendlyShort(dateStr)} only?\n\nAll other days stay unchanged.`)) {
+                    sel.value = '';
+                    return;
+                }
+                sel.disabled = true;
+                try {
+                    await updateRegistrationDateRoom(dateId, newRoomId);
+                    // Update in-memory allRegistrations so the calendar redraws correctly
+                    allRegistrations = allRegistrations.map(reg => {
+                        const dates = (reg.registration_dates || []).map(d =>
+                            String(d.id) === String(dateId) ? { ...d, room_id: newRoomId } : d
+                        );
+                        return { ...reg, registration_dates: dates };
+                    });
+                    closeDayRosterDetail();
+                    drawRoomCalendar();
+                    renderCapacityOverview();
+                } catch (err) {
+                    alert('Move failed: ' + err.message);
+                    sel.disabled = false;
+                    sel.value = '';
+                }
+            });
+        });
     }
 
     panel.classList.remove('hidden');
@@ -698,14 +741,15 @@ function drawRoomCalendar() {
     document.getElementById('rcalRoomName').textContent  = room?.label || rcalRoomId;
     document.getElementById('rcalMonthLabel').textContent = MONTH_NAMES_ADMIN[m] + ' ' + y;
 
-    // Build dayMap: 'YYYY-MM-DD' → [{ childName, dayType }]
+    // Build dayMap: 'YYYY-MM-DD' → [{ childName, dayType, dateId }]
+    // Filter by the date's own room_id (not the registration's) so per-day moves are reflected.
     const dayMap = {};
     allRegistrations.forEach(reg => {
-        if (reg.room_id !== rcalRoomId) return;
         (reg.registration_dates || []).forEach(d => {
+            if (d.room_id !== rcalRoomId) return;
             if (d.waitlisted || !d.care_date || !d.care_date.startsWith(monthKey)) return;
             if (!dayMap[d.care_date]) dayMap[d.care_date] = [];
-            dayMap[d.care_date].push({ childName: reg.child_name, dayType: d.day_type });
+            dayMap[d.care_date].push({ childName: reg.child_name, dayType: d.day_type, dateId: d.id });
         });
     });
 

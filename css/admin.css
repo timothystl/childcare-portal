@@ -234,16 +234,6 @@
 .badge-waitlist  { background: #fed7d7; color: #9b2c2c; }
 .date-chip em    { font-style: normal; font-weight: 700; }
 
-.room-change-select {
-    font-size: .85em;
-    padding: 4px 6px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    background: #fff;
-    cursor: pointer;
-    max-width: 140px;
-}
-
 .btn-edit-days {
     font-size: .82em;
     padding: 5px 10px;
@@ -1791,7 +1781,30 @@ tr.pending-approval:hover { background: #fef3c7; }
     font-size: .9em;
 }
 .day-detail-item:last-child { border-bottom: none; }
-.day-detail-name { font-weight: 500; color: #2d3748; }
+.day-detail-name { font-weight: 500; color: #2d3748; flex: 1; min-width: 0; }
+
+.day-detail-full-badge {
+    display: inline-block;
+    background: #fed7d7;
+    color: #9b2c2c;
+    font-size: .78em;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.day-move-select {
+    font-size: .78em;
+    padding: 3px 5px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #f8f9ff;
+    cursor: pointer;
+    margin-left: 8px;
+    max-width: 160px;
+}
 
 /* Make rcal-dialog position:relative so the detail panel anchors to it */
 .rcal-dialog { position: relative; }
