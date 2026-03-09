@@ -243,18 +243,13 @@ async function deleteRegistration(id) {
     if (error) throw error;
 }
 
-async function updateRegistrationRoom(regId, newRoomId) {
+async function updateRegistrationDateRoom(dateId, newRoomId) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { error: regErr } = await sbClient
-        .from('registrations')
-        .update({ room_id: newRoomId })
-        .eq('id', regId);
-    if (regErr) throw regErr;
-    const { error: datesErr } = await sbClient
+    const { error } = await sbClient
         .from('registration_dates')
         .update({ room_id: newRoomId })
-        .eq('registration_id', regId);
-    if (datesErr) throw datesErr;
+        .eq('id', dateId);
+    if (error) throw error;
 }
 
 async function addRegistrationDate(regId, roomId, careDate, dayType, waitlisted) {
