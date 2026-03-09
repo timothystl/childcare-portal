@@ -205,7 +205,7 @@ async function fetchAllRegistrations({ sinceDate = null, untilDate = null } = {}
             id, created_at, status,
             parent_name, parent_email, parent_phone,
             child_name, child_age, child_dob, room_id,
-            registration_dates ( care_date, waitlisted, day_type )
+            registration_dates ( id, care_date, waitlisted, day_type, room_id )
         `)
         .gte('created_at', since)
         .lte('created_at', until)

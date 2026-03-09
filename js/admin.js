@@ -442,7 +442,8 @@ function renderCapacityOverview() {
             (reg.registration_dates || []).forEach(d => {
                 if (d.waitlisted || !d.care_date) return;
                 if (d.care_date.startsWith(key)) {
-                    counts[reg.room_id] = (counts[reg.room_id] || 0) + 1;
+                    const roomKey = d.room_id || reg.room_id; // use date-level room_id when available
+                    counts[roomKey] = (counts[roomKey] || 0) + 1;
                 }
             });
         });
