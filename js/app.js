@@ -67,10 +67,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (banner) {
         if (win.mode === 'closed') {
             banner.className = 'reg-window-banner locked';
-            banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed. Deadline was <strong>${win.deadlineLabel}</strong>.`;
+            if (regWindowOverride === 'closed') {
+                banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed — this month's space is full. To inquire about availability, <a href="mailto:mdo@timothystl.org">contact the office</a>.`;
+            } else {
+                banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed. Deadline was <strong>${win.deadlineLabel}</strong>.`;
+            }
         } else {
             banner.className = 'reg-window-banner open';
-            banner.innerHTML = `📅 Now accepting registrations for <strong>${win.targetLabel}</strong>. Deadline: <strong>${win.deadlineLabel}</strong>.`;
+            if (regWindowOverride === 'open') {
+                banner.innerHTML = `✅ Registration is still open for <strong>${win.targetLabel}</strong> — space is still available. Deadline: <strong>${win.deadlineLabel}</strong>.`;
+            } else {
+                banner.innerHTML = `📅 Now accepting registrations for <strong>${win.targetLabel}</strong>. Deadline: <strong>${win.deadlineLabel}</strong>.`;
+            }
         }
     }
 
@@ -874,10 +882,18 @@ function resetForNextFamily() {
     if (banner) {
         if (win.mode === 'closed') {
             banner.className = 'reg-window-banner locked';
-            banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed.`;
+            if (regWindowOverride === 'closed') {
+                banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed — this month's space is full. To inquire about availability, <a href="mailto:mdo@timothystl.org">contact the office</a>.`;
+            } else {
+                banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed. Deadline was <strong>${win.deadlineLabel}</strong>.`;
+            }
         } else {
             banner.className = 'reg-window-banner open';
-            banner.innerHTML = `📅 Now accepting registrations for <strong>${win.targetLabel}</strong>. Deadline: <strong>${win.deadlineLabel}</strong>.`;
+            if (regWindowOverride === 'open') {
+                banner.innerHTML = `✅ Registration is still open for <strong>${win.targetLabel}</strong> — space is still available. Deadline: <strong>${win.deadlineLabel}</strong>.`;
+            } else {
+                banner.innerHTML = `📅 Now accepting registrations for <strong>${win.targetLabel}</strong>. Deadline: <strong>${win.deadlineLabel}</strong>.`;
+            }
         }
     }
 }
