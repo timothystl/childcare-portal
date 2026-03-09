@@ -500,6 +500,21 @@ main { padding: 32px 36px; }
     z-index: 2;
 }
 
+.cal-day.recurring-locked {
+    background: #5b3ea0 !important;
+    border-color: #5b3ea0 !important;
+    color: #fff;
+    cursor: default;
+}
+
+.cal-day.recurring-locked .spot-badge { color: #fff; }
+
+.recurring-badge {
+    background: rgba(255,255,255,0.25);
+    border-radius: 3px;
+    padding: 1px 3px;
+}
+
 /* ============================================================
    DAY PICKER BACKDROP + POPUP
    ============================================================ */

@@ -1564,8 +1564,9 @@ async function autoFillStaffSchedule() {
         // Exclude administrators from auto-assignment
         const active = allStaffData.filter(s => s.active && !/^admin(istrator)?$/i.test((s.role || '').trim()));
 
-        // Track weekly hours used per staff
+        // Track weekly hours and days used per staff
         const weeklyHours = new Map(active.map(s => [s.id, 0]));
+        const weeklyDays  = new Map(active.map(s => [s.id, 0]));
 
         // Build assignment map: { date: { roomId: { am: [names], pm: [names] } } }
         const assignments = {};
@@ -1603,11 +1604,15 @@ async function autoFillStaffSchedule() {
                 let amFilled = 0;
                 for (const s of amCandidates) {
                     if (amFilled >= amNeed) break;
-                    const max  = staffAvailability[s.id]?.maxHours ?? 40;
-                    const used = weeklyHours.get(s.id) || 0;
-                    if (used + SHIFT_HRS.am > max) continue;
+                    const maxHrs  = staffAvailability[s.id]?.maxHours ?? 40;
+                    const maxDays = staffAvailability[s.id]?.maxDays  ?? 5;
+                    const used    = weeklyHours.get(s.id) || 0;
+                    const daysUsed = weeklyDays.get(s.id) || 0;
+                    if (used + SHIFT_HRS.am > maxHrs) continue;
+                    if (daysUsed >= maxDays) continue;
                     assignments[d][room.id].am.push(s.name);
                     weeklyHours.set(s.id, used + SHIFT_HRS.am);
+                    weeklyDays.set(s.id, daysUsed + 1);
                     amFilled++;
                 }
 
@@ -1625,14 +1630,21 @@ async function autoFillStaffSchedule() {
                 for (const s of pmCandidates) {
                     if (pmFilled >= pmNeed) break;
                     if (assignments[d][room.id].pm.includes(s.name)) continue;
-                    const max  = staffAvailability[s.id]?.maxHours ?? 40;
-                    const used = weeklyHours.get(s.id) || 0;
-                    // AM staff already had their hours added; PM is additional only if not already on AM
+                    const maxHrs   = staffAvailability[s.id]?.maxHours ?? 40;
+                    const maxDays  = staffAvailability[s.id]?.maxDays  ?? 5;
+                    const used     = weeklyHours.get(s.id) || 0;
+                    const daysUsed = weeklyDays.get(s.id) || 0;
+                    // AM staff already had their hours and day counted; PM-only is additional
                     const alreadyOnAm = assignments[d][room.id].am.includes(s.name);
-                    const addHrs = alreadyOnAm ? 0 : SHIFT_HRS.pm; // covering full day counts once
-                    if (used + addHrs > max) continue;
+                    const addHrs  = alreadyOnAm ? 0 : SHIFT_HRS.pm;
+                    const addDays = alreadyOnAm ? 0 : 1;
+                    if (used + addHrs > maxHrs) continue;
+                    if (!alreadyOnAm && daysUsed >= maxDays) continue;
                     assignments[d][room.id].pm.push(s.name);
-                    if (!alreadyOnAm) weeklyHours.set(s.id, used + SHIFT_HRS.pm);
+                    if (!alreadyOnAm) {
+                        weeklyHours.set(s.id, used + SHIFT_HRS.pm);
+                        weeklyDays.set(s.id, daysUsed + addDays);
+                    }
                     pmFilled++;
                 }
             });
@@ -2823,6 +2835,15 @@ function renderModalChildRows() {
                         <input type="text" class="fmc-discount-note" value="${escHtml(child.discount_note || '')}" placeholder="Optional note">
                     </div>
                 </div>
+                <div class="fm-child-recurring">
+                    <label style="font-size:.82em;color:#555;font-weight:600;display:block;margin-bottom:4px">Recurring Days <span style="font-weight:400;color:#888">(pre-fill calendar each month)</span></label>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                        ${['Mon','Tue','Wed','Thu','Fri'].map(day => {
+                            const rd = Array.isArray(child.recurring_days) ? child.recurring_days : [];
+                            return `<label style="font-size:.85em;display:flex;align-items:center;gap:3px"><input type="checkbox" class="fmc-recurring-day" value="${day}" ${rd.includes(day) ? 'checked' : ''}> ${day}</label>`;
+                        }).join('')}
+                    </div>
+                </div>
                 <button type="button" class="fmc-remove-btn" data-index="${i}" title="Remove child">✕</button>
             </div>`;
     }).join('');
@@ -2847,18 +2868,20 @@ function addModalChildRow() {
     document.querySelectorAll('#fmChildRows .fm-child-row').forEach(row => {
         const idx = parseInt(row.dataset.index);
         if (!isNaN(idx) && familyModalChildren[idx]) {
-            familyModalChildren[idx].child_name    = row.querySelector('.fmc-name')?.value.trim() || '';
-            familyModalChildren[idx].child_dob     = row.querySelector('.fmc-dob')?.value || null;
-            familyModalChildren[idx].room_override = row.querySelector('.fmc-room')?.value || null;
-            familyModalChildren[idx].discount_type = row.querySelector('.fmc-discount-type')?.value || 'none';
+            familyModalChildren[idx].child_name     = row.querySelector('.fmc-name')?.value.trim() || '';
+            familyModalChildren[idx].child_dob      = row.querySelector('.fmc-dob')?.value || null;
+            familyModalChildren[idx].room_override  = row.querySelector('.fmc-room')?.value || null;
+            familyModalChildren[idx].discount_type  = row.querySelector('.fmc-discount-type')?.value || 'none';
             familyModalChildren[idx].discount_value = parseFloat(row.querySelector('.fmc-discount-value')?.value) || 0;
-            familyModalChildren[idx].discount_note = row.querySelector('.fmc-discount-note')?.value.trim() || null;
+            familyModalChildren[idx].discount_note  = row.querySelector('.fmc-discount-note')?.value.trim() || null;
+            familyModalChildren[idx].recurring_days = [...row.querySelectorAll('.fmc-recurring-day:checked')].map(cb => cb.value);
         }
     });
 
     familyModalChildren.push({
         id: null, child_name: '', child_dob: null,
         room_override: null, discount_type: 'none', discount_value: 0, discount_note: null,
+        recurring_days: [],
     });
     renderModalChildRows();
     // Focus the new name input
@@ -2885,6 +2908,7 @@ function readModalChildrenFromDom() {
             discount_type:  row.querySelector('.fmc-discount-type').value || 'none',
             discount_value: parseFloat(row.querySelector('.fmc-discount-value').value) || 0,
             discount_note:  row.querySelector('.fmc-discount-note').value.trim() || null,
+            recurring_days: [...row.querySelectorAll('.fmc-recurring-day:checked')].map(cb => cb.value),
         });
     });
     return children;
@@ -2969,6 +2993,7 @@ async function saveFamilyModal() {
                         discount_type:  child.discount_type,
                         discount_value: child.discount_value,
                         discount_note:  child.discount_note,
+                        recurring_days: child.recurring_days?.length ? child.recurring_days : null,
                     });
                 } else {
                     const student = await addStudent({
@@ -2981,6 +3006,7 @@ async function saveFamilyModal() {
                         discount_type:  child.discount_type,
                         discount_value: child.discount_value,
                         discount_note:  child.discount_note,
+                        recurring_days: child.recurring_days?.length ? child.recurring_days : null,
                     });
                 }
             }
@@ -3584,6 +3610,7 @@ function openStaffForm(staff = null) {
         cb.checked = availPeriods.includes(cb.value);
     });
     document.getElementById('sfMaxHours').value = avail.maxHours != null ? avail.maxHours : 40;
+    document.getElementById('sfMaxDays').value  = avail.maxDays  != null ? avail.maxDays  : 5;
 
     document.getElementById('staffFormStatus').textContent = '';
     document.getElementById('staffEditForm').classList.remove('hidden');
@@ -3620,6 +3647,7 @@ async function onSaveStaffMember() {
     const availDays    = [...document.querySelectorAll('.sfAvailDay:checked')].map(cb => cb.value);
     const availPeriods = [...document.querySelectorAll('.sfAvailPeriod:checked')].map(cb => cb.value);
     const maxHours     = parseFloat(document.getElementById('sfMaxHours').value) || 40;
+    const maxDays      = parseInt(document.getElementById('sfMaxDays').value, 10) || 5;
     const savingId     = editingStaffId;
 
     try {
@@ -3644,7 +3672,7 @@ async function onSaveStaffMember() {
             if (typeof staffAvailability !== 'object' || Array.isArray(staffAvailability) || staffAvailability === null) {
                 staffAvailability = {};
             }
-            staffAvailability[staffId] = { days: availDays, periods: availPeriods, maxHours };
+            staffAvailability[staffId] = { days: availDays, periods: availPeriods, maxHours, maxDays };
             saveStaffAvailability(staffAvailability).catch(console.error);
         }
         loadStaffList();
@@ -5004,6 +5032,230 @@ function renderWaitlistAdmin() {
         }));
 }
 
+// ============================================================
+// WAITLIST PLANNING PANEL
+// ============================================================
+function renderWaitlistPlanning() {
+    const container = document.getElementById('wlPlanContent');
+    if (!container) return;
+
+    // Show next 4 months starting from current month
+    const today = new Date();
+    const months = Array.from({ length: 4 }, (_, i) => {
+        const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+        return { year: d.getFullYear(), month: d.getMonth(), key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: MONTH_NAMES_ADMIN[d.getMonth()] + ' ' + d.getFullYear() };
+    });
+
+    // Count confirmed bookings per room per day from allRegistrations
+    const dailyBookings = {}; // 'YYYY-MM-DD' → { roomId: count }
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date) return;
+            const roomId = d.room_id || reg.room_id;
+            if (!dailyBookings[d.care_date]) dailyBookings[d.care_date] = {};
+            dailyBookings[d.care_date][roomId] = (dailyBookings[d.care_date][roomId] || 0) + 1;
+        });
+    });
+
+    // Aging-out: for each enrolled child, calculate when they graduate to next room
+    // Bear → Bee at 12mo, Bee → Turtle at 24mo, Turtle → Owl at 36mo, Owl → out at 60mo
+    const ageOutThresholds = { bear: 12, bee: 24, turtle: 36, owl: 60 };
+    const agingOut = {}; // 'YYYY-MM' → { roomId: [childName, ...] }
+    const seenChildren = new Set();
+    allRegistrations.forEach(reg => {
+        if (!reg.child_dob || !reg.room_id || !ageOutThresholds[reg.room_id]) return;
+        const key = `${reg.child_name}:${reg.room_id}`;
+        if (seenChildren.has(key)) return;
+        seenChildren.add(key);
+        const dob        = new Date(reg.child_dob);
+        const monthsOld  = ageOutThresholds[reg.room_id];
+        const graduates  = new Date(dob.getFullYear(), dob.getMonth() + monthsOld, 1);
+        const gradKey    = `${graduates.getFullYear()}-${String(graduates.getMonth()+1).padStart(2,'0')}`;
+        if (!agingOut[gradKey]) agingOut[gradKey] = {};
+        if (!agingOut[gradKey][reg.room_id]) agingOut[gradKey][reg.room_id] = [];
+        agingOut[gradKey][reg.room_id].push(reg.child_name);
+    });
+
+    // Build the planning grid
+    const waitlistByRoom = {};
+    (_allWaitlistApps || []).filter(a => ['pending','offered','accepted'].includes(a.status)).forEach(a => {
+        const rid = a.sibling_room_id || 'tbd';
+        if (!waitlistByRoom[rid]) waitlistByRoom[rid] = [];
+        waitlistByRoom[rid].push(a);
+    });
+
+    const roomRows = ROOMS.filter(r => r.id !== 'summer').map(room => {
+        const monthCells = months.map(({ key, label, year, month: mo }) => {
+            // Count working days in month
+            const daysInMonth = new Date(year, mo + 1, 0).getDate();
+            let workDays = 0; const dailyCounts = [];
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dow = new Date(year, mo, day).getDay();
+                if (dow === 0 || dow === 6) continue;
+                workDays++;
+                const dateStr = `${key}-${String(day).padStart(2,'0')}`;
+                dailyCounts.push((dailyBookings[dateStr]?.[room.id] || 0));
+            }
+            const avgBooked  = workDays ? dailyCounts.reduce((a,b)=>a+b,0)/workDays : 0;
+            const avgOpen    = Math.max(0, room.capacity - avgBooked).toFixed(1);
+            const pct        = room.capacity > 0 ? avgBooked / room.capacity : 0;
+            const color      = pct >= 0.9 ? '#fff5f5' : pct >= 0.7 ? '#fffaf0' : '#f0fff4';
+            const textColor  = pct >= 0.9 ? '#9b2c2c' : pct >= 0.7 ? '#b45309' : '#276749';
+
+            // Aging-out events this month
+            const outs  = (agingOut[key]?.[room.id] || []);
+            const outHtml = outs.length ? `<div style="font-size:.75em;color:#667eea;margin-top:3px">→ ${outs.length} graduate${outs.length>1?'s':''} out</div>` : '';
+
+            return `<td style="background:${color};color:${textColor};text-align:center;padding:8px 6px;font-size:.85em;white-space:nowrap">
+                <strong>${avgOpen}</strong><br><span style="font-size:.78em;color:#888">avg open/day</span>${outHtml}
+            </td>`;
+        }).join('');
+
+        const wl = (waitlistByRoom[room.id] || []).slice(0,5);
+        const wlHtml = wl.length
+            ? wl.map(a => `<div style="font-size:.8em;color:#555;padding:2px 0">${escHtml(a.child_name)} <span style="color:#aaa">(${a.desired_start_date || '?'})</span></div>`).join('')
+            : '<div style="font-size:.8em;color:#aaa">No waitlist</div>';
+
+        return `<tr>
+            <td style="font-weight:600;white-space:nowrap;padding:8px 10px">${room.label}<br><span style="font-weight:400;font-size:.8em;color:#888">Cap ${room.capacity}/day</span></td>
+            ${monthCells}
+            <td style="padding:8px 10px;max-width:200px">${wlHtml}</td>
+        </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div style="overflow-x:auto">
+        <table class="report-table" style="min-width:700px">
+            <thead><tr>
+                <th>Room</th>
+                ${months.map(m => `<th style="text-align:center">${m.label}</th>`).join('')}
+                <th>Waitlisted (next up)</th>
+            </tr></thead>
+            <tbody>${roomRows}</tbody>
+        </table></div>
+        <p style="font-size:.8em;color:#888;margin-top:8px">Avg open/day based on known registrations. → Graduates = children aging out of this room that month, freeing a permanent spot.</p>`;
+}
+
+// ============================================================
+// WAITLIST IMPORT
+// ============================================================
+async function previewWaitlistImport() {
+    const fileInput = document.getElementById('wlImportFile');
+    const preview   = document.getElementById('wlImportPreview');
+    if (!fileInput?.files?.length) { preview.innerHTML = '<p class="import-error">Please choose a file first.</p>'; return; }
+
+    const file = fileInput.files[0];
+    let rows;
+    try {
+        rows = await parseUploadedFile(file);
+    } catch (err) {
+        preview.innerHTML = `<p class="import-error">Could not read file: ${escHtml(err.message)}</p>`;
+        return;
+    }
+
+    if (!rows.length) { preview.innerHTML = '<p class="import-error">No data rows found in file.</p>'; return; }
+
+    // Detect columns (case-insensitive fuzzy match)
+    const headers  = Object.keys(rows[0]).map(h => h.trim());
+    const col = (keywords) => headers.find(h => keywords.some(k => h.toLowerCase().includes(k))) || null;
+
+    const colParent  = col(['parent name','guardian name','parent']);
+    const colEmail   = col(['email','e-mail']);
+    const colPhone   = col(['phone','cell','mobile']);
+    const colChild   = col(['child name','student name','child first','first name']);
+    const colDob     = col(['dob','birth date','birthdate','date of birth','birthday']);
+    const colStart   = col(['start date','desired start','start']);
+    const colDays    = col(['days requested','days of week','days','weekdays']);
+    const colType    = col(['day type','full or half','half or full','type']);
+    const colNotes   = col(['notes','comments','note']);
+
+    if (!colParent || !colEmail || !colChild) {
+        preview.innerHTML = `<p class="import-error">Missing required columns. Need at least: Parent Name, Email, Child Name. Detected columns: ${escHtml(headers.join(', '))}</p>`;
+        return;
+    }
+
+    // Normalize rows into waitlist records
+    const records = rows.map(r => {
+        const parentName  = (r[colParent] || '').trim();
+        const parentEmail = (r[colEmail]  || '').trim().toLowerCase();
+        const parentPhone = colPhone  ? (r[colPhone]  || '').trim() : '';
+        const childName   = (r[colChild]  || '').trim();
+        const childDob    = colDob    ? _normDateStr(r[colDob])   : null;
+        const startDate   = colStart  ? _normDateStr(r[colStart]) : null;
+        const daysOfWeek  = colDays   ? (r[colDays]  || '').trim() : '';
+        const dayType     = colType   ? ((r[colType] || '').toLowerCase().includes('half') ? 'half' : 'full') : 'full';
+        const notes       = colNotes  ? (r[colNotes] || '').trim() : '';
+        return { parentName, parentEmail, parentPhone, childName, childDob, startDate, daysOfWeek, dayType, notes };
+    }).filter(r => r.parentName && r.parentEmail && r.childName);
+
+    if (!records.length) { preview.innerHTML = '<p class="import-error">No valid rows after normalization.</p>'; return; }
+
+    preview.innerHTML = `
+        <p style="margin-bottom:8px;font-size:.9em;color:#555">${records.length} record(s) ready to import. Review below, then click <strong>Import</strong>.</p>
+        <div style="overflow-x:auto;margin-bottom:12px">
+        <table class="report-table" style="font-size:.82em">
+            <thead><tr>
+                <th>Parent</th><th>Email</th><th>Child</th><th>Child DOB</th>
+                <th>Desired Start</th><th>Days</th><th>Type</th><th>Notes</th>
+            </tr></thead>
+            <tbody>
+                ${records.map(r => `<tr>
+                    <td>${escHtml(r.parentName)}</td>
+                    <td>${escHtml(r.parentEmail)}</td>
+                    <td>${escHtml(r.childName)}</td>
+                    <td>${r.childDob || '—'}</td>
+                    <td>${r.startDate || '—'}</td>
+                    <td>${escHtml(r.daysOfWeek) || '—'}</td>
+                    <td>${r.dayType}</td>
+                    <td>${escHtml(r.notes) || '—'}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table></div>
+        <button id="wlImportConfirmBtn" class="btn-primary">Import ${records.length} Record(s)</button>
+        <span id="wlImportStatus" style="margin-left:12px;font-size:.88em;color:#555"></span>`;
+
+    document.getElementById('wlImportConfirmBtn').addEventListener('click', async () => {
+        const btn    = document.getElementById('wlImportConfirmBtn');
+        const status = document.getElementById('wlImportStatus');
+        btn.disabled = true; btn.textContent = 'Importing…';
+        let imported = 0, failed = 0;
+        for (const r of records) {
+            try {
+                await submitWaitlistApplication({
+                    parent_name:          r.parentName,
+                    parent_email:         r.parentEmail,
+                    parent_phone:         r.parentPhone || null,
+                    child_name:           r.childName,
+                    child_dob:            r.childDob || null,
+                    desired_start_date:   r.startDate || new Date().toISOString().split('T')[0],
+                    days_of_week:         r.daysOfWeek || null,
+                    day_type:             r.dayType,
+                    notes:                r.notes || null,
+                    status:               'pending',
+                });
+                imported++;
+            } catch { failed++; }
+        }
+        status.textContent = `✓ ${imported} imported${failed ? `, ${failed} failed` : ''}`;
+        btn.textContent = 'Done';
+        if (imported > 0) await loadWaitlistApplications();
+    });
+}
+
+function _normDateStr(val) {
+    if (!val) return null;
+    const s = String(val).trim();
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // MM/DD/YYYY or M/D/YYYY
+    const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (mdy) return `${mdy[3]}-${mdy[1].padStart(2,'0')}-${mdy[2].padStart(2,'0')}`;
+    // Try native parse
+    const d = new Date(s);
+    if (!isNaN(d)) return d.toLocaleDateString('en-CA');
+    return null;
+}
+
 function setupWaitlistAdmin() {
     document.getElementById('refreshWaitlistBtn')?.addEventListener('click', loadWaitlistApplications);
     document.getElementById('wlStatusFilter')?.addEventListener('change', () => { renderWaitlistAdmin(); renderWaitlistQuickList(); });
@@ -5046,6 +5298,10 @@ function setupWaitlistAdmin() {
     });
     document.getElementById('addToWaitlistBtn')?.addEventListener('click', _openAdminWlModal);
     document.getElementById('generateWaitlistBtn')?.addEventListener('click', generateWaitlistReport);
+    document.getElementById('generateWlPlanBtn')?.addEventListener('click', renderWaitlistPlanning);
+
+    // Waitlist import
+    document.getElementById('wlImportParseBtn')?.addEventListener('click', previewWaitlistImport);
 
     // Modal controls
     document.getElementById('adminWlCancelBtn')?.addEventListener('click', _closeAdminWlModal);

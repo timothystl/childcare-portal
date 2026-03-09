@@ -20,8 +20,8 @@ let regWindowOverride   = 'auto';     // 'auto' | 'open' | 'closed'
 
 // ============================================================
 // REGISTRATION WINDOW
-// - mode 'confirmed' : day 1–20  → form enabled, dates saved as confirmed
-// - mode 'closed'    : day 21+   → registration closed (no waitlist)
+// - mode 'confirmed' : day 1–15  → form enabled, dates saved as confirmed
+// - mode 'closed'    : day 16+   → registration closed (no waitlist)
 // ============================================================
 function getRegistrationWindow() {
     const today  = new Date();
@@ -33,10 +33,10 @@ function getRegistrationWindow() {
     const targetDate  = new Date(year, month + 1, 1);
     const targetLabel = MONTH_NAMES[targetDate.getMonth()] + ' ' + targetDate.getFullYear();
 
-    const deadlineDate  = new Date(year, month, 20);
+    const deadlineDate  = new Date(year, month, 15);
     const deadlineLabel = deadlineDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
-    let mode = day <= 20 ? 'confirmed' : 'closed';
+    let mode = day <= 15 ? 'confirmed' : 'closed';
     if (regWindowOverride === 'open')   mode = 'confirmed';
     if (regWindowOverride === 'closed') mode = 'closed';
 
@@ -322,6 +322,7 @@ function renderChildSection() {
                 const dobLabel   = s.child_dob
                     ? new Date(s.child_dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                     : '';
+                const recurDays = Array.isArray(s.recurring_days) ? s.recurring_days.join(',') : '';
                 return `<label class="child-card-label${isSelected ? ' selected' : ''}" data-student-id="${s.id}">
                     <input type="checkbox" class="child-card-checkbox"
                            data-student-id="${s.id}"
@@ -330,9 +331,11 @@ function renderChildSection() {
                            data-room-override="${escStr(s.room_override || '')}"
                            data-discount-type="${escStr(s.discount_type || 'none')}"
                            data-discount-value="${escStr(String(s.discount_value || 0))}"
+                           data-recurring-days="${escStr(recurDays)}"
                            ${isSelected ? 'checked' : ''}>
                     <span class="child-card-name">${escStr(s.child_name)}</span>
                     ${dobLabel ? `<span class="child-card-dob">${dobLabel}</span>` : ''}
+                    ${recurDays ? `<span class="child-card-recurring" title="Recurring days: ${escStr(recurDays.replace(/,/g,', '))}">🔁 ${escStr(recurDays.replace(/,/g,', '))}</span>` : ''}
                 </label>`;
             }).join('')}
         </div>`;
@@ -352,10 +355,12 @@ function renderChildSection() {
             cb.closest('.child-card-label').classList.toggle('selected', cb.checked);
             if (cb.checked) {
                 if (!selectedChildren.some(c => c.studentId === studentId)) {
+                    const rdRaw = cb.dataset.recurringDays || '';
                     selectedChildren.push({
                         name: childName, dob: childDob, room, isNew: false, studentId,
                         discountType:  cb.dataset.discountType  || 'none',
                         discountValue: parseFloat(cb.dataset.discountValue || '0'),
+                        recurringDays: rdRaw ? rdRaw.split(',').filter(Boolean) : [],
                     });
                     onChildrenChanged();
                     // Non-blocking: warn if already registered for the target month
@@ -386,6 +391,24 @@ async function onChildrenChanged() {
         renderSelectedDates();
         return;
     }
+
+    // Pre-populate recurring days for selected children who have them set
+    const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const { targetDate } = getRegistrationWindow();
+    const yr = targetDate.getFullYear(), mo = targetDate.getMonth();
+    const daysInMonth = new Date(yr, mo + 1, 0).getDate();
+    const allRecurring = new Set(selectedChildren.flatMap(c => c.recurringDays || []));
+    if (allRecurring.size) {
+        for (let day = 1; day <= daysInMonth; day++) {
+            const d   = new Date(yr, mo, day);
+            const dow = DOW_NAMES[d.getDay()];
+            if (allRecurring.has(dow)) {
+                const dateStr = `${yr}-${String(mo+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                selectedDates.set(dateStr, { dayType: 'full', locked: true });
+            }
+        }
+    }
+
     document.getElementById('calendarWrapper')?.classList.remove('hidden');
     document.getElementById('calendarHint')?.classList.add('hidden');
     await loadMonthCapacity();
@@ -512,14 +535,17 @@ function renderCalendar() {
         else               status = getDateStatus(dateStr);
 
         const cell = document.createElement('div');
-        cell.className = `cal-day ${status}${isSelected ? ' selected' : ''}${isPickerOpen ? ' picker-active' : ''}`;
+        const isLocked = isSelected && entry?.locked;
+        cell.className = `cal-day ${status}${isSelected ? ' selected' : ''}${isLocked ? ' recurring-locked' : ''}${isPickerOpen ? ' picker-active' : ''}`;
         cell.setAttribute('data-date', dateStr);
 
         let badge = '';
         if (isSelected && entry) {
-            badge = entry.dayType === 'half'
-                ? '<span class="selected-type-badge">½ day</span>'
-                : '<span class="selected-type-badge">Full</span>';
+            badge = isLocked
+                ? '<span class="selected-type-badge recurring-badge">🔁 Recurring</span>'
+                : (entry.dayType === 'half'
+                    ? '<span class="selected-type-badge">½ day</span>'
+                    : '<span class="selected-type-badge">Full</span>');
         } else if (isClosed) {
             const reason = closureMap.get(dateStr);
             badge = `<span class="spot-badge closed-badge">Closed</span>${reason ? `<span class="closed-reason">${escStr(reason)}</span>` : ''}`;
@@ -555,6 +581,7 @@ function handleDayClick(dateStr, status, cellEl) {
     if (!selectedChildren.length) return;
 
     if (selectedDates.has(dateStr)) {
+        if (selectedDates.get(dateStr)?.locked) return; // cannot remove a recurring day
         selectedDates.delete(dateStr);
         closeDayPicker();
         renderCalendar();
