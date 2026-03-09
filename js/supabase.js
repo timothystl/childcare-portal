@@ -243,6 +243,37 @@ async function deleteRegistration(id) {
     if (error) throw error;
 }
 
+async function updateRegistrationRoom(regId, newRoomId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error: regErr } = await sbClient
+        .from('registrations')
+        .update({ room_id: newRoomId })
+        .eq('id', regId);
+    if (regErr) throw regErr;
+    const { error: datesErr } = await sbClient
+        .from('registration_dates')
+        .update({ room_id: newRoomId })
+        .eq('registration_id', regId);
+    if (datesErr) throw datesErr;
+}
+
+async function addRegistrationDate(regId, roomId, careDate, dayType, waitlisted) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('registration_dates')
+        .insert({ registration_id: regId, room_id: roomId, care_date: careDate, day_type: dayType, waitlisted: !!waitlisted });
+    if (error) throw error;
+}
+
+async function deleteRegistrationDate(dateId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('registration_dates')
+        .delete()
+        .eq('id', dateId);
+    if (error) throw error;
+}
+
 // ============================================================
 // SETTINGS  (key/value table for admin overrides)
 // ============================================================

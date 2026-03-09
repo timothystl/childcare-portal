@@ -234,6 +234,24 @@
 .badge-waitlist  { background: #fed7d7; color: #9b2c2c; }
 .date-chip em    { font-style: normal; font-weight: 700; }
 
+.room-change-select {
+    font-size: .85em;
+    padding: 4px 6px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    max-width: 140px;
+}
+
+.btn-edit-days {
+    font-size: .82em;
+    padding: 5px 10px;
+    white-space: nowrap;
+}
+
+.actions-cell { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
 .btn-delete {
     background: #fff;
     color: #e53e3e;
@@ -2095,7 +2113,9 @@ tr.pending-approval:hover { background: #fef3c7; }
 .clock-event-open input[type="time"] { font-size: 0.82rem; padding: 2px 4px; }
 .clock-add-form    { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.85rem; margin-top: 2px; }
 .clock-add-form input[type="time"] { font-size: 0.82rem; padding: 2px 4px; }
-.show-add-clock-btn { font-size: 0.8rem; margin-top: 2px; align-self: flex-start; }
+.clock-action-btns  { display: flex; gap: 6px; margin-top: 2px; flex-wrap: wrap; }
+.show-add-clock-btn { font-size: 0.8rem; align-self: flex-start; }
+.clock-in-now-btn   { font-size: 0.8rem; align-self: flex-start; }
 
 /* ============================================================
    PAYROLL TABLE
