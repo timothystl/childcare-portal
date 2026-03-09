@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timothy Lutheran Church Mother's Day Out — Registration</title>
+    <link rel="stylesheet" href="css/styles.css?v=8">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img src="images/logo.png" alt="Timothy Lutheran Church" class="site-logo"
+                 onerror="this.style.display='none'">
+            <h1>Mother's Day Out</h1>
+            <p>Childcare Calendar Registration</p>
+        </header>
+
+        <main>
+            <!-- Registration window status banner -->
+            <div id="regWindowBanner" class="reg-window-banner"></div>
+
+            <!-- Waitlist callout for new parents -->
+            <div class="waitlist-callout">
+                <div class="waitlist-callout-text">
+                    <strong>New to Timothy Lutheran MDO?</strong>
+                    <span>No spots available right now? Join our waitlist and we'll reach out when one opens up.</span>
+                </div>
+                <button type="button" id="waitlistCalloutBtn" class="btn-waitlist-callout">⏳ Join the Waitlist</button>
+            </div>
+
+            <form id="registrationForm" novalidate>
+
+                <!-- Family Lookup — REQUIRED to proceed -->
+                <section class="form-section lookup-section">
+                    <h2>🔍 Find Your Family</h2>
+                    <p class="hint">Search by name or email address, or enter your 4-digit family PIN. If you don't appear in the system, please contact the office.</p>
+
+                    <div class="lookup-row">
+                        <div class="lookup-search-row">
+                            <input type="text" id="familySearchInput" placeholder="Search by name or email…" autocomplete="off">
+                            <button type="button" id="familySearchBtn" class="btn-secondary">Search</button>
+                        </div>
+                        <div class="lookup-divider"><span>or</span></div>
+                        <div class="lookup-pin-row">
+                            <input type="text" id="familyPinInput" placeholder="4-digit PIN" maxlength="4"
+                                   pattern="[0-9]{4}" inputmode="numeric" autocomplete="off" class="pin-input">
+                            <button type="button" id="familyPinBtn" class="btn-secondary">Look Up</button>
+                        </div>
+                    </div>
+
+                    <div id="familySearchResults"></div>
+
+                    <!-- Shown once a family is selected -->
+                    <div id="familySelectedBar" class="family-selected-bar hidden">
+                        <span class="family-selected-icon">✓</span>
+                        <span id="selectedFamilyName" class="family-selected-name"></span>
+                        <span id="selectedFamilyPin" class="fam-pin-badge"></span>
+                        <button type="button" id="changeFamilyBtn" class="btn-ghost btn-sm">Change</button>
+                    </div>
+                </section>
+
+                <!-- Locked message — visible until family is found -->
+                <div id="lookupRequiredMsg" class="lookup-required-msg">
+                    🔒 Find your family above to begin your registration.
+                </div>
+
+                <!-- Steps 1–4 + Submit — hidden until family is selected -->
+                <div id="registrationSteps" class="hidden">
+
+                    <!-- Step 1: Parent Information (pre-filled read-only from family) -->
+                    <section class="form-section">
+                        <h2><span class="step-badge">1</span> Parent &amp; Guardian Information</h2>
+                        <div class="field-grid">
+                            <div class="form-group">
+                                <label for="parentName">Parent / Guardian Name <span class="req">*</span></label>
+                                <input type="text" id="parentName" required placeholder="Jane Smith"
+                                       autocomplete="name" data-1p-ignore data-lpignore="true">
+                            </div>
+                            <div class="form-group">
+                                <label for="parentEmail">Email <span class="req">*</span></label>
+                                <input type="email" id="parentEmail" required placeholder="jane@example.com"
+                                       autocomplete="email" data-1p-ignore data-lpignore="true">
+                            </div>
+                            <div class="form-group">
+                                <label for="parentPhone">Phone <span class="req">*</span></label>
+                                <input type="tel" id="parentPhone" required placeholder="(555) 000-0000"
+                                       autocomplete="tel" data-1p-ignore data-lpignore="true">
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Step 2: Children (existing family children only) -->
+                    <section class="form-section">
+                        <h2><span class="step-badge">2</span> Children</h2>
+                        <p class="hint">Select which children to register — all selected children will share the same care days. If children need different schedules, select each child separately and submit one at a time.</p>
+                        <div id="childSection"></div>
+                    </section>
+
+                    <!-- Step 3: Calendar -->
+                    <section class="form-section">
+                        <h2><span class="step-badge">3</span> Select Care Days</h2>
+                        <p class="hint" id="calendarHint">Select at least one child above to enable the calendar.</p>
+
+                        <div id="calendarWrapper" class="calendar-wrapper hidden">
+                            <div class="calendar-controls">
+                                <h3 id="currentMonthLabel"></h3>
+                            </div>
+                            <div id="calendar" class="calendar"></div>
+                            <div class="legend">
+                                <span class="legend-item"><span class="dot available"></span> Available</span>
+                                <span class="legend-item"><span class="dot limited"></span> &le;3 spots left</span>
+                                <span class="legend-item"><span class="dot full"></span> Not available</span>
+                                <span class="legend-item"><span class="dot selected"></span> Your selection</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Step 4: Review -->
+                    <section class="form-section">
+                        <h2><span class="step-badge">4</span> Review Selection</h2>
+                        <div id="selectedDates" class="selected-dates">
+                            <p class="empty-state">No dates selected yet.</p>
+                        </div>
+                    </section>
+
+                    <!-- Submit -->
+                    <div class="form-actions">
+                        <button type="submit" id="submitBtn" class="btn-primary">Submit Registration</button>
+                    </div>
+
+                </div><!-- /#registrationSteps -->
+
+            </form>
+        </main>
+
+        <!-- Success Modal -->
+        <div id="successModal" class="modal" role="dialog" aria-modal="true">
+            <div class="modal-content">
+                <div class="modal-icon">&#10003;</div>
+                <h2>Registration Submitted!</h2>
+                <div id="successDetails"></div>
+                <button id="closeModal" class="btn-primary" style="margin-top:18px;">Done</button>
+            </div>
+        </div>
+
+        <!-- Contact Us Modal -->
+        <div id="contactModal" class="modal" role="dialog" aria-modal="true">
+            <div class="modal-content contact-modal-content">
+                <div class="modal-icon contact-modal-icon">✉️</div>
+                <h2>Contact Us</h2>
+                <p style="color:#666;margin-bottom:18px;font-size:.93em;">Have a question or need help? Send us a message and we'll get back to you soon.</p>
+                <form id="contactForm" novalidate>
+                    <div class="contact-form-grid">
+                        <div class="form-group">
+                            <label for="contactName">Your Name</label>
+                            <input type="text" id="contactName" placeholder="Jane Smith" autocomplete="name">
+                        </div>
+                        <div class="form-group">
+                            <label for="contactEmail">Your Email</label>
+                            <input type="email" id="contactEmail" placeholder="jane@example.com" autocomplete="email">
+                        </div>
+                        <div class="form-group contact-msg-group">
+                            <label for="contactMessage">Message <span class="req">*</span></label>
+                            <textarea id="contactMessage" rows="4" placeholder="What can we help you with?" required></textarea>
+                        </div>
+                    </div>
+                    <div class="contact-form-actions">
+                        <button type="button" id="closeContactModal" class="btn-ghost">Cancel</button>
+                        <button type="submit" class="btn-primary">Send Message</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Error Toast -->
+        <div id="errorToast" class="toast error hidden"></div>
+    </div>
+
+    <!-- Waitlist Application Modal -->
+    <div id="waitlistModal" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content waitlist-modal-content">
+            <div class="modal-icon">⏳</div>
+            <h2>Enrollment Waitlist</h2>
+            <p style="color:#666;margin-bottom:18px;font-size:.93em;">No spot available right now? Join our waitlist and we'll contact you when one opens up. You can apply even before your child is born.</p>
+            <form id="waitlistForm" novalidate>
+
+                <!-- Parent info -->
+                <div class="wl-section-label">Your Information</div>
+                <div class="contact-form-grid">
+                    <div class="form-group">
+                        <label for="wlParentName">Parent / Guardian Name <span class="req">*</span></label>
+                        <input type="text" id="wlParentName" placeholder="Jane Smith" autocomplete="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="wlParentEmail">Email <span class="req">*</span></label>
+                        <input type="email" id="wlParentEmail" placeholder="jane@example.com" autocomplete="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="wlParentPhone">Phone</label>
+                        <input type="tel" id="wlParentPhone" placeholder="(555) 000-0000" autocomplete="tel">
+                    </div>
+                </div>
+
+                <!-- Child info -->
+                <div class="wl-section-label" style="margin-top:14px;">Child Information</div>
+                <div class="contact-form-grid">
+                    <div class="form-group">
+                        <label for="wlChildName">Child's Name <span class="req">*</span></label>
+                        <input type="text" id="wlChildName" placeholder="First name is fine" required>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer;">
+                            <input type="checkbox" id="wlIsUnborn" style="width:16px;height:16px;flex-shrink:0;margin:0;">
+                            Child not yet born (expecting)
+                        </label>
+                        <div id="wlDobRow" style="margin-top:8px;">
+                            <label for="wlChildDob">Date of Birth <span class="req">*</span></label>
+                            <input type="date" id="wlChildDob">
+                        </div>
+                        <div id="wlDueRow" class="hidden" style="margin-top:8px;">
+                            <label for="wlDueDate">Expected Due Date <span class="req">*</span></label>
+                            <input type="date" id="wlDueDate">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Care preferences -->
+                <div class="wl-section-label" style="margin-top:14px;">Care Preferences</div>
+                <div class="contact-form-grid">
+                    <div class="form-group">
+                        <label for="wlStartDate">Desired Start Date <span class="req">*</span></label>
+                        <input type="date" id="wlStartDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="wlFlexibility">How flexible is your start date?</label>
+                        <select id="wlFlexibility">
+                            <option value="exact">This date only</option>
+                            <option value="within_month">Within a month of this date</option>
+                            <option value="within_quarter" selected>Within a few months</option>
+                            <option value="flexible">Very flexible</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Days Needed <span class="req">*</span></label>
+                        <div class="wl-days-row">
+                            <label><input type="checkbox" class="wlDay" value="Mon"> Mon</label>
+                            <label><input type="checkbox" class="wlDay" value="Tue"> Tue</label>
+                            <label><input type="checkbox" class="wlDay" value="Wed"> Wed</label>
+                            <label><input type="checkbox" class="wlDay" value="Thu"> Thu</label>
+                            <label><input type="checkbox" class="wlDay" value="Fri"> Fri</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Full Day or Half Day?</label>
+                        <div class="wl-days-row">
+                            <label><input type="radio" name="wlDayType" value="full" checked> Full Day</label>
+                            <label><input type="radio" name="wlDayType" value="half"> Half Day</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sibling -->
+                <div class="wl-section-label" style="margin-top:14px;">Sibling</div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="wlHasSibling" style="margin-right:6px;">
+                        A sibling is already enrolled at Timothy Lutheran MDO
+                    </label>
+                    <div id="wlSiblingFields" class="hidden" style="margin-top:10px;">
+                        <div class="contact-form-grid">
+                            <div class="form-group">
+                                <label for="wlSiblingName">Sibling's Name</label>
+                                <input type="text" id="wlSiblingName" placeholder="Child's name">
+                            </div>
+                            <div class="form-group">
+                                <label for="wlSiblingRoom">Sibling's Room</label>
+                                <select id="wlSiblingRoom">
+                                    <option value="">— Not sure —</option>
+                                    <option value="bear">🐻 Bear Room (0–12 mo)</option>
+                                    <option value="bee">🐝 Bee Room (12–24 mo)</option>
+                                    <option value="turtle">🐢 Turtle Room (2 yrs)</option>
+                                    <option value="owl">🦉 Owl Room (3+ yrs)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div class="form-group" style="margin-top:10px;">
+                    <label for="wlNotes">Anything else we should know? (optional)</label>
+                    <textarea id="wlNotes" rows="3" placeholder="Special circumstances, schedule needs, questions…"></textarea>
+                </div>
+
+                <div class="contact-form-actions" style="margin-top:16px;">
+                    <button type="button" id="closeWaitlistModal" class="btn-ghost">Cancel</button>
+                    <button type="submit" id="wlSubmitBtn" class="btn-primary">Join Waitlist</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Waitlist Success Modal -->
+    <div id="waitlistSuccessModal" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content">
+            <div class="modal-icon">✓</div>
+            <h2>You're on the Waitlist!</h2>
+            <p id="waitlistSuccessDetails" style="color:#555;margin:12px 0;"></p>
+            <p style="color:#888;font-size:.9em;">We'll reach out to you when a spot opens up. If anything changes, feel free to contact us.</p>
+            <button id="closeWaitlistSuccessModal" class="btn-primary" style="margin-top:18px;">Done</button>
+        </div>
+    </div>
+
+    <!-- Floating Contact Us button -->
+    <button id="contactUsBtn" class="btn-contact-float" title="Contact Us">
+        <span class="fab-icon">💬</span><span class="fab-label"> Contact Us</span>
+    </button>
+
+    <!-- Floating Waitlist button -->
+    <button id="waitlistBtn" class="btn-waitlist-float" title="Join Enrollment Waitlist">
+        <span class="fab-icon">⏳</span><span class="fab-label"> Join Waitlist</span>
+    </button>
+
+    <!-- Floating View Schedule link -->
+    <a href="lookup.html" class="btn-view-schedule-float" title="View my registered days and bill">
+        <span class="fab-icon">📅</span><span class="fab-label"> My Schedule</span>
+    </a>
+
+    <footer class="site-footer">
+        <a href="https://timothystl.org/mdo" class="footer-program-link">About the MDO Program</a>
+    </footer>
+
+    <!-- Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase.js?v=34"></script>
+    <script src="js/app.js?v=28"></script>
+</body>
+</html>

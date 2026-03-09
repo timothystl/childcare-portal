@@ -1,0 +1,6 @@
+# Redirect old root (parent calendar) to /calendar now that / is the program home page
+/index.html    /calendar    301
+
+# Compatibility: anyone who bookmarked the bare portal URL from the old structure
+/register      /calendar    301
+/signup        /calendar    301
