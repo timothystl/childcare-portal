@@ -250,7 +250,7 @@
 
 <script>
 // ── Supabase ──────────────────────────────────────────────────
-const SUPABASE_URL      = 'https://dahdstopsumxnqvdclmy.supabase.co';
+const SUPABASE_URL      = window.location.origin + '/sb';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -305,33 +305,67 @@ document.querySelectorAll('.num-btn[data-n]').forEach(btn => {
         pin += btn.dataset.n;
         document.getElementById('pinError').textContent = '';
         updateDots();
-        if (pin.length === 4) await verifyPin();
+        if (pin.length === 4) {
+            if (checkLockout()) { pin = ''; updateDots(); return; }
+            await verifyPin();
+        }
     });
 });
 document.getElementById('delBtn').addEventListener('click', () => {
     if (pin.length > 0) { pin = pin.slice(0, -1); updateDots(); }
 });
 
+// ── PIN Rate Limiting ─────────────────────────────────────────
+const MAX_ATTEMPTS    = 5;
+const LOCKOUT_MS      = 5 * 60 * 1000; // 5 minutes
+const STORAGE_KEY     = 'pin_lockout';
+
+function getLockoutState() {
+    try {
+        const raw = sessionStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : { attempts: 0, lockedUntil: 0 };
+    } catch { return { attempts: 0, lockedUntil: 0 }; }
+}
+
+function saveLockoutState(state) {
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+}
+
+function recordFailedAttempt() {
+    const state = getLockoutState();
+    state.attempts += 1;
+    if (state.attempts >= MAX_ATTEMPTS) {
+        state.lockedUntil = Date.now() + LOCKOUT_MS;
+        state.attempts    = 0;
+    }
+    saveLockoutState(state);
+}
+
+function checkLockout() {
+    const state = getLockoutState();
+    if (state.lockedUntil && Date.now() < state.lockedUntil) {
+        const secsLeft = Math.ceil((state.lockedUntil - Date.now()) / 1000);
+        const mins     = Math.floor(secsLeft / 60);
+        const secs     = secsLeft % 60;
+        showError(`Too many failed attempts. Try again in ${mins}:${String(secs).padStart(2,'0')}.`);
+        return true;
+    }
+    return false;
+}
+
 // ── Verify PIN ────────────────────────────────────────────────
 async function verifyPin() {
     showScreen('loading');
     try {
-        // First test: can we reach the staff table at all?
-        const testResult = await sb.from('staff').select('count', { count: 'exact', head: true });
-        console.log('Table access test:', testResult);
-
         const { data, error } = await sb
             .from('staff')
-            .select('id, name, role, staff_pin, active')
+            .select('id, name, role, active')
             .eq('staff_pin', parseInt(pin, 10))
             .eq('active', true)
             .maybeSingle();
-        console.log('PIN lookup result:', { data, error, pinUsed: parseInt(pin, 10) });
         if (error) throw error;
         if (!data) {
-            // Show all active staff pins for debugging (remove in production)
-            const { data: allStaff } = await sb.from('staff').select('name, staff_pin, active').eq('active', true);
-            console.log('All active staff:', allStaff);
+            recordFailedAttempt();
             showScreen('pin');
             showError('Invalid PIN. Please try again.');
             return;
@@ -344,16 +378,12 @@ async function verifyPin() {
         document.getElementById('dateLabel').textContent =
             new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
-        console.log('Calling refreshClockStatus for staffId:', staffId, 'workDate:', workDate);
         await refreshClockStatus();
-        console.log('refreshClockStatus succeeded, showing clock screen');
         showScreen('clock');
-        console.log('showScreen(clock) called, clockScreen display:', document.getElementById('clockScreen').style.display);
     } catch (err) {
         showScreen('pin');
         const msg = err?.message || String(err);
         showError('Error: ' + msg);
-        console.error('verifyPin catch block:', err);
     }
 }
 
