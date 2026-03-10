@@ -212,8 +212,7 @@ async function runEmailPinLookup() {
             return;
         }
         if (data.family) {
-            const enteredPin = data.isParent2 ? String(data.family.parent2_pin) : pin;
-            selectFamily(data.family, enteredPin);
+            selectFamily(data.family, data.isParent2);
         } else {
             showToast('Lookup failed. Please try again.');
         }
@@ -225,7 +224,7 @@ async function runEmailPinLookup() {
 }
 
 
-function selectFamily(family, enteredPin = null) {
+function selectFamily(family, isParent2 = false) {
     // Check if registration is locked for nonpayment
     if (family.registration_locked) {
         showToast('Registration is currently unavailable for this family. Please contact the office to resolve your account balance.');
@@ -241,10 +240,8 @@ function selectFamily(family, enteredPin = null) {
 
     selectedFamily = family;
 
-    // If the entered PIN matches parent 2's PIN, prefill with parent 2 contact info
-    const useParent2 = enteredPin && family.parent2_pin &&
-        String(family.parent2_pin) === String(enteredPin) &&
-        (family.parent2_name || family.parent2_email);
+    // Prefill with the authenticated parent's contact info
+    const useParent2 = isParent2 && (family.parent2_name || family.parent2_email);
     const prefillName  = useParent2 ? (family.parent2_name  || family.parent_name)  : family.parent_name;
     const prefillEmail = useParent2 ? (family.parent2_email || family.parent_email) : family.parent_email;
     const prefillPhone = useParent2 ? (family.parent2_phone || family.parent_phone) : family.parent_phone;
@@ -1404,11 +1401,8 @@ function downloadIcal(sortedDates, childNames, parentName) {
             dueRow.classList.add('hidden');
             sibFields.classList.add('hidden');
 
-            const dobInfo = isUnbornChecked
-                ? `(expected ${dueDate})`
-                : childDob ? `(DOB ${childDob})` : '';
             document.getElementById('waitlistSuccessDetails').textContent =
-                `${payload.child_name} ${dobInfo} has been added to the waitlist for a start around ${startDate}. We'll contact you at ${payload.parent_email}.`;
+                `${payload.child_name} has been added to the waitlist for a start around ${startDate}. We'll contact you at ${payload.parent_email}.`;
             successM.style.display = 'flex';
         } catch (err) {
             showToast('Submission failed: ' + err.message);

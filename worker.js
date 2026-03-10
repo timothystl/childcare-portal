@@ -1,15 +1,19 @@
 const SUPABASE_URL = 'https://dahdstopsumxnqvdclmy.supabase.co';
+const ALLOWED_ORIGINS = new Set(['https://mdo.timothystl.org']);
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    const allowedOrigin = ALLOWED_ORIGINS.has(url.origin) ? url.origin : null;
+
     // Handle CORS preflight for /sb/* FIRST, before the proxy block
     if (request.method === 'OPTIONS' && url.pathname.startsWith('/sb/')) {
+      if (!allowedOrigin) return new Response(null, { status: 403 });
       return new Response(null, {
         status: 204,
         headers: {
-          'Access-Control-Allow-Origin':  url.origin,
+          'Access-Control-Allow-Origin':  allowedOrigin,
           'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'apikey, Authorization, Content-Type, Prefer, X-Client-Info',
           'Access-Control-Max-Age':       '86400',
@@ -41,7 +45,7 @@ export default {
           status: 504,
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': url.origin,
+            'Access-Control-Allow-Origin': allowedOrigin ?? '',
           },
         });
       }
