@@ -193,29 +193,21 @@ async function runEmailPinLookup() {
 
     if (!email || !email.includes('@')) { showToast('Please enter your email address.'); return; }
     if (!pin || pin.length !== 4) { showToast('Please enter your 4-digit family PIN.'); return; }
+    if (checkRegLockout()) return;
 
     if (pinBtn) { pinBtn.textContent = 'Looking up…'; pinBtn.disabled = true; }
     try {
-        const { data, error } = await sbClient.functions.invoke('family-lookup', { body: { email, pin } });
-        if (error) { showToast('Lookup failed. Please try again.'); return; }
-
-        if (data.error === 'login_locked') {
+        const result = await lookupFamilyForRegistration(email, pin);
+        if (!result) {
+            recordRegFailure();
+            showToast('No family found matching that email and PIN. Please contact the office if you need help.');
+            return;
+        }
+        if (result.family.login_locked) {
             showToast('This account has been locked. Please contact the office to regain access.');
             return;
         }
-        if (data.error === 'not_found' || data.error === 'invalid_pin') {
-            const left = data.attempts_left;
-            const msg = left != null && left > 0
-                ? `Email or PIN not found. ${left} attempt${left !== 1 ? 's' : ''} remaining before lockout.`
-                : 'No family found matching that email and PIN. Please contact the office if you need help.';
-            showToast(msg);
-            return;
-        }
-        if (data.family) {
-            selectFamily(data.family, data.isParent2);
-        } else {
-            showToast('Lookup failed. Please try again.');
-        }
+        selectFamily(result.family, result.isParent2);
     } catch {
         showToast('Lookup failed. Please try again.');
     } finally {
