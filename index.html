@@ -897,6 +897,76 @@
       .highlights-grid { grid-template-columns: 1fr; }
       .contact-grid { grid-template-columns: 1fr; }
     }
+
+    /* ════════════════════════════════════════════════════
+       OUR STAFF
+    ════════════════════════════════════════════════════ */
+    .staff-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-top: 48px;
+    }
+    .staff-card {
+      background: var(--white);
+      border-radius: var(--radius-md);
+      padding: 28px 20px 24px;
+      box-shadow: var(--shadow-card);
+      text-align: center;
+      border-top: 4px solid var(--gold);
+    }
+    .staff-card--leadership {
+      border-top-color: var(--navy);
+    }
+    .staff-card-photo {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: var(--warm-gray);
+      border: 2px dashed var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2em;
+      margin: 0 auto 14px;
+    }
+    .staff-card-name {
+      font-family: var(--font-head);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 4px;
+    }
+    .staff-card-role {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .staff-card-room {
+      font-size: 12px;
+      color: var(--gold);
+      font-weight: 700;
+      margin-top: 6px;
+    }
+    .staff-section-label {
+      font-family: var(--font-head);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--navy);
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      margin: 40px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--border);
+    }
+    @media (max-width: 900px) {
+      .staff-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 620px) {
+      .staff-grid { grid-template-columns: repeat(2, 1fr); }
+    }
   </style>
 </head>
 <body>
@@ -914,6 +984,7 @@
     <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>
     <ul class="nav-links" id="navLinks">
       <li><a href="#classrooms">Classrooms</a></li>
+      <li><a href="#our-staff">Our Staff</a></li>
       <li><a href="#photos">Gallery</a></li>
       <li><a href="#how-it-works">Care Portal</a></li>
       <li><a href="#faq">FAQ</a></li>
@@ -1000,7 +1071,7 @@
       <div class="pillar-card">
         <div class="pillar-icon">👩‍🏫</div>
         <h3>Experienced staff</h3>
-        <p>Our educators are trained in early childhood development and many
+        <p>Our educators are highly experienced in early childhood development and many
            have been part of the MDO family for years. You'll know their names
            — and they'll know your child's.</p>
       </div>
@@ -1206,10 +1277,100 @@
         <h3 style="margin:0 0 6px;font-size:1.05em;color:#333;">Summer Camp Program</h3>
         <p style="margin:0;color:#555;font-size:0.95em;line-height:1.6;">
           We also offer a separate <strong>Summer Camp</strong> program for children ages <strong>5–10</strong>.
-          Summer camp runs during the summer months with fun themed weeks, activities, and field trips.
+          Summer camp runs <strong>May 26 – July 31</strong> with fun themed weeks, activities, and field trips.
           Contact the office for enrollment details and availability.
         </p>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ OUR STAFF ═══════════════════════════════════════════════════ -->
+<section class="section section--white" id="our-staff">
+  <div class="container">
+    <div class="section-label">Our Staff</div>
+    <h2 class="section-title">The people who make it happen.</h2>
+    <p class="section-subtitle">
+      Our educators are highly experienced in early childhood development and many have been part of the
+      MDO family for years. You'll know their names — and they'll know your child's.
+    </p>
+
+    <div class="staff-section-label">Leadership</div>
+    <div class="staff-grid">
+
+      <div class="staff-card staff-card--leadership">
+        <div class="staff-card-photo">👩‍💼</div>
+        <div class="staff-card-name">Director</div>
+        <div class="staff-card-role">Program Director</div>
+      </div>
+
+      <div class="staff-card staff-card--leadership">
+        <div class="staff-card-photo">👩‍💼</div>
+        <div class="staff-card-name">Assistant Director</div>
+        <div class="staff-card-role">Asst. Director</div>
+      </div>
+
+    </div>
+
+    <div class="staff-section-label">Lead Teachers</div>
+    <div class="staff-grid">
+
+      <div class="staff-card">
+        <div class="staff-card-photo">👩‍🏫</div>
+        <div class="staff-card-name">Lead Teacher</div>
+        <div class="staff-card-role">Lead Teacher</div>
+        <div class="staff-card-room">🐻 Bear Room</div>
+      </div>
+
+      <div class="staff-card">
+        <div class="staff-card-photo">👩‍🏫</div>
+        <div class="staff-card-name">Lead Teacher</div>
+        <div class="staff-card-role">Lead Teacher</div>
+        <div class="staff-card-room">🐻 Bear Room</div>
+      </div>
+
+      <div class="staff-card">
+        <div class="staff-card-photo">👩‍🏫</div>
+        <div class="staff-card-name">Lead Teacher</div>
+        <div class="staff-card-role">Lead Teacher</div>
+        <div class="staff-card-room">🐝 Bee Room</div>
+      </div>
+
+      <div class="staff-card">
+        <div class="staff-card-photo">👩‍🏫</div>
+        <div class="staff-card-name">Lead Teacher</div>
+        <div class="staff-card-role">Lead Teacher</div>
+        <div class="staff-card-room">🐝 Bee Room</div>
+      </div>
+
+      <div class="staff-card">
+        <div class="staff-card-photo">👩‍🏫</div>
+        <div class="staff-card-name">Lead Teacher</div>
+        <div class="staff-card-role">Lead Teacher</div>
+        <div class="staff-card-room">🐢 Turtle Room</div>
+      </div>
+
+      <div class="staff-card">
+        <div class="staff-card-photo">👩‍🏫</div>
+        <div class="staff-card-name">Lead Teacher</div>
+        <div class="staff-card-role">Lead Teacher</div>
+        <div class="staff-card-room">🐢 Turtle Room</div>
+      </div>
+
+      <div class="staff-card">
+        <div class="staff-card-photo">👩‍🏫</div>
+        <div class="staff-card-name">Lead Teacher</div>
+        <div class="staff-card-role">Lead Teacher</div>
+        <div class="staff-card-room">🦉 Owl Room</div>
+      </div>
+
+      <div class="staff-card">
+        <div class="staff-card-photo">👩‍🏫</div>
+        <div class="staff-card-name">Lead Teacher</div>
+        <div class="staff-card-role">Lead Teacher</div>
+        <div class="staff-card-room">🦉 Owl Room</div>
+      </div>
+
     </div>
   </div>
 </section>
