@@ -193,17 +193,29 @@ async function runEmailPinLookup() {
 
     if (!email || !email.includes('@')) { showToast('Please enter your email address.'); return; }
     if (!pin || pin.length !== 4) { showToast('Please enter your 4-digit family PIN.'); return; }
-    if (checkRegLockout()) return;
 
     if (pinBtn) { pinBtn.textContent = 'Looking up…'; pinBtn.disabled = true; }
     try {
-        const result = await lookupFamilyForRegistration(email, pin);
-        if (result) {
-            const enteredPin = result.isParent2 ? String(result.family.parent2_pin) : pin;
-            selectFamily(result.family, enteredPin);
+        const { data, error } = await sbClient.functions.invoke('family-lookup', { body: { email, pin } });
+        if (error) { showToast('Lookup failed. Please try again.'); return; }
+
+        if (data.error === 'login_locked') {
+            showToast('This account has been locked. Please contact the office to regain access.');
+            return;
+        }
+        if (data.error === 'not_found' || data.error === 'invalid_pin') {
+            const left = data.attempts_left;
+            const msg = left != null && left > 0
+                ? `Email or PIN not found. ${left} attempt${left !== 1 ? 's' : ''} remaining before lockout.`
+                : 'No family found matching that email and PIN. Please contact the office if you need help.';
+            showToast(msg);
+            return;
+        }
+        if (data.family) {
+            const enteredPin = data.isParent2 ? String(data.family.parent2_pin) : pin;
+            selectFamily(data.family, enteredPin);
         } else {
-            recordRegFailure();
-            showToast('No family found matching that email and PIN. Please contact the office if you need help.');
+            showToast('Lookup failed. Please try again.');
         }
     } catch {
         showToast('Lookup failed. Please try again.');
@@ -241,12 +253,7 @@ function selectFamily(family, enteredPin = null) {
     setPrefilled('parentEmail', prefillEmail);
     setPrefilled('parentPhone', prefillPhone);
 
-    const bar = document.getElementById('familySelectedBar');
-    if (bar) bar.classList.remove('hidden');
-    const displayName = useParent2 ? (family.parent2_name || family.parent_name) : family.parent_name;
-    const nameEl = document.getElementById('selectedFamilyName');
-    if (nameEl) nameEl.textContent = displayName;
-
+    document.getElementById('familySelectedBar')?.classList.remove('hidden');
     document.getElementById('lookupRequiredMsg')?.classList.add('hidden');
     document.getElementById('registrationSteps')?.classList.remove('hidden');
 

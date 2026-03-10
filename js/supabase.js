@@ -543,7 +543,7 @@ async function fetchAllFamilies({ includeArchived = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, created_at, active, group, registration_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
+        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, created_at, active, group, registration_locked, login_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
         .order('parent_name');
     if (!includeArchived) query = query.eq('active', true);
     const { data, error } = await query;
@@ -568,6 +568,12 @@ async function restoreFamily(id) {
 
 async function setFamilyRegistrationLock(id, locked) {
     return updateFamily(id, { registration_locked: locked });
+}
+
+async function setFamilyLoginLock(id, locked) {
+    const updates = { login_locked: locked };
+    if (!locked) updates.login_attempts = 0;  // reset counter when admin unlocks
+    return updateFamily(id, updates);
 }
 
 // ---- Student CRUD ----
@@ -765,14 +771,23 @@ async function getAdminSession() {
 async function lookupFamilyByEmailAndPin(email, pin) {
     if (!sbClient) return null;
     try {
-        const { data, error } = await sbClient
+        const parsedPin = parseInt(pin, 10);
+        // Try parent 1
+        const { data: p1 } = await sbClient
             .from('families')
-            .select('id, parent_name, parent_email, parent_phone, pin')
+            .select('id, parent_email, login_locked')
             .ilike('parent_email', email)
-            .eq('pin', parseInt(pin, 10))
+            .eq('pin', parsedPin)
             .maybeSingle();
-        if (error) { console.error('lookupFamilyByEmailAndPin:', error); return null; }
-        return data || null;
+        if (p1) return p1;
+        // Try parent 2
+        const { data: p2 } = await sbClient
+            .from('families')
+            .select('id, parent_email: parent2_email, login_locked')
+            .ilike('parent2_email', email)
+            .eq('parent2_pin', parsedPin)
+            .maybeSingle();
+        return p2 || null;
     } catch (_) {
         return null;
     }

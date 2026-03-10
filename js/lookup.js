@@ -94,13 +94,18 @@ async function doLookup() {
             return;
         }
 
+        if (family.login_locked) {
+            showError('This account has been locked. Please contact the office to regain access.');
+            return;
+        }
+
         const registrations = await fetchRegistrationsByEmail(family.parent_email);
         if (!registrations.length) {
             showError('No registrations found for your account.');
             return;
         }
 
-        showResults(registrations, { name: family.parent_name, email: family.parent_email });
+        showResults(registrations, family.parent_email);
 
     } catch (err) {
         console.error('Lookup error:', err);
@@ -120,11 +125,11 @@ function showError(msg) {
 // ============================================================
 // RENDER RESULTS
 // ============================================================
-function showResults(registrations, parentInfo) {
+function showResults(registrations, parentEmail) {
     document.getElementById('lookupScreen').classList.add('hidden');
     document.getElementById('lookupResults').classList.remove('hidden');
 
-    document.getElementById('lookupParentEmail').textContent = parentInfo.email;
+    document.getElementById('lookupParentEmail').textContent = parentEmail;
 
     // Only show current month and next month
     const now   = new Date();
