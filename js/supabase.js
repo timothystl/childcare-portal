@@ -454,7 +454,7 @@ async function lookupFamilyForRegistration(email, pin) {
     if (!sbClient) return null;
     try {
         const parsedPin = parseInt(pin, 10);
-        const fields = 'id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, registration_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)';
+        const fields = 'id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, registration_locked, login_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)';
 
         // Try parent 1 email + PIN
         const { data: p1 } = await sbClient
