@@ -1194,3 +1194,34 @@ async function sendScheduleEmail({ parentName, parentEmail, monthLabel, childNam
     if (error) throw error;
     return data;
 }
+
+// ── Historical Attendance Summary ──────────────────────────────
+
+async function fetchBillingSummary() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_summary')
+        .select('*')
+        .order('month')
+        .order('room_id');
+    if (error) throw error;
+    return data || [];
+}
+
+async function fetchAttendanceSummary({ month, roomId } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    let q = sbClient
+        .from('attendance_summary')
+        .select('*')
+        .order('summary_date')
+        .order('room_id');
+    if (month) {
+        q = q.gte('summary_date', `${month}-01`).lte('summary_date', `${month}-31`);
+    }
+    if (roomId) {
+        q = q.eq('room_id', roomId);
+    }
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}

@@ -4484,6 +4484,154 @@ function setupExtraReports() {
     document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
     document.getElementById('generateYtdBtn')?.addEventListener('click', generateYtdRevenue);
     document.getElementById('exportYtdBtn')?.addEventListener('click', exportYtdRevenue);
+    setupHistoricalAttendance();
+}
+
+// ============================================================
+// HISTORICAL ATTENDANCE — Jan through Apr 2026
+// ============================================================
+const HISTORICAL_ROOM_LABELS = {
+    bear:   'Bear Room (Infants)',
+    bee:    'Bee Room (Ones)',
+    turtle: 'Turtle Room (Twos)',
+    owl:    'Owl Room (Threes)',
+};
+
+function setupHistoricalAttendance() {
+    loadHistoricalBilling();
+    document.getElementById('loadHistoricalBtn')?.addEventListener('click', loadHistoricalDaily);
+    document.getElementById('exportHistoricalBtn')?.addEventListener('click', exportHistoricalDaily);
+}
+
+async function loadHistoricalBilling() {
+    const wrap = document.getElementById('historicalBillingTable');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const data = await fetchBillingSummary();
+        if (!data || data.length === 0) {
+            wrap.innerHTML = '<p class="empty-hint">No billing summary data found. Run the seed SQL in Supabase first.</p>';
+            return;
+        }
+        wrap.innerHTML = _buildBillingTable(data);
+    } catch (e) {
+        wrap.innerHTML = `<p class="empty-hint" style="color:red;">Error loading billing data: ${escHtml(e.message)}</p>`;
+    }
+}
+
+function _buildBillingTable(rows) {
+    const months = [...new Set(rows.map(r => r.month))].sort();
+    const rooms  = ['bear', 'bee', 'turtle', 'owl'];
+
+    // Index by month+room
+    const idx = {};
+    rows.forEach(r => { idx[`${r.month}|${r.room_id}`] = r; });
+
+    const fmt  = v => v != null ? `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 0 })}` : '—';
+    const fmtN = v => v != null ? v.toLocaleString() : '—';
+
+    const monthLabel = m => new Date(m + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    let html = '<div style="overflow-x:auto"><table class="report-table" style="font-size:0.85rem">';
+    html += '<thead><tr><th>Room</th>';
+    months.forEach(m => {
+        html += `<th colspan="4" style="text-align:center;border-left:2px solid #ccc">${monthLabel(m)}</th>`;
+    });
+    html += '</tr><tr><th></th>';
+    months.forEach(() => {
+        html += '<th style="border-left:2px solid #ccc">Half Days</th><th>Full Days</th><th>Discount</th><th>Net Billed</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    let colTotals = {}; // month -> { half, full, discount, net }
+    months.forEach(m => { colTotals[m] = { half: 0, full: 0, discount: 0, net: 0 }; });
+
+    rooms.forEach(roomId => {
+        html += `<tr><td><strong>${escHtml(HISTORICAL_ROOM_LABELS[roomId] || roomId)}</strong></td>`;
+        months.forEach(m => {
+            const r = idx[`${m}|${roomId}`];
+            const half     = r?.half_days;
+            const full     = r?.full_days;
+            const discount = r?.discount;
+            const net      = r?.net_billed;
+            if (r) {
+                colTotals[m].half     += half     ?? 0;
+                colTotals[m].full     += full     ?? 0;
+                colTotals[m].discount += discount ?? 0;
+                colTotals[m].net      += net      ?? 0;
+            }
+            html += `<td style="border-left:2px solid #ccc;text-align:right">${fmtN(half)}</td>`;
+            html += `<td style="text-align:right">${fmtN(full)}</td>`;
+            html += `<td style="text-align:right;color:#b00">${r?.discount != null ? fmt(discount) : '—'}</td>`;
+            html += `<td style="text-align:right;font-weight:600">${fmt(net)}</td>`;
+        });
+        html += '</tr>';
+    });
+
+    // Totals row
+    html += '<tr style="font-weight:700;background:#f0f4ff"><td>TOTAL</td>';
+    months.forEach(m => {
+        const t = colTotals[m];
+        html += `<td style="border-left:2px solid #ccc;text-align:right">${t.half.toLocaleString()}</td>`;
+        html += `<td style="text-align:right">${t.full.toLocaleString()}</td>`;
+        html += `<td style="text-align:right;color:#b00">${t.discount ? fmt(t.discount) : '—'}</td>`;
+        html += `<td style="text-align:right">${fmt(t.net)}</td>`;
+    });
+    html += '</tr>';
+
+    html += '</tbody></table></div>';
+    return html;
+}
+
+async function loadHistoricalDaily() {
+    const month = document.getElementById('historicalMonth')?.value;
+    const room  = document.getElementById('historicalRoom')?.value;
+    const wrap  = document.getElementById('historicalDailyTable');
+    if (!wrap || !month) return;
+    wrap.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const data = await fetchAttendanceSummary({ month, roomId: room || null });
+        if (!data || data.length === 0) {
+            wrap.innerHTML = '<p class="empty-hint">No daily attendance data found for this selection. Run the seed SQL in Supabase first.</p>';
+            return;
+        }
+        wrap.innerHTML = _buildDailyTable(data);
+    } catch (e) {
+        wrap.innerHTML = `<p class="empty-hint" style="color:red;">Error: ${escHtml(e.message)}</p>`;
+    }
+}
+
+function _buildDailyTable(rows) {
+    const dayFmt = d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    let html = '<div style="overflow-x:auto"><table class="report-table" style="font-size:0.85rem">';
+    html += '<thead><tr><th>Date</th><th>Room</th><th style="text-align:right">Half Days</th><th style="text-align:right">Full Days</th><th style="text-align:right">Total</th></tr></thead><tbody>';
+    let lastDate = '';
+    rows.forEach(r => {
+        const isNewDate = r.summary_date !== lastDate;
+        lastDate = r.summary_date;
+        html += `<tr${isNewDate ? ' style="border-top:1px solid #ddd"' : ''}>`;
+        html += `<td>${isNewDate ? escHtml(dayFmt(r.summary_date)) : ''}</td>`;
+        html += `<td>${escHtml(HISTORICAL_ROOM_LABELS[r.room_id] || r.room_id)}</td>`;
+        html += `<td style="text-align:right">${r.half_days ?? '<em style="color:#888">n/a</em>'}</td>`;
+        html += `<td style="text-align:right">${r.full_days ?? '<em style="color:#888">n/a</em>'}</td>`;
+        html += `<td style="text-align:right;font-weight:600">${r.total_attended}</td>`;
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+}
+
+async function exportHistoricalDaily() {
+    const month = document.getElementById('historicalMonth')?.value || '2026-01';
+    const room  = document.getElementById('historicalRoom')?.value;
+    const data  = await fetchAttendanceSummary({ month, roomId: room || null });
+    if (!data || data.length === 0) return;
+    const lines = ['Date,Room,Half Days,Full Days,Total'];
+    data.forEach(r => {
+        lines.push([r.summary_date, HISTORICAL_ROOM_LABELS[r.room_id] || r.room_id,
+            r.half_days ?? '', r.full_days ?? '', r.total_attended].map(csvCell).join(','));
+    });
+    downloadFile(`attendance_${month}.csv`, 'text/csv', lines.join('\n'));
 }
 
 // ── Enrollment Trends ──────────────────────────────────────
