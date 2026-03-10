@@ -447,6 +447,39 @@ async function lookupFamilyByPin(pin) {
     }
 }
 
+// Looks up a family by email+PIN for the registration portal.
+// Checks both parent 1 (parent_email + pin) and parent 2 (parent2_email + parent2_pin).
+// Returns { family, isParent2 } or null.
+async function lookupFamilyForRegistration(email, pin) {
+    if (!sbClient) return null;
+    try {
+        const parsedPin = parseInt(pin, 10);
+        const fields = 'id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, registration_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)';
+
+        // Try parent 1 email + PIN
+        const { data: p1 } = await sbClient
+            .from('families')
+            .select(fields)
+            .ilike('parent_email', email)
+            .eq('pin', parsedPin)
+            .maybeSingle();
+        if (p1) return { family: p1, isParent2: false };
+
+        // Try parent 2 email + PIN
+        const { data: p2 } = await sbClient
+            .from('families')
+            .select(fields)
+            .ilike('parent2_email', email)
+            .eq('parent2_pin', parsedPin)
+            .maybeSingle();
+        if (p2) return { family: p2, isParent2: true };
+
+        return null;
+    } catch (_) {
+        return null;
+    }
+}
+
 async function createFamily({ parentName, parentEmail, parentPhone, pin: providedPin = null,
                               parent2Name = null, parent2Email = null, parent2Phone = null, parent2Pin = null }) {
     if (!sbClient) throw new Error('Supabase not configured.');
