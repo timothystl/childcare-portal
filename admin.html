@@ -617,6 +617,49 @@
                 </div>
             </section>
 
+            <!-- Historical Attendance (Jan–Apr 2026) -->
+            <section class="admin-section collapsible-section" id="historicalAttendanceSection">
+                <h2>📂 Historical Attendance — Jan through Apr 2026</h2>
+                <p class="section-desc">Back-dated attendance and billing data imported from the Daycare Billing Summary spreadsheet. Monthly billing totals are authoritative; daily counts are best-effort from source records.</p>
+
+                <!-- Monthly Billing Summary -->
+                <h3 style="margin:16px 0 8px;font-size:1rem;color:var(--color-primary,#1c3160);">Monthly Billing by Room</h3>
+                <div id="historicalBillingTable">
+                    <p class="empty-hint">Loading…</p>
+                </div>
+
+                <!-- Daily Attendance Filter -->
+                <h3 style="margin:20px 0 8px;font-size:1rem;color:var(--color-primary,#1c3160);">Daily Attendance Detail</h3>
+                <div class="roster-controls" style="margin-bottom:12px;">
+                    <div class="roster-field">
+                        <label for="historicalMonth">Month</label>
+                        <select id="historicalMonth">
+                            <option value="2026-01">January 2026</option>
+                            <option value="2026-02">February 2026</option>
+                            <option value="2026-03">March 2026</option>
+                            <option value="2026-04">April 2026</option>
+                        </select>
+                    </div>
+                    <div class="roster-field">
+                        <label for="historicalRoom">Room</label>
+                        <select id="historicalRoom">
+                            <option value="">All Rooms</option>
+                            <option value="bear">Bear Room (Infants)</option>
+                            <option value="bee">Bee Room (Ones)</option>
+                            <option value="turtle">Turtle Room (Twos)</option>
+                            <option value="owl">Owl Room (Threes)</option>
+                        </select>
+                    </div>
+                    <div class="roster-btns">
+                        <button id="loadHistoricalBtn" class="btn-secondary">View</button>
+                        <button id="exportHistoricalBtn" class="btn-primary">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="historicalDailyTable">
+                    <p class="empty-hint">Select a month above and click View.</p>
+                </div>
+            </section>
+
         </div><!-- /#tab-reports -->
 
         <!-- ── Tab: Staffing ─────────────────────────────────── -->
