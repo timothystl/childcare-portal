@@ -11,11 +11,22 @@
     <title>Staff Clock In / Out</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
+        :root {
+            --navy:       #1c3160;
+            --navy-light: #264480;
+            --gold:       #f5c518;
+            --gold-pale:  #fdf3d0;
+            --cream:      #fdf8f0;
+            --border:     #e8e0d0;
+            --text:       #3d3530;
+            --text-muted: #7a7065;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--navy);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -24,22 +35,23 @@
         }
 
         .card {
-            background: #fff;
+            background: var(--cream);
             border-radius: 20px;
             padding: 32px 28px;
             width: 100%;
             max-width: 380px;
-            box-shadow: 0 20px 60px rgba(0,0,0,.25);
+            box-shadow: 0 20px 60px rgba(0,0,0,.35);
             text-align: center;
+            border-top: 4px solid var(--gold);
         }
 
         .logo { font-size: 2.2em; margin-bottom: 4px; }
-        h1 { font-size: 1.3em; color: #333; margin-bottom: 4px; }
-        .subtitle { color: #888; font-size: .9em; margin-bottom: 28px; }
+        h1 { font-size: 1.3em; color: var(--navy); margin-bottom: 4px; font-weight: 700; }
+        .subtitle { color: var(--text-muted); font-size: .9em; margin-bottom: 28px; }
 
         /* PIN Screen */
         #pinScreen {}
-        .pin-label { font-size: .85em; color: #666; margin-bottom: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+        .pin-label { font-size: .85em; color: var(--text-muted); margin-bottom: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 
         .pin-display {
             display: flex;
@@ -50,11 +62,11 @@
         .pin-dot {
             width: 18px; height: 18px;
             border-radius: 50%;
-            border: 2px solid #ccc;
+            border: 2px solid var(--border);
             background: transparent;
             transition: background .15s, border-color .15s;
         }
-        .pin-dot.filled { background: #667eea; border-color: #667eea; }
+        .pin-dot.filled { background: var(--navy); border-color: var(--navy); }
 
         .numpad {
             display: grid;
@@ -63,24 +75,24 @@
             margin-bottom: 16px;
         }
         .num-btn {
-            background: #f5f5f5;
-            border: none;
+            background: #fff;
+            border: 1.5px solid var(--border);
             border-radius: 14px;
             padding: 18px 10px;
             font-size: 1.5em;
-            font-weight: 600;
-            color: #333;
+            font-weight: 700;
+            color: var(--text);
             cursor: pointer;
-            transition: background .15s, transform .1s;
+            transition: background .15s, transform .1s, border-color .15s;
             -webkit-tap-highlight-color: transparent;
             user-select: none;
         }
-        .num-btn:active { background: #667eea; color: #fff; transform: scale(.94); }
-        .num-btn.del-btn { font-size: 1.1em; color: #999; }
+        .num-btn:active { background: var(--navy); color: #fff; border-color: var(--navy); transform: scale(.94); }
+        .num-btn.del-btn { font-size: 1.1em; color: var(--text-muted); }
         .num-btn.zero-btn { grid-column: 2; }
 
         .pin-error {
-            color: #e53e3e;
+            color: #c62828;
             font-size: .88em;
             min-height: 20px;
             margin-bottom: 6px;
@@ -92,45 +104,45 @@
         .welcome-name {
             font-size: 1.4em;
             font-weight: 700;
-            color: #333;
+            color: var(--navy);
             margin-bottom: 2px;
         }
         .welcome-role {
             font-size: .88em;
-            color: #888;
+            color: var(--text-muted);
             margin-bottom: 20px;
         }
 
         .date-label {
             font-size: .85em;
-            color: #888;
+            color: var(--text-muted);
             margin-bottom: 14px;
         }
 
         .status-box {
-            background: #f8f9ff;
+            background: var(--gold-pale);
             border-radius: 14px;
             padding: 18px;
             margin-bottom: 22px;
-            border: 1.5px solid #e0e6ff;
+            border: 1.5px solid var(--border);
         }
         .status-line {
             display: flex;
             justify-content: space-between;
             font-size: .9em;
-            color: #555;
+            color: var(--text-muted);
             padding: 4px 0;
         }
-        .status-line span:last-child { font-weight: 600; color: #333; }
+        .status-line span:last-child { font-weight: 700; color: var(--text); }
         .status-none { color: #aaa; font-style: italic; }
 
         .hours-total {
             margin-top: 10px;
             padding-top: 10px;
-            border-top: 1px solid #e0e6ff;
+            border-top: 1px solid var(--border);
             font-size: 1em;
             font-weight: 700;
-            color: #667eea;
+            color: var(--navy);
             text-align: right;
         }
 
@@ -148,23 +160,23 @@
         }
         .btn-clock:active { transform: scale(.97); }
         .btn-clock:disabled { opacity: .5; cursor: not-allowed; }
-        .btn-in  { background: #48bb78; color: #fff; }
-        .btn-out { background: #667eea; color: #fff; }
+        .btn-in  { background: #2e7d32; color: #fff; }
+        .btn-out { background: var(--navy); color: #fff; }
 
         .btn-signout {
             width: 100%;
-            background: #f5f5f5;
-            border: 1.5px solid #ddd;
+            background: transparent;
+            border: 1.5px solid var(--border);
             border-radius: 12px;
-            color: #666;
+            color: var(--text-muted);
             font-size: 1em;
             font-weight: 600;
             cursor: pointer;
             padding: 14px;
             margin-top: 4px;
-            transition: background .15s;
+            transition: background .15s, border-color .15s;
         }
-        .btn-signout:active { background: #e8e8e8; }
+        .btn-signout:active { background: var(--border); }
 
         .msg {
             font-size: .88em;
@@ -178,8 +190,8 @@
         .spinner {
             display: inline-block;
             width: 22px; height: 22px;
-            border: 3px solid #eee;
-            border-top-color: #667eea;
+            border: 3px solid var(--border);
+            border-top-color: var(--navy);
             border-radius: 50%;
             animation: spin .7s linear infinite;
             vertical-align: middle;
