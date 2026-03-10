@@ -2,34 +2,6 @@
 // PARENT PORTAL — My Schedule Lookup
 // ============================================================
 
-// Rate limiting — 5 failed attempts triggers a 5-minute lockout
-const LOOKUP_MAX_ATTEMPTS = 5;
-const LOOKUP_LOCKOUT_MS   = 5 * 60 * 1000;
-const LOOKUP_STORAGE_KEY  = 'lookup_lockout';
-
-function getLookupLockout() {
-    try { return JSON.parse(sessionStorage.getItem(LOOKUP_STORAGE_KEY) || 'null'); } catch { return null; }
-}
-function saveLookupLockout(state) {
-    sessionStorage.setItem(LOOKUP_STORAGE_KEY, JSON.stringify(state));
-}
-function recordLookupFailure() {
-    const now   = Date.now();
-    const state = getLookupLockout() || { attempts: 0, lockedUntil: 0 };
-    state.attempts++;
-    if (state.attempts >= LOOKUP_MAX_ATTEMPTS) state.lockedUntil = now + LOOKUP_LOCKOUT_MS;
-    saveLookupLockout(state);
-}
-/** Returns true (and shows error) if currently locked out. */
-function checkLookupLockout() {
-    const state = getLookupLockout();
-    if (!state || !state.lockedUntil) return false;
-    const remaining = state.lockedUntil - Date.now();
-    if (remaining <= 0) { sessionStorage.removeItem(LOOKUP_STORAGE_KEY); return false; }
-    const mins = Math.ceil(remaining / 60000);
-    showError(`Too many failed attempts. Please try again in ${mins} minute${mins !== 1 ? 's' : ''}.`);
-    return true;
-}
 
 const MONTH_NAMES_LOOKUP = [
     'January','February','March','April','May','June',
@@ -80,8 +52,6 @@ async function doLookup() {
         showError('Please enter your 4-digit PIN.');
         return;
     }
-    if (checkLookupLockout()) return;
-
     btn.disabled    = true;
     btn.textContent = 'Looking up…';
 
@@ -89,7 +59,6 @@ async function doLookup() {
         // Verify BOTH email AND PIN match — neither alone is sufficient
         const family = await lookupFamilyByEmailAndPin(email, pin);
         if (!family) {
-            recordLookupFailure();
             showError('Email and PIN do not match. Please contact the office if you need help.');
             return;
         }

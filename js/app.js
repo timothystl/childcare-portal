@@ -136,36 +136,6 @@ function getRoomForStudent(student) {
     return getRoomFromDob(student.child_dob || student.dob || null);
 }
 
-// ============================================================
-// FAMILY LOOKUP RATE LIMITING
-// ============================================================
-const REG_MAX_ATTEMPTS  = 5;
-const REG_LOCKOUT_MS    = 5 * 60 * 1000;
-const REG_STORAGE_KEY   = 'reg_lookup_lockout';
-
-function getRegLockout() {
-    try { return JSON.parse(sessionStorage.getItem(REG_STORAGE_KEY) || 'null'); } catch { return null; }
-}
-function saveRegLockout(state) {
-    sessionStorage.setItem(REG_STORAGE_KEY, JSON.stringify(state));
-}
-function recordRegFailure() {
-    const now   = Date.now();
-    const state = getRegLockout() || { attempts: 0, lockedUntil: 0 };
-    state.attempts++;
-    if (state.attempts >= REG_MAX_ATTEMPTS) state.lockedUntil = now + REG_LOCKOUT_MS;
-    saveRegLockout(state);
-}
-/** Returns true (and shows toast) if currently locked out. */
-function checkRegLockout() {
-    const state = getRegLockout();
-    if (!state || !state.lockedUntil) return false;
-    const remaining = state.lockedUntil - Date.now();
-    if (remaining <= 0) { sessionStorage.removeItem(REG_STORAGE_KEY); return false; }
-    const mins = Math.ceil(remaining / 60000);
-    showToast(`Too many failed attempts. Please try again in ${mins} minute${mins !== 1 ? 's' : ''}.`);
-    return true;
-}
 
 // ============================================================
 // FAMILY LOOKUP  (Item 9)
@@ -193,8 +163,6 @@ async function runEmailPinLookup() {
 
     if (!email || !email.includes('@')) { showToast('Please enter your email address.'); return; }
     if (!pin || pin.length !== 4) { showToast('Please enter your 4-digit family PIN.'); return; }
-    if (checkRegLockout()) return;
-
     if (pinBtn) { pinBtn.textContent = 'Looking up…'; pinBtn.disabled = true; }
     try {
         const result = await lookupFamilyForRegistration(email, pin);
@@ -203,7 +171,6 @@ async function runEmailPinLookup() {
             return;
         }
         if (!result) {
-            recordRegFailure();
             showToast('No family found matching that email and PIN. Please contact the office if you need help.');
             return;
         }
