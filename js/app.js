@@ -139,86 +139,45 @@ function getRoomForStudent(student) {
 // FAMILY LOOKUP  (Item 9)
 // ============================================================
 function setupFamilyLookup() {
-    const searchInput = document.getElementById('familySearchInput');
-    const searchBtn   = document.getElementById('familySearchBtn');
-    const pinInput    = document.getElementById('familyPinInput');
-    const pinBtn      = document.getElementById('familyPinBtn');
+    const emailInput = document.getElementById('familyEmailInput');
+    const pinInput   = document.getElementById('familyPinInput');
+    const pinBtn     = document.getElementById('familyPinBtn');
 
-    let searchTimer;
-    searchInput?.addEventListener('input', () => {
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(runFamilySearch, 380);
+    emailInput?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); runEmailPinLookup(); }
     });
-    searchInput?.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); runFamilySearch(); }
-    });
-    searchBtn?.addEventListener('click', runFamilySearch);
-
     pinInput?.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); runPinLookup(); }
+        if (e.key === 'Enter') { e.preventDefault(); runEmailPinLookup(); }
     });
-    pinBtn?.addEventListener('click', runPinLookup);
+    pinBtn?.addEventListener('click', runEmailPinLookup);
 
     document.getElementById('changeFamilyBtn')?.addEventListener('click', resetFamilyLookup);
 }
 
-async function runFamilySearch() {
-    const query     = document.getElementById('familySearchInput')?.value.trim();
-    const resultsEl = document.getElementById('familySearchResults');
-    if (!resultsEl) return;
-    if (!query || query.length < 2) { resultsEl.innerHTML = ''; return; }
-
-    resultsEl.innerHTML = '<div class="lookup-searching">Searching…</div>';
-    try {
-        const families = await searchFamilies(query);
-        renderFamilySearchResults(families, query);
-    } catch {
-        resultsEl.innerHTML = '<div class="lookup-error">Search failed. Please try again.</div>';
-    }
-}
-
-async function runPinLookup() {
+async function runEmailPinLookup() {
+    const email  = document.getElementById('familyEmailInput')?.value.trim();
     const pin    = document.getElementById('familyPinInput')?.value.trim();
     const pinBtn = document.getElementById('familyPinBtn');
+
+    if (!email || !email.includes('@')) { showToast('Please enter your email address.'); return; }
     if (!pin || pin.length !== 4) { showToast('Please enter your 4-digit family PIN.'); return; }
 
     if (pinBtn) { pinBtn.textContent = 'Looking up…'; pinBtn.disabled = true; }
     try {
-        const family = await lookupFamilyByPin(pin);
-        if (family) {
-            document.getElementById('familySearchResults').innerHTML = '';
-            selectFamily(family, pin);
+        const result = await lookupFamilyForRegistration(email, pin);
+        if (result) {
+            const enteredPin = result.isParent2 ? String(result.family.parent2_pin) : pin;
+            selectFamily(result.family, enteredPin);
         } else {
-            showToast(`No family found for PIN ${pin}. Please check and try again.`);
+            showToast('No family found matching that email and PIN. Please contact the office if you need help.');
         }
     } catch {
-        showToast('PIN lookup failed. Please try again.');
+        showToast('Lookup failed. Please try again.');
     } finally {
-        if (pinBtn) { pinBtn.textContent = 'Look Up'; pinBtn.disabled = false; }
+        if (pinBtn) { pinBtn.textContent = 'Find My Family'; pinBtn.disabled = false; }
     }
 }
 
-function renderFamilySearchResults(families, query) {
-    const resultsEl = document.getElementById('familySearchResults');
-    if (!families.length) {
-        resultsEl.innerHTML = `<div class="lookup-no-results">No family found for "<strong>${escStr(query)}</strong>". Please contact the office to be added to the system.</div>`;
-        return;
-    }
-    resultsEl.innerHTML = families.map(f => {
-        const kids = (f.students || []).length;
-        return `<div class="family-result-item" data-id="${f.id}">
-            <span class="family-result-name">${escStr(f.parent_name)}</span>
-            <span class="family-result-meta">${escStr(f.parent_email || '')}${kids ? ` &middot; ${kids} child${kids > 1 ? 'ren' : ''}` : ''}</span>
-        </div>`;
-    }).join('');
-
-    resultsEl.querySelectorAll('.family-result-item').forEach(el => {
-        el.addEventListener('click', () => {
-            const fam = families.find(f => String(f.id) === el.dataset.id);
-            if (fam) selectFamily(fam);
-        });
-    });
-}
 
 function selectFamily(family, enteredPin = null) {
     // Check if registration is locked for nonpayment
@@ -235,7 +194,6 @@ function selectFamily(family, enteredPin = null) {
     hideCalendar();
 
     selectedFamily = family;
-    document.getElementById('familySearchResults').innerHTML = '';
 
     // If the entered PIN matches parent 2's PIN, prefill with parent 2 contact info
     const useParent2 = enteredPin && family.parent2_pin &&
@@ -251,16 +209,9 @@ function selectFamily(family, enteredPin = null) {
 
     const bar = document.getElementById('familySelectedBar');
     if (bar) bar.classList.remove('hidden');
-    // Show the correct parent's name and PIN in the "family selected" bar
     const displayName = useParent2 ? (family.parent2_name || family.parent_name) : family.parent_name;
-    const displayPin  = enteredPin || (useParent2 ? family.parent2_pin : family.pin);
     const nameEl = document.getElementById('selectedFamilyName');
     if (nameEl) nameEl.textContent = displayName;
-    const pinEl = document.getElementById('selectedFamilyPin');
-    if (pinEl) {
-        pinEl.textContent = displayPin ? `PIN: ${displayPin}` : '';
-        pinEl.style.display = displayPin ? '' : 'none';
-    }
 
     document.getElementById('lookupRequiredMsg')?.classList.add('hidden');
     document.getElementById('registrationSteps')?.classList.remove('hidden');
@@ -272,13 +223,10 @@ function resetFamilyLookup() {
     selectedFamily   = null;
     selectedChildren = [];
 
-    const searchInput = document.getElementById('familySearchInput');
-    const pinInput    = document.getElementById('familyPinInput');
-    if (searchInput) searchInput.value = '';
+    const emailInput = document.getElementById('familyEmailInput');
+    const pinInput   = document.getElementById('familyPinInput');
+    if (emailInput)  emailInput.value  = '';
     if (pinInput)    pinInput.value    = '';
-    const resultsEl = document.getElementById('familySearchResults');
-    if (resultsEl) resultsEl.innerHTML = '';
-
     document.getElementById('familySelectedBar')?.classList.add('hidden');
 
     document.getElementById('lookupRequiredMsg')?.classList.remove('hidden');
@@ -327,9 +275,6 @@ function renderChildSection() {
             ${students.map(s => {
                 const room       = getRoomForStudent(s);
                 const isSelected = selectedChildren.some(c => c.studentId === s.id);
-                const dobLabel   = s.child_dob
-                    ? new Date(s.child_dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                    : '';
                 const recurDays = Array.isArray(s.recurring_days) ? s.recurring_days.join(',') : '';
                 return `<label class="child-card-label${isSelected ? ' selected' : ''}" data-student-id="${s.id}">
                     <input type="checkbox" class="child-card-checkbox"
@@ -342,7 +287,6 @@ function renderChildSection() {
                            data-recurring-days="${escStr(recurDays)}"
                            ${isSelected ? 'checked' : ''}>
                     <span class="child-card-name">${escStr(s.child_name)}</span>
-                    ${dobLabel ? `<span class="child-card-dob">${dobLabel}</span>` : ''}
                     ${recurDays ? `<span class="child-card-recurring" title="Recurring days: ${escStr(recurDays.replace(/,/g,', '))}">🔁 ${escStr(recurDays.replace(/,/g,', '))}</span>` : ''}
                 </label>`;
             }).join('')}
