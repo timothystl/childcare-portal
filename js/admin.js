@@ -2397,6 +2397,11 @@ function setupFamilies() {
             doSetFamilyLock(unlockBtn.dataset.familyId, false);
             return;
         }
+        const loginUnlockBtn = e.target.closest('.fm-login-unlock-btn[data-family-id]');
+        if (loginUnlockBtn) {
+            doSetFamilyLoginLock(loginUnlockBtn.dataset.familyId, false);
+            return;
+        }
     });
 
     // Escape closes family modal (visibility-safe)
@@ -2756,7 +2761,8 @@ function renderFamiliesList(families) {
                                 <div class="family-row-actions">
                                     ${f.group === 'summer' ? '<span class="family-badge-summer">Summer</span>' : ''}
                                     ${archived ? '<span class="family-badge-archived">Archived</span>' : ''}
-                                    ${f.registration_locked ? '<span class="family-badge-locked" title="Registration locked for nonpayment">🔒 Locked</span>' : ''}
+                                    ${f.registration_locked ? '<span class="family-badge-locked" title="Registration locked for nonpayment">🔒 Reg Locked</span>' : ''}
+                                    ${f.login_locked ? '<span class="family-badge-login-locked" title="Login locked — too many failed attempts">🚫 Login Locked</span>' : ''}
                                     ${!archived
                                         ? `<button class="fm-edit-btn" data-family-id="${f.id}" title="Edit family">✏ Edit</button>
                                            <button class="fm-archive-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Archive family">Archive</button>`
@@ -2765,6 +2771,10 @@ function renderFamiliesList(families) {
                                     ${f.registration_locked
                                         ? `<button class="fm-unlock-btn btn-secondary" data-family-id="${f.id}" title="Unlock registration">🔓 Unlock Reg</button>`
                                         : `<button class="fm-lock-btn btn-warning" data-family-id="${f.id}" title="Lock registration for nonpayment">🔒 Lock Reg</button>`
+                                    }
+                                    ${f.login_locked
+                                        ? `<button class="fm-login-unlock-btn btn-secondary" data-family-id="${f.id}" title="Unlock login access">🔓 Unlock Login</button>`
+                                        : ''
                                     }
                                     <button class="fm-merge-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Merge into another family">⇄ Merge</button>
                                     <button class="fm-delete-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Permanently delete this family">🗑 Delete</button>
@@ -3208,6 +3218,17 @@ async function doSetFamilyLock(id, locked) {
         onFamilySearch();
     } catch (err) {
         alert((locked ? 'Lock' : 'Unlock') + ' failed: ' + err.message);
+    }
+}
+
+async function doSetFamilyLoginLock(id, locked) {
+    try {
+        await setFamilyLoginLock(id, locked);
+        const fam = allFamiliesData.find(f => f.id === id);
+        if (fam) { fam.login_locked = locked; if (!locked) fam.login_attempts = 0; }
+        onFamilySearch();
+    } catch (err) {
+        alert('Unlock login failed: ' + err.message);
     }
 }
 
