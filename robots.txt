@@ -1,0 +1,13 @@
+# Disallow all crawlers from the parent portal, admin, and clock-in pages.
+# These pages require authentication and should never appear in search results.
+User-agent: *
+Disallow: /calendar
+Disallow: /calendar.html
+Disallow: /lookup
+Disallow: /lookup.html
+Disallow: /admin
+Disallow: /admin.html
+Disallow: /clockin
+Disallow: /clockin.html
+Disallow: /notice
+Disallow: /notice.html

@@ -17,6 +17,7 @@ let closureMap          = new Map();  // 'YYYY-MM-DD' -> reason string
 let calendarLoading     = false;
 let pickerOpenDate      = null;
 let regWindowOverride   = 'auto';     // 'auto' | 'open' | 'closed'
+const studentDataMap    = new Map();  // studentId -> { dob, roomOverride } — kept in JS, not DOM
 
 // ============================================================
 // REGISTRATION WINDOW
@@ -222,6 +223,7 @@ function selectFamily(family, enteredPin = null) {
 function resetFamilyLookup() {
     selectedFamily   = null;
     selectedChildren = [];
+    studentDataMap.clear();
 
     const emailInput = document.getElementById('familyEmailInput');
     const pinInput   = document.getElementById('familyPinInput');
@@ -270,6 +272,14 @@ function renderChildSection() {
         return;
     }
 
+    // Store sensitive fields in JS memory, not in DOM attributes
+    students.forEach(s => {
+        studentDataMap.set(String(s.id), {
+            dob:          s.child_dob || '',
+            roomOverride: s.room_override || '',
+        });
+    });
+
     section.innerHTML = `
         <div class="child-cards-row">
             ${students.map(s => {
@@ -280,8 +290,6 @@ function renderChildSection() {
                     <input type="checkbox" class="child-card-checkbox"
                            data-student-id="${s.id}"
                            data-name="${escStr(s.child_name)}"
-                           data-dob="${escStr(s.child_dob || '')}"
-                           data-room-override="${escStr(s.room_override || '')}"
                            data-discount-type="${escStr(s.discount_type || 'none')}"
                            data-discount-value="${escStr(String(s.discount_value || 0))}"
                            data-recurring-days="${escStr(recurDays)}"
@@ -296,8 +304,9 @@ function renderChildSection() {
         cb.addEventListener('change', () => {
             const studentId    = cb.dataset.studentId;
             const childName    = cb.dataset.name;
-            const childDob     = cb.dataset.dob;
-            const roomOverride = cb.dataset.roomOverride || null;
+            const sd           = studentDataMap.get(studentId) || {};
+            const childDob     = sd.dob || '';
+            const roomOverride = sd.roomOverride || null;
             const room = getRoomForStudent({ child_dob: childDob, room_override: roomOverride });
             if (!room) {
                 cb.checked = false;
