@@ -3967,12 +3967,24 @@ async function loadHoursForDate() {
                         <span class="clock-event-label">⚠ ${inTime} → not clocked out</span>
                         <input type="time" class="clock-out-time-input" value="${outDefault}">
                         <button class="btn-secondary clock-out-manual-btn" data-event-id="${ev.id}">Clock Out</button>
+                        <button class="btn-ghost clock-delete-btn" data-event-id="${ev.id}" title="Delete entry">✕</button>
                     </div>`;
                 }
                 const ms  = new Date(ev.clock_out) - new Date(ev.clock_in);
                 const hrs = (ms / 3600000).toFixed(2);
+                const inVal  = _timeInputDefault(ev.clock_in);
+                const outVal = _timeInputDefault(ev.clock_out);
                 return `<div class="clock-event-item">
                     <span class="clock-event-label">${inTime} → ${_fmtClockTime(ev.clock_out)} (${hrs}h)</span>
+                    <button class="btn-ghost clock-edit-btn" data-event-id="${ev.id}" title="Edit times">Edit</button>
+                    <button class="btn-ghost clock-delete-btn" data-event-id="${ev.id}" title="Delete entry">✕</button>
+                    <div class="clock-edit-form hidden">
+                        <input type="time" class="edit-clock-in-input" value="${inVal}">
+                        <span>→</span>
+                        <input type="time" class="edit-clock-out-input" value="${outVal}">
+                        <button class="btn-secondary confirm-edit-clock-btn" data-event-id="${ev.id}">Save</button>
+                        <button class="btn-ghost cancel-edit-clock-btn">Cancel</button>
+                    </div>
                 </div>`;
             });
 
@@ -4099,6 +4111,65 @@ async function loadHoursForDate() {
                     await loadHoursForDate();
                 } catch (err) {
                     alert('Failed to add entry: ' + err.message);
+                    btn.disabled = false;
+                }
+            });
+        });
+
+        // Delete clock event
+        container.querySelectorAll('.clock-delete-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (!confirm('Delete this clock entry?')) return;
+                btn.disabled = true;
+                try {
+                    await deleteClockEvent(btn.dataset.eventId);
+                    await loadHoursForDate();
+                } catch (err) {
+                    alert('Delete failed: ' + err.message);
+                    btn.disabled = false;
+                }
+            });
+        });
+
+        // Show edit form
+        container.querySelectorAll('.clock-edit-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const item = btn.closest('.clock-event-item');
+                item.querySelector('.clock-edit-form').classList.remove('hidden');
+                item.querySelector('.clock-event-label').classList.add('hidden');
+                btn.classList.add('hidden');
+                item.querySelector('.clock-delete-btn').classList.add('hidden');
+            });
+        });
+
+        // Cancel edit
+        container.querySelectorAll('.cancel-edit-clock-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const item = btn.closest('.clock-event-item');
+                item.querySelector('.clock-edit-form').classList.add('hidden');
+                item.querySelector('.clock-event-label').classList.remove('hidden');
+                item.querySelector('.clock-edit-btn').classList.remove('hidden');
+                item.querySelector('.clock-delete-btn').classList.remove('hidden');
+            });
+        });
+
+        // Save edit
+        container.querySelectorAll('.confirm-edit-clock-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const form  = btn.closest('.clock-edit-form');
+                const inVal  = form.querySelector('.edit-clock-in-input').value;
+                const outVal = form.querySelector('.edit-clock-out-input').value;
+                if (!inVal) { alert('Clock-in time is required.'); return; }
+                btn.disabled = true;
+                try {
+                    await updateClockEvent(
+                        btn.dataset.eventId,
+                        _localTimeToISO(date, inVal),
+                        outVal ? _localTimeToISO(date, outVal) : null
+                    );
+                    await loadHoursForDate();
+                } catch (err) {
+                    alert('Save failed: ' + err.message);
                     btn.disabled = false;
                 }
             });

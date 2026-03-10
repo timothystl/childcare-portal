@@ -2155,6 +2155,10 @@ tr.pending-approval:hover { background: #fef3c7; }
 .clock-action-btns  { display: flex; gap: 6px; margin-top: 2px; flex-wrap: wrap; }
 .show-add-clock-btn { font-size: 0.8rem; align-self: flex-start; }
 .clock-in-now-btn   { font-size: 0.8rem; align-self: flex-start; }
+.clock-edit-btn, .clock-delete-btn { font-size: 0.75rem; padding: 1px 6px; }
+.clock-delete-btn   { color: #b91c1c; }
+.clock-edit-form    { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.85rem; margin-top: 2px; }
+.clock-edit-form input[type="time"] { font-size: 0.82rem; padding: 2px 4px; }
 
 /* ============================================================
    PAYROLL TABLE
