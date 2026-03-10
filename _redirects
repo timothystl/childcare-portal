@@ -1,3 +1,6 @@
+# Portal app lives at /calendar
+/calendar      /calendar.html    200
+
 # Redirect old root (parent calendar) to /calendar now that / is the program home page
 /index.html    /calendar    301
 
