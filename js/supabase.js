@@ -447,34 +447,26 @@ async function lookupFamilyByPin(pin) {
     }
 }
 
+// Calls the server-side family_login RPC which verifies the PIN, tracks failed
+// attempts, and auto-locks after 5 failures — no edge function needed.
+// Returns { data, error } where data is the raw JSONB from the RPC.
+async function familyLogin(email, pin) {
+    if (!sbClient) return { data: null, error: 'not_configured' };
+    const parsedPin = parseInt(pin, 10);
+    if (isNaN(parsedPin)) return { data: null, error: 'invalid_pin' };
+    const { data, error } = await sbClient.rpc('family_login', { p_email: email, p_pin: parsedPin });
+    if (error) throw error;
+    return data; // { error: '...' } or { family: {...}, isParent2: bool }
+}
+
 // Looks up a family by email+PIN for the registration portal.
-// Checks both parent 1 (parent_email + pin) and parent 2 (parent2_email + parent2_pin).
-// Returns { family, isParent2 } or null.
+// Returns { family, isParent2 } on success, null on wrong email/PIN, or throws on locked.
 async function lookupFamilyForRegistration(email, pin) {
     if (!sbClient) return null;
     try {
-        const parsedPin = parseInt(pin, 10);
-        const fields = 'id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, registration_locked, login_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)';
-
-        // Try parent 1 email + PIN
-        const { data: p1 } = await sbClient
-            .from('families')
-            .select(fields)
-            .ilike('parent_email', email)
-            .eq('pin', parsedPin)
-            .maybeSingle();
-        if (p1) return { family: p1, isParent2: false };
-
-        // Try parent 2 email + PIN
-        const { data: p2 } = await sbClient
-            .from('families')
-            .select(fields)
-            .ilike('parent2_email', email)
-            .eq('parent2_pin', parsedPin)
-            .maybeSingle();
-        if (p2) return { family: p2, isParent2: true };
-
-        return null;
+        const result = await familyLogin(email, pin);
+        if (!result || result.error === 'not_found' || result.error === 'invalid_pin') return null;
+        return result; // { family, isParent2 }
     } catch (_) {
         return null;
     }
@@ -771,23 +763,12 @@ async function getAdminSession() {
 async function lookupFamilyByEmailAndPin(email, pin) {
     if (!sbClient) return null;
     try {
-        const parsedPin = parseInt(pin, 10);
-        // Try parent 1
-        const { data: p1 } = await sbClient
-            .from('families')
-            .select('id, parent_email, login_locked')
-            .ilike('parent_email', email)
-            .eq('pin', parsedPin)
-            .maybeSingle();
-        if (p1) return p1;
-        // Try parent 2
-        const { data: p2 } = await sbClient
-            .from('families')
-            .select('id, parent_email: parent2_email, login_locked')
-            .ilike('parent2_email', email)
-            .eq('parent2_pin', parsedPin)
-            .maybeSingle();
-        return p2 || null;
+        const result = await familyLogin(email, pin);
+        if (!result || result.error === 'not_found' || result.error === 'invalid_pin') return null;
+        if (result.error === 'login_locked') return { login_locked: true };
+        // Return shape expected by callers: id, parent_email (login email), login_locked
+        const loginEmail = result.isParent2 ? result.family.parent2_email : result.family.parent_email;
+        return { id: result.family.id, parent_email: loginEmail, login_locked: false };
     } catch (_) {
         return null;
     }

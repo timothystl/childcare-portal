@@ -198,13 +198,13 @@ async function runEmailPinLookup() {
     if (pinBtn) { pinBtn.textContent = 'Looking up…'; pinBtn.disabled = true; }
     try {
         const result = await lookupFamilyForRegistration(email, pin);
+        if (result && result.error === 'login_locked') {
+            showToast('This account has been locked. Please contact the office to regain access.');
+            return;
+        }
         if (!result) {
             recordRegFailure();
             showToast('No family found matching that email and PIN. Please contact the office if you need help.');
-            return;
-        }
-        if (result.family.login_locked) {
-            showToast('This account has been locked. Please contact the office to regain access.');
             return;
         }
         selectFamily(result.family, result.isParent2);
