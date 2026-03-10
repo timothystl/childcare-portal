@@ -40,6 +40,7 @@ Deno.serve(async (req) => {
       'registration_locked', 'login_locked', 'login_attempts',
       'students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)',
     ].join(', ')
+    // NOTE: pin/parent2_pin are fetched only for server-side verification — they are stripped before returning to client
 
     // Try parent 1 first, then parent 2
     const { data: byP1 } = await supabase
@@ -86,8 +87,8 @@ Deno.serve(async (req) => {
       .update({ login_attempts: 0 })
       .eq('id', family.id)
 
-    // Return family data; strip the attempt fields — client doesn't need them
-    const { login_attempts: _a, ...safeFamily } = family
+    // Strip server-only fields — client must never receive PINs or attempt counters
+    const { pin: _p, parent2_pin: _p2, login_attempts: _a, ...safeFamily } = family
     return json({ family: safeFamily, isParent2 })
 
   } catch (err) {
