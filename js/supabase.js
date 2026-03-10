@@ -1061,6 +1061,24 @@ async function updateClockEventOut(eventId, clockOutISO) {
     if (error) throw error;
 }
 
+async function updateClockEvent(eventId, clockInISO, clockOutISO) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('staff_clock_events')
+        .update({ clock_in: clockInISO, clock_out: clockOutISO || null })
+        .eq('id', eventId);
+    if (error) throw error;
+}
+
+async function deleteClockEvent(eventId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('staff_clock_events')
+        .delete()
+        .eq('id', eventId);
+    if (error) throw error;
+}
+
 // ============================================================
 // STAFF AVAILABILITY  (stored in settings table as JSON blob)
 // ============================================================
