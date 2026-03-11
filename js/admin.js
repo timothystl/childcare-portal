@@ -4686,7 +4686,13 @@ async function _buildTrendMap() {
         const day = _trendDayName(row.summary_date);
         if (!mo || !day) return;
         if (!histByMonth[mo]) histByMonth[mo] = [];
-        histByMonth[mo].push({ roomId: row.room_id, day, half: row.half_days || 0, full: row.full_days || 0 });
+        // Bear Room Jan/Feb has no half/full split — fall back to total_attended as full days
+        const noSplit = row.half_days == null && row.full_days == null;
+        histByMonth[mo].push({
+            roomId: row.room_id, day,
+            half: noSplit ? 0 : (row.half_days || 0),
+            full: noSplit ? (row.total_attended || 0) : (row.full_days || 0),
+        });
     });
 
     Object.entries(histByMonth).forEach(([mo, entries]) => {
