@@ -1216,7 +1216,10 @@ async function fetchAttendanceSummary({ month, roomId } = {}) {
         .order('summary_date')
         .order('room_id');
     if (month) {
-        q = q.gte('summary_date', `${month}-01`).lte('summary_date', `${month}-31`);
+        // Use next-month boundary to avoid invalid dates like "2026-02-31"
+        const [y, m] = month.split('-').map(Number);
+        const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+        q = q.gte('summary_date', `${month}-01`).lt('summary_date', `${nextMonth}-01`);
     }
     if (roomId) {
         q = q.eq('room_id', roomId);

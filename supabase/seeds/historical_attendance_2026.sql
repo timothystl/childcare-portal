@@ -29,7 +29,12 @@ INSERT INTO billing_summary (month, room_id, half_days, full_days, subtotal, dis
 ('2026-04-01', 'bee',    53, 108,     NULL,    NULL, 11015.00),
 ('2026-04-01', 'turtle',  23,  94,    NULL,    NULL,  8085.00),
 ('2026-04-01', 'owl',    79,  41,     NULL,    NULL,  6630.00)
-ON CONFLICT (month, room_id) DO NOTHING;
+ON CONFLICT (month, room_id) DO UPDATE SET
+    half_days  = EXCLUDED.half_days,
+    full_days  = EXCLUDED.full_days,
+    subtotal   = EXCLUDED.subtotal,
+    discount   = EXCLUDED.discount,
+    net_billed = EXCLUDED.net_billed;
 
 
 -- ── DAILY ATTENDANCE — JANUARY 2026 ─────────────────────────
@@ -121,7 +126,10 @@ INSERT INTO attendance_summary (summary_date, room_id, half_days, full_days, tot
 ('2026-01-28', 'owl',  2,  4,  6),
 ('2026-01-29', 'owl',  2,  3,  5),
 ('2026-01-30', 'owl',  5,  3,  8)
-ON CONFLICT (summary_date, room_id) DO NOTHING;
+ON CONFLICT (summary_date, room_id) DO UPDATE SET
+    half_days       = EXCLUDED.half_days,
+    full_days       = EXCLUDED.full_days,
+    total_attended  = EXCLUDED.total_attended;
 
 
 -- ── DAILY ATTENDANCE — FEBRUARY 2026 ────────────────────────
@@ -211,7 +219,10 @@ INSERT INTO attendance_summary (summary_date, room_id, half_days, full_days, tot
 ('2026-02-25', 'owl',  7,  6, 13),  -- was (7,6)
 ('2026-02-26', 'owl',  5,  3,  8),
 ('2026-02-27', 'owl',  7,  4, 11)   -- adjusted to hit monthly totals 119/95
-ON CONFLICT (summary_date, room_id) DO NOTHING;
+ON CONFLICT (summary_date, room_id) DO UPDATE SET
+    half_days       = EXCLUDED.half_days,
+    full_days       = EXCLUDED.full_days,
+    total_attended  = EXCLUDED.total_attended;
 
 
 -- ── DAILY ATTENDANCE — MARCH 2026 ───────────────────────────
@@ -305,7 +316,10 @@ INSERT INTO attendance_summary (summary_date, room_id, half_days, full_days, tot
 ('2026-03-27', 'owl',  5,  4,  9),
 ('2026-03-30', 'owl',  7,  3, 10),
 ('2026-03-31', 'owl',  9,  5, 14)   -- adjusted to approach 131/104
-ON CONFLICT (summary_date, room_id) DO NOTHING;
+ON CONFLICT (summary_date, room_id) DO UPDATE SET
+    half_days       = EXCLUDED.half_days,
+    full_days       = EXCLUDED.full_days,
+    total_attended  = EXCLUDED.total_attended;
 
 
 -- ── DAILY ATTENDANCE — APRIL 2026 ───────────────────────────
@@ -395,4 +409,7 @@ INSERT INTO attendance_summary (summary_date, room_id, half_days, full_days, tot
 ('2026-04-28', 'owl',  3,  2,  5),
 ('2026-04-29', 'owl',  3,  2,  5),
 ('2026-04-30', 'owl',  3,  2,  5)   -- adjusted to approach 79/41
-ON CONFLICT (summary_date, room_id) DO NOTHING;
+ON CONFLICT (summary_date, room_id) DO UPDATE SET
+    half_days       = EXCLUDED.half_days,
+    full_days       = EXCLUDED.full_days,
+    total_attended  = EXCLUDED.total_attended;
