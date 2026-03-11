@@ -4711,8 +4711,8 @@ function _renderTrendsTable(trendMap) {
         `<th colspan="2" style="text-align:center;border-left:2px solid #ddd">${d}</th>`
     ).join('');
     const daySubHeaders = TREND_DAYS.map(d =>
-        `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal;color:#555">Half</th>` +
-        `<th style="text-align:right;font-weight:normal;color:#555">Full</th>`
+        `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>` +
+        `<th style="text-align:right;font-weight:normal">Full</th>`
     ).join('');
 
     return ROOMS.map(room => {
@@ -4752,8 +4752,8 @@ function _renderTrendsTable(trendMap) {
                             <th rowspan="2" style="border-left:2px solid #ddd">All Days</th>
                         </tr>
                         <tr>${daySubHeaders}
-                            <th style="text-align:right;border-left:2px solid #ddd;font-weight:normal;color:#555">Half</th>
-                            <th style="text-align:right;font-weight:normal;color:#555">Full</th>
+                            <th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>
+                            <th style="text-align:right;font-weight:normal">Full</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
