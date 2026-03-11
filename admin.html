@@ -553,22 +553,41 @@
                 </div>
             </section>
 
-            <!-- Monthly Billing Report -->
-            <section class="admin-section collapsible-section" id="monthlyBillingSection">
-                <h2>📊 Monthly Billing Report</h2>
-                <p class="section-desc">Attendance and billing totals for a selected month across all rooms.</p>
+            <!-- Attendance & Revenue (unified) -->
+            <section class="admin-section collapsible-section" id="attendanceRevenueSection">
+                <h2>📊 Attendance &amp; Revenue</h2>
+                <p class="section-desc">Monthly attendance and net revenue across all rooms. Historical months use imported data; current and future months reflect live registrations. Click any month row to view daily detail.</p>
                 <div class="roster-controls">
                     <div class="roster-field">
-                        <label for="reportMonth">Month</label>
-                        <input type="month" id="reportMonth">
+                        <label for="arDateFrom">From</label>
+                        <input type="date" id="arDateFrom">
+                    </div>
+                    <div class="roster-field">
+                        <label for="arDateTo">To</label>
+                        <input type="date" id="arDateTo">
+                    </div>
+                    <div class="roster-field">
+                        <label for="arRoomFilter">Room</label>
+                        <select id="arRoomFilter">
+                            <option value="">All Rooms</option>
+                        </select>
                     </div>
                     <div class="roster-btns">
-                        <button id="generateReportBtn" class="btn-secondary">Generate Report</button>
-                        <button id="exportReportBtn" class="btn-primary">&#8595; Export Excel</button>
+                        <button id="generateArBtn" class="btn-secondary">Generate</button>
+                        <button id="exportArBtn" class="btn-primary">&#8595; Export Excel</button>
                     </div>
                 </div>
-                <div id="reportContent">
-                    <p class="empty-hint">Select a month above and click Generate Report.</p>
+                <div id="arContent">
+                    <p class="empty-hint">Select a date range above and click Generate.</p>
+                </div>
+                <div id="arDailyPanel" class="ar-daily-panel" style="display:none;">
+                    <div class="ar-daily-header">
+                        <span id="arDailyTitle" class="ar-daily-title">Daily Detail</span>
+                        <button id="arDailyCloseBtn" class="btn-link ar-daily-close">✕ Close</button>
+                    </div>
+                    <div id="arDailyContent">
+                        <p class="empty-hint">Loading…</p>
+                    </div>
                 </div>
             </section>
 
@@ -604,61 +623,6 @@
                 </div>
             </section>
 
-            <!-- Year-to-Date Revenue -->
-            <section class="admin-section collapsible-section" id="ytdRevenueSection">
-                <h2>📅 Year-to-Date Revenue</h2>
-                <p class="section-desc">Rolling monthly revenue totals by room for the current calendar year.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateYtdBtn" class="btn-secondary">Generate YTD</button>
-                    <button id="exportYtdBtn" class="btn-primary">&#8595; Export Excel</button>
-                </div>
-                <div id="ytdContent">
-                    <p class="empty-hint">Click Generate YTD to view revenue by month.</p>
-                </div>
-            </section>
-
-            <!-- Historical Attendance (Jan–Apr 2026) -->
-            <section class="admin-section collapsible-section" id="historicalAttendanceSection">
-                <h2>📂 Historical Attendance — Jan through Apr 2026</h2>
-                <p class="section-desc">Back-dated attendance and billing data imported from the Daycare Billing Summary spreadsheet. Monthly billing totals are authoritative; daily counts are best-effort from source records.</p>
-
-                <!-- Monthly Billing Summary -->
-                <h3 style="margin:16px 0 8px;font-size:1rem;color:var(--color-primary,#1c3160);">Monthly Billing by Room</h3>
-                <div id="historicalBillingTable">
-                    <p class="empty-hint">Loading…</p>
-                </div>
-
-                <!-- Daily Attendance Filter -->
-                <h3 style="margin:20px 0 8px;font-size:1rem;color:var(--color-primary,#1c3160);">Daily Attendance Detail</h3>
-                <div class="roster-controls" style="margin-bottom:12px;">
-                    <div class="roster-field">
-                        <label for="historicalMonth">Month</label>
-                        <select id="historicalMonth">
-                            <option value="2026-01">January 2026</option>
-                            <option value="2026-02">February 2026</option>
-                            <option value="2026-03">March 2026</option>
-                            <option value="2026-04">April 2026</option>
-                        </select>
-                    </div>
-                    <div class="roster-field">
-                        <label for="historicalRoom">Room</label>
-                        <select id="historicalRoom">
-                            <option value="">All Rooms</option>
-                            <option value="bear">Bear Room (Infants)</option>
-                            <option value="bee">Bee Room (Ones)</option>
-                            <option value="turtle">Turtle Room (Twos)</option>
-                            <option value="owl">Owl Room (Threes)</option>
-                        </select>
-                    </div>
-                    <div class="roster-btns">
-                        <button id="loadHistoricalBtn" class="btn-secondary">View</button>
-                        <button id="exportHistoricalBtn" class="btn-primary">&#8595; Export Excel</button>
-                    </div>
-                </div>
-                <div id="historicalDailyTable">
-                    <p class="empty-hint">Select a month above and click View.</p>
-                </div>
-            </section>
 
         </div><!-- /#tab-reports -->
 

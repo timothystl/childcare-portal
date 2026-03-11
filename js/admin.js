@@ -81,8 +81,8 @@ async function initDashboard() {
     setupFilters();
     setupRoster();
     setupClosures();
-    setupMonthlyReport();
     setupMonthlyRoster();
+    setupAttendanceRevenue();
     setupFamilyBilling();
     setupWindowOverride();
     setupFamilies();
@@ -1086,143 +1086,10 @@ function showOverrideStatus(val, saved) {
 }
 
 // ============================================================
-// MONTHLY BILLING REPORT
+// SHARED CONSTANTS
 // ============================================================
 const MONTH_NAMES_ADMIN = ['January','February','March','April','May','June',
                            'July','August','September','October','November','December'];
-
-function setupMonthlyReport() {
-    document.getElementById('generateReportBtn').addEventListener('click', generateMonthlyReport);
-    document.getElementById('exportReportBtn').addEventListener('click', exportMonthlyReport);
-
-    const now = new Date();
-    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    document.getElementById('reportMonth').value = monthStr;
-}
-
-function generateMonthlyReport() {
-    const monthVal = document.getElementById('reportMonth').value;
-    if (!monthVal) { alert('Please select a month.'); return; }
-
-    const breakdown = {};
-    ROOMS.forEach(r => {
-        breakdown[r.id] = { roomLabel: r.label, full: 0, half: 0, revenue: 0 };
-    });
-
-    let totalFull = 0, totalHalf = 0, totalRevenue = 0;
-
-    allRegistrations.forEach(reg => {
-        const room = ROOMS.find(r => r.id === reg.room_id);
-        if (!room) return;
-        (reg.registration_dates || []).forEach(d => {
-            if (!d.care_date.startsWith(monthVal)) return;
-            if (d.waitlisted) return;
-            if (d.day_type === 'half') {
-                breakdown[reg.room_id].half++;
-                breakdown[reg.room_id].revenue += room.halfDayRate || 0;
-                totalHalf++;
-                totalRevenue += room.halfDayRate || 0;
-            } else {
-                breakdown[reg.room_id].full++;
-                breakdown[reg.room_id].revenue += room.fullDayRate || 0;
-                totalFull++;
-                totalRevenue += room.fullDayRate || 0;
-            }
-        });
-    });
-
-    const [y, m] = monthVal.split('-').map(Number);
-    const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
-
-    renderMonthlyReport(monthLabel, monthVal, breakdown, { totalFull, totalHalf, totalRevenue });
-}
-
-function renderMonthlyReport(monthLabel, monthVal, breakdown, totals) {
-    const container = document.getElementById('reportContent');
-
-    const rows = ROOMS.map(room => {
-        const b         = breakdown[room.id];
-        const totalDays = b.full + b.half;
-        return `
-            <tr>
-                <td>${room.label}</td>
-                <td class="report-num">${b.full}</td>
-                <td class="report-num">${b.half}</td>
-                <td class="report-num"><strong>${totalDays}</strong></td>
-                <td class="report-num report-revenue">$${b.revenue.toFixed(2)}</td>
-            </tr>`;
-    }).join('');
-
-    if (totals.totalFull === 0 && totals.totalHalf === 0) {
-        container.innerHTML = `<p class="empty-hint">No registrations found for ${monthLabel}.</p>`;
-        return;
-    }
-
-    container.innerHTML = `
-        <h3 class="report-month-title">${monthLabel}</h3>
-        <div class="table-wrapper report-table-wrap">
-            <table class="report-table">
-                <thead>
-                    <tr>
-                        <th>Room</th>
-                        <th>Full Days</th>
-                        <th>Half Days</th>
-                        <th>Total Days</th>
-                        <th>Revenue</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-                <tfoot>
-                    <tr class="report-total-row">
-                        <td><strong>Grand Total</strong></td>
-                        <td class="report-num"><strong>${totals.totalFull}</strong></td>
-                        <td class="report-num"><strong>${totals.totalHalf}</strong></td>
-                        <td class="report-num"><strong>${totals.totalFull + totals.totalHalf}</strong></td>
-                        <td class="report-num report-revenue"><strong>$${totals.totalRevenue.toFixed(2)}</strong></td>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>`;
-}
-
-function exportMonthlyReport() {
-    const monthVal = document.getElementById('reportMonth').value;
-    if (!monthVal) { alert('Please select a month first.'); return; }
-
-    const rows = [];
-    ROOMS.forEach(room => {
-        let full = 0, half = 0, revenue = 0;
-        allRegistrations.forEach(reg => {
-            if (reg.room_id !== room.id) return;
-            (reg.registration_dates || []).forEach(d => {
-                if (!d.care_date.startsWith(monthVal)) return;
-                if (d.waitlisted) return;
-                if (d.day_type === 'half') { half++; revenue += room.halfDayRate || 0; }
-                else                       { full++; revenue += room.fullDayRate || 0; }
-            });
-        });
-        rows.push({
-            'Room':        room.label,
-            'Full Days':   full,
-            'Half Days':   half,
-            'Total Days':  full + half,
-            'Revenue':     `$${revenue.toFixed(2)}`,
-        });
-    });
-
-    if (!rows.length) { alert('No data to export.'); return; }
-
-    const [y, m] = monthVal.split('-').map(Number);
-    const label  = MONTH_NAMES_ADMIN[m - 1] + '-' + y;
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, label);
-    ws['!cols'] = Object.keys(rows[0]).map(k => ({
-        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
-    }));
-    XLSX.writeFile(wb, `billing-report-${monthVal}.xlsx`);
-}
 
 // ============================================================
 // MONTHLY CLASSROOM ROSTER
@@ -4477,143 +4344,324 @@ async function exportPayrollReport() {
 }
 
 // ============================================================
-// EXTRA REPORTS  (Enrollment Trends · Waitlist Demand · YTD Revenue)
+// ATTENDANCE & REVENUE — unified date-range report
 // ============================================================
-function setupExtraReports() {
-    document.getElementById('generateTrendsBtn')?.addEventListener('click', generateEnrollmentTrends);
-    document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
-    document.getElementById('generateYtdBtn')?.addEventListener('click', generateYtdRevenue);
-    document.getElementById('exportYtdBtn')?.addEventListener('click', exportYtdRevenue);
-    setupHistoricalAttendance();
-}
 
-// ============================================================
-// HISTORICAL ATTENDANCE — Jan through Apr 2026
-// ============================================================
-const HISTORICAL_ROOM_LABELS = {
-    bear:   'Bear Room (Infants)',
-    bee:    'Bee Room (Ones)',
-    turtle: 'Turtle Room (Twos)',
-    owl:    'Owl Room (Threes)',
-};
-
-function setupHistoricalAttendance() {
-    loadHistoricalBilling();
-    document.getElementById('loadHistoricalBtn')?.addEventListener('click', loadHistoricalDaily);
-    document.getElementById('exportHistoricalBtn')?.addEventListener('click', exportHistoricalDaily);
-}
-
-async function loadHistoricalBilling() {
-    const wrap = document.getElementById('historicalBillingTable');
-    if (!wrap) return;
-    wrap.innerHTML = '<p class="empty-hint">Loading…</p>';
-    try {
-        const data = await fetchBillingSummary();
-        if (!data || data.length === 0) {
-            wrap.innerHTML = '<p class="empty-hint">No billing summary data found. Run the seed SQL in Supabase first.</p>';
-            return;
-        }
-        wrap.innerHTML = _buildBillingTable(data);
-    } catch (e) {
-        wrap.innerHTML = `<p class="empty-hint" style="color:red;">Error loading billing data: ${escHtml(e.message)}</p>`;
-    }
-}
-
-function _buildBillingTable(rows) {
-    const months = [...new Set(rows.map(r => r.month))].sort();
-    const rooms  = ['bear', 'bee', 'turtle', 'owl'];
-
-    // Index by month+room
-    const idx = {};
-    rows.forEach(r => { idx[`${r.month}|${r.room_id}`] = r; });
-
-    const fmt  = v => v != null ? `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 0 })}` : '—';
-    const fmtN = v => v != null ? v.toLocaleString() : '—';
-
-    const monthLabel = m => new Date(m + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-    let html = '<div style="overflow-x:auto"><table class="report-table" style="font-size:0.85rem">';
-    html += '<thead><tr><th>Room</th>';
-    months.forEach(m => {
-        html += `<th colspan="4" style="text-align:center;border-left:2px solid #ccc">${monthLabel(m)}</th>`;
-    });
-    html += '</tr><tr><th></th>';
-    months.forEach(() => {
-        html += '<th style="border-left:2px solid #ccc">Half Days</th><th>Full Days</th><th>Discount</th><th>Net Billed</th>';
-    });
-    html += '</tr></thead><tbody>';
-
-    let colTotals = {}; // month -> { half, full, discount, net }
-    months.forEach(m => { colTotals[m] = { half: 0, full: 0, discount: 0, net: 0 }; });
-
-    rooms.forEach(roomId => {
-        html += `<tr><td><strong>${escHtml(HISTORICAL_ROOM_LABELS[roomId] || roomId)}</strong></td>`;
-        months.forEach(m => {
-            const r = idx[`${m}|${roomId}`];
-            const half     = r?.half_days;
-            const full     = r?.full_days;
-            const discount = r?.discount;
-            const net      = r?.net_billed;
-            if (r) {
-                colTotals[m].half     += half     ?? 0;
-                colTotals[m].full     += full     ?? 0;
-                colTotals[m].discount += discount ?? 0;
-                colTotals[m].net      += net      ?? 0;
-            }
-            html += `<td style="border-left:2px solid #ccc;text-align:right">${fmtN(half)}</td>`;
-            html += `<td style="text-align:right">${fmtN(full)}</td>`;
-            html += `<td style="text-align:right;color:#b00">${r?.discount != null ? fmt(discount) : '—'}</td>`;
-            html += `<td style="text-align:right;font-weight:600">${fmt(net)}</td>`;
+function setupAttendanceRevenue() {
+    // Populate room filter dropdown
+    const roomSel = document.getElementById('arRoomFilter');
+    if (roomSel) {
+        ROOMS.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.textContent = r.label;
+            roomSel.appendChild(opt);
         });
-        html += '</tr>';
-    });
+    }
 
-    // Totals row
-    html += '<tr style="font-weight:700;background:#f0f4ff"><td>TOTAL</td>';
-    months.forEach(m => {
-        const t = colTotals[m];
-        html += `<td style="border-left:2px solid #ccc;text-align:right">${t.half.toLocaleString()}</td>`;
-        html += `<td style="text-align:right">${t.full.toLocaleString()}</td>`;
-        html += `<td style="text-align:right;color:#b00">${t.discount ? fmt(t.discount) : '—'}</td>`;
-        html += `<td style="text-align:right">${fmt(t.net)}</td>`;
-    });
-    html += '</tr>';
+    // Default: Jan 1 of current year → today
+    const today = new Date();
+    const todayStr = today.toISOString().substring(0, 10);
+    const janFirst = `${today.getFullYear()}-01-01`;
+    const fromEl = document.getElementById('arDateFrom');
+    const toEl   = document.getElementById('arDateTo');
+    if (fromEl) fromEl.value = janFirst;
+    if (toEl)   toEl.value   = todayStr;
 
-    html += '</tbody></table></div>';
-    return html;
+    document.getElementById('generateArBtn')?.addEventListener('click', generateAttendanceRevenue);
+    document.getElementById('exportArBtn')?.addEventListener('click', exportAttendanceRevenue);
+    document.getElementById('arDailyCloseBtn')?.addEventListener('click', () => {
+        const panel = document.getElementById('arDailyPanel');
+        if (panel) panel.style.display = 'none';
+        // Reset expand icons
+        document.querySelectorAll('#arSummaryTable .ar-expand-icon').forEach(i => i.textContent = '▶');
+        document.querySelectorAll('#arSummaryTable .ar-month-row').forEach(r => r.classList.remove('ar-row-active'));
+    });
 }
 
-async function loadHistoricalDaily() {
-    const month = document.getElementById('historicalMonth')?.value;
-    const room  = document.getElementById('historicalRoom')?.value;
-    const wrap  = document.getElementById('historicalDailyTable');
-    if (!wrap || !month) return;
-    wrap.innerHTML = '<p class="empty-hint">Loading…</p>';
+// Build unified data map for any date range.
+// Returns { 'YYYY-MM': { [roomId]: { attendees, netBilled, liveDisc, histDisc? }, _discounts } }
+// Historical billing_summary rows take precedence over live calculations for the same room+month.
+async function _buildArDataMap(fromDate, toDate) {
+    const fromMo = fromDate.substring(0, 7);
+    const toMo   = toDate.substring(0, 7);
+    const map    = {};
+
+    // Step 1: build from live allRegistrations
+    const dmap = getDiscountMap();
+    allRegistrations.forEach(reg => {
+        const room = ROOMS.find(r => r.id === reg.room_id);
+        if (!room) return;
+        const discKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
+        const disc    = dmap.get(discKey) || { type: 'none', value: 0 };
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date) return;
+            if (d.care_date < fromDate || d.care_date > toDate) return;
+            const mo = d.care_date.substring(0, 7);
+            if (!map[mo]) map[mo] = {};
+            if (!map[mo][reg.room_id]) map[mo][reg.room_id] = { attendees: 0, netBilled: 0, liveDisc: 0 };
+            const baseRate = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
+            const actual   = effectiveAdminRate(baseRate, disc.type, disc.value);
+            map[mo][reg.room_id].attendees++;
+            map[mo][reg.room_id].netBilled += actual;
+            map[mo][reg.room_id].liveDisc  += Math.max(0, baseRate - actual);
+        });
+    });
+
+    // Step 2: historical billing_summary overwrites live per room+month
+    let historical = [];
+    try { historical = await fetchBillingSummary(); } catch (e) { console.warn('billing_summary unavailable:', e); }
+    historical.forEach(row => {
+        const mo = (row.month || '').substring(0, 7);
+        if (mo < fromMo || mo > toMo) return;
+        if (!map[mo]) map[mo] = {};
+        map[mo][row.room_id] = {
+            attendees: (row.half_days || 0) + (row.full_days || 0),
+            netBilled: parseFloat(row.net_billed) || 0,
+            histDisc:  parseFloat(row.discount)   || 0,
+            liveDisc:  0,
+        };
+    });
+
+    // Step 3: sum total discounts per month (historical discount per room takes precedence over live)
+    Object.keys(map).forEach(mo => {
+        map[mo]._discounts = ROOMS.reduce((sum, r) => {
+            const e = map[mo][r.id];
+            if (!e) return sum;
+            return sum + (e.histDisc != null ? e.histDisc : e.liveDisc || 0);
+        }, 0);
+    });
+
+    return map;
+}
+
+async function generateAttendanceRevenue() {
+    const fromDate   = document.getElementById('arDateFrom')?.value;
+    const toDate     = document.getElementById('arDateTo')?.value;
+    const roomFilter = document.getElementById('arRoomFilter')?.value || '';
+    const container  = document.getElementById('arContent');
+
+    if (!fromDate || !toDate) { alert('Please select both a start and end date.'); return; }
+    if (fromDate > toDate)    { alert('Start date must be before end date.'); return; }
+
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    const dailyPanel = document.getElementById('arDailyPanel');
+    if (dailyPanel) dailyPanel.style.display = 'none';
+
     try {
-        const data = await fetchAttendanceSummary({ month, roomId: room || null });
-        if (!data || data.length === 0) {
-            wrap.innerHTML = '<p class="empty-hint">No daily attendance data found for this selection. Run the seed SQL in Supabase first.</p>';
+        const arMap  = await _buildArDataMap(fromDate, toDate);
+        const fromMo = fromDate.substring(0, 7);
+        const toMo   = toDate.substring(0, 7);
+        const months = Object.keys(arMap).sort().filter(mo => mo >= fromMo && mo <= toMo);
+
+        if (!months.length) {
+            container.innerHTML = '<p class="empty-hint">No attendance or revenue data found for the selected date range.</p>';
             return;
         }
-        wrap.innerHTML = _buildDailyTable(data);
-    } catch (e) {
-        wrap.innerHTML = `<p class="empty-hint" style="color:red;">Error: ${escHtml(e.message)}</p>`;
+
+        const rooms = roomFilter ? ROOMS.filter(r => r.id === roomFilter) : ROOMS;
+        const showTotalCol = rooms.length > 1;
+
+        // Accumulate totals per room
+        const roomTotals = {};
+        rooms.forEach(r => { roomTotals[r.id] = { attendees: 0, netBilled: 0 }; });
+        let grandAttendees = 0, grandRevenue = 0, grandDiscounts = 0;
+
+        const fmtRev = v => v > 0 ? `$${Math.round(v).toLocaleString('en-US')}` : '—';
+
+        const rowsHtml = months.map(mo => {
+            const [y, m] = mo.split('-').map(Number);
+            const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            let moAttendees = 0, moRevenue = 0;
+
+            const cells = rooms.map(r => {
+                const e   = arMap[mo]?.[r.id];
+                const att = e?.attendees || 0;
+                const rev = e?.netBilled || 0;
+                roomTotals[r.id].attendees += att;
+                roomTotals[r.id].netBilled += rev;
+                moAttendees += att;
+                moRevenue   += rev;
+                return `<td class="report-num">${att > 0 ? att.toLocaleString() : '—'}</td>` +
+                       `<td class="report-num report-revenue">${fmtRev(rev)}</td>`;
+            }).join('');
+
+            grandAttendees += moAttendees;
+            grandRevenue   += moRevenue;
+            grandDiscounts += arMap[mo]._discounts || 0;
+
+            const totalCols = showTotalCol
+                ? `<td class="report-num ar-total-col"><strong>${moAttendees > 0 ? moAttendees.toLocaleString() : '—'}</strong></td>` +
+                  `<td class="report-num report-revenue ar-total-col"><strong>${fmtRev(moRevenue)}</strong></td>`
+                : '';
+
+            return `<tr class="ar-month-row" data-month="${mo}" title="Click to view daily detail for ${label}">
+                        <td class="staff-date-cell ar-month-cell"><span class="ar-expand-icon">▶</span>${label}</td>
+                        ${cells}${totalCols}
+                    </tr>`;
+        }).join('');
+
+        // Build header rows
+        const roomColHeaders = rooms.map(r =>
+            `<th colspan="2" class="ar-room-header">${r.label}</th>`
+        ).join('');
+        const roomSubHeaders = rooms.map(() =>
+            `<th class="report-num ar-sub-header">Attendees</th><th class="report-num ar-sub-header">Net Billed</th>`
+        ).join('');
+        const totalColHeader    = showTotalCol ? '<th colspan="2" class="ar-room-header ar-total-col">Total</th>' : '';
+        const totalSubHeader    = showTotalCol ? '<th class="report-num ar-sub-header ar-total-col">Attendees</th><th class="report-num ar-sub-header ar-total-col">Net Billed</th>' : '';
+
+        // Totals row
+        const n = months.length;
+        const totalCells = rooms.map(r => {
+            const t = roomTotals[r.id];
+            return `<td class="report-num"><strong>${t.attendees > 0 ? t.attendees.toLocaleString() : '—'}</strong></td>` +
+                   `<td class="report-num report-revenue"><strong>${fmtRev(t.netBilled)}</strong></td>`;
+        }).join('');
+        const grandTotalCols = showTotalCol
+            ? `<td class="report-num ar-total-col"><strong>${grandAttendees > 0 ? grandAttendees.toLocaleString() : '—'}</strong></td>` +
+              `<td class="report-num report-revenue ar-total-col"><strong>${fmtRev(grandRevenue)}</strong></td>`
+            : '';
+
+        // Averages row
+        const avgCells = rooms.map(r => {
+            const t      = roomTotals[r.id];
+            const avgAtt = n > 0 ? Math.round(t.attendees / n) : 0;
+            const avgRev = n > 0 ? t.netBilled / n : 0;
+            return `<td class="report-num">${avgAtt > 0 ? avgAtt.toLocaleString() : '—'}</td>` +
+                   `<td class="report-num report-revenue">${fmtRev(avgRev)}</td>`;
+        }).join('');
+        const grandAvgCols = showTotalCol
+            ? `<td class="report-num ar-total-col">${n > 0 ? Math.round(grandAttendees / n).toLocaleString() : '—'}</td>` +
+              `<td class="report-num report-revenue ar-total-col">${fmtRev(n > 0 ? grandRevenue / n : 0)}</td>`
+            : '';
+
+        const discStr = grandDiscounts > 0
+            ? `-$${Math.round(grandDiscounts).toLocaleString('en-US')}`
+            : '$0';
+
+        container.innerHTML = `
+            <div class="ar-summary-meta">
+                <span class="ar-total-badge">$${Math.round(grandRevenue).toLocaleString('en-US')} total revenue</span>
+                <span class="ar-discount-badge ytd-discount-total">${discStr} in discounts</span>
+                <span class="ar-hint">Click a month row to view daily detail.</span>
+            </div>
+            <div class="table-wrapper report-table-wrap">
+                <table class="report-table ar-summary-table" id="arSummaryTable">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="ar-month-th">Month</th>
+                            ${roomColHeaders}${totalColHeader}
+                        </tr>
+                        <tr>${roomSubHeaders}${totalSubHeader}</tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                    <tfoot>
+                        <tr class="report-total-row">
+                            <td><strong>Totals</strong></td>
+                            ${totalCells}${grandTotalCols}
+                        </tr>
+                        <tr class="report-total-row ar-avg-row">
+                            <td><em>Monthly Avg</em></td>
+                            ${avgCells}${grandAvgCols}
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>`;
+
+        // Wire up row clicks for daily detail
+        document.querySelectorAll('#arSummaryTable .ar-month-row').forEach(row => {
+            row.addEventListener('click', () => loadArDailyDetail(row.dataset.month, roomFilter));
+        });
+
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error loading data: ${escHtml(err.message)}</p>`;
     }
 }
 
-function _buildDailyTable(rows) {
+async function loadArDailyDetail(month, roomFilter) {
+    const panel     = document.getElementById('arDailyPanel');
+    const titleEl   = document.getElementById('arDailyTitle');
+    const contentEl = document.getElementById('arDailyContent');
+    if (!panel || !contentEl) return;
+
+    // Highlight active row
+    document.querySelectorAll('#arSummaryTable .ar-month-row').forEach(r => r.classList.remove('ar-row-active'));
+    document.querySelectorAll('#arSummaryTable .ar-expand-icon').forEach(i => i.textContent = '▶');
+    const activeRow = document.querySelector(`#arSummaryTable .ar-month-row[data-month="${month}"]`);
+    if (activeRow) {
+        activeRow.classList.add('ar-row-active');
+        const icon = activeRow.querySelector('.ar-expand-icon');
+        if (icon) icon.textContent = '▼';
+    }
+
+    const [y, m] = month.split('-').map(Number);
+    if (titleEl) titleEl.textContent = `Daily Detail — ${MONTH_NAMES_ADMIN[m - 1]} ${y}`;
+
+    panel.style.display = '';
+    // Scroll the panel into view smoothly
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    contentEl.innerHTML = '<p class="empty-hint">Loading…</p>';
+
+    const roomLabels = Object.fromEntries(ROOMS.map(r => [r.id, r.label]));
+
+    try {
+        // Try historical attendance_summary first
+        const histData = await fetchAttendanceSummary({ month, roomId: roomFilter || null });
+
+        if (histData && histData.length > 0) {
+            contentEl.innerHTML = _buildArDailyTable(histData, roomLabels);
+            return;
+        }
+
+        // Fall back to live registrations
+        const liveRows = _buildArLiveDailyRows(month, roomFilter);
+        if (!liveRows.length) {
+            contentEl.innerHTML = '<p class="empty-hint">No daily attendance data available for this month.</p>';
+            return;
+        }
+        contentEl.innerHTML = _buildArDailyTable(liveRows, roomLabels);
+
+    } catch (err) {
+        contentEl.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function _buildArLiveDailyRows(month, roomFilter) {
+    const dayMap = {};
+    allRegistrations.forEach(reg => {
+        if (roomFilter && reg.room_id !== roomFilter) return;
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date || !d.care_date.startsWith(month)) return;
+            if (!dayMap[d.care_date]) dayMap[d.care_date] = {};
+            if (!dayMap[d.care_date][reg.room_id]) dayMap[d.care_date][reg.room_id] = { half: 0, full: 0 };
+            if (d.day_type === 'half') dayMap[d.care_date][reg.room_id].half++;
+            else                      dayMap[d.care_date][reg.room_id].full++;
+        });
+    });
+    const rows = [];
+    Object.keys(dayMap).sort().forEach(date => {
+        Object.keys(dayMap[date]).sort().forEach(roomId => {
+            const { half, full } = dayMap[date][roomId];
+            rows.push({ summary_date: date, room_id: roomId, half_days: half, full_days: full, total_attended: half + full });
+        });
+    });
+    return rows;
+}
+
+function _buildArDailyTable(rows, roomLabels) {
     const dayFmt = d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     let html = '<div style="overflow-x:auto"><table class="report-table" style="font-size:0.85rem">';
     html += '<thead><tr><th>Date</th><th>Room</th><th style="text-align:right">Half Days</th><th style="text-align:right">Full Days</th><th style="text-align:right">Total</th></tr></thead><tbody>';
     let lastDate = '';
     rows.forEach(r => {
-        const isNewDate = r.summary_date !== lastDate;
+        const isNew = r.summary_date !== lastDate;
         lastDate = r.summary_date;
-        html += `<tr${isNewDate ? ' style="border-top:1px solid #ddd"' : ''}>`;
-        html += `<td>${isNewDate ? escHtml(dayFmt(r.summary_date)) : ''}</td>`;
-        html += `<td>${escHtml(HISTORICAL_ROOM_LABELS[r.room_id] || r.room_id)}</td>`;
-        html += `<td style="text-align:right">${r.half_days ?? '<em style="color:#888">n/a</em>'}</td>`;
-        html += `<td style="text-align:right">${r.full_days ?? '<em style="color:#888">n/a</em>'}</td>`;
+        html += `<tr${isNew ? ' class="ar-daily-date-break"' : ''}>`;
+        html += `<td>${isNew ? escHtml(dayFmt(r.summary_date)) : ''}</td>`;
+        html += `<td>${escHtml(roomLabels[r.room_id] || r.room_id)}</td>`;
+        html += `<td style="text-align:right">${r.half_days ?? '—'}</td>`;
+        html += `<td style="text-align:right">${r.full_days ?? '—'}</td>`;
         html += `<td style="text-align:right;font-weight:600">${r.total_attended}</td>`;
         html += '</tr>';
     });
@@ -4621,17 +4669,56 @@ function _buildDailyTable(rows) {
     return html;
 }
 
-async function exportHistoricalDaily() {
-    const month = document.getElementById('historicalMonth')?.value || '2026-01';
-    const room  = document.getElementById('historicalRoom')?.value;
-    const data  = await fetchAttendanceSummary({ month, roomId: room || null });
-    if (!data || data.length === 0) return;
-    const lines = ['Date,Room,Half Days,Full Days,Total'];
-    data.forEach(r => {
-        lines.push([r.summary_date, HISTORICAL_ROOM_LABELS[r.room_id] || r.room_id,
-            r.half_days ?? '', r.full_days ?? '', r.total_attended].map(csvCell).join(','));
+async function exportAttendanceRevenue() {
+    const fromDate   = document.getElementById('arDateFrom')?.value;
+    const toDate     = document.getElementById('arDateTo')?.value;
+    const roomFilter = document.getElementById('arRoomFilter')?.value || '';
+    if (!fromDate || !toDate) { alert('Please generate a report first.'); return; }
+
+    let arMap;
+    try {
+        arMap = await _buildArDataMap(fromDate, toDate);
+    } catch (err) {
+        alert('Error loading data: ' + err.message);
+        return;
+    }
+
+    const fromMo = fromDate.substring(0, 7);
+    const toMo   = toDate.substring(0, 7);
+    const months = Object.keys(arMap).sort().filter(mo => mo >= fromMo && mo <= toMo);
+    if (!months.length) { alert('No data to export.'); return; }
+
+    const rooms = roomFilter ? ROOMS.filter(r => r.id === roomFilter) : ROOMS;
+
+    const rows = months.map(mo => {
+        const [y, m] = mo.split('-').map(Number);
+        const row    = { Month: MONTH_NAMES_ADMIN[m - 1] + ' ' + y };
+        rooms.forEach(r => {
+            const e = arMap[mo]?.[r.id];
+            row[`${r.label} – Attendees`]  = e?.attendees  || 0;
+            row[`${r.label} – Net Billed`] = e?.netBilled  ? `$${e.netBilled.toFixed(2)}` : '$0.00';
+        });
+        const totalAtt = rooms.reduce((s, r) => s + (arMap[mo]?.[r.id]?.attendees || 0), 0);
+        const totalRev = rooms.reduce((s, r) => s + (arMap[mo]?.[r.id]?.netBilled || 0), 0);
+        row['Total Attendees']   = totalAtt;
+        row['Total Revenue']     = `$${totalRev.toFixed(2)}`;
+        row['Total Discounts']   = arMap[mo]._discounts > 0 ? `-$${arMap[mo]._discounts.toFixed(2)}` : '$0.00';
+        return row;
     });
-    downloadFile(`attendance_${month}.csv`, 'text/csv', lines.join('\n'));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Attendance-Revenue');
+    const roomSuffix = roomFilter ? `_${roomFilter}` : '';
+    XLSX.writeFile(wb, `attendance-revenue_${fromDate}_to_${toDate}${roomSuffix}.xlsx`);
+}
+
+// ============================================================
+// EXTRA REPORTS  (Enrollment Trends · Waitlist Demand)
+// ============================================================
+function setupExtraReports() {
+    document.getElementById('generateTrendsBtn')?.addEventListener('click', generateEnrollmentTrends);
+    document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
 }
 
 // ── Enrollment Trends ──────────────────────────────────────
@@ -4874,133 +4961,6 @@ async function generateWaitlistReport() {
     }
 }
 
-// ── Year-to-Date Revenue ───────────────────────────────────
-// Build revenue map from live registrations only (synchronous)
-function _buildLiveRevenueMap(yearKey) {
-    // Returns { 'YYYY-MM': { roomId: actualRevenue, _discounts: totalDiscounted } }
-    const map  = {};
-    const dmap = getDiscountMap();
-    allRegistrations.forEach(reg => {
-        const room = ROOMS.find(r => r.id === reg.room_id);
-        if (!room) return;
-        const discKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
-        const disc    = dmap.get(discKey) || { type: 'none', value: 0 };
-        (reg.registration_dates || []).forEach(d => {
-            if (d.waitlisted || !d.care_date || !d.care_date.startsWith(yearKey)) return;
-            const mo       = d.care_date.substring(0, 7);
-            if (!map[mo]) map[mo] = { _discounts: 0 };
-            const baseRate   = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
-            const actual     = effectiveAdminRate(baseRate, disc.type, disc.value);
-            map[mo][reg.room_id] = (map[mo][reg.room_id] || 0) + actual;
-            map[mo]._discounts  += Math.max(0, baseRate - actual);
-        });
-    });
-    return map;
-}
-
-// Fetch billing_summary from Supabase and merge with live registration data.
-// Historical months (present in billing_summary) take precedence over live calc.
-async function _buildYtdRevenueMap(yearKey) {
-    const map = _buildLiveRevenueMap(yearKey);
-
-    let historical = [];
-    try { historical = await fetchBillingSummary(); } catch (e) { console.warn('Could not load billing_summary:', e); }
-
-    historical.forEach(row => {
-        const mo = (row.month || '').substring(0, 7); // 'YYYY-MM'
-        if (!mo.startsWith(yearKey)) return;
-        if (!map[mo]) map[mo] = { _discounts: 0 };
-        // Historical net_billed overwrites any live-calculated value for that room+month
-        map[mo][row.room_id] = parseFloat(row.net_billed) || 0;
-        // Use actual discount from source data if available
-        if (row.discount != null) {
-            map[mo]._discounts = (map[mo]._discounts || 0) + (parseFloat(row.discount) || 0);
-        }
-    });
-
-    return map;
-}
-
-async function generateYtdRevenue() {
-    const year      = new Date().getFullYear();
-    const container = document.getElementById('ytdContent');
-    container.innerHTML = '<p class="empty-hint">Loading…</p>';
-    try {
-        const revenueMap = await _buildYtdRevenueMap(String(year));
-        const months     = Object.keys(revenueMap).sort();
-        if (!months.length) {
-            container.innerHTML = `<p class="empty-hint">No revenue data found for ${year}.</p>`;
-            return;
-        }
-
-        const roomHeaders = ROOMS.map(r => `<th>${r.label}</th>`).join('');
-        let runningTotal = 0;
-        let totalDiscounts = 0;
-        const rows = months.map(mo => {
-            const [y, m]  = mo.split('-').map(Number);
-            const label   = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
-            const moTotal = ROOMS.reduce((s, r) => s + (revenueMap[mo][r.id] || 0), 0);
-            const moDisc  = revenueMap[mo]._discounts || 0;
-            runningTotal  += moTotal;
-            totalDiscounts += moDisc;
-            const cells = ROOMS.map(room =>
-                `<td class="report-num report-revenue">$${(revenueMap[mo][room.id] || 0).toFixed(2)}</td>`
-            ).join('');
-            return `
-                <tr>
-                    <td class="staff-date-cell">${label}</td>
-                    ${cells}
-                    <td class="report-num report-revenue"><strong>$${moTotal.toFixed(2)}</strong></td>
-                    <td class="report-num ytd-discount-cell">${moDisc > 0 ? `-$${moDisc.toFixed(2)}` : '—'}</td>
-                    <td class="report-num report-revenue">$${runningTotal.toFixed(2)}</td>
-                </tr>`;
-        }).join('');
-
-        container.innerHTML = `
-            <h3 class="report-month-title">${year} Year to Date — $${runningTotal.toFixed(2)} collected · <span class="ytd-discount-total">-$${totalDiscounts.toFixed(2)} discounted</span></h3>
-            <div class="table-wrapper report-table-wrap">
-                <table class="report-table">
-                    <thead>
-                        <tr><th>Month</th>${roomHeaders}<th>Monthly Revenue</th><th>Discounts Given</th><th>Running Total</th></tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>`;
-    } catch (err) {
-        container.innerHTML = `<p class="import-error">Error loading revenue: ${escHtml(err.message)}</p>`;
-    }
-}
-
-async function exportYtdRevenue() {
-    const year = new Date().getFullYear();
-    let revenueMap;
-    try {
-        revenueMap = await _buildYtdRevenueMap(String(year));
-    } catch (err) {
-        alert('Error loading revenue data: ' + err.message);
-        return;
-    }
-    const months = Object.keys(revenueMap).sort();
-    if (!months.length) { alert('No data to export.'); return; }
-
-    let running = 0;
-    const rows = months.map(mo => {
-        const [y, m] = mo.split('-').map(Number);
-        const row    = { Month: MONTH_NAMES_ADMIN[m - 1] + ' ' + y };
-        ROOMS.forEach(r => { row[r.label] = `$${(revenueMap[mo][r.id] || 0).toFixed(2)}`; });
-        const moTotal = ROOMS.reduce((s, r) => s + (revenueMap[mo][r.id] || 0), 0);
-        running += moTotal;
-        row['Monthly Revenue']  = `$${moTotal.toFixed(2)}`;
-        row['Discounts Given']  = revenueMap[mo]._discounts > 0 ? `-$${revenueMap[mo]._discounts.toFixed(2)}` : '$0.00';
-        row['Running Total']    = `$${running.toFixed(2)}`;
-        return row;
-    });
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Revenue ${year}`);
-    XLSX.writeFile(wb, `ytd-revenue-${year}.xlsx`);
-}
 
 // ============================================================
 // WAITLIST MANAGEMENT (admin)
