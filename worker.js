@@ -61,6 +61,13 @@ export default {
       });
     }
 
+    // Rewrite /calendar → /calendar.html (avoids _redirects loop in Workers Assets)
+    if (url.pathname === '/calendar') {
+      const rewritten = new URL(request.url);
+      rewritten.pathname = '/calendar.html';
+      request = new Request(rewritten.toString(), request);
+    }
+
     // Static assets
     const response    = await env.ASSETS.fetch(request);
     const newHeaders  = new Headers(response.headers);

@@ -1,5 +1,4 @@
-# Portal app lives at /calendar
-/calendar      /calendar.html    200
+# /calendar → /calendar.html rewrite is handled in worker.js
 
 # Redirect old root (parent calendar) to /calendar now that / is the program home page
 /index.html    /calendar    301
