@@ -4635,57 +4635,128 @@ async function exportHistoricalDaily() {
 }
 
 // ── Enrollment Trends ──────────────────────────────────────
-function _buildLiveTrendMap() {
-    // Returns { 'YYYY-MM': { roomId: Set<regId>, _full: N, _half: N, _historical: false } }
+// trendMap shape:
+// { 'YYYY-MM': { _historical: bool, [roomId]: { Mon:{half,full}, Tue:{half,full}, ... } } }
+
+const TREND_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+function _trendDayName(dateStr) {
+    const idx = new Date(dateStr + 'T12:00:00').getDay() - 1; // 0=Mon..4=Fri
+    return idx >= 0 && idx <= 4 ? TREND_DAYS[idx] : null;
+}
+function _trendCell(map, roomId, day) {
+    return map[roomId]?.[day] || { half: 0, full: 0 };
+}
+
+async function _buildTrendMap() {
+    // Start with an empty map
     const trendMap = {};
+
+    function ensureRoom(mo, roomId) {
+        if (!trendMap[mo]) trendMap[mo] = { _historical: false };
+        if (!trendMap[mo][roomId]) {
+            trendMap[mo][roomId] = {};
+            TREND_DAYS.forEach(d => { trendMap[mo][roomId][d] = { half: 0, full: 0 }; });
+        }
+    }
+
+    // Live registrations
     allRegistrations.forEach(reg => {
         (reg.registration_dates || []).forEach(d => {
             if (d.waitlisted || !d.care_date) return;
+            const day = _trendDayName(d.care_date);
+            if (!day) return;
             const mo = d.care_date.substring(0, 7);
-            if (!trendMap[mo]) trendMap[mo] = { _full: 0, _half: 0, _historical: false };
-            if (!trendMap[mo][reg.room_id]) trendMap[mo][reg.room_id] = new Set();
-            trendMap[mo][reg.room_id].add(reg.id);
-            if (d.day_type === 'half') trendMap[mo]._half++;
-            else                       trendMap[mo]._full++;
+            ensureRoom(mo, reg.room_id);
+            if (d.day_type === 'half') trendMap[mo][reg.room_id][day].half++;
+            else                       trendMap[mo][reg.room_id][day].full++;
         });
     });
-    return trendMap;
-}
 
-// Fetch attendance_summary from Supabase and merge with live trend data.
-// Historical months override live data for full/half day totals and per-room attendance.
-async function _buildTrendMap() {
-    const trendMap = _buildLiveTrendMap();
-
+    // Historical attendance_summary — overrides any live data for matching months
     let historical = [];
     try { historical = await fetchAttendanceSummary(); } catch (e) { console.warn('Could not load attendance_summary:', e); }
 
-    // Aggregate daily rows into monthly totals: { 'YYYY-MM': { roomId: { total, half, full } } }
-    const histMonths = {};
+    // Group by month first so we can flag entire months as historical
+    const histByMonth = {};
     historical.forEach(row => {
         const mo = (row.summary_date || '').substring(0, 7);
-        if (!mo) return;
-        if (!histMonths[mo]) histMonths[mo] = {};
-        if (!histMonths[mo][row.room_id]) histMonths[mo][row.room_id] = { total: 0, half: 0, full: 0 };
-        histMonths[mo][row.room_id].total += row.total_attended || 0;
-        histMonths[mo][row.room_id].half  += row.half_days     || 0;
-        histMonths[mo][row.room_id].full  += row.full_days     || 0;
+        const day = _trendDayName(row.summary_date);
+        if (!mo || !day) return;
+        if (!histByMonth[mo]) histByMonth[mo] = [];
+        histByMonth[mo].push({ roomId: row.room_id, day, half: row.half_days || 0, full: row.full_days || 0 });
     });
 
-    Object.entries(histMonths).forEach(([mo, rooms]) => {
-        if (!trendMap[mo]) trendMap[mo] = { _full: 0, _half: 0, _historical: false };
-        trendMap[mo]._historical = true;
-        trendMap[mo]._full = 0;
-        trendMap[mo]._half = 0;
-        Object.entries(rooms).forEach(([roomId, counts]) => {
-            // Store raw number for historical rooms (not a Set)
-            trendMap[mo][roomId] = counts.total;
-            trendMap[mo]._full  += counts.full;
-            trendMap[mo]._half  += counts.half;
+    Object.entries(histByMonth).forEach(([mo, entries]) => {
+        // Clear any live data for this month — historical is authoritative
+        trendMap[mo] = { _historical: true };
+        entries.forEach(({ roomId, day, half, full }) => {
+            ensureRoom(mo, roomId);
+            trendMap[mo][roomId][day].half += half;
+            trendMap[mo][roomId][day].full += full;
         });
     });
 
     return trendMap;
+}
+
+function _renderTrendsTable(trendMap) {
+    const months = Object.keys(trendMap).sort();
+    if (!months.length) return '<p class="empty-hint">No enrollment data found.</p>';
+
+    // One table per room — rows = months, columns = Mon–Fri × H/F + totals
+    const dayHeaders = TREND_DAYS.map(d =>
+        `<th colspan="2" style="text-align:center;border-left:2px solid #ddd">${d}</th>`
+    ).join('');
+    const daySubHeaders = TREND_DAYS.map(d =>
+        `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal;color:#555">H</th>` +
+        `<th style="text-align:right;font-weight:normal;color:#555">F</th>`
+    ).join('');
+
+    return ROOMS.map(room => {
+        const rows = months.map(mo => {
+            const [y, m] = mo.split('-').map(Number);
+            const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            const isHist = trendMap[mo]._historical;
+            const src    = isHist ? ' <span style="font-size:.7em;color:#888">(hist)</span>' : '';
+            let moHalf = 0, moFull = 0;
+            const dayCells = TREND_DAYS.map(d => {
+                const c = _trendCell(trendMap[mo], room.id, d);
+                moHalf += c.half; moFull += c.full;
+                const hVal = c.half || '—';
+                const fVal = c.full || '—';
+                return `<td class="report-num" style="border-left:2px solid #ddd">${hVal}</td>` +
+                       `<td class="report-num">${fVal}</td>`;
+            }).join('');
+            const total = moHalf + moFull;
+            return `<tr>
+                <td class="staff-date-cell">${label}${src}</td>
+                ${dayCells}
+                <td class="report-num" style="border-left:2px solid #ddd">${moHalf || '—'}</td>
+                <td class="report-num">${moFull || '—'}</td>
+                <td class="report-num"><strong>${total || '—'}</strong></td>
+            </tr>`;
+        }).join('');
+
+        return `
+            <h4 style="margin:18px 0 6px;font-size:1em">${escHtml(room.label)}</h4>
+            <div class="table-wrapper report-table-wrap">
+                <table class="report-table" style="font-size:.85rem">
+                    <thead>
+                        <tr>
+                            <th rowspan="2">Month</th>
+                            ${dayHeaders}
+                            <th colspan="2" style="text-align:center;border-left:2px solid #ddd">Month Total</th>
+                            <th rowspan="2" style="border-left:2px solid #ddd">All Days</th>
+                        </tr>
+                        <tr>${daySubHeaders}
+                            <th style="text-align:right;border-left:2px solid #ddd;font-weight:normal;color:#555">H</th>
+                            <th style="text-align:right;font-weight:normal;color:#555">F</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }).join('');
 }
 
 async function generateEnrollmentTrends() {
@@ -4693,53 +4764,9 @@ async function generateEnrollmentTrends() {
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
         const trendMap = await _buildTrendMap();
-        const months   = Object.keys(trendMap).sort();
-        if (!months.length) {
-            container.innerHTML = '<p class="empty-hint">No enrollment data found.</p>';
-            return;
-        }
-
-        const roomHeaders = ROOMS.map(r => `<th>${r.label}</th>`).join('');
-        const rows = months.map(mo => {
-            const [y, m]  = mo.split('-').map(Number);
-            const label   = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
-            const isHist  = trendMap[mo]._historical;
-            const cells   = ROOMS.map(room => {
-                const val = trendMap[mo][room.id];
-                const count = isHist ? (val || 0) : (val?.size || 0);
-                return `<td class="report-num">${count || '—'}</td>`;
-            }).join('');
-            const total    = ROOMS.reduce((s, r) => {
-                const val = trendMap[mo][r.id];
-                return s + (isHist ? (val || 0) : (val?.size || 0));
-            }, 0);
-            const fullDays = trendMap[mo]._full;
-            const halfDays = trendMap[mo]._half;
-            const histTag  = isHist ? ' <span style="font-size:.7em;color:#888;font-weight:400">(historical)</span>' : '';
-            return `<tr>
-                <td class="staff-date-cell">${label}${histTag}</td>
-                ${cells}
-                <td class="report-num"><strong>${total}</strong></td>
-                <td class="report-num">${fullDays || '—'}</td>
-                <td class="report-num">${halfDays || '—'}</td>
-            </tr>`;
-        }).join('');
-
-        container.innerHTML = `
-            <div class="table-wrapper report-table-wrap">
-                <table class="report-table">
-                    <thead>
-                        <tr>
-                            <th>Month</th>${roomHeaders}
-                            <th>Total</th>
-                            <th>Full-Day Care Days</th>
-                            <th>Half-Day Care Days</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>
-            <p style="font-size:.8em;color:#888;margin-top:6px">Current months: unique enrolled children · Historical months: total attendance days from imported records</p>`;
+        const html = _renderTrendsTable(trendMap);
+        container.innerHTML = html +
+            `<p style="font-size:.8em;color:#888;margin-top:8px">H = Half-day bookings · F = Full-day bookings · (hist) = sourced from imported attendance records</p>`;
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error loading trends: ${escHtml(err.message)}</p>`;
     }
@@ -4756,22 +4783,25 @@ async function exportEnrollmentTrends() {
     const months = Object.keys(trendMap).sort();
     if (!months.length) { alert('No data to export.'); return; }
 
-    const rows = months.map(mo => {
+    const rows = [];
+    months.forEach(mo => {
         const [y, m] = mo.split('-').map(Number);
-        const isHist = trendMap[mo]._historical;
-        const row = { Month: MONTH_NAMES_ADMIN[m - 1] + ' ' + y };
-        ROOMS.forEach(r => {
-            const val = trendMap[mo][r.id];
-            row[r.label] = isHist ? (val || 0) : (val?.size || 0);
+        const moLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+        const isHist  = trendMap[mo]._historical;
+        ROOMS.forEach(room => {
+            const row = { Month: moLabel, Room: room.label, Source: isHist ? 'historical' : 'live' };
+            let moHalf = 0, moFull = 0;
+            TREND_DAYS.forEach(d => {
+                const c = _trendCell(trendMap[mo], room.id, d);
+                row[`${d} Half`] = c.half || 0;
+                row[`${d} Full`] = c.full || 0;
+                moHalf += c.half; moFull += c.full;
+            });
+            row['Month Half Total'] = moHalf;
+            row['Month Full Total'] = moFull;
+            row['Month Total']      = moHalf + moFull;
+            rows.push(row);
         });
-        row['Total']               = ROOMS.reduce((s, r) => {
-            const val = trendMap[mo][r.id];
-            return s + (isHist ? (val || 0) : (val?.size || 0));
-        }, 0);
-        row['Full-Day Care Days']  = trendMap[mo]._full;
-        row['Half-Day Care Days']  = trendMap[mo]._half;
-        row['Source']              = isHist ? 'historical' : 'live';
-        return row;
     });
 
     const ws = XLSX.utils.json_to_sheet(rows);
