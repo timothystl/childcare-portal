@@ -4775,7 +4775,8 @@ async function generateWaitlistReport() {
 }
 
 // ── Year-to-Date Revenue ───────────────────────────────────
-function _buildYtdRevenueMap(yearKey) {
+// Build revenue map from live registrations only (synchronous)
+function _buildLiveRevenueMap(yearKey) {
     // Returns { 'YYYY-MM': { roomId: actualRevenue, _discounts: totalDiscounted } }
     const map  = {};
     const dmap = getDiscountMap();
@@ -4797,55 +4798,89 @@ function _buildYtdRevenueMap(yearKey) {
     return map;
 }
 
-function generateYtdRevenue() {
-    const year       = new Date().getFullYear();
-    const revenueMap = _buildYtdRevenueMap(String(year));
-    const months     = Object.keys(revenueMap).sort();
-    const container  = document.getElementById('ytdContent');
-    if (!months.length) {
-        container.innerHTML = `<p class="empty-hint">No revenue data found for ${year}.</p>`;
-        return;
-    }
+// Fetch billing_summary from Supabase and merge with live registration data.
+// Historical months (present in billing_summary) take precedence over live calc.
+async function _buildYtdRevenueMap(yearKey) {
+    const map = _buildLiveRevenueMap(yearKey);
 
-    const roomHeaders = ROOMS.map(r => `<th>${r.label}</th>`).join('');
-    let runningTotal = 0;
-    let totalDiscounts = 0;
-    const rows = months.map(mo => {
-        const [y, m]  = mo.split('-').map(Number);
-        const label   = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
-        const moTotal = ROOMS.reduce((s, r) => s + (revenueMap[mo][r.id] || 0), 0);
-        const moDisc  = revenueMap[mo]._discounts || 0;
-        runningTotal  += moTotal;
-        totalDiscounts += moDisc;
-        const cells = ROOMS.map(room =>
-            `<td class="report-num report-revenue">$${(revenueMap[mo][room.id] || 0).toFixed(2)}</td>`
-        ).join('');
-        return `
-            <tr>
-                <td class="staff-date-cell">${label}</td>
-                ${cells}
-                <td class="report-num report-revenue"><strong>$${moTotal.toFixed(2)}</strong></td>
-                <td class="report-num ytd-discount-cell">${moDisc > 0 ? `-$${moDisc.toFixed(2)}` : '—'}</td>
-                <td class="report-num report-revenue">$${runningTotal.toFixed(2)}</td>
-            </tr>`;
-    }).join('');
+    let historical = [];
+    try { historical = await fetchBillingSummary(); } catch (e) { console.warn('Could not load billing_summary:', e); }
 
-    container.innerHTML = `
-        <h3 class="report-month-title">${year} Year to Date — $${runningTotal.toFixed(2)} collected · <span class="ytd-discount-total">-$${totalDiscounts.toFixed(2)} discounted</span></h3>
-        <div class="table-wrapper report-table-wrap">
-            <table class="report-table">
-                <thead>
-                    <tr><th>Month</th>${roomHeaders}<th>Monthly Revenue</th><th>Discounts Given</th><th>Running Total</th></tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </div>`;
+    historical.forEach(row => {
+        const mo = (row.month || '').substring(0, 7); // 'YYYY-MM'
+        if (!mo.startsWith(yearKey)) return;
+        if (!map[mo]) map[mo] = { _discounts: 0 };
+        // Historical net_billed overwrites any live-calculated value for that room+month
+        map[mo][row.room_id] = parseFloat(row.net_billed) || 0;
+        // Use actual discount from source data if available
+        if (row.discount != null) {
+            map[mo]._discounts = (map[mo]._discounts || 0) + (parseFloat(row.discount) || 0);
+        }
+    });
+
+    return map;
 }
 
-function exportYtdRevenue() {
-    const year       = new Date().getFullYear();
-    const revenueMap = _buildYtdRevenueMap(String(year));
-    const months     = Object.keys(revenueMap).sort();
+async function generateYtdRevenue() {
+    const year      = new Date().getFullYear();
+    const container = document.getElementById('ytdContent');
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const revenueMap = await _buildYtdRevenueMap(String(year));
+        const months     = Object.keys(revenueMap).sort();
+        if (!months.length) {
+            container.innerHTML = `<p class="empty-hint">No revenue data found for ${year}.</p>`;
+            return;
+        }
+
+        const roomHeaders = ROOMS.map(r => `<th>${r.label}</th>`).join('');
+        let runningTotal = 0;
+        let totalDiscounts = 0;
+        const rows = months.map(mo => {
+            const [y, m]  = mo.split('-').map(Number);
+            const label   = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            const moTotal = ROOMS.reduce((s, r) => s + (revenueMap[mo][r.id] || 0), 0);
+            const moDisc  = revenueMap[mo]._discounts || 0;
+            runningTotal  += moTotal;
+            totalDiscounts += moDisc;
+            const cells = ROOMS.map(room =>
+                `<td class="report-num report-revenue">$${(revenueMap[mo][room.id] || 0).toFixed(2)}</td>`
+            ).join('');
+            return `
+                <tr>
+                    <td class="staff-date-cell">${label}</td>
+                    ${cells}
+                    <td class="report-num report-revenue"><strong>$${moTotal.toFixed(2)}</strong></td>
+                    <td class="report-num ytd-discount-cell">${moDisc > 0 ? `-$${moDisc.toFixed(2)}` : '—'}</td>
+                    <td class="report-num report-revenue">$${runningTotal.toFixed(2)}</td>
+                </tr>`;
+        }).join('');
+
+        container.innerHTML = `
+            <h3 class="report-month-title">${year} Year to Date — $${runningTotal.toFixed(2)} collected · <span class="ytd-discount-total">-$${totalDiscounts.toFixed(2)} discounted</span></h3>
+            <div class="table-wrapper report-table-wrap">
+                <table class="report-table">
+                    <thead>
+                        <tr><th>Month</th>${roomHeaders}<th>Monthly Revenue</th><th>Discounts Given</th><th>Running Total</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error loading revenue: ${escHtml(err.message)}</p>`;
+    }
+}
+
+async function exportYtdRevenue() {
+    const year = new Date().getFullYear();
+    let revenueMap;
+    try {
+        revenueMap = await _buildYtdRevenueMap(String(year));
+    } catch (err) {
+        alert('Error loading revenue data: ' + err.message);
+        return;
+    }
+    const months = Object.keys(revenueMap).sort();
     if (!months.length) { alert('No data to export.'); return; }
 
     let running = 0;
