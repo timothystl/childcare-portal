@@ -4659,8 +4659,11 @@ async function _buildTrendMap() {
         }
     }
 
+    // Fetch all registrations across all time (not the date-limited cache)
+    const allRegs = await fetchAllRegistrations({ sinceDate: '2000-01-01T00:00:00Z' });
+
     // Live registrations
-    allRegistrations.forEach(reg => {
+    allRegs.forEach(reg => {
         (reg.registration_dates || []).forEach(d => {
             if (d.waitlisted || !d.care_date) return;
             const day = _trendDayName(d.care_date);
@@ -4708,8 +4711,8 @@ function _renderTrendsTable(trendMap) {
         `<th colspan="2" style="text-align:center;border-left:2px solid #ddd">${d}</th>`
     ).join('');
     const daySubHeaders = TREND_DAYS.map(d =>
-        `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal;color:#555">H</th>` +
-        `<th style="text-align:right;font-weight:normal;color:#555">F</th>`
+        `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal;color:#555">Half</th>` +
+        `<th style="text-align:right;font-weight:normal;color:#555">Full</th>`
     ).join('');
 
     return ROOMS.map(room => {
@@ -4749,8 +4752,8 @@ function _renderTrendsTable(trendMap) {
                             <th rowspan="2" style="border-left:2px solid #ddd">All Days</th>
                         </tr>
                         <tr>${daySubHeaders}
-                            <th style="text-align:right;border-left:2px solid #ddd;font-weight:normal;color:#555">H</th>
-                            <th style="text-align:right;font-weight:normal;color:#555">F</th>
+                            <th style="text-align:right;border-left:2px solid #ddd;font-weight:normal;color:#555">Half</th>
+                            <th style="text-align:right;font-weight:normal;color:#555">Full</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -4766,7 +4769,7 @@ async function generateEnrollmentTrends() {
         const trendMap = await _buildTrendMap();
         const html = _renderTrendsTable(trendMap);
         container.innerHTML = html +
-            `<p style="font-size:.8em;color:#888;margin-top:8px">H = Half-day bookings · F = Full-day bookings · (hist) = sourced from imported attendance records</p>`;
+            `<p style="font-size:.8em;color:#888;margin-top:8px">(hist) = sourced from imported attendance records</p>`;
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error loading trends: ${escHtml(err.message)}</p>`;
     }
