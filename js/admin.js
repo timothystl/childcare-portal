@@ -4715,12 +4715,9 @@ function _renderTrendsTable(trendMap) {
         return v % 1 === 0 ? String(v) : v.toFixed(1);
     }
 
+    // One "Total" column per day (half + full = all kids present that day)
     const dayHeaders = TREND_DAYS.map(d =>
-        `<th colspan="2" style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
-    ).join('');
-    const daySubHeaders = TREND_DAYS.map(() =>
-        `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>` +
-        `<th style="text-align:right;font-weight:normal">Full</th>`
+        `<th style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
     ).join('');
 
     // facilityAccum: accumulates per-room avg across all months, then sums across rooms
@@ -4744,8 +4741,7 @@ function _renderTrendsTable(trendMap) {
                 const c = _trendCell(trendMap[mo], room.id, d);
                 const count = c.dates.size;
                 if (!count) {
-                    return `<td class="report-num" style="border-left:2px solid #ddd">—</td>` +
-                           `<td class="report-num">—</td>`;
+                    return `<td class="report-num" style="border-left:2px solid #ddd">—</td>`;
                 }
                 const avgHalf = c.halfSum / count;
                 const avgFull = c.fullSum / count;
@@ -4754,17 +4750,14 @@ function _renderTrendsTable(trendMap) {
                 roomAccum[d].halfSum += avgHalf;
                 roomAccum[d].fullSum += avgFull;
                 roomAccum[d].count++;
-                return `<td class="report-num" style="border-left:2px solid #ddd">${fmtAvg(avgHalf)}</td>` +
-                       `<td class="report-num">${fmtAvg(avgFull)}</td>`;
+                return `<td class="report-num" style="border-left:2px solid #ddd">${fmtAvg(avgHalf + avgFull)}</td>`;
             }).join('');
 
             const moTotal = moHalfTotal + moFullTotal;
             return `<tr>
                 <td class="staff-date-cell">${label}${src}</td>
                 ${dayCells}
-                <td class="report-num" style="border-left:2px solid #ddd">${moHalfTotal || '—'}</td>
-                <td class="report-num">${moFullTotal || '—'}</td>
-                <td class="report-num"><strong>${moTotal || '—'}</strong></td>
+                <td class="report-num" style="border-left:2px solid #ddd"><strong>${moTotal || '—'}</strong></td>
             </tr>`;
         }).join('');
 
@@ -4772,22 +4765,20 @@ function _renderTrendsTable(trendMap) {
         const avgCells = TREND_DAYS.map(d => {
             const { halfSum, fullSum, count } = roomAccum[d];
             if (!count) {
-                return `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff">—</td>` +
-                       `<td class="report-num" style="background:#f0f4ff">—</td>`;
+                return `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff">—</td>`;
             }
             const avgH = halfSum / count;
             const avgF = fullSum / count;
             // Accumulate into facility totals
             facilityAccum[d].halfSum += avgH;
             facilityAccum[d].fullSum += avgF;
-            return `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff;font-weight:600">${fmtAvg(avgH)}</td>` +
-                   `<td class="report-num" style="background:#f0f4ff;font-weight:600">${fmtAvg(avgF)}</td>`;
+            return `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff;font-weight:600">${fmtAvg(avgH + avgF)}</td>`;
         }).join('');
 
         const avgRow = `<tr style="background:#f0f4ff;border-top:2px solid #c0c8e0">
             <td class="staff-date-cell" style="font-weight:700;font-style:italic">Avg across months</td>
             ${avgCells}
-            <td colspan="3" style="border-left:2px solid #ddd;background:#f0f4ff"></td>
+            <td style="border-left:2px solid #ddd;background:#f0f4ff"></td>
         </tr>`;
 
         return `
@@ -4796,14 +4787,9 @@ function _renderTrendsTable(trendMap) {
                 <table class="report-table" style="font-size:.85rem">
                     <thead>
                         <tr>
-                            <th rowspan="2">Month</th>
+                            <th>Month</th>
                             ${dayHeaders}
-                            <th colspan="2" style="text-align:center;border-left:2px solid #ddd">Month Total</th>
-                            <th rowspan="2" style="border-left:2px solid #ddd">All Days</th>
-                        </tr>
-                        <tr>${daySubHeaders}
-                            <th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>
-                            <th style="text-align:right;font-weight:normal">Full</th>
+                            <th style="text-align:center;border-left:2px solid #ddd">Month Total</th>
                         </tr>
                     </thead>
                     <tbody>${rows}${avgRow}</tbody>
@@ -4814,16 +4800,11 @@ function _renderTrendsTable(trendMap) {
     // Facility totals table — sum of all room averages per day of week
     const facilityCells = TREND_DAYS.map(d => {
         const { halfSum, fullSum } = facilityAccum[d];
-        return `<td class="report-num" style="border-left:2px solid #ddd;font-weight:600">${fmtAvg(halfSum)}</td>` +
-               `<td class="report-num" style="font-weight:600">${fmtAvg(fullSum)}</td>`;
+        return `<td class="report-num" style="border-left:2px solid #ddd;font-weight:600">${fmtAvg(halfSum + fullSum)}</td>`;
     }).join('');
 
     const facilityHeaders = TREND_DAYS.map(d =>
-        `<th colspan="2" style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
-    ).join('');
-    const facilitySubHeaders = TREND_DAYS.map(() =>
-        `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>` +
-        `<th style="text-align:right;font-weight:normal">Full</th>`
+        `<th style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
     ).join('');
 
     const facilityHtml = `
@@ -4833,10 +4814,9 @@ function _renderTrendsTable(trendMap) {
             <table class="report-table" style="font-size:.85rem">
                 <thead>
                     <tr>
-                        <th rowspan="2">Scope</th>
+                        <th>Scope</th>
                         ${facilityHeaders}
                     </tr>
-                    <tr>${facilitySubHeaders}</tr>
                 </thead>
                 <tbody>
                     <tr>
@@ -4881,20 +4861,15 @@ async function exportEnrollmentTrends() {
         const isHist  = trendMap[mo]._historical;
         ROOMS.forEach(room => {
             const row = { Month: moLabel, Room: room.label, Source: isHist ? 'historical' : 'live' };
-            let moHalfTotal = 0, moFullTotal = 0;
+            let moTotal = 0;
             TREND_DAYS.forEach(d => {
                 const c = _trendCell(trendMap[mo], room.id, d);
                 const count = c.dates.size;
-                const avgHalf = count ? +(c.halfSum / count).toFixed(2) : 0;
-                const avgFull = count ? +(c.fullSum / count).toFixed(2) : 0;
-                row[`Avg ${d} Half`] = avgHalf;
-                row[`Avg ${d} Full`] = avgFull;
-                moHalfTotal += c.halfSum;
-                moFullTotal += c.fullSum;
+                const avgTotal = count ? +((c.halfSum + c.fullSum) / count).toFixed(2) : 0;
+                row[`Avg ${d}`] = avgTotal;
+                moTotal += c.halfSum + c.fullSum;
             });
-            row['Month Half Total'] = moHalfTotal;
-            row['Month Full Total'] = moFullTotal;
-            row['Month Total']      = moHalfTotal + moFullTotal;
+            row['Month Total'] = moTotal;
             rows.push(row);
         });
     });
