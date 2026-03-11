@@ -4715,17 +4715,29 @@ function _renderTrendsTable(trendMap) {
         return v % 1 === 0 ? String(v) : v.toFixed(1);
     }
 
-    // One "Total" column per day (half + full = all kids present that day)
-    const dayHeaders = TREND_DAYS.map(d =>
-        `<th style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
-    ).join('');
-
     // facilityAccum: accumulates per-room avg across all months, then sums across rooms
     // shape: { day: { halfSum, fullSum } } — summed room averages (already averaged per month)
     const facilityAccum = {};
     TREND_DAYS.forEach(d => { facilityAccum[d] = { halfSum: 0, fullSum: 0 }; });
 
     const roomHtml = ROOMS.map(room => {
+        // Rooms with half-day option show Half | Full | Total per day; full-day-only rooms show just Total
+        const showSplit = !room.fullDayOnly;
+
+        const dayHeaders = TREND_DAYS.map(d =>
+            showSplit
+                ? `<th colspan="3" style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
+                : `<th style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
+        ).join('');
+
+        const daySubHeaders = showSplit
+            ? TREND_DAYS.map(() =>
+                `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>` +
+                `<th style="text-align:right;font-weight:normal">Full</th>` +
+                `<th style="text-align:right;font-weight:normal">Total</th>`
+              ).join('')
+            : null;
+
         // roomAccum: accumulates monthly averages for this room to compute an "avg across months" row
         const roomAccum = {};
         TREND_DAYS.forEach(d => { roomAccum[d] = { halfSum: 0, fullSum: 0, count: 0 }; });
@@ -4741,7 +4753,11 @@ function _renderTrendsTable(trendMap) {
                 const c = _trendCell(trendMap[mo], room.id, d);
                 const count = c.dates.size;
                 if (!count) {
-                    return `<td class="report-num" style="border-left:2px solid #ddd">—</td>`;
+                    return showSplit
+                        ? `<td class="report-num" style="border-left:2px solid #ddd">—</td>` +
+                          `<td class="report-num">—</td>` +
+                          `<td class="report-num">—</td>`
+                        : `<td class="report-num" style="border-left:2px solid #ddd">—</td>`;
                 }
                 const avgHalf = c.halfSum / count;
                 const avgFull = c.fullSum / count;
@@ -4750,10 +4766,23 @@ function _renderTrendsTable(trendMap) {
                 roomAccum[d].halfSum += avgHalf;
                 roomAccum[d].fullSum += avgFull;
                 roomAccum[d].count++;
-                return `<td class="report-num" style="border-left:2px solid #ddd">${fmtAvg(avgHalf + avgFull)}</td>`;
+                return showSplit
+                    ? `<td class="report-num" style="border-left:2px solid #ddd">${fmtAvg(avgHalf)}</td>` +
+                      `<td class="report-num">${fmtAvg(avgFull)}</td>` +
+                      `<td class="report-num">${fmtAvg(avgHalf + avgFull)}</td>`
+                    : `<td class="report-num" style="border-left:2px solid #ddd">${fmtAvg(avgHalf + avgFull)}</td>`;
             }).join('');
 
             const moTotal = moHalfTotal + moFullTotal;
+            if (showSplit) {
+                return `<tr>
+                    <td class="staff-date-cell">${label}${src}</td>
+                    ${dayCells}
+                    <td class="report-num" style="border-left:2px solid #ddd">${moHalfTotal || '—'}</td>
+                    <td class="report-num">${moFullTotal || '—'}</td>
+                    <td class="report-num"><strong>${moTotal || '—'}</strong></td>
+                </tr>`;
+            }
             return `<tr>
                 <td class="staff-date-cell">${label}${src}</td>
                 ${dayCells}
@@ -4765,21 +4794,46 @@ function _renderTrendsTable(trendMap) {
         const avgCells = TREND_DAYS.map(d => {
             const { halfSum, fullSum, count } = roomAccum[d];
             if (!count) {
-                return `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff">—</td>`;
+                return showSplit
+                    ? `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff">—</td>` +
+                      `<td class="report-num" style="background:#f0f4ff">—</td>` +
+                      `<td class="report-num" style="background:#f0f4ff">—</td>`
+                    : `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff">—</td>`;
             }
             const avgH = halfSum / count;
             const avgF = fullSum / count;
             // Accumulate into facility totals
             facilityAccum[d].halfSum += avgH;
             facilityAccum[d].fullSum += avgF;
-            return `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff;font-weight:600">${fmtAvg(avgH + avgF)}</td>`;
+            return showSplit
+                ? `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff;font-weight:600">${fmtAvg(avgH)}</td>` +
+                  `<td class="report-num" style="background:#f0f4ff;font-weight:600">${fmtAvg(avgF)}</td>` +
+                  `<td class="report-num" style="background:#f0f4ff;font-weight:600">${fmtAvg(avgH + avgF)}</td>`
+                : `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff;font-weight:600">${fmtAvg(avgH + avgF)}</td>`;
         }).join('');
+
+        const avgRowTrailer = showSplit
+            ? `<td colspan="3" style="border-left:2px solid #ddd;background:#f0f4ff"></td>`
+            : `<td style="border-left:2px solid #ddd;background:#f0f4ff"></td>`;
 
         const avgRow = `<tr style="background:#f0f4ff;border-top:2px solid #c0c8e0">
             <td class="staff-date-cell" style="font-weight:700;font-style:italic">Avg across months</td>
             ${avgCells}
-            <td style="border-left:2px solid #ddd;background:#f0f4ff"></td>
+            ${avgRowTrailer}
         </tr>`;
+
+        const monthHeader = showSplit ? `<th rowspan="2">Month</th>` : `<th>Month</th>`;
+        const monthTotalHeader = showSplit
+            ? `<th colspan="2" style="text-align:center;border-left:2px solid #ddd">Month Total</th>` +
+              `<th style="border-left:none">All Days</th>`
+            : `<th style="text-align:center;border-left:2px solid #ddd">Month Total</th>`;
+        const subHeaderRow = showSplit
+            ? `<tr>${daySubHeaders}` +
+              `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>` +
+              `<th style="text-align:right;font-weight:normal">Full</th>` +
+              `<th style="text-align:right;font-weight:normal">Total</th>` +
+              `</tr>`
+            : '';
 
         return `
             <h4 style="margin:18px 0 6px;font-size:1em">${escHtml(room.label)}</h4>
@@ -4787,17 +4841,18 @@ function _renderTrendsTable(trendMap) {
                 <table class="report-table" style="font-size:.85rem">
                     <thead>
                         <tr>
-                            <th>Month</th>
+                            ${monthHeader}
                             ${dayHeaders}
-                            <th style="text-align:center;border-left:2px solid #ddd">Month Total</th>
+                            ${monthTotalHeader}
                         </tr>
+                        ${subHeaderRow}
                     </thead>
                     <tbody>${rows}${avgRow}</tbody>
                 </table>
             </div>`;
     }).join('');
 
-    // Facility totals table — sum of all room averages per day of week
+    // Facility totals table — sum of all room averages per day of week (totals only)
     const facilityCells = TREND_DAYS.map(d => {
         const { halfSum, fullSum } = facilityAccum[d];
         return `<td class="report-num" style="border-left:2px solid #ddd;font-weight:600">${fmtAvg(halfSum + fullSum)}</td>`;
@@ -4861,15 +4916,27 @@ async function exportEnrollmentTrends() {
         const isHist  = trendMap[mo]._historical;
         ROOMS.forEach(room => {
             const row = { Month: moLabel, Room: room.label, Source: isHist ? 'historical' : 'live' };
-            let moTotal = 0;
+            let moHalfTotal = 0, moFullTotal = 0;
             TREND_DAYS.forEach(d => {
                 const c = _trendCell(trendMap[mo], room.id, d);
                 const count = c.dates.size;
-                const avgTotal = count ? +((c.halfSum + c.fullSum) / count).toFixed(2) : 0;
-                row[`Avg ${d}`] = avgTotal;
-                moTotal += c.halfSum + c.fullSum;
+                if (room.fullDayOnly) {
+                    row[`Avg ${d}`] = count ? +((c.halfSum + c.fullSum) / count).toFixed(2) : 0;
+                } else {
+                    row[`Avg ${d} Half`] = count ? +(c.halfSum / count).toFixed(2) : 0;
+                    row[`Avg ${d} Full`] = count ? +(c.fullSum / count).toFixed(2) : 0;
+                    row[`Avg ${d} Total`] = count ? +((c.halfSum + c.fullSum) / count).toFixed(2) : 0;
+                }
+                moHalfTotal += c.halfSum;
+                moFullTotal += c.fullSum;
             });
-            row['Month Total'] = moTotal;
+            if (room.fullDayOnly) {
+                row['Month Total'] = moHalfTotal + moFullTotal;
+            } else {
+                row['Month Half Total'] = moHalfTotal;
+                row['Month Full Total'] = moFullTotal;
+                row['Month Total']      = moHalfTotal + moFullTotal;
+            }
             rows.push(row);
         });
     });
