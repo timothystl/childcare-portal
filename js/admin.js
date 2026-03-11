@@ -4370,13 +4370,6 @@ function setupAttendanceRevenue() {
 
     document.getElementById('generateArBtn')?.addEventListener('click', generateAttendanceRevenue);
     document.getElementById('exportArBtn')?.addEventListener('click', exportAttendanceRevenue);
-    document.getElementById('arDailyCloseBtn')?.addEventListener('click', () => {
-        const panel = document.getElementById('arDailyPanel');
-        if (panel) panel.style.display = 'none';
-        // Reset expand icons
-        document.querySelectorAll('#arSummaryTable .ar-expand-icon').forEach(i => i.textContent = '▶');
-        document.querySelectorAll('#arSummaryTable .ar-month-row').forEach(r => r.classList.remove('ar-row-active'));
-    });
 }
 
 // Build unified data map for any date range.
@@ -4445,8 +4438,6 @@ async function generateAttendanceRevenue() {
     if (fromDate > toDate)    { alert('Start date must be before end date.'); return; }
 
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
-    const dailyPanel = document.getElementById('arDailyPanel');
-    if (dailyPanel) dailyPanel.style.display = 'none';
 
     try {
         const arMap  = await _buildArDataMap(fromDate, toDate);
@@ -4495,8 +4486,8 @@ async function generateAttendanceRevenue() {
                   `<td class="report-num report-revenue ar-total-col"><strong>${fmtRev(moRevenue)}</strong></td>`
                 : '';
 
-            return `<tr class="ar-month-row" data-month="${mo}" title="Click to view daily detail for ${label}">
-                        <td class="staff-date-cell ar-month-cell"><span class="ar-expand-icon">▶</span>${label}</td>
+            return `<tr>
+                        <td class="staff-date-cell">${label}</td>
                         ${cells}${totalCols}
                     </tr>`;
         }).join('');
@@ -4569,105 +4560,11 @@ async function generateAttendanceRevenue() {
                 </table>
             </div>`;
 
-        // Wire up row clicks for daily detail
-        document.querySelectorAll('#arSummaryTable .ar-month-row').forEach(row => {
-            row.addEventListener('click', () => loadArDailyDetail(row.dataset.month, roomFilter));
-        });
-
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error loading data: ${escHtml(err.message)}</p>`;
     }
 }
 
-async function loadArDailyDetail(month, roomFilter) {
-    const panel     = document.getElementById('arDailyPanel');
-    const titleEl   = document.getElementById('arDailyTitle');
-    const contentEl = document.getElementById('arDailyContent');
-    if (!panel || !contentEl) return;
-
-    // Highlight active row
-    document.querySelectorAll('#arSummaryTable .ar-month-row').forEach(r => r.classList.remove('ar-row-active'));
-    document.querySelectorAll('#arSummaryTable .ar-expand-icon').forEach(i => i.textContent = '▶');
-    const activeRow = document.querySelector(`#arSummaryTable .ar-month-row[data-month="${month}"]`);
-    if (activeRow) {
-        activeRow.classList.add('ar-row-active');
-        const icon = activeRow.querySelector('.ar-expand-icon');
-        if (icon) icon.textContent = '▼';
-    }
-
-    const [y, m] = month.split('-').map(Number);
-    if (titleEl) titleEl.textContent = `Daily Detail — ${MONTH_NAMES_ADMIN[m - 1]} ${y}`;
-
-    panel.style.display = '';
-    // Scroll the panel into view smoothly
-    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    contentEl.innerHTML = '<p class="empty-hint">Loading…</p>';
-
-    const roomLabels = Object.fromEntries(ROOMS.map(r => [r.id, r.label]));
-
-    try {
-        // Try historical attendance_summary first
-        const histData = await fetchAttendanceSummary({ month, roomId: roomFilter || null });
-
-        if (histData && histData.length > 0) {
-            contentEl.innerHTML = _buildArDailyTable(histData, roomLabels);
-            return;
-        }
-
-        // Fall back to live registrations
-        const liveRows = _buildArLiveDailyRows(month, roomFilter);
-        if (!liveRows.length) {
-            contentEl.innerHTML = '<p class="empty-hint">No daily attendance data available for this month.</p>';
-            return;
-        }
-        contentEl.innerHTML = _buildArDailyTable(liveRows, roomLabels);
-
-    } catch (err) {
-        contentEl.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
-    }
-}
-
-function _buildArLiveDailyRows(month, roomFilter) {
-    const dayMap = {};
-    allRegistrations.forEach(reg => {
-        if (roomFilter && reg.room_id !== roomFilter) return;
-        (reg.registration_dates || []).forEach(d => {
-            if (d.waitlisted || !d.care_date || !d.care_date.startsWith(month)) return;
-            if (!dayMap[d.care_date]) dayMap[d.care_date] = {};
-            if (!dayMap[d.care_date][reg.room_id]) dayMap[d.care_date][reg.room_id] = { half: 0, full: 0 };
-            if (d.day_type === 'half') dayMap[d.care_date][reg.room_id].half++;
-            else                      dayMap[d.care_date][reg.room_id].full++;
-        });
-    });
-    const rows = [];
-    Object.keys(dayMap).sort().forEach(date => {
-        Object.keys(dayMap[date]).sort().forEach(roomId => {
-            const { half, full } = dayMap[date][roomId];
-            rows.push({ summary_date: date, room_id: roomId, half_days: half, full_days: full, total_attended: half + full });
-        });
-    });
-    return rows;
-}
-
-function _buildArDailyTable(rows, roomLabels) {
-    const dayFmt = d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    let html = '<div style="overflow-x:auto"><table class="report-table" style="font-size:0.85rem">';
-    html += '<thead><tr><th>Date</th><th>Room</th><th style="text-align:right">Half Days</th><th style="text-align:right">Full Days</th><th style="text-align:right">Total</th></tr></thead><tbody>';
-    let lastDate = '';
-    rows.forEach(r => {
-        const isNew = r.summary_date !== lastDate;
-        lastDate = r.summary_date;
-        html += `<tr${isNew ? ' class="ar-daily-date-break"' : ''}>`;
-        html += `<td>${isNew ? escHtml(dayFmt(r.summary_date)) : ''}</td>`;
-        html += `<td>${escHtml(roomLabels[r.room_id] || r.room_id)}</td>`;
-        html += `<td style="text-align:right">${r.half_days ?? '—'}</td>`;
-        html += `<td style="text-align:right">${r.full_days ?? '—'}</td>`;
-        html += `<td style="text-align:right;font-weight:600">${r.total_attended}</td>`;
-        html += '</tr>';
-    });
-    html += '</tbody></table></div>';
-    return html;
-}
 
 async function exportAttendanceRevenue() {
     const fromDate   = document.getElementById('arDateFrom')?.value;
@@ -4731,34 +4628,45 @@ function _trendDayName(dateStr) {
     return idx >= 0 && idx <= 4 ? TREND_DAYS[idx] : null;
 }
 function _trendCell(map, roomId, day) {
-    return map[roomId]?.[day] || { half: 0, full: 0 };
+    return map[roomId]?.[day] || { halfSum: 0, fullSum: 0, dates: new Set() };
 }
 
 async function _buildTrendMap() {
-    // Start with an empty map
     const trendMap = {};
 
     function ensureRoom(mo, roomId) {
         if (!trendMap[mo]) trendMap[mo] = { _historical: false };
         if (!trendMap[mo][roomId]) {
             trendMap[mo][roomId] = {};
-            TREND_DAYS.forEach(d => { trendMap[mo][roomId][d] = { half: 0, full: 0 }; });
+            TREND_DAYS.forEach(d => { trendMap[mo][roomId][d] = { halfSum: 0, fullSum: 0, dates: new Set() }; });
         }
     }
 
     // Fetch all registrations across all time (not the date-limited cache)
     const allRegs = await fetchAllRegistrations({ sinceDate: '2000-01-01T00:00:00Z' });
 
-    // Live registrations
+    // Build a per-date accumulator: date → roomId → { half, full }
+    const liveDateMap = {};
     allRegs.forEach(reg => {
         (reg.registration_dates || []).forEach(d => {
             if (d.waitlisted || !d.care_date) return;
-            const day = _trendDayName(d.care_date);
-            if (!day) return;
-            const mo = d.care_date.substring(0, 7);
-            ensureRoom(mo, reg.room_id);
-            if (d.day_type === 'half') trendMap[mo][reg.room_id][day].half++;
-            else                       trendMap[mo][reg.room_id][day].full++;
+            if (!liveDateMap[d.care_date]) liveDateMap[d.care_date] = {};
+            if (!liveDateMap[d.care_date][reg.room_id]) liveDateMap[d.care_date][reg.room_id] = { half: 0, full: 0 };
+            if (d.day_type === 'half') liveDateMap[d.care_date][reg.room_id].half++;
+            else                       liveDateMap[d.care_date][reg.room_id].full++;
+        });
+    });
+
+    // Fold per-date data into trendMap
+    Object.entries(liveDateMap).forEach(([date, rooms]) => {
+        const day = _trendDayName(date);
+        if (!day) return;
+        const mo = date.substring(0, 7);
+        Object.entries(rooms).forEach(([roomId, counts]) => {
+            ensureRoom(mo, roomId);
+            trendMap[mo][roomId][day].halfSum += counts.half;
+            trendMap[mo][roomId][day].fullSum += counts.full;
+            trendMap[mo][roomId][day].dates.add(date);
         });
     });
 
@@ -4777,6 +4685,7 @@ async function _buildTrendMap() {
         const noSplit = row.half_days == null && row.full_days == null;
         histByMonth[mo].push({
             roomId: row.room_id, day,
+            date: row.summary_date,
             half: noSplit ? 0 : (row.half_days || 0),
             full: noSplit ? (row.total_attended || 0) : (row.full_days || 0),
         });
@@ -4785,10 +4694,11 @@ async function _buildTrendMap() {
     Object.entries(histByMonth).forEach(([mo, entries]) => {
         // Clear any live data for this month — historical is authoritative
         trendMap[mo] = { _historical: true };
-        entries.forEach(({ roomId, day, half, full }) => {
+        entries.forEach(({ roomId, day, date, half, full }) => {
             ensureRoom(mo, roomId);
-            trendMap[mo][roomId][day].half += half;
-            trendMap[mo][roomId][day].full += full;
+            trendMap[mo][roomId][day].halfSum += half;
+            trendMap[mo][roomId][day].fullSum += full;
+            trendMap[mo][roomId][day].dates.add(date);
         });
     });
 
@@ -4799,39 +4709,86 @@ function _renderTrendsTable(trendMap) {
     const months = Object.keys(trendMap).sort();
     if (!months.length) return '<p class="empty-hint">No enrollment data found.</p>';
 
-    // One table per room — rows = months, columns = Mon–Fri × H/F + totals
+    // Format an average value: show one decimal unless it's a whole number, '—' for zero
+    function fmtAvg(v) {
+        if (!v) return '—';
+        return v % 1 === 0 ? String(v) : v.toFixed(1);
+    }
+
     const dayHeaders = TREND_DAYS.map(d =>
-        `<th colspan="2" style="text-align:center;border-left:2px solid #ddd">${d}</th>`
+        `<th colspan="2" style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
     ).join('');
-    const daySubHeaders = TREND_DAYS.map(d =>
+    const daySubHeaders = TREND_DAYS.map(() =>
         `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>` +
         `<th style="text-align:right;font-weight:normal">Full</th>`
     ).join('');
 
-    return ROOMS.map(room => {
+    // facilityAccum: accumulates per-room avg across all months, then sums across rooms
+    // shape: { day: { halfSum, fullSum } } — summed room averages (already averaged per month)
+    const facilityAccum = {};
+    TREND_DAYS.forEach(d => { facilityAccum[d] = { halfSum: 0, fullSum: 0 }; });
+
+    const roomHtml = ROOMS.map(room => {
+        // roomAccum: accumulates monthly averages for this room to compute an "avg across months" row
+        const roomAccum = {};
+        TREND_DAYS.forEach(d => { roomAccum[d] = { halfSum: 0, fullSum: 0, count: 0 }; });
+
         const rows = months.map(mo => {
             const [y, m] = mo.split('-').map(Number);
             const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
             const isHist = trendMap[mo]._historical;
             const src    = isHist ? ' <span style="font-size:.7em;color:#888">(hist)</span>' : '';
-            let moHalf = 0, moFull = 0;
+            let moHalfTotal = 0, moFullTotal = 0;
+
             const dayCells = TREND_DAYS.map(d => {
                 const c = _trendCell(trendMap[mo], room.id, d);
-                moHalf += c.half; moFull += c.full;
-                const hVal = c.half || '—';
-                const fVal = c.full || '—';
-                return `<td class="report-num" style="border-left:2px solid #ddd">${hVal}</td>` +
-                       `<td class="report-num">${fVal}</td>`;
+                const count = c.dates.size;
+                if (!count) {
+                    return `<td class="report-num" style="border-left:2px solid #ddd">—</td>` +
+                           `<td class="report-num">—</td>`;
+                }
+                const avgHalf = c.halfSum / count;
+                const avgFull = c.fullSum / count;
+                moHalfTotal += c.halfSum;
+                moFullTotal += c.fullSum;
+                roomAccum[d].halfSum += avgHalf;
+                roomAccum[d].fullSum += avgFull;
+                roomAccum[d].count++;
+                return `<td class="report-num" style="border-left:2px solid #ddd">${fmtAvg(avgHalf)}</td>` +
+                       `<td class="report-num">${fmtAvg(avgFull)}</td>`;
             }).join('');
-            const total = moHalf + moFull;
+
+            const moTotal = moHalfTotal + moFullTotal;
             return `<tr>
                 <td class="staff-date-cell">${label}${src}</td>
                 ${dayCells}
-                <td class="report-num" style="border-left:2px solid #ddd">${moHalf || '—'}</td>
-                <td class="report-num">${moFull || '—'}</td>
-                <td class="report-num"><strong>${total || '—'}</strong></td>
+                <td class="report-num" style="border-left:2px solid #ddd">${moHalfTotal || '—'}</td>
+                <td class="report-num">${moFullTotal || '—'}</td>
+                <td class="report-num"><strong>${moTotal || '—'}</strong></td>
             </tr>`;
         }).join('');
+
+        // "Avg across months" row for this room
+        const avgCells = TREND_DAYS.map(d => {
+            const { halfSum, fullSum, count } = roomAccum[d];
+            if (!count) {
+                return `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff">—</td>` +
+                       `<td class="report-num" style="background:#f0f4ff">—</td>`;
+            }
+            const avgH = halfSum / count;
+            const avgF = fullSum / count;
+            // Accumulate into facility totals
+            facilityAccum[d].halfSum += avgH;
+            facilityAccum[d].fullSum += avgF;
+            return `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff;font-weight:600">${fmtAvg(avgH)}</td>` +
+                   `<td class="report-num" style="background:#f0f4ff;font-weight:600">${fmtAvg(avgF)}</td>`;
+        }).join('');
+
+        const avgRow = `<tr style="background:#f0f4ff;border-top:2px solid #c0c8e0">
+            <td class="staff-date-cell" style="font-weight:700;font-style:italic">Avg across months</td>
+            ${avgCells}
+            <td colspan="3" style="border-left:2px solid #ddd;background:#f0f4ff"></td>
+        </tr>`;
 
         return `
             <h4 style="margin:18px 0 6px;font-size:1em">${escHtml(room.label)}</h4>
@@ -4849,10 +4806,48 @@ function _renderTrendsTable(trendMap) {
                             <th style="text-align:right;font-weight:normal">Full</th>
                         </tr>
                     </thead>
-                    <tbody>${rows}</tbody>
+                    <tbody>${rows}${avgRow}</tbody>
                 </table>
             </div>`;
     }).join('');
+
+    // Facility totals table — sum of all room averages per day of week
+    const facilityCells = TREND_DAYS.map(d => {
+        const { halfSum, fullSum } = facilityAccum[d];
+        return `<td class="report-num" style="border-left:2px solid #ddd;font-weight:600">${fmtAvg(halfSum)}</td>` +
+               `<td class="report-num" style="font-weight:600">${fmtAvg(fullSum)}</td>`;
+    }).join('');
+
+    const facilityHeaders = TREND_DAYS.map(d =>
+        `<th colspan="2" style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
+    ).join('');
+    const facilitySubHeaders = TREND_DAYS.map(() =>
+        `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>` +
+        `<th style="text-align:right;font-weight:normal">Full</th>`
+    ).join('');
+
+    const facilityHtml = `
+        <h4 style="margin:28px 0 4px;font-size:1em;border-top:2px solid #c0c8e0;padding-top:14px">Facility Total Averages</h4>
+        <p style="font-size:.8em;color:#666;margin:0 0 8px">Average children per day of week across all rooms combined (sum of room averages).</p>
+        <div class="table-wrapper report-table-wrap">
+            <table class="report-table" style="font-size:.85rem">
+                <thead>
+                    <tr>
+                        <th rowspan="2">Scope</th>
+                        ${facilityHeaders}
+                    </tr>
+                    <tr>${facilitySubHeaders}</tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="staff-date-cell" style="font-weight:700">All Rooms</td>
+                        ${facilityCells}
+                    </tr>
+                </tbody>
+            </table>
+        </div>`;
+
+    return roomHtml + facilityHtml;
 }
 
 async function generateEnrollmentTrends() {
@@ -4886,16 +4881,20 @@ async function exportEnrollmentTrends() {
         const isHist  = trendMap[mo]._historical;
         ROOMS.forEach(room => {
             const row = { Month: moLabel, Room: room.label, Source: isHist ? 'historical' : 'live' };
-            let moHalf = 0, moFull = 0;
+            let moHalfTotal = 0, moFullTotal = 0;
             TREND_DAYS.forEach(d => {
                 const c = _trendCell(trendMap[mo], room.id, d);
-                row[`${d} Half`] = c.half || 0;
-                row[`${d} Full`] = c.full || 0;
-                moHalf += c.half; moFull += c.full;
+                const count = c.dates.size;
+                const avgHalf = count ? +(c.halfSum / count).toFixed(2) : 0;
+                const avgFull = count ? +(c.fullSum / count).toFixed(2) : 0;
+                row[`Avg ${d} Half`] = avgHalf;
+                row[`Avg ${d} Full`] = avgFull;
+                moHalfTotal += c.halfSum;
+                moFullTotal += c.fullSum;
             });
-            row['Month Half Total'] = moHalf;
-            row['Month Full Total'] = moFull;
-            row['Month Total']      = moHalf + moFull;
+            row['Month Half Total'] = moHalfTotal;
+            row['Month Full Total'] = moFullTotal;
+            row['Month Total']      = moHalfTotal + moFullTotal;
             rows.push(row);
         });
     });

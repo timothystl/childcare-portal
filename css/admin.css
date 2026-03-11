@@ -601,56 +601,7 @@ tr.pending-approval:hover { background: #fef3c7; }
 .ar-month-th {
     vertical-align: bottom;
 }
-.ar-month-row {
-    cursor: pointer;
-    transition: background 0.12s;
-}
-.ar-month-row:hover { background: #f0f6ff; }
-.ar-month-row.ar-row-active { background: #e6f0ff; }
-.ar-month-cell { white-space: nowrap; }
-.ar-expand-icon {
-    display: inline-block;
-    font-size: 0.65em;
-    margin-right: 6px;
-    color: #7a8fb0;
-    transition: transform 0.15s;
-    vertical-align: middle;
-}
 .ar-avg-row td { font-style: italic; color: #555; }
-.ar-daily-panel {
-    margin-top: 18px;
-    border: 1px solid #d0d8f0;
-    border-radius: 8px;
-    overflow: hidden;
-}
-.ar-daily-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 16px;
-    background: #e8edf8;
-    border-bottom: 1px solid #d0d8f0;
-}
-.ar-daily-title {
-    font-weight: 700;
-    font-size: 0.95em;
-    color: #1c3160;
-}
-.ar-daily-close {
-    background: none;
-    border: none;
-    color: #666;
-    cursor: pointer;
-    font-size: 0.9em;
-    padding: 2px 6px;
-}
-.ar-daily-close:hover { color: #c00; }
-#arDailyContent {
-    padding: 12px 14px;
-    max-height: 420px;
-    overflow-y: auto;
-}
-.ar-daily-date-break { border-top: 1px solid #dde4f0; }
 
 /* Registration Window Override section */
 .override-row {
