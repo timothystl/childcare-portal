@@ -973,6 +973,42 @@
         </div>
     </div>
 
+    <!-- Admin Add Day Modal -->
+    <div id="adminAddDayModal" class="rcal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="rcal-dialog" style="max-width:480px">
+            <div class="rcal-header">
+                <h2 class="rcal-title">Add Child — <span id="aadDateLabel"></span></h2>
+                <button id="aadCloseBtn" class="rcal-close">✕</button>
+            </div>
+            <div style="margin-bottom:12px">
+                <label style="font-size:.9em;font-weight:600;display:block;margin-bottom:6px">Child Name</label>
+                <input id="aadSearch" type="text" placeholder="Type to search enrolled children…" autocomplete="off"
+                       style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:.9em;box-sizing:border-box">
+                <div id="aadResults" style="margin-top:6px;max-height:180px;overflow-y:auto;border-radius:8px"></div>
+            </div>
+            <div id="aadForm" class="hidden">
+                <p id="aadChildInfo" style="font-size:.9em;color:#333;background:#f0f4ff;padding:8px 12px;border-radius:8px;margin:0 0 12px"></p>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+                    <label style="font-size:.9em;font-weight:600">Day Type
+                        <select id="aadDayType" style="margin-left:6px;padding:6px 8px;border:1px solid #ddd;border-radius:8px;font-size:.9em">
+                            <option value="full">Full Day</option>
+                            <option value="half">Half Day</option>
+                        </select>
+                    </label>
+                    <label style="font-size:.9em;display:flex;align-items:center;gap:6px">
+                        <input type="checkbox" id="aadChangeFee" checked>
+                        <span>Apply $5 change fee</span>
+                    </label>
+                </div>
+                <p id="aadError" style="color:#c62828;font-size:.85em;min-height:18px;margin:0 0 10px"></p>
+                <div style="display:flex;gap:8px">
+                    <button id="aadConfirmBtn" class="btn-primary">Add to Day</button>
+                    <button id="aadCancelBtn" class="btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="js/supabase.js?v=35"></script>

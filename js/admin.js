@@ -354,8 +354,9 @@ function renderEditDaysList() {
             const label    = friendlyShort(d.care_date);
             const typeTag  = d.day_type === 'half' ? 'Half' : 'Full';
             const wlTag    = d.waitlisted ? ' · Waitlist' : '';
+            const feeTag   = d.change_fee > 0 ? ` <span style="font-size:.75em;padding:1px 5px;background:#fef3c7;border:1px solid #fbbf24;border-radius:3px;color:#92400e">+$${Number(d.change_fee).toFixed(0)} fee</span>` : '';
             return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:#f8f9ff;border-radius:8px;font-size:.9em">
-                <span>${label} — <strong>${typeTag}</strong>${wlTag}</span>
+                <span>${label} — <strong>${typeTag}</strong>${wlTag}${feeTag}</span>
                 <button class="btn-delete edit-days-remove-btn" data-date-id="${d.id}" style="padding:3px 10px;font-size:.82em">Remove</button>
             </div>`;
         }).join('')}
@@ -754,6 +755,14 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
         });
     }
 
+    // "+ Add Child to This Day" button
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn-secondary';
+    addBtn.textContent = '+ Add Child to This Day';
+    addBtn.style.cssText = 'margin-top:14px;width:100%;font-size:.85em';
+    addBtn.addEventListener('click', () => openAdminAddDayModal(dateStr, roomId));
+    bodyEl.appendChild(addBtn);
+
     panel.classList.remove('hidden');
     panel.classList.add('visible');
 }
@@ -762,6 +771,172 @@ function closeDayRosterDetail() {
     const panel = document.getElementById('dayDetailPanel');
     if (panel) { panel.classList.remove('visible'); panel.classList.add('hidden'); }
 }
+
+// ── Admin Add Day Modal ─────────────────────────────────────
+let _aadDateStr  = '';
+let _aadRoomId   = '';
+let _aadSelected = null; // the registration record chosen
+
+function openAdminAddDayModal(dateStr, roomId) {
+    _aadDateStr  = dateStr;
+    _aadRoomId   = roomId;
+    _aadSelected = null;
+    document.getElementById('aadDateLabel').textContent = friendlyShort(dateStr);
+    document.getElementById('aadSearch').value = '';
+    document.getElementById('aadResults').innerHTML = '';
+    document.getElementById('aadForm').classList.add('hidden');
+    document.getElementById('aadError').textContent = '';
+    document.getElementById('aadChangeFee').checked = true;
+    document.getElementById('adminAddDayModal').classList.remove('hidden');
+}
+
+function _closeAdminAddDayModal() {
+    document.getElementById('adminAddDayModal').classList.add('hidden');
+    _aadSelected = null;
+}
+
+function _aadSelectChild(reg) {
+    _aadSelected = reg;
+    const room = ROOMS.find(r => r.id === reg.room_id);
+    document.getElementById('aadChildInfo').textContent =
+        `Adding: ${reg.child_name} — ${reg.parent_name} (${room?.label || reg.room_id})`;
+    document.getElementById('aadForm').classList.remove('hidden');
+    document.getElementById('aadError').textContent = '';
+}
+
+function _aadRunSearch() {
+    const q = document.getElementById('aadSearch').value.trim().toLowerCase();
+    const resultsEl = document.getElementById('aadResults');
+    if (!q) { resultsEl.innerHTML = ''; return; }
+
+    // Collect unique child+registration combos from allRegistrations, excluding already booked on this date in this room
+    const seen = new Set();
+    const matches = [];
+    allRegistrations.forEach(reg => {
+        if (!reg.child_name.toLowerCase().includes(q) && !reg.parent_name.toLowerCase().includes(q)) return;
+        const key = `${reg.id}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        // Skip if already booked for this exact date in this room
+        const alreadyBooked = (reg.registration_dates || []).some(
+            d => d.care_date === _aadDateStr && (d.room_id || reg.room_id) === _aadRoomId && !d.waitlisted
+        );
+        if (alreadyBooked) return;
+        matches.push(reg);
+    });
+
+    if (!matches.length) {
+        resultsEl.innerHTML = `<p style="font-size:.85em;color:#888;padding:8px">No matching children found. Child must have an active registration.</p>`;
+        return;
+    }
+
+    resultsEl.innerHTML = matches.slice(0, 10).map(reg => {
+        const room = ROOMS.find(r => r.id === reg.room_id);
+        return `<div class="aad-result-row" data-reg-id="${reg.id}"
+            style="padding:8px 10px;cursor:pointer;border-radius:6px;font-size:.88em;border-bottom:1px solid #f0f0f0">
+            <strong>${escHtml(reg.child_name)}</strong> — ${escHtml(reg.parent_name)}
+            <span style="color:#888;font-size:.9em"> · ${escHtml(room?.label || reg.room_id)}</span>
+        </div>`;
+    }).join('');
+
+    resultsEl.querySelectorAll('.aad-result-row').forEach(row => {
+        row.addEventListener('mouseenter', () => { row.style.background = '#f0f4ff'; });
+        row.addEventListener('mouseleave', () => { row.style.background = ''; });
+        row.addEventListener('click', () => {
+            const reg = matches.find(r => String(r.id) === row.dataset.regId);
+            if (reg) { _aadSelectChild(reg); resultsEl.innerHTML = ''; document.getElementById('aadSearch').value = reg.child_name; }
+        });
+    });
+}
+
+async function _aadConfirm() {
+    if (!_aadSelected) return;
+    const errEl = document.getElementById('aadError');
+    errEl.textContent = '';
+    const dayType   = document.getElementById('aadDayType').value;
+    const applyFee  = document.getElementById('aadChangeFee').checked;
+    const changeFee = applyFee ? 5 : 0;
+    const btn = document.getElementById('aadConfirmBtn');
+    btn.disabled = true;
+
+    try {
+        // Check capacity
+        const roomCap = ROOMS.find(r => r.id === _aadRoomId)?.capacity || 0;
+        const bookedCount = allRegistrations.reduce((count, reg) => {
+            return count + (reg.registration_dates || []).filter(
+                d => d.care_date === _aadDateStr && (d.room_id || reg.room_id) === _aadRoomId && !d.waitlisted
+            ).length;
+        }, 0);
+        if (roomCap > 0 && bookedCount >= roomCap) {
+            if (!confirm(`${ROOMS.find(r => r.id === _aadRoomId)?.label} is at capacity (${bookedCount}/${roomCap}) on this day. Add anyway (as waitlisted)?`)) {
+                btn.disabled = false;
+                return;
+            }
+        }
+
+        await addRegistrationDate(_aadSelected.id, _aadRoomId, _aadDateStr, dayType, false, changeFee);
+
+        // Reload registration data
+        allRegistrations = await fetchAllRegistrations();
+        const updatedReg = allRegistrations.find(r => r.id === _aadSelected.id) || _aadSelected;
+
+        // Send change notice email (non-blocking)
+        try {
+            const room = ROOMS.find(r => r.id === (updatedReg.room_id || _aadRoomId));
+            const rate = dayType === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+            const [y, m] = _aadDateStr.substring(0, 7).split('-').map(Number);
+            const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            const existingDates = (updatedReg.registration_dates || [])
+                .filter(d => !d.waitlisted && d.care_date !== _aadDateStr && d.care_date.startsWith(_aadDateStr.substring(0, 7)))
+                .map(d => {
+                    const r2 = ROOMS.find(x => x.id === (d.room_id || updatedReg.room_id));
+                    const r2rate = d.day_type === 'half' ? (r2?.halfDayRate || 0) : (r2?.fullDayRate || 0);
+                    return { date: d.care_date, dayType: d.day_type, amount: r2rate };
+                });
+            await sendScheduleChangeEmail({
+                parentName: updatedReg.parent_name,
+                parentEmail: updatedReg.parent_email,
+                childName: updatedReg.child_name,
+                monthLabel,
+                existingDates,
+                addedDate: { date: _aadDateStr, dayType, amount: rate },
+                changeFee,
+            });
+        } catch (emailErr) {
+            console.warn('Change notice email failed:', emailErr);
+        }
+
+        _closeAdminAddDayModal();
+        drawRoomCalendar();
+        renderCapacityOverview();
+        // Refresh the day detail panel for the same date
+        const enrolled = [];
+        allRegistrations.forEach(reg => {
+            (reg.registration_dates || []).forEach(d => {
+                if (d.care_date === _aadDateStr && (d.room_id || reg.room_id) === _aadRoomId && !d.waitlisted) {
+                    enrolled.push({ childName: reg.child_name, dayType: d.day_type, dateId: d.id });
+                }
+            });
+        });
+        const room = ROOMS.find(r => r.id === _aadRoomId);
+        showDayRosterDetail(_aadDateStr, _aadRoomId, enrolled, room?.capacity || 0);
+    } catch (err) {
+        errEl.textContent = 'Failed to add: ' + err.message;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// Wire up modal events once DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('aadCloseBtn')?.addEventListener('click', _closeAdminAddDayModal);
+    document.getElementById('aadCancelBtn')?.addEventListener('click', _closeAdminAddDayModal);
+    document.getElementById('aadConfirmBtn')?.addEventListener('click', _aadConfirm);
+    document.getElementById('aadSearch')?.addEventListener('input', _aadRunSearch);
+    document.getElementById('adminAddDayModal')?.addEventListener('click', e => {
+        if (e.target === document.getElementById('adminAddDayModal')) _closeAdminAddDayModal();
+    });
+});
 
 function openRoomCalendar(roomId, monthKey) {
     try {
@@ -1234,19 +1409,21 @@ function _buildFamilyBillingData(monthVal) {
         const room     = ROOMS.find(r => r.id === reg.room_id);
         const discKey  = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
         const disc     = dmap.get(discKey) || { type: 'none', value: 0 };
-        let fullDays = 0, halfDays = 0, subtotal = 0;
+        let fullDays = 0, halfDays = 0, subtotal = 0, changeFees = 0;
         dates.forEach(d => {
             const rate = d.day_type === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
             subtotal += effectiveAdminRate(rate, disc.type, disc.value);
+            changeFees += Number(d.change_fee) || 0;
             if (d.day_type === 'half') halfDays++; else fullDays++;
         });
 
         // Merge if child already present (multiple reg rows for same child + month)
         const existing = fam.children.find(c => c.childName === reg.child_name);
         if (existing) {
-            existing.fullDays += fullDays;
-            existing.halfDays += halfDays;
-            existing.subtotal += subtotal;
+            existing.fullDays   += fullDays;
+            existing.halfDays   += halfDays;
+            existing.subtotal   += subtotal;
+            existing.changeFees += changeFees;
         } else {
             fam.children.push({
                 childName: reg.child_name,
@@ -1254,6 +1431,7 @@ function _buildFamilyBillingData(monthVal) {
                 fullDays,
                 halfDays,
                 subtotal,
+                changeFees,
                 discLabel: disc.type === 'staff'  ? 'Staff (free)' :
                            disc.type === 'custom' ? `${disc.value}% off` : '—',
             });
@@ -1283,17 +1461,25 @@ function generateFamilyBillingReport() {
 
     let grandTotal = 0;
     const rows = families.map(fam => {
-        const familyTotal = fam.children.reduce((s, c) => s + c.subtotal, 0);
+        const familyTotal = fam.children.reduce((s, c) => s + c.subtotal + (c.changeFees || 0), 0);
         grandTotal += familyTotal;
-        const childRows = fam.children.map(c => `
-            <tr class="billing-child-row">
+        const childRows = fam.children.map(c => {
+            const feeRow = c.changeFees > 0
+                ? `<tr class="billing-child-row" style="background:#fffbeb">
+                    <td class="billing-indent" style="color:#92400e;font-size:.85em" colspan="4">↳ Schedule change fee${c.changeFees > 5 ? 's (' + Math.round(c.changeFees / 5) + ' × $5)' : ''}</td>
+                    <td class="report-num" style="color:#92400e">—</td>
+                    <td class="report-num report-revenue" style="color:#92400e">+$${c.changeFees.toFixed(2)}</td>
+                   </tr>`
+                : '';
+            return `<tr class="billing-child-row">
                 <td class="billing-indent">${escHtml(c.childName)}</td>
                 <td>${escHtml(c.roomLabel)}</td>
                 <td class="report-num">${c.fullDays || '—'}</td>
                 <td class="report-num">${c.halfDays || '—'}</td>
                 <td class="report-num">${c.discLabel}</td>
                 <td class="report-num report-revenue">$${c.subtotal.toFixed(2)}</td>
-            </tr>`).join('');
+            </tr>${feeRow}`;
+        }).join('');
         return `
             <tr class="billing-family-row">
                 <td colspan="5">
@@ -1341,15 +1527,17 @@ function exportFamilyBillingReport() {
     families.forEach(fam => {
         fam.children.forEach(c => {
             rows.push({
-                'Parent Name':  fam.parentName,
-                'Email':        fam.parentEmail,
-                'Phone':        fam.parentPhone,
-                'Child Name':   c.childName,
-                'Room':         c.roomLabel,
-                'Full Days':    c.fullDays,
-                'Half Days':    c.halfDays,
-                'Discount':     c.discLabel,
-                'Amount Due':   `$${c.subtotal.toFixed(2)}`,
+                'Parent Name':   fam.parentName,
+                'Email':         fam.parentEmail,
+                'Phone':         fam.parentPhone,
+                'Child Name':    c.childName,
+                'Room':          c.roomLabel,
+                'Full Days':     c.fullDays,
+                'Half Days':     c.halfDays,
+                'Discount':      c.discLabel,
+                'Care Amount':   `$${c.subtotal.toFixed(2)}`,
+                'Change Fees':   c.changeFees > 0 ? `$${c.changeFees.toFixed(2)}` : '—',
+                'Total Due':     `$${(c.subtotal + (c.changeFees || 0)).toFixed(2)}`,
             });
         });
     });
