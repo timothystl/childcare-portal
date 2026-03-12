@@ -4836,8 +4836,11 @@ function _renderTrendsTable(trendMap) {
             : '';
 
         return `
-            <h4 style="margin:18px 0 6px;font-size:1em">${escHtml(room.label)}</h4>
-            <div class="table-wrapper report-table-wrap">
+            <h4 style="margin:18px 0 6px;font-size:1em;display:flex;align-items:center;gap:10px">
+                ${escHtml(room.label)}
+                <button onclick="(function(btn){var w=document.getElementById('trendsRoom_${room.id}');var collapsed=w.style.display==='none';w.style.display=collapsed?'':'none';btn.textContent=collapsed?'▲ Collapse':'▼ Expand';})(this)" style="font-size:.75em;padding:2px 8px;cursor:pointer;background:#f0f4ff;border:1px solid #c0c8e0;border-radius:4px">▲ Collapse</button>
+            </h4>
+            <div id="trendsRoom_${room.id}" class="table-wrapper report-table-wrap">
                 <table class="report-table" style="font-size:.85rem">
                     <thead>
                         <tr>
@@ -4852,15 +4855,23 @@ function _renderTrendsTable(trendMap) {
             </div>`;
     }).join('');
 
-    // Facility totals table — sum of all room averages per day of week (totals only)
+    // Facility totals table — sum of all room averages per day of week, with Half/Full/Total split
+    const facilityDayHeaders = TREND_DAYS.map(d =>
+        `<th colspan="3" style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
+    ).join('');
+
+    const facilitySubHeaders = TREND_DAYS.map(() =>
+        `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>` +
+        `<th style="text-align:right;font-weight:normal">Full</th>` +
+        `<th style="text-align:right;font-weight:normal">Total</th>`
+    ).join('');
+
     const facilityCells = TREND_DAYS.map(d => {
         const { halfSum, fullSum } = facilityAccum[d];
-        return `<td class="report-num" style="border-left:2px solid #ddd;font-weight:600">${fmtAvg(halfSum + fullSum)}</td>`;
+        return `<td class="report-num" style="border-left:2px solid #ddd;font-weight:600">${fmtAvg(halfSum)}</td>` +
+               `<td class="report-num" style="font-weight:600">${fmtAvg(fullSum)}</td>` +
+               `<td class="report-num" style="font-weight:600">${fmtAvg(halfSum + fullSum)}</td>`;
     }).join('');
-
-    const facilityHeaders = TREND_DAYS.map(d =>
-        `<th style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
-    ).join('');
 
     const facilityHtml = `
         <h4 style="margin:28px 0 4px;font-size:1em;border-top:2px solid #c0c8e0;padding-top:14px">Facility Total Averages</h4>
@@ -4869,9 +4880,10 @@ function _renderTrendsTable(trendMap) {
             <table class="report-table" style="font-size:.85rem">
                 <thead>
                     <tr>
-                        <th>Scope</th>
-                        ${facilityHeaders}
+                        <th rowspan="2">Scope</th>
+                        ${facilityDayHeaders}
                     </tr>
+                    <tr>${facilitySubHeaders}</tr>
                 </thead>
                 <tbody>
                     <tr>
@@ -5002,6 +5014,268 @@ async function generateWaitlistReport() {
     }
 }
 
+
+// ── Enrollment Planner ─────────────────────────────────────
+
+function initEnrollmentPlannerSelectors() {
+    const roomSel = document.getElementById('plannerRoomSel');
+    if (!roomSel || roomSel.options.length > 0) return;
+    ROOMS.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.id;
+        opt.textContent = r.label;
+        roomSel.appendChild(opt);
+    });
+    const monthSel = document.getElementById('plannerMonthSel');
+    const now = new Date();
+    for (let i = 0; i < 6; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = MONTH_NAMES_ADMIN[d.getMonth()] + ' ' + d.getFullYear();
+        if (i === 1) opt.selected = true;
+        monthSel.appendChild(opt);
+    }
+}
+
+// Build per-day slot counts for a room/month from allRegistrations.
+// Falls back to prior month's data as a projection if the target month has no data.
+function _buildPlannerSlots(roomId, monthKey, room) {
+    const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+    function _tally(monthPrefix) {
+        const acc = {};
+        TREND_DAYS.forEach(d => { acc[d] = { full: 0, half: 0, dates: new Set() }; });
+        let found = false;
+        allRegistrations.forEach(reg => {
+            (reg.registration_dates || []).forEach(rd => {
+                if (!rd.care_date || rd.waitlisted) return;
+                if (!rd.care_date.startsWith(monthPrefix)) return;
+                const effectiveRoom = rd.room_id || reg.room_id;
+                if (effectiveRoom !== roomId) return;
+                const dow = DAY_NAMES[new Date(rd.care_date + 'T00:00:00').getDay()];
+                if (!TREND_DAYS.includes(dow)) return;
+                acc[dow].dates.add(rd.care_date);
+                if (rd.day_type === 'half') acc[dow].half++;
+                else acc[dow].full++;
+                found = true;
+            });
+        });
+        return { acc, found };
+    }
+
+    let { acc, found } = _tally(monthKey);
+    let sourceType = 'live';
+
+    if (!found) {
+        const prev = new Date(monthKey + '-01');
+        prev.setMonth(prev.getMonth() - 1);
+        const prevKey = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+        ({ acc } = _tally(prevKey));
+        sourceType = 'projected';
+    }
+
+    const days = {};
+    TREND_DAYS.forEach(d => {
+        const cnt = acc[d].dates.size || 1; // avoid div/0; open = capacity when no data
+        const avgFull = acc[d].full / cnt;
+        const avgHalf = acc[d].half / cnt;
+        const avgTotal = avgFull + avgHalf;
+        const open = Math.max(0, room.capacity - Math.round(avgTotal));
+        days[d] = { full: avgFull, half: avgHalf, total: avgTotal, open, hasDates: acc[d].dates.size > 0 };
+    });
+    return { days, sourceType };
+}
+
+async function generateEnrollmentPlanner() {
+    initEnrollmentPlannerSelectors();
+    const roomId   = document.getElementById('plannerRoomSel').value;
+    const monthKey = document.getElementById('plannerMonthSel').value;
+    const container = document.getElementById('plannerContent');
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+
+    try {
+        if (!allRegistrations.length) allRegistrations = await fetchAllRegistrations();
+
+        const room = ROOMS.find(r => r.id === roomId);
+        if (!room) throw new Error('Room not found');
+
+        const { days, sourceType } = _buildPlannerSlots(roomId, monthKey, room);
+
+        // Fetch or reuse waitlist
+        if (!_wlDemandCache.length) _wlDemandCache = await fetchWaitlistApplications();
+        const active = _wlDemandCache.filter(a => ['pending','offered','accepted'].includes(a.status));
+
+        // Filter waitlist applicants: must map to this room, desired start within ±1 month
+        const [planY, planM] = monthKey.split('-').map(Number);
+        const planDate = new Date(planY, planM - 1, 1);
+        const candidates = active.filter(a => {
+            if (wlDeriveRoom(a) !== roomId) return false;
+            const startMo = (a.desired_start_date || '').substring(0, 7);
+            if (!startMo) return false;
+            const [sy, sm] = startMo.split('-').map(Number);
+            const diff = (sy - planY) * 12 + (sm - planM);
+            return Math.abs(diff) <= 1;
+        });
+
+        // Compute revenue potential per candidate
+        const fullDayRate = room.fullDayRate || 0;
+        const halfDayRate = room.halfDayRate || fullDayRate;
+
+        const enriched = candidates.map(a => {
+            const desiredDays = (a.days_of_week || '').split(',').map(s => s.trim()).filter(Boolean);
+            const isHalf = a.day_type === 'half';
+            const rate = isHalf ? halfDayRate : fullDayRate;
+            const weeklyRev = desiredDays.length * rate;
+            // Per-day slot availability for desired days
+            const dayStatus = {};
+            desiredDays.forEach(d => {
+                if (!TREND_DAYS.includes(d)) return;
+                const open = days[d]?.open ?? 0;
+                dayStatus[d] = open > 1 ? 'open' : open === 1 ? 'tight' : 'full';
+            });
+            const canFit = desiredDays.every(d => (days[d]?.open ?? 0) > 0);
+            return { ...a, desiredDays, isHalf, weeklyRev, dayStatus, canFit };
+        });
+
+        // Sort: fully-fittable first, then by weekly revenue desc, then by applied_at asc
+        enriched.sort((a, b) => {
+            if (a.canFit !== b.canFit) return a.canFit ? -1 : 1;
+            if (b.weeklyRev !== a.weeklyRev) return b.weeklyRev - a.weeklyRev;
+            return (a.applied_at || '') < (b.applied_at || '') ? -1 : 1;
+        });
+
+        container.innerHTML = _renderPlannerContent(room, monthKey, days, sourceType, enriched, fullDayRate, halfDayRate);
+    } catch(err) {
+        container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function _renderPlannerContent(room, monthKey, days, sourceType, candidates, fullDayRate, halfDayRate) {
+    const [y, m] = monthKey.split('-').map(Number);
+    const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+    const srcBadge = sourceType === 'projected'
+        ? `<span style="font-size:.75em;padding:2px 7px;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;color:#856404">projected from prior month</span>`
+        : `<span style="font-size:.75em;padding:2px 7px;background:#d4edda;border:1px solid #28a745;border-radius:4px;color:#155724">live registration data</span>`;
+
+    // ── Availability Matrix ──────────────────────────────────
+    const matrixRows = [
+        { label: 'Full-day enrolled', key: 'full', fmt: v => v > 0 ? v.toFixed(1).replace(/\.0$/,'') : '—' },
+        { label: 'Half-day enrolled', key: 'half', fmt: v => v > 0 ? v.toFixed(1).replace(/\.0$/,'') : '—' },
+        { label: `Total / ${room.capacity} capacity`, key: 'total', fmt: v => v > 0 ? v.toFixed(1).replace(/\.0$/,'') : '—', bold: true },
+        { label: 'Open slots', key: 'open', fmt: v => v, color: true },
+    ];
+
+    const matrixHtml = `
+        <h4 style="margin:0 0 6px;font-size:.95em">Schedule Availability — ${escHtml(room.label)} &bull; ${monthLabel} ${srcBadge}</h4>
+        <div class="table-wrapper report-table-wrap" style="margin-bottom:18px">
+            <table class="report-table" style="font-size:.85rem">
+                <thead><tr>
+                    <th>Metric</th>
+                    ${TREND_DAYS.map(d => `<th style="text-align:center">${d}</th>`).join('')}
+                </tr></thead>
+                <tbody>
+                    ${matrixRows.map(row => {
+                        const cells = TREND_DAYS.map(d => {
+                            const val = days[d]?.[row.key] ?? 0;
+                            const hasDates = days[d]?.hasDates;
+                            let style = 'text-align:center';
+                            if (row.bold) style += ';font-weight:600';
+                            if (row.color && hasDates) {
+                                const open = days[d]?.open ?? 0;
+                                const bg = open === 0 ? '#f8d7da' : open <= 2 ? '#fff3cd' : '#d4edda';
+                                style += `;background:${bg}`;
+                            }
+                            const display = hasDates ? row.fmt(val) : '—';
+                            return `<td class="report-num" style="${style}">${display}</td>`;
+                        }).join('');
+                        return `<tr><td class="staff-date-cell">${row.label}</td>${cells}</tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>`;
+
+    // ── Optimization Alerts ─────────────────────────────────
+    const alerts = [];
+    const halfBlockedDays = TREND_DAYS.filter(d => days[d]?.half > 0 && days[d]?.hasDates);
+    const fullWlWantHalfDays = candidates.filter(c => !c.isHalf && c.desiredDays.some(d => halfBlockedDays.includes(d)));
+    if (halfBlockedDays.length && fullWlWantHalfDays.length) {
+        alerts.push(`⚠️ Half-day children are enrolled on <strong>${halfBlockedDays.join(', ')}</strong> — <strong>${fullWlWantHalfDays.length}</strong> full-day waitlist applicant${fullWlWantHalfDays.length > 1 ? 's' : ''} want those days. Consider whether holding for a full-day child would better use the space.`);
+    }
+    const fittable = candidates.filter(c => c.canFit);
+    if (fittable.length) {
+        alerts.push(`✅ <strong>${fittable.length}</strong> waitlist applicant${fittable.length > 1 ? 's' : ''} can be fully accommodated with current open slots.`);
+    } else if (candidates.length) {
+        alerts.push(`⚠️ No waitlist applicants for this room/month can be fully accommodated with current open slots.`);
+    }
+    if (fullDayRate && halfDayRate && fullDayRate > halfDayRate) {
+        const revDiff = fullDayRate - halfDayRate;
+        alerts.push(`💡 Full-day placement earns <strong>$${revDiff}/day more</strong> than half-day. Prefer full-day waitlist applicants when filling open slots.`);
+    }
+
+    const alertsHtml = alerts.length
+        ? `<div style="margin-bottom:18px;display:flex;flex-direction:column;gap:8px">
+            ${alerts.map(a => `<div style="padding:8px 12px;background:#f8f9fa;border-left:4px solid #6c757d;border-radius:0 4px 4px 0;font-size:.88em;line-height:1.4">${a}</div>`).join('')}
+           </div>`
+        : '';
+
+    // ── Waitlist Candidates ─────────────────────────────────
+    let candidatesHtml;
+    if (!candidates.length) {
+        candidatesHtml = `<p class="empty-hint">No active waitlist applicants for ${escHtml(room.label)} within ±1 month of ${monthLabel}.</p>`;
+    } else {
+        const today = new Date().toISOString().split('T')[0];
+        const rows = candidates.map(c => {
+            const waitSince = c.applied_at ? c.applied_at.substring(0, 10) : '—';
+            const desiredStart = c.desired_start_date || '—';
+            const typeLabel = c.isHalf ? 'Half' : 'Full';
+            const typeBg = c.isHalf ? '#fff3cd' : '#d4edda';
+            const revLabel = c.weeklyRev > 0 ? `$${c.weeklyRev}/wk` : '—';
+
+            // Days display with status icons
+            const daysDisplay = c.desiredDays.length
+                ? c.desiredDays.map(d => {
+                    const status = c.dayStatus[d] || 'open';
+                    const icon = status === 'full' ? '✗' : status === 'tight' ? '⚠' : '✓';
+                    const color = status === 'full' ? '#dc3545' : status === 'tight' ? '#856404' : '#155724';
+                    return `<span style="color:${color};white-space:nowrap">${icon} ${d}</span>`;
+                  }).join(' &nbsp;')
+                : '<span style="color:#888">not specified</span>';
+
+            const fitBg = c.canFit ? '' : 'background:#fff5f5';
+            return `<tr style="${fitBg}">
+                <td class="staff-date-cell">${escHtml(c.child_name)}</td>
+                <td style="font-size:.85em">${escHtml(c.parent_name)}</td>
+                <td style="font-size:.85em">${desiredStart}</td>
+                <td style="font-size:.85em">${daysDisplay}</td>
+                <td style="text-align:center"><span style="padding:1px 7px;border-radius:3px;font-size:.82em;background:${typeBg}">${typeLabel}</span></td>
+                <td class="report-num" style="font-weight:600;color:#1a5276">${revLabel}</td>
+                <td style="font-size:.8em;color:#888">${waitSince}</td>
+            </tr>`;
+        }).join('');
+
+        candidatesHtml = `
+            <h4 style="margin:0 0 6px;font-size:.95em">Waitlist Candidates — sorted by fit &amp; weekly revenue potential</h4>
+            <p style="font-size:.8em;color:#666;margin:0 0 8px">✓ = open slot &nbsp; ⚠ = only 1 spot left &nbsp; ✗ = no available slot on that day. Highlighted rows cannot be fully accommodated.</p>
+            <div class="table-wrapper report-table-wrap">
+                <table class="report-table" style="font-size:.85rem">
+                    <thead><tr>
+                        <th>Child</th>
+                        <th>Parent</th>
+                        <th>Desired Start</th>
+                        <th>Days Wanted</th>
+                        <th style="text-align:center">Type</th>
+                        <th style="text-align:right">Wkly Rev</th>
+                        <th>On List Since</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }
+
+    return matrixHtml + alertsHtml + candidatesHtml;
+}
 
 // ============================================================
 // WAITLIST MANAGEMENT (admin)
@@ -5829,6 +6103,7 @@ function setupWaitlistAdmin() {
     document.getElementById('addToWaitlistBtn')?.addEventListener('click', _openAdminWlModal);
     document.getElementById('generateWaitlistBtn')?.addEventListener('click', generateWaitlistReport);
     document.getElementById('generateWlPlanBtn')?.addEventListener('click', renderWaitlistPlanning);
+    initEnrollmentPlannerSelectors();
 
     // Waitlist import
     document.getElementById('wlImportParseBtn')?.addEventListener('click', previewWaitlistImport);

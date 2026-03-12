@@ -331,6 +331,24 @@
                 </div>
             </section>
 
+            <!-- Enrollment Planner -->
+            <section class="admin-section collapsible-section" id="enrollmentPlannerSection">
+                <h2>📅 Enrollment Planner</h2>
+                <p class="section-desc">Cross-reference open capacity with waitlist demand. Prioritize full-day and full-week placements to maximize space and revenue.</p>
+                <div class="roster-btns" style="margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+                    <label style="font-weight:600">Room:
+                        <select id="plannerRoomSel" style="margin-left:6px;padding:4px 8px"></select>
+                    </label>
+                    <label style="font-weight:600">Month:
+                        <select id="plannerMonthSel" style="margin-left:6px;padding:4px 8px"></select>
+                    </label>
+                    <button id="generatePlannerBtn" class="btn-secondary" onclick="generateEnrollmentPlanner()">Generate Planner</button>
+                </div>
+                <div id="plannerContent">
+                    <p class="empty-hint">Select a room and month, then click Generate Planner.</p>
+                </div>
+            </section>
+
             <!-- Manual Entry Modal -->
             <div id="adminWlOverlay" class="admin-wl-overlay hidden">
                 <div class="admin-wl-dialog">
