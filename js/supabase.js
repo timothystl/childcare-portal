@@ -217,7 +217,7 @@ async function fetchAllRegistrations({ sinceDate = null, untilDate = null } = {}
             id, created_at, status,
             parent_name, parent_email, parent_phone,
             child_name, child_age, child_dob, room_id,
-            registration_dates ( id, care_date, waitlisted, day_type, room_id )
+            registration_dates ( id, care_date, waitlisted, day_type, room_id, change_fee )
         `)
         .gte('created_at', since)
         .lte('created_at', until)
@@ -264,11 +264,11 @@ async function updateRegistrationDateRoom(dateId, newRoomId) {
     if (error) throw error;
 }
 
-async function addRegistrationDate(regId, roomId, careDate, dayType, waitlisted) {
+async function addRegistrationDate(regId, roomId, careDate, dayType, waitlisted, changeFee = 0) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
         .from('registration_dates')
-        .insert({ registration_id: regId, room_id: roomId, care_date: careDate, day_type: dayType, waitlisted: !!waitlisted });
+        .insert({ registration_id: regId, room_id: roomId, care_date: careDate, day_type: dayType, waitlisted: !!waitlisted, change_fee: changeFee || 0 });
     if (error) throw error;
 }
 
@@ -1189,6 +1189,16 @@ async function sendScheduleEmail({ parentName, parentEmail, monthLabel, childNam
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.functions.invoke('send-schedule-confirmation', {
         body: { parentName, parentEmail, monthLabel, childNames, dates, grandTotal },
+        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    if (error) throw error;
+    return data;
+}
+
+async function sendScheduleChangeEmail({ parentName, parentEmail, childName, monthLabel, existingDates, addedDate, changeFee }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.functions.invoke('send-schedule-change', {
+        body: { parentName, parentEmail, childName, monthLabel, existingDates, addedDate, changeFee },
         headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
     });
     if (error) throw error;
