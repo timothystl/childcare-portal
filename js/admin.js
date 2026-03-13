@@ -89,11 +89,45 @@ function stopInactivityTimer() {
     );
 }
 
-function showDashboard() {
+async function showDashboard() {
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('dashboard').classList.remove('hidden');
     startInactivityTimer();
-    initDashboard();
+    initDashboard();        // one-time setup (event listeners, etc.)
+    await applySessionRole(); // runs on every login — fresh roles + restrictions
+}
+
+// Determine the current user's role, apply restrictions, update display.
+// Called on every login so switching accounts always reflects correctly.
+async function applySessionRole() {
+    _resetRoleRestrictions();
+    try {
+        const [roles, session] = await Promise.all([loadAdminRoles(), getAdminSession()]);
+        window._adminRoles   = roles;
+        window._adminSession = session;
+        const email    = (session?.user?.email || '').toLowerCase().trim();
+        const hasRules = Object.keys(roles).length > 0;
+        currentAdminRole = roles[email] || (hasRules ? 'staff' : 'full');
+        // Show logged-in email + role in header
+        const displayEl = document.getElementById('currentUserDisplay');
+        if (displayEl) {
+            displayEl.textContent = email
+                ? `${email} · ${ROLE_LABELS[currentAdminRole] || currentAdminRole}`
+                : '';
+        }
+    } catch (err) {
+        console.error('applySessionRole failed:', err);
+    }
+    applyRoleRestrictions();
+}
+
+// Undo any restrictions from a previous session before applying new ones.
+function _resetRoleRestrictions() {
+    ['logHoursSection', 'payrollSection', 'staffRosterToggleWrap',
+     'staffRosterSection', 'adminRolesSection', 'exportXlsxBtn']
+        .forEach(id => document.getElementById(id)?.classList.remove('hidden'));
+    document.querySelectorAll('#adminTabs .admin-tab-btn')
+        .forEach(btn => btn.classList.remove('hidden'));
 }
 
 // Auto-restore session if already logged in
@@ -118,8 +152,6 @@ async function initDashboard() {
             loadRateSettings(),
             loadRatioSettings(),
             loadOfferLinks().then(v => { window._globalOfferLinks = v; }),
-            loadAdminRoles().then(roles => { window._adminRoles = roles; }),
-            getAdminSession().then(s => { window._adminSession = s; }),
         ]);
     } catch (err) {
         console.error('initDashboard: initial data load failed —', err);
@@ -149,14 +181,6 @@ async function initDashboard() {
     setupAdminRoles();
     setupTabs();
     setupCollapsibles();
-    // Determine and apply role-based access restrictions
-    const userEmail  = (window._adminSession?.user?.email || '').toLowerCase().trim();
-    const rolesMap   = window._adminRoles || {};
-    // Default to 'full' only when the map is completely empty (initial setup).
-    // Once any rules exist, unknown emails default to 'staff' (least privilege).
-    const hasRules   = Object.keys(rolesMap).length > 0;
-    currentAdminRole = rolesMap[userEmail] || (hasRules ? 'staff' : 'full');
-    applyRoleRestrictions();
     document.getElementById('refreshBtn').addEventListener('click', () => {
         const active = localStorage.getItem('adminActiveTab') || 'daily';
         if (active === 'registrations') loadRegistrations();
