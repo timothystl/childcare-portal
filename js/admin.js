@@ -1,6 +1,7 @@
 // ============================================================
 // STATE
 // ============================================================
+let currentAdminRole = 'full'; // 'full' | 'restricted' — set after login
 let allRegistrations = [];
 let allClosureDates  = new Set(); // YYYY-MM-DD strings
 let tableSortState   = { col: 'submitted', dir: 'desc' }; // default: newest first
@@ -71,7 +72,15 @@ async function initDashboard() {
     populateRoomFilter();
     populateRosterRoomFilter();
     try {
-        await Promise.all([loadRegistrations(), loadClosureList(), loadRateSettings(), loadRatioSettings(), loadOfferLinks().then(v => { window._globalOfferLinks = v; })]);
+        await Promise.all([
+            loadRegistrations(),
+            loadClosureList(),
+            loadRateSettings(),
+            loadRatioSettings(),
+            loadOfferLinks().then(v => { window._globalOfferLinks = v; }),
+            loadAdminRoles().then(roles => { window._adminRoles = roles; }),
+            getAdminSession().then(s => { window._adminSession = s; }),
+        ]);
     } catch (err) {
         console.error('initDashboard: initial data load failed —', err);
         // Continue setup so the tab structure is always rendered
@@ -97,8 +106,13 @@ async function initDashboard() {
     setupPayrollReport();
     setupExtraReports();
     setupWaitlistAdmin();
+    setupAdminRoles();
     setupTabs();
     setupCollapsibles();
+    // Determine and apply role-based access restrictions
+    const userEmail = (window._adminSession?.user?.email || '').toLowerCase().trim();
+    currentAdminRole = (userEmail && window._adminRoles?.[userEmail]) ? window._adminRoles[userEmail] : 'full';
+    applyRoleRestrictions();
     document.getElementById('refreshBtn').addEventListener('click', () => {
         const active = localStorage.getItem('adminActiveTab') || 'daily';
         if (active === 'registrations') loadRegistrations();
@@ -3928,6 +3942,97 @@ async function onSaveStaffMember() {
         loadStaffList();
     } catch (err) {
         alert('Save failed: ' + err.message);
+    }
+}
+
+// ============================================================
+// ADMIN ROLES  (access control)
+// ============================================================
+
+const ROLE_LABELS = {
+    full:       'Full Access',
+    restricted: 'Restricted — Schedule Planner only',
+};
+
+function applyRoleRestrictions() {
+    if (currentAdminRole === 'full') return;
+
+    if (currentAdminRole === 'restricted') {
+        // Staffing tab: hide everything except the schedule planner
+        document.getElementById('logHoursSection')?.classList.add('hidden');
+        document.getElementById('payrollSection')?.classList.add('hidden');
+        document.getElementById('staffRosterToggleWrap')?.classList.add('hidden');
+        document.getElementById('staffRosterSection')?.classList.add('hidden');
+        // Settings tab: hide the admin roles manager so restricted users can't escalate
+        document.getElementById('adminRolesSection')?.classList.add('hidden');
+    }
+}
+
+function setupAdminRoles() {
+    renderAdminRolesTable();
+
+    document.getElementById('addAdminRoleBtn')?.addEventListener('click', async () => {
+        const emailInput = document.getElementById('newRoleEmail');
+        const email = emailInput.value.trim().toLowerCase();
+        const level = document.getElementById('newRoleLevel').value;
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            alert('Please enter a valid email address.');
+            return;
+        }
+        window._adminRoles = window._adminRoles || {};
+        window._adminRoles[email] = level;
+        await _saveAdminRolesUI();
+        emailInput.value = '';
+        renderAdminRolesTable();
+    });
+}
+
+function renderAdminRolesTable() {
+    const wrap = document.getElementById('adminRolesTableWrap');
+    if (!wrap) return;
+    const rolesMap = window._adminRoles || {};
+    const entries  = Object.entries(rolesMap);
+    if (!entries.length) {
+        wrap.innerHTML = '<p class="empty-hint">No access rules configured — all admins have full access.</p>';
+        return;
+    }
+    const rows = entries.map(([email, role]) => `
+        <tr>
+            <td>${email}</td>
+            <td>${ROLE_LABELS[role] || role}</td>
+            <td><button class="btn-ghost btn-sm remove-admin-role-btn" data-email="${email}">Remove</button></td>
+        </tr>
+    `).join('');
+    wrap.innerHTML = `
+        <table class="rates-table">
+            <thead><tr><th>Email</th><th>Access Level</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    `;
+    wrap.querySelectorAll('.remove-admin-role-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!window._adminRoles) return;
+            delete window._adminRoles[btn.dataset.email];
+            await _saveAdminRolesUI();
+            renderAdminRolesTable();
+        });
+    });
+}
+
+async function _saveAdminRolesUI() {
+    const statusEl = document.getElementById('adminRolesStatus');
+    try {
+        await saveAdminRoles(window._adminRoles || {});
+        if (statusEl) {
+            statusEl.textContent = '✓ Saved!';
+            statusEl.style.color = '#2e7d32';
+            setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+    } catch (err) {
+        if (statusEl) {
+            statusEl.textContent = '⚠️ ' + err.message;
+            statusEl.style.color = '#c62828';
+        }
     }
 }
 
