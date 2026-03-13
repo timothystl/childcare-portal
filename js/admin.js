@@ -107,7 +107,10 @@ async function applySessionRole() {
         window._adminSession = session;
         const email    = (session?.user?.email || '').toLowerCase().trim();
         const hasRules = Object.keys(roles).length > 0;
-        currentAdminRole = roles[email] || (hasRules ? 'staff' : 'full');
+        // Temporary: ensure these accounts always have full access while lockout is resolved
+        const _tempFullAccess = ['dinger@timothystl.org', 'mdo@timothystl.org'];
+        currentAdminRole = _tempFullAccess.includes(email) ? 'full'
+            : roles[email] || (hasRules ? 'staff' : 'full');
         // Show logged-in email + role in header
         const displayEl = document.getElementById('currentUserDisplay');
         if (displayEl) {
