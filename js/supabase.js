@@ -1135,6 +1135,27 @@ async function saveAdminRoles(rolesMap) {
     if (error) throw error;
 }
 
+async function sendPasswordReset(email) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.href,
+    });
+    if (error) throw error;
+}
+
+async function callAdminUsers(action, payload = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated.');
+    const { data, error } = await sbClient.functions.invoke('admin-users', {
+        body: { action, ...payload },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) throw error;
+    return data;
+}
+
 // ============================================================
 // WAITLIST APPLICATIONS
 // ============================================================

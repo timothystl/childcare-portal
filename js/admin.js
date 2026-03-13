@@ -110,8 +110,12 @@ async function initDashboard() {
     setupTabs();
     setupCollapsibles();
     // Determine and apply role-based access restrictions
-    const userEmail = (window._adminSession?.user?.email || '').toLowerCase().trim();
-    currentAdminRole = (userEmail && window._adminRoles?.[userEmail]) ? window._adminRoles[userEmail] : 'full';
+    const userEmail  = (window._adminSession?.user?.email || '').toLowerCase().trim();
+    const rolesMap   = window._adminRoles || {};
+    // Default to 'full' only when the map is completely empty (initial setup).
+    // Once any rules exist, unknown emails default to 'staff' (least privilege).
+    const hasRules   = Object.keys(rolesMap).length > 0;
+    currentAdminRole = rolesMap[userEmail] || (hasRules ? 'staff' : 'full');
     applyRoleRestrictions();
     document.getElementById('refreshBtn').addEventListener('click', () => {
         const active = localStorage.getItem('adminActiveTab') || 'daily';
@@ -3986,71 +3990,146 @@ function applyRoleRestrictions() {
 }
 
 function setupAdminRoles() {
-    renderAdminRolesTable();
+    _loadAdminUsersTable();
 
     document.getElementById('addAdminRoleBtn')?.addEventListener('click', async () => {
-        const emailInput = document.getElementById('newRoleEmail');
-        const email = emailInput.value.trim().toLowerCase();
-        const level = document.getElementById('newRoleLevel').value;
+        const emailInput    = document.getElementById('newRoleEmail');
+        const passwordInput = document.getElementById('newRolePassword');
+        const email    = emailInput.value.trim().toLowerCase();
+        const password = passwordInput.value;
+        const level    = document.getElementById('newRoleLevel').value;
+
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            alert('Please enter a valid email address.');
-            return;
+            alert('Please enter a valid email address.'); return;
         }
-        window._adminRoles = window._adminRoles || {};
-        window._adminRoles[email] = level;
-        await _saveAdminRolesUI();
-        emailInput.value = '';
-        renderAdminRolesTable();
+        if (!password || password.length < 6) {
+            alert('Password must be at least 6 characters.'); return;
+        }
+
+        const btn = document.getElementById('addAdminRoleBtn');
+        btn.disabled = true; btn.textContent = 'Creating…';
+        try {
+            await callAdminUsers('create', { email, password });
+            window._adminRoles = window._adminRoles || {};
+            window._adminRoles[email] = level;
+            await saveAdminRoles(window._adminRoles);
+            emailInput.value = ''; passwordInput.value = '';
+            _showAdminRolesStatus('✓ User created!', '#2e7d32');
+            _loadAdminUsersTable();
+        } catch (err) {
+            _showAdminRolesStatus('⚠️ ' + err.message, '#c62828');
+        } finally {
+            btn.disabled = false; btn.textContent = 'Add User';
+        }
     });
 }
 
-function renderAdminRolesTable() {
+async function _loadAdminUsersTable() {
+    const wrap = document.getElementById('adminRolesTableWrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="empty-hint">Loading users…</p>';
+    try {
+        const result = await callAdminUsers('list', {});
+        _renderAdminUsersTable(result.users || []);
+    } catch (err) {
+        wrap.innerHTML = `<p class="empty-hint">⚠️ Could not load users: ${err.message}</p>`;
+    }
+}
+
+function _renderAdminUsersTable(authUsers) {
     const wrap = document.getElementById('adminRolesTableWrap');
     if (!wrap) return;
     const rolesMap = window._adminRoles || {};
-    const entries  = Object.entries(rolesMap);
-    if (!entries.length) {
-        wrap.innerHTML = '<p class="empty-hint">No access rules configured — all admins have full access.</p>';
+
+    if (!authUsers.length) {
+        wrap.innerHTML = '<p class="empty-hint">No admin users found.</p>';
         return;
     }
-    const rows = entries.map(([email, role]) => `
-        <tr>
-            <td>${email}</td>
-            <td>${ROLE_LABELS[role] || role}</td>
-            <td><button class="btn-ghost btn-sm remove-admin-role-btn" data-email="${email}">Remove</button></td>
-        </tr>
-    `).join('');
+
+    const rows = authUsers.map(u => {
+        const email   = u.email || '';
+        const role    = rolesMap[email] || 'full';
+        const options = Object.entries(ROLE_LABELS).map(([val, label]) =>
+            `<option value="${val}" ${val === role ? 'selected' : ''}>${label}</option>`
+        ).join('');
+        const lastSeen = u.last_sign_in_at
+            ? new Date(u.last_sign_in_at).toLocaleDateString()
+            : 'Never';
+        return `
+            <tr>
+                <td>${email}</td>
+                <td><select class="admin-role-select family-search-input btn-sm" data-email="${email}">${options}</select></td>
+                <td style="color:#888;font-size:.85em;white-space:nowrap">${lastSeen}</td>
+                <td style="white-space:nowrap">
+                    <button class="btn-ghost btn-sm reset-pw-btn" data-email="${email}">Reset Password</button>
+                    <button class="btn-ghost btn-sm delete-user-btn" style="color:#c62828" data-userid="${u.id}" data-email="${email}">Delete</button>
+                </td>
+            </tr>`;
+    }).join('');
+
     wrap.innerHTML = `
-        <table class="rates-table">
-            <thead><tr><th>Email</th><th>Access Level</th><th></th></tr></thead>
+        <table class="rates-table" style="width:100%">
+            <thead><tr><th>Email</th><th>Access Level</th><th>Last Login</th><th></th></tr></thead>
             <tbody>${rows}</tbody>
-        </table>
-    `;
-    wrap.querySelectorAll('.remove-admin-role-btn').forEach(btn => {
+        </table>`;
+
+    // Inline role change — save immediately on select change
+    wrap.querySelectorAll('.admin-role-select').forEach(sel => {
+        sel.addEventListener('change', async () => {
+            window._adminRoles = window._adminRoles || {};
+            window._adminRoles[sel.dataset.email] = sel.value;
+            try {
+                await saveAdminRoles(window._adminRoles);
+                _showAdminRolesStatus('✓ Saved!', '#2e7d32');
+            } catch (err) {
+                _showAdminRolesStatus('⚠️ ' + err.message, '#c62828');
+            }
+        });
+    });
+
+    // Reset password — sends email via Supabase Auth
+    wrap.querySelectorAll('.reset-pw-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (!window._adminRoles) return;
-            delete window._adminRoles[btn.dataset.email];
-            await _saveAdminRolesUI();
-            renderAdminRolesTable();
+            const { email } = btn.dataset;
+            if (!confirm(`Send a password reset email to ${email}?`)) return;
+            btn.disabled = true;
+            try {
+                await sendPasswordReset(email);
+                _showAdminRolesStatus(`✓ Reset email sent to ${email}`, '#2e7d32');
+            } catch (err) {
+                _showAdminRolesStatus('⚠️ ' + err.message, '#c62828');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    // Delete — removes from Supabase Auth AND portal roles map
+    wrap.querySelectorAll('.delete-user-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const { userid, email } = btn.dataset;
+            if (!confirm(`Permanently delete the admin account for ${email}? This cannot be undone.`)) return;
+            btn.disabled = true;
+            try {
+                await callAdminUsers('delete', { userId: userid });
+                if (window._adminRoles) delete window._adminRoles[email];
+                await saveAdminRoles(window._adminRoles || {});
+                _showAdminRolesStatus(`✓ Deleted ${email}`, '#2e7d32');
+                _loadAdminUsersTable();
+            } catch (err) {
+                _showAdminRolesStatus('⚠️ ' + err.message, '#c62828');
+                btn.disabled = false;
+            }
         });
     });
 }
 
-async function _saveAdminRolesUI() {
-    const statusEl = document.getElementById('adminRolesStatus');
-    try {
-        await saveAdminRoles(window._adminRoles || {});
-        if (statusEl) {
-            statusEl.textContent = '✓ Saved!';
-            statusEl.style.color = '#2e7d32';
-            setTimeout(() => { statusEl.textContent = ''; }, 3000);
-        }
-    } catch (err) {
-        if (statusEl) {
-            statusEl.textContent = '⚠️ ' + err.message;
-            statusEl.style.color = '#c62828';
-        }
-    }
+function _showAdminRolesStatus(msg, color) {
+    const el = document.getElementById('adminRolesStatus');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color  = color;
+    setTimeout(() => { el.textContent = ''; }, 4000);
 }
 
 // ============================================================
