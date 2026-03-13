@@ -43,16 +43,56 @@ async function attemptLogin() {
 }
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
+    stopInactivityTimer();
     await logoutAdmin();
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('dashboard').classList.add('hidden');
     document.getElementById('adminPassword').value = '';
     document.getElementById('adminEmail').value    = '';
+    document.getElementById('loginError').classList.add('hidden');
 });
+
+// ============================================================
+// INACTIVITY TIMEOUT
+// ============================================================
+const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+let _inactivityTimer = null;
+
+function _resetInactivityTimer() {
+    clearTimeout(_inactivityTimer);
+    _inactivityTimer = setTimeout(_signOutInactive, INACTIVITY_MS);
+}
+
+async function _signOutInactive() {
+    stopInactivityTimer();
+    await logoutAdmin();
+    document.getElementById('dashboard').classList.add('hidden');
+    document.getElementById('adminPassword').value = '';
+    document.getElementById('adminEmail').value    = '';
+    const errEl = document.getElementById('loginError');
+    errEl.textContent = 'You were signed out due to inactivity.';
+    errEl.classList.remove('hidden');
+    document.getElementById('loginScreen').classList.remove('hidden');
+}
+
+function startInactivityTimer() {
+    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt =>
+        document.addEventListener(evt, _resetInactivityTimer, { passive: true })
+    );
+    _resetInactivityTimer();
+}
+
+function stopInactivityTimer() {
+    clearTimeout(_inactivityTimer);
+    ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt =>
+        document.removeEventListener(evt, _resetInactivityTimer)
+    );
+}
 
 function showDashboard() {
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('dashboard').classList.remove('hidden');
+    startInactivityTimer();
     initDashboard();
 }
 
