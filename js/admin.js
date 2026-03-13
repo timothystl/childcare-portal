@@ -3964,8 +3964,9 @@ function applyRoleRestrictions() {
         document.getElementById('payrollSection')?.classList.add('hidden');
         document.getElementById('staffRosterToggleWrap')?.classList.add('hidden');
         document.getElementById('staffRosterSection')?.classList.add('hidden');
-        // Settings tab: hide the admin roles manager so restricted users can't escalate
-        document.getElementById('adminRolesSection')?.classList.add('hidden');
+        // Settings tab: show only Registration Window Override
+        ['closedDaysSection', 'ratesSection', 'ratiosSection', 'offerLinksSection', 'adminRolesSection']
+            .forEach(id => document.getElementById(id)?.classList.add('hidden'));
     }
 
     if (currentAdminRole === 'staff') {
