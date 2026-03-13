@@ -107,10 +107,7 @@ async function applySessionRole() {
         window._adminSession = session;
         const email    = (session?.user?.email || '').toLowerCase().trim();
         const hasRules = Object.keys(roles).length > 0;
-        // Temporary: ensure these accounts always have full access while lockout is resolved
-        const _tempFullAccess = ['dinger@timothystl.org', 'mdo@timothystl.org'];
-        currentAdminRole = _tempFullAccess.includes(email) ? 'full'
-            : roles[email] || (hasRules ? 'staff' : 'full');
+        currentAdminRole = roles[email] || (hasRules ? 'staff' : 'full');
         // Show logged-in email + role in header
         const displayEl = document.getElementById('currentUserDisplay');
         if (displayEl) {
@@ -136,6 +133,19 @@ function _resetRoleRestrictions() {
     document.querySelectorAll('#adminTabs .admin-tab-btn')
         .forEach(btn => { btn.style.display = ''; });
 }
+
+// One-time migration: ensure primary admin accounts exist in roles map
+(async () => {
+    try {
+        const roles = await loadAdminRoles();
+        const primaryAdmins = ['dinger@timothystl.org', 'mdo@timothystl.org'];
+        const missing = primaryAdmins.filter(e => !(e in roles));
+        if (missing.length > 0) {
+            missing.forEach(e => { roles[e] = 'full'; });
+            await saveAdminRoles(roles);
+        }
+    } catch (_) { /* non-fatal */ }
+})();
 
 // Auto-restore session if already logged in
 (async () => {
