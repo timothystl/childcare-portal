@@ -1109,6 +1109,33 @@ async function saveStaffAvailability(availMap) {
 }
 
 // ============================================================
+// ADMIN ROLES  (access control)
+// ============================================================
+async function loadAdminRoles() {
+    if (!sbClient) return {};
+    try {
+        const { data, error } = await sbClient
+            .from('settings')
+            .select('value')
+            .eq('key', 'admin_roles')
+            .maybeSingle();
+        if (error || !data) return {};
+        const raw = data.value;
+        return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+async function saveAdminRoles(rolesMap) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'admin_roles', value: rolesMap }, { onConflict: 'key' });
+    if (error) throw error;
+}
+
+// ============================================================
 // WAITLIST APPLICATIONS
 // ============================================================
 // SQL — run once in Supabase SQL Editor to create the table:

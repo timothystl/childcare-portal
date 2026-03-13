@@ -2269,6 +2269,21 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 
 /* ============================================================
+   ADMIN ROLES  (settings section)
+   ============================================================ */
+.add-role-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+.btn-sm {
+    padding: 3px 10px;
+    font-size: .82em;
+}
+
+/* ============================================================
    AUTO-FILL SCHEDULE TABLE
    ============================================================ */
 .autofill-table { width: 100%; }

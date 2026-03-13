@@ -547,6 +547,24 @@
                 </div>
             </section>
 
+            <!-- Admin Access -->
+            <section class="admin-section collapsible-section" id="adminRolesSection">
+                <h2>🔐 Admin Access</h2>
+                <p class="section-desc">Map admin login emails to access levels. Emails not listed default to Full Access. Changes take effect on the next login.</p>
+                <div id="adminRolesTableWrap">
+                    <p class="empty-hint">No access rules configured — all admins have full access.</p>
+                </div>
+                <div class="add-role-row">
+                    <input type="email" id="newRoleEmail" placeholder="email@example.com" class="family-search-input" style="flex:1;min-width:180px">
+                    <select id="newRoleLevel" class="family-search-input">
+                        <option value="full">Full Access</option>
+                        <option value="restricted">Restricted — Schedule Planner only</option>
+                    </select>
+                    <button id="addAdminRoleBtn" class="btn-primary">Add</button>
+                </div>
+                <span id="adminRolesStatus" class="rates-status" style="display:block;margin-top:6px"></span>
+            </section>
+
         </div><!-- /#tab-settings -->
 
         <!-- ── Tab: Reports ───────────────────────────────────── -->
@@ -699,7 +717,7 @@
             </section>
 
             <!-- Staff Roster toggle button -->
-            <div style="padding:0 24px 8px">
+            <div id="staffRosterToggleWrap" style="padding:0 24px 8px">
                 <button id="toggleStaffRosterBtn" class="btn-ghost">👥 Show Staff Roster</button>
             </div>
 
