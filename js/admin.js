@@ -4102,7 +4102,13 @@ async function _loadAdminUsersTable() {
     if (!wrap) return;
     wrap.innerHTML = '<p class="empty-hint">Loading users…</p>';
     try {
-        const result = await callAdminUsers('list', {});
+        // Load both auth users and current roles together so the table
+        // always reflects the saved state regardless of timing
+        const [result, roles] = await Promise.all([
+            callAdminUsers('list', {}),
+            loadAdminRoles(),
+        ]);
+        window._adminRoles = roles;
         _renderAdminUsersTable(result.users || []);
     } catch (err) {
         wrap.innerHTML = `<p class="empty-hint">⚠️ Could not load users: ${err.message}</p>`;
