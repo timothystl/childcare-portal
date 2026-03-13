@@ -1119,24 +1119,13 @@ async function loadAdminRoles() {
             .select('value')
             .eq('key', 'admin_roles')
             .maybeSingle();
-        if (error) {
-            console.error('[loadAdminRoles] DB error:', error);
-            return {};
-        }
-        if (!data) {
-            console.warn('[loadAdminRoles] No admin_roles row found in settings table');
-            return {};
-        }
+        if (error || !data) return {};
         const raw = data.value;
         if (typeof raw === 'string') {
-            // Handle case where value was stored as a JSON string rather than native jsonb
             try { return JSON.parse(raw); } catch (_) { return {}; }
         }
-        const result = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
-        console.log('[loadAdminRoles] loaded:', JSON.stringify(result));
-        return result;
-    } catch (err) {
-        console.error('[loadAdminRoles] exception:', err);
+        return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+    } catch (_) {
         return {};
     }
 }
