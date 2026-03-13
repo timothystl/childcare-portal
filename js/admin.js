@@ -93,7 +93,7 @@ async function showDashboard() {
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('dashboard').classList.remove('hidden');
     startInactivityTimer();
-    initDashboard();        // one-time setup (event listeners, etc.)
+    await initDashboard();    // wait for full setup before applying restrictions
     await applySessionRole(); // runs on every login — fresh roles + restrictions
 }
 
@@ -124,10 +124,14 @@ async function applySessionRole() {
 // Undo any restrictions from a previous session before applying new ones.
 function _resetRoleRestrictions() {
     ['logHoursSection', 'payrollSection', 'staffRosterToggleWrap',
-     'staffRosterSection', 'adminRolesSection', 'exportXlsxBtn']
-        .forEach(id => document.getElementById(id)?.classList.remove('hidden'));
+     'staffRosterSection', 'adminRolesSection', 'exportXlsxBtn',
+     'closedDaysSection', 'ratesSection', 'ratiosSection', 'offerLinksSection']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = '';
+        });
     document.querySelectorAll('#adminTabs .admin-tab-btn')
-        .forEach(btn => btn.classList.remove('hidden'));
+        .forEach(btn => { btn.style.display = ''; });
 }
 
 // Auto-restore session if already logged in
@@ -4023,24 +4027,30 @@ const ROLE_LABELS = {
     staff:      'Staff — Classroom Roster (read-only)',
 };
 
+function _hide(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+}
+
 function applyRoleRestrictions() {
     if (currentAdminRole === 'full') return;
 
     if (currentAdminRole === 'restricted') {
         // Staffing tab: hide everything except the schedule planner
-        document.getElementById('logHoursSection')?.classList.add('hidden');
-        document.getElementById('payrollSection')?.classList.add('hidden');
-        document.getElementById('staffRosterToggleWrap')?.classList.add('hidden');
-        document.getElementById('staffRosterSection')?.classList.add('hidden');
+        _hide('logHoursSection');
+        _hide('payrollSection');
+        _hide('staffRosterToggleWrap');
+        _hide('staffRosterSection');
         // Settings tab: show only Registration Window Override
-        ['closedDaysSection', 'ratesSection', 'ratiosSection', 'offerLinksSection', 'adminRolesSection']
-            .forEach(id => document.getElementById(id)?.classList.add('hidden'));
+        ['closedDaysSection', 'ratesSection', 'ratiosSection',
+         'offerLinksSection', 'adminRolesSection']
+            .forEach(id => _hide(id));
     }
 
     if (currentAdminRole === 'staff') {
         // Hide all tabs except Classrooms and force it active
         document.querySelectorAll('#adminTabs .admin-tab-btn').forEach(btn => {
-            if (btn.dataset.tab !== 'daily') btn.classList.add('hidden');
+            if (btn.dataset.tab !== 'daily') btn.style.display = 'none';
         });
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
         document.getElementById('tab-daily')?.classList.remove('hidden');
@@ -4048,8 +4058,7 @@ function applyRoleRestrictions() {
             b.classList.toggle('active', b.dataset.tab === 'daily');
         });
         localStorage.setItem('adminActiveTab', 'daily');
-        // Hide global export button — staff shouldn't bulk-export data
-        document.getElementById('exportXlsxBtn')?.classList.add('hidden');
+        _hide('exportXlsxBtn');
     }
 }
 
