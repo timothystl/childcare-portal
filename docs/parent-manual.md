@@ -62,8 +62,10 @@ Once you have selected at least one child, the calendar becomes active.
 
 **Selecting days:**
 
-- Click any available date to select it. It will turn blue.
-- Click it again to deselect it.
+- Click any available date. A small popup appears asking whether you want **Full Day** or **Half Day** — the price for each option is shown in the popup. Click your choice to confirm the selection. The day turns blue.
+- If all of your selected children are in a full-day-only room, the Half Day option will not appear.
+- If you are registering more than one child at the same time, the popup shows the combined price for all selected children.
+- Click a blue (already selected) date to remove it from your selection.
 - Use the month navigation to move forward and back in the calendar.
 
 **Tips:**
