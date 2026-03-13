@@ -71,6 +71,15 @@
     flex-wrap: wrap;
     align-items: center;
 }
+.current-user-display {
+    font-size: .82em;
+    color: #666;
+    background: #f1f5f9;
+    border: 1px solid #dde3ea;
+    border-radius: 6px;
+    padding: 4px 10px;
+    white-space: nowrap;
+}
 
 .btn-secondary {
     background: #fff;
