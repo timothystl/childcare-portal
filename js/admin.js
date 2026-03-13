@@ -3952,6 +3952,7 @@ async function onSaveStaffMember() {
 const ROLE_LABELS = {
     full:       'Full Access',
     restricted: 'Restricted — Schedule Planner only',
+    staff:      'Staff — Classroom Roster (read-only)',
 };
 
 function applyRoleRestrictions() {
@@ -3965,6 +3966,21 @@ function applyRoleRestrictions() {
         document.getElementById('staffRosterSection')?.classList.add('hidden');
         // Settings tab: hide the admin roles manager so restricted users can't escalate
         document.getElementById('adminRolesSection')?.classList.add('hidden');
+    }
+
+    if (currentAdminRole === 'staff') {
+        // Hide all tabs except Classrooms and force it active
+        document.querySelectorAll('#adminTabs .admin-tab-btn').forEach(btn => {
+            if (btn.dataset.tab !== 'daily') btn.classList.add('hidden');
+        });
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+        document.getElementById('tab-daily')?.classList.remove('hidden');
+        document.querySelectorAll('#adminTabs .admin-tab-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.tab === 'daily');
+        });
+        localStorage.setItem('adminActiveTab', 'daily');
+        // Hide global export button — staff shouldn't bulk-export data
+        document.getElementById('exportXlsxBtn')?.classList.add('hidden');
     }
 }
 
