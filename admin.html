@@ -772,21 +772,33 @@
                     </div>
                     <div class="staff-form-row">
                         <div class="fm-field">
-                            <label>Available Days</label>
-                            <div class="avail-days-group">
-                                <label><input type="checkbox" class="sfAvailDay" value="Mon"> Mon</label>
-                                <label><input type="checkbox" class="sfAvailDay" value="Tue"> Tue</label>
-                                <label><input type="checkbox" class="sfAvailDay" value="Wed"> Wed</label>
-                                <label><input type="checkbox" class="sfAvailDay" value="Thu"> Thu</label>
-                                <label><input type="checkbox" class="sfAvailDay" value="Fri"> Fri</label>
-                            </div>
-                        </div>
-                        <div class="fm-field">
-                            <label>Available Shifts</label>
-                            <div class="avail-days-group">
-                                <label><input type="checkbox" class="sfAvailPeriod" value="am"> AM</label>
-                                <label><input type="checkbox" class="sfAvailPeriod" value="pm"> PM</label>
-                            </div>
+                            <label>Shift Availability by Day</label>
+                            <table class="shift-pref-grid">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <th>AM</th>
+                                        <td><input type="checkbox" class="sfDayPeriod" data-day="Mon" data-period="am"></td>
+                                        <td><input type="checkbox" class="sfDayPeriod" data-day="Tue" data-period="am"></td>
+                                        <td><input type="checkbox" class="sfDayPeriod" data-day="Wed" data-period="am"></td>
+                                        <td><input type="checkbox" class="sfDayPeriod" data-day="Thu" data-period="am"></td>
+                                        <td><input type="checkbox" class="sfDayPeriod" data-day="Fri" data-period="am"></td>
+                                    </tr>
+                                    <tr>
+                                        <th>PM</th>
+                                        <td><input type="checkbox" class="sfDayPeriod" data-day="Mon" data-period="pm"></td>
+                                        <td><input type="checkbox" class="sfDayPeriod" data-day="Tue" data-period="pm"></td>
+                                        <td><input type="checkbox" class="sfDayPeriod" data-day="Wed" data-period="pm"></td>
+                                        <td><input type="checkbox" class="sfDayPeriod" data-day="Thu" data-period="pm"></td>
+                                        <td><input type="checkbox" class="sfDayPeriod" data-day="Fri" data-period="pm"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                         <div class="fm-field">
                             <label>Max Hrs/Week</label>

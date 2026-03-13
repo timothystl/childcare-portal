@@ -1775,8 +1775,10 @@ async function autoFillStaffSchedule() {
         }
 
         const counts = _buildShiftCounts(weekDates);
-        // Exclude administrators from auto-assignment
-        const active = allStaffData.filter(s => s.active && !/^admin(istrator)?$/i.test((s.role || '').trim()));
+        // Exclude administrators, directors, and assistant directors from auto-assignment
+        const active = allStaffData.filter(s => s.active &&
+            !/^admin(istrator)?$/i.test((s.role || '').trim()) &&
+            !/^(director|asst\.?\s*director)$/i.test((s.role || '').trim()));
 
         // Track weekly hours and days used per staff
         const weeklyHours = new Map(active.map(s => [s.id, 0]));
@@ -1799,20 +1801,24 @@ async function autoFillStaffSchedule() {
                 const pmNeed  = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
 
                 // Candidates: active staff available today and assigned to this room (or float)
-                // Also respect AM/PM period availability if set
                 const candidates = active.filter(s => {
-                    const avail   = staffAvailability[s.id];
-                    const days    = avail?.days    ?? ['Mon','Tue','Wed','Thu','Fri'];
-                    return days.includes(dayName) &&
+                    const avail = staffAvailability[s.id];
+                    // Determine available days from dayPeriods keys or legacy days array
+                    const availDays = avail?.dayPeriods
+                        ? Object.keys(avail.dayPeriods).filter(d => avail.dayPeriods[d]?.length > 0)
+                        : (avail?.days ?? ['Mon','Tue','Wed','Thu','Fri']);
+                    return availDays.includes(dayName) &&
                         (s.room_id === room.id || !s.room_id); // room match or float
                 });
 
                 // Sort by hours used ascending so we spread load evenly
                 candidates.sort((a, b) => (weeklyHours.get(a.id) || 0) - (weeklyHours.get(b.id) || 0));
 
-                // Assign AM — respect AM period availability
+                // Assign AM — respect per-day AM availability
                 const amCandidates = candidates.filter(s => {
-                    const periods = staffAvailability[s.id]?.periods;
+                    const avail = staffAvailability[s.id];
+                    if (avail?.dayPeriods) return avail.dayPeriods[dayName]?.includes('am') ?? false;
+                    const periods = avail?.periods;
                     return !periods || periods.includes('am');
                 });
                 let amFilled = 0;
@@ -1831,9 +1837,11 @@ async function autoFillStaffSchedule() {
                 }
 
                 // Assign PM (prefer staff already on AM shift first, then others)
-                // Respect PM period availability
+                // Respect per-day PM availability
                 const pmAvail = candidates.filter(s => {
-                    const periods = staffAvailability[s.id]?.periods;
+                    const avail = staffAvailability[s.id];
+                    if (avail?.dayPeriods) return avail.dayPeriods[dayName]?.includes('pm') ?? false;
+                    const periods = avail?.periods;
                     return !periods || periods.includes('pm');
                 });
                 const pmCandidates = [
@@ -3831,13 +3839,18 @@ function openStaffForm(staff = null) {
 
     // Availability
     const avail = staff ? (staffAvailability[staff.id] || {}) : {};
-    const availDays    = avail.days    || ['Mon','Tue','Wed','Thu','Fri'];
-    const availPeriods = avail.periods || ['am','pm'];
-    document.querySelectorAll('.sfAvailDay').forEach(cb => {
-        cb.checked = availDays.includes(cb.value);
-    });
-    document.querySelectorAll('.sfAvailPeriod').forEach(cb => {
-        cb.checked = availPeriods.includes(cb.value);
+    // Build dayPeriods — support old format (days + periods) for backward compat
+    let dayPeriods = avail.dayPeriods;
+    if (!dayPeriods) {
+        const days    = avail.days    || ['Mon','Tue','Wed','Thu','Fri'];
+        const periods = avail.periods || ['am','pm'];
+        dayPeriods = {};
+        days.forEach(d => { dayPeriods[d] = [...periods]; });
+    }
+    document.querySelectorAll('.sfDayPeriod').forEach(cb => {
+        const day    = cb.dataset.day;
+        const period = cb.dataset.period;
+        cb.checked = !!(dayPeriods[day] && dayPeriods[day].includes(period));
     });
     document.getElementById('sfMaxHours').value = avail.maxHours != null ? avail.maxHours : 40;
     document.getElementById('sfMaxDays').value  = avail.maxDays  != null ? avail.maxDays  : 5;
@@ -3874,10 +3887,17 @@ async function onSaveStaffMember() {
     const payType = document.getElementById('sfPayType').value;
 
     // Capture availability before closing the form
-    const availDays    = [...document.querySelectorAll('.sfAvailDay:checked')].map(cb => cb.value);
-    const availPeriods = [...document.querySelectorAll('.sfAvailPeriod:checked')].map(cb => cb.value);
-    const maxHours     = parseFloat(document.getElementById('sfMaxHours').value) || 40;
-    const maxDays      = parseInt(document.getElementById('sfMaxDays').value, 10) || 5;
+    const dayPeriods = {};
+    document.querySelectorAll('.sfDayPeriod').forEach(cb => {
+        if (cb.checked) {
+            const day    = cb.dataset.day;
+            const period = cb.dataset.period;
+            if (!dayPeriods[day]) dayPeriods[day] = [];
+            dayPeriods[day].push(period);
+        }
+    });
+    const maxHours = parseFloat(document.getElementById('sfMaxHours').value) || 40;
+    const maxDays  = parseInt(document.getElementById('sfMaxDays').value, 10) || 5;
     const savingId     = editingStaffId;
 
     try {
@@ -3902,7 +3922,7 @@ async function onSaveStaffMember() {
             if (typeof staffAvailability !== 'object' || Array.isArray(staffAvailability) || staffAvailability === null) {
                 staffAvailability = {};
             }
-            staffAvailability[staffId] = { days: availDays, periods: availPeriods, maxHours, maxDays };
+            staffAvailability[staffId] = { dayPeriods, maxHours, maxDays };
             saveStaffAvailability(staffAvailability).catch(console.error);
         }
         loadStaffList();

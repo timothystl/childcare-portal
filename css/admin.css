@@ -2239,6 +2239,36 @@ tr.pending-approval:hover { background: #fef3c7; }
 }
 
 /* ============================================================
+   SHIFT PREFERENCE GRID  (staff form)
+   ============================================================ */
+.shift-pref-grid {
+    border-collapse: collapse;
+    margin-top: 4px;
+    font-size: .88em;
+}
+.shift-pref-grid th,
+.shift-pref-grid td {
+    padding: 3px 8px;
+    text-align: center;
+}
+.shift-pref-grid thead th {
+    font-weight: 600;
+    color: #555;
+    border-bottom: 1px solid #ddd;
+}
+.shift-pref-grid tbody th {
+    font-weight: 600;
+    color: #666;
+    text-align: left;
+    padding-right: 10px;
+}
+.shift-pref-grid tbody td input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
+
+/* ============================================================
    AUTO-FILL SCHEDULE TABLE
    ============================================================ */
 .autofill-table { width: 100%; }
