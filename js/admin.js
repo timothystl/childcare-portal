@@ -108,6 +108,11 @@ async function applySessionRole() {
         const email    = (session?.user?.email || '').toLowerCase().trim();
         const hasRules = Object.keys(roles).length > 0;
         currentAdminRole = roles[email] || (hasRules ? 'staff' : 'full');
+        console.log('[applySessionRole] email:', JSON.stringify(email),
+            '| roles keys:', JSON.stringify(Object.keys(roles)),
+            '| roles[email]:', JSON.stringify(roles[email]),
+            '| hasRules:', hasRules,
+            '| result:', currentAdminRole);
         // Show logged-in email + role in header
         const displayEl = document.getElementById('currentUserDisplay');
         if (displayEl) {
