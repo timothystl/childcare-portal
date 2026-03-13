@@ -550,18 +550,20 @@
             <!-- Admin Access -->
             <section class="admin-section collapsible-section" id="adminRolesSection">
                 <h2>🔐 Admin Access</h2>
-                <p class="section-desc">Map admin login emails to access levels. Emails not listed default to Full Access. Changes take effect on the next login.</p>
+                <p class="section-desc">Manage admin login accounts and their access levels. Access role changes take effect on the next login.</p>
                 <div id="adminRolesTableWrap">
-                    <p class="empty-hint">No access rules configured — all admins have full access.</p>
+                    <p class="empty-hint">Loading…</p>
                 </div>
+                <p class="section-desc" style="margin-top:16px;font-weight:600;color:#444">Add Admin User</p>
                 <div class="add-role-row">
-                    <input type="email" id="newRoleEmail" placeholder="email@example.com" class="family-search-input" style="flex:1;min-width:180px">
+                    <input type="email" id="newRoleEmail" placeholder="email@example.com" class="family-search-input" style="flex:1;min-width:160px">
+                    <input type="password" id="newRolePassword" placeholder="Password (min 6 chars)" class="family-search-input" style="width:190px">
                     <select id="newRoleLevel" class="family-search-input">
                         <option value="full">Full Access</option>
                         <option value="restricted">Restricted — Schedule Planner only</option>
                         <option value="staff">Staff — Classroom Roster (read-only)</option>
                     </select>
-                    <button id="addAdminRoleBtn" class="btn-primary">Add</button>
+                    <button id="addAdminRoleBtn" class="btn-primary">Add User</button>
                 </div>
                 <span id="adminRolesStatus" class="rates-status" style="display:block;margin-top:6px"></span>
             </section>
