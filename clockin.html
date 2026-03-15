@@ -4,28 +4,46 @@
   <link rel="icon" type="image/png" href="/images/logo.png">
   <link rel="apple-touch-icon" href="/images/logo.png">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1c3160">
+  <meta name="theme-color" content="#01294A">
     <meta charset="UTF-8">
     <meta name="robots" content="noindex, nofollow">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>Staff Clock In / Out</title>
+    <!-- Fonts: Sunlit Neighborhood brand system -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
+        /* ── Sunlit Neighborhood — Variation B: Staff Clock-In ── */
         :root {
-            --navy:       #1c3160;
-            --navy-light: #264480;
-            --gold:       #f5c518;
-            --gold-pale:  #fdf3d0;
-            --cream:      #fdf8f0;
-            --border:     #e8e0d0;
-            --text:       #3d3530;
-            --text-muted: #7a7065;
+            --navy:       #01294A;
+            --navy-lt:    #013d6b;
+            --navy-dk:    #010f1a;
+            --sun:        #F5B731;
+            --sun-lt:     #FDE598;
+            --sun-pale:   #FFF8E1;
+            --green:      #5BAD8B;
+            --green-lt:   #C8EADC;
+            --green-pale: #EAF5EF;
+            --tang:       #E97D55;
+            --tang-pale:  #FDEEE8;
+            --cream:      #FDFAF0;
+            --linen:      #FAF7ED;
+            --warm-gray:  #F5F0E4;
+            --border:     #E8E0CC;
+            --text:       #2E2A22;
+            --text-muted: #7A6E5A;
+            --white:      #FFFFFF;
+
+            --font-head: 'Lora', Georgia, serif;
+            --font-body: 'Nunito', system-ui, sans-serif;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: var(--font-body);
             background: var(--navy);
             min-height: 100vh;
             display: flex;
@@ -34,24 +52,43 @@
             padding: 16px;
         }
 
+        /* Clocked-in state: green background */
+        body.clocked-in {
+            background: var(--green-pale);
+        }
+
         .card {
             background: var(--cream);
-            border-radius: 20px;
+            border-radius: 22px;
             padding: 32px 28px;
             width: 100%;
             max-width: 380px;
             box-shadow: 0 20px 60px rgba(0,0,0,.35);
             text-align: center;
-            border-top: 4px solid var(--gold);
+            border-top: 4px solid var(--sun);
         }
 
         .logo { font-size: 2.2em; margin-bottom: 4px; }
-        h1 { font-size: 1.3em; color: var(--navy); margin-bottom: 4px; font-weight: 700; }
-        .subtitle { color: var(--text-muted); font-size: .9em; margin-bottom: 28px; }
+        h1 {
+            font-size: 1.3em;
+            font-family: var(--font-head);
+            color: var(--navy);
+            margin-bottom: 4px;
+            font-weight: 700;
+        }
+        .subtitle { color: var(--text-muted); font-size: .9em; margin-bottom: 28px; font-family: var(--font-body); }
 
         /* PIN Screen */
         #pinScreen {}
-        .pin-label { font-size: .85em; color: var(--text-muted); margin-bottom: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+        .pin-label {
+            font-size: .85em;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            font-weight: 700;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            font-family: var(--font-body);
+        }
 
         .pin-display {
             display: flex;
@@ -75,11 +112,12 @@
             margin-bottom: 16px;
         }
         .num-btn {
-            background: #fff;
+            background: var(--white);
             border: 1.5px solid var(--border);
             border-radius: 14px;
             padding: 18px 10px;
             font-size: 1.5em;
+            font-family: var(--font-body);
             font-weight: 700;
             color: var(--text);
             cursor: pointer;
@@ -87,22 +125,34 @@
             -webkit-tap-highlight-color: transparent;
             user-select: none;
         }
-        .num-btn:active { background: var(--navy); color: #fff; border-color: var(--navy); transform: scale(.94); }
+        .num-btn:active { background: var(--navy); color: var(--white); border-color: var(--navy); transform: scale(.94); }
         .num-btn.del-btn { font-size: 1.1em; color: var(--text-muted); }
         .num-btn.zero-btn { grid-column: 2; }
 
         .pin-error {
-            color: #c62828;
+            color: var(--tang);
             font-size: .88em;
             min-height: 20px;
             margin-bottom: 6px;
+            font-family: var(--font-body);
         }
 
         /* Clock Screen */
         #clockScreen { display: none; }
 
+        /* Current time display */
+        .clock-time {
+            font-size: 2.2em;
+            font-family: var(--font-head);
+            color: var(--navy);
+            font-weight: 700;
+            margin-bottom: 4px;
+            letter-spacing: .02em;
+        }
+
         .welcome-name {
             font-size: 1.4em;
+            font-family: var(--font-head);
             font-weight: 700;
             color: var(--navy);
             margin-bottom: 2px;
@@ -111,39 +161,60 @@
             font-size: .88em;
             color: var(--text-muted);
             margin-bottom: 20px;
+            font-family: var(--font-body);
         }
 
         .date-label {
             font-size: .85em;
             color: var(--text-muted);
             margin-bottom: 14px;
+            font-family: var(--font-body);
         }
 
+        /* Clocked-in status box: green tint */
         .status-box {
-            background: var(--gold-pale);
+            background: var(--linen);
             border-radius: 14px;
             padding: 18px;
             margin-bottom: 22px;
             border: 1.5px solid var(--border);
         }
+        .status-box.is-clocked-in {
+            background: var(--green-pale);
+            border-color: var(--green-lt);
+        }
         .status-line {
             display: flex;
             justify-content: space-between;
             font-size: .9em;
+            font-family: var(--font-body);
             color: var(--text-muted);
             padding: 4px 0;
         }
         .status-line span:last-child { font-weight: 700; color: var(--text); }
-        .status-none { color: #aaa; font-style: italic; }
+        .status-none { color: var(--text-muted); font-style: italic; }
 
         .hours-total {
             margin-top: 10px;
             padding-top: 10px;
             border-top: 1px solid var(--border);
             font-size: 1em;
+            font-family: var(--font-head);
             font-weight: 700;
             color: var(--navy);
             text-align: right;
+        }
+
+        /* Room assignment badge */
+        .room-badge {
+            display: inline-block;
+            padding: 3px 12px;
+            border-radius: 999px;
+            font-size: .78em;
+            font-weight: 700;
+            font-family: var(--font-body);
+            letter-spacing: .06em;
+            margin-bottom: 16px;
         }
 
         .btn-clock {
@@ -151,8 +222,9 @@
             padding: 18px;
             border: none;
             border-radius: 16px;
-            font-size: 1.2em;
-            font-weight: 700;
+            font-size: 1em;
+            font-family: var(--font-body);
+            font-weight: 800;
             cursor: pointer;
             margin-bottom: 12px;
             transition: opacity .2s, transform .1s;
@@ -160,8 +232,12 @@
         }
         .btn-clock:active { transform: scale(.97); }
         .btn-clock:disabled { opacity: .5; cursor: not-allowed; }
-        .btn-in  { background: #2e7d32; color: #fff; }
-        .btn-out { background: var(--navy); color: #fff; }
+        /* Clock In — green per brand spec for staff */
+        .btn-in  { background: var(--green); color: var(--white); }
+        .btn-in:hover { background: #4a9678; }
+        /* Clock Out — tangerine per brand spec for danger/clock-out */
+        .btn-out { background: var(--tang); color: var(--white); }
+        .btn-out:hover { background: #c05a38; }
 
         .btn-signout {
             width: 100%;
@@ -170,21 +246,23 @@
             border-radius: 12px;
             color: var(--text-muted);
             font-size: 1em;
+            font-family: var(--font-body);
             font-weight: 600;
             cursor: pointer;
             padding: 14px;
             margin-top: 4px;
             transition: background .15s, border-color .15s;
         }
-        .btn-signout:active { background: var(--border); }
+        .btn-signout:active { background: var(--warm-gray); }
 
         .msg {
             font-size: .88em;
+            font-family: var(--font-body);
             min-height: 22px;
             margin-bottom: 8px;
         }
-        .msg-ok  { color: #2e7d32; }
-        .msg-err { color: #c62828; }
+        .msg-ok  { color: var(--green); }
+        .msg-err { color: var(--tang); }
 
         /* Loading spinner */
         .spinner {
