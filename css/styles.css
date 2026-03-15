@@ -66,14 +66,14 @@ a { color: var(--green); }
 }
 
 header {
-    background: var(--navy);
-    color: var(--white);
+    background: var(--green-lt);
+    color: var(--navy);
     border-bottom: 3px solid var(--sun);
     padding: 28px 36px 32px;
     text-align: center;
 }
-header h1 { font-size: 2em; margin-bottom: 6px; font-family: var(--font-head); color: var(--white); }
-header p  { color: rgba(255,255,255,0.75); font-size: 1.05em; }
+header h1 { font-size: 2em; margin-bottom: 6px; font-family: var(--font-head); color: var(--navy); }
+header p  { color: rgba(1,41,74,0.65); font-size: 1.05em; }
 .site-footer {
     text-align: center;
     padding: 18px 0 10px;
