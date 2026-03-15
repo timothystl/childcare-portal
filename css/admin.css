@@ -73,9 +73,9 @@
 }
 .current-user-display {
     font-size: .82em;
-    color: rgba(255,255,255,0.8);
-    background: rgba(255,255,255,0.1);
-    border: 1px solid rgba(255,255,255,0.25);
+    color: var(--navy);
+    background: rgba(1,41,74,0.08);
+    border: 1px solid rgba(1,41,74,0.2);
     border-radius: 6px;
     padding: 4px 10px;
     white-space: nowrap;
