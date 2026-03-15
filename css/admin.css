@@ -42,7 +42,7 @@
 }
 
 .admin-header {
-    background: var(--navy);
+    background: var(--green-lt);
     padding: 20px 32px;
     display: flex;
     justify-content: space-between;
@@ -55,8 +55,8 @@
     z-index: 100;
     box-shadow: var(--shadow-card);
 }
-.admin-header h1 { font-size: 1.4em; color: var(--white); font-family: var(--font-body); font-weight: 800; }
-.sub-label        { color: var(--sun); font-size: .88em; margin-top: 2px; font-weight: 600; }
+.admin-header h1 { font-size: 1.4em; color: var(--navy); font-family: var(--font-body); font-weight: 800; }
+.sub-label        { color: var(--green); font-size: .88em; margin-top: 2px; font-weight: 600; }
 
 /* Logo + title group on left side of admin header */
 .admin-header-left {
