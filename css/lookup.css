@@ -1,11 +1,13 @@
 /* ============================================================
    PARENT PORTAL — My Schedule Lookup
+   Sunlit Neighborhood — Variation B brand system
    ============================================================ */
 
 .lookup-body {
-    background: linear-gradient(135deg, #1d2f5e 0%, #3d627c 100%);
+    background: var(--navy);
     min-height: 100vh;
     padding: 24px 16px;
+    font-family: var(--font-body);
 }
 
 /* -------- Lookup Card -------- */
@@ -18,13 +20,14 @@
 }
 
 .lookup-card {
-    background: #fff;
-    border-radius: 16px;
+    background: var(--white);
+    border-radius: var(--radius-md);
     padding: 44px 40px;
     max-width: 440px;
     width: 100%;
     box-shadow: 0 16px 56px rgba(0,0,0,.22);
     text-align: center;
+    border: 1px solid var(--border);
 }
 
 .lookup-logo {
@@ -35,12 +38,13 @@
 .lookup-card h1 {
     font-size: 1.45em;
     font-weight: 700;
-    color: #1a202c;
+    font-family: var(--font-head);
+    color: var(--navy);
     margin-bottom: 6px;
 }
 
 .lookup-sub {
-    color: #718096;
+    color: var(--text-muted);
     font-size: .93em;
     margin-bottom: 24px;
 }
@@ -49,7 +53,7 @@
 .lookup-tabs {
     display: flex;
     border-radius: 10px;
-    background: #eef4f8;
+    background: var(--linen);
     padding: 4px;
     margin-bottom: 22px;
     gap: 4px;
@@ -59,9 +63,10 @@
     flex: 1;
     padding: 9px 0;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     background: transparent;
-    color: #3d627c;
+    color: var(--navy);
+    font-family: var(--font-body);
     font-weight: 600;
     font-size: .9em;
     cursor: pointer;
@@ -69,9 +74,10 @@
 }
 
 .lookup-tab.active {
-    background: #fff;
-    color: #2d4f68;
+    background: var(--white);
+    color: var(--navy);
     box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    font-weight: 800;
 }
 
 /* -------- Input section -------- */
@@ -79,11 +85,11 @@
 
 .lookup-hint {
     font-size: .8em;
-    color: #a0aec0;
+    color: var(--text-muted);
     margin-top: 6px;
     margin-bottom: 16px;
 }
-.lookup-hint a { color: #3d627c; text-decoration: none; }
+.lookup-hint a { color: var(--green); text-decoration: none; }
 .lookup-hint a:hover { text-decoration: underline; }
 
 .lookup-btn { width: 100%; margin-top: 8px; }
@@ -92,8 +98,8 @@
     margin-top: 20px;
     font-size: .82em;
 }
-.lookup-footer-links a { color: #a0aec0; text-decoration: none; }
-.lookup-footer-links a:hover { color: #3d627c; }
+.lookup-footer-links a { color: var(--text-muted); text-decoration: none; }
+.lookup-footer-links a:hover { color: var(--navy); }
 
 /* -------- Results Wrapper -------- */
 .lookup-results-wrap {
@@ -106,8 +112,8 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    background: rgba(255,255,255,.12);
-    border-radius: 14px;
+    background: rgba(255,255,255,.1);
+    border-radius: var(--radius-md);
     padding: 24px 28px;
     margin-bottom: 20px;
     gap: 16px;
@@ -116,7 +122,8 @@
 .lookup-results-header h1 {
     font-size: 1.3em;
     font-weight: 700;
-    color: #fff;
+    font-family: var(--font-head);
+    color: var(--white);
     margin: 0 0 4px;
 }
 
@@ -132,22 +139,23 @@
     flex-shrink: 0;
 }
 
-/* Override btn-ghost for dark purple header background */
+/* Override btn-ghost for dark navy header background */
 .lookup-header-actions .btn-ghost {
     color: rgba(255,255,255,.9);
     border-color: rgba(255,255,255,.5);
 }
 .lookup-header-actions .btn-ghost:hover {
-    color: #fff;
-    border-color: #fff;
+    color: var(--white);
+    border-color: var(--white);
     background: rgba(255,255,255,.12);
 }
 
 /* -------- Child Card -------- */
 .lookup-child-card {
-    background: #fff;
-    border-radius: 14px;
-    box-shadow: 0 4px 20px rgba(0,0,0,.12);
+    background: var(--white);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border);
     margin-bottom: 18px;
     overflow: hidden;
 }
@@ -157,8 +165,8 @@
     justify-content: space-between;
     align-items: center;
     padding: 18px 22px;
-    background: #f7f9ff;
-    border-bottom: 1px solid #e8edf5;
+    background: var(--linen);
+    border-bottom: 1px solid var(--border);
 }
 
 .lookup-child-info {
@@ -170,24 +178,25 @@
 .lookup-child-name {
     font-weight: 700;
     font-size: 1.05em;
-    color: #1a202c;
+    font-family: var(--font-head);
+    color: var(--navy);
 }
 
 .lookup-child-room {
     font-size: .82em;
-    color: #718096;
+    color: var(--text-muted);
 }
 
 .lookup-child-total {
     font-size: 1.2em;
     font-weight: 700;
-    color: #276749;
+    color: #1a5c3e;
 }
 
 /* -------- Month Block -------- */
 .lookup-month-block {
     padding: 16px 22px;
-    border-bottom: 1px solid #eef4f8;
+    border-bottom: 1px solid var(--warm-gray);
 }
 .lookup-month-block:last-of-type { border-bottom: none; }
 
@@ -202,7 +211,8 @@
 .lookup-month-label {
     font-weight: 700;
     font-size: .95em;
-    color: #2d3748;
+    color: var(--navy);
+    font-family: var(--font-head);
 }
 
 .lookup-month-meta {
@@ -213,16 +223,16 @@
 
 .lookup-tally {
     font-size: .78em;
-    color: #718096;
+    color: var(--text-muted);
     display: flex;
     gap: 6px;
 }
-.lookup-tally-full { color: #276749; font-weight: 600; }
-.lookup-tally-half { color: #c05621; font-weight: 600; }
+.lookup-tally-full { color: #1a5c3e; font-weight: 600; }
+.lookup-tally-half { color: #7a5a00; font-weight: 600; }
 
 .lookup-month-bill {
     font-weight: 700;
-    color: #276749;
+    color: #1a5c3e;
     font-size: .95em;
     white-space: nowrap;
 }
@@ -238,9 +248,9 @@
     display: inline-flex;
     flex-direction: column;
     align-items: center;
-    background: #e8f4fd;
-    border: 1.5px solid #bee3f8;
-    border-radius: 8px;
+    background: var(--linen);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
     padding: 5px 10px;
     min-width: 58px;
     font-size: .78em;
@@ -248,26 +258,26 @@
     line-height: 1.3;
 }
 .lookup-date-chip.lookup-half {
-    background: #fffbeb;
-    border-color: #fde68a;
+    background: var(--sun-pale);
+    border-color: var(--sun-lt);
 }
 
 .lookup-chip-dow {
     font-size: .75em;
-    color: #a0aec0;
+    color: var(--text-muted);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: .04em;
 }
 .lookup-chip-date {
     font-weight: 700;
-    color: #2b6cb0;
+    color: var(--navy);
 }
-.lookup-date-chip.lookup-half .lookup-chip-date { color: #92400e; }
+.lookup-date-chip.lookup-half .lookup-chip-date { color: #7a5a00; }
 
 .lookup-chip-type {
     font-size: .7em;
-    color: #718096;
+    color: var(--text-muted);
     font-weight: 600;
 }
 
@@ -277,22 +287,22 @@
     justify-content: space-between;
     align-items: center;
     padding: 14px 22px;
-    background: #f0fff4;
-    border-top: 2px solid #c6f6d5;
+    background: var(--green-pale);
+    border-top: 2px solid var(--green-lt);
     font-weight: 700;
 }
 .lookup-grand-label {
     font-size: .9em;
-    color: #276749;
+    color: #1a5c3e;
 }
 .lookup-grand-amount {
     font-size: 1.15em;
-    color: #276749;
+    color: #1a5c3e;
 }
 
 .lookup-no-dates {
     padding: 20px 22px;
-    color: #a0aec0;
+    color: var(--text-muted);
     font-size: .9em;
 }
 
@@ -317,17 +327,17 @@
     color: rgba(255,255,255,.85);
     text-decoration: underline;
 }
-.lookup-register-link:hover { color: #fff; }
+.lookup-register-link:hover { color: var(--white); }
 
 /* -------- Print -------- */
 @media print {
-    .lookup-body { background: #fff !important; }
-    .lookup-results-header { background: #f0f0f0 !important; }
-    .lookup-results-header h1 { color: #000 !important; }
-    .lookup-parent-email { color: #555 !important; }
+    .lookup-body { background: var(--white) !important; }
+    .lookup-results-header { background: var(--linen) !important; }
+    .lookup-results-header h1 { color: var(--navy) !important; }
+    .lookup-parent-email { color: var(--text-muted) !important; }
     .lookup-header-actions,
     .lookup-disclaimer { display: none !important; }
-    .lookup-child-card { box-shadow: none !important; border: 1px solid #ddd; }
+    .lookup-child-card { box-shadow: none !important; border: 1px solid var(--border); }
 }
 
 /* -------- Responsive -------- */
