@@ -53,7 +53,7 @@ body {
 
 a { color: var(--green); }
 
-.calendar-body { background: var(--green-lt); }
+.calendar-body { background: var(--navy); }
 
 /* ============================================================
    PORTAL LAYOUT
