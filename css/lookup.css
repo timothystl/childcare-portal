@@ -4,7 +4,7 @@
    ============================================================ */
 
 .lookup-body {
-    background: var(--linen);
+    background: var(--green-lt);
     min-height: 100vh;
     padding: 24px 16px;
     font-family: var(--font-body);
@@ -112,7 +112,7 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    background: rgba(255,255,255,.1);
+    background: var(--green);
     border-radius: var(--radius-md);
     padding: 24px 28px;
     margin-bottom: 20px;
@@ -332,7 +332,7 @@
 /* -------- Print -------- */
 @media print {
     .lookup-body { background: var(--white) !important; }
-    .lookup-results-header { background: var(--linen) !important; }
+    .lookup-results-header { background: var(--green-pale) !important; }
     .lookup-results-header h1 { color: var(--navy) !important; }
     .lookup-parent-email { color: var(--text-muted) !important; }
     .lookup-header-actions,
