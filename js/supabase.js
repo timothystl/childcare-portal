@@ -1138,6 +1138,33 @@ async function saveAdminRoles(rolesMap) {
     if (error) throw error;
 }
 
+// ============================================================
+// HISTORICAL PAYROLL RECORDS  (stored in settings table as JSON blob)
+// ============================================================
+// Shape: [{ id, label, total_paid, notes }, ...]
+async function fetchHistoricalPayroll() {
+    if (!sbClient) return [];
+    const { data } = await sbClient
+        .from('settings')
+        .select('value')
+        .eq('key', 'historical_payroll')
+        .maybeSingle();
+    const raw = data?.value;
+    if (!raw) return [];
+    if (typeof raw === 'string') {
+        try { return JSON.parse(raw); } catch { return []; }
+    }
+    return Array.isArray(raw) ? raw : [];
+}
+
+async function saveHistoricalPayroll(records) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'historical_payroll', value: records }, { onConflict: 'key' });
+    if (error) throw error;
+}
+
 async function sendPasswordReset(email) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient.auth.resetPasswordForEmail(email, {
