@@ -5102,7 +5102,7 @@ async function generateAttendanceRevenue() {
                   `<td class="report-num report-revenue ar-total-col"><strong>${fmtRev(moRevenue)}</strong></td>`
                 : '';
 
-            return `<tr>
+            return `<tr class="ar-editable-row" data-month="${mo}" style="cursor:pointer" title="Click to edit">
                         <td class="staff-date-cell">${label}</td>
                         ${cells}${totalCols}
                     </tr>`;
@@ -5151,7 +5151,8 @@ async function generateAttendanceRevenue() {
             <div class="ar-summary-meta">
                 <span class="ar-total-badge">$${Math.round(grandRevenue).toLocaleString('en-US')} total revenue</span>
                 <span class="ar-discount-badge ytd-discount-total">${discStr} in discounts</span>
-                <span class="ar-hint">Click a month row to view daily detail.</span>
+                <span class="ar-hint">Click a month row to edit its data.</span>
+                <button type="button" class="btn-secondary ar-add-month-btn" id="arAddMonthBtn">+ Add Month</button>
             </div>
             <div class="table-wrapper report-table-wrap">
                 <table class="report-table ar-summary-table" id="arSummaryTable">
@@ -5176,11 +5177,214 @@ async function generateAttendanceRevenue() {
                 </table>
             </div>`;
 
+        // Wire up click-to-edit on month rows
+        container.querySelectorAll('.ar-editable-row').forEach(row => {
+            row.addEventListener('click', () => _arStartEdit(row, arMap, rooms, showTotalCol));
+        });
+
+        // Wire up Add Month button
+        document.getElementById('arAddMonthBtn')?.addEventListener('click', () => {
+            _arShowAddMonthForm(container, rooms);
+        });
+
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error loading data: ${escHtml(err.message)}</p>`;
     }
 }
 
+
+// ── Inline Edit: click a month row to edit attendees + net billed per room ──
+
+function _arStartEdit(row, arMap, rooms, showTotalCol) {
+    // Prevent double-entry
+    if (row.classList.contains('ar-editing')) return;
+    row.classList.add('ar-editing');
+
+    const mo = row.dataset.month;
+    const fmtRev = v => v > 0 ? `$${Math.round(v).toLocaleString('en-US')}` : '—';
+
+    // Replace each room's two cells with inputs
+    const cells = row.querySelectorAll('td');
+    // cells[0] is the month label; then pairs of (attendees, netBilled) per room; then optional total pair
+    const inputs = []; // collect { roomId, attInput, revInput }
+    rooms.forEach((r, i) => {
+        const attTd = cells[1 + i * 2];
+        const revTd = cells[1 + i * 2 + 1];
+        const e     = arMap[mo]?.[r.id];
+        const att   = e?.attendees || 0;
+        const rev   = e?.netBilled || 0;
+
+        const attInput = document.createElement('input');
+        attInput.type = 'number';
+        attInput.min  = '0';
+        attInput.value = att;
+        attInput.className = 'ar-edit-input ar-edit-att';
+        attInput.title = `${r.label} – Attendees`;
+
+        const revInput = document.createElement('input');
+        revInput.type = 'number';
+        revInput.min  = '0';
+        revInput.step = '0.01';
+        revInput.value = rev > 0 ? rev.toFixed(2) : '0';
+        revInput.className = 'ar-edit-input ar-edit-rev';
+        revInput.title = `${r.label} – Net Billed`;
+
+        attTd.textContent = '';
+        attTd.appendChild(attInput);
+        revTd.textContent = '';
+        revTd.appendChild(revInput);
+
+        inputs.push({ roomId: r.id, attInput, revInput });
+    });
+
+    // Replace total columns (if shown) with a placeholder
+    if (showTotalCol) {
+        const totalAttTd = cells[1 + rooms.length * 2];
+        const totalRevTd = cells[1 + rooms.length * 2 + 1];
+        if (totalAttTd) totalAttTd.innerHTML = '<em>—</em>';
+        if (totalRevTd) totalRevTd.innerHTML = '<em>—</em>';
+    }
+
+    // Replace month label cell with save/cancel buttons
+    const labelTd = cells[0];
+    const [y, m] = mo.split('-').map(Number);
+    const label   = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+    labelTd.innerHTML = `
+        <span class="ar-edit-label">${escHtml(label)}</span>
+        <div class="ar-edit-actions">
+            <button type="button" class="btn-primary ar-save-btn" title="Save changes">Save</button>
+            <button type="button" class="btn-secondary ar-cancel-btn" title="Cancel editing">Cancel</button>
+        </div>`;
+
+    // Stop clicks on inputs/buttons from re-triggering row click
+    labelTd.addEventListener('click', e => e.stopPropagation());
+    inputs.forEach(({ attInput, revInput }) => {
+        attInput.addEventListener('click', e => e.stopPropagation());
+        revInput.addEventListener('click', e => e.stopPropagation());
+    });
+
+    // Cancel → re-generate
+    labelTd.querySelector('.ar-cancel-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        generateAttendanceRevenue();
+    });
+
+    // Save → upsert each room's billing_summary, then re-generate
+    labelTd.querySelector('.ar-save-btn').addEventListener('click', async e => {
+        e.stopPropagation();
+        const saveBtn = e.target;
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+
+        try {
+            const monthDate = `${mo}-01`; // e.g. "2026-03-01"
+            for (const { roomId, attInput, revInput } of inputs) {
+                const attendees = parseInt(attInput.value, 10) || 0;
+                const netBilled = parseFloat(revInput.value) || 0;
+                await upsertBillingSummary({
+                    month:      monthDate,
+                    room_id:    roomId,
+                    half_days:  null,
+                    full_days:  attendees,
+                    net_billed: netBilled,
+                    data_source: 'admin_edit',
+                });
+            }
+            await generateAttendanceRevenue();
+        } catch (err) {
+            alert('Error saving: ' + err.message);
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save';
+        }
+    });
+}
+
+// ── Add Month: show a form to add a new month of data ──
+
+function _arShowAddMonthForm(container, rooms) {
+    // Don't add twice
+    if (document.getElementById('arAddMonthForm')) return;
+
+    const roomInputs = rooms.map(r => `
+        <tr>
+            <td class="ar-add-room-label">${r.label}</td>
+            <td><input type="number" min="0" value="0" class="ar-edit-input ar-edit-att" data-room="${r.id}" data-field="attendees" title="Attendees"></td>
+            <td><input type="number" min="0" step="0.01" value="0" class="ar-edit-input ar-edit-rev" data-room="${r.id}" data-field="netBilled" title="Net Billed"></td>
+        </tr>
+    `).join('');
+
+    const formHtml = `
+        <div id="arAddMonthForm" class="ar-add-month-form">
+            <h3>Add New Month</h3>
+            <div class="ar-add-month-field">
+                <label for="arNewMonth">Month</label>
+                <input type="month" id="arNewMonth" required>
+            </div>
+            <table class="ar-add-month-table">
+                <thead>
+                    <tr>
+                        <th>Room</th>
+                        <th>Attendees</th>
+                        <th>Net Billed ($)</th>
+                    </tr>
+                </thead>
+                <tbody>${roomInputs}</tbody>
+            </table>
+            <div class="ar-add-month-actions">
+                <button type="button" class="btn-primary" id="arAddMonthSave">Save Month</button>
+                <button type="button" class="btn-secondary" id="arAddMonthCancel">Cancel</button>
+            </div>
+        </div>`;
+
+    container.insertAdjacentHTML('afterbegin', formHtml);
+
+    document.getElementById('arAddMonthCancel').addEventListener('click', () => {
+        document.getElementById('arAddMonthForm')?.remove();
+    });
+
+    document.getElementById('arAddMonthSave').addEventListener('click', async () => {
+        const monthVal = document.getElementById('arNewMonth')?.value;
+        if (!monthVal) { alert('Please select a month.'); return; }
+
+        const saveBtn = document.getElementById('arAddMonthSave');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+
+        try {
+            const monthDate = `${monthVal}-01`;
+            const form = document.getElementById('arAddMonthForm');
+            const attInputs = form.querySelectorAll('[data-field="attendees"]');
+            const revInputs = form.querySelectorAll('[data-field="netBilled"]');
+
+            for (let i = 0; i < attInputs.length; i++) {
+                const roomId    = attInputs[i].dataset.room;
+                const attendees = parseInt(attInputs[i].value, 10) || 0;
+                const netBilled = parseFloat(revInputs[i].value) || 0;
+                if (attendees === 0 && netBilled === 0) continue; // skip empty rooms
+                await upsertBillingSummary({
+                    month:      monthDate,
+                    room_id:    roomId,
+                    half_days:  null,
+                    full_days:  attendees,
+                    net_billed: netBilled,
+                    data_source: 'admin_entry',
+                });
+            }
+
+            // Update the date range to include the new month and regenerate
+            const newFrom = document.getElementById('arDateFrom');
+            const newTo   = document.getElementById('arDateTo');
+            if (newFrom && monthDate < newFrom.value) newFrom.value = monthDate;
+            if (newTo && monthDate > newTo.value) newTo.value = monthDate;
+
+            await generateAttendanceRevenue();
+        } catch (err) {
+            alert('Error saving month: ' + err.message);
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Month';
+        }
+    });
+}
 
 async function exportAttendanceRevenue() {
     const fromDate   = document.getElementById('arDateFrom')?.value;

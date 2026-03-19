@@ -616,6 +616,90 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .ar-avg-row td { font-style: italic; color: var(--text-muted); }
 
+/* Editable row hover */
+.ar-editable-row:hover { background: var(--sage-light, #e8f0e8); }
+.ar-editable-row.ar-editing { background: #fffbe6; }
+.ar-editable-row.ar-editing:hover { background: #fffbe6; }
+
+/* Inline edit inputs */
+.ar-edit-input {
+    width: 90px;
+    padding: 4px 6px;
+    font-size: 0.88em;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    text-align: right;
+}
+.ar-edit-input:focus {
+    border-color: var(--green);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.15);
+}
+.ar-edit-att { width: 70px; }
+.ar-edit-rev { width: 95px; }
+
+/* Edit mode label + action buttons */
+.ar-edit-label { display: block; font-weight: 600; margin-bottom: 4px; }
+.ar-edit-actions { display: flex; gap: 6px; }
+.ar-edit-actions .btn-primary,
+.ar-edit-actions .btn-secondary { font-size: 0.78em; padding: 3px 10px; }
+
+/* Add Month button in summary meta bar */
+.ar-add-month-btn {
+    font-size: 0.82em;
+    padding: 4px 12px;
+    margin-left: auto;
+}
+.ar-summary-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Add Month form */
+.ar-add-month-form {
+    background: #fffbe6;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+}
+.ar-add-month-form h3 {
+    margin: 0 0 12px;
+    font-size: 1em;
+}
+.ar-add-month-field {
+    margin-bottom: 12px;
+}
+.ar-add-month-field label {
+    font-weight: 600;
+    margin-right: 8px;
+}
+.ar-add-month-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 12px;
+}
+.ar-add-month-table th {
+    text-align: left;
+    font-size: 0.82em;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+}
+.ar-add-month-table td {
+    padding: 4px 8px;
+}
+.ar-add-room-label {
+    font-weight: 500;
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+.ar-add-month-actions {
+    display: flex;
+    gap: 8px;
+}
+
 /* Registration Window Override section */
 .override-row {
     display: flex;

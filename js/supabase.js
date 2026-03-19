@@ -1316,3 +1316,34 @@ async function fetchAttendanceSummary({ month, roomId } = {}) {
     if (error) throw error;
     return data || [];
 }
+
+// Upsert a billing_summary row (insert or update by month+room_id)
+async function upsertBillingSummary(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_summary')
+        .upsert({
+            month:       row.month,
+            room_id:     row.room_id,
+            half_days:   row.half_days ?? null,
+            full_days:   row.full_days ?? null,
+            subtotal:    row.subtotal ?? null,
+            discount:    row.discount ?? null,
+            net_billed:  row.net_billed,
+            data_source: row.data_source || 'admin_entry',
+        }, { onConflict: 'month,room_id' })
+        .select();
+    if (error) throw error;
+    return data;
+}
+
+// Delete a billing_summary row by month and room_id
+async function deleteBillingSummary(month, roomId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('billing_summary')
+        .delete()
+        .eq('month', month)
+        .eq('room_id', roomId);
+    if (error) throw error;
+}
