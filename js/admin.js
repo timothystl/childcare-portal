@@ -125,7 +125,7 @@ async function applySessionRole() {
 function _resetRoleRestrictions() {
     ['logHoursSection', 'payrollSection', 'staffRosterToggleWrap',
      'staffRosterSection', 'adminRolesSection', 'exportXlsxBtn',
-     'closedDaysSection', 'ratesSection', 'ratiosSection', 'offerLinksSection']
+     'closedDaysSection', 'ratesSection', 'ratiosSection', 'offerLinksSection', 'summerCampSection']
         .forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = '';
@@ -155,6 +155,7 @@ async function initDashboard() {
             loadClosureList(),
             loadRateSettings(),
             loadRatioSettings(),
+            loadSummerCampSetting(),
             loadOfferLinks().then(v => { window._globalOfferLinks = v; }),
         ]);
     } catch (err) {
@@ -175,6 +176,7 @@ async function initDashboard() {
     setupRoomCalendar();
     setupRates();
     setupRatios();
+    setupSummerCamp();
     setupOfferLinks();
     setupStaffScheduling();
     setupStaffRoster();
@@ -1478,6 +1480,7 @@ function _buildFamilyBillingData(monthVal) {
     const dmap      = getDiscountMap();
     const familyMap = new Map();
 
+    // First pass: collect each child's registration info per family key
     allRegistrations.forEach(reg => {
         const dates = (reg.registration_dates || []).filter(d =>
             !d.waitlisted && d.care_date && d.care_date.startsWith(monthVal));
@@ -1489,43 +1492,92 @@ function _buildFamilyBillingData(monthVal) {
                 parentName:  reg.parent_name,
                 parentEmail: reg.parent_email,
                 parentPhone: reg.parent_phone,
-                children: [],
+                regs: [],
             });
         }
-        const fam      = familyMap.get(key);
-        const room     = ROOMS.find(r => r.id === reg.room_id);
-        const discKey  = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
-        const disc     = dmap.get(discKey) || { type: 'none', value: 0 };
-        let fullDays = 0, halfDays = 0, subtotal = 0, changeFees = 0;
-        dates.forEach(d => {
-            const rate = d.day_type === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
-            subtotal += effectiveAdminRate(rate, disc.type, disc.value);
-            changeFees += Number(d.change_fee) || 0;
-            if (d.day_type === 'half') halfDays++; else fullDays++;
-        });
-
-        // Merge if child already present (multiple reg rows for same child + month)
-        const existing = fam.children.find(c => c.childName === reg.child_name);
-        if (existing) {
-            existing.fullDays   += fullDays;
-            existing.halfDays   += halfDays;
-            existing.subtotal   += subtotal;
-            existing.changeFees += changeFees;
-        } else {
-            fam.children.push({
-                childName: reg.child_name,
-                roomLabel: room?.label || reg.room_id,
-                fullDays,
-                halfDays,
-                subtotal,
-                changeFees,
-                discLabel: disc.type === 'staff'  ? 'Staff (free)' :
-                           disc.type === 'custom' ? `${disc.value}% off` : '—',
-            });
-        }
+        const room    = ROOMS.find(r => r.id === reg.room_id);
+        const discKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
+        const disc    = dmap.get(discKey) || { type: 'none', value: 0 };
+        familyMap.get(key).regs.push({ reg, room, disc, dates });
     });
 
-    return [...familyMap.values()].sort((a, b) => {
+    // Second pass: compute billing per family, applying sibling discount per day
+    const result = [];
+    for (const fam of familyMap.values()) {
+        const { regs } = fam;
+
+        // Build map: care_date → array of { childName, effRate, dayType }
+        // used to figure out which days have multiple siblings
+        const dateChildMap = new Map();
+        regs.forEach(({ reg, room, disc, dates }) => {
+            dates.forEach(d => {
+                const base    = d.day_type === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+                const effRate = effectiveAdminRate(base, disc.type, disc.value);
+                if (!dateChildMap.has(d.care_date)) dateChildMap.set(d.care_date, []);
+                dateChildMap.get(d.care_date).push({ childName: reg.child_name, effRate });
+            });
+        });
+
+        // For each shared date, identify which child (lowest rate) gets the $10 sibling discount
+        // Key: `${childName}:${care_date}` → discount amount
+        const siblingDiscMap = new Map();
+        for (const [date, children] of dateChildMap) {
+            if (children.length < 2) continue;
+            const sorted = [...children].sort((a, b) => b.effRate - a.effRate);
+            sorted.forEach((c, i) => {
+                if (i > 0) {
+                    const k = `${c.childName}:${date}`;
+                    siblingDiscMap.set(k, (siblingDiscMap.get(k) || 0) + Math.min(10, c.effRate));
+                }
+            });
+        }
+
+        // Now aggregate per-child totals with sibling discounts applied
+        const childMap = new Map();
+        regs.forEach(({ reg, room, disc, dates }) => {
+            let fullDays = 0, halfDays = 0, subtotal = 0, changeFees = 0, sibDiscount = 0;
+            dates.forEach(d => {
+                const base    = d.day_type === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+                const effRate = effectiveAdminRate(base, disc.type, disc.value);
+                const sib     = siblingDiscMap.get(`${reg.child_name}:${d.care_date}`) || 0;
+                subtotal   += Math.max(0, effRate - sib);
+                sibDiscount += sib;
+                changeFees  += Number(d.change_fee) || 0;
+                if (d.day_type === 'half') halfDays++; else fullDays++;
+            });
+
+            const existing = childMap.get(reg.child_name);
+            if (existing) {
+                existing.fullDays    += fullDays;
+                existing.halfDays    += halfDays;
+                existing.subtotal    += subtotal;
+                existing.changeFees  += changeFees;
+                existing.sibDiscount += sibDiscount;
+            } else {
+                const discLabel = disc.type === 'staff'  ? 'Staff (free)' :
+                                  disc.type === 'custom' ? `${disc.value}% off` : '—';
+                childMap.set(reg.child_name, {
+                    childName:   reg.child_name,
+                    roomLabel:   room?.label || reg.room_id,
+                    fullDays,
+                    halfDays,
+                    subtotal,
+                    changeFees,
+                    sibDiscount,
+                    discLabel,
+                });
+            }
+        });
+
+        result.push({
+            parentName:  fam.parentName,
+            parentEmail: fam.parentEmail,
+            parentPhone: fam.parentPhone,
+            children:    [...childMap.values()],
+        });
+    }
+
+    return result.sort((a, b) => {
         const la = (a.parentName || '').split(' ').pop().toLowerCase();
         const lb = (b.parentName || '').split(' ').pop().toLowerCase();
         return la.localeCompare(lb);
@@ -1558,6 +1610,13 @@ function generateFamilyBillingReport() {
                     <td class="report-num report-revenue" style="color:#92400e">+$${c.changeFees.toFixed(2)}</td>
                    </tr>`
                 : '';
+            const sibRow = c.sibDiscount > 0
+                ? `<tr class="billing-child-row" style="background:#f0fdf4">
+                    <td class="billing-indent" style="color:#166534;font-size:.85em" colspan="4">↳ Sibling discount applied</td>
+                    <td class="report-num" style="color:#166534">—</td>
+                    <td class="report-num report-revenue" style="color:#166534">−$${c.sibDiscount.toFixed(2)}</td>
+                   </tr>`
+                : '';
             return `<tr class="billing-child-row">
                 <td class="billing-indent">${escHtml(c.childName)}</td>
                 <td>${escHtml(c.roomLabel)}</td>
@@ -1565,7 +1624,7 @@ function generateFamilyBillingReport() {
                 <td class="report-num">${c.halfDays || '—'}</td>
                 <td class="report-num">${c.discLabel}</td>
                 <td class="report-num report-revenue">$${c.subtotal.toFixed(2)}</td>
-            </tr>${feeRow}`;
+            </tr>${sibRow}${feeRow}`;
         }).join('');
         return `
             <tr class="billing-family-row">
@@ -1614,17 +1673,19 @@ function exportFamilyBillingReport() {
     families.forEach(fam => {
         fam.children.forEach(c => {
             rows.push({
-                'Parent Name':   fam.parentName,
-                'Email':         fam.parentEmail,
-                'Phone':         fam.parentPhone,
-                'Child Name':    c.childName,
-                'Room':          c.roomLabel,
-                'Full Days':     c.fullDays,
-                'Half Days':     c.halfDays,
-                'Discount':      c.discLabel,
-                'Care Amount':   `$${c.subtotal.toFixed(2)}`,
-                'Change Fees':   c.changeFees > 0 ? `$${c.changeFees.toFixed(2)}` : '—',
-                'Total Due':     `$${(c.subtotal + (c.changeFees || 0)).toFixed(2)}`,
+                'Parent Name':      fam.parentName,
+                'Email':            fam.parentEmail,
+                'Phone':            fam.parentPhone,
+                'Child Name':       c.childName,
+                'Room':             c.roomLabel,
+                'Full Days':        c.fullDays,
+                'Half Days':        c.halfDays,
+                'Total Days':       (c.fullDays || 0) + (c.halfDays || 0),
+                'Discount':         c.discLabel,
+                'Sibling Discount': c.sibDiscount > 0 ? `-$${c.sibDiscount.toFixed(2)}` : '—',
+                'Care Amount':      `$${c.subtotal.toFixed(2)}`,
+                'Change Fees':      c.changeFees > 0 ? `$${c.changeFees.toFixed(2)}` : '—',
+                'Total Due':        `$${(c.subtotal + (c.changeFees || 0)).toFixed(2)}`,
             });
         });
     });
@@ -2219,6 +2280,45 @@ async function onSaveRatios() {
         btn.disabled    = false;
         btn.textContent = '💾 Save Ratios';
     }
+}
+
+// ============================================================
+// SUMMER CAMP VISIBILITY SETTING
+// ============================================================
+async function setupSummerCamp() {
+    const toggle   = document.getElementById('hideSummerCampToggle');
+    const btn      = document.getElementById('saveSummerCampBtn');
+    const statusEl = document.getElementById('summerCampStatus');
+    if (!toggle || !btn) return;
+
+    // Load current value
+    const summerRoom = ROOMS.find(r => r.id === 'summer');
+    toggle.checked = summerRoom?.hidden || false;
+
+    btn.addEventListener('click', async () => {
+        btn.disabled    = true;
+        btn.textContent = 'Saving…';
+        if (statusEl) statusEl.textContent = '';
+        try {
+            const hidden = toggle.checked;
+            await saveSummerCampSetting(hidden);
+            if (summerRoom) summerRoom.hidden = hidden;
+            if (statusEl) {
+                statusEl.textContent = '✓ Saved!';
+                statusEl.style.color = '#2e7d32';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+        } catch (err) {
+            if (statusEl) {
+                statusEl.textContent = '⚠️ ' + err.message;
+                statusEl.style.color = '#c62828';
+            }
+            console.error('setupSummerCamp:', err);
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = '💾 Save';
+        }
+    });
 }
 
 // ============================================================
@@ -3662,6 +3762,7 @@ function renderRatesTable() {
             <thead>
                 <tr>
                     <th>Room</th>
+                    <th>Age Range (months)<br><small>Min – Max (blank = no limit)</small></th>
                     <th>Full Day Rate ($)</th>
                     <th>Half Day Rate ($)</th>
                     <th>Weekly Full ($)<br><small>All 5 weekdays full</small></th>
@@ -3669,11 +3770,22 @@ function renderRatesTable() {
                 </tr>
             </thead>
             <tbody>
-                ${ROOMS.map(room => `
+                ${ROOMS.filter(r => r.id !== 'summer').map(room => `
                     <tr data-room-id="${room.id}">
                         <td class="rates-room-label">
                             <strong>${escHtml(room.label)}</strong>
                             <span class="rates-ages">${escHtml(room.ages)}</span>
+                        </td>
+                        <td>
+                            <div style="display:flex;gap:4px;align-items:center;">
+                                <input type="number" class="rate-input" data-field="ageMinMonths"
+                                    value="${room.ageMinMonths ?? ''}" min="0" step="1" placeholder="min"
+                                    style="width:58px;" title="Minimum age in months">
+                                <span>–</span>
+                                <input type="number" class="rate-input" data-field="ageMaxMonths"
+                                    value="${room.ageMaxMonths ?? ''}" min="0" step="1" placeholder="∞"
+                                    style="width:58px;" title="Max age in months (blank = no upper limit)">
+                            </div>
                         </td>
                         <td>
                             <input type="number" class="rate-input" data-field="fullDayRate"
@@ -3701,7 +3813,7 @@ function renderRatesTable() {
                 `).join('')}
             </tbody>
         </table>
-        <p class="rates-hint">💡 Weekly rates apply when a child books all 5 Mon–Fri days in a single week with the same day type. Leave blank to disable the discount for that room.</p>`;
+        <p class="rates-hint">💡 Age Range: changing these values updates which room children are auto-assigned to based on their date of birth. Weekly rates apply when a child books all 5 Mon–Fri days in a single week with the same day type.</p>`;
 }
 
 async function onSaveRates() {
@@ -3718,9 +3830,24 @@ async function onSaveRates() {
             const id = row.dataset.roomId;
             rates[id] = {};
             row.querySelectorAll('.rate-input[data-field]').forEach(input => {
-                const val = input.value.trim();
-                rates[id][input.dataset.field] = val === '' ? null : parseFloat(val);
+                const val   = input.value.trim();
+                const field = input.dataset.field;
+                // Age fields are integers; rate fields are floats
+                if (field === 'ageMinMonths' || field === 'ageMaxMonths') {
+                    rates[id][field] = val === '' ? null : parseInt(val, 10);
+                } else {
+                    rates[id][field] = val === '' ? null : parseFloat(val);
+                }
             });
+            // Regenerate the human-readable ages label from the saved range
+            const r = rates[id];
+            if (r.ageMinMonths != null || r.ageMaxMonths != null) {
+                const min = r.ageMinMonths ?? 0;
+                const max = r.ageMaxMonths;
+                rates[id].ages = max == null
+                    ? `${min}+ months`
+                    : `${min} – ${max + 1} months`;
+            }
         });
 
         await saveRateSettings(rates);
@@ -3729,10 +3856,13 @@ async function onSaveRates() {
         ROOMS.forEach(room => {
             const r = rates[room.id];
             if (!r) return;
-            if (r.fullDayRate   != null) room.fullDayRate   = r.fullDayRate;
-            if (r.halfDayRate   != null) room.halfDayRate   = r.halfDayRate;
+            if (r.fullDayRate    != null) room.fullDayRate    = r.fullDayRate;
+            if (r.halfDayRate    != null) room.halfDayRate    = r.halfDayRate;
             if (r.weeklyFullRate != null) room.weeklyFullRate = r.weeklyFullRate;
             if (r.weeklyHalfRate != null) room.weeklyHalfRate = r.weeklyHalfRate;
+            if (r.ageMinMonths   != null) room.ageMinMonths   = r.ageMinMonths;
+            if ('ageMaxMonths'   in r)    room.ageMaxMonths   = r.ageMaxMonths;
+            if (r.ages           != null) room.ages           = r.ages;
         });
         renderRatesTable();
 
@@ -4044,7 +4174,7 @@ function applyRoleRestrictions() {
         _hide('staffRosterSection');
         // Settings tab: show only Registration Window Override
         ['closedDaysSection', 'ratesSection', 'ratiosSection',
-         'offerLinksSection', 'adminRolesSection']
+         'offerLinksSection', 'adminRolesSection', 'summerCampSection']
             .forEach(id => _hide(id));
     }
 

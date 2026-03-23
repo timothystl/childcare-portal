@@ -13,6 +13,8 @@ const ROOMS = [
         id:             'bear',
         label:          '🐻 Bear Room',
         ages:           'Birth – 12 months',
+        ageMinMonths:   0,
+        ageMaxMonths:   11,
         capacity:       8,
         fullDayOnly:    true,
         fullDayRate:    80,
@@ -25,6 +27,8 @@ const ROOMS = [
         id:             'bee',
         label:          '🐝 Bee Room',
         ages:           '12 – 24 months',
+        ageMinMonths:   12,
+        ageMaxMonths:   23,
         capacity:       16,
         fullDayOnly:    false,
         fullDayRate:    75,
@@ -36,7 +40,23 @@ const ROOMS = [
     {
         id:             'turtle',
         label:          '🐢 Turtle Room',
-        ages:           '2 years',
+        ages:           '24 – 30 months',
+        ageMinMonths:   24,
+        ageMaxMonths:   29,
+        capacity:       11,
+        fullDayOnly:    false,
+        fullDayRate:    75,
+        halfDayRate:    45,
+        weeklyFullRate: null,
+        weeklyHalfRate: null,
+        staffRatio:     8,
+    },
+    {
+        id:             'goose',
+        label:          '🪿 Goose Room',
+        ages:           '30 – 36 months',
+        ageMinMonths:   30,
+        ageMaxMonths:   35,
         capacity:       11,
         fullDayOnly:    false,
         fullDayRate:    75,
@@ -48,7 +68,9 @@ const ROOMS = [
     {
         id:             'owl',
         label:          '🦉 Owl Room',
-        ages:           '3+ years',
+        ages:           '36+ months',
+        ageMinMonths:   36,
+        ageMaxMonths:   null,
         capacity:       11,
         fullDayOnly:    false,
         fullDayRate:    75,
@@ -61,6 +83,8 @@ const ROOMS = [
         id:             'summer',
         label:          '☀️ Summer Camp',
         ages:           '4–9 years',
+        ageMinMonths:   null,
+        ageMaxMonths:   null,
         capacity:       25,
         fullDayOnly:    true,
         fullDayRate:    75,
@@ -68,6 +92,7 @@ const ROOMS = [
         weeklyFullRate: null,
         weeklyHalfRate: null,
         staffRatio:     11,
+        hidden:         false,  // toggled by admin via Settings → Hide Summer Camp
     },
 ];
 
@@ -778,7 +803,7 @@ async function lookupFamilyByEmailAndPin(email, pin) {
 // SETTINGS — room rates, weekly rates (stored in `settings` table)
 // ============================================================
 
-// Load room rates from Supabase and merge into ROOMS array.
+// Load room rates (and age ranges) from Supabase and merge into ROOMS array.
 // Returns true if settings were loaded, false if table doesn't exist yet.
 async function loadRateSettings() {
     if (!sbClient) return false;
@@ -794,10 +819,13 @@ async function loadRateSettings() {
         ROOMS.forEach(room => {
             const r = rates[room.id];
             if (!r) return;
-            if (r.fullDayRate   != null) room.fullDayRate   = r.fullDayRate;
-            if (r.halfDayRate   != null) room.halfDayRate   = r.halfDayRate;
+            if (r.fullDayRate    != null) room.fullDayRate    = r.fullDayRate;
+            if (r.halfDayRate    != null) room.halfDayRate    = r.halfDayRate;
             if (r.weeklyFullRate != null) room.weeklyFullRate = r.weeklyFullRate;
             if (r.weeklyHalfRate != null) room.weeklyHalfRate = r.weeklyHalfRate;
+            if (r.ageMinMonths   != null) room.ageMinMonths   = r.ageMinMonths;
+            if ('ageMaxMonths'   in r)    room.ageMaxMonths   = r.ageMaxMonths; // allow null
+            if (r.ages           != null) room.ages           = r.ages;
         });
         return true;
     } catch (_) {
@@ -805,13 +833,26 @@ async function loadRateSettings() {
     }
 }
 
-// Save room rates to Supabase.
+// Save room rates (and age ranges) to Supabase.
 async function saveRateSettings(rates) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
         .from('settings')
         .upsert({ key: 'room_rates', value: rates }, { onConflict: 'key' });
     if (error) throw error;
+}
+
+// Load summer camp hidden flag from Supabase and apply to ROOMS.
+async function loadSummerCampSetting() {
+    const val = await fetchSetting('hide_summer_camp');
+    const summerRoom = ROOMS.find(r => r.id === 'summer');
+    if (summerRoom) summerRoom.hidden = val === true || val === 'true';
+    return summerRoom?.hidden || false;
+}
+
+// Save summer camp hidden flag to Supabase.
+async function saveSummerCampSetting(hidden) {
+    await upsertSetting('hide_summer_camp', hidden);
 }
 
 // Load staff-to-child ratios from Supabase and merge into ROOMS array.

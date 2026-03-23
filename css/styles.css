@@ -763,6 +763,17 @@ main { padding: 32px 36px; }
 }
 .receipt-amount { text-align: right; }
 .receipt-total-row td { color: var(--text); }
+.receipt-day-summary {
+    font-size: .88em;
+    color: var(--text-muted);
+    margin: 10px 0 0;
+}
+.billing-day-counts {
+    font-size: .85em;
+    color: var(--text-muted);
+    margin-top: 8px;
+    padding: 4px 0;
+}
 .receipt-waitlist-note {
     font-size: .82em !important;
     color: var(--text-muted) !important;

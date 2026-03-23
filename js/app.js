@@ -53,8 +53,9 @@ function getTargetMonthKey() {
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
-    // Load room rates from admin settings (no-op if settings table not yet created)
+    // Load room rates and summer camp visibility from admin settings
     await loadRateSettings();
+    await loadSummerCampSetting();
 
     regWindowOverride = (await fetchSetting('reg_window_override')) || 'auto';
 
@@ -115,11 +116,17 @@ function calcAgeMonths(dobStr) {
 function getRoomIdFromDob(dobStr) {
     if (!dobStr) return null;
     const months = calcAgeMonths(dobStr);
-    if (months < 0)  return null;
-    if (months < 12) return 'bear';
-    if (months < 24) return 'bee';
-    if (months < 36) return 'turtle';
-    return 'owl';
+    if (months < 0) return null;
+    // Use ROOMS age ranges dynamically (excludes summer camp and hidden rooms)
+    const ageable = ROOMS
+        .filter(r => r.id !== 'summer' && r.ageMinMonths != null)
+        .sort((a, b) => a.ageMinMonths - b.ageMinMonths);
+    for (const room of ageable) {
+        if (months >= room.ageMinMonths && (room.ageMaxMonths == null || months <= room.ageMaxMonths)) {
+            return room.id;
+        }
+    }
+    return null;
 }
 
 function getRoomFromDob(dobStr) {
@@ -795,8 +802,22 @@ function renderSelectedDates() {
     const discountNote = hasAnyDiscount
         ? `<span class="billing-note">Discount(s) applied.</span>`
         : '';
+
+    // Day count summary
+    let fullDayCount = 0, halfDayCount = 0;
+    for (const [, entry] of selectedDates) {
+        if (entry.dayType === 'half') halfDayCount++;
+        else fullDayCount++;
+    }
+    const totalDayCount = fullDayCount + halfDayCount;
+    const daySummaryParts = [];
+    if (fullDayCount > 0) daySummaryParts.push(`${fullDayCount} full day${fullDayCount !== 1 ? 's' : ''}`);
+    if (halfDayCount > 0) daySummaryParts.push(`${halfDayCount} half day${halfDayCount !== 1 ? 's' : ''}`);
+    const daySummary = `<div class="billing-day-counts">${totalDayCount} day${totalDayCount !== 1 ? 's' : ''} total (${daySummaryParts.join(', ')})</div>`;
+
     container.innerHTML = `
         <ul class="date-list">${rows}</ul>
+        ${daySummary}
         <div class="billing-total">
             ${totalLabel}: <strong>$${total.toFixed(2)}</strong>${discountNote}
         </div>`;
@@ -1073,7 +1094,18 @@ async function handleSubmit(e) {
                 amount: calcSubmitDayAmounts(dayType).reduce((s, e) => s + e.finalAmount, 0),
             }));
 
+            // Day count summary for receipt
+            let rcptFull = 0, rcptHalf = 0;
+            sortedDates.forEach(({ dayType }) => {
+                if (dayType === 'half') rcptHalf++; else rcptFull++;
+            });
+            const rcptTotal = rcptFull + rcptHalf;
+            const rcptParts = [];
+            if (rcptFull > 0) rcptParts.push(`${rcptFull} full day${rcptFull !== 1 ? 's' : ''}`);
+            if (rcptHalf > 0) rcptParts.push(`${rcptHalf} half day${rcptHalf !== 1 ? 's' : ''}`);
+
             receiptHtml = `
+                <p class="receipt-day-summary">${rcptTotal} day${rcptTotal !== 1 ? 's' : ''} total &mdash; ${rcptParts.join(', ')}</p>
                 <table class="receipt-table">
                     <thead><tr><th>Date</th><th>Type</th><th>Amount</th></tr></thead>
                     <tbody>${receiptRows}</tbody>
