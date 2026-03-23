@@ -107,6 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // AGE / DOB HELPERS
 // ============================================================
 function calcAgeMonths(dobStr) {
+    if (!dobStr) return null;
     const today = new Date();
     const birth = new Date(dobStr + 'T00:00:00');
     return (today.getFullYear() - birth.getFullYear()) * 12
