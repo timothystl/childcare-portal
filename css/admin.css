@@ -1636,6 +1636,81 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 
 /* ============================================================
+   DATA HEALTH — inline issue badges
+   ============================================================ */
+.data-issue-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: .7em;
+    font-weight: 700;
+    letter-spacing: .03em;
+    flex-shrink: 0;
+    cursor: default;
+}
+.data-issue-critical {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+.data-issue-warning {
+    background: #fef9c3;
+    color: #854d0e;
+    border: 1px solid #fde047;
+}
+.family-row-has-issues {
+    border-left: 3px solid #f87171;
+}
+.student-has-issues {
+    background: #fff8f8;
+}
+
+/* ============================================================
+   DATA HEALTH — top banner
+   ============================================================ */
+.data-health-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    font-size: .88em;
+    flex-wrap: wrap;
+}
+.dh-icon { font-size: 1.1em; flex-shrink: 0; }
+.dh-text { flex: 1; min-width: 180px; color: #78350f; }
+.dh-filter-btn {
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid #d97706;
+    background: #fff;
+    color: #92400e;
+    font-size: .82em;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s;
+}
+.dh-filter-btn:hover, .dh-filter-btn.active {
+    background: #92400e;
+    color: #fff;
+}
+.dh-dismiss-btn {
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: transparent;
+    color: #6b7280;
+    font-size: .82em;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.dh-dismiss-btn:hover { background: #f3f4f6; }
+
+/* ============================================================
    FAMILY MODAL
    ============================================================ */
 .fm-overlay {

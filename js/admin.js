@@ -2562,6 +2562,45 @@ function baseRow(reg, roomLabel, date, status, dayType) {
 }
 
 // ============================================================
+// DATA HEALTH — missing-field detection
+// ============================================================
+
+// Returns array of { level:'critical'|'warning', label, tip } for a family.
+function getFamilyIssues(f) {
+    const issues = [];
+    if (!f.parent_email)  issues.push({ level: 'critical', label: 'No email',  tip: 'Primary parent has no email — cannot log in or receive confirmations.' });
+    if (!f.pin)           issues.push({ level: 'critical', label: 'No PIN',    tip: 'Primary parent has no PIN — cannot log into the parent portal.' });
+    if (!f.parent_phone)  issues.push({ level: 'warning',  label: 'No phone',  tip: 'Primary parent has no phone number on file.' });
+    return issues;
+}
+
+// Returns array of { level, label, tip } for a single student.
+function getStudentIssues(s) {
+    const issues = [];
+    if (!s.child_dob)   issues.push({ level: 'critical', label: 'No DOB',  tip: 'Missing date of birth — child cannot be auto-assigned a room and registration will fail.' });
+    if (!s.child_name)  issues.push({ level: 'critical', label: 'No name', tip: 'Child record has no name.' });
+    return issues;
+}
+
+// Renders a run of issue badge spans.
+function issuesBadgeHtml(issues) {
+    return issues.map(i =>
+        `<span class="data-issue-badge data-issue-${i.level}" title="${escHtml(i.tip)}">${escHtml(i.label)}</span>`
+    ).join('');
+}
+
+// Scans all loaded families and returns a summary { critical, warning }.
+function scanDataHealth(families) {
+    let critical = 0, warning = 0;
+    (families || []).forEach(f => {
+        getFamilyIssues(f).forEach(i => i.level === 'critical' ? critical++ : warning++);
+        (f.students || []).forEach(s =>
+            getStudentIssues(s).forEach(i => i.level === 'critical' ? critical++ : warning++));
+    });
+    return { critical, warning };
+}
+
+// ============================================================
 // FAMILIES & STUDENTS
 // ============================================================
 let importRows        = [];
@@ -2569,6 +2608,7 @@ let allFamiliesData   = [];
 let editingFamilyId   = null;   // null = adding new, string = editing existing
 let familyModalChildren = [];   // working copy of children in the modal
 let showArchivedFamilies = false;
+let showIssuesOnly = false;
 
 function setupFamilies() {
     const fileInput  = document.getElementById('familiesFileInput');
@@ -2899,9 +2939,43 @@ async function loadFamilies() {
         if (searchEl) searchEl.value = '';
         familiesPage = 0;
         renderFamiliesList(allFamiliesData);
+        updateDataHealthBanner(allFamiliesData);
     } catch (err) {
         if (container) container.innerHTML = `<p class="import-error">Failed to load families: ${escHtml(err.message)}</p>`;
     }
+}
+
+function updateDataHealthBanner(families) {
+    const banner = document.getElementById('dataHealthBanner');
+    if (!banner) return;
+    const { critical, warning } = scanDataHealth(families);
+
+    if (critical === 0 && warning === 0) {
+        banner.style.display = 'none';
+        return;
+    }
+
+    const parts = [];
+    if (critical > 0) parts.push(`<strong>${critical}</strong> critical issue${critical !== 1 ? 's' : ''}`);
+    if (warning  > 0) parts.push(`<strong>${warning}</strong> warning${warning  !== 1 ? 's' : ''}`);
+
+    banner.style.display = '';
+    banner.innerHTML = `
+        <span class="dh-icon">⚠️</span>
+        <span class="dh-text">Data issues found: ${parts.join(' &amp; ')} — missing emails, PINs, or dates of birth. Badges are shown on each affected record below.</span>
+        <button class="dh-filter-btn${showIssuesOnly ? ' active' : ''}" id="dhFilterBtn">
+            ${showIssuesOnly ? '✕ Show All' : '🔍 Show Issues Only'}
+        </button>
+        <button class="dh-dismiss-btn" id="dhDismissBtn" title="Dismiss">✕</button>`;
+
+    document.getElementById('dhFilterBtn')?.addEventListener('click', () => {
+        showIssuesOnly = !showIssuesOnly;
+        renderFamiliesList(allFamiliesData);
+        updateDataHealthBanner(allFamiliesData);
+    });
+    document.getElementById('dhDismissBtn')?.addEventListener('click', () => {
+        banner.style.display = 'none';
+    });
 }
 
 function sortFamilies(families) {
@@ -2957,16 +3031,26 @@ function sortFamilies(families) {
 
 function renderFamiliesList(families) {
     const container = document.getElementById('familiesList');
-    if (!families.length) {
-        container.innerHTML = showArchivedFamilies
-            ? '<p class="empty-hint">No archived families.</p>'
-            : '<p class="empty-hint">No families yet. Use + Add Family or import from Excel.</p>';
+
+    // Apply "issues only" filter before rendering
+    const filtered = showIssuesOnly
+        ? families.filter(f =>
+            getFamilyIssues(f).length > 0 ||
+            (f.students || []).some(s => getStudentIssues(s).length > 0))
+        : families;
+
+    if (!filtered.length) {
+        container.innerHTML = showIssuesOnly
+            ? '<p class="empty-hint">✅ No data issues found in the current family list.</p>'
+            : showArchivedFamilies
+                ? '<p class="empty-hint">No archived families.</p>'
+                : '<p class="empty-hint">No families yet. Use + Add Family or import from Excel.</p>';
         return;
     }
 
     // Deduplicate by family ID in case the DB ever returns the same row twice
     const _seenIds = new Set();
-    const unique   = families.filter(f => {
+    const unique   = filtered.filter(f => {
         if (_seenIds.has(f.id)) return false;
         _seenIds.add(f.id);
         return true;
@@ -3008,13 +3092,16 @@ function renderFamiliesList(families) {
                 const kids     = (f.students || []);
                 const archived = f.active === false;
                 const lastName = (f.parent_name || '').trim().split(/\s+/).pop() || '';
+                const famIssues = getFamilyIssues(f);
+                const anyIssues = famIssues.length > 0 || kids.some(s => getStudentIssues(s).length > 0);
                 return `
-                    <li class="family-row${archived ? ' family-row-archived' : ''}">
+                    <li class="family-row${archived ? ' family-row-archived' : ''}${anyIssues ? ' family-row-has-issues' : ''}">
                         <div class="family-heading">${escHtml(lastName)} Family</div>
                         <div class="family-row-top">
                             <div class="family-parent-row">
                                 <span class="family-row-name">${escHtml(f.parent_name || '')}</span>
                                 <span class="family-pin-badge">${f.pin ? `PIN: ${f.pin}` : ''}</span>
+                                ${issuesBadgeHtml(famIssues)}
                                 <span class="family-row-meta">${escHtml(f.parent_email || '')}${f.parent_email && f.parent_phone ? ' &middot; ' : ''}${escHtml(f.parent_phone || '')}</span>
                                 <div class="family-row-actions">
                                     ${f.group === 'summer' ? '<span class="family-badge-summer">Summer</span>' : ''}
@@ -3044,10 +3131,12 @@ function renderFamiliesList(families) {
                                         : '';
                                     const dt = s.discount_type || 'none';
                                     const dv = s.discount_value || 0;
-                                    return `<li class="family-student-item" data-student-id="${s.id}">
+                                    const sIssues = getStudentIssues(s);
+                                    return `<li class="family-student-item${sIssues.length ? ' student-has-issues' : ''}" data-student-id="${s.id}">
                                         <span class="student-bullet">Child</span>
                                         <span class="student-name">${escHtml(s.child_name)}</span>
                                         <span class="student-dob">${dobStr}</span>
+                                        ${issuesBadgeHtml(sIssues)}
                                         <div class="room-override-wrap">
                                             <label class="room-override-label">Room:</label>
                                             <select class="room-override-select" data-student-id="${s.id}">
