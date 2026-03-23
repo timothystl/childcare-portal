@@ -183,7 +183,7 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
             parent_phone: parent.phone,
             child_name:   child.name,
             child_age:    child.ageMonths,
-            child_dob:    child.dob,
+            child_dob:    child.dob || null,
             room_id:      roomId,
             status:       status,
         })
