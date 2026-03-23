@@ -253,8 +253,8 @@
     .staff-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 20px; margin-top: 48px; }
     .staff-card { background: var(--white); border-radius: var(--radius-md); padding: 28px 20px 24px; box-shadow: var(--shadow-card); text-align: center; border: 1px solid var(--border); border-top: 4px solid var(--sun); }
     .staff-card--leadership { border-top-color: var(--green); }
-    .staff-card-photo { width: 120px; height: 120px; border-radius: 50%; background: var(--sun-pale); border: 3px solid var(--sun); display: flex; align-items: center; justify-content: center; font-size: 2em; margin: 0 auto 14px; overflow: hidden; }
-    .staff-card-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 28%; transform: scale(2.6); transform-origin: center 28%; display: block; }
+    .staff-card-photo { width: 160px; height: 204px; border-radius: 12px; border: 3px solid var(--sun); margin: 0 auto 14px; overflow: hidden; background-color: var(--sun-pale); }
+    .staff-card-photo img { display: none; }
     .staff-card--leadership .staff-card-photo { background: var(--green-pale); border-color: var(--green-lt); border-width: 3px; }
     .staff-card-name { font-family: var(--font-head); font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
     .staff-card-role { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
@@ -577,6 +577,21 @@
 <script>
   document.getElementById('navToggle').addEventListener('click',function(){
     document.getElementById('navLinks').classList.toggle('open');
+  });
+</script>
+<script>
+  // Staff card portrait positioning
+  const PHOTO_SCALE = 0.65;
+  const PHOTO_OFFSET_X = 46;
+  const PHOTO_OFFSET_Y = 115;
+  const IMG_W = 405, IMG_H = 640;
+  document.querySelectorAll('.staff-card-photo').forEach(function(el) {
+    var img = el.querySelector('img');
+    if (!img) return;
+    el.style.backgroundImage = 'url(' + img.src + ')';
+    el.style.backgroundSize = (IMG_W * PHOTO_SCALE) + 'px ' + (IMG_H * PHOTO_SCALE) + 'px';
+    el.style.backgroundPosition = '-' + PHOTO_OFFSET_X + 'px -' + PHOTO_OFFSET_Y + 'px';
+    el.style.backgroundRepeat = 'no-repeat';
   });
 </script>
 </body>
