@@ -817,8 +817,12 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
                 const childName   = sel.dataset.child;
                 const dateId      = sel.dataset.dateId;
                 const fromRoom    = ROOMS.find(r => r.id === sel.dataset.fromRoom)?.label || sel.dataset.fromRoom;
-                const toRoom      = ROOMS.find(r => r.id === newRoomId)?.label || newRoomId;
-                if (!confirm(`Move ${childName} from ${fromRoom} to ${toRoom} for ${friendlyShort(dateStr)} only?\n\nAll other days stay unchanged.`)) {
+                const toRoomObj   = ROOMS.find(r => r.id === newRoomId);
+                const toRoom      = toRoomObj?.label || newRoomId;
+                const toCnt       = roomCounts[newRoomId] || 0;
+                const toFull      = toRoomObj && toRoomObj.capacity > 0 && toCnt >= toRoomObj.capacity;
+                const overCapNote = toFull ? `\n\n⚠️ ${toRoom} is at capacity (${toCnt}/${toRoomObj.capacity}). This will force it over capacity.` : '';
+                if (!confirm(`Move ${childName} from ${fromRoom} to ${toRoom} for ${friendlyShort(dateStr)} only?${overCapNote}\n\nAll other days stay unchanged.`)) {
                     sel.value = '';
                     return;
                 }
@@ -957,7 +961,7 @@ async function _aadConfirm() {
             ).length;
         }, 0);
         if (roomCap > 0 && bookedCount >= roomCap) {
-            if (!confirm(`${ROOMS.find(r => r.id === _aadRoomId)?.label} is at capacity (${bookedCount}/${roomCap}) on this day. Add anyway (as waitlisted)?`)) {
+            if (!confirm(`⚠️ ${ROOMS.find(r => r.id === _aadRoomId)?.label} is at capacity (${bookedCount}/${roomCap}) on this day.\n\nForce add over capacity?`)) {
                 btn.disabled = false;
                 return;
             }
