@@ -1,0 +1,534 @@
+// ============================================================
+// MODULE: Admin Settings (rates, closures, roles, tabs, collapsibles)
+// Sections: Summer Camp Visibility, Offer Links, Closures,
+//           Tabs, Collapsibles, Rates & Settings, Admin Roles
+// ============================================================
+
+// SUMMER CAMP VISIBILITY SETTING
+// ============================================================
+async function setupSummerCamp() {
+    const toggle   = document.getElementById('hideSummerCampToggle');
+    const btn      = document.getElementById('saveSummerCampBtn');
+    const statusEl = document.getElementById('summerCampStatus');
+    if (!toggle || !btn) return;
+
+    // Load current value
+    const summerRoom = ROOMS.find(r => r.id === 'summer');
+    toggle.checked = summerRoom?.hidden || false;
+
+    btn.addEventListener('click', async () => {
+        btn.disabled    = true;
+        btn.textContent = 'Saving…';
+        if (statusEl) statusEl.textContent = '';
+        try {
+            const hidden = toggle.checked;
+            await saveSummerCampSetting(hidden);
+            if (summerRoom) summerRoom.hidden = hidden;
+            if (statusEl) {
+                statusEl.textContent = '✓ Saved!';
+                statusEl.style.color = '#2e7d32';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+        } catch (err) {
+            if (statusEl) {
+                statusEl.textContent = '⚠️ ' + err.message;
+                statusEl.style.color = '#c62828';
+            }
+            console.error('setupSummerCamp:', err);
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = '💾 Save';
+        }
+    });
+}
+
+// ============================================================
+// OFFER EMAIL LINKS (global settings)
+// ============================================================
+function setupOfferLinks() {
+    const g = window._globalOfferLinks || {};
+    const procareEl   = document.getElementById('globalProcareLink');
+    const paperworkEl = document.getElementById('globalPaperworkLinks');
+    if (procareEl)   procareEl.value   = g.procareLink   || '';
+    if (paperworkEl) paperworkEl.value = (g.paperworkLinks || []).join(', ');
+
+    document.getElementById('saveOfferLinksBtn')?.addEventListener('click', async () => {
+        const btn      = document.getElementById('saveOfferLinksBtn');
+        const statusEl = document.getElementById('offerLinksStatus');
+        btn.disabled    = true;
+        btn.textContent = 'Saving…';
+        if (statusEl) statusEl.textContent = '';
+        try {
+            const procareLink   = procareEl?.value.trim() || null;
+            const paperworkLinks = (paperworkEl?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+            const payload = { procareLink, paperworkLinks };
+            await saveOfferLinks(payload);
+            window._globalOfferLinks = payload;
+            if (statusEl) {
+                statusEl.textContent = '✓ Saved!';
+                statusEl.style.color = '#2e7d32';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+        } catch (err) {
+            if (statusEl) { statusEl.textContent = '⚠️ ' + err.message; statusEl.style.color = '#c62828'; }
+            console.error('saveOfferLinks:', err);
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = '💾 Save Links';
+        }
+    });
+}
+
+// ============================================================
+// CLOSURES
+// ============================================================
+function setupClosures() {
+    document.getElementById('addClosureBtn').addEventListener('click', async () => {
+        const date   = document.getElementById('closureDate').value;
+        const reason = document.getElementById('closureReason').value.trim();
+        if (!date) { alert('Please select a date to block.'); return; }
+        try {
+            await addClosure(date, reason);
+            document.getElementById('closureDate').value   = '';
+            document.getElementById('closureReason').value = '';
+            await loadClosureList();
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
+    });
+}
+
+async function loadClosureList() {
+    try {
+        const closures  = await fetchClosures();
+        allClosureDates = new Set(closures.map(c => c.close_date));
+        const container = document.getElementById('closureList');
+        if (!closures.length) {
+            container.innerHTML = '<p class="empty-hint">No closures set.</p>';
+            return;
+        }
+        container.innerHTML = `
+            <ul class="closure-list">
+                ${closures.map(c => `
+                    <li class="closure-item">
+                        <span class="closure-date-lbl">${friendlyShort(c.close_date)}</span>
+                        <span class="closure-reason-lbl">${escHtml(c.reason || '—')}</span>
+                        <button class="btn-remove-closure" data-date="${c.close_date}">Remove</button>
+                    </li>`).join('')}
+            </ul>`;
+        container.querySelectorAll('.btn-remove-closure').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                const d = e.currentTarget.getAttribute('data-date');
+                if (!confirm(`Remove closure for ${friendlyShort(d)}?`)) return;
+                try {
+                    await deleteClosure(d);
+                    await loadClosureList();
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            });
+        });
+    } catch (err) {
+        console.error('loadClosureList:', err);
+    }
+}
+
+// ============================================================
+
+// TABS
+// ============================================================
+function setupTabs() {
+    const btns  = document.querySelectorAll('#adminTabs .admin-tab-btn');
+    const panes = document.querySelectorAll('.tab-pane');
+
+    function activate(tab) {
+        btns.forEach(b  => b.classList.toggle('active', b.dataset.tab === tab));
+        panes.forEach(p => p.classList.toggle('hidden', p.id !== 'tab-' + tab));
+        localStorage.setItem('adminActiveTab', tab);
+        // Lazy-load heavy data the first time each tab is opened
+        if (tab === 'families'  && allFamiliesData.length === 0) loadFamilies();
+        if (tab === 'staffing'  && allStaffData.length === 0)    loadStaffList();
+        if (tab === 'messages'  && !_messagesLoaded)             { _messagesLoaded = true; loadMessages(); }
+    }
+
+    btns.forEach(btn => btn.addEventListener('click', () => activate(btn.dataset.tab)));
+
+    // Restore last-used tab, defaulting to 'daily'
+    const saved = localStorage.getItem('adminActiveTab') || 'daily';
+    activate(saved);
+}
+
+// ============================================================
+// COLLAPSIBLES  (Settings tab sections)
+// ============================================================
+function setupCollapsibles() {
+    document.querySelectorAll('.collapsible-section').forEach(section => {
+        const id = section.id;
+        const h2 = section.querySelector('h2');
+        if (!h2 || !id) return;
+        // Skip if already processed (guards against double-init)
+        if (section.querySelector(':scope > .collapsible-body')) return;
+
+        // Wrap all content after h2 in a collapsible body div
+        const body = document.createElement('div');
+        body.className = 'collapsible-body';
+        while (h2.nextSibling) body.appendChild(h2.nextSibling);
+        section.appendChild(body);
+
+        // Add toggle button inside h2
+        const btn = document.createElement('button');
+        btn.type      = 'button';
+        btn.className = 'collapse-toggle';
+        btn.setAttribute('aria-expanded', 'true');
+        btn.title     = 'Collapse / expand';
+        btn.innerHTML = '<span class="collapse-chevron" aria-hidden="true"></span>';
+        h2.appendChild(btn);
+
+        function setCollapsed(collapsed) {
+            body.hidden = collapsed;
+            section.classList.toggle('is-collapsed', collapsed);
+            btn.setAttribute('aria-expanded', String(!collapsed));
+            localStorage.setItem('adminCollapse_' + id, collapsed ? '1' : '0');
+        }
+
+        btn.addEventListener('click', () => setCollapsed(!section.classList.contains('is-collapsed')));
+
+        // Restore saved state (default: open)
+        if (localStorage.getItem('adminCollapse_' + id) === '1') setCollapsed(true);
+    });
+}
+
+// ============================================================
+// RATES & SETTINGS
+// ============================================================
+function setupRates() {
+    renderRatesTable();
+    document.getElementById('saveRatesBtn')?.addEventListener('click', onSaveRates);
+}
+
+function renderRatesTable() {
+    const wrap = document.getElementById('ratesTableWrap');
+    if (!wrap) return;
+    wrap.innerHTML = `
+        <table class="rates-table">
+            <thead>
+                <tr>
+                    <th>Room</th>
+                    <th>Age Range (months)<br><small>Min – Max (blank = no limit)</small></th>
+                    <th>Full Day Rate ($)</th>
+                    <th>Half Day Rate ($)</th>
+                    <th>Weekly Full ($)<br><small>All 5 weekdays full</small></th>
+                    <th>Weekly Half ($)<br><small>All 5 weekdays half</small></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${ROOMS.filter(r => r.id !== 'summer').map(room => `
+                    <tr data-room-id="${room.id}">
+                        <td class="rates-room-label">
+                            <strong>${escHtml(room.label)}</strong>
+                            <span class="rates-ages">${escHtml(room.ages)}</span>
+                        </td>
+                        <td>
+                            <div style="display:flex;gap:4px;align-items:center;">
+                                <input type="number" class="rate-input" data-field="ageMinMonths"
+                                    value="${room.ageMinMonths ?? ''}" min="0" step="1" placeholder="min"
+                                    style="width:58px;" title="Minimum age in months">
+                                <span>–</span>
+                                <input type="number" class="rate-input" data-field="ageMaxMonths"
+                                    value="${room.ageMaxMonths ?? ''}" min="0" step="1" placeholder="∞"
+                                    style="width:58px;" title="Max age in months (blank = no upper limit)">
+                            </div>
+                        </td>
+                        <td>
+                            <input type="number" class="rate-input" data-field="fullDayRate"
+                                value="${room.fullDayRate ?? ''}" min="0" step="0.01" placeholder="0.00">
+                        </td>
+                        <td>
+                            ${room.fullDayOnly
+                                ? '<span class="rates-na">Full day only</span>'
+                                : `<input type="number" class="rate-input" data-field="halfDayRate"
+                                    value="${room.halfDayRate ?? ''}" min="0" step="0.01" placeholder="0.00">`
+                            }
+                        </td>
+                        <td>
+                            <input type="number" class="rate-input" data-field="weeklyFullRate"
+                                value="${room.weeklyFullRate ?? ''}" min="0" step="0.01" placeholder="— disabled">
+                        </td>
+                        <td>
+                            ${room.fullDayOnly
+                                ? '<span class="rates-na">—</span>'
+                                : `<input type="number" class="rate-input" data-field="weeklyHalfRate"
+                                    value="${room.weeklyHalfRate ?? ''}" min="0" step="0.01" placeholder="— disabled">`
+                            }
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        <p class="rates-hint">💡 Age Range: changing these values updates which room children are auto-assigned to based on their date of birth. Weekly rates apply when a child books all 5 Mon–Fri days in a single week with the same day type.</p>`;
+}
+
+async function onSaveRates() {
+    const btn      = document.getElementById('saveRatesBtn');
+    const statusEl = document.getElementById('ratesStatus');
+    if (!btn) return;
+    btn.disabled    = true;
+    btn.textContent = 'Saving…';
+    if (statusEl) { statusEl.textContent = ''; }
+
+    try {
+        const rates = {};
+        document.querySelectorAll('#ratesTableWrap tbody tr[data-room-id]').forEach(row => {
+            const id = row.dataset.roomId;
+            rates[id] = {};
+            row.querySelectorAll('.rate-input[data-field]').forEach(input => {
+                const val   = input.value.trim();
+                const field = input.dataset.field;
+                // Age fields are integers; rate fields are floats
+                if (field === 'ageMinMonths' || field === 'ageMaxMonths') {
+                    rates[id][field] = val === '' ? null : parseInt(val, 10);
+                } else {
+                    rates[id][field] = val === '' ? null : parseFloat(val);
+                }
+            });
+            // Regenerate the human-readable ages label from the saved range
+            const r = rates[id];
+            if (r.ageMinMonths != null || r.ageMaxMonths != null) {
+                const min = r.ageMinMonths ?? 0;
+                const max = r.ageMaxMonths;
+                rates[id].ages = max == null
+                    ? `${min}+ months`
+                    : `${min} – ${max + 1} months`;
+            }
+        });
+
+        await saveRateSettings(rates);
+        await logAdminAction('update', 'rate_settings', null, { rooms: Object.keys(rates) });
+        // Merge saved values directly into ROOMS (avoids a DB round-trip that can
+        // silently fail and revert the display back to hardcoded defaults).
+        ROOMS.forEach(room => {
+            const r = rates[room.id];
+            if (!r) return;
+            if (r.fullDayRate    != null) room.fullDayRate    = r.fullDayRate;
+            if (r.halfDayRate    != null) room.halfDayRate    = r.halfDayRate;
+            if (r.weeklyFullRate != null) room.weeklyFullRate = r.weeklyFullRate;
+            if (r.weeklyHalfRate != null) room.weeklyHalfRate = r.weeklyHalfRate;
+            if (r.ageMinMonths   != null) room.ageMinMonths   = r.ageMinMonths;
+            if ('ageMaxMonths'   in r)    room.ageMaxMonths   = r.ageMaxMonths;
+            if (r.ages           != null) room.ages           = r.ages;
+        });
+        renderRatesTable();
+
+        if (statusEl) {
+            statusEl.textContent   = '✓ Saved!';
+            statusEl.style.color   = '#2e7d32';
+            setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+    } catch (err) {
+        if (statusEl) {
+            statusEl.textContent = '⚠️ ' + err.message;
+            statusEl.style.color = '#c62828';
+        }
+        console.error('onSaveRates:', err);
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = '💾 Save Rates';
+    }
+}
+
+// ============================================================
+
+// ADMIN ROLES  (access control)
+// ============================================================
+
+const ROLE_LABELS = {
+    full:       'Full Access',
+    restricted: 'Restricted — Schedule Planner only',
+    staff:      'Staff — Classroom Roster (read-only)',
+};
+
+function _hide(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+}
+
+function applyRoleRestrictions() {
+    if (currentAdminRole === 'full') return;
+
+    if (currentAdminRole === 'restricted') {
+        // Staffing tab: hide everything except the schedule planner
+        _hide('logHoursSection');
+        _hide('payrollSection');
+        _hide('staffRosterToggleWrap');
+        _hide('staffRosterSection');
+        // Settings tab: show only Registration Window Override
+        ['closedDaysSection', 'ratesSection', 'ratiosSection',
+         'offerLinksSection', 'adminRolesSection', 'summerCampSection']
+            .forEach(id => _hide(id));
+    }
+
+    if (currentAdminRole === 'staff') {
+        // Hide all tabs except Classrooms and force it active
+        document.querySelectorAll('#adminTabs .admin-tab-btn').forEach(btn => {
+            if (btn.dataset.tab !== 'daily') btn.style.display = 'none';
+        });
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+        document.getElementById('tab-daily')?.classList.remove('hidden');
+        document.querySelectorAll('#adminTabs .admin-tab-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.tab === 'daily');
+        });
+        localStorage.setItem('adminActiveTab', 'daily');
+        _hide('exportXlsxBtn');
+    }
+}
+
+function setupAdminRoles() {
+    _loadAdminUsersTable();
+
+    document.getElementById('addAdminRoleBtn')?.addEventListener('click', async () => {
+        const emailInput    = document.getElementById('newRoleEmail');
+        const passwordInput = document.getElementById('newRolePassword');
+        const email    = emailInput.value.trim().toLowerCase();
+        const password = passwordInput.value;
+        const level    = document.getElementById('newRoleLevel').value;
+
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            alert('Please enter a valid email address.'); return;
+        }
+        if (!password || password.length < 6) {
+            alert('Password must be at least 6 characters.'); return;
+        }
+
+        const btn = document.getElementById('addAdminRoleBtn');
+        btn.disabled = true; btn.textContent = 'Creating…';
+        try {
+            await callAdminUsers('create', { email, password });
+            window._adminRoles = window._adminRoles || {};
+            window._adminRoles[email] = level;
+            await saveAdminRoles(window._adminRoles);
+            emailInput.value = ''; passwordInput.value = '';
+            _showAdminRolesStatus('✓ User created!', '#2e7d32');
+            _loadAdminUsersTable();
+        } catch (err) {
+            _showAdminRolesStatus('⚠️ ' + err.message, '#c62828');
+        } finally {
+            btn.disabled = false; btn.textContent = 'Add User';
+        }
+    });
+}
+
+async function _loadAdminUsersTable() {
+    const wrap = document.getElementById('adminRolesTableWrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="empty-hint">Loading users…</p>';
+    try {
+        // Load both auth users and current roles together so the table
+        // always reflects the saved state regardless of timing
+        const [result, roles] = await Promise.all([
+            callAdminUsers('list', {}),
+            loadAdminRoles(),
+        ]);
+        window._adminRoles = roles;
+        _renderAdminUsersTable(result.users || []);
+    } catch (err) {
+        wrap.innerHTML = `<p class="empty-hint">⚠️ Could not load users: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function _renderAdminUsersTable(authUsers) {
+    const wrap = document.getElementById('adminRolesTableWrap');
+    if (!wrap) return;
+    const rolesMap = window._adminRoles || {};
+
+    if (!authUsers.length) {
+        wrap.innerHTML = '<p class="empty-hint">No admin users found.</p>';
+        return;
+    }
+
+    const rows = authUsers.map(u => {
+        const email   = u.email || '';
+        const role    = rolesMap[email] || 'full';
+        const options = Object.entries(ROLE_LABELS).map(([val, label]) =>
+            `<option value="${val}" ${val === role ? 'selected' : ''}>${label}</option>`
+        ).join('');
+        const lastSeen = u.last_sign_in_at
+            ? new Date(u.last_sign_in_at).toLocaleDateString()
+            : 'Never';
+        return `
+            <tr>
+                <td>${escHtml(email)}</td>
+                <td><select class="admin-role-select family-search-input btn-sm" data-email="${escHtml(email)}">${options}</select></td>
+                <td style="color:#888;font-size:.85em;white-space:nowrap">${lastSeen}</td>
+                <td style="white-space:nowrap">
+                    <button class="btn-ghost btn-sm reset-pw-btn" data-email="${escHtml(email)}">Reset Password</button>
+                    <button class="btn-ghost btn-sm delete-user-btn" style="color:#c62828" data-userid="${u.id}" data-email="${escHtml(email)}">Delete</button>
+                </td>
+            </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+        <table class="rates-table" style="width:100%">
+            <thead><tr><th>Email</th><th>Access Level</th><th>Last Login</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+
+    // Inline role change — save immediately on select change
+    wrap.querySelectorAll('.admin-role-select').forEach(sel => {
+        sel.addEventListener('change', async () => {
+            window._adminRoles = window._adminRoles || {};
+            window._adminRoles[sel.dataset.email] = sel.value;
+            try {
+                await saveAdminRoles(window._adminRoles);
+                _showAdminRolesStatus('✓ Saved!', '#2e7d32');
+            } catch (err) {
+                _showAdminRolesStatus('⚠️ ' + err.message, '#c62828');
+            }
+        });
+    });
+
+    // Reset password — sends email via Supabase Auth
+    wrap.querySelectorAll('.reset-pw-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const { email } = btn.dataset;
+            if (!confirm(`Send a password reset email to ${email}?`)) return;
+            btn.disabled = true;
+            try {
+                await sendPasswordReset(email);
+                _showAdminRolesStatus(`✓ Reset email sent to ${email}`, '#2e7d32');
+            } catch (err) {
+                _showAdminRolesStatus('⚠️ ' + err.message, '#c62828');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    // Delete — removes from Supabase Auth AND portal roles map
+    wrap.querySelectorAll('.delete-user-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const { userid, email } = btn.dataset;
+            if (!confirm(`Permanently delete the admin account for ${email}? This cannot be undone.`)) return;
+            btn.disabled = true;
+            try {
+                await callAdminUsers('delete', { userId: userid });
+                if (window._adminRoles) delete window._adminRoles[email];
+                await saveAdminRoles(window._adminRoles || {});
+                _showAdminRolesStatus(`✓ Deleted ${email}`, '#2e7d32');
+                _loadAdminUsersTable();
+            } catch (err) {
+                _showAdminRolesStatus('⚠️ ' + err.message, '#c62828');
+                btn.disabled = false;
+            }
+        });
+    });
+}
+
+function _showAdminRolesStatus(msg, color) {
+    const el = document.getElementById('adminRolesStatus');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color  = color;
+    setTimeout(() => { el.textContent = ''; }, 4000);
+}
+
+// ============================================================
