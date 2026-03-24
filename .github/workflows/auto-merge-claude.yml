@@ -29,9 +29,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Sync marketing homepage to root
-        run: cp marketing/website/index.html index.html
-
       - name: Deploy to Cloudflare Workers
         run: npx wrangler deploy
         env:
