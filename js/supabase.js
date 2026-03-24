@@ -8,6 +8,10 @@
 //   ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 //   CREATE POLICY "Public read"  ON settings FOR SELECT USING (true);
 //   CREATE POLICY "Auth write"   ON settings FOR ALL USING (auth.role() = 'authenticated');
+// status values:
+//   'active'      — open year-round, enrollable
+//   'coming_soon' — not yet open; capacity null until state inspection clears
+//   'seasonal'    — only open during certain periods (admin toggles visibility)
 const ROOMS = [
     {
         id:             'bear',
@@ -16,6 +20,7 @@ const ROOMS = [
         ageMinMonths:   0,
         ageMaxMonths:   11,
         capacity:       8,
+        status:         'active',
         fullDayOnly:    true,
         fullDayRate:    80,
         halfDayRate:    null,
@@ -30,6 +35,7 @@ const ROOMS = [
         ageMinMonths:   12,
         ageMaxMonths:   23,
         capacity:       16,
+        status:         'active',
         fullDayOnly:    false,
         fullDayRate:    75,
         halfDayRate:    55,
@@ -44,6 +50,7 @@ const ROOMS = [
         ageMinMonths:   24,
         ageMaxMonths:   29,
         capacity:       11,
+        status:         'active',
         fullDayOnly:    false,
         fullDayRate:    75,
         halfDayRate:    45,
@@ -57,7 +64,8 @@ const ROOMS = [
         ages:           '30 – 36 months',
         ageMinMonths:   30,
         ageMaxMonths:   35,
-        capacity:       11,
+        capacity:       null,   // pending state inspection — set once licensed
+        status:         'coming_soon',
         fullDayOnly:    false,
         fullDayRate:    75,
         halfDayRate:    45,
@@ -72,6 +80,7 @@ const ROOMS = [
         ageMinMonths:   36,
         ageMaxMonths:   null,
         capacity:       11,
+        status:         'active',
         fullDayOnly:    false,
         fullDayRate:    75,
         halfDayRate:    45,
@@ -86,6 +95,8 @@ const ROOMS = [
         ageMinMonths:   null,
         ageMaxMonths:   null,
         capacity:       25,
+        status:         'seasonal',
+        seasons:        ['summer', 'spring_break', 'winter_break'],
         fullDayOnly:    true,
         fullDayRate:    75,
         halfDayRate:    null,

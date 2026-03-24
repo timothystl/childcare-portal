@@ -118,9 +118,9 @@ function getRoomIdFromDob(dobStr) {
     if (!dobStr) return null;
     const months = calcAgeMonths(dobStr);
     if (months < 0) return null;
-    // Use ROOMS age ranges dynamically (excludes summer camp and hidden rooms)
+    // Use ROOMS age ranges dynamically — only active rooms with age bounds
     const ageable = ROOMS
-        .filter(r => r.id !== 'summer' && r.ageMinMonths != null)
+        .filter(r => r.status === 'active' && r.ageMinMonths != null)
         .sort((a, b) => a.ageMinMonths - b.ageMinMonths);
     for (const room of ageable) {
         if (months >= room.ageMinMonths && (room.ageMaxMonths == null || months <= room.ageMaxMonths)) {

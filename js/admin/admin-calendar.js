@@ -332,6 +332,15 @@ function renderCapacityOverview() {
     });
 
     const cards = ROOMS.map(room => {
+        if (room.status === 'coming_soon') {
+            return `
+            <div class="cap-card cap-card--soon" style="opacity:.65;">
+                <h3>${room.label}</h3>
+                <p class="cap-meta">Coming Soon — capacity TBD</p>
+                <div class="progress-bar"><div class="progress-fill bar-green" style="width:0%"></div></div>
+                <p class="cap-pct">Pending state inspection</p>
+            </div>`;
+        }
         const used  = counts[room.id] || 0;
         const cap   = room.capacity * workingDays;
         const pct   = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;

@@ -2168,6 +2168,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .rates-room-label { min-width: 140px; }
 .rates-room-label strong { display: block; color: var(--text); }
 .rates-ages { display: block; font-size: .8em; color: var(--text-muted); margin-top: 2px; }
+.rates-badge-soon { display: inline-block; font-size: .7em; font-weight: 700; color: #92400e; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; text-transform: uppercase; letter-spacing: .03em; }
 
 .rate-input {
     width: 100px;

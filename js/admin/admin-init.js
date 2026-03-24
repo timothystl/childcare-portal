@@ -11,6 +11,7 @@ async function initDashboard() {
     dashboardInitDone = true;
     populateRoomFilter();
     populateRosterRoomFilter();
+    populateWlRoomFilter();
     try {
         await Promise.all([
             loadRegistrations(),
@@ -79,6 +80,19 @@ function populateRosterRoomFilter() {
         opt.value       = r.id;
         opt.textContent = r.label;
         sel.appendChild(opt);
+    });
+}
+
+function populateWlRoomFilter() {
+    // Insert ROOMS options before the static "TBD / Unborn" option
+    const sel = document.getElementById('wlRoomFilter');
+    if (!sel) return;
+    const tbdOpt = sel.querySelector('option[value="tbd"]');
+    ROOMS.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value       = r.id;
+        opt.textContent = r.label + (r.status === 'coming_soon' ? ' (Coming Soon)' : '');
+        sel.insertBefore(opt, tbdOpt);
     });
 }
 
