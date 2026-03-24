@@ -1,0 +1,212 @@
+# Privacy, Security & Legal Compliance Overview
+## Timothy Lutheran Church — Mother's Day Out Registration Portal
+
+**Prepared:** March 2026
+**Audience:** MDO Director, Church Administration, Legal Counsel, Licensing Inspectors
+**Purpose:** Plain-language summary of all privacy and security safeguards in the family registration portal, and how the portal addresses applicable legal obligations.
+
+---
+
+## Part 1 — Applicable Laws and Why They Apply
+
+### COPPA — Children's Online Privacy Protection Act (Federal)
+COPPA is a U.S. federal law that governs websites and online services that collect personal information about children under the age of 13. Because this portal collects children's names and dates of birth to assign them to age-appropriate classrooms, COPPA applies. The key requirements are:
+- Information about children may only be submitted by a parent or legal guardian (not the child themselves).
+- The information collected must be limited to what is necessary to operate the service.
+- Parents must be able to review and delete the information about their child.
+
+**How this portal complies:** Children do not interact with the portal directly — only parents register and log in. Only name and date of birth are collected for each child. Parents can download all their data and submit a deletion request through the portal.
+
+---
+
+### CCPA — California Consumer Privacy Act (State)
+The CCPA grants California residents specific rights over their personal data, including the right to know what is collected, the right to access it, and the right to request deletion. Even for organizations not primarily based in California, maintaining these rights is considered best practice and protects against future exposure.
+
+**How this portal complies:** A published privacy policy explains all data collected. Families can download all their data in one click. Families can request account deletion through the portal. The portal does not sell personal information to any third party.
+
+---
+
+### Missouri Child Care Licensing Requirements (State)
+Missouri licensing standards for childcare programs require that facilities maintain accurate enrollment records and protect the privacy of children and families in their care. While there is no specific Missouri law governing web portals, the spirit of these requirements is met through controlled data access, role-based staff permissions, and a complete audit trail of all administrative actions.
+
+---
+
+### FERPA Considerations
+FERPA (Family Educational Rights and Privacy Act) primarily applies to schools receiving federal education funding. For a church-based MDO program it may not apply directly, but its core principle — that parents have the right to inspect and correct records about their children — is fully honored in this portal's design.
+
+---
+
+## Part 2 — What Personal Data Is Collected and Why
+
+| Data Element | Who It Belongs To | Why It Is Collected |
+|---|---|---|
+| Parent/Guardian full name | Parent | Identifies the family account; printed on rosters |
+| Parent email address | Parent | Registration confirmation emails; contact by staff |
+| Parent phone number | Parent | Emergency contact; staff communication |
+| Family access PIN | Parent | Secure login to view/edit registrations |
+| Child's full name | Child (under 13) | Classroom rosters; identifying the child in care |
+| Child's date of birth | Child (under 13) | Determines which age-appropriate room to assign |
+| Care schedule selections | Family | Processing registrations; billing; staffing ratios |
+| Contact form messages | Parent | Responding to inquiries |
+
+**What is NOT collected:**
+- Payment card numbers or banking information (billing is handled offline by the MDO office)
+- Social Security numbers
+- Medical or health records
+- Photos or images of children
+- Location data
+- Behavioral tracking or advertising data of any kind
+
+---
+
+## Part 3 — Security Safeguards in Plain Language
+
+### 3.1 Encrypted Transmission (HTTPS / TLS)
+All data traveling between a parent's browser and the server is encrypted using HTTPS, the same technology used by banks. This is enforced at the Cloudflare edge — it is not possible to access the portal over an unencrypted connection. This means that even if someone were intercepting traffic on a public Wi-Fi network, they could not read any submitted information.
+
+---
+
+### 3.2 Family PINs Are Never Readable — Even by Staff
+When a family sets their 4-digit PIN, it is immediately scrambled using a process called "bcrypt hashing" before being saved to the database. The original PIN is discarded and never stored anywhere. When a parent enters their PIN to log in, the system scrambles their input the same way and compares the two scrambled versions — it never compares against the real PIN, because the real PIN no longer exists in any form.
+
+**Practical implication:** If an MDO staff member, a database administrator, or an unauthorized person ever viewed the raw database, they would see thousands of strings like `$2a$12$XK9mQ...` rather than any actual PIN. These scrambled values are mathematically impossible to reverse.
+
+---
+
+### 3.3 Database Access Controls (Row-Level Security)
+The database uses PostgreSQL Row-Level Security (RLS) policies. This means the database itself enforces who can see what — it is not just the application checking permissions and deciding what to display. A family logged in to their account cannot see any other family's records even if they tried to access them directly. Staff cannot see records they are not authorized to see. These restrictions are enforced at the lowest level of the system.
+
+---
+
+### 3.4 Admin Authentication with Automatic Timeout
+Accessing the admin dashboard requires a valid staff email address and password, authenticated through Supabase's secure authentication system. Passwords are never stored in the application.
+
+After 30 minutes of inactivity, admin sessions are automatically terminated and the user is required to log in again. This protects against a situation where a staff member walks away from a computer and leaves a sensitive dashboard open.
+
+---
+
+### 3.5 Role-Based Staff Access
+Not all staff see the same information. The system supports multiple access roles:
+
+- **Full Admin** — Complete access including payroll, billing reports, all family data, and system settings.
+- **Restricted Admin** — Can manage registrations and rosters but cannot see payroll, billing, or system configuration.
+- **Staff** — Limited access appropriate for classroom staff.
+
+This "least privilege" approach means a classroom aide cannot accidentally (or intentionally) access billing information or family financial data they have no business reason to see.
+
+---
+
+### 3.6 Complete Admin Activity Audit Log
+Every significant action taken by any admin user is automatically recorded in a permanent audit log. This log captures:
+- Which admin account performed the action
+- What action was taken (e.g., deleted registration, changed billing rate, locked family account)
+- Which record was affected (identified by ID, not by displaying personal data)
+- The exact date and time it occurred
+- The before and after values for any changed fields
+
+**Why this matters legally and operationally:** If a registration is missing, a billing amount appears incorrect, or a staff member is accused of inappropriate access, the audit log provides an authoritative, tamper-evident record of exactly what happened and when.
+
+---
+
+### 3.7 XSS Protection — Preventing Malicious Content
+The portal protects against a category of web attack called Cross-Site Scripting (XSS). This occurs when an attacker enters malicious computer code into a data field (like a name field) hoping the website will execute it. The portal sanitizes all database content before displaying it — converting any potentially dangerous characters into harmless text. This means a bad actor cannot inject code that could steal other families' sessions or redirect users to fraudulent websites.
+
+---
+
+### 3.8 Server-Enforced Registration Rules
+The rule that registration closes after the 15th of each month is enforced in the database itself — not just visually in the browser. Even if someone with technical knowledge attempted to bypass the on-screen lock using browser developer tools, the database would reject the submission. This enforcement cannot be circumvented from a regular browser.
+
+---
+
+### 3.9 Error Monitoring (Operational Security)
+A silent background monitor watches for any technical errors on every page of the portal. If something breaks — such as a registration submission failing, a page crashing, or a database query returning an error — it is logged automatically to an admin-viewable error table. This allows staff to discover and fix problems proactively rather than waiting for a parent to report them, reducing the window of time that families might encounter broken features.
+
+---
+
+### 3.10 No Third-Party Advertising or Tracking
+The portal does not use advertising cookies, cross-site tracking pixels, or third-party analytics on parent-facing pages. No family data is shared with advertising networks. The only external services used are:
+
+| Service | Purpose | Their Privacy Policy |
+|---|---|---|
+| **Supabase** | Database, authentication, serverless functions | supabase.com/privacy |
+| **Cloudflare** | Web hosting and edge security (CDN) | cloudflare.com/privacypolicy |
+| **Google Fonts** | Web fonts (font files loaded from Google's servers) | policies.google.com/privacy |
+
+---
+
+## Part 4 — Family Rights and How They Are Exercised
+
+### Right to Access (Download Your Data)
+Any logged-in parent can click "Download My Data" in the My Schedule portal. This generates and downloads a complete record of everything the system holds about their family: parent contact information, children's names and birthdates, and all registration history. No request to the office is required.
+
+### Right to Correction
+Families can request corrections to any inaccurate information by emailing mdo@timothystl.org. The MDO office can update records directly from the admin dashboard.
+
+### Right to Deletion
+Families can submit a deletion request directly through the portal using the "Request Account Deletion" form, or by emailing mdo@timothystl.org. All deletion requests are handled within 30 days. An admin-facing queue in the dashboard shows all pending deletion requests so nothing falls through the cracks.
+
+**Note on retention exceptions:** Records that are required for legal, financial, or tax purposes may be retained for the minimum period required by law even after a deletion request. The portal's privacy policy discloses this limitation.
+
+### Right to Know We Don't Sell Data
+The portal does not sell, rent, or trade personal information to any third party for commercial purposes. This is stated in the published privacy policy and requires no opt-out action by families.
+
+---
+
+## Part 5 — Data Retention
+
+- **Active records** are retained throughout the current program year.
+- **Prior year records** are retained for one full program year to support billing reconciliation and attendance reporting if disputes arise.
+- **Records older than two program years** may be purged at the MDO director's discretion.
+- **Audit logs** may be retained longer as part of the organization's operational record.
+
+---
+
+## Part 6 — Published Privacy Policy
+
+A formal privacy policy is published at the portal address (`/privacy.html`) and is linked from the parent-facing registration pages. It covers:
+
+1. What information is collected
+2. How it is used
+3. Children's privacy (COPPA compliance statement)
+4. Data storage and security measures
+5. Data retention periods
+6. Family rights (access, correction, deletion, no-sale)
+7. Cookies and tracking disclosure
+8. Third-party services disclosure
+9. Contact information for privacy requests
+10. Policy update process
+
+The policy is written in plain English and is accessible without logging in.
+
+---
+
+## Part 7 — Summary of Key Compliance Points
+
+| Requirement | Status | How It Is Met |
+|---|---|---|
+| COPPA — Parental consent for children's data | Compliant | Only parents register; children do not interact with portal |
+| COPPA — Minimal data collection | Compliant | Only name + DOB collected for children |
+| COPPA — Parental access and deletion rights | Compliant | Download and deletion tools built into parent portal |
+| CCPA — Privacy policy published | Compliant | privacy.html linked from all pages |
+| CCPA — Right to access | Compliant | One-click data download in parent portal |
+| CCPA — Right to deletion | Compliant | In-portal deletion request form + email option |
+| CCPA — No sale of personal data | Compliant | Data not sold; disclosed in privacy policy |
+| Secure transmission | Compliant | HTTPS enforced at Cloudflare edge |
+| Secure credential storage | Compliant | PINs hashed with bcrypt; admin passwords via Supabase Auth |
+| Access controls | Compliant | RLS in database + role-based admin permissions |
+| Activity audit trail | Compliant | All admin actions logged with timestamp and detail |
+| No advertising tracking | Compliant | No ad cookies or tracking pixels on parent pages |
+
+---
+
+## Contact for Privacy Questions
+
+**Timothy Lutheran Church Mother's Day Out**
+Email: mdo@timothystl.org
+Address: Timothy Lutheran Church, St. Louis, MO
+
+*For questions about this document or the portal's privacy practices, contact the MDO director.*
+
+---
+
+*Document reflects portal state as of March 2026. Should be reviewed and updated whenever significant changes are made to data practices or applicable law changes.*
