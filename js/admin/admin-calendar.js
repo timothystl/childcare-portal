@@ -1,0 +1,1066 @@
+// ============================================================
+// MODULE: Admin Calendar (registration management tab)
+// Sections: Load Registrations, Table Render, Edit Days Modal,
+//           Capacity Overview, Room Capacity Calendar Modal,
+//           Registration Window Override, Filters, Export
+// ============================================================
+
+// LOAD REGISTRATIONS
+// ============================================================
+async function loadRegistrations() {
+    document.getElementById('regTableBody').innerHTML =
+        '<tr><td colspan="10" class="loading-cell">Loading…</td></tr>';
+    try {
+        allRegistrations = await fetchAllRegistrations();
+        populateCareMonthFilter();
+        renderTable(allRegistrations);
+        renderCapacityOverview();
+    } catch (err) {
+        console.error(err);
+        document.getElementById('regTableBody').innerHTML =
+            '<tr><td colspan="10" class="loading-cell error">Failed to load — check Supabase config.</td></tr>';
+    }
+}
+
+// Populate care-month dropdown with all months present in registration_dates
+function populateCareMonthFilter() {
+    const sel = document.getElementById('careMonthFilter');
+    const current = sel.value; // preserve selection if already set
+    while (sel.options.length > 1) sel.remove(1);
+
+    const months = new Set();
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (d.care_date) months.add(d.care_date.substring(0, 7));
+        });
+    });
+
+    [...months].sort().forEach(m => {
+        const [y, mo] = m.split('-').map(Number);
+        const label = MONTH_NAMES_ADMIN[mo - 1] + ' ' + y;
+        const opt = document.createElement('option');
+        opt.value       = m;
+        opt.textContent = label;
+        sel.appendChild(opt);
+    });
+
+    if (current) sel.value = current; // restore selection
+}
+
+// ============================================================
+// TABLE RENDER
+// ============================================================
+function renderTable(data) {
+    // Update sort indicators on column headers
+    document.querySelectorAll('#regTable thead th[data-col]').forEach(th => {
+        const col = th.dataset.col;
+        const isActive = col === tableSortState.col;
+        th.classList.toggle('sort-active', isActive);
+        // Strip old indicator then re-add
+        th.textContent = th.textContent.replace(/\s*[▲▼]$/, '');
+        if (isActive) th.textContent += tableSortState.dir === 'asc' ? ' ▲' : ' ▼';
+    });
+
+    const tbody = document.getElementById('regTableBody');
+    if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="11" class="loading-cell">No registrations found.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = data.map(reg => {
+        const room  = ROOMS.find(r => r.id === reg.room_id) || { label: reg.room_id };
+        const dates = (reg.registration_dates || [])
+            .sort((a, b) => a.care_date.localeCompare(b.care_date));
+
+        // Date chips — show ½ day or Full
+        const datesHtml = dates.map(d => {
+            const cls       = d.waitlisted ? 'badge-waitlist' : 'badge-confirmed';
+            const typeLabel = d.day_type === 'half' ? '½ day' : 'Full';
+            return `<span class="date-chip ${cls}" title="${d.day_type === 'half' ? 'Half Day' : 'Full Day'}">${friendlyShort(d.care_date)} <em>${typeLabel}</em></span>`;
+        }).join('');
+
+        // Full / Half tally
+        const confirmed = dates.filter(d => !d.waitlisted);
+        const fullCount = confirmed.filter(d => d.day_type !== 'half').length;
+        const halfCount = confirmed.filter(d => d.day_type === 'half').length;
+        const tallyParts = [];
+        if (fullCount) tallyParts.push(`<span class="tally-full">${fullCount} Full</span>`);
+        if (halfCount) tallyParts.push(`<span class="tally-half">${halfCount} Half</span>`);
+        const tallyHtml = tallyParts.join('<br>') || '—';
+
+        const submitted = new Date(reg.created_at).toLocaleDateString('en-US',
+            { month: 'short', day: 'numeric', year: 'numeric' });
+
+        const bill = calcRegistrationBill(reg);
+
+        // Discount info — try reg email first, fall back to searching all family emails
+        const discKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
+        const disc    = getDiscountMap().get(discKey);
+        const discLabel = disc
+            ? (disc.type === 'staff' ? 'Staff (free)' : `${disc.value}% off`)
+            : '—';
+
+        return `
+            <tr data-id="${reg.id}" data-room="${reg.room_id}">
+                <td>${submitted}</td>
+                <td>${escHtml(reg.parent_name)}</td>
+                <td><a href="mailto:${escHtml(reg.parent_email)}">${escHtml(reg.parent_email)}</a></td>
+                <td>${escHtml(reg.parent_phone)}</td>
+                <td>${escHtml(reg.child_name)}</td>
+                <td>${room.label}</td>
+                <td class="dates-cell">${datesHtml}</td>
+                <td class="tally-cell">${tallyHtml}</td>
+                <td class="bill-cell">$${bill.toFixed(2)}</td>
+                <td class="discount-cell">${discLabel}</td>
+                <td class="actions-cell">
+                    <button class="btn-secondary btn-edit-days" data-id="${reg.id}">Edit Days</button>
+                    <button class="btn-delete" data-id="${reg.id}">Delete</button>
+                </td>
+            </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('.btn-delete').forEach(btn => {
+        btn.addEventListener('click', async e => {
+            const id  = e.currentTarget.getAttribute('data-id');
+            const reg = allRegistrations.find(r => String(r.id) === id);
+            if (!confirm(`Delete registration for ${reg?.child_name ?? 'this child'}? This cannot be undone.`)) return;
+            try {
+                await deleteRegistration(id);
+                await logAdminAction('delete', 'registration', id, { child_name: reg?.child_name, parent_name: reg?.parent_name });
+                await loadRegistrations();
+            } catch (err) {
+                alert('Delete failed: ' + err.message);
+            }
+        });
+    });
+
+    tbody.querySelectorAll('.btn-edit-days').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const id  = e.currentTarget.getAttribute('data-id');
+            const reg = allRegistrations.find(r => String(r.id) === id);
+            if (reg) openEditDaysModal(reg);
+        });
+    });
+}
+
+// ============================================================
+// EDIT DAYS MODAL
+// ============================================================
+let editDaysReg = null;
+
+function openEditDaysModal(reg) {
+    editDaysReg = reg;
+    document.getElementById('editDaysTitle').textContent =
+        `Edit Days — ${reg.child_name}`;
+    document.getElementById('editDaysDate').value = '';
+    document.getElementById('editDaysDayType').value = 'full';
+    document.getElementById('editDaysWaitlist').checked = false;
+    document.getElementById('editDaysError').textContent = '';
+    renderEditDaysList();
+    document.getElementById('editDaysModal').classList.remove('hidden');
+}
+
+function renderEditDaysList() {
+    const reg   = editDaysReg;
+    const dates = (reg.registration_dates || [])
+        .slice()
+        .sort((a, b) => a.care_date.localeCompare(b.care_date));
+
+    const body = document.getElementById('editDaysBody');
+    if (!dates.length) {
+        body.innerHTML = '<p style="color:#888;font-size:.9em;padding:8px 0">No days scheduled.</p>';
+        return;
+    }
+    body.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto;margin-bottom:8px">
+        ${dates.map(d => {
+            const label    = friendlyShort(d.care_date);
+            const typeTag  = d.day_type === 'half' ? 'Half' : 'Full';
+            const wlTag    = d.waitlisted ? ' · Waitlist' : '';
+            const feeTag   = d.change_fee > 0 ? ` <span style="font-size:.75em;padding:1px 5px;background:#fef3c7;border:1px solid #fbbf24;border-radius:3px;color:#92400e">+$${Number(d.change_fee).toFixed(0)} fee</span>` : '';
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:#f8f9ff;border-radius:8px;font-size:.9em">
+                <span>${label} — <strong>${typeTag}</strong>${wlTag}${feeTag}</span>
+                <button class="btn-delete edit-days-remove-btn" data-date-id="${d.id}" style="padding:3px 10px;font-size:.82em">Remove</button>
+            </div>`;
+        }).join('')}
+    </div>`;
+
+    body.querySelectorAll('.edit-days-remove-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const dateId = btn.dataset.dateId;
+            btn.disabled = true;
+            try {
+                await deleteRegistrationDate(dateId);
+                // Update local state
+                editDaysReg.registration_dates = editDaysReg.registration_dates.filter(
+                    d => String(d.id) !== String(dateId)
+                );
+                allRegistrations = allRegistrations.map(r =>
+                    r.id === editDaysReg.id ? editDaysReg : r
+                );
+                renderEditDaysList();
+                renderTable(allRegistrations);
+            } catch (err) {
+                alert('Remove failed: ' + err.message);
+                btn.disabled = false;
+            }
+        });
+    });
+}
+
+document.getElementById('editDaysClose')?.addEventListener('click', () => {
+    document.getElementById('editDaysModal').classList.add('hidden');
+    editDaysReg = null;
+});
+
+document.getElementById('editDaysAddBtn')?.addEventListener('click', async () => {
+    const dateVal  = document.getElementById('editDaysDate').value;
+    const dayType  = document.getElementById('editDaysDayType').value;
+    const waitlist = document.getElementById('editDaysWaitlist').checked;
+    const errEl    = document.getElementById('editDaysError');
+
+    if (!dateVal) { errEl.textContent = 'Please select a date.'; return; }
+    if (!editDaysReg) return;
+
+    // Check for duplicate
+    if ((editDaysReg.registration_dates || []).some(d => d.care_date === dateVal)) {
+        errEl.textContent = 'That date is already on this registration.';
+        return;
+    }
+
+    errEl.textContent = '';
+    const btn = document.getElementById('editDaysAddBtn');
+    btn.disabled = true;
+    try {
+        await addRegistrationDate(editDaysReg.id, editDaysReg.room_id, dateVal, dayType, waitlist);
+        // Reload registration to get the new date's ID
+        const fresh = await fetchAllRegistrations();
+        allRegistrations = fresh;
+        editDaysReg = fresh.find(r => r.id === editDaysReg.id) || editDaysReg;
+        renderEditDaysList();
+        renderTable(allRegistrations);
+        document.getElementById('editDaysDate').value = '';
+    } catch (err) {
+        errEl.textContent = 'Add failed: ' + err.message;
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+// ============================================================
+// CAPACITY OVERVIEW
+// ============================================================
+let capOverviewDate = null; // JS Date set to 1st of currently displayed month
+
+function initCapacityMonthNav() {
+    const today = new Date();
+    capOverviewDate = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    // Populate select: 6 months back → 12 months ahead
+    const sel = document.getElementById('capMonthSelect');
+    if (sel) {
+        sel.innerHTML = '';
+        for (let offset = -6; offset <= 12; offset++) {
+            const d = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = MONTH_NAMES_ADMIN[d.getMonth()] + ' ' + d.getFullYear();
+            if (offset === 0) opt.selected = true;
+            sel.appendChild(opt);
+        }
+        sel.addEventListener('change', () => {
+            const [y, m] = sel.value.split('-').map(Number);
+            capOverviewDate = new Date(y, m - 1, 1);
+            renderCapacityOverview();
+        });
+    }
+
+    document.getElementById('capPrevMonth')?.addEventListener('click', () => {
+        capOverviewDate = new Date(capOverviewDate.getFullYear(), capOverviewDate.getMonth() - 1, 1);
+        _syncCapSelect();
+        renderCapacityOverview();
+    });
+    document.getElementById('capNextMonth')?.addEventListener('click', () => {
+        capOverviewDate = new Date(capOverviewDate.getFullYear(), capOverviewDate.getMonth() + 1, 1);
+        _syncCapSelect();
+        renderCapacityOverview();
+    });
+}
+
+function _syncCapSelect() {
+    const sel = document.getElementById('capMonthSelect');
+    if (!sel || !capOverviewDate) return;
+    const key = `${capOverviewDate.getFullYear()}-${String(capOverviewDate.getMonth() + 1).padStart(2, '0')}`;
+    // If the target month isn't in the select, add it
+    let opt = [...sel.options].find(o => o.value === key);
+    if (!opt) {
+        opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = MONTH_NAMES_ADMIN[capOverviewDate.getMonth()] + ' ' + capOverviewDate.getFullYear();
+        sel.appendChild(opt);
+    }
+    sel.value = key;
+}
+
+function renderCapacityOverview() {
+    const grid = document.getElementById('capacityGrid');
+    if (!capOverviewDate) capOverviewDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+    const y = capOverviewDate.getFullYear();
+    const m = capOverviewDate.getMonth();
+    const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+
+    // Count Mon–Fri working days in the month
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    let workingDays = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dow = new Date(y, m, day).getDay();
+        if (dow !== 0 && dow !== 6) workingDays++;
+    }
+
+    // Count confirmed bookings per room for this month
+    const counts = {};
+    ROOMS.forEach(r => { counts[r.id] = 0; });
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date) return;
+            if (d.care_date.startsWith(key)) {
+                const roomKey = d.room_id || reg.room_id;
+                counts[roomKey] = (counts[roomKey] || 0) + 1;
+            }
+        });
+    });
+
+    const cards = ROOMS.map(room => {
+        const used  = counts[room.id] || 0;
+        const cap   = room.capacity * workingDays;
+        const pct   = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+        const color = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
+        return `
+            <div class="cap-card" data-room-id="${room.id}" data-month-key="${key}" role="button" tabindex="0" title="View ${room.label} calendar">
+                <h3>${room.label}</h3>
+                <p class="cap-meta">Max ${room.capacity}/day &middot; ${used} booking${used !== 1 ? 's' : ''}</p>
+                <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
+                <p class="cap-pct">${pct}% utilisation</p>
+                <p class="cap-card-hint">Click to view calendar →</p>
+            </div>`;
+    }).join('');
+
+    grid.innerHTML = `<div class="capacity-grid">${cards}</div>`;
+}
+
+// ============================================================
+// ROOM CAPACITY CALENDAR MODAL
+// ============================================================
+let rcalRoomId    = null;
+let rcalMonthDate = null; // JS Date set to 1st of displayed month
+let rcalSetupDone = false; // guard against double-registration if initDashboard runs twice
+
+function setupRoomCalendar() {
+    if (rcalSetupDone) return;
+    rcalSetupDone = true;
+
+    // Wire up modal buttons (null-safe in case modal HTML is missing/cached)
+    document.getElementById('rcalClose')?.addEventListener('click', closeRoomCalendar);
+    document.getElementById('rcalPrev')?.addEventListener('click', () => {
+        rcalMonthDate = new Date(rcalMonthDate.getFullYear(), rcalMonthDate.getMonth() - 1, 1);
+        drawRoomCalendar();
+    });
+    document.getElementById('rcalNext')?.addEventListener('click', () => {
+        rcalMonthDate = new Date(rcalMonthDate.getFullYear(), rcalMonthDate.getMonth() + 1, 1);
+        drawRoomCalendar();
+    });
+    document.getElementById('roomCalModal')?.addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeRoomCalendar();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            closeDayRosterDetail();
+            closeRoomCalendar();
+        }
+    });
+
+    // Cap-card click/keyboard delegation (capacity overview → open room calendar)
+    document.addEventListener('click', e => {
+        const card = e.target.closest('.cap-card[data-room-id]');
+        if (card) openRoomCalendar(card.dataset.roomId, card.dataset.monthKey);
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            const card = e.target.closest('.cap-card[data-room-id]');
+            if (card) { e.preventDefault(); openRoomCalendar(card.dataset.roomId, card.dataset.monthKey); }
+        }
+    });
+
+    // Default room schedule week to the current Monday
+    const rsWeekInput = document.getElementById('roomSchedWeekOf');
+    if (rsWeekInput) {
+        const today = new Date();
+        const day   = today.getDay();                         // 0=Sun … 6=Sat
+        const diff  = (day === 0 ? -6 : 1 - day);            // days back to Mon
+        const mon   = new Date(today);
+        mon.setDate(today.getDate() + diff);
+        rsWeekInput.value = mon.toISOString().split('T')[0];
+    }
+    document.getElementById('viewRoomSchedBtn')?.addEventListener('click', renderRoomSchedule);
+}
+
+async function renderRoomSchedule() {
+    const weekOf    = document.getElementById('roomSchedWeekOf')?.value;
+    if (!weekOf) { alert('Please select a week first.'); return; }
+
+    const btn       = document.getElementById('viewRoomSchedBtn');
+    const container = document.getElementById('roomSchedContent');
+    btn.disabled = true; btn.textContent = 'Loading…';
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+
+    try {
+        // Ensure registration data is loaded
+        if (!allRegistrations.length) allRegistrations = await fetchAllRegistrations();
+
+        const weekDates = _buildWeekDates(weekOf);
+        if (!weekDates.length) {
+            container.innerHTML = '<p class="empty-hint">No school days in this week (all weekends or closed days).</p>';
+            return;
+        }
+
+        const counts = _buildShiftCounts(weekDates);
+
+        const roomHeaders = ROOMS.map(r => `<th colspan="2" class="staff-room-header">${r.label}</th>`).join('');
+        const subHeaders  = ROOMS.map(() =>
+            `<th class="staff-sub-head shift-am-th">AM</th><th class="staff-sub-head shift-pm-th">PM</th>`
+        ).join('');
+
+        const rows = weekDates.map(d => {
+            const dt    = new Date(d + 'T00:00:00');
+            const label = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
+            const cells = ROOMS.map(room => {
+                const c   = counts[d][room.id] || { total: 0, fullDay: 0 };
+                const cap = room.capacity || 0;
+
+                const amCls = cap && c.total   >= cap ? 'sched-full' : cap && c.total   >= cap * .8 ? 'sched-near' : '';
+                const pmCls = cap && c.fullDay >= cap ? 'sched-full' : cap && c.fullDay >= cap * .8 ? 'sched-near' : '';
+
+                const amStr = cap ? `${c.total}/${cap}`    : (c.total   > 0 ? String(c.total)   : '—');
+                const pmStr = cap ? `${c.fullDay}/${cap}`  : (c.fullDay > 0 ? String(c.fullDay) : '—');
+
+                return `<td class="sched-cell ${amCls}">${amStr}</td><td class="sched-cell ${pmCls}">${pmStr}</td>`;
+            }).join('');
+            return `<tr><td class="staff-date-cell"><strong>${label}</strong></td>${cells}</tr>`;
+        }).join('');
+
+        container.innerHTML = `
+            <div class="table-wrapper staff-table-wrap">
+                <table class="report-table autofill-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="staff-date-header">Date</th>
+                            ${roomHeaders}
+                        </tr>
+                        <tr>${subHeaders}</tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            <p class="sched-legend">AM = all enrolled &nbsp;·&nbsp; PM = full-day only &nbsp;·&nbsp; <span class="sched-near-swatch"></span> ≥80% full &nbsp;·&nbsp; <span class="sched-full-swatch"></span> at/over capacity</p>`;
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    } finally {
+        btn.disabled = false; btn.textContent = 'View Week';
+    }
+}
+
+// ---- Day Roster Detail popup (inside room calendar) ----
+function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
+    // Lazy-create the detail panel
+    let panel = document.getElementById('dayDetailPanel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id        = 'dayDetailPanel';
+        panel.className = 'day-detail-panel';
+        panel.innerHTML = `
+            <div class="day-detail-inner">
+                <div class="day-detail-header">
+                    <span id="dayDetailTitle" class="day-detail-title"></span>
+                    <button id="dayDetailClose" class="day-detail-close" title="Close">✕</button>
+                </div>
+                <div id="dayDetailBody" class="day-detail-body"></div>
+            </div>`;
+        document.getElementById('roomCalModal')?.querySelector('.rcal-dialog')?.appendChild(panel)
+            || document.body.appendChild(panel);
+        document.getElementById('dayDetailClose').addEventListener('click', closeDayRosterDetail);
+    }
+
+    const room = ROOMS.find(r => r.id === roomId);
+    document.getElementById('dayDetailTitle').textContent =
+        `${room?.label || roomId} — ${friendlyShort(dateStr)}`;
+
+    // Build per-room enrollment counts for this date (for availability info in dropdown)
+    const roomCounts = {};
+    ROOMS.forEach(r => { roomCounts[r.id] = 0; });
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (d.care_date === dateStr && !d.waitlisted) {
+                roomCounts[d.room_id] = (roomCounts[d.room_id] || 0) + 1;
+            }
+        });
+    });
+
+    const otherRooms = ROOMS.filter(r => r.id !== roomId);
+    const isFull     = cap > 0 && enrolled.length >= cap;
+
+    const bodyEl = document.getElementById('dayDetailBody');
+    if (!enrolled.length) {
+        bodyEl.innerHTML = '<p class="empty-hint" style="padding:12px 0;">No children booked for this day.</p>';
+    } else {
+        const countBadge = isFull
+            ? `<span class="day-detail-full-badge">Room is full</span>`
+            : ``;
+        const moveOptions = otherRooms.map(r => {
+            const cnt       = roomCounts[r.id] || 0;
+            const spotsLeft = Math.max(0, r.capacity - cnt);
+            const avail     = spotsLeft === 0 ? 'Full' : `${spotsLeft} open`;
+            return `<option value="${r.id}">${r.label} — ${avail}</option>`;
+        }).join('');
+
+        bodyEl.innerHTML = `
+            <p class="day-detail-count">
+                ${enrolled.length} / ${cap} spots filled ${countBadge}
+            </p>
+            <ul class="day-detail-list">
+                ${enrolled.map(e => `
+                    <li class="day-detail-item">
+                        <span class="day-detail-name">${escHtml(e.childName)}</span>
+                        <span class="day-chip ${e.dayType}">${e.dayType === 'half' ? 'Half Day' : 'Full Day'}</span>
+                        <select class="day-move-select" data-date-id="${e.dateId}"
+                                data-child="${escHtml(e.childName)}"
+                                data-from-room="${roomId}"
+                                title="Move ${escHtml(e.childName)} to a different room for this day only">
+                            <option value="">Move to…</option>
+                            ${moveOptions}
+                        </select>
+                    </li>`).join('')}
+            </ul>`;
+
+        // Wire move dropdowns
+        bodyEl.querySelectorAll('.day-move-select').forEach(sel => {
+            sel.addEventListener('change', async () => {
+                const newRoomId   = sel.value;
+                if (!newRoomId) return;
+                const childName   = sel.dataset.child;
+                const dateId      = sel.dataset.dateId;
+                const fromRoom    = ROOMS.find(r => r.id === sel.dataset.fromRoom)?.label || sel.dataset.fromRoom;
+                const toRoomObj   = ROOMS.find(r => r.id === newRoomId);
+                const toRoom      = toRoomObj?.label || newRoomId;
+                const toCnt       = roomCounts[newRoomId] || 0;
+                const toFull      = toRoomObj && toRoomObj.capacity > 0 && toCnt >= toRoomObj.capacity;
+                const overCapNote = toFull ? `\n\n⚠️ ${toRoom} is at capacity (${toCnt}/${toRoomObj.capacity}). This will force it over capacity.` : '';
+                if (!confirm(`Move ${childName} from ${fromRoom} to ${toRoom} for ${friendlyShort(dateStr)} only?${overCapNote}\n\nAll other days stay unchanged.`)) {
+                    sel.value = '';
+                    return;
+                }
+                sel.disabled = true;
+                try {
+                    await updateRegistrationDateRoom(dateId, newRoomId);
+                    // Update in-memory allRegistrations so the calendar redraws correctly
+                    allRegistrations = allRegistrations.map(reg => {
+                        const dates = (reg.registration_dates || []).map(d =>
+                            String(d.id) === String(dateId) ? { ...d, room_id: newRoomId } : d
+                        );
+                        return { ...reg, registration_dates: dates };
+                    });
+                    closeDayRosterDetail();
+                    drawRoomCalendar();
+                    renderCapacityOverview();
+                } catch (err) {
+                    alert('Move failed: ' + err.message);
+                    sel.disabled = false;
+                    sel.value = '';
+                }
+            });
+        });
+    }
+
+    // "+ Add Child to This Day" button
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn-secondary';
+    addBtn.textContent = '+ Add Child to This Day';
+    addBtn.style.cssText = 'margin-top:14px;width:100%;font-size:.85em';
+    addBtn.addEventListener('click', () => openAdminAddDayModal(dateStr, roomId));
+    bodyEl.appendChild(addBtn);
+
+    panel.classList.remove('hidden');
+    panel.classList.add('visible');
+}
+
+function closeDayRosterDetail() {
+    const panel = document.getElementById('dayDetailPanel');
+    if (panel) { panel.classList.remove('visible'); panel.classList.add('hidden'); }
+}
+
+// ── Admin Add Day Modal ─────────────────────────────────────
+let _aadDateStr  = '';
+let _aadRoomId   = '';
+let _aadSelected = null; // the registration record chosen
+
+function openAdminAddDayModal(dateStr, roomId) {
+    _aadDateStr  = dateStr;
+    _aadRoomId   = roomId;
+    _aadSelected = null;
+    document.getElementById('aadDateLabel').textContent = friendlyShort(dateStr);
+    document.getElementById('aadSearch').value = '';
+    document.getElementById('aadResults').innerHTML = '';
+    document.getElementById('aadForm').classList.add('hidden');
+    document.getElementById('aadError').textContent = '';
+    document.getElementById('aadChangeFee').checked = true;
+    document.getElementById('adminAddDayModal').classList.remove('hidden');
+}
+
+function _closeAdminAddDayModal() {
+    document.getElementById('adminAddDayModal').classList.add('hidden');
+    _aadSelected = null;
+}
+
+function _aadSelectChild(reg) {
+    _aadSelected = reg;
+    const room = ROOMS.find(r => r.id === reg.room_id);
+    document.getElementById('aadChildInfo').textContent =
+        `Adding: ${reg.child_name} — ${reg.parent_name} (${room?.label || reg.room_id})`;
+    document.getElementById('aadForm').classList.remove('hidden');
+    document.getElementById('aadError').textContent = '';
+}
+
+function _aadRunSearch() {
+    const q = document.getElementById('aadSearch').value.trim().toLowerCase();
+    const resultsEl = document.getElementById('aadResults');
+    if (!q) { resultsEl.innerHTML = ''; return; }
+
+    // Collect unique child+registration combos from allRegistrations, excluding already booked on this date in this room
+    const seen = new Set();
+    const matches = [];
+    allRegistrations.forEach(reg => {
+        if (!reg.child_name.toLowerCase().includes(q) && !reg.parent_name.toLowerCase().includes(q)) return;
+        const key = `${reg.id}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        // Skip if already booked for this exact date in this room
+        const alreadyBooked = (reg.registration_dates || []).some(
+            d => d.care_date === _aadDateStr && (d.room_id || reg.room_id) === _aadRoomId && !d.waitlisted
+        );
+        if (alreadyBooked) return;
+        matches.push(reg);
+    });
+
+    if (!matches.length) {
+        resultsEl.innerHTML = `<p style="font-size:.85em;color:#888;padding:8px">No matching children found. Child must have an active registration.</p>`;
+        return;
+    }
+
+    resultsEl.innerHTML = matches.slice(0, 10).map(reg => {
+        const room = ROOMS.find(r => r.id === reg.room_id);
+        return `<div class="aad-result-row" data-reg-id="${reg.id}"
+            style="padding:8px 10px;cursor:pointer;border-radius:6px;font-size:.88em;border-bottom:1px solid #f0f0f0">
+            <strong>${escHtml(reg.child_name)}</strong> — ${escHtml(reg.parent_name)}
+            <span style="color:#888;font-size:.9em"> · ${escHtml(room?.label || reg.room_id)}</span>
+        </div>`;
+    }).join('');
+
+    resultsEl.querySelectorAll('.aad-result-row').forEach(row => {
+        row.addEventListener('mouseenter', () => { row.style.background = '#f0f4ff'; });
+        row.addEventListener('mouseleave', () => { row.style.background = ''; });
+        row.addEventListener('click', () => {
+            const reg = matches.find(r => String(r.id) === row.dataset.regId);
+            if (reg) { _aadSelectChild(reg); resultsEl.innerHTML = ''; document.getElementById('aadSearch').value = reg.child_name; }
+        });
+    });
+}
+
+async function _aadConfirm() {
+    if (!_aadSelected) return;
+    const errEl = document.getElementById('aadError');
+    errEl.textContent = '';
+    const dayType   = document.getElementById('aadDayType').value;
+    const applyFee  = document.getElementById('aadChangeFee').checked;
+    const changeFee = applyFee ? 5 : 0;
+    const btn = document.getElementById('aadConfirmBtn');
+    btn.disabled = true;
+
+    try {
+        // Check capacity
+        const roomCap = ROOMS.find(r => r.id === _aadRoomId)?.capacity || 0;
+        const bookedCount = allRegistrations.reduce((count, reg) => {
+            return count + (reg.registration_dates || []).filter(
+                d => d.care_date === _aadDateStr && (d.room_id || reg.room_id) === _aadRoomId && !d.waitlisted
+            ).length;
+        }, 0);
+        if (roomCap > 0 && bookedCount >= roomCap) {
+            if (!confirm(`⚠️ ${ROOMS.find(r => r.id === _aadRoomId)?.label} is at capacity (${bookedCount}/${roomCap}) on this day.\n\nForce add over capacity?`)) {
+                btn.disabled = false;
+                return;
+            }
+        }
+
+        await addRegistrationDate(_aadSelected.id, _aadRoomId, _aadDateStr, dayType, false, changeFee);
+
+        // Reload registration data
+        allRegistrations = await fetchAllRegistrations();
+        const updatedReg = allRegistrations.find(r => r.id === _aadSelected.id) || _aadSelected;
+
+        // Send change notice email (non-blocking)
+        try {
+            const room = ROOMS.find(r => r.id === (updatedReg.room_id || _aadRoomId));
+            const rate = dayType === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+            const [y, m] = _aadDateStr.substring(0, 7).split('-').map(Number);
+            const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            const existingDates = (updatedReg.registration_dates || [])
+                .filter(d => !d.waitlisted && d.care_date !== _aadDateStr && d.care_date.startsWith(_aadDateStr.substring(0, 7)))
+                .map(d => {
+                    const r2 = ROOMS.find(x => x.id === (d.room_id || updatedReg.room_id));
+                    const r2rate = d.day_type === 'half' ? (r2?.halfDayRate || 0) : (r2?.fullDayRate || 0);
+                    return { date: d.care_date, dayType: d.day_type, amount: r2rate };
+                });
+            await sendScheduleChangeEmail({
+                parentName: updatedReg.parent_name,
+                parentEmail: updatedReg.parent_email,
+                childName: updatedReg.child_name,
+                monthLabel,
+                existingDates,
+                addedDate: { date: _aadDateStr, dayType, amount: rate },
+                changeFee,
+            });
+        } catch (emailErr) {
+            console.warn('Change notice email failed:', emailErr);
+        }
+
+        _closeAdminAddDayModal();
+        drawRoomCalendar();
+        renderCapacityOverview();
+        // Refresh the day detail panel for the same date
+        const enrolled = [];
+        allRegistrations.forEach(reg => {
+            (reg.registration_dates || []).forEach(d => {
+                if (d.care_date === _aadDateStr && (d.room_id || reg.room_id) === _aadRoomId && !d.waitlisted) {
+                    enrolled.push({ childName: reg.child_name, dayType: d.day_type, dateId: d.id });
+                }
+            });
+        });
+        const room = ROOMS.find(r => r.id === _aadRoomId);
+        showDayRosterDetail(_aadDateStr, _aadRoomId, enrolled, room?.capacity || 0);
+    } catch (err) {
+        errEl.textContent = 'Failed to add: ' + err.message;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// Wire up modal events once DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('aadCloseBtn')?.addEventListener('click', _closeAdminAddDayModal);
+    document.getElementById('aadCancelBtn')?.addEventListener('click', _closeAdminAddDayModal);
+    document.getElementById('aadConfirmBtn')?.addEventListener('click', _aadConfirm);
+    document.getElementById('aadSearch')?.addEventListener('input', _aadRunSearch);
+    document.getElementById('adminAddDayModal')?.addEventListener('click', e => {
+        if (e.target === document.getElementById('adminAddDayModal')) _closeAdminAddDayModal();
+    });
+});
+
+function openRoomCalendar(roomId, monthKey) {
+    try {
+        rcalRoomId    = roomId;
+        const [y, m]  = monthKey.split('-').map(Number);
+        rcalMonthDate = new Date(y, m - 1, 1);
+        drawRoomCalendar();
+        const modal = document.getElementById('roomCalModal');
+        if (!modal) { console.error('roomCalModal element not found'); return; }
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    } catch (err) {
+        console.error('openRoomCalendar error:', err);
+    }
+}
+
+function closeRoomCalendar() {
+    const modal = document.getElementById('roomCalModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+function drawRoomCalendar() {
+    const room  = ROOMS.find(r => r.id === rcalRoomId);
+    const y     = rcalMonthDate.getFullYear();
+    const m     = rcalMonthDate.getMonth(); // 0-based
+    const monthKey = `${y}-${String(m + 1).padStart(2, '0')}`;
+
+    document.getElementById('rcalRoomName').textContent  = room?.label || rcalRoomId;
+    document.getElementById('rcalMonthLabel').textContent = MONTH_NAMES_ADMIN[m] + ' ' + y;
+
+    // Build dayMap: 'YYYY-MM-DD' → [{ childName, dayType, dateId }]
+    // Filter by the date's own room_id (not the registration's) so per-day moves are reflected.
+    const dayMap = {};
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (d.room_id !== rcalRoomId) return;
+            if (d.waitlisted || !d.care_date || !d.care_date.startsWith(monthKey)) return;
+            if (!dayMap[d.care_date]) dayMap[d.care_date] = [];
+            dayMap[d.care_date].push({ childName: reg.child_name, dayType: d.day_type, dateId: d.id });
+        });
+    });
+
+    const cap        = room?.capacity || 0;
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+    // Mon-offset for first day of month in a Mon–Fri 5-column grid.
+    // If month starts Sat or Sun, first weekday is Mon the 2nd/3rd → 0 lead empties.
+    const firstDow  = new Date(y, m, 1).getDay(); // 0=Sun … 6=Sat
+    const monBased  = firstDow === 0 ? 6 : firstDow - 1; // 0=Mon … 4=Fri, 5=Sat, 6=Sun
+    const leadEmpties = monBased < 5 ? monBased : 0; // Sat/Sun → 0, weekday → its Mon-based offset
+
+    // Build cell data
+    const cells = [];
+    for (let i = 0; i < leadEmpties; i++) cells.push(null);
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dow = new Date(y, m, day).getDay();
+        if (dow === 0 || dow === 6) continue;
+        const dateStr  = `${monthKey}-${String(day).padStart(2, '0')}`;
+        const enrolled = (dayMap[dateStr] || []).slice().sort((a, b) => a.childName.localeCompare(b.childName));
+        const isClosed = allClosureDates.has(dateStr);
+        cells.push({ day, dateStr, enrolled, cap, isClosed });
+    }
+
+    // Render day-of-week header
+    const dowHtml = ['Mon','Tue','Wed','Thu','Fri']
+        .map(d => `<div class="rcal-dow-cell">${d}</div>`).join('');
+
+    // Render cells
+    const cellsHtml = cells.map(cell => {
+        if (!cell) return `<div class="rcal-cell rcal-cell-empty"></div>`;
+        const { day, dateStr, enrolled, cap, isClosed } = cell;
+        if (isClosed) return `
+            <div class="rcal-cell rcal-cell-closed">
+                <div class="rcal-day-num">${day}</div>
+                <div class="rcal-closed-label">Closed</div>
+            </div>`;
+        const count    = enrolled.length;
+        const pct      = cap > 0 ? count / cap : 0;
+        const cls      = pct >= 1 ? 'rcal-cell-full' : pct >= 0.75 ? 'rcal-cell-near' : 'rcal-cell-open';
+        const countLbl = cap ? `${count}/${cap}` : `${count}`;
+        const spotsLeft = Math.max(0, cap - count);
+        const slotLabel = spotsLeft === 0 ? 'Full' : `${spotsLeft} open`;
+        return `
+            <div class="rcal-cell ${cls} rcal-cell-clickable"
+                 data-date="${dateStr}"
+                 role="button" tabindex="0" title="Click to view roster for this day">
+                <div class="rcal-day-num">${day}</div>
+                <div class="rcal-count">${countLbl}</div>
+                <div class="rcal-slots-label">${slotLabel}</div>
+            </div>`;
+    }).join('');
+
+    document.getElementById('rcalBody').innerHTML = `
+        <div class="rcal-dow-row">${dowHtml}</div>
+        <div class="rcal-grid">${cellsHtml}</div>`;
+
+    // Attach click listeners directly to each cell via closure data (avoids JSON
+    // attribute parsing and stopPropagation conflicts with the modal overlay).
+    cells.forEach(cell => {
+        if (!cell || cell.isClosed) return;
+        const el = document.querySelector(`#rcalBody [data-date="${cell.dateStr}"]`);
+        if (el) {
+            el.addEventListener('click', () =>
+                showDayRosterDetail(cell.dateStr, rcalRoomId, cell.enrolled, cell.cap));
+        }
+    });
+}
+
+// ============================================================
+
+// REGISTRATION WINDOW OVERRIDE
+// ============================================================
+async function setupWindowOverride() {
+    try {
+        const current = await fetchSetting('reg_window_override') || 'auto';
+        document.getElementById('windowOverrideSelect').value = current;
+        showOverrideStatus(current, false);
+    } catch (err) {
+        console.warn('Could not load window override setting:', err);
+    }
+
+    document.getElementById('saveOverrideBtn').addEventListener('click', async () => {
+        const val    = document.getElementById('windowOverrideSelect').value;
+        const btn    = document.getElementById('saveOverrideBtn');
+        btn.disabled    = true;
+        btn.textContent = 'Saving…';
+        try {
+            await upsertSetting('reg_window_override', val);
+            showOverrideStatus(val, true);
+        } catch (err) {
+            alert('Error saving override: ' + err.message);
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Save';
+        }
+    });
+}
+
+function showOverrideStatus(val, saved) {
+    const el = document.getElementById('overrideStatus');
+    const labels = {
+        auto:   '⚙️ Auto — open days 1–20, closed days 21+ each month.',
+        open:   '🟢 Force Open — registration is open for all parents right now.',
+        closed: '🔴 Force Closed — registration is blocked for all parents right now.',
+    };
+    el.textContent = (saved ? '✅ Saved. ' : '') + (labels[val] || '');
+    el.className   = `override-status override-${val}`;
+}
+
+
+// FILTERS
+// ============================================================
+function setupFilters() {
+    ['searchInput', 'roomFilter', 'careMonthFilter'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', applyFilters);
+    });
+
+    // Sortable column headers
+    document.querySelectorAll('#regTable thead th[data-col]').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.title = 'Click to sort';
+        th.addEventListener('click', () => {
+            const col = th.dataset.col;
+            if (tableSortState.col === col) {
+                tableSortState.dir = tableSortState.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                tableSortState = { col, dir: 'asc' };
+            }
+            applyFilters();
+        });
+    });
+}
+
+function sortRegistrations(data) {
+    const { col, dir } = tableSortState;
+    const mult = dir === 'asc' ? 1 : -1;
+    return [...data].sort((a, b) => {
+        let va, vb;
+        switch (col) {
+            case 'submitted':
+                va = a.created_at || ''; vb = b.created_at || '';
+                return mult * va.localeCompare(vb);
+            case 'parent':
+                va = (a.parent_name || '').toLowerCase(); vb = (b.parent_name || '').toLowerCase();
+                return mult * va.localeCompare(vb);
+            case 'email':
+                va = (a.parent_email || '').toLowerCase(); vb = (b.parent_email || '').toLowerCase();
+                return mult * va.localeCompare(vb);
+            case 'child':
+                va = (a.child_name || '').toLowerCase(); vb = (b.child_name || '').toLowerCase();
+                return mult * va.localeCompare(vb);
+            case 'room':
+                va = a.room_id || ''; vb = b.room_id || '';
+                return mult * va.localeCompare(vb);
+            case 'tally': {
+                const tally = reg => (reg.registration_dates || []).filter(d => !d.waitlisted).length;
+                return mult * (tally(a) - tally(b));
+            }
+            case 'bill':
+                return mult * (calcRegistrationBill(a) - calcRegistrationBill(b));
+            default:
+                return 0;
+        }
+    });
+}
+
+function applyFilters() {
+    const search    = document.getElementById('searchInput').value.toLowerCase();
+    const room      = document.getElementById('roomFilter').value;
+    const careMonth = document.getElementById('careMonthFilter').value; // 'YYYY-MM' or ''
+
+    let filtered = allRegistrations.filter(reg => {
+        const matchSearch = !search ||
+            (reg.parent_name  || '').toLowerCase().includes(search) ||
+            (reg.parent_email || '').toLowerCase().includes(search) ||
+            (reg.child_name   || '').toLowerCase().includes(search);
+        const matchRoom      = !room      || reg.room_id === room;
+        const matchCareMonth = !careMonth || (reg.registration_dates || []).some(d =>
+            d.care_date && d.care_date.startsWith(careMonth));
+        return matchSearch && matchRoom && matchCareMonth;
+    });
+
+    // When a specific care month is selected also sort by earliest care date in that month
+    // (overrides column sort for that scenario for clarity)
+    if (careMonth && tableSortState.col === 'submitted') {
+        filtered = filtered.slice().sort((a, b) => {
+            const earliest = regs => (regs || [])
+                .filter(d => d.care_date?.startsWith(careMonth))
+                .map(d => d.care_date).sort()[0] || '';
+            return earliest(a.registration_dates).localeCompare(earliest(b.registration_dates));
+        });
+    } else {
+        filtered = sortRegistrations(filtered);
+    }
+
+    renderTable(filtered);
+}
+
+// ============================================================
+// EXPORT — CSV / EXCEL
+// ============================================================
+function exportCSV() {
+    const rows    = flattenForExport(allRegistrations);
+    const headers = Object.keys(rows[0] || {});
+    const csv     = [headers.join(','), ...rows.map(r => headers.map(h => csvCell(r[h])).join(','))].join('\n');
+    downloadFile('registrations.csv', 'text/csv', csv);
+}
+
+function exportExcel() {
+    const rows = flattenForExport(allRegistrations);
+    const ws   = XLSX.utils.json_to_sheet(rows);
+    const wb   = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Registrations');
+    ws['!cols'] = Object.keys(rows[0] || {}).map(k => ({
+        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
+    }));
+    XLSX.writeFile(wb, 'registrations.xlsx');
+}
+
+function flattenForExport(data) {
+    const rows = [];
+    data.forEach(reg => {
+        const room  = ROOMS.find(r => r.id === reg.room_id)?.label || reg.room_id;
+        const dates = (reg.registration_dates || [])
+            .sort((a, b) => a.care_date.localeCompare(b.care_date));
+        if (!dates.length) {
+            rows.push(baseRow(reg, room, '', '', ''));
+        } else {
+            dates.forEach(d => {
+                rows.push(baseRow(reg, room, d.care_date,
+                    d.waitlisted ? 'Waitlist' : 'Confirmed',
+                    d.day_type === 'half' ? 'Half Day' : 'Full Day'));
+            });
+        }
+    });
+    return rows;
+}
+
+function baseRow(reg, roomLabel, date, status, dayType) {
+    const room = ROOMS.find(r => r.label === roomLabel);
+    const rate = dayType === 'Half Day' ? room?.halfDayRate : room?.fullDayRate;
+    const bill = calcRegistrationBill(reg);
+    return {
+        'Submitted':   new Date(reg.created_at).toLocaleDateString('en-US'),
+        'Parent Name': reg.parent_name,
+        'Email':       reg.parent_email,
+        'Phone':       reg.parent_phone,
+        'Child Name':  reg.child_name,
+        'DOB':         reg.child_dob || '',
+        'Room':        roomLabel,
+        'Care Date':   date,
+        'Day Type':    dayType,
+        'Status':      status,
+        'Rate':        date && rate ? `$${rate}` : '',
+        'Total Bill':  `$${bill.toFixed(2)}`,
+    };
+}
+
+// ============================================================
