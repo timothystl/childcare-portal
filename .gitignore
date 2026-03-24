@@ -5,3 +5,4 @@
 .env*
 !.env.example
 supabase/.temp/
+.claude/worktrees/
