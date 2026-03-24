@@ -394,6 +394,7 @@ function renderTable(data) {
             if (!confirm(`Delete registration for ${reg?.child_name ?? 'this child'}? This cannot be undone.`)) return;
             try {
                 await deleteRegistration(id);
+                await logAdminAction('delete', 'registration', id, { child_name: reg?.child_name, parent_name: reg?.parent_name });
                 await loadRegistrations();
             } catch (err) {
                 alert('Delete failed: ' + err.message);
@@ -3540,6 +3541,8 @@ async function confirmArchiveFamily(id, name) {
 async function doArchiveFamily(id) {
     try {
         await archiveFamily(id);
+        const fam = allFamiliesData.find(f => f.id === id);
+        await logAdminAction('archive', 'family', id, { parent_name: fam?.parent_name });
         await loadFamilies();
     } catch (err) {
         alert('Archive failed: ' + err.message);
@@ -3549,6 +3552,8 @@ async function doArchiveFamily(id) {
 async function doRestoreFamily(id) {
     try {
         await restoreFamily(id);
+        const fam = allFamiliesData.find(f => f.id === id);
+        await logAdminAction('restore', 'family', id, { parent_name: fam?.parent_name });
         await loadFamilies();
     } catch (err) {
         alert('Restore failed: ' + err.message);
@@ -3561,6 +3566,7 @@ async function doSetFamilyLock(id, locked) {
         await setFamilyRegistrationLock(id, locked);
         const fam = allFamiliesData.find(f => f.id === id);
         if (fam) fam.registration_locked = locked;
+        await logAdminAction(locked ? 'lock_registration' : 'unlock_registration', 'family', id, { parent_name: fam?.parent_name });
         onFamilySearch();
     } catch (err) {
         alert((locked ? 'Lock' : 'Unlock') + ' failed: ' + err.message);
@@ -3572,6 +3578,7 @@ async function doSetFamilyLoginLock(id, locked) {
         await setFamilyLoginLock(id, locked);
         const fam = allFamiliesData.find(f => f.id === id);
         if (fam) { fam.login_locked = locked; if (!locked) fam.login_attempts = 0; }
+        await logAdminAction(locked ? 'lock_login' : 'unlock_login', 'family', id, { parent_name: fam?.parent_name });
         onFamilySearch();
     } catch (err) {
         alert('Unlock login failed: ' + err.message);
@@ -3580,12 +3587,13 @@ async function doSetFamilyLoginLock(id, locked) {
 
 function confirmDeleteFamily(id, name) {
     if (!confirm(`Permanently delete the ${name} family and ALL their children?\n\nThis cannot be undone.`)) return;
-    doDeleteFamily(id);
+    doDeleteFamily(id, name);
 }
 
-async function doDeleteFamily(id) {
+async function doDeleteFamily(id, name) {
     try {
         await deleteFamily(id);
+        await logAdminAction('delete', 'family', id, { parent_name: name });
         await loadFamilies();
     } catch (err) {
         alert('Delete failed: ' + err.message);
@@ -3944,6 +3952,7 @@ async function onSaveRates() {
         });
 
         await saveRateSettings(rates);
+        await logAdminAction('update', 'rate_settings', null, { rooms: Object.keys(rates) });
         // Merge saved values directly into ROOMS (avoids a DB round-trip that can
         // silently fail and revert the display back to hardcoded defaults).
         ROOMS.forEach(room => {
@@ -4335,7 +4344,7 @@ async function _loadAdminUsersTable() {
         window._adminRoles = roles;
         _renderAdminUsersTable(result.users || []);
     } catch (err) {
-        wrap.innerHTML = `<p class="empty-hint">⚠️ Could not load users: ${err.message}</p>`;
+        wrap.innerHTML = `<p class="empty-hint">⚠️ Could not load users: ${escHtml(err.message)}</p>`;
     }
 }
 
@@ -4360,12 +4369,12 @@ function _renderAdminUsersTable(authUsers) {
             : 'Never';
         return `
             <tr>
-                <td>${email}</td>
-                <td><select class="admin-role-select family-search-input btn-sm" data-email="${email}">${options}</select></td>
+                <td>${escHtml(email)}</td>
+                <td><select class="admin-role-select family-search-input btn-sm" data-email="${escHtml(email)}">${options}</select></td>
                 <td style="color:#888;font-size:.85em;white-space:nowrap">${lastSeen}</td>
                 <td style="white-space:nowrap">
-                    <button class="btn-ghost btn-sm reset-pw-btn" data-email="${email}">Reset Password</button>
-                    <button class="btn-ghost btn-sm delete-user-btn" style="color:#c62828" data-userid="${u.id}" data-email="${email}">Delete</button>
+                    <button class="btn-ghost btn-sm reset-pw-btn" data-email="${escHtml(email)}">Reset Password</button>
+                    <button class="btn-ghost btn-sm delete-user-btn" style="color:#c62828" data-userid="${u.id}" data-email="${escHtml(email)}">Delete</button>
                 </td>
             </tr>`;
     }).join('');
@@ -7248,8 +7257,4 @@ function friendlyShort(dateStr) {
         { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function escHtml(str) {
-    return String(str ?? '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+// escHtml() is defined in supabase.js (loaded before this file).

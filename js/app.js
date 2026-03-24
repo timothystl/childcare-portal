@@ -1205,9 +1205,8 @@ function showToast(msg) {
     t.classList.remove('hidden');
     setTimeout(() => t.classList.add('hidden'), 5000);
 }
-function escStr(str) {
-    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+// escStr: alias for escHtml() defined in supabase.js (loaded before this file).
+const escStr = escHtml;
 function setupListeners() {}   // kept for compatibility
 
 // ============================================================

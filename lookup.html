@@ -72,6 +72,31 @@
                 <p>These are your confirmed care days based on our registration system. Contact us if you notice any discrepancies.</p>
                 <a href="index.html" class="lookup-register-link">Register for additional days →</a>
             </div>
+
+            <!-- GDPR / CCPA data controls -->
+            <div class="lookup-data-controls">
+                <h3>Your Data</h3>
+                <p>Under applicable privacy laws you have the right to access, correct, or request deletion of your personal data.</p>
+                <div class="lookup-data-buttons">
+                    <button id="downloadDataBtn" class="btn-secondary">⬇ Download My Data</button>
+                    <button id="requestDeletionBtn" class="btn-ghost">🗑 Request Account Deletion</button>
+                </div>
+
+                <!-- Deletion request form (hidden by default) -->
+                <div id="deletionRequestForm" class="lookup-deletion-form hidden">
+                    <p>To request deletion of your family's account and all associated records, submit the form below. An admin will process your request within 30 days.</p>
+                    <textarea id="deletionNote" placeholder="Optional: reason or additional details" rows="3"></textarea>
+                    <div style="display:flex;gap:10px;margin-top:8px">
+                        <button id="submitDeletionBtn" class="btn-primary">Send Deletion Request</button>
+                        <button id="cancelDeletionBtn" class="btn-ghost">Cancel</button>
+                    </div>
+                    <p id="deletionStatus" class="hidden" style="margin-top:8px;font-size:.9em"></p>
+                </div>
+            </div>
+
+            <div class="lookup-footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+            </div>
         </div>
     </div>
 

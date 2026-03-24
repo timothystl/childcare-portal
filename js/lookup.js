@@ -2,6 +2,9 @@
 // PARENT PORTAL — My Schedule Lookup
 // ============================================================
 
+// Module state (populated after a successful lookup)
+let _currentFamily        = null;
+let _currentRegistrations = [];
 
 const MONTH_NAMES_LOOKUP = [
     'January','February','March','April','May','June',
@@ -22,6 +25,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('lookupBackBtn')?.addEventListener('click', resetToLookup);
     document.getElementById('lookupPrintBtn')?.addEventListener('click', printSchedule);
+
+    // GDPR / CCPA data controls
+    document.getElementById('downloadDataBtn')?.addEventListener('click', downloadMyData);
+    document.getElementById('requestDeletionBtn')?.addEventListener('click', () => {
+        document.getElementById('deletionRequestForm').classList.remove('hidden');
+    });
+    document.getElementById('cancelDeletionBtn')?.addEventListener('click', () => {
+        document.getElementById('deletionRequestForm').classList.add('hidden');
+    });
+    document.getElementById('submitDeletionBtn')?.addEventListener('click', submitDeletionRequest);
 });
 
 function resetToLookup() {
@@ -74,6 +87,8 @@ async function doLookup() {
             return;
         }
 
+        _currentFamily        = family;
+        _currentRegistrations = registrations;
         showResults(registrations, family.parent_email);
 
     } catch (err) {
@@ -225,10 +240,79 @@ function printSchedule() {
 }
 
 // ============================================================
+// GDPR / CCPA DATA CONTROLS
+// ============================================================
+
+// Download My Data — exports all registration data as a JSON file
+function downloadMyData() {
+    if (!_currentFamily || !_currentRegistrations.length) return;
+
+    const exportData = {
+        exported_at:  new Date().toISOString(),
+        family: {
+            parent_name:  _currentFamily.parent_name,
+            parent_email: _currentFamily.parent_email,
+            parent_phone: _currentFamily.parent_phone,
+            parent2_name: _currentFamily.parent2_name  || null,
+            parent2_email: _currentFamily.parent2_email || null,
+        },
+        registrations: _currentRegistrations.map(reg => ({
+            id:           reg.id,
+            submitted_at: reg.created_at,
+            child_name:   reg.child_name,
+            room_id:      reg.room_id,
+            status:       reg.status,
+            dates: (reg.registration_dates || []).map(d => ({
+                care_date:  d.care_date,
+                day_type:   d.day_type,
+                waitlisted: d.waitlisted,
+            })),
+        })),
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `mdo-schedule-data-${new Date().toISOString().substring(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Request Account Deletion — sends a message to admin via the messages table
+async function submitDeletionRequest() {
+    const note   = (document.getElementById('deletionNote')?.value || '').trim();
+    const status = document.getElementById('deletionStatus');
+    const btn    = document.getElementById('submitDeletionBtn');
+
+    if (!_currentFamily) return;
+
+    btn.disabled    = true;
+    btn.textContent = 'Sending…';
+    status.classList.add('hidden');
+
+    try {
+        await addMessage({
+            parentName:  _currentFamily.parent_name,
+            parentEmail: _currentFamily.parent_email,
+            message: `ACCOUNT DELETION REQUEST\n\nThe family has requested deletion of their account and all associated records under data privacy rights.\n\n${note ? 'Note: ' + note : ''}`,
+        });
+        status.textContent = '✅ Your deletion request has been received. We will process it within 30 days and confirm by email.';
+        status.style.color = '#2e7d32';
+        status.classList.remove('hidden');
+        document.getElementById('deletionNote').value = '';
+        btn.textContent = 'Sent';
+    } catch (err) {
+        status.textContent = '⚠️ Could not send request: ' + err.message + '. Please email mdo@timothystl.org directly.';
+        status.style.color = '#c62828';
+        status.classList.remove('hidden');
+        btn.disabled    = false;
+        btn.textContent = 'Send Deletion Request';
+    }
+}
+
+// ============================================================
 // HELPER
 // ============================================================
-function escLookup(str) {
-    return String(str ?? '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+// escLookup: alias for the shared escHtml() defined in supabase.js
+const escLookup = escHtml;

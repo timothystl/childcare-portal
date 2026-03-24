@@ -593,6 +593,19 @@ async function setFamilyLoginLock(id, locked) {
     return updateFamily(id, updates);
 }
 
+// Set a family PIN via the server-side RPC so the plaintext PIN is
+// hashed with bcrypt (pgcrypto) and never stored in plain text.
+// p_is_parent2: pass true to update the second parent's PIN.
+async function setFamilyPin(familyId, newPin, isParent2 = false) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.rpc('set_family_pin', {
+        p_family_id:  familyId,
+        p_new_pin:    String(newPin),
+        p_is_parent2: isParent2,
+    });
+    if (error) throw error;
+}
+
 // ---- Student CRUD ----
 async function updateStudent(id, updates) {
     if (!sbClient) throw new Error('Supabase not configured.');
@@ -1387,4 +1400,57 @@ async function deleteBillingSummary(month, roomId) {
         .eq('month', month)
         .eq('room_id', roomId);
     if (error) throw error;
+}
+
+// ============================================================
+// HTML SANITIZATION UTILITY
+// Shared by admin.js, app.js, and any future pages.
+// Escapes characters that could be used for XSS when injecting
+// user-supplied data into innerHTML template literals.
+// app.js uses the local alias escStr(); admin.js previously
+// defined its own escHtml(). This canonical version in
+// supabase.js (loaded first on every page) means both pages
+// get the same function automatically.
+// ============================================================
+function escHtml(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// ============================================================
+// AUDIT LOGGING
+// Calls the server-side log_admin_action() RPC so each action is
+// recorded with the authenticated admin's email (captured by the DB,
+// not the client, so it cannot be spoofed).
+//
+// Usage:
+//   await logAdminAction('delete', 'registration', reg.id, { child_name: 'Alice' });
+//   await logAdminAction('update', 'rate_settings', null, { room: 'bee', newRate: 75 });
+// ============================================================
+async function logAdminAction(action, entity, entityId = null, details = null) {
+    if (!sbClient) return;
+    try {
+        await sbClient.rpc('log_admin_action', {
+            p_action:    action,
+            p_entity:    entity,
+            p_entity_id: entityId != null ? String(entityId) : null,
+            p_details:   details,
+        });
+    } catch (err) {
+        // Non-fatal: log to console but never let audit failure break the UI action
+        console.warn('logAdminAction failed:', err.message);
+    }
+}
+
+async function fetchAuditLog() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('admin_audit_log_recent')
+        .select('*');
+    if (error) throw error;
+    return data || [];
 }
