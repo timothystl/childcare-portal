@@ -1040,7 +1040,13 @@ async function handleSubmit(e) {
                 });
                 results.push({ child, reg });
             } catch (childErr) {
-                errors.push(`${child.name}: ${childErr.message}`);
+                // Postgres trigger raises P0001 for window-closed; surface it cleanly.
+                const msg = childErr.message || '';
+                const isWindowClosed = msg.includes('Registration window is') ||
+                                       msg.includes('window is closed');
+                errors.push(isWindowClosed
+                    ? msg.replace(/\s*HINT:.*$/s, '').trim()
+                    : `${child.name}: ${msg}`);
             }
         }
 

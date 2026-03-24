@@ -97,6 +97,160 @@ const ROOMS = [
 ];
 
 // ============================================================
+// TYPE DEFINITIONS  (JSDoc — no build step required)
+// Provides IDE autocomplete and catches field-name typos at development time.
+// ============================================================
+
+/**
+ * A room configuration object (static config + admin-overridable rates).
+ * @typedef {Object} Room
+ * @property {string}      id             - Unique room identifier ('bear', 'bee', etc.)
+ * @property {string}      label          - Display label with emoji
+ * @property {string}      ages           - Human-readable age range
+ * @property {number|null} ageMinMonths   - Minimum age in months (null = no lower bound)
+ * @property {number|null} ageMaxMonths   - Maximum age in months (null = no upper bound)
+ * @property {number}      capacity       - Maximum enrolled children
+ * @property {boolean}     fullDayOnly    - Whether half-day option is disabled
+ * @property {number}      fullDayRate    - Full-day base rate in dollars
+ * @property {number|null} halfDayRate    - Half-day base rate in dollars (null if fullDayOnly)
+ * @property {number|null} weeklyFullRate - Weekly rate when all 5 weekdays are booked full-day
+ * @property {number|null} weeklyHalfRate - Weekly rate when all 5 weekdays are booked half-day
+ * @property {number}      staffRatio     - Max children per staff member
+ * @property {boolean}     [hidden]       - If true, room is hidden from the parent portal
+ */
+
+/**
+ * A single date entry used when building a registration.
+ * @typedef {Object} DateEntry
+ * @property {string} date    - ISO 8601 date string (YYYY-MM-DD)
+ * @property {string} dayType - 'full' or 'half'
+ */
+
+/**
+ * A registration_dates row as returned by Supabase.
+ * @typedef {Object} RegistrationDate
+ * @property {number}  id              - PK
+ * @property {number}  registration_id - FK → registrations.id
+ * @property {string}  room_id         - FK → room id string
+ * @property {string}  care_date       - ISO 8601 date (YYYY-MM-DD)
+ * @property {boolean} waitlisted      - Whether this date is waitlisted
+ * @property {string}  day_type        - 'full' or 'half'
+ * @property {number}  [change_fee]    - Admin-applied change fee for post-submission adds
+ */
+
+/**
+ * A registration row as returned by Supabase (may include nested registration_dates).
+ * @typedef {Object} Registration
+ * @property {number}              id                 - PK
+ * @property {string}              created_at         - ISO 8601 timestamp
+ * @property {string}              status             - 'confirmed' | 'waitlist' | 'cancelled'
+ * @property {string}              parent_name
+ * @property {string}              parent_email
+ * @property {string}              parent_phone
+ * @property {string}              child_name
+ * @property {number}              child_age          - Age in months at time of registration
+ * @property {string|null}         child_dob          - ISO 8601 date or null
+ * @property {string}              room_id
+ * @property {RegistrationDate[]}  [registration_dates] - Present when fetched with a join
+ */
+
+/**
+ * A student row as returned by Supabase (nested inside a Family).
+ * @typedef {Object} Student
+ * @property {number}      id
+ * @property {string}      child_name
+ * @property {string|null} child_dob         - ISO 8601 date or null
+ * @property {string|null} room_override     - Override room id, or null to use auto-assignment
+ * @property {string|null} discount_type     - 'percent' | 'flat' | 'custom' | null
+ * @property {number|null} discount_value    - Discount amount or percentage
+ * @property {string|null} discount_note     - Free-text note shown on billing
+ * @property {string|null} recurring_days    - Comma-separated weekday abbreviations, or null
+ */
+
+/**
+ * A family row as returned by Supabase (may include nested students).
+ * @typedef {Object} Family
+ * @property {number}      id
+ * @property {string}      parent_name
+ * @property {string}      parent_email
+ * @property {string}      parent_phone
+ * @property {number|null} pin                   - Hashed PIN (plaintext pre-migration)
+ * @property {string|null} parent2_name
+ * @property {string|null} parent2_email
+ * @property {string|null} parent2_phone
+ * @property {number|null} parent2_pin
+ * @property {boolean}     [registration_locked] - Blocks new registrations when true
+ * @property {boolean}     [login_locked]        - Blocks PIN login when true
+ * @property {Student[]}   [students]            - Present when fetched with a join
+ */
+
+/**
+ * Result returned by the family_login RPC.
+ * @typedef {Object} FamilyLoginResult
+ * @property {Family}  family    - The matched family record with nested students
+ * @property {boolean} isParent2 - Whether login matched the second parent's PIN
+ */
+
+/**
+ * A facility closure record.
+ * @typedef {Object} ClosureRecord
+ * @property {string} close_date - ISO 8601 date (YYYY-MM-DD)
+ * @property {string} reason     - Human-readable reason (may be empty string)
+ */
+
+/**
+ * A staff member record.
+ * @typedef {Object} StaffRecord
+ * @property {number}      id
+ * @property {string}      name
+ * @property {string|null} email
+ * @property {string|null} role         - Job title / role label
+ * @property {boolean}     active
+ * @property {number|null} pin          - Clock-in PIN
+ * @property {number}      [hours_week] - Contracted hours per week
+ */
+
+/**
+ * A staff clock event (individual clock-in / clock-out punch).
+ * @typedef {Object} ClockEvent
+ * @property {number}      id
+ * @property {number}      staff_id
+ * @property {string}      event_type  - 'in' or 'out'
+ * @property {string}      event_time  - ISO 8601 timestamp
+ */
+
+/**
+ * A staff hours record (manually entered or computed pay period summary).
+ * @typedef {Object} StaffHours
+ * @property {number}      id
+ * @property {number}      staff_id
+ * @property {string}      week_start  - ISO 8601 date (Monday of pay week)
+ * @property {number}      hours       - Total hours for the week
+ * @property {number}      [rate]      - Hourly rate at time of entry
+ */
+
+/**
+ * A waitlist entry.
+ * @typedef {Object} WaitlistEntry
+ * @property {number}      id
+ * @property {string}      created_at
+ * @property {string}      parent_name
+ * @property {string}      parent_email
+ * @property {string}      parent_phone
+ * @property {string}      child_name
+ * @property {string|null} child_dob
+ * @property {string}      room_id
+ * @property {string}      status      - 'waiting' | 'offered' | 'accepted' | 'declined'
+ * @property {string|null} offer_sent_at
+ * @property {string|null} notes
+ */
+
+/**
+ * An admin roles map keyed by lowercase email → role string.
+ * @typedef {Object<string, string>} AdminRolesMap
+ */
+
+// ============================================================
 // SUPABASE CONFIGURATION
 // ============================================================
 // Requests proxied through Cloudflare Worker (/sb/*) to avoid CORS issues.
@@ -123,6 +277,12 @@ function friendlyError(err) {
 // ============================================================
 // CAPACITY
 // ============================================================
+/**
+ * Returns a map of care_date → confirmed-booking count for the given room and dates.
+ * @param {string}   roomId      - Room id to check
+ * @param {string[]} dateStrings - ISO 8601 dates to check (YYYY-MM-DD)
+ * @returns {Promise<Object<string, number>>} Map of date string to booking count
+ */
 async function fetchCapacityForDates(roomId, dateStrings) {
     if (!dateStrings.length || !sbClient) return {};
     const { data, error } = await sbClient
@@ -142,6 +302,10 @@ async function fetchCapacityForDates(roomId, dateStrings) {
 // ============================================================
 // CLOSURES
 // ============================================================
+/**
+ * Fetches all facility closure dates ordered ascending.
+ * @returns {Promise<ClosureRecord[]>}
+ */
 async function fetchClosures() {
     if (!sbClient) return [];
     const { data, error } = await sbClient
@@ -152,6 +316,12 @@ async function fetchClosures() {
     return data || [];
 }
 
+/**
+ * Adds a facility closure date.
+ * @param {string} closeDate - ISO 8601 date (YYYY-MM-DD)
+ * @param {string} [reason]  - Optional reason string
+ * @returns {Promise<void>}
+ */
 async function addClosure(closeDate, reason) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
@@ -160,6 +330,11 @@ async function addClosure(closeDate, reason) {
     if (error) throw error;
 }
 
+/**
+ * Removes a facility closure date.
+ * @param {string} closeDate - ISO 8601 date (YYYY-MM-DD)
+ * @returns {Promise<void>}
+ */
 async function deleteClosure(closeDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
@@ -172,6 +347,19 @@ async function deleteClosure(closeDate) {
 // ============================================================
 // REGISTRATION SUBMIT
 // ============================================================
+/**
+ * Inserts a new registration row and its associated date rows.
+ * The server-side `enforce_registration_window` trigger will reject the insert
+ * if the registration window is closed (unless an admin override is active).
+ * @param {Object}      params
+ * @param {{name:string, email:string, phone:string}} params.parent
+ * @param {{name:string, ageMonths:number, dob:string|null}}  params.child
+ * @param {string}      params.roomId          - Room id string
+ * @param {DateEntry[]} params.confirmedDates  - Dates to book as confirmed
+ * @param {DateEntry[]} [params.waitlistDates] - Dates to book as waitlisted
+ * @param {string}      [params.status]        - Registration status (default: 'confirmed')
+ * @returns {Promise<Registration>} The created registration row
+ */
 async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates = [], status = 'confirmed' }) {
     if (!sbClient) throw new Error('Supabase is not configured yet.');
 
@@ -227,6 +415,14 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
 // ============================================================
 // ADMIN HELPERS
 // ============================================================
+/**
+ * Fetches registrations with nested registration_dates.
+ * Defaults to the current month + next month; pass explicit dates for reports.
+ * @param {Object}      [opts]
+ * @param {string|null} [opts.sinceDate] - ISO 8601 timestamp lower bound (inclusive)
+ * @param {string|null} [opts.untilDate] - ISO 8601 timestamp upper bound (inclusive)
+ * @returns {Promise<Registration[]>}
+ */
 async function fetchAllRegistrations({ sinceDate = null, untilDate = null } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     // Default: only load this month and next month (filtered by submission date).
@@ -251,6 +447,11 @@ async function fetchAllRegistrations({ sinceDate = null, untilDate = null } = {}
     return data || [];
 }
 
+/**
+ * Moves a waitlisted registration to confirmed status.
+ * @param {number} id - Registration id
+ * @returns {Promise<void>}
+ */
 async function approveRegistration(id) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error: regErr } = await sbClient
@@ -265,6 +466,11 @@ async function approveRegistration(id) {
     if (datesErr) throw datesErr;
 }
 
+/**
+ * Permanently deletes a registration and all its date rows.
+ * @param {number} id - Registration id
+ * @returns {Promise<void>}
+ */
 async function deleteRegistration(id) {
     if (!sbClient) throw new Error('Supabase not configured.');
     // Delete registration_dates first (no cascade in DB), then the registration
@@ -289,6 +495,16 @@ async function updateRegistrationDateRoom(dateId, newRoomId) {
     if (error) throw error;
 }
 
+/**
+ * Adds a single date to an existing registration.
+ * @param {number}  regId      - Registration id
+ * @param {string}  roomId     - Room id string
+ * @param {string}  careDate   - ISO 8601 date (YYYY-MM-DD)
+ * @param {string}  dayType    - 'full' or 'half'
+ * @param {boolean} waitlisted - Whether to mark the date as waitlisted
+ * @param {number}  [changeFee=0] - Admin change fee to apply to this date
+ * @returns {Promise<void>}
+ */
 async function addRegistrationDate(regId, roomId, careDate, dayType, waitlisted, changeFee = 0) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
@@ -309,6 +525,11 @@ async function deleteRegistrationDate(dateId) {
 // ============================================================
 // SETTINGS  (key/value table for admin overrides)
 // ============================================================
+/**
+ * Reads a single setting from the settings key/value table.
+ * @param {string} key - Setting key (e.g. 'reg_window_override', 'room_rates')
+ * @returns {Promise<*>} The JSONB value, or null if not found
+ */
 async function fetchSetting(key) {
     if (!sbClient) return null;
     const { data, error } = await sbClient
@@ -320,6 +541,12 @@ async function fetchSetting(key) {
     return data?.value ?? null;
 }
 
+/**
+ * Creates or updates a setting in the settings key/value table.
+ * @param {string} key   - Setting key
+ * @param {*}      value - Any JSON-serializable value
+ * @returns {Promise<void>}
+ */
 async function upsertSetting(key, value) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
@@ -334,6 +561,14 @@ async function upsertSetting(key, value) {
 // Returns an array of care_date strings that already have a confirmed
 // registration for this parent+child — so the caller can show specifics.
 // ============================================================
+/**
+ * Returns the subset of dateStrings that are already confirmed-booked for this child.
+ * Used to show the parent exactly which dates conflict before allowing submission.
+ * @param {string}   email       - Parent email (case-insensitive)
+ * @param {string}   childName   - Child name (case-insensitive)
+ * @param {string[]} dateStrings - ISO 8601 dates to check
+ * @returns {Promise<string[]>} Already-booked dates from the input list
+ */
 async function checkDateConflicts(email, childName, dateStrings) {
     if (!sbClient || !dateStrings.length) return [];
     try {
@@ -361,6 +596,14 @@ async function checkDateConflicts(email, childName, dateStrings) {
 }
 
 // Legacy month-level check kept for any callers outside handleSubmit
+/**
+ * Month-level duplicate check: returns the first existing registration for this
+ * parent+child in the given month, or null if none exists.
+ * @param {string}      email     - Parent email (case-insensitive)
+ * @param {string}      monthKey  - 'YYYY-MM' month string
+ * @param {string|null} [childName] - Child name filter (case-insensitive)
+ * @returns {Promise<Registration|null>}
+ */
 async function checkExistingRegistration(email, monthKey, childName = null) {
     if (!sbClient) return null;
     try {
@@ -400,6 +643,13 @@ async function checkExistingRegistration(email, monthKey, childName = null) {
 //   ALTER TABLE families ADD COLUMN IF NOT EXISTS registration_locked BOOLEAN DEFAULT FALSE;
 
 // Try the families table first (ProCare import); fall back to searching registrations
+/**
+ * Searches families by parent name or email.
+ * Tries the families table first; falls back to building family-like records
+ * from the registrations table if the families table is empty or unavailable.
+ * @param {string} query - Search term
+ * @returns {Promise<Family[]>}
+ */
 async function searchFamilies(query) {
     if (!sbClient || !query) return [];
     try {
@@ -472,9 +722,13 @@ async function lookupFamilyByPin(pin) {
     }
 }
 
-// Calls the server-side family_login RPC which verifies the PIN, tracks failed
-// attempts, and auto-locks after 5 failures — no edge function needed.
-// Returns { data, error } where data is the raw JSONB from the RPC.
+/**
+ * Calls the server-side family_login RPC.
+ * Validates the PIN, tracks failures, and auto-locks after 5 attempts.
+ * @param {string} email - Parent email
+ * @param {string|number} pin - 4-digit PIN
+ * @returns {Promise<FamilyLoginResult|{error:string}>}
+ */
 async function familyLogin(email, pin) {
     if (!sbClient) return { data: null, error: 'not_configured' };
     const parsedPin = parseInt(pin, 10);
@@ -484,8 +738,13 @@ async function familyLogin(email, pin) {
     return data; // { error: '...' } or { family: {...}, isParent2: bool }
 }
 
-// Looks up a family by email+PIN for the registration portal.
-// Returns { family, isParent2 } on success, null on wrong email/PIN, or throws on locked.
+/**
+ * Convenience wrapper around familyLogin for the parent portal.
+ * Returns { family, isParent2 } on success, null on wrong credentials, throws on locked.
+ * @param {string}        email - Parent email
+ * @param {string|number} pin   - 4-digit PIN
+ * @returns {Promise<FamilyLoginResult|null>}
+ */
 async function lookupFamilyForRegistration(email, pin) {
     if (!sbClient) return null;
     try {
@@ -497,6 +756,20 @@ async function lookupFamilyForRegistration(email, pin) {
     }
 }
 
+/**
+ * Creates a new family, or updates the existing one if the email already exists.
+ * Auto-generates a unique 4-digit PIN if none is provided.
+ * @param {Object}      params
+ * @param {string}      params.parentName
+ * @param {string}      params.parentEmail
+ * @param {string}      [params.parentPhone]
+ * @param {number|null} [params.pin]          - Explicit PIN; auto-generated if omitted
+ * @param {string|null} [params.parent2Name]
+ * @param {string|null} [params.parent2Email]
+ * @param {string|null} [params.parent2Phone]
+ * @param {number|null} [params.parent2Pin]
+ * @returns {Promise<Family>}
+ */
 async function createFamily({ parentName, parentEmail, parentPhone, pin: providedPin = null,
                               parent2Name = null, parent2Email = null, parent2Phone = null, parent2Pin = null }) {
     if (!sbClient) throw new Error('Supabase not configured.');
@@ -542,6 +815,14 @@ async function createFamily({ parentName, parentEmail, parentPhone, pin: provide
     return data;
 }
 
+/**
+ * Adds a student to a family. Returns the existing student record if already present.
+ * @param {Object}      params
+ * @param {number}      params.familyId  - Family id
+ * @param {string}      params.childName
+ * @param {string|null} [params.childDob] - ISO 8601 date or null
+ * @returns {Promise<Student>}
+ */
 async function addStudent({ familyId, childName, childDob }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: existing } = await sbClient
@@ -556,6 +837,12 @@ async function addStudent({ familyId, childName, childDob }) {
     return data;
 }
 
+/**
+ * Fetches all active families with nested students (admin use).
+ * @param {Object}  [opts]
+ * @param {boolean} [opts.includeArchived=false] - If true, includes inactive families
+ * @returns {Promise<Family[]>}
+ */
 async function fetchAllFamilies({ includeArchived = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
@@ -569,6 +856,12 @@ async function fetchAllFamilies({ includeArchived = false } = {}) {
 }
 
 // ---- Family CRUD ----
+/**
+ * Updates arbitrary columns on a family row.
+ * @param {number}  id      - Family id
+ * @param {Partial<Family>} updates - Columns to update
+ * @returns {Promise<void>}
+ */
 async function updateFamily(id, updates) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient.from('families').update(updates).eq('id', id);
@@ -777,6 +1070,12 @@ async function fetchRegistrationsByEmail(email) {
 // ============================================================
 // ADMIN AUTH  (Supabase Auth — server-validated)
 // ============================================================
+/**
+ * Signs in an admin user via Supabase Auth.
+ * @param {string} email
+ * @param {string} password
+ * @returns {Promise<import('@supabase/supabase-js').AuthResponse['data']>}
+ */
 async function loginAdmin(email, password) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
@@ -784,11 +1083,19 @@ async function loginAdmin(email, password) {
     return data;
 }
 
+/**
+ * Signs out the current admin session.
+ * @returns {Promise<void>}
+ */
 async function logoutAdmin() {
     if (!sbClient) return;
     await sbClient.auth.signOut();
 }
 
+/**
+ * Returns the active Supabase Auth session, or null if not authenticated.
+ * @returns {Promise<import('@supabase/supabase-js').Session|null>}
+ */
 async function getAdminSession() {
     if (!sbClient) return null;
     const { data: { session } } = await sbClient.auth.getSession();
@@ -992,6 +1299,12 @@ async function setStaffActive(id, active) {
 // ============================================================
 // STAFF HOURS  (payroll)
 // ============================================================
+/**
+ * Fetches staff hours records for a date range.
+ * @param {string} startDate - ISO 8601 date (YYYY-MM-DD), inclusive
+ * @param {string} endDate   - ISO 8601 date (YYYY-MM-DD), inclusive
+ * @returns {Promise<StaffHours[]>}
+ */
 async function fetchStaffHours(startDate, endDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
@@ -1004,6 +1317,14 @@ async function fetchStaffHours(startDate, endDate) {
     return data || [];
 }
 
+/**
+ * Creates or updates a staff hours row for a given staff member and date.
+ * @param {number} staffId     - Staff id
+ * @param {string} workDate    - ISO 8601 date (YYYY-MM-DD)
+ * @param {number} hoursWorked - Total hours worked
+ * @param {string} [notes]     - Optional notes
+ * @returns {Promise<void>}
+ */
 async function upsertStaffHours(staffId, workDate, hoursWorked, notes) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
@@ -1018,6 +1339,11 @@ async function upsertStaffHours(staffId, workDate, hoursWorked, notes) {
 // ============================================================
 // STAFF CLOCK EVENTS  (teacher clock-in/out)
 // ============================================================
+/**
+ * Looks up an active staff member by their clock-in PIN.
+ * @param {string|number} pin - Staff clock-in PIN
+ * @returns {Promise<StaffRecord|null>} Matching staff row, or null if not found
+ */
 async function fetchStaffByPin(pin) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
@@ -1030,7 +1356,13 @@ async function fetchStaffByPin(pin) {
     return data; // null if not found
 }
 
-// Returns the most recent open (clocked-in, not yet clocked-out) event for today, or null.
+/**
+ * Returns the most recent open (clocked-in, not yet clocked-out) event for the given date,
+ * or null if the staff member is not currently clocked in.
+ * @param {number} staffId  - Staff id
+ * @param {string} workDate - ISO 8601 date (YYYY-MM-DD)
+ * @returns {Promise<{id:number, clock_in:string, clock_out:null}|null>}
+ */
 async function getClockStatus(staffId, workDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
@@ -1046,7 +1378,12 @@ async function getClockStatus(staffId, workDate) {
     return data; // null = not currently clocked in
 }
 
-// Each call inserts a new event row — supports multiple shifts per day.
+/**
+ * Records a clock-in event. Each call inserts a new row, supporting multiple shifts per day.
+ * @param {number} staffId  - Staff id
+ * @param {string} workDate - ISO 8601 date (YYYY-MM-DD)
+ * @returns {Promise<void>}
+ */
 async function clockIn(staffId, workDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const now = new Date().toISOString();
@@ -1056,7 +1393,12 @@ async function clockIn(staffId, workDate) {
     if (error) throw error;
 }
 
-// Closes the most recent open event for this staff/day.
+/**
+ * Records a clock-out by closing the most recent open event for the given staff/day.
+ * @param {number} staffId  - Staff id
+ * @param {string} workDate - ISO 8601 date (YYYY-MM-DD)
+ * @returns {Promise<void>}
+ */
 async function clockOut(staffId, workDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const now = new Date().toISOString();
@@ -1165,6 +1507,10 @@ async function saveStaffAvailability(availMap) {
 // ============================================================
 // ADMIN ROLES  (access control)
 // ============================================================
+/**
+ * Loads the admin roles map from the settings table.
+ * @returns {Promise<AdminRolesMap>} Map of lowercase email → role string (empty object if none)
+ */
 async function loadAdminRoles() {
     if (!sbClient) return {};
     try {
@@ -1184,6 +1530,11 @@ async function loadAdminRoles() {
     }
 }
 
+/**
+ * Persists the admin roles map to the settings table.
+ * @param {AdminRolesMap} rolesMap - Map of lowercase email → role string
+ * @returns {Promise<void>}
+ */
 async function saveAdminRoles(rolesMap) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
@@ -1286,6 +1637,10 @@ async function submitWaitlistApplication(data) {
     return result;
 }
 
+/**
+ * Fetches all waitlist applications ordered by application date (oldest first).
+ * @returns {Promise<WaitlistEntry[]>}
+ */
 async function fetchWaitlistApplications() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
@@ -1296,6 +1651,12 @@ async function fetchWaitlistApplications() {
     return data || [];
 }
 
+/**
+ * Updates a waitlist application (e.g. to change status or record offer_sent_at).
+ * @param {number}                   id     - Waitlist application id
+ * @param {Partial<WaitlistEntry>}   fields - Fields to update
+ * @returns {Promise<void>}
+ */
 async function updateWaitlistApplication(id, fields) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
@@ -1317,6 +1678,17 @@ async function sendWaitlistOfferEmail({ parentName, parentEmail, childName, offe
     return data;
 }
 
+/**
+ * Sends the registration confirmation email to a parent via Edge Function.
+ * @param {Object}   params
+ * @param {string}   params.parentName
+ * @param {string}   params.parentEmail
+ * @param {string}   params.monthLabel   - e.g. 'April 2026'
+ * @param {string[]} params.childNames
+ * @param {Array}    params.dates        - Formatted date objects for the email body
+ * @param {number}   params.grandTotal   - Total billed amount in dollars
+ * @returns {Promise<Object>} Edge function response data
+ */
 async function sendScheduleEmail({ parentName, parentEmail, monthLabel, childNames, dates, grandTotal }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.functions.invoke('send-schedule-confirmation', {
