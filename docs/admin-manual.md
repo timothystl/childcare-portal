@@ -439,3 +439,75 @@ Click the 🗑 **Delete** button to permanently remove a staff member. This cann
 | Run payroll | Staffing → Payroll Report |
 | Enter daily hours | Staffing → Log Hours |
 | Add or edit a staff member | Staffing → Staff Roster |
+
+---
+
+## Managing Rooms & Classrooms
+
+### The single source of truth
+
+All room definitions live in one place: the `ROOMS` array at the top of `js/supabase.js`. Every part of the system — the parent portal, admin dropdowns, capacity overview, rates table, waitlist filter — reads from this array automatically. **To add a new room, edit only this file.** Nothing else needs to change.
+
+### Room status values
+
+Each room has a `status` field that controls how it behaves throughout the system:
+
+| Status | What it means |
+|--------|--------------|
+| `active` | Open and enrollable year-round. Children are auto-assigned by age. Appears everywhere. |
+| `coming_soon` | Not yet open. Excluded from parent booking and age-based auto-assignment. Shows as "Coming Soon" in the admin capacity overview and rates table, and as a greyed-out card on the public website. |
+| `seasonal` | Only open during certain times (e.g. summer camp). Admin controls visibility via the Summer Camp toggle in Settings. Excluded from the rates table (has its own section). |
+
+### Adding a new room
+
+1. Open `js/supabase.js`.
+2. Add a new object to the `ROOMS` array following the pattern of existing rooms.
+3. Set `status: 'coming_soon'` if the room is not yet open, or `status: 'active'` if it is ready immediately.
+4. Set `capacity: null` if the licensed capacity is not yet known (e.g. pending state inspection). Update it to the actual number once inspection clears.
+5. Deploy. The new room appears automatically in all admin dropdowns, the capacity overview, rates table, and waitlist filter.
+
+Minimum required fields for a new room:
+
+```js
+{
+    id:             'robin',        // lowercase, no spaces — used in the database
+    label:          '🐦 Robin Room',
+    ages:           '3½ – 4 years',
+    ageMinMonths:   42,
+    ageMaxMonths:   47,             // null = no upper limit
+    capacity:       12,             // null if unknown (coming_soon)
+    status:         'active',       // 'active' | 'coming_soon' | 'seasonal'
+    fullDayOnly:    false,
+    fullDayRate:    75,
+    halfDayRate:    45,
+    weeklyFullRate: null,
+    weeklyHalfRate: null,
+    staffRatio:     8,
+}
+```
+
+### Opening a "coming soon" room
+
+When the state inspection clears and a room is ready to enroll:
+
+1. In `js/supabase.js`, find the room and change:
+   - `status: 'coming_soon'` → `status: 'active'`
+   - `capacity: null` → `capacity: <licensed number>`
+2. Deploy. The room is immediately enrollable, the capacity overview shows real utilisation, and the website card loses the "Coming Soon" badge.
+
+### The Goose Room (current status: Coming Soon)
+
+The Goose Room (🪿, ages 2½–3 years) is not yet open pending the state licensing inspection. Once the inspection is complete:
+
+- Update `status` to `'active'` and set `capacity` to the approved number in `js/supabase.js`.
+- Remove the dashed "Coming Soon" card from the public website (`index.html` classrooms section) and replace it with a standard room card showing the confirmed capacity.
+
+### Summer Camp and break sessions
+
+Summer Camp (`id: 'summer'`) serves summer, spring break, and winter break. This is documented in the `seasons` array on the room definition:
+
+```js
+seasons: ['summer', 'spring_break', 'winter_break']
+```
+
+Visibility for parents is controlled by the **Hide Summer Camp** toggle in **Settings → Summer Camp**. Turn it on to hide the room from the parent portal (e.g. after summer ends), and turn it off to show it again before the next session opens. Existing summer registrations are never affected by this toggle — it only controls whether new bookings can be made.
