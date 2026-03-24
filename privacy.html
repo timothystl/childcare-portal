@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" href="/images/logo.png">
+  <link rel="apple-touch-icon" href="/images/logo.png">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Privacy Policy — Timothy Lutheran Church MDO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    body { background: #faf7f2; }
+    .privacy-wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 52px 24px 80px;
+    }
+    .privacy-wrap h1 {
+      font-family: 'Lora', Georgia, serif;
+      font-size: 2rem;
+      color: #01294a;
+      margin-bottom: 6px;
+    }
+    .privacy-wrap .meta {
+      font-size: .85rem;
+      color: #6b6560;
+      margin-bottom: 36px;
+    }
+    .privacy-wrap h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #01294a;
+      margin: 32px 0 10px;
+      padding-top: 8px;
+      border-top: 2px solid #e4ddd3;
+    }
+    .privacy-wrap p, .privacy-wrap li {
+      font-size: .95rem;
+      line-height: 1.75;
+      color: #3a3330;
+    }
+    .privacy-wrap ul {
+      margin: 8px 0 16px 20px;
+    }
+    .privacy-wrap a { color: #01294a; }
+    .privacy-back {
+      display: inline-block;
+      margin-bottom: 32px;
+      font-size: .875rem;
+      color: #6b6560;
+      text-decoration: none;
+    }
+    .privacy-back:hover { color: #01294a; }
+  </style>
+</head>
+<body>
+
+<div class="privacy-wrap">
+  <a href="index.html" class="privacy-back">← Back to Timothy Lutheran MDO</a>
+
+  <h1>Privacy Policy</h1>
+  <p class="meta">Timothy Lutheran Church Mother's Day Out &nbsp;·&nbsp; Effective March 2026</p>
+
+  <p>
+    Timothy Lutheran Church Mother's Day Out ("we," "us," or "our") is committed to protecting
+    the privacy of the families and children in our program. This policy explains what personal
+    information we collect, how we use it, and your rights under applicable privacy laws including
+    the California Consumer Privacy Act (CCPA) and the Children's Online Privacy Protection Act
+    (COPPA).
+  </p>
+
+  <h2>1. Information We Collect</h2>
+  <p>When you register for our program or create a family account, we collect:</p>
+  <ul>
+    <li><strong>Parent / Guardian information:</strong> full name, email address, phone number, and a numeric access PIN.</li>
+    <li><strong>Child information:</strong> child's name, date of birth (used solely to assign the appropriate age-based classroom).</li>
+    <li><strong>Care schedule data:</strong> requested care dates, day type (full/half day), and registration status.</li>
+    <li><strong>Contact messages:</strong> any messages you send through the "Contact Us" form.</li>
+  </ul>
+  <p>
+    We do <strong>not</strong> collect payment card numbers or process payments through this portal.
+    Billing is handled separately by the MDO office.
+  </p>
+
+  <h2>2. How We Use Your Information</h2>
+  <p>We use the information we collect exclusively to operate the MDO program:</p>
+  <ul>
+    <li>Processing and managing your child's care registrations.</li>
+    <li>Sending schedule confirmation and change notification emails.</li>
+    <li>Generating classroom rosters and staffing assignments for MDO staff.</li>
+    <li>Producing billing summaries for the MDO administration.</li>
+    <li>Responding to questions submitted via the contact form.</li>
+  </ul>
+  <p>We do <strong>not</strong> sell, rent, or share your personal information with third parties for marketing purposes.</p>
+
+  <h2>3. Children's Privacy (COPPA)</h2>
+  <p>
+    Our portal collects limited information about children under 13 (name and date of birth) solely
+    to administer childcare services. This information is provided by a parent or legal guardian
+    and is not used for any purpose other than operating the MDO program.
+    We do not knowingly allow children to register or interact with the portal directly.
+  </p>
+
+  <h2>4. Data Storage and Security</h2>
+  <ul>
+    <li>All data is stored in a Supabase (PostgreSQL) database hosted in the United States.</li>
+    <li>Access to the database is protected by Row-Level Security (RLS) policies.</li>
+    <li>Family PINs are stored as bcrypt hashes — never as reversible plain text.</li>
+    <li>Admin access requires email/password authentication with a 30-minute inactivity timeout.</li>
+    <li>All data in transit is encrypted via HTTPS (TLS) enforced at the Cloudflare edge.</li>
+  </ul>
+
+  <h2>5. Data Retention</h2>
+  <p>
+    Registration records are retained for the current and prior program year to support billing
+    reconciliation and attendance reporting. Records older than two program years may be purged at the
+    discretion of the MDO director.
+  </p>
+
+  <h2>6. Your Rights</h2>
+  <p>You have the right to:</p>
+  <ul>
+    <li><strong>Access</strong> — Download a copy of the data we hold about your family from the
+        <a href="lookup.html">My Schedule</a> portal (use the "Download My Data" button after logging in).</li>
+    <li><strong>Correction</strong> — Request corrections to any inaccurate personal data by emailing
+        <a href="mailto:mdo@timothystl.org">mdo@timothystl.org</a>.</li>
+    <li><strong>Deletion</strong> — Request deletion of your family's account and all associated records
+        via the "Request Account Deletion" form in the <a href="lookup.html">My Schedule</a> portal,
+        or by emailing <a href="mailto:mdo@timothystl.org">mdo@timothystl.org</a>.
+        We will process deletion requests within 30 days. Note that records required for legal or
+        financial compliance may be retained for the minimum legally required period.</li>
+    <li><strong>Opt-out of sale</strong> — We do not sell personal information. No opt-out is required.</li>
+  </ul>
+
+  <h2>7. Cookies and Tracking</h2>
+  <p>
+    This portal does not use advertising cookies or cross-site tracking. The only local storage used
+    is a session token maintained by our authentication provider (Supabase) to keep admins logged in,
+    and a browser preference key to remember the last active admin dashboard tab.
+    No analytics cookies are set on the parent-facing pages.
+  </p>
+
+  <h2>8. Third-Party Services</h2>
+  <p>We use the following services to operate this portal:</p>
+  <ul>
+    <li><strong>Supabase</strong> — database, authentication, and serverless functions.
+        See <a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase Privacy Policy</a>.</li>
+    <li><strong>Cloudflare</strong> — CDN hosting and edge security.
+        See <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare Privacy Policy</a>.</li>
+    <li><strong>Google Fonts</strong> — web fonts loaded from Google's CDN.
+        See <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a>.</li>
+  </ul>
+
+  <h2>9. Contact</h2>
+  <p>
+    For privacy questions, data requests, or to exercise any of the rights described above:
+  </p>
+  <ul>
+    <li>Email: <a href="mailto:mdo@timothystl.org">mdo@timothystl.org</a></li>
+    <li>Phone: Contact the church office at Timothy Lutheran Church</li>
+    <li>Address: Timothy Lutheran Church, St. Louis, MO</li>
+  </ul>
+
+  <h2>10. Changes to This Policy</h2>
+  <p>
+    We may update this privacy policy from time to time. The effective date at the top of this page
+    will reflect the most recent revision. Continued use of the registration portal after an update
+    constitutes acceptance of the revised policy.
+  </p>
+
+  <p style="margin-top:40px;padding-top:20px;border-top:1px solid #e4ddd3;font-size:.8rem;color:#9a918b">
+    Timothy Lutheran Church Mother's Day Out &nbsp;·&nbsp; St. Louis, MO &nbsp;·&nbsp;
+    <a href="index.html">mdo.timothystl.org</a>
+  </p>
+</div>
+
+</body>
+</html>

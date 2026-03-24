@@ -346,3 +346,56 @@
     .lookup-results-header { flex-direction: column; padding: 18px; }
     .lookup-month-row { flex-direction: column; align-items: flex-start; gap: 6px; }
 }
+
+/* -------- GDPR / CCPA Data Controls -------- */
+.lookup-data-controls {
+    margin-top: 32px;
+    padding: 20px 24px;
+    background: var(--linen, #faf7f2);
+    border-radius: 10px;
+    border: 1px solid var(--border, #e4ddd3);
+}
+.lookup-data-controls h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--navy, #01294a);
+    margin: 0 0 6px;
+}
+.lookup-data-controls p {
+    font-size: .85rem;
+    color: var(--text-muted, #6b6560);
+    margin: 0 0 14px;
+    line-height: 1.5;
+}
+.lookup-data-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.lookup-deletion-form {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border, #e4ddd3);
+}
+.lookup-deletion-form p {
+    margin-bottom: 10px;
+}
+.lookup-deletion-form textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    border: 1px solid var(--border, #e4ddd3);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: .9rem;
+    resize: vertical;
+}
+.lookup-footer-links {
+    margin-top: 16px;
+    text-align: center;
+    font-size: .8rem;
+}
+.lookup-footer-links a {
+    color: var(--text-muted, #6b6560);
+    text-decoration: underline;
+}
