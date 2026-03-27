@@ -465,10 +465,11 @@ async function autoFillStaffSchedule() {
         }
 
         const counts = _buildShiftCounts(weekDates);
-        // Exclude administrators, directors, and assistant directors from auto-assignment
+        // Exclude administrators, directors, assistant directors, and "Other" from auto-assignment
         const active = allStaffData.filter(s => s.active &&
             !/^admin(istrator)?$/i.test((s.role || '').trim()) &&
-            !/^(director|asst\.?\s*director)$/i.test((s.role || '').trim()));
+            !/^(director|asst\.?\s*director)$/i.test((s.role || '').trim()) &&
+            !/^other$/i.test((s.role || '').trim()));
 
         // Track weekly hours and days used per staff
         const weeklyHours = new Map(active.map(s => [s.id, 0]));
