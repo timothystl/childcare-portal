@@ -1786,6 +1786,51 @@ async function deleteBillingSummary(month, roomId) {
 }
 
 // ============================================================
+// BILLING OVERRIDES
+// Per-child per-month manual billing amount overrides.
+// ============================================================
+
+// Fetch all billing overrides for a given month ('YYYY-MM')
+async function fetchBillingOverrides(month) {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('billing_overrides')
+        .select('*')
+        .eq('month', month);
+    if (error) { console.warn('fetchBillingOverrides:', error); return []; }
+    return data || [];
+}
+
+// Insert or update a billing override (unique by month + parent_email + child_name)
+async function upsertBillingOverride(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_overrides')
+        .upsert({
+            month:           row.month,
+            parent_email:    row.parent_email,
+            child_name:      row.child_name,
+            override_amount: row.override_amount,
+            updated_at:      new Date().toISOString(),
+        }, { onConflict: 'month,parent_email,child_name' })
+        .select();
+    if (error) throw error;
+    return data;
+}
+
+// Delete a billing override, restoring the calculated amount
+async function deleteBillingOverride(month, parentEmail, childName) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('billing_overrides')
+        .delete()
+        .eq('month', month)
+        .eq('parent_email', parentEmail)
+        .eq('child_name', childName);
+    if (error) throw error;
+}
+
+// ============================================================
 // HTML SANITIZATION UTILITY
 // Shared by admin.js, app.js, and any future pages.
 // Escapes characters that could be used for XSS when injecting

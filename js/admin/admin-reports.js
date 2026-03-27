@@ -10,15 +10,111 @@
 function setupFamilyBilling() {
     document.getElementById('generateFamilyBillingBtn')?.addEventListener('click', async () => {
         if (allFamiliesData.length === 0) await loadFamilies();
-        generateFamilyBillingReport();
+        await generateFamilyBillingReport();
     });
     document.getElementById('exportFamilyBillingBtn')?.addEventListener('click', exportFamilyBillingReport);
+    document.getElementById('printFamilyBillingBtn')?.addEventListener('click', printFamilyBillingReport);
+
     const now = new Date();
     const el = document.getElementById('familyBillingMonth');
     if (el) el.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    // Single delegated listener for all billing override interactions
+    document.getElementById('familyBillingContent')?.addEventListener('click', async e => {
+        // Show inline edit input
+        if (e.target.classList.contains('billing-override-btn')) {
+            const cell    = e.target.closest('.billing-override-cell');
+            if (!cell) return;
+            const current = parseFloat(cell.dataset.calculated) || 0;
+            cell.innerHTML = `
+                <input type="number" class="billing-override-input" value="${current.toFixed(2)}" step="0.01" min="0">
+                <button class="billing-override-save btn-xs">Save</button>
+                <button class="billing-override-cancel btn-xs">Cancel</button>`;
+            cell.querySelector('.billing-override-input').focus();
+        }
+
+        // Save the override
+        if (e.target.classList.contains('billing-override-save')) {
+            const cell   = e.target.closest('.billing-override-cell');
+            const input  = cell.querySelector('.billing-override-input');
+            const amount = parseFloat(input.value);
+            if (isNaN(amount) || amount < 0) { alert('Please enter a valid amount.'); return; }
+            try {
+                await upsertBillingOverride({
+                    month:           cell.dataset.month,
+                    parent_email:    cell.dataset.email,
+                    child_name:      cell.dataset.child,
+                    override_amount: amount,
+                });
+                await generateFamilyBillingReport();
+            } catch (err) { alert('Failed to save override: ' + err.message); }
+        }
+
+        // Cancel edit, restore report
+        if (e.target.classList.contains('billing-override-cancel')) {
+            await generateFamilyBillingReport();
+        }
+
+        // Remove override, restore calculated amount
+        if (e.target.classList.contains('billing-override-reset')) {
+            if (!confirm('Remove manual override and restore the calculated amount?')) return;
+            const cell = e.target.closest('.billing-override-cell');
+            try {
+                await deleteBillingOverride(cell.dataset.month, cell.dataset.email, cell.dataset.child);
+                await generateFamilyBillingReport();
+            } catch (err) { alert('Failed to remove override: ' + err.message); }
+        }
+    });
 }
 
-function _buildFamilyBillingData(monthVal) {
+function printFamilyBillingReport() {
+    const monthVal  = document.getElementById('familyBillingMonth')?.value;
+    const table     = document.getElementById('billingReportTable');
+    if (!table) { alert('Please generate the billing report first.'); return; }
+
+    const [y, m]     = (monthVal || '--').split('-').map(Number);
+    const monthLabel = m ? (MONTH_NAMES_ADMIN[m - 1] + ' ' + y) : '';
+
+    // Clone table and strip interactive override elements
+    const tableClone = table.cloneNode(true);
+    tableClone.querySelectorAll('.billing-override-btn, .billing-override-reset, .billing-override-label, .billing-override-input, .billing-override-save, .billing-override-cancel').forEach(el => el.remove());
+
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Family Billing — ${escHtml(monthLabel)}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 24px; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  p.subtitle { font-size: 10px; color: #666; margin: 0 0 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #1e3a5f; color: #fff; padding: 6px 10px; text-align: left; font-size: 11px; }
+  th:nth-child(3), th:nth-child(4), th:nth-child(5), th:nth-child(6) { text-align: right; }
+  td { padding: 5px 10px; font-size: 11px; vertical-align: middle; }
+  td.report-num { text-align: right; }
+  tr.billing-family-row td { background: #f0ebe0; border-top: 2px solid #bbb; font-weight: bold; }
+  tr.billing-child-row td { background: #fff; border-bottom: 1px solid #e8e8e8; }
+  td.billing-indent { padding-left: 22px; }
+  span.billing-contact { font-size: 10px; color: #555; font-weight: normal; margin-left: 8px; }
+  tr.report-total-row td { background: #e8eef5; font-weight: bold; border-top: 2px solid #1e3a5f; }
+  span.billing-override-amount { font-style: italic; }
+  @media print { body { margin: 0; } }
+</style>
+</head>
+<body>
+<h1>Family Billing Summary — ${escHtml(monthLabel)}</h1>
+<p class="subtitle">Printed ${new Date().toLocaleDateString()}</p>
+${tableClone.outerHTML}
+</body>
+</html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
+}
+
+function _buildFamilyBillingData(monthVal, overridesMap = new Map()) {
     const dmap      = getDiscountMap();
     const familyMap = new Map();
 
@@ -48,7 +144,7 @@ function _buildFamilyBillingData(monthVal) {
     for (const fam of familyMap.values()) {
         const { regs } = fam;
 
-        // Build map: care_date → array of { childName, effRate, dayType }
+        // Build map: care_date → array of { childName, effRate }
         // used to figure out which days have multiple siblings
         const dateChildMap = new Map();
         regs.forEach(({ reg, room, disc, dates }) => {
@@ -77,36 +173,47 @@ function _buildFamilyBillingData(monthVal) {
         // Now aggregate per-child totals with sibling discounts applied
         const childMap = new Map();
         regs.forEach(({ reg, room, disc, dates }) => {
-            let fullDays = 0, halfDays = 0, subtotal = 0, changeFees = 0, sibDiscount = 0;
+            let fullDays = 0, halfDays = 0, subtotal = 0, changeFees = 0, sibDiscount = 0, discountDollar = 0;
             dates.forEach(d => {
                 const base    = d.day_type === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
                 const effRate = effectiveAdminRate(base, disc.type, disc.value);
                 const sib     = siblingDiscMap.get(`${reg.child_name}:${d.care_date}`) || 0;
-                subtotal   += Math.max(0, effRate - sib);
-                sibDiscount += sib;
-                changeFees  += Number(d.change_fee) || 0;
+                subtotal      += Math.max(0, effRate - sib);
+                sibDiscount   += sib;
+                discountDollar += Math.max(0, base - effRate);
+                changeFees    += Number(d.change_fee) || 0;
                 if (d.day_type === 'half') halfDays++; else fullDays++;
             });
 
+            // Check for manual billing override
+            const overrideKey    = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
+            const overrideAmount = overridesMap.get(overrideKey);
+            const hasOverride    = overrideAmount !== undefined;
+
             const existing = childMap.get(reg.child_name);
             if (existing) {
-                existing.fullDays    += fullDays;
-                existing.halfDays    += halfDays;
-                existing.subtotal    += subtotal;
-                existing.changeFees  += changeFees;
-                existing.sibDiscount += sibDiscount;
+                existing.fullDays      += fullDays;
+                existing.halfDays      += halfDays;
+                existing.subtotal      += subtotal;
+                existing.changeFees    += changeFees;
+                existing.sibDiscount   += sibDiscount;
+                existing.discountDollar += discountDollar;
             } else {
                 const discLabel = disc.type === 'staff'  ? 'Staff (free)' :
                                   disc.type === 'custom' ? `${disc.value}% off` : '—';
                 childMap.set(reg.child_name, {
-                    childName:   reg.child_name,
-                    roomLabel:   room?.label || reg.room_id,
+                    childName:      reg.child_name,
+                    roomLabel:      room?.label || reg.room_id,
                     fullDays,
                     halfDays,
                     subtotal,
                     changeFees,
                     sibDiscount,
+                    discountDollar,
                     discLabel,
+                    hasOverride,
+                    overrideAmount: hasOverride ? overrideAmount : undefined,
+                    parentEmail:    (reg.parent_email || '').toLowerCase(),
                 });
             }
         });
@@ -126,15 +233,25 @@ function _buildFamilyBillingData(monthVal) {
     });
 }
 
-function generateFamilyBillingReport() {
+async function generateFamilyBillingReport() {
     const monthVal = document.getElementById('familyBillingMonth')?.value;
     if (!monthVal) { alert('Please select a month.'); return; }
 
-    const [y, m]    = monthVal.split('-').map(Number);
+    const [y, m]     = monthVal.split('-').map(Number);
     const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
-    const families   = _buildFamilyBillingData(monthVal);
+    const container  = document.getElementById('familyBillingContent');
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
 
-    const container = document.getElementById('familyBillingContent');
+    // Load any manual billing overrides for this month
+    let overrideRows = [];
+    try { overrideRows = await fetchBillingOverrides(monthVal); } catch (e) { console.warn('fetchBillingOverrides:', e); }
+    const overridesMap = new Map(overrideRows.map(r => [
+        `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+        parseFloat(r.override_amount),
+    ]));
+
+    const families = _buildFamilyBillingData(monthVal, overridesMap);
+
     if (!families.length) {
         container.innerHTML = `<p class="empty-hint">No registrations found for ${monthLabel}.</p>`;
         return;
@@ -142,9 +259,18 @@ function generateFamilyBillingReport() {
 
     let grandTotal = 0;
     const rows = families.map(fam => {
-        const familyTotal = fam.children.reduce((s, c) => s + c.subtotal + (c.changeFees || 0), 0);
+        const familyTotal = fam.children.reduce((s, c) => {
+            const billed = c.hasOverride ? c.overrideAmount : c.subtotal;
+            return s + billed + (c.changeFees || 0);
+        }, 0);
         grandTotal += familyTotal;
+
         const childRows = fam.children.map(c => {
+            const billed      = c.hasOverride ? c.overrideAmount : c.subtotal;
+            const discDisplay = c.discountDollar > 0
+                ? `${escHtml(c.discLabel)} (−$${c.discountDollar.toFixed(2)})`
+                : escHtml(c.discLabel);
+
             const feeRow = c.changeFees > 0
                 ? `<tr class="billing-child-row" style="background:#fffbeb">
                     <td class="billing-indent" style="color:#92400e;font-size:.85em" colspan="4">↳ Schedule change fee${c.changeFees > 5 ? 's (' + Math.round(c.changeFees / 5) + ' × $5)' : ''}</td>
@@ -152,22 +278,43 @@ function generateFamilyBillingReport() {
                     <td class="report-num report-revenue" style="color:#92400e">+$${c.changeFees.toFixed(2)}</td>
                    </tr>`
                 : '';
-            const sibRow = c.sibDiscount > 0
+            const sibRow = !c.hasOverride && c.sibDiscount > 0
                 ? `<tr class="billing-child-row" style="background:#f0fdf4">
                     <td class="billing-indent" style="color:#166534;font-size:.85em" colspan="4">↳ Sibling discount applied</td>
                     <td class="report-num" style="color:#166534">—</td>
                     <td class="report-num report-revenue" style="color:#166534">−$${c.sibDiscount.toFixed(2)}</td>
                    </tr>`
                 : '';
+
+            const amountCell = c.hasOverride
+                ? `<td class="report-num report-revenue billing-override-cell has-override"
+                       data-month="${escHtml(monthVal)}"
+                       data-email="${escHtml(c.parentEmail)}"
+                       data-child="${escHtml(c.childName)}"
+                       data-calculated="${c.subtotal.toFixed(2)}">
+                       <span class="billing-override-amount">$${billed.toFixed(2)}</span>
+                       <span class="billing-override-label">overridden</span>
+                       <button class="billing-override-reset" title="Remove override and restore calculated amount">×</button>
+                   </td>`
+                : `<td class="report-num report-revenue billing-override-cell"
+                       data-month="${escHtml(monthVal)}"
+                       data-email="${escHtml(c.parentEmail)}"
+                       data-child="${escHtml(c.childName)}"
+                       data-calculated="${c.subtotal.toFixed(2)}">
+                       $${billed.toFixed(2)}
+                       <button class="billing-override-btn" title="Override this amount">✏</button>
+                   </td>`;
+
             return `<tr class="billing-child-row">
                 <td class="billing-indent">${escHtml(c.childName)}</td>
                 <td>${escHtml(c.roomLabel)}</td>
                 <td class="report-num">${c.fullDays || '—'}</td>
                 <td class="report-num">${c.halfDays || '—'}</td>
-                <td class="report-num">${c.discLabel}</td>
-                <td class="report-num report-revenue">$${c.subtotal.toFixed(2)}</td>
+                <td class="report-num">${discDisplay}</td>
+                ${amountCell}
             </tr>${sibRow}${feeRow}`;
         }).join('');
+
         return `
             <tr class="billing-family-row">
                 <td colspan="5">
@@ -182,7 +329,7 @@ function generateFamilyBillingReport() {
     container.innerHTML = `
         <h3 class="report-month-title">${monthLabel} — ${families.length} famil${families.length !== 1 ? 'ies' : 'y'}</h3>
         <div class="table-wrapper report-table-wrap">
-            <table class="report-table billing-table">
+            <table class="report-table billing-table" id="billingReportTable">
                 <thead>
                     <tr>
                         <th>Family / Child</th>
@@ -204,30 +351,39 @@ function generateFamilyBillingReport() {
         </div>`;
 }
 
-function exportFamilyBillingReport() {
+async function exportFamilyBillingReport() {
     const monthVal = document.getElementById('familyBillingMonth')?.value;
     if (!monthVal) { alert('Please select a month first.'); return; }
 
-    const families = _buildFamilyBillingData(monthVal);
+    let overrideRows = [];
+    try { overrideRows = await fetchBillingOverrides(monthVal); } catch (e) { console.warn('fetchBillingOverrides:', e); }
+    const overridesMap = new Map(overrideRows.map(r => [
+        `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+        parseFloat(r.override_amount),
+    ]));
+
+    const families = _buildFamilyBillingData(monthVal, overridesMap);
     if (!families.length) { alert('No data to export.'); return; }
 
     const rows = [];
     families.forEach(fam => {
         fam.children.forEach(c => {
+            const billed = c.hasOverride ? c.overrideAmount : c.subtotal;
             rows.push({
-                'Parent Name':      fam.parentName,
-                'Email':            fam.parentEmail,
-                'Phone':            fam.parentPhone,
-                'Child Name':       c.childName,
-                'Room':             c.roomLabel,
-                'Full Days':        c.fullDays,
-                'Half Days':        c.halfDays,
-                'Total Days':       (c.fullDays || 0) + (c.halfDays || 0),
-                'Discount':         c.discLabel,
-                'Sibling Discount': c.sibDiscount > 0 ? `-$${c.sibDiscount.toFixed(2)}` : '—',
-                'Care Amount':      `$${c.subtotal.toFixed(2)}`,
-                'Change Fees':      c.changeFees > 0 ? `$${c.changeFees.toFixed(2)}` : '—',
-                'Total Due':        `$${(c.subtotal + (c.changeFees || 0)).toFixed(2)}`,
+                'Parent Name':        fam.parentName,
+                'Email':              fam.parentEmail,
+                'Phone':              fam.parentPhone,
+                'Child Name':         c.childName,
+                'Room':               c.roomLabel,
+                'Full Days':          c.fullDays,
+                'Half Days':          c.halfDays,
+                'Total Days':         (c.fullDays || 0) + (c.halfDays || 0),
+                'Discount Type':      c.discLabel,
+                'Discount Amount':    c.discountDollar > 0 ? `-$${c.discountDollar.toFixed(2)}` : '—',
+                'Sibling Discount':   c.sibDiscount > 0 ? `-$${c.sibDiscount.toFixed(2)}` : '—',
+                'Care Amount':        c.hasOverride ? `$${billed.toFixed(2)} (manual)` : `$${billed.toFixed(2)}`,
+                'Change Fees':        c.changeFees > 0 ? `$${c.changeFees.toFixed(2)}` : '—',
+                'Total Due':          `$${(billed + (c.changeFees || 0)).toFixed(2)}`,
             });
         });
     });

@@ -2259,6 +2259,64 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
 .billing-family-total { font-size: 1.05em; }
 
+/* Override cell — edit button */
+.billing-override-cell { white-space: nowrap; }
+.billing-override-btn {
+    display: none;
+    margin-left: 6px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .8em;
+    color: var(--text-muted);
+    padding: 0 2px;
+    vertical-align: middle;
+    opacity: 0.6;
+}
+.billing-override-btn:hover { opacity: 1; color: var(--navy); }
+.billing-child-row:hover .billing-override-btn { display: inline; }
+
+/* Override cell — active override state */
+.billing-override-cell.has-override { color: #7c3aed; }
+.billing-override-amount { font-style: italic; }
+.billing-override-label {
+    font-size: .75em;
+    color: #7c3aed;
+    margin-left: 4px;
+    font-style: normal;
+}
+.billing-override-reset {
+    margin-left: 4px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .9em;
+    color: #7c3aed;
+    padding: 0 2px;
+    vertical-align: middle;
+    line-height: 1;
+}
+.billing-override-reset:hover { color: #dc2626; }
+
+/* Override cell — inline edit input */
+.billing-override-input {
+    width: 80px;
+    padding: 2px 4px;
+    font-size: .9em;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+}
+.btn-xs {
+    padding: 2px 8px;
+    font-size: .8em;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    margin-left: 4px;
+    background: var(--white);
+}
+.btn-xs:hover { background: var(--linen); }
+
 /* ============================================================
    STAFF SCHEDULE TABLE
    ============================================================ */
