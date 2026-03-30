@@ -6,7 +6,7 @@
 
 CREATE TABLE IF NOT EXISTS staff_schedules (
     id          BIGSERIAL    PRIMARY KEY,
-    staff_id    BIGINT       NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+    staff_id    UUID         NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
     work_date   DATE         NOT NULL,
     room_id     TEXT         NOT NULL,
     shift       TEXT         NOT NULL CHECK (shift IN ('am', 'pm')),
