@@ -81,6 +81,12 @@ export default {
       "font-src 'self' data:"
     );
     newHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+
+    // Ensure service worker can claim full scope
+    if (url.pathname === '/sw.js') {
+      newHeaders.set('Service-Worker-Allowed', '/');
+    }
+
     return new Response(response.body, {
       status:     response.status,
       statusText: response.statusText,

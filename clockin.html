@@ -592,5 +592,10 @@ function setMsg(text, type) {
 }
 </script>
 <script src="js/error-monitor.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+  }
+</script>
 </body>
 </html>
