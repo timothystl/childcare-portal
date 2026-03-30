@@ -1584,7 +1584,7 @@ function _arStartEdit(row, arMap, rooms, showTotalCol) {
         if (totalRevTd) totalRevTd.innerHTML = '<em>—</em>';
     }
 
-    // Replace month label cell with save/cancel buttons
+    // Replace month label cell with save/cancel/clear buttons
     const labelTd = cells[0];
     const [y, m] = mo.split('-').map(Number);
     const label   = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
@@ -1593,6 +1593,7 @@ function _arStartEdit(row, arMap, rooms, showTotalCol) {
         <div class="ar-edit-actions">
             <button type="button" class="btn-primary ar-save-btn" title="Save changes">Save</button>
             <button type="button" class="btn-secondary ar-cancel-btn" title="Cancel editing">Cancel</button>
+            <button type="button" class="btn-danger ar-clear-btn" title="Delete saved data for this month and revert to live calculated data">Clear (use live data)</button>
         </div>`;
 
     // Stop clicks on inputs/buttons from re-triggering row click
@@ -1606,6 +1607,26 @@ function _arStartEdit(row, arMap, rooms, showTotalCol) {
     labelTd.querySelector('.ar-cancel-btn').addEventListener('click', e => {
         e.stopPropagation();
         generateAttendanceRevenue();
+    });
+
+    // Clear → delete all billing_summary rows for this month, revert to live data
+    labelTd.querySelector('.ar-clear-btn').addEventListener('click', async e => {
+        e.stopPropagation();
+        if (!confirm(`Delete all saved billing data for ${label} and revert to live calculated data?`)) return;
+        const clearBtn = e.target;
+        clearBtn.disabled = true;
+        clearBtn.textContent = 'Clearing…';
+        try {
+            const monthDate = `${mo}-01`;
+            for (const r of rooms) {
+                await deleteBillingSummary(monthDate, r.id);
+            }
+            await generateAttendanceRevenue();
+        } catch (err) {
+            alert('Error clearing data: ' + err.message);
+            clearBtn.disabled = false;
+            clearBtn.textContent = 'Clear (use live data)';
+        }
     });
 
     // Save → upsert each room's billing_summary, then re-generate
