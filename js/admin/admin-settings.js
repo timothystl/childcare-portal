@@ -324,11 +324,11 @@ async function onSaveRates() {
             });
             // Regenerate the human-readable ages label from the saved range
             const r = rates[id];
-            if (r.ageMinMonths != null || r.ageMaxMonths != null) {
+            {
                 const min = r.ageMinMonths ?? 0;
-                const max = r.ageMaxMonths;
+                const max = r.ageMaxMonths ?? null;
                 rates[id].ages = max == null
-                    ? `${min}+ months`
+                    ? (min > 0 ? `${min}+ months` : '')
                     : `${min} – ${max + 1} months`;
             }
         });
@@ -344,8 +344,8 @@ async function onSaveRates() {
             if (r.halfDayRate    != null) room.halfDayRate    = r.halfDayRate;
             if (r.weeklyFullRate != null) room.weeklyFullRate = r.weeklyFullRate;
             if (r.weeklyHalfRate != null) room.weeklyHalfRate = r.weeklyHalfRate;
-            if (r.ageMinMonths   != null) room.ageMinMonths   = r.ageMinMonths;
-            if ('ageMaxMonths'   in r)    room.ageMaxMonths   = r.ageMaxMonths;
+            if ('ageMinMonths'   in r)    room.ageMinMonths   = r.ageMinMonths; // allow null
+            if ('ageMaxMonths'   in r)    room.ageMaxMonths   = r.ageMaxMonths; // allow null
             if (r.ages           != null) room.ages           = r.ages;
         });
         renderRatesTable();
