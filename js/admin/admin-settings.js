@@ -96,6 +96,36 @@ function setupClosures() {
             alert('Error: ' + err.message);
         }
     });
+
+    document.getElementById('notifyClosureBtn').addEventListener('click', async () => {
+        const date   = document.getElementById('closureDate').value;
+        const reason = document.getElementById('closureReason').value.trim();
+        const label  = reason || 'School closure';
+        const title  = 'MDO Closed' + (date ? ` – ${new Date(date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : '');
+        const body   = reason || 'A school closure has been scheduled. Please check the calendar for details.';
+
+        const btn = document.getElementById('notifyClosureBtn');
+        btn.disabled = true;
+        btn.textContent = '📤 Sending…';
+        try {
+            const session = await getAdminSession();
+            const res = await fetch('/send-push', {
+                method:  'POST',
+                headers: {
+                    'Content-Type':  'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({ broadcast: true, title, body }),
+            });
+            const { sent } = await res.json();
+            btn.textContent = `✅ Sent to ${sent} device${sent !== 1 ? 's' : ''}`;
+            setTimeout(() => { btn.disabled = false; btn.textContent = '🔔 Notify Parents'; }, 3000);
+        } catch (err) {
+            alert('Failed to send notification: ' + err.message);
+            btn.disabled = false;
+            btn.textContent = '🔔 Notify Parents';
+        }
+    });
 }
 
 async function loadClosureList() {

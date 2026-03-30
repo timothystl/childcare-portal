@@ -221,6 +221,11 @@ function selectFamily(family, isParent2 = false) {
     document.getElementById('lookupRequiredMsg')?.classList.add('hidden');
     document.getElementById('registrationSteps')?.classList.remove('hidden');
 
+    // Offer push notifications now that we know the family's UUID
+    if (typeof initPushNotifications === 'function') {
+        initPushNotifications(family.id);
+    }
+
     renderChildSection();
 }
 

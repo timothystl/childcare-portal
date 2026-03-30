@@ -79,3 +79,33 @@ self.addEventListener('fetch', event => {
     })
   );
 });
+
+// ── Push notifications ────────────────────────────────────────────────────────
+
+self.addEventListener('push', event => {
+  let data = { title: 'Timothy Lutheran MDO', body: '' };
+  if (event.data) {
+    try { data = { ...data, ...event.data.json() }; }
+    catch { data.body = event.data.text(); }
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body:  data.body,
+      icon:  '/images/logo.png',
+      badge: '/images/logo.png',
+      tag:   data.tag || 'mdo',
+    })
+  );
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const c of list) {
+        if (c.url.includes('/calendar') && 'focus' in c) return c.focus();
+      }
+      return clients.openWindow('/calendar');
+    })
+  );
+});
