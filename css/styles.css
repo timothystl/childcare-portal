@@ -1519,3 +1519,33 @@ input.prefilled {
     }
     .btn-waitlist-float .fab-label { display: none; }
 }
+
+/* ── Push notification opt-in banner ─────────────────────────────────────── */
+#push-prompt {
+    position: fixed;
+    bottom: 1.25rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--navy);
+    color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.25);
+    padding: .85rem 1.1rem;
+    z-index: 9999;
+    max-width: min(520px, calc(100vw - 2rem));
+    width: 100%;
+    animation: push-slide-up .25s ease;
+}
+@keyframes push-slide-up {
+    from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.push-prompt-inner {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+.push-prompt-text { flex: 1; font-size: .9rem; }
+.push-prompt-btns { display: flex; gap: .5rem; flex-shrink: 0; }
+.btn-sm { padding: .35rem .8rem; font-size: .85rem; }

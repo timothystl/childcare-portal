@@ -1,6 +1,123 @@
 const SUPABASE_URL = 'https://dahdstopsumxnqvdclmy.supabase.co';
 const ALLOWED_ORIGINS = new Set(['https://mdo.timothystl.org']);
 
+// ── Web Push helpers (RFC 8291 / RFC 8188) ───────────────────────────────────
+
+function concatU8(...arrays) {
+  const total = arrays.reduce((n, a) => n + a.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const a of arrays) { out.set(a, off); off += a.length; }
+  return out;
+}
+
+function b64urlDecode(str) {
+  const pad = '='.repeat((4 - str.length % 4) % 4);
+  return Uint8Array.from(
+    atob(str.replace(/-/g, '+').replace(/_/g, '/') + pad),
+    c => c.charCodeAt(0)
+  );
+}
+
+function b64urlEncode(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function hmacSha256(keyBytes, data) {
+  const key = await crypto.subtle.importKey(
+    'raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, data));
+}
+
+// HKDF-SHA-256: Extract then single-block Expand (L ≤ 32)
+async function hkdf(salt, ikm, info, len) {
+  const prk = await hmacSha256(salt, ikm);
+  const okm = await hmacSha256(prk, concatU8(info, new Uint8Array([1])));
+  return okm.slice(0, len);
+}
+
+// Encrypt a push payload per RFC 8291 (aes128gcm content encoding)
+async function encryptWebPush(plaintext, p256dhB64, authB64) {
+  const te    = new TextEncoder();
+  const uaPub = b64urlDecode(p256dhB64);  // subscription p256dh, 65 bytes
+  const auth  = b64urlDecode(authB64);    // subscription auth, 16 bytes
+
+  // Ephemeral sender ECDH key pair
+  const senderKP = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const uaKey = await crypto.subtle.importKey(
+    'raw', uaPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+
+  // ECDH shared secret + sender public key
+  const dh    = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: uaKey }, senderKP.privateKey, 256));
+  const asPub = new Uint8Array(await crypto.subtle.exportKey('raw', senderKP.publicKey));
+
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+
+  // IKM = HKDF(salt=auth, ikm=dh, info="WebPush: info\0"||uaPub||asPub, len=32)
+  const ikm = await hkdf(
+    auth, dh,
+    concatU8(te.encode('WebPush: info\0'), uaPub, asPub),
+    32
+  );
+
+  // CEK (16 bytes) and Nonce (12 bytes) from random salt + IKM
+  const cek   = await hkdf(salt, ikm, te.encode('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hkdf(salt, ikm, te.encode('Content-Encoding: nonce\0'),     12);
+
+  const cekKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+
+  // Pad: plaintext || 0x02 (last-record delimiter, no extra padding)
+  const msg    = te.encode(typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext));
+  const padded = concatU8(msg, new Uint8Array([2]));
+
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: nonce }, cekKey, padded));
+
+  // RFC 8188 header: salt(16) | rs(4,BE) | keylen(1) | senderPub(65)
+  const header = new Uint8Array(86);
+  header.set(salt, 0);
+  new DataView(header.buffer).setUint32(16, 4096, false);
+  header[20] = 65;
+  header.set(asPub, 21);
+
+  return concatU8(header, ciphertext);
+}
+
+// Build a VAPID JWT for the Authorization header
+async function vapidJwt(endpoint, subject, privateKeyJwk) {
+  const te  = new TextEncoder();
+  const now = Math.floor(Date.now() / 1000);
+  const { origin } = new URL(endpoint);
+  const toB64 = o => btoa(JSON.stringify(o))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unsigned = `${toB64({ typ: 'JWT', alg: 'ES256' })}.${toB64({ aud: origin, exp: now + 43200, sub: subject })}`;
+  const key = await crypto.subtle.importKey(
+    'jwk', privateKeyJwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' }, key, te.encode(unsigned)));
+  return `${unsigned}.${b64urlEncode(sig)}`;
+}
+
+// Send a single Web Push notification to one subscription
+async function sendWebPush(sub, payload, env) {
+  const privateKeyJwk = JSON.parse(env.VAPID_PRIVATE_KEY);
+  const jwt  = await vapidJwt(sub.endpoint, env.VAPID_SUBJECT, privateKeyJwk);
+  const body = await encryptWebPush(JSON.stringify(payload), sub.p256dh, sub.auth);
+  return fetch(sub.endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization':    `vapid t=${jwt}, k=${env.VAPID_PUBLIC_KEY}`,
+      'Content-Type':     'application/octet-stream',
+      'Content-Encoding': 'aes128gcm',
+      'TTL':              '86400',
+    },
+    body,
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -58,6 +175,82 @@ export default {
         status:     supabaseRes.status,
         statusText: supabaseRes.statusText,
         headers:    resHeaders,
+      });
+    }
+
+    // ── POST /push-subscribe — save a push subscription for a family ────────
+    if (url.pathname === '/push-subscribe' && request.method === 'POST') {
+      const { family_id, endpoint, p256dh, auth } = await request.json().catch(() => ({}));
+      if (!family_id || !endpoint || !p256dh || !auth) {
+        return new Response('Missing fields', { status: 400 });
+      }
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions`, {
+        method:  'POST',
+        headers: {
+          'apikey':        env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type':  'application/json',
+          'Prefer':        'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({ family_id, endpoint, p256dh, auth }),
+      });
+      return new Response(null, { status: res.ok ? 201 : 500 });
+    }
+
+    // ── POST /send-push — send a notification (admin only) ──────────────────
+    if (url.pathname === '/send-push' && request.method === 'POST') {
+      // Verify the caller holds a valid Supabase session (admin is authenticated)
+      const bearer = request.headers.get('Authorization');
+      if (!bearer) return new Response('Unauthorized', { status: 401 });
+      const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': bearer },
+      });
+      if (!userRes.ok) return new Response('Unauthorized', { status: 401 });
+
+      const { family_id, broadcast, title, body: msgBody } = await request.json().catch(() => ({}));
+      if (!title) return new Response('Missing title', { status: 400 });
+
+      // Fetch matching subscriptions
+      let query = `${SUPABASE_URL}/rest/v1/push_subscriptions?select=*`;
+      if (!broadcast && family_id) query += `&family_id=eq.${encodeURIComponent(family_id)}`;
+
+      const subsRes = await fetch(query, {
+        headers: {
+          'apikey':        env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+      });
+      if (!subsRes.ok) return new Response('Failed to fetch subscriptions', { status: 500 });
+
+      const subs = await subsRes.json();
+      if (!subs.length) return new Response(JSON.stringify({ sent: 0 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+
+      const results = await Promise.allSettled(
+        subs.map(sub => sendWebPush(sub, { title, body: msgBody }, env))
+      );
+
+      // Remove expired (410 Gone) subscriptions
+      const expired = subs
+        .filter((_, i) => results[i].status === 'fulfilled' && results[i].value.status === 410)
+        .map(s => s.id);
+      if (expired.length) {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/push_subscriptions?id=in.(${expired.join(',')})`,
+          {
+            method:  'DELETE',
+            headers: {
+              'apikey':        env.SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+          }
+        );
+      }
+
+      const sent = subs.length - expired.length;
+      return new Response(JSON.stringify({ sent }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
       });
     }
 
