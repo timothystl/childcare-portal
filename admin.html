@@ -1111,5 +1111,10 @@
     <script src="js/admin/admin-settings.js"></script>
     <script src="js/admin/admin-waitlist.js"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+  }
+</script>
 </body>
 </html>

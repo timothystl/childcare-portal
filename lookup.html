@@ -104,5 +104,10 @@
     <script src="js/supabase.js?v=34"></script>
     <script src="js/error-monitor.js"></script>
     <script src="js/lookup.js?v=3"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+  }
+</script>
 </body>
 </html>

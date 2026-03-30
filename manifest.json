@@ -2,16 +2,45 @@
   "name": "Timothy Lutheran MDO",
   "short_name": "TL MDO",
   "description": "Mother's Day Out — care day scheduling and family portal",
-  "start_url": "/",
+  "start_url": "/calendar",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#1c3160",
-  "theme_color": "#1c3160",
+  "orientation": "portrait-primary",
+  "background_color": "#01294A",
+  "theme_color": "#01294A",
+  "categories": ["education", "lifestyle"],
   "icons": [
+    {
+      "src": "/images/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/images/logo.png",
       "sizes": "500x500",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Family Portal",
+      "short_name": "Portal",
+      "url": "/calendar",
+      "icons": [{ "src": "/images/logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Staff Clock-In",
+      "short_name": "Clock In",
+      "url": "/clockin.html",
+      "icons": [{ "src": "/images/logo.png", "sizes": "192x192" }]
     }
   ]
 }

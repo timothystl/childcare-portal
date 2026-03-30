@@ -176,6 +176,10 @@
     <a href="index.html">mdo.timothystl.org</a>
   </p>
 </div>
-
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+  }
+</script>
 </body>
 </html>
