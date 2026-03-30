@@ -1983,6 +1983,260 @@ async function exportAttendanceRevenue() {
 function setupExtraReports() {
     document.getElementById('generateTrendsBtn')?.addEventListener('click', generateEnrollmentTrends);
     document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
+    document.getElementById('generateRoomPnlBtn')?.addEventListener('click', generateRoomPnl);
+    document.getElementById('exportRoomPnlBtn')?.addEventListener('click', exportRoomPnl);
+
+    // Default P&L date range: first of current month → today
+    const today = new Date().toISOString().split('T')[0];
+    const firstOfMonth = today.substring(0, 7) + '-01';
+    const pnlFrom = document.getElementById('pnlDateFrom');
+    const pnlTo   = document.getElementById('pnlDateTo');
+    if (pnlFrom && !pnlFrom.value) pnlFrom.value = firstOfMonth;
+    if (pnlTo   && !pnlTo.value)   pnlTo.value   = today;
+}
+
+// ============================================================
+// ROOM P&L REPORT
+// ============================================================
+
+/**
+ * Builds per-room, per-month P&L data.
+ * Revenue comes from _buildArDataMap (same as Attendance & Revenue report).
+ * Labor cost comes from saved staff_schedules:
+ *   - Hourly staff: hourly_rate × shift_hours per assignment
+ *   - Salary staff: (salary_biweekly / 10) prorated by shift hours across rooms on the same day
+ *
+ * Returns { months, rooms, data }
+ *   data[mo][roomId] = { revenue, labor, margin, attendees }
+ */
+async function _buildRoomPnlData(fromDate, toDate) {
+    const fromMo = fromDate.substring(0, 7);
+    const toMo   = toDate.substring(0, 7);
+
+    // Fetch revenue and schedule data in parallel
+    const [arMap, scheduleRows] = await Promise.all([
+        _buildArDataMap(fromDate, toDate),
+        fetchStaffScheduleRange(fromDate, toDate).catch(e => {
+            console.warn('fetchStaffScheduleRange failed:', e);
+            return [];
+        }),
+    ]);
+
+    // ── Labor cost calculation ──────────────────────────────
+    // Group schedule rows by staff+date so salaried staff can be prorated across rooms
+    const staffDayMap = new Map(); // `staffId|date` → [row, ...]
+    scheduleRows.forEach(row => {
+        const key = `${row.staff_id}|${row.work_date}`;
+        if (!staffDayMap.has(key)) staffDayMap.set(key, []);
+        staffDayMap.get(key).push(row);
+    });
+
+    // Accumulate labor cost per room per month
+    const laborMap = new Map(); // `mo|roomId` → cost
+    staffDayMap.forEach(shifts => {
+        const mo        = shifts[0].work_date.substring(0, 7);
+        const payType   = shifts[0].pay_type;
+        const totalHrs  = shifts.reduce((s, r) => s + (SHIFT_HRS[r.shift] || 0), 0);
+
+        shifts.forEach(r => {
+            const mapKey = `${mo}|${r.room_id}`;
+            let cost = 0;
+            if (payType === 'salary') {
+                // Daily cost = biweekly salary / 10 working days, prorated by this shift's hours
+                const dailyCost = (r.salary_biweekly || 0) / 10;
+                cost = totalHrs > 0 ? dailyCost * ((SHIFT_HRS[r.shift] || 0) / totalHrs) : 0;
+            } else {
+                cost = (r.hourly_rate || 0) * (SHIFT_HRS[r.shift] || 0);
+            }
+            laborMap.set(mapKey, (laborMap.get(mapKey) || 0) + cost);
+        });
+    });
+
+    // ── Merge revenue + labor into a unified data map ───────
+    const data  = {};
+    const rooms = ROOMS.filter(r => r.status !== 'seasonal');
+
+    // Seed months from AR data
+    Object.keys(arMap).sort().forEach(mo => {
+        if (mo < fromMo || mo > toMo) return;
+        data[mo] = {};
+        rooms.forEach(r => {
+            const rev  = arMap[mo]?.[r.id]?.netBilled  || 0;
+            const att  = arMap[mo]?.[r.id]?.attendees  || 0;
+            const lab  = laborMap.get(`${mo}|${r.id}`) || 0;
+            data[mo][r.id] = { revenue: rev, labor: lab, margin: rev - lab, attendees: att };
+        });
+    });
+
+    // Also seed months that have labor but no AR entries
+    laborMap.forEach((cost, key) => {
+        const [mo, roomId] = key.split('|');
+        if (mo < fromMo || mo > toMo) return;
+        if (!data[mo]) data[mo] = {};
+        if (!data[mo][roomId]) data[mo][roomId] = { revenue: 0, labor: 0, margin: 0, attendees: 0 };
+        data[mo][roomId].labor   = cost;
+        data[mo][roomId].margin  = data[mo][roomId].revenue - cost;
+    });
+
+    const months = Object.keys(data).sort();
+    return { months, rooms, data, hasScheduleData: scheduleRows.length > 0 };
+}
+
+async function generateRoomPnl() {
+    const fromDate  = document.getElementById('pnlDateFrom')?.value;
+    const toDate    = document.getElementById('pnlDateTo')?.value;
+    const container = document.getElementById('roomPnlContent');
+
+    if (!fromDate || !toDate) { alert('Please select both a start and end date.'); return; }
+    if (fromDate > toDate)    { alert('Start date must be before end date.'); return; }
+
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const { months, rooms, data, hasScheduleData } = await _buildRoomPnlData(fromDate, toDate);
+
+        if (!months.length) {
+            container.innerHTML = '<p class="empty-hint">No data found for the selected range.</p>';
+            return;
+        }
+
+        const fmt$  = v => v !== 0 ? `$${Math.round(Math.abs(v)).toLocaleString('en-US')}` : '—';
+        const fmtPct = v => isFinite(v) && v !== 0 ? `${Math.round(v)}%` : '—';
+        const marginStyle = v => v < 0 ? ' style="color:#c62828"' : v > 0 ? ' style="color:#2e7d32"' : '';
+
+        // Totals accumulators
+        const roomTotals = {};
+        rooms.forEach(r => { roomTotals[r.id] = { revenue: 0, labor: 0, margin: 0, attendees: 0 }; });
+        let grandRev = 0, grandLab = 0;
+
+        const rowsHtml = months.map(mo => {
+            const [y, m] = mo.split('-').map(Number);
+            const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            let moRev = 0, moLab = 0;
+
+            const cells = rooms.map(r => {
+                const d   = data[mo]?.[r.id] || { revenue: 0, labor: 0, margin: 0, attendees: 0 };
+                const pct = d.revenue > 0 ? (d.margin / d.revenue) * 100 : (d.labor > 0 ? -100 : 0);
+                roomTotals[r.id].revenue   += d.revenue;
+                roomTotals[r.id].labor     += d.labor;
+                roomTotals[r.id].margin    += d.margin;
+                roomTotals[r.id].attendees += d.attendees;
+                moRev += d.revenue;
+                moLab += d.labor;
+                return `<td class="report-num report-revenue">${d.revenue > 0 ? fmt$(d.revenue) : '—'}</td>` +
+                       `<td class="report-num">${d.labor > 0 ? fmt$(d.labor) : '—'}</td>` +
+                       `<td class="report-num"${marginStyle(d.margin)}>${d.revenue > 0 || d.labor > 0 ? (d.margin < 0 ? '−' : '') + fmt$(d.margin) : '—'}</td>` +
+                       `<td class="report-num"${marginStyle(pct)}>${d.revenue > 0 || d.labor > 0 ? fmtPct(pct) : '—'}</td>`;
+            }).join('');
+
+            grandRev += moRev;
+            grandLab += moLab;
+            const moMargin = moRev - moLab;
+            const moPct    = moRev > 0 ? (moMargin / moRev) * 100 : 0;
+
+            return `<tr>
+                <td class="staff-date-cell">${label}</td>
+                ${cells}
+                <td class="report-num report-revenue ar-total-col"><strong>${moRev > 0 ? fmt$(moRev) : '—'}</strong></td>
+                <td class="report-num ar-total-col"><strong>${moLab > 0 ? fmt$(moLab) : '—'}</strong></td>
+                <td class="report-num ar-total-col"${marginStyle(moMargin)}><strong>${moRev > 0 || moLab > 0 ? (moMargin < 0 ? '−' : '') + fmt$(moMargin) : '—'}</strong></td>
+                <td class="report-num ar-total-col"${marginStyle(moPct)}><strong>${moRev > 0 || moLab > 0 ? fmtPct(moPct) : '—'}</strong></td>
+            </tr>`;
+        }).join('');
+
+        const roomColHeaders = rooms.map(r =>
+            `<th colspan="4" class="ar-room-header">${r.label}</th>`).join('');
+        const roomSubHeaders = rooms.map(() =>
+            `<th class="report-num ar-sub-header">Revenue</th>` +
+            `<th class="report-num ar-sub-header">Labor</th>` +
+            `<th class="report-num ar-sub-header">Margin $</th>` +
+            `<th class="report-num ar-sub-header">Margin %</th>`).join('');
+
+        const totalCells = rooms.map(r => {
+            const t   = roomTotals[r.id];
+            const pct = t.revenue > 0 ? (t.margin / t.revenue) * 100 : 0;
+            return `<td class="report-num report-revenue"><strong>${fmt$(t.revenue)}</strong></td>` +
+                   `<td class="report-num"><strong>${fmt$(t.labor)}</strong></td>` +
+                   `<td class="report-num"${marginStyle(t.margin)}><strong>${(t.margin < 0 ? '−' : '') + fmt$(t.margin)}</strong></td>` +
+                   `<td class="report-num"${marginStyle(pct)}><strong>${fmtPct(pct)}</strong></td>`;
+        }).join('');
+
+        const grandMargin = grandRev - grandLab;
+        const grandPct    = grandRev > 0 ? (grandMargin / grandRev) * 100 : 0;
+
+        const noScheduleWarning = !hasScheduleData
+            ? `<p class="import-error" style="margin-bottom:8px">⚠️ No saved schedule data found for this period — labor costs will show as $0. Use the Staffing tab to auto-fill and save schedules.</p>`
+            : '';
+
+        container.innerHTML = `
+            ${noScheduleWarning}
+            <div class="ar-summary-meta">
+                <span class="ar-total-badge">$${Math.round(grandRev).toLocaleString('en-US')} revenue</span>
+                <span class="ar-discount-badge">$${Math.round(grandLab).toLocaleString('en-US')} labor</span>
+                <span class="ar-total-badge" style="background:${grandMargin >= 0 ? '#e8f5e9;color:#2e7d32' : '#ffebee;color:#c62828'}">$${Math.round(Math.abs(grandMargin)).toLocaleString('en-US')} ${grandMargin >= 0 ? 'margin' : 'loss'} (${Math.round(grandPct)}%)</span>
+            </div>
+            <div class="table-wrapper report-table-wrap">
+                <table class="report-table ar-summary-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="ar-month-th">Month</th>
+                            ${roomColHeaders}
+                            <th colspan="4" class="ar-room-header ar-total-col">Total</th>
+                        </tr>
+                        <tr>${roomSubHeaders}
+                            <th class="report-num ar-sub-header ar-total-col">Revenue</th>
+                            <th class="report-num ar-sub-header ar-total-col">Labor</th>
+                            <th class="report-num ar-sub-header ar-total-col">Margin $</th>
+                            <th class="report-num ar-sub-header ar-total-col">Margin %</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                    <tfoot>
+                        <tr class="report-total-row">
+                            <td><strong>Totals</strong></td>
+                            ${totalCells}
+                            <td class="report-num report-revenue ar-total-col"><strong>${fmt$(grandRev)}</strong></td>
+                            <td class="report-num ar-total-col"><strong>${fmt$(grandLab)}</strong></td>
+                            <td class="report-num ar-total-col"${marginStyle(grandMargin)}><strong>${(grandMargin < 0 ? '−' : '') + fmt$(grandMargin)}</strong></td>
+                            <td class="report-num ar-total-col"${marginStyle(grandPct)}><strong>${fmtPct(grandPct)}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>`;
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error loading data: ${escHtml(err.message)}</p>`;
+    }
+}
+
+async function exportRoomPnl() {
+    const fromDate = document.getElementById('pnlDateFrom')?.value;
+    const toDate   = document.getElementById('pnlDateTo')?.value;
+    if (!fromDate || !toDate) { alert('Please select a date range first.'); return; }
+
+    const { months, rooms, data } = await _buildRoomPnlData(fromDate, toDate);
+    const fmtPct = v => isFinite(v) && v !== 0 ? `${Math.round(v)}%` : '';
+
+    const rows = months.map(mo => {
+        const [y, m] = mo.split('-').map(Number);
+        const row    = { Month: MONTH_NAMES_ADMIN[m - 1] + ' ' + y };
+        rooms.forEach(r => {
+            const d   = data[mo]?.[r.id] || { revenue: 0, labor: 0, margin: 0 };
+            const pct = d.revenue > 0 ? (d.margin / d.revenue) * 100 : 0;
+            row[`${r.label} Revenue`] = d.revenue ? `$${d.revenue.toFixed(2)}` : '';
+            row[`${r.label} Labor`]   = d.labor   ? `$${d.labor.toFixed(2)}`   : '';
+            row[`${r.label} Margin`]  = d.revenue || d.labor ? `$${d.margin.toFixed(2)}` : '';
+            row[`${r.label} Margin%`] = d.revenue || d.labor ? fmtPct(pct) : '';
+        });
+        const moRev = rooms.reduce((s, r) => s + (data[mo]?.[r.id]?.revenue || 0), 0);
+        const moLab = rooms.reduce((s, r) => s + (data[mo]?.[r.id]?.labor   || 0), 0);
+        row['Total Revenue'] = `$${moRev.toFixed(2)}`;
+        row['Total Labor']   = `$${moLab.toFixed(2)}`;
+        row['Total Margin']  = `$${(moRev - moLab).toFixed(2)}`;
+        row['Margin %']      = moRev > 0 ? fmtPct(((moRev - moLab) / moRev) * 100) : '';
+        return row;
+    });
+
+    if (!rows.length) { alert('No data to export.'); return; }
+    downloadXlsx(rows, `room-pnl-${fromDate}-${toDate}.xlsx`);
 }
 
 // ── Enrollment Trends ──────────────────────────────────────

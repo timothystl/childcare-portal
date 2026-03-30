@@ -658,6 +658,29 @@
                 </div>
             </section>
 
+            <!-- Room P&L -->
+            <section class="admin-section collapsible-section" id="roomPnlSection">
+                <h2>💰 Room Profitability (P&amp;L)</h2>
+                <p class="section-desc">Monthly revenue vs. labor cost per room. Labor is calculated from saved staff schedules — run the auto-fill planner and save a schedule for each week to populate cost data. Salary staff costs are prorated by shift hours.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="pnlDateFrom">From</label>
+                        <input type="date" id="pnlDateFrom">
+                    </div>
+                    <div class="roster-field">
+                        <label for="pnlDateTo">To</label>
+                        <input type="date" id="pnlDateTo">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateRoomPnlBtn" class="btn-secondary">Generate</button>
+                        <button id="exportRoomPnlBtn" class="btn-primary">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="roomPnlContent">
+                    <p class="empty-hint">Select a date range above and click Generate.</p>
+                </div>
+            </section>
+
             <!-- Enrollment Trends -->
             <section class="admin-section collapsible-section" id="enrollmentTrendsSection">
                 <h2>📈 Enrollment Trends</h2>
