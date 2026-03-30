@@ -1171,10 +1171,36 @@ async function _buildPayrollData(startVal, endVal) {
         if (hrs > 0) ytdMap.set(ev.staff_id, (ytdMap.get(ev.staff_id) || 0) + hrs);
     });
 
+    // Build per-day detail for each staff member (used by click-to-expand in the report)
+    // Each entry: { work_date, hours, source }
+    // source: 'manual' = typed in by admin, 'clock-sync' = synced from clock-in, 'clock' = live clock calc
+    const periodDetailMap = new Map(); // staff_id → [{ work_date, hours, source }]
+    periodHrs.forEach(h => {
+        const source = (h.notes || '').toLowerCase().includes('clock') ? 'clock-sync' : 'manual';
+        if (!periodDetailMap.has(h.staff_id)) periodDetailMap.set(h.staff_id, []);
+        periodDetailMap.get(h.staff_id).push({ work_date: h.work_date, hours: parseFloat(h.hours_worked), source });
+    });
+    // Add clock-only days (not yet synced to staff_hours)
+    const clockOnlyDayMap = new Map(); // `staffId|date` → accumulated hours
+    periodClockEvents.forEach(ev => {
+        if (manualPeriodKeys.has(manualKey(ev.staff_id, ev.work_date))) return;
+        const hrs = calcClockHrs(ev);
+        if (hrs <= 0) return;
+        const key = manualKey(ev.staff_id, ev.work_date);
+        clockOnlyDayMap.set(key, (clockOnlyDayMap.get(key) || 0) + hrs);
+    });
+    clockOnlyDayMap.forEach((hrs, key) => {
+        const [staffId, work_date] = key.split('|');
+        if (!periodDetailMap.has(staffId)) periodDetailMap.set(staffId, []);
+        periodDetailMap.get(staffId).push({ work_date, hours: hrs, source: 'clock' });
+    });
+    // Sort each staff's detail entries by date
+    periodDetailMap.forEach(entries => entries.sort((a, b) => a.work_date.localeCompare(b.work_date)));
+
     // Include active staff + anyone with hours in the period
     const staff = allStaff.filter(s => s.active || periodMap.has(s.id));
     staff.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    return { staff, periodMap, ytdMap };
+    return { staff, periodMap, ytdMap, periodDetailMap };
 }
 
 async function generatePayrollReport() {
@@ -1185,8 +1211,8 @@ async function generatePayrollReport() {
     const container = document.getElementById('payrollContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
-        const { staff, periodMap, ytdMap } = await _buildPayrollData(startVal, endVal);
-        renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap);
+        const { staff, periodMap, ytdMap, periodDetailMap } = await _buildPayrollData(startVal, endVal);
+        renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap);
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
     }
@@ -1201,7 +1227,7 @@ function _calcYtdPeriods(startVal, endVal) {
     return Math.max(1, Math.ceil(days / 14));
 }
 
-function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap) {
+function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap = new Map()) {
     const container = document.getElementById('payrollContent');
     if (!staff.length) {
         container.innerHTML = '<p class="empty-hint">No staff data found.</p>';
@@ -1240,10 +1266,26 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap) {
             ytdPayStr     = yHrs > 0 ? '$' + (yHrs * rate).toFixed(2) : '—';
         }
 
+        const hasDetail = !isSalary && (periodDetailMap.get(s.id) || []).length > 0;
+        const detailRows = (periodDetailMap.get(s.id) || []).map(d => {
+            const [dy, dm, dd] = d.work_date.split('-').map(Number);
+            const dateLabel = `${MONTH_NAMES_ADMIN[dm - 1]} ${dd}`;
+            const sourceChip = d.source === 'clock-sync'
+                ? '<span style="font-size:.75em;color:#6b7280">clock sync</span>'
+                : d.source === 'clock'
+                ? '<span style="font-size:.75em;color:#9a6700">clock only</span>'
+                : '<span style="font-size:.75em;color:#166534">manual</span>';
+            return `<tr class="payroll-detail-row" style="display:none">
+                <td colspan="2" class="billing-indent" style="padding-left:2.5rem">${dateLabel} ${sourceChip}</td>
+                <td class="report-num payroll-hrs">${d.hours.toFixed(2)}</td>
+                <td colspan="3"></td>
+            </tr>`;
+        }).join('');
+
         return `
-            <tr>
+            <tr class="payroll-staff-row${hasDetail ? ' payroll-expandable' : ''}" data-staff-id="${escHtml(s.id)}" style="${hasDetail ? 'cursor:pointer' : ''}">
                 <td>
-                    <strong>${escHtml(s.name)}</strong>${inactive}
+                    <strong>${escHtml(s.name)}</strong>${inactive}${hasDetail ? ' <span class="payroll-expand-icon" style="font-size:.8em;color:#6b7280">▶</span>' : ''}
                     <br><small class="rates-ages">${escHtml(s.role || '')} · ${escHtml(roomLabel)}</small>
                 </td>
                 <td>${rateStr}</td>
@@ -1251,7 +1293,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap) {
                 <td class="report-num report-revenue">${periodPayStr}</td>
                 <td class="report-num payroll-hrs">${ytdHrsStr}</td>
                 <td class="report-num report-revenue">${ytdPayStr}</td>
-            </tr>`;
+            </tr>${detailRows}`;
     }).join('');
 
     const [sy, sm, sd] = startVal.split('-').map(Number);
@@ -1286,6 +1328,22 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap) {
                 </tfoot>
             </table>
         </div>`;
+
+    // Wire up click-to-expand detail rows for hourly staff
+    container.querySelectorAll('.payroll-expandable').forEach(row => {
+        row.addEventListener('click', () => {
+            const icon     = row.querySelector('.payroll-expand-icon');
+            let next       = row.nextElementSibling;
+            let expanded   = false;
+            while (next && next.classList.contains('payroll-detail-row')) {
+                const showing = next.style.display !== 'none';
+                next.style.display = showing ? 'none' : '';
+                expanded = !showing;
+                next = next.nextElementSibling;
+            }
+            if (icon) icon.textContent = expanded ? '▼' : '▶';
+        });
+    });
 }
 
 async function exportPayrollReport() {
