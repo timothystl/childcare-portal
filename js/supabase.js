@@ -1348,6 +1348,134 @@ async function upsertStaffHours(staffId, workDate, hoursWorked, notes) {
 }
 
 // ============================================================
+// STAFF SCHEDULES  (auto-fill planner persistence)
+// ============================================================
+
+/**
+ * Persists a full week of auto-fill schedule assignments.
+ * Deletes existing rows for the given dates first, then bulk-inserts
+ * the new ones (replace-on-save semantics).
+ *
+ * @param {string[]} weekDates   - Array of ISO dates (YYYY-MM-DD) for the week
+ * @param {Object}   assignments - { date: { roomId: { am: [names], pm: [names] } } }
+ * @param {Object[]} staffList   - Array of staff records with { id, name }
+ * @returns {Promise<number>}    - Count of rows inserted
+ */
+async function saveStaffScheduleWeek(weekDates, assignments, staffList) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    if (!weekDates?.length) throw new Error('No dates provided.');
+
+    // Build name → id lookup (case-insensitive)
+    const nameToId = new Map(
+        staffList.map(s => [s.name.trim().toLowerCase(), s.id])
+    );
+
+    // Flatten the nested assignments structure into DB rows
+    const rows = [];
+    for (const date of weekDates) {
+        const dayAssign = assignments[date];
+        if (!dayAssign) continue;
+        for (const [roomId, shifts] of Object.entries(dayAssign)) {
+            for (const shift of ['am', 'pm']) {
+                for (const name of (shifts[shift] || [])) {
+                    const staffId = nameToId.get(name.trim().toLowerCase());
+                    if (!staffId) {
+                        console.warn(`saveStaffScheduleWeek: no staff ID for "${name}" — skipping`);
+                        continue;
+                    }
+                    rows.push({ staff_id: staffId, work_date: date, room_id: roomId, shift });
+                }
+            }
+        }
+    }
+
+    // Delete the whole week first, then reinsert (clean replace)
+    const { error: delError } = await sbClient
+        .from('staff_schedules')
+        .delete()
+        .gte('work_date', weekDates[0])
+        .lte('work_date', weekDates[weekDates.length - 1]);
+    if (delError) throw friendlyError(delError);
+
+    if (!rows.length) return 0;
+
+    const { error: insError } = await sbClient
+        .from('staff_schedules')
+        .insert(rows);
+    if (insError) throw friendlyError(insError);
+
+    return rows.length;
+}
+
+/**
+ * Fetches saved schedule assignments for a date range, with staff names.
+ * Used to reload a saved week in the schedule planner.
+ *
+ * @param {string} startDate - ISO date, inclusive
+ * @param {string} endDate   - ISO date, inclusive
+ * @returns {Promise<Array<{staff_id, staff_name, work_date, room_id, shift}>>}
+ */
+async function fetchStaffScheduleWeek(startDate, endDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_schedules')
+        .select('staff_id, work_date, room_id, shift, staff:staff_id(name)')
+        .gte('work_date', startDate)
+        .lte('work_date', endDate)
+        .order('work_date')
+        .order('room_id')
+        .order('shift');
+    if (error) throw friendlyError(error);
+    return (data || []).map(r => ({
+        staff_id:   r.staff_id,
+        staff_name: r.staff?.name ?? '',
+        work_date:  r.work_date,
+        room_id:    r.room_id,
+        shift:      r.shift,
+    }));
+}
+
+/**
+ * Fetches schedule assignments with pay rate data for Room P&L cost allocation.
+ * Returns one record per staff-member per shift per day, enriched with pay
+ * fields so the caller can compute per-room labor cost.
+ *
+ * @param {string} startDate - ISO date, inclusive
+ * @param {string} endDate   - ISO date, inclusive
+ * @returns {Promise<Array<{
+ *   staff_id, staff_name, work_date, room_id, shift,
+ *   pay_type, hourly_rate, salary_biweekly
+ * }>>}
+ */
+async function fetchStaffScheduleRange(startDate, endDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_schedules')
+        .select(`
+            staff_id,
+            work_date,
+            room_id,
+            shift,
+            staff:staff_id(name, pay_type, hourly_rate, salary_biweekly)
+        `)
+        .gte('work_date', startDate)
+        .lte('work_date', endDate)
+        .order('work_date')
+        .order('room_id');
+    if (error) throw friendlyError(error);
+    return (data || []).map(r => ({
+        staff_id:        r.staff_id,
+        staff_name:      r.staff?.name ?? '',
+        work_date:       r.work_date,
+        room_id:         r.room_id,
+        shift:           r.shift,
+        pay_type:        r.staff?.pay_type ?? 'hourly',
+        hourly_rate:     parseFloat(r.staff?.hourly_rate) || 0,
+        salary_biweekly: parseFloat(r.staff?.salary_biweekly) || 0,
+    }));
+}
+
+// ============================================================
 // STAFF CLOCK EVENTS  (teacher clock-in/out)
 // ============================================================
 /**

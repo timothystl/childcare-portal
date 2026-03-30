@@ -405,6 +405,7 @@ async function exportFamilyBillingReport() {
 function setupStaffScheduling() {
     document.getElementById('generateStaffBtn')?.addEventListener('click', generateStaffSchedule);
     document.getElementById('autoFillStaffBtn')?.addEventListener('click', autoFillStaffSchedule);
+    document.getElementById('saveScheduleBtn')?.addEventListener('click', saveStaffSchedule);
     document.getElementById('exportStaffBtn')?.addEventListener('click', exportStaffSchedule);
 
     // Default to the Monday of the current week
@@ -901,6 +902,44 @@ function _showStaffPicker(anchorBtn, date, room, shift) {
             }
         });
     }, 0);
+}
+
+// ============================================================
+// SAVE STAFF SCHEDULE
+// ============================================================
+
+async function saveStaffSchedule() {
+    if (!_autoFillAssignments || !_autoFillWeekDates) {
+        alert('Please generate and auto-fill a schedule first.');
+        return;
+    }
+
+    const btn = document.getElementById('saveScheduleBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    try {
+        if (!allStaffData.length) await loadStaffList();
+
+        const count = await saveStaffScheduleWeek(
+            _autoFillWeekDates,
+            _autoFillAssignments,
+            allStaffData
+        );
+
+        await logAdminAction('save', 'staff_schedule', null,
+            { week_start: _autoFillWeekDates[0], rows_saved: count });
+
+        btn.textContent = `✓ Saved (${count} assignments)`;
+        setTimeout(() => {
+            btn.disabled    = false;
+            btn.textContent = '💾 Save Schedule';
+        }, 2500);
+    } catch (err) {
+        alert('Save failed: ' + err.message);
+        btn.disabled    = false;
+        btn.textContent = '💾 Save Schedule';
+    }
 }
 
 // ============================================================
