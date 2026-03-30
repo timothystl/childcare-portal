@@ -207,12 +207,25 @@ export default {
       });
       if (!userRes.ok) return new Response('Unauthorized', { status: 401 });
 
-      const { family_id, broadcast, title, body: msgBody } = await request.json().catch(() => ({}));
+      const { family_id, parent_email, broadcast, title, body: msgBody } = await request.json().catch(() => ({}));
       if (!title) return new Response('Missing title', { status: 400 });
+
+      // Resolve family_id from parent_email if needed
+      let resolvedFamilyId = family_id;
+      if (!broadcast && !resolvedFamilyId && parent_email) {
+        const famRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/families?or=(parent_email.ilike.${encodeURIComponent(parent_email)},parent2_email.ilike.${encodeURIComponent(parent_email)})&select=id&limit=1`,
+          { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+        );
+        if (famRes.ok) {
+          const fams = await famRes.json();
+          if (fams.length) resolvedFamilyId = fams[0].id;
+        }
+      }
 
       // Fetch matching subscriptions
       let query = `${SUPABASE_URL}/rest/v1/push_subscriptions?select=*`;
-      if (!broadcast && family_id) query += `&family_id=eq.${encodeURIComponent(family_id)}`;
+      if (!broadcast && resolvedFamilyId) query += `&family_id=eq.${encodeURIComponent(resolvedFamilyId)}`;
 
       const subsRes = await fetch(query, {
         headers: {

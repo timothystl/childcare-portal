@@ -5,6 +5,24 @@
 //           Registration Window Override, Filters, Export
 // ============================================================
 
+// ── Push notification helper (non-blocking, best-effort) ────────────────────
+async function _sendSchedulePush(parentEmail, childName, title, body) {
+    try {
+        const session = await getAdminSession();
+        if (!session) return;
+        await fetch('/send-push', {
+            method:  'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ parent_email: parentEmail, title, body }),
+        });
+    } catch (err) {
+        console.warn('Schedule push notification failed:', err);
+    }
+}
+
 // LOAD REGISTRATIONS
 // ============================================================
 async function loadRegistrations() {
@@ -189,6 +207,7 @@ function renderEditDaysList() {
             const dateId = btn.dataset.dateId;
             btn.disabled = true;
             try {
+                const removedDate = editDaysReg.registration_dates.find(d => String(d.id) === String(dateId));
                 await deleteRegistrationDate(dateId);
                 // Update local state
                 editDaysReg.registration_dates = editDaysReg.registration_dates.filter(
@@ -199,6 +218,16 @@ function renderEditDaysList() {
                 );
                 renderEditDaysList();
                 renderTable(allRegistrations);
+                // Notify parent (non-blocking)
+                if (removedDate) {
+                    const dateLabel = friendlyShort(removedDate.care_date);
+                    _sendSchedulePush(
+                        editDaysReg.parent_email,
+                        editDaysReg.child_name,
+                        'Schedule Update — Timothy Lutheran MDO',
+                        `${editDaysReg.child_name}'s care day on ${dateLabel} has been removed from your schedule.`
+                    );
+                }
             } catch (err) {
                 alert('Remove failed: ' + err.message);
                 btn.disabled = false;
@@ -231,6 +260,7 @@ document.getElementById('editDaysAddBtn')?.addEventListener('click', async () =>
     const btn = document.getElementById('editDaysAddBtn');
     btn.disabled = true;
     try {
+        const regSnapshot = editDaysReg; // capture before reload
         await addRegistrationDate(editDaysReg.id, editDaysReg.room_id, dateVal, dayType, waitlist);
         // Reload registration to get the new date's ID
         const fresh = await fetchAllRegistrations();
@@ -239,6 +269,17 @@ document.getElementById('editDaysAddBtn')?.addEventListener('click', async () =>
         renderEditDaysList();
         renderTable(allRegistrations);
         document.getElementById('editDaysDate').value = '';
+        // Notify parent (non-blocking)
+        if (!waitlist) {
+            const dateLabel  = friendlyShort(dateVal);
+            const typeLabel  = dayType === 'half' ? 'half day' : 'full day';
+            _sendSchedulePush(
+                regSnapshot.parent_email,
+                regSnapshot.child_name,
+                'Schedule Update — Timothy Lutheran MDO',
+                `${regSnapshot.child_name} has been added on ${dateLabel} (${typeLabel}).`
+            );
+        }
     } catch (err) {
         errEl.textContent = 'Add failed: ' + err.message;
     } finally {
@@ -740,6 +781,16 @@ async function _aadConfirm() {
         } catch (emailErr) {
             console.warn('Change notice email failed:', emailErr);
         }
+
+        // Send push notification (non-blocking)
+        const dateLabel = friendlyShort(_aadDateStr);
+        const typeLabel = dayType === 'half' ? 'half day' : 'full day';
+        _sendSchedulePush(
+            updatedReg.parent_email,
+            updatedReg.child_name,
+            'Schedule Update — Timothy Lutheran MDO',
+            `${updatedReg.child_name} has been added on ${dateLabel} (${typeLabel}).`
+        );
 
         _closeAdminAddDayModal();
         drawRoomCalendar();
