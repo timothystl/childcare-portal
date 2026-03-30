@@ -1154,7 +1154,7 @@ async function loadRateSettings() {
             if (r.halfDayRate    != null) room.halfDayRate    = r.halfDayRate;
             if (r.weeklyFullRate != null) room.weeklyFullRate = r.weeklyFullRate;
             if (r.weeklyHalfRate != null) room.weeklyHalfRate = r.weeklyHalfRate;
-            if (r.ageMinMonths   != null) room.ageMinMonths   = r.ageMinMonths;
+            if ('ageMinMonths'   in r)    room.ageMinMonths   = r.ageMinMonths; // allow null
             if ('ageMaxMonths'   in r)    room.ageMaxMonths   = r.ageMaxMonths; // allow null
             if (r.ages           != null) room.ages           = r.ages;
         });
