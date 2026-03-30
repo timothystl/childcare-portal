@@ -1335,9 +1335,24 @@ async function _buildArDataMap(fromDate, toDate) {
     const toMo   = toDate.substring(0, 7);
     const map    = {};
 
-    // Step 1: build from live allRegistrations
+    // Step 1: build from live registrations
+    // Ensure family discount data is loaded — it's only lazy-loaded when the Families tab is opened,
+    // so a user who goes straight to Reports would have an empty discount map otherwise.
+    if (allFamiliesData.length === 0) {
+        try {
+            allFamiliesData = await fetchAllFamilies({ includeArchived: true });
+            _discountMap = null; // force rebuild with freshly loaded data
+        } catch (e) { console.warn('Could not load families for discount map:', e); }
+    }
+    // Fetch all registrations for the report range regardless of when they were submitted.
+    // The global allRegistrations only covers recently-submitted registrations (last ~2 months),
+    // which would miss families who registered earlier in the year.
+    let regsForReport = allRegistrations;
+    try {
+        regsForReport = await fetchAllRegistrations({ sinceDate: '2020-01-01', untilDate: new Date().toISOString() });
+    } catch (e) { console.warn('Could not fetch full registration history; falling back to loaded data:', e); }
     const dmap = getDiscountMap();
-    allRegistrations.forEach(reg => {
+    regsForReport.forEach(reg => {
         const room = ROOMS.find(r => r.id === reg.room_id);
         if (!room) return;
         const discKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
