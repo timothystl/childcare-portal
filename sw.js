@@ -1,17 +1,18 @@
 // Service Worker for Timothy Lutheran MDO
 // Cache-first for static assets, network-only for API calls
 
-const CACHE_NAME = 'tl-mdo-v1';
+const CACHE_NAME = 'tl-mdo-v2';
 
 // Static assets to pre-cache on install
+// Uses clean URLs (no .html) to match how Cloudflare Assets serves them
 const PRECACHE_URLS = [
   '/',
-  '/index.html',
-  '/calendar.html',
-  '/clockin.html',
-  '/lookup.html',
-  '/notice.html',
-  '/privacy.html',
+  '/calendar',
+  '/lookup',
+  '/admin',
+  '/clockin',
+  '/notice',
+  '/privacy',
   '/manifest.json',
   '/css/styles.css',
   '/css/admin.css',

@@ -61,6 +61,15 @@ export default {
       });
     }
 
+    // Redirect .html URLs to clean URLs — Cloudflare Assets enforces clean URLs,
+    // so /lookup.html, /admin.html, etc. must redirect to /lookup, /admin, etc.
+    // Exclude /index.html which is handled separately by _redirects.
+    if (url.pathname.endsWith('.html') && url.pathname !== '/index.html') {
+      const clean = new URL(request.url);
+      clean.pathname = url.pathname.slice(0, -5);
+      return Response.redirect(clean.href, 301);
+    }
+
     // Rewrite /calendar → /calendar.html (avoids _redirects loop in Workers Assets)
     if (url.pathname === '/calendar') {
       const rewritten = new URL(request.url);
