@@ -1352,24 +1352,99 @@ async function _buildArDataMap(fromDate, toDate) {
         regsForReport = await fetchAllRegistrations({ sinceDate: '2020-01-01', untilDate: new Date().toISOString() });
     } catch (e) { console.warn('Could not fetch full registration history; falling back to loaded data:', e); }
     const dmap = getDiscountMap();
+
+    // Fetch billing overrides for every month in the report range
+    const overridesByMonth = new Map(); // 'YYYY-MM' → Map(parentEmail:childName → overrideAmount)
+    {
+        let [oy, om] = fromMo.split('-').map(Number);
+        while (true) {
+            const mo = `${oy}-${String(om).padStart(2, '0')}`;
+            if (mo > toMo) break;
+            try {
+                const rows = await fetchBillingOverrides(mo);
+                overridesByMonth.set(mo, new Map(rows.map(r => [
+                    `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+                    parseFloat(r.override_amount),
+                ])));
+            } catch (e) { console.warn(`fetchBillingOverrides(${mo}):`, e); }
+            if (om === 12) { oy++; om = 1; } else { om++; }
+        }
+    }
+
+    // Group registrations by family so we can compute sibling discounts the same way
+    // the Family Billing report does ($10/day off the lower-rate sibling when 2+ attend same day).
+    const familyMap = new Map(); // familyKey → [{ reg, room, disc, dates }]
     regsForReport.forEach(reg => {
+        const dates = (reg.registration_dates || []).filter(d =>
+            !d.waitlisted && d.care_date && d.care_date >= fromDate && d.care_date <= toDate);
+        if (!dates.length) return;
         const room = ROOMS.find(r => r.id === reg.room_id);
         if (!room) return;
         const discKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
-        const disc    = dmap.get(discKey) || { type: 'none', value: 0 };
-        (reg.registration_dates || []).forEach(d => {
-            if (d.waitlisted || !d.care_date) return;
-            if (d.care_date < fromDate || d.care_date > toDate) return;
-            const mo = d.care_date.substring(0, 7);
-            if (!map[mo]) map[mo] = {};
-            if (!map[mo][reg.room_id]) map[mo][reg.room_id] = { attendees: 0, netBilled: 0, liveDisc: 0 };
-            const baseRate = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
-            const actual   = effectiveAdminRate(baseRate, disc.type, disc.value);
-            map[mo][reg.room_id].attendees++;
-            map[mo][reg.room_id].netBilled += actual;
-            map[mo][reg.room_id].liveDisc  += Math.max(0, baseRate - actual);
-        });
+        const disc = dmap.get(discKey) || { type: 'none', value: 0 };
+        const familyKey = (reg.parent_email || reg.parent_name || '').toLowerCase().trim();
+        if (!familyMap.has(familyKey)) familyMap.set(familyKey, []);
+        familyMap.get(familyKey).push({ reg, room, disc, dates });
     });
+
+    for (const regs of familyMap.values()) {
+        // Build per-month sibling discount map for this family: mo → childName → totalSibDiscount
+        const moSibDisc = new Map();
+        regs.forEach(({ reg, room, disc, dates }) => {
+            dates.forEach(d => {
+                const mo = d.care_date.substring(0, 7);
+                const base = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
+                const eff  = effectiveAdminRate(base, disc.type, disc.value);
+                if (!moSibDisc.has(mo)) moSibDisc.set(mo, { dateChildMap: new Map(), sibMap: null });
+                const dateMap = moSibDisc.get(mo).dateChildMap;
+                if (!dateMap.has(d.care_date)) dateMap.set(d.care_date, []);
+                dateMap.get(d.care_date).push({ childName: reg.child_name, effRate: eff });
+            });
+        });
+        // Resolve sibling discounts per date within each month
+        for (const moEntry of moSibDisc.values()) {
+            const sibMap = new Map();
+            for (const children of moEntry.dateChildMap.values()) {
+                if (children.length < 2) continue;
+                [...children].sort((a, b) => b.effRate - a.effRate).forEach((c, i) => {
+                    if (i > 0) sibMap.set(c.childName, (sibMap.get(c.childName) || 0) + Math.min(10, c.effRate));
+                });
+            }
+            moEntry.sibMap = sibMap;
+        }
+
+        // Aggregate each child's per-month subtotal to room+month,
+        // applying sibling discounts and billing overrides to match Family Billing totals.
+        regs.forEach(({ reg, room, disc, dates }) => {
+            const overrideKey = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
+            // Group dates by month
+            const moGroups = new Map();
+            dates.forEach(d => {
+                const mo = d.care_date.substring(0, 7);
+                if (!moGroups.has(mo)) moGroups.set(mo, []);
+                moGroups.get(mo).push(d);
+            });
+            for (const [mo, moDates] of moGroups) {
+                let calcSubtotal = 0, baseTotal = 0;
+                moDates.forEach(d => {
+                    const base = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
+                    calcSubtotal += effectiveAdminRate(base, disc.type, disc.value);
+                    baseTotal    += base;
+                });
+                const sibTotal = (moSibDisc.get(mo)?.sibMap?.get(reg.child_name)) || 0;
+                calcSubtotal = Math.max(0, calcSubtotal - sibTotal);
+
+                const overridesMap  = overridesByMonth.get(mo);
+                const billedAmount  = overridesMap?.has(overrideKey) ? overridesMap.get(overrideKey) : calcSubtotal;
+
+                if (!map[mo]) map[mo] = {};
+                if (!map[mo][reg.room_id]) map[mo][reg.room_id] = { attendees: 0, netBilled: 0, liveDisc: 0 };
+                map[mo][reg.room_id].attendees += moDates.length;
+                map[mo][reg.room_id].netBilled += billedAmount;
+                map[mo][reg.room_id].liveDisc  += Math.max(0, baseTotal - billedAmount);
+            }
+        });
+    }
 
     // Step 2: historical billing_summary overwrites live per room+month
     let historical = [];
