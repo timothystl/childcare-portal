@@ -1931,7 +1931,35 @@ async function fetchAttendanceSummary({ month, roomId } = {}) {
     return data || [];
 }
 
-// Upsert a billing_summary row (insert or update by month+room_id)
+// Fetch confirmed, non-waitlisted care dates in a date range.
+// Returns flat array of { registration_id, care_date, day_type, room_id }.
+// Used by the Finance modeling tool to count actual enrollment and avg days/child.
+async function fetchRegistrationDatesForRange(fromDate, toDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('registrations')
+        .select(`
+            id, room_id,
+            registration_dates!inner ( care_date, day_type, room_id, waitlisted )
+        `)
+        .eq('status', 'confirmed')
+        .gte('registration_dates.care_date', fromDate)
+        .lte('registration_dates.care_date', toDate)
+        .eq('registration_dates.waitlisted', false);
+    if (error) throw error;
+    const result = [];
+    for (const reg of (data || [])) {
+        for (const rd of (reg.registration_dates || [])) {
+            result.push({
+                registration_id: reg.id,
+                care_date:       rd.care_date,
+                day_type:        rd.day_type,
+                room_id:         rd.room_id || reg.room_id,
+            });
+        }
+    }
+    return result;
+}
 async function upsertBillingSummary(row) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
