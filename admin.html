@@ -1017,15 +1017,16 @@
             <!-- Rate / Wage Modeling Tool -->
             <section class="admin-section collapsible-section" id="financeModelSection">
                 <h2>🔧 Rate &amp; Wage Modeling Tool</h2>
-                <p class="section-desc">Model the financial impact of tuition rate increases or staff wage changes using recent actuals as a baseline.</p>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;max-width:640px;margin-bottom:1rem">
-                    <div>
-                        <label style="font-weight:600;font-size:.875rem">Tuition Rate Increase (%)</label>
-                        <input id="modelRateInc" type="number" step="0.1" min="0" class="form-control" value="0" placeholder="e.g. 5">
-                    </div>
+                <p class="section-desc">Enter specific dollar increases per room and day type, plus wage changes, to see the projected financial impact.</p>
+
+                <h4 style="margin:0 0 .5rem;font-size:.95rem">Tuition Rate Increases ($ per care day)</h4>
+                <div id="modelRoomGrid"><p class="empty-hint">Loading rooms…</p></div>
+
+                <h4 style="margin:1.25rem 0 .5rem;font-size:.95rem">Staff Cost Changes</h4>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;max-width:400px;margin-bottom:1.25rem">
                     <div>
                         <label style="font-weight:600;font-size:.875rem">Hourly Wage Increase ($/hr)</label>
-                        <input id="modelWageInc" type="number" step="0.25" min="0" class="form-control" value="0" placeholder="e.g. 1.00">
+                        <input id="modelWageInc" type="number" step="0.25" min="0" class="form-control" value="0" placeholder="e.g. 0.75">
                     </div>
                     <div>
                         <label style="font-weight:600;font-size:.875rem">Salary Staff Increase (%)</label>
