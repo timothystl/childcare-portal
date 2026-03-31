@@ -49,6 +49,7 @@ async function initDashboard() {
     setupExtraReports();
     setupWaitlistAdmin();
     setupAdminRoles();
+    setupFinanceDashboard();
     setupTabs();
     setupCollapsibles();
     document.getElementById('refreshBtn').addEventListener('click', () => {

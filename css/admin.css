@@ -2875,3 +2875,64 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     body { background: white; }
     .roster-day-table { font-size: .8em; }
 }
+
+/* ── Finance Tab ─────────────────────────────────────────── */
+.fin-kpi-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-bottom: 1.5rem;
+}
+.fin-kpi {
+    flex: 1 1 140px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: .85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+}
+.fin-kpi-label {
+    font-size: .78rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    font-weight: 600;
+}
+.fin-kpi-value {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1.1;
+}
+.fin-kpi-target {
+    font-size: .7rem;
+    font-weight: 400;
+    color: #94a3b8;
+    display: block;
+}
+.fin-positive { color: #16a34a; }
+.fin-negative { color: #dc2626; }
+.fin-warn     { color: #d97706; }
+
+.fin-charts-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+}
+.fin-chart-wrap {
+    flex: 1 1 340px;
+    min-width: 0;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem 1.25rem 1.25rem;
+}
+.fin-chart-title {
+    margin: 0 0 .75rem;
+    font-size: .9rem;
+    color: #1e3a5f;
+    font-weight: 600;
+}
