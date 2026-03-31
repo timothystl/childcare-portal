@@ -478,34 +478,34 @@ function setupModelingTool() {
     renderRoomRateGrid();
 }
 
-// Build per-room baseline metrics from real data
+// Build per-room baseline metrics.
+// Revenue: _buildRoomPnlData (authoritative, same as dashboard)
+// Child-days: billing_summary full_days/half_days (works for both historical and live months)
+// Enrollment: direct count of confirmed registrations per room
 async function _buildRoomModelData() {
     const today = new Date();
-    // Include current month + up to 3 prior months; filter to months with actual revenue (max 3)
-    // Current month is included even if incomplete — it has real data and real care dates
+    // Include current month + up to 3 prior; skip months with no revenue; use max 3
     const candidateMonths = [];
     for (let i = 0; i <= 3; i++) {
-        const d    = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const d     = new Date(today.getFullYear(), today.getMonth() - i, 1);
         const moKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-        // For current month use today as end; for past months use last day of that month
-        const end  = i === 0 ? today : new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        const end   = i === 0 ? today : new Date(d.getFullYear(), d.getMonth()+1, 0);
         candidateMonths.push({ key: moKey, start: `${moKey}-01`, end: end.toISOString().split('T')[0] });
     }
     const fromDate = candidateMonths[candidateMonths.length-1].start;
-    const toDate   = candidateMonths[0].end; // today, captures current-month care dates
+    const toDate   = candidateMonths[0].end;
 
     await loadRateSettings();
 
-    // Revenue comes from _buildRoomPnlData (same source as dashboard) — authoritative
-    // Registration dates give us actual enrollment counts and avg days per child
-    const [pnlData, regDates, allStaff] = await Promise.all([
+    const [pnlData, allBilling, enrollByRoom, allStaff] = await Promise.all([
         _buildRoomPnlData(fromDate, toDate),
-        fetchRegistrationDatesForRange(fromDate, toDate),
+        fetchBillingSummary(),
+        fetchConfirmedEnrollmentByRoom(),
         fetchAllStaff({ includeInactive: false }),
     ]);
 
     // Per-room monthly revenue from PnL
-    const roomRevByMonth = {}; // { roomId: { moKey: revenue } }
+    const roomRevByMonth = {};
     pnlData.months.forEach(mo => {
         const moKey = mo.substring(0, 7);
         Object.entries(pnlData.data[mo] || {}).forEach(([roomId, rd]) => {
@@ -514,7 +514,7 @@ async function _buildRoomModelData() {
         });
     });
 
-    // Only use months that have center-wide revenue > 0 (skip months with no data)
+    // Skip months with no center-wide revenue
     const totalRevByMonth = {};
     Object.values(roomRevByMonth).forEach(roomMap => {
         Object.entries(roomMap).forEach(([mo, rev]) => {
@@ -530,112 +530,58 @@ async function _buildRoomModelData() {
         return _roomModelData;
     }
 
-    // Process registration dates: per month per room track enrollment sets and care-date sets
-    const monthStats = {}; // { moKey: { roomId: { fullEnroll:Set, halfEnroll:Set, fullDates:Set, halfDates:Set } } }
-    last3.forEach(m => { monthStats[m.key] = {}; });
-    regDates.forEach(rd => {
-        const moKey = (rd.care_date || '').substring(0, 7);
-        if (!monthStats[moKey]) return;
-        const rId = rd.room_id;
-        if (!monthStats[moKey][rId]) {
-            monthStats[moKey][rId] = {
-                fullEnroll: new Set(), halfEnroll: new Set(),
-                fullDates:  new Set(), halfDates:  new Set(),
-            };
-        }
-        const s = monthStats[moKey][rId];
-        if (rd.day_type === 'full') {
-            s.fullEnroll.add(rd.registration_id);
-            s.fullDates.add(rd.care_date);
-        } else if (rd.day_type === 'half') {
-            s.halfEnroll.add(rd.registration_id);
-            s.halfDates.add(rd.care_date);
-        }
-    });
+    // Filter billing summary to our months
+    const recentBilling = allBilling.filter(b =>
+        last3.some(m => (b.month || '').substring(0, 7) === m.key)
+    );
 
     const n = last3.length;
     const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
+    const SCHOOL_DAYS = 21; // avg billable days per month — used when no better data
     const roomData = {};
 
     activeRooms.forEach(r => {
-        // Revenue: avg over the 3 months from PnL
+        const billingRows = recentBilling.filter(b => b.room_id === r.id);
+
+        // Revenue avg from PnL
         const avgNetBilled = last3.reduce((s, m) =>
             s + (roomRevByMonth[r.id]?.[m.key] || 0), 0) / n;
 
-        // Enrollment and attendance from registration dates
-        const avgFullEnroll = last3.reduce((s, m) =>
-            s + (monthStats[m.key][r.id]?.fullEnroll.size || 0), 0) / n;
-        const avgHalfEnroll = last3.reduce((s, m) =>
-            s + (monthStats[m.key][r.id]?.halfEnroll.size || 0), 0) / n;
+        // Child-days from billing_summary (total per room per month)
+        const avgFullChildDays = billingRows.reduce((s, b) => s + (b.full_days || 0), 0) / n;
+        const avgHalfChildDays = billingRows.reduce((s, b) => s + (b.half_days || 0), 0), 0) / n;
 
-        // School days per room (unique dates any child attended)
-        const avgFullSchoolDays = last3.reduce((s, m) =>
-            s + (monthStats[m.key][r.id]?.fullDates.size || 0), 0) / n;
-        const avgHalfSchoolDays = last3.reduce((s, m) =>
-            s + (monthStats[m.key][r.id]?.halfDates.size || 0), 0) / n;
+        // Enrollment from confirmed registrations (current snapshot)
+        const enrollment = enrollByRoom[r.id] || 0;
 
-        // Total child-days per month (used for rate-increase revenue calc)
-        const avgFullChildDays = last3.reduce((s, m) =>
-            s + (monthStats[m.key][r.id]?.fullEnroll.size > 0
-                ? monthStats[m.key][r.id].fullDates.size * monthStats[m.key][r.id].fullEnroll.size
-                : 0), 0) / n;
-        // ^ approximation: school_days × enrollment (slightly over-counts part-time kids)
-        // Better: count actual care_dates per child. Use total from billing or reg count.
-        // For rate impact we actually need total child-days, compute directly:
-        const totalFullChildDays = last3.reduce((s, m) => {
-            const reg = monthStats[m.key][r.id];
-            if (!reg) return s;
-            // Each registration_date row is one child-day — count is total care dates for that room/month/type
-            return s + reg.fullDates.size * reg.fullEnroll.size; // approx
-        }, 0) / n;
-        // Actually, let me count actual entries in regDates for this room/month/type
-        const countChildDays = (moKey, roomId, dtype) => {
-            return regDates.filter(rd =>
-                rd.room_id === roomId &&
-                (rd.care_date||'').startsWith(moKey) &&
-                rd.day_type === dtype
-            ).length;
-        };
-        const avgActualFullChildDays = last3.reduce((s, m) => s + countChildDays(m.key, r.id, 'full'), 0) / n;
-        const avgActualHalfChildDays = last3.reduce((s, m) => s + countChildDays(m.key, r.id, 'half'), 0) / n;
+        // Avg days per enrolled child: child-days ÷ enrollment
+        // Falls back to a typical pattern if enrollment unknown
+        const avgDaysPerFullChild = enrollment > 0 && avgFullChildDays > 0
+            ? Math.round(avgFullChildDays / enrollment * 10) / 10
+            : (avgFullChildDays > 0 ? Math.round(avgFullChildDays / Math.max(1, SCHOOL_DAYS * 0.6) * 10) / 10 : SCHOOL_DAYS);
+        const avgDaysPerHalfChild = enrollment > 0 && avgHalfChildDays > 0
+            ? Math.round(avgHalfChildDays / enrollment * 10) / 10
+            : (avgHalfChildDays > 0 ? Math.round(avgHalfChildDays / Math.max(1, SCHOOL_DAYS * 0.6) * 10) / 10 : SCHOOL_DAYS * 0.7);
 
-        // Avg days per enrolled child per month
-        const avgDaysPerFullChild = avgFullEnroll > 0
-            ? avgActualFullChildDays / avgFullEnroll
-            : (avgFullSchoolDays > 0 ? avgFullSchoolDays : 18);
-        const avgDaysPerHalfChild = avgHalfEnroll > 0
-            ? avgActualHalfChildDays / avgHalfEnroll
-            : (avgHalfSchoolDays > 0 ? avgHalfSchoolDays : 14);
-
-        const totalEnroll = avgFullEnroll + avgHalfEnroll;
-        const staffNeeded = r.staffRatio > 0 ? Math.ceil(totalEnroll / r.staffRatio) : 1;
+        const availableSlots = r.capacity != null ? Math.max(0, r.capacity - enrollment) : null;
+        const staffNeeded    = r.staffRatio > 0 ? Math.ceil(enrollment / r.staffRatio) : 0;
 
         roomData[r.id] = {
             room: r,
-            avgNetBilled,
-            avgActualFullChildDays, avgActualHalfChildDays,
-            avgFullEnroll:  Math.round(avgFullEnroll  * 10) / 10,
-            avgHalfEnroll:  Math.round(avgHalfEnroll  * 10) / 10,
-            avgFullSchoolDays: Math.round(avgFullSchoolDays * 10) / 10,
-            avgDaysPerFullChild: Math.round(avgDaysPerFullChild * 10) / 10,
-            avgDaysPerHalfChild: Math.round(avgDaysPerHalfChild * 10) / 10,
-            totalEnroll:    Math.round(totalEnroll    * 10) / 10,
-            availableSlots: Math.max(0, r.capacity - Math.round(totalEnroll)),
-            staffNeeded,
-            hasLiveRegData: avgFullEnroll > 0 || avgHalfEnroll > 0,
+            avgNetBilled, avgFullChildDays, avgHalfChildDays,
+            enrollment,
+            avgDaysPerFullChild, avgDaysPerHalfChild,
+            availableSlots, staffNeeded,
+            hasData: avgNetBilled > 0 || enrollment > 0,
         };
     });
 
     // Center-wide avg days per child (fallback for new/coming_soon rooms)
-    const roomsWithReg = Object.values(roomData).filter(rd => rd.hasLiveRegData && rd.avgFullEnroll > 0);
-    const centerAvgDaysPerFull = roomsWithReg.length > 0
-        ? roomsWithReg.reduce((s, rd) => s + rd.avgDaysPerFullChild, 0) / roomsWithReg.length
-        : 18;
-    const centerAvgDaysPerHalf = roomsWithReg.length > 0
-        ? roomsWithReg.filter(rd => rd.avgHalfEnroll > 0)
-                      .reduce((s, rd) => s + rd.avgDaysPerHalfChild, 0) /
-          Math.max(1, roomsWithReg.filter(rd => rd.avgHalfEnroll > 0).length)
-        : 14;
+    const roomsWithData = Object.values(roomData).filter(rd => rd.enrollment > 0 && rd.avgFullChildDays > 0);
+    const centerAvgDaysPerFull = roomsWithData.length > 0
+        ? roomsWithData.reduce((s, rd) => s + rd.avgDaysPerFullChild, 0) / roomsWithData.length
+        : SCHOOL_DAYS * 0.7;
+    const centerAvgDaysPerHalf = SCHOOL_DAYS * 0.6;
 
     // Avg hourly staff rate
     const hourlyStaff   = allStaff.filter(s => s.pay_type !== 'salary' && s.active !== false);
@@ -822,7 +768,7 @@ async function runFinanceModel() {
                 fullDayOnly: r.fullDayOnly,
                 baseRev: rd.avgNetBilled,
                 rateRevInc, enrollRevInc, totalRevInc,
-                projRev: rd.avgNetBilled + totalRevInc,
+                projRev: rd.avgNetBilled + totalRevInc - additionalStaffCost,
                 fullEnrollInc, halfEnrollInc, fullRateInc, halfRateInc,
                 daysPerFull, daysPerHalf,
                 additionalStaff, additionalStaffCost,
@@ -889,7 +835,7 @@ async function runFinanceModel() {
                     <th class="report-num">Rate Change</th>
                     <th class="report-num">Enrollment Change</th>
                     <th class="report-num">Staff Cost</th>
-                    <th class="report-num">Projected Rev/mo</th>
+                    <th class="report-num">Projected Net/mo</th>
                 </tr></thead>
                 <tbody>
                 ${changedRooms.map(r => `<tr>
@@ -914,7 +860,7 @@ async function runFinanceModel() {
                     <td class="report-num" style="color:#16a34a"><strong>${roomProjections.reduce((s,r)=>s+r.rateRevInc,0) > 0 ? '+'+fmt$(roomProjections.reduce((s,r)=>s+r.rateRevInc,0)) : '—'}</strong></td>
                     <td class="report-num" style="color:#16a34a"><strong>${roomProjections.reduce((s,r)=>s+r.enrollRevInc,0) > 0 ? '+'+fmt$(roomProjections.reduce((s,r)=>s+r.enrollRevInc,0)) : '—'}</strong></td>
                     <td class="report-num" style="color:#ef4444"><strong>${totalAdditionalStaffCost > 0 ? '+'+fmt$(totalAdditionalStaffCost) : '—'}</strong></td>
-                    <td class="report-num"><strong>${fmt$(totalProjRev)}</strong></td>
+                    <td class="report-num"><strong>${fmt$(totalProjRev - totalAdditionalStaffCost)}</strong></td>
                 </tr>
                 </tbody>
             </table>
