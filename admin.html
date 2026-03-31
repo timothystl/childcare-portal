@@ -957,6 +957,83 @@
                 </div>
             </section>
 
+            <!-- Expense Lines -->
+            <section class="admin-section collapsible-section" id="financeExpenseSection">
+                <h2>📋 Expense Lines</h2>
+                <p class="section-desc">Track fixed monthly costs and annual one-time expenses (workers comp, supplies, enrollment fees, etc.).</p>
+                <button id="addExpenseBtn" class="btn-primary" style="margin-bottom:1rem">+ Add Expense</button>
+
+                <!-- Inline add/edit form -->
+                <div id="expenseFormWrap" class="hidden" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:1.25rem;margin-bottom:1rem;max-width:520px">
+                    <h4 id="expenseFormTitle" style="margin:0 0 1rem">Add Expense</h4>
+                    <div style="display:grid;gap:.75rem">
+                        <div>
+                            <label style="font-weight:600;font-size:.875rem">Label *</label>
+                            <input id="expenseLabelInput" type="text" class="form-control" placeholder="e.g. Workers Comp, Supplies">
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+                            <div>
+                                <label style="font-weight:600;font-size:.875rem">Type *</label>
+                                <select id="expenseTypeInput" class="form-control">
+                                    <option value="monthly">Monthly (recurring)</option>
+                                    <option value="annual">Annual (one-time)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-weight:600;font-size:.875rem">Amount ($) *</label>
+                                <input id="expenseAmountInput" type="number" step="0.01" class="form-control" placeholder="0.00">
+                            </div>
+                        </div>
+                        <div id="expenseMonthWrap" style="display:none">
+                            <label style="font-weight:600;font-size:.875rem">Month it occurs</label>
+                            <select id="expenseMonthInput" class="form-control">
+                                <option value="1">January</option><option value="2">February</option>
+                                <option value="3">March</option><option value="4">April</option>
+                                <option value="5">May</option><option value="6">June</option>
+                                <option value="7">July</option><option value="8">August</option>
+                                <option value="9">September</option><option value="10">October</option>
+                                <option value="11">November</option><option value="12">December</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-weight:600;font-size:.875rem">Notes (optional)</label>
+                            <input id="expenseNotesInput" type="text" class="form-control" placeholder="e.g. policy #, vendor">
+                        </div>
+                    </div>
+                    <div style="margin-top:1rem;display:flex;gap:.75rem;align-items:center">
+                        <button id="expenseFormSave" class="btn-primary">Save</button>
+                        <button id="expenseFormCancel" class="btn-secondary">Cancel</button>
+                        <span id="expenseFormStatus" style="font-size:.85em;color:#6b7280"></span>
+                    </div>
+                </div>
+
+                <div id="expenseLinesContent">
+                    <p class="empty-hint">No expenses entered yet.</p>
+                </div>
+            </section>
+
+            <!-- Rate / Wage Modeling Tool -->
+            <section class="admin-section collapsible-section" id="financeModelSection">
+                <h2>🔧 Rate &amp; Wage Modeling Tool</h2>
+                <p class="section-desc">Model the financial impact of tuition rate increases or staff wage changes using recent actuals as a baseline.</p>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;max-width:640px;margin-bottom:1rem">
+                    <div>
+                        <label style="font-weight:600;font-size:.875rem">Tuition Rate Increase (%)</label>
+                        <input id="modelRateInc" type="number" step="0.1" min="0" class="form-control" value="0" placeholder="e.g. 5">
+                    </div>
+                    <div>
+                        <label style="font-weight:600;font-size:.875rem">Hourly Wage Increase ($/hr)</label>
+                        <input id="modelWageInc" type="number" step="0.25" min="0" class="form-control" value="0" placeholder="e.g. 1.00">
+                    </div>
+                    <div>
+                        <label style="font-weight:600;font-size:.875rem">Salary Staff Increase (%)</label>
+                        <input id="modelSalInc" type="number" step="0.1" min="0" class="form-control" value="0" placeholder="e.g. 3">
+                    </div>
+                </div>
+                <button id="runModelBtn" class="btn-primary">Run Model</button>
+                <div id="modelResults" style="margin-top:1.25rem"></div>
+            </section>
+
         </div><!-- /#tab-finance -->
 
     </div>
