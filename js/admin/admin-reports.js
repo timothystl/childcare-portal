@@ -2076,12 +2076,16 @@ async function _buildRoomPnlData(fromDate, toDate) {
         const [, rawStart, rawEnd] = m;
         const end = new Date(rawEnd.trim());
         if (isNaN(end)) return null;
-        let start = new Date(rawStart.trim());
-        if (isNaN(start)) {
+        // Only trust the start date directly if it contains a 4-digit year.
+        // new Date("January 5") returns year 2001 in some browsers instead of Invalid Date.
+        const startHasYear = /\b\d{4}\b/.test(rawStart.trim());
+        let start;
+        if (startHasYear) {
+            start = new Date(rawStart.trim());
+        } else {
             start = new Date(`${rawStart.trim()}, ${end.getFullYear()}`);
-            if (isNaN(start)) return null;
-            // If parsed start month is after end month, it belongs to the prior year
-            if (start.getMonth() > end.getMonth()) {
+            if (!isNaN(start) && start.getMonth() > end.getMonth()) {
+                // Start month is later in the year than end month → prior year
                 start = new Date(`${rawStart.trim()}, ${end.getFullYear() - 1}`);
             }
         }
@@ -2107,16 +2111,11 @@ async function _buildRoomPnlData(fromDate, toDate) {
             ]);
 
             // ── Tier 1: Historical Payroll Records ──────────────────────────
-            console.log('[PnL] Raw historical records fetched:', JSON.stringify(histRecords));
             histRecords.forEach(r => {
                 const parsed = _parsePayrollLabel(r.label);
-                if (!parsed) {
-                    console.warn('[PnL] Could not parse label:', JSON.stringify(r.label));
-                    return;
-                }
+                if (!parsed) return;
                 const { start, end } = parsed;
                 const totalWorkDays = _workDaysInRange(start, end);
-                console.log(`[PnL] Record "${r.label}" → start=${start.toISOString()} end=${end.toISOString()} totalWorkDays=${totalWorkDays} total_paid=${r.total_paid}`);
                 if (totalWorkDays === 0) return;
                 // Walk each day in period, tally working days per month
                 const moWorkDays = {};
@@ -2130,17 +2129,14 @@ async function _buildRoomPnlData(fromDate, toDate) {
                     }
                     d.setDate(d.getDate() + 1);
                 }
-                console.log(`[PnL]   → moWorkDays:`, JSON.stringify(moWorkDays));
                 // Prorate total_paid by proportion of working days in each month
                 Object.entries(moWorkDays).forEach(([mo, days]) => {
                     if (mo < fromMo || mo > toMo) return;
-                    const contribution = parseFloat(r.total_paid) * days / totalWorkDays;
-                    console.log(`[PnL]   → month ${mo}: ${days}/${totalWorkDays} days → $${contribution.toFixed(2)}`);
-                    centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + contribution;
+                    centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) +
+                        (parseFloat(r.total_paid) * days / totalWorkDays);
                     centerLaborSource[mo] = 'historical';
                 });
             });
-            console.log('[PnL] Final centerLaborByMonth:', JSON.stringify(centerLaborByMonth));
 
             // ── Tier 2: Logged staff hours (for months not covered by history) ──
             hoursRowsAll.forEach(h => {
