@@ -1969,6 +1969,23 @@ async function fetchRegistrationDatesForRange(fromDate, toDate) {
         }));
 }
 
+// Count currently confirmed registrations per room.
+// Returns { roomId: { total, full, half } } — used by finance modeling tool.
+async function fetchConfirmedEnrollmentByRoom() {
+    if (!sbClient) return {};
+    const { data, error } = await sbClient
+        .from('registrations')
+        .select('id, room_id')
+        .eq('status', 'confirmed');
+    if (error) throw error;
+    const out = {};
+    for (const reg of (data || [])) {
+        if (!out[reg.room_id]) out[reg.room_id] = 0;
+        out[reg.room_id]++;
+    }
+    return out;
+}
+
 async function upsertBillingSummary(row) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
