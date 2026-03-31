@@ -549,7 +549,7 @@ async function _buildRoomModelData() {
 
         // Child-days from billing_summary (total per room per month)
         const avgFullChildDays = billingRows.reduce((s, b) => s + (b.full_days || 0), 0) / n;
-        const avgHalfChildDays = billingRows.reduce((s, b) => s + (b.half_days || 0), 0), 0) / n;
+        const avgHalfChildDays = billingRows.reduce((s, b) => s + (b.half_days || 0), 0) / n;
 
         // Enrollment from confirmed registrations (current snapshot)
         const enrollment = enrollByRoom[r.id] || 0;
@@ -605,12 +605,12 @@ async function renderRoomRateGrid() {
 
         const overviewRows = activeRooms.map(r => {
             const rd = roomData[r.id];
-            const enrollStr = rd.avgFullEnroll > 0 || rd.avgHalfEnroll > 0
-                ? `${rd.avgFullEnroll > 0 ? rd.avgFullEnroll+' FD' : ''}${rd.avgHalfEnroll > 0 ? (rd.avgFullEnroll > 0 ? ', ' : '') + rd.avgHalfEnroll+' HD' : ''}`
+            const enrollStr = rd.enrollment > 0
+                ? `${rd.enrollment} enrolled`
                 : '<span style="color:#9ca3af">None recorded</span>';
-            const daysStr = rd.hasLiveRegData
-                ? `${rd.avgDaysPerFullChild}/mo FD${rd.avgHalfEnroll > 0 ? `, ${rd.avgDaysPerHalfChild}/mo HD` : ''}`
-                : '<span style="color:#9ca3af;font-size:.8em">No registration data</span>';
+            const daysStr = rd.hasData && rd.avgFullChildDays > 0
+                ? `${rd.avgDaysPerFullChild}/mo FD${rd.avgHalfChildDays > 0 ? `, ${rd.avgDaysPerHalfChild}/mo HD` : ''}`
+                : '<span style="color:#9ca3af;font-size:.8em">Est. from avg</span>';
             const slotsStyle = rd.availableSlots === 0 ? 'color:#dc2626' : rd.availableSlots <= 2 ? 'color:#d97706' : 'color:#16a34a';
             return `<tr${r.status === 'coming_soon' ? ' style="background:#fefce8"' : ''}>
                 <td>${escHtml(r.label)}${r.status === 'coming_soon' ? ' <span style="font-size:.75em;color:#d97706">(upcoming)</span>' : ''}</td>
@@ -740,12 +740,12 @@ async function runFinanceModel() {
             const halfEnrollInc = inp['half-enroll']  || 0;
 
             // Rate change revenue: applied to the actual child-days already happening
-            const rateRevInc = fullRateInc * rd.avgActualFullChildDays
-                             + halfRateInc * rd.avgActualHalfChildDays;
+            const rateRevInc = fullRateInc * rd.avgFullChildDays
+                             + halfRateInc * rd.avgHalfChildDays;
 
             // Enrollment change revenue: uses actual avg days/child for this room
-            const daysPerFull = rd.hasLiveRegData ? rd.avgDaysPerFullChild : centerAvgDaysPerFull;
-            const daysPerHalf = rd.hasLiveRegData ? rd.avgDaysPerHalfChild : centerAvgDaysPerHalf;
+            const daysPerFull = rd.hasData ? rd.avgDaysPerFullChild : centerAvgDaysPerFull;
+            const daysPerHalf = rd.hasData ? rd.avgDaysPerHalfChild : centerAvgDaysPerHalf;
             const projFDRate  = (r.fullDayRate  || 0) + fullRateInc;
             const projHDRate  = (r.halfDayRate  || 0) + halfRateInc;
             const enrollRevInc = fullEnrollInc * daysPerFull * projFDRate
@@ -756,7 +756,7 @@ async function runFinanceModel() {
             totalProjRev += rd.avgNetBilled + totalRevInc;
 
             // Staff impact
-            const newTotalEnroll  = Math.max(0, rd.totalEnroll + fullEnrollInc + halfEnrollInc);
+            const newTotalEnroll  = Math.max(0, rd.enrollment + fullEnrollInc + halfEnrollInc);
             const newStaffNeeded  = r.staffRatio > 0 ? Math.ceil(newTotalEnroll / r.staffRatio) : 0;
             const additionalStaff = Math.max(0, newStaffNeeded - rd.staffNeeded);
             const additionalStaffCost = additionalStaff * avgHourlyRate * 160;
