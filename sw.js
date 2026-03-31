@@ -1,7 +1,7 @@
 // Service Worker for Timothy Lutheran MDO
 // Cache-first for static assets, network-only for API calls
 
-const CACHE_NAME = 'tl-mdo-v2';
+const CACHE_NAME = 'tl-mdo-v3';
 
 // Static assets to pre-cache on install
 // Uses clean URLs (no .html) to match how Cloudflare Assets serves them
@@ -54,27 +54,37 @@ self.addEventListener('fetch', event => {
     return; // fall through to browser default (network)
   }
 
-  // Cache-first for same-origin requests, with network fallback
-  event.respondWith(
-    caches.match(request).then(cached => {
-      if (cached) return cached;
+  // Network-first for HTML pages and JS files (so code changes are always picked up).
+  // Cache-first for images and other truly static assets.
+  const isHtmlOrJs = request.mode === 'navigate' ||
+                     url.pathname.endsWith('.js') ||
+                     url.pathname === '/admin' ||
+                     url.pathname === '/';
 
-      return fetch(request).then(response => {
-        // Only cache successful, non-opaque GET responses
-        if (
-          request.method === 'GET' &&
-          response.status === 200 &&
-          response.type === 'basic'
-        ) {
+  if (isHtmlOrJs) {
+    // Network-first: try network, fall back to cache if offline
+    event.respondWith(
+      fetch(request).then(response => {
+        if (request.method === 'GET' && response.status === 200 && response.type === 'basic') {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
         }
         return response;
-      }).catch(() => {
-        // Offline fallback for navigation requests
-        if (request.mode === 'navigate') {
-          return caches.match('/index.html');
+      }).catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Cache-first for static assets (CSS, images, fonts)
+  event.respondWith(
+    caches.match(request).then(cached => {
+      if (cached) return cached;
+      return fetch(request).then(response => {
+        if (request.method === 'GET' && response.status === 200 && response.type === 'basic') {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
         }
+        return response;
       });
     })
   );

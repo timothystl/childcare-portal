@@ -2099,8 +2099,14 @@ async function _buildRoomPnlData(fromDate, toDate) {
 
     if (scheduleRows.length === 0) {
         try {
+            // Fetch all three data sources in parallel
+            const [histRecords, hoursRowsAll, allStaff] = await Promise.all([
+                fetchHistoricalPayroll(),
+                fetchStaffHoursWithPay(fromDate, toDate),
+                fetchAllStaff({ includeInactive: true }),
+            ]);
+
             // ── Tier 1: Historical Payroll Records ──────────────────────────
-            const histRecords = await fetchHistoricalPayroll();
             histRecords.forEach(r => {
                 const parsed = _parsePayrollLabel(r.label);
                 if (!parsed) return;
@@ -2129,8 +2135,7 @@ async function _buildRoomPnlData(fromDate, toDate) {
             });
 
             // ── Tier 2: Logged staff hours (for months not covered by history) ──
-            const hoursRows = await fetchStaffHoursWithPay(fromDate, toDate);
-            hoursRows.forEach(h => {
+            hoursRowsAll.forEach(h => {
                 const mo = h.work_date.substring(0, 7);
                 if (mo < fromMo || mo > toMo || centerLaborSource[mo] === 'historical') return;
                 const cost = h.pay_type === 'salary'
@@ -2141,7 +2146,6 @@ async function _buildRoomPnlData(fromDate, toDate) {
             });
 
             // ── Tier 3: Salary estimate (months with no data at all) ─────────
-            const allStaff = await fetchAllStaff({ includeInactive: true });
             const salaryStaff = allStaff.filter(s => s.pay_type === 'salary' && (s.salary_biweekly || 0) > 0);
             if (salaryStaff.length > 0) {
                 let [ey, em] = fromMo.split('-').map(Number);
