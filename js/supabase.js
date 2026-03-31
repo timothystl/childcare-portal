@@ -1936,17 +1936,31 @@ async function fetchAttendanceSummary({ month, roomId } = {}) {
 // Used by the Finance modeling tool to count actual enrollment and avg days/child.
 async function fetchRegistrationDatesForRange(fromDate, toDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    // Query registration_dates directly — many-to-one join to registrations is reliable.
-    // Use neq(true) for waitlisted to correctly include NULL values (not just explicit false).
-    const { data, error } = await sbClient
+
+    // Step 1: Fetch all non-waitlisted care dates in the range (no join needed)
+    const { data: dates, error: datesErr } = await sbClient
         .from('registration_dates')
-        .select('registration_id, care_date, day_type, room_id, waitlisted, registrations(id, status)')
+        .select('registration_id, care_date, day_type, room_id, waitlisted')
         .gte('care_date', fromDate)
         .lte('care_date', toDate)
-        .neq('waitlisted', true);
-    if (error) throw error;
-    return (data || [])
-        .filter(rd => rd.registrations?.status === 'confirmed')
+        .neq('waitlisted', true)
+        .limit(5000);
+    if (datesErr) throw datesErr;
+    if (!dates?.length) return [];
+
+    // Step 2: From those registration IDs, find which are 'confirmed'
+    const regIds = [...new Set(dates.map(d => d.registration_id).filter(Boolean))];
+    const { data: regs, error: regsErr } = await sbClient
+        .from('registrations')
+        .select('id')
+        .in('id', regIds)
+        .eq('status', 'confirmed');
+    if (regsErr) throw regsErr;
+
+    const confirmedIds = new Set((regs || []).map(r => r.id));
+
+    return dates
+        .filter(rd => confirmedIds.has(rd.registration_id))
         .map(rd => ({
             registration_id: rd.registration_id,
             care_date:       rd.care_date,
