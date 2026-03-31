@@ -481,16 +481,16 @@ function setupModelingTool() {
 // Build per-room baseline metrics from real data
 async function _buildRoomModelData() {
     const today = new Date();
-    // Last 3 complete months
-    const last3 = [];
-    for (let i = 1; i <= 3; i++) {
+    // Look back up to 4 months and use the ones that actually have revenue data (max 3)
+    const candidateMonths = [];
+    for (let i = 1; i <= 4; i++) {
         const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
         const moKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
         const end   = new Date(d.getFullYear(), d.getMonth()+1, 0);
-        last3.push({ key: moKey, start: `${moKey}-01`, end: end.toISOString().split('T')[0] });
+        candidateMonths.push({ key: moKey, start: `${moKey}-01`, end: end.toISOString().split('T')[0] });
     }
-    const fromDate = last3[last3.length-1].start;
-    const toDate   = last3[0].end;
+    const fromDate = candidateMonths[candidateMonths.length-1].start;
+    const toDate   = candidateMonths[0].end;
 
     await loadRateSettings();
 
@@ -511,6 +511,22 @@ async function _buildRoomModelData() {
             roomRevByMonth[roomId][moKey] = (roomRevByMonth[roomId][moKey] || 0) + (rd.revenue || 0);
         });
     });
+
+    // Only use months that have center-wide revenue > 0 (skip months with no data)
+    const totalRevByMonth = {};
+    Object.values(roomRevByMonth).forEach(roomMap => {
+        Object.entries(roomMap).forEach(([mo, rev]) => {
+            totalRevByMonth[mo] = (totalRevByMonth[mo] || 0) + rev;
+        });
+    });
+    const last3 = candidateMonths
+        .filter(m => (totalRevByMonth[m.key] || 0) > 0)
+        .slice(0, 3);
+
+    if (!last3.length) {
+        _roomModelData = { roomData: {}, last3: [], pnlData, centerAvgDaysPerFull: 18, centerAvgDaysPerHalf: 14, avgHourlyRate: 0 };
+        return _roomModelData;
+    }
 
     // Process registration dates: per month per room track enrollment sets and care-date sets
     const monthStats = {}; // { moKey: { roomId: { fullEnroll:Set, halfEnroll:Set, fullDates:Set, halfDates:Set } } }
