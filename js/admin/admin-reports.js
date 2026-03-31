@@ -2110,6 +2110,10 @@ async function _buildRoomPnlData(fromDate, toDate) {
                 fetchAllStaff({ includeInactive: true }),
             ]);
 
+            // Build a lookup: set of date strings (YYYY-MM-DD) covered by historical records
+            // so logged-hours entries on those dates aren't double-counted.
+            const histCoveredDates = new Set();
+
             // ── Tier 1: Historical Payroll Records ──────────────────────────
             histRecords.forEach(r => {
                 const parsed = _parsePayrollLabel(r.label);
@@ -2117,7 +2121,7 @@ async function _buildRoomPnlData(fromDate, toDate) {
                 const { start, end } = parsed;
                 const totalWorkDays = _workDaysInRange(start, end);
                 if (totalWorkDays === 0) return;
-                // Walk each day in period, tally working days per month
+                // Walk each day in period, tally working days per month + record covered dates
                 const moWorkDays = {};
                 const d = new Date(start); d.setHours(12);
                 const e = new Date(end);   e.setHours(12);
@@ -2125,7 +2129,9 @@ async function _buildRoomPnlData(fromDate, toDate) {
                     const dow = d.getDay();
                     if (dow >= 1 && dow <= 5) {
                         const mo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                        const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                         moWorkDays[mo] = (moWorkDays[mo] || 0) + 1;
+                        histCoveredDates.add(ds);
                     }
                     d.setDate(d.getDate() + 1);
                 }
@@ -2138,18 +2144,21 @@ async function _buildRoomPnlData(fromDate, toDate) {
                 });
             });
 
-            // ── Tier 2: Logged staff hours (for months not covered by history) ──
+            // ── Tier 2: Logged staff hours for dates NOT covered by a historical record ──
+            // This fills in days within a month that no payroll record covers (e.g. Feb 16–28
+            // when only Feb 2–15 has a historical record).
             hoursRowsAll.forEach(h => {
                 const mo = h.work_date.substring(0, 7);
-                if (mo < fromMo || mo > toMo || centerLaborSource[mo] === 'historical') return;
+                if (mo < fromMo || mo > toMo) return;
+                if (histCoveredDates.has(h.work_date)) return; // already in historical total
                 const cost = h.pay_type === 'salary'
                     ? h.salary_biweekly / 10
                     : h.hourly_rate * h.hours_worked;
                 centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + cost;
-                centerLaborSource[mo]  = 'hours';
+                if (!centerLaborSource[mo]) centerLaborSource[mo] = 'hours';
             });
 
-            // ── Tier 3: Salary estimate (months with no data at all) ─────────
+            // ── Tier 3: Salary estimate only for months with zero data at all ─────────
             const salaryStaff = allStaff.filter(s => s.pay_type === 'salary' && (s.salary_biweekly || 0) > 0);
             if (salaryStaff.length > 0) {
                 let [ey, em] = fromMo.split('-').map(Number);
