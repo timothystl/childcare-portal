@@ -386,6 +386,10 @@ function _hide(id) {
 function applyRoleRestrictions() {
     if (currentAdminRole === 'full') return;
 
+    // Finance tab is full-access only
+    const finBtn = document.querySelector('[data-tab="finance"]');
+    if (finBtn) finBtn.style.display = 'none';
+
     if (currentAdminRole === 'restricted') {
         // Staffing tab: hide everything except the schedule planner
         _hide('logHoursSection');

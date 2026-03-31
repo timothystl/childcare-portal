@@ -68,6 +68,7 @@
             <button class="admin-tab-btn" data-tab="waitlist">⏳ Waitlist</button>
             <button class="admin-tab-btn" data-tab="reports">📊 Reports</button>
             <button class="admin-tab-btn" data-tab="staffing">👷 Staffing</button>
+            <button class="admin-tab-btn" data-tab="finance">💰 Finance</button>
             <button class="admin-tab-btn" data-tab="settings">⚙️ Settings</button>
         </nav>
 
@@ -924,6 +925,40 @@
 
         </div><!-- /#tab-staffing -->
 
+        <!-- ══════════════════════════════════════════════════════ -->
+        <!-- FINANCE TAB                                           -->
+        <!-- ══════════════════════════════════════════════════════ -->
+        <div class="tab-pane hidden" id="tab-finance">
+
+            <!-- Financial Dashboard -->
+            <section class="admin-section collapsible-section" id="financeDashSection">
+                <h2>💰 Financial Dashboard</h2>
+                <p class="section-desc">Year-to-date revenue, labor, and margin with month-by-month charts.</p>
+                <div class="report-controls" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+                    <label for="financeYear" style="font-weight:600">Year</label>
+                    <select id="financeYear" class="form-control" style="width:120px"></select>
+                    <button id="generateFinanceBtn" class="btn-primary">Generate</button>
+                </div>
+                <div id="financeDashContent">
+                    <p class="empty-hint">Select a year and click Generate.</p>
+                </div>
+            </section>
+
+            <!-- Year-over-Year Comparison -->
+            <section class="admin-section collapsible-section" id="financeYoySection">
+                <h2>📈 Year-over-Year Comparison</h2>
+                <p class="section-desc">Compare revenue and labor month-by-month against the prior year.</p>
+                <div class="report-controls" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+                    <span style="font-size:.9em;color:#6b7280">Uses the year selected above — compares it against the prior year.</span>
+                    <button id="generateYoyBtn" class="btn-secondary">Generate Comparison</button>
+                </div>
+                <div id="financeYoyContent">
+                    <p class="empty-hint">Click Generate Comparison.</p>
+                </div>
+            </section>
+
+        </div><!-- /#tab-finance -->
+
     </div>
 
     <!-- Room Capacity Calendar Modal -->
@@ -1123,6 +1158,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script src="js/supabase.js?v=35"></script>
     <script src="js/error-monitor.js"></script>
     <script src="js/admin/admin-core.js"></script>
@@ -1135,6 +1171,7 @@
     <script src="js/admin/admin-messages.js"></script>
     <script src="js/admin/admin-settings.js"></script>
     <script src="js/admin/admin-waitlist.js"></script>
+    <script src="js/admin/admin-finance.js"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 <script>
   if ('serviceWorker' in navigator) {
