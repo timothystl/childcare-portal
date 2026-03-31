@@ -481,16 +481,18 @@ function setupModelingTool() {
 // Build per-room baseline metrics from real data
 async function _buildRoomModelData() {
     const today = new Date();
-    // Look back up to 4 months and use the ones that actually have revenue data (max 3)
+    // Include current month + up to 3 prior months; filter to months with actual revenue (max 3)
+    // Current month is included even if incomplete — it has real data and real care dates
     const candidateMonths = [];
-    for (let i = 1; i <= 4; i++) {
-        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    for (let i = 0; i <= 3; i++) {
+        const d    = new Date(today.getFullYear(), today.getMonth() - i, 1);
         const moKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-        const end   = new Date(d.getFullYear(), d.getMonth()+1, 0);
+        // For current month use today as end; for past months use last day of that month
+        const end  = i === 0 ? today : new Date(d.getFullYear(), d.getMonth() + 1, 0);
         candidateMonths.push({ key: moKey, start: `${moKey}-01`, end: end.toISOString().split('T')[0] });
     }
     const fromDate = candidateMonths[candidateMonths.length-1].start;
-    const toDate   = candidateMonths[0].end;
+    const toDate   = candidateMonths[0].end; // today, captures current-month care dates
 
     await loadRateSettings();
 

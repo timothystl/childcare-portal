@@ -1936,14 +1936,14 @@ async function fetchAttendanceSummary({ month, roomId } = {}) {
 // Used by the Finance modeling tool to count actual enrollment and avg days/child.
 async function fetchRegistrationDatesForRange(fromDate, toDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    // Query registration_dates directly (many-to-one join to registrations is reliable).
-    // Filtering nested one-to-many with !inner doesn't work consistently in this client version.
+    // Query registration_dates directly — many-to-one join to registrations is reliable.
+    // Use neq(true) for waitlisted to correctly include NULL values (not just explicit false).
     const { data, error } = await sbClient
         .from('registration_dates')
         .select('registration_id, care_date, day_type, room_id, waitlisted, registrations(id, status)')
         .gte('care_date', fromDate)
         .lte('care_date', toDate)
-        .eq('waitlisted', false);
+        .neq('waitlisted', true);
     if (error) throw error;
     return (data || [])
         .filter(rd => rd.registrations?.status === 'confirmed')
