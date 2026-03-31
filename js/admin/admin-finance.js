@@ -467,8 +467,10 @@ function _monthlyExpenseBurden(moNum, laborAmount = 0, revenueAmount = 0) {
 
 // ============================================================
 // RATE / WAGE MODELING TOOL
+// Uses actual per-room revenue from _buildRoomPnlData() and
+// real enrollment counts from fetchRegistrationDatesForRange().
 // ============================================================
-const MODEL_AVG_WORK_DAYS = 21.5; // avg billable days per month per enrolled child
+let _roomModelData = null; // cache — cleared on tab switch
 
 function setupModelingTool() {
     document.getElementById('runModelBtn')
@@ -476,73 +478,265 @@ function setupModelingTool() {
     renderRoomRateGrid();
 }
 
+// Build per-room baseline metrics from real data
+async function _buildRoomModelData() {
+    const today = new Date();
+    // Last 3 complete months
+    const last3 = [];
+    for (let i = 1; i <= 3; i++) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const moKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        const end   = new Date(d.getFullYear(), d.getMonth()+1, 0);
+        last3.push({ key: moKey, start: `${moKey}-01`, end: end.toISOString().split('T')[0] });
+    }
+    const fromDate = last3[last3.length-1].start;
+    const toDate   = last3[0].end;
+
+    await loadRateSettings();
+
+    // Revenue comes from _buildRoomPnlData (same source as dashboard) — authoritative
+    // Registration dates give us actual enrollment counts and avg days per child
+    const [pnlData, regDates, allStaff] = await Promise.all([
+        _buildRoomPnlData(fromDate, toDate),
+        fetchRegistrationDatesForRange(fromDate, toDate),
+        fetchAllStaff({ includeInactive: false }),
+    ]);
+
+    // Per-room monthly revenue from PnL
+    const roomRevByMonth = {}; // { roomId: { moKey: revenue } }
+    pnlData.months.forEach(mo => {
+        const moKey = mo.substring(0, 7);
+        Object.entries(pnlData.data[mo] || {}).forEach(([roomId, rd]) => {
+            if (!roomRevByMonth[roomId]) roomRevByMonth[roomId] = {};
+            roomRevByMonth[roomId][moKey] = (roomRevByMonth[roomId][moKey] || 0) + (rd.revenue || 0);
+        });
+    });
+
+    // Process registration dates: per month per room track enrollment sets and care-date sets
+    const monthStats = {}; // { moKey: { roomId: { fullEnroll:Set, halfEnroll:Set, fullDates:Set, halfDates:Set } } }
+    last3.forEach(m => { monthStats[m.key] = {}; });
+    regDates.forEach(rd => {
+        const moKey = (rd.care_date || '').substring(0, 7);
+        if (!monthStats[moKey]) return;
+        const rId = rd.room_id;
+        if (!monthStats[moKey][rId]) {
+            monthStats[moKey][rId] = {
+                fullEnroll: new Set(), halfEnroll: new Set(),
+                fullDates:  new Set(), halfDates:  new Set(),
+            };
+        }
+        const s = monthStats[moKey][rId];
+        if (rd.day_type === 'full') {
+            s.fullEnroll.add(rd.registration_id);
+            s.fullDates.add(rd.care_date);
+        } else if (rd.day_type === 'half') {
+            s.halfEnroll.add(rd.registration_id);
+            s.halfDates.add(rd.care_date);
+        }
+    });
+
+    const n = last3.length;
+    const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
+    const roomData = {};
+
+    activeRooms.forEach(r => {
+        // Revenue: avg over the 3 months from PnL
+        const avgNetBilled = last3.reduce((s, m) =>
+            s + (roomRevByMonth[r.id]?.[m.key] || 0), 0) / n;
+
+        // Enrollment and attendance from registration dates
+        const avgFullEnroll = last3.reduce((s, m) =>
+            s + (monthStats[m.key][r.id]?.fullEnroll.size || 0), 0) / n;
+        const avgHalfEnroll = last3.reduce((s, m) =>
+            s + (monthStats[m.key][r.id]?.halfEnroll.size || 0), 0) / n;
+
+        // School days per room (unique dates any child attended)
+        const avgFullSchoolDays = last3.reduce((s, m) =>
+            s + (monthStats[m.key][r.id]?.fullDates.size || 0), 0) / n;
+        const avgHalfSchoolDays = last3.reduce((s, m) =>
+            s + (monthStats[m.key][r.id]?.halfDates.size || 0), 0) / n;
+
+        // Total child-days per month (used for rate-increase revenue calc)
+        const avgFullChildDays = last3.reduce((s, m) =>
+            s + (monthStats[m.key][r.id]?.fullEnroll.size > 0
+                ? monthStats[m.key][r.id].fullDates.size * monthStats[m.key][r.id].fullEnroll.size
+                : 0), 0) / n;
+        // ^ approximation: school_days × enrollment (slightly over-counts part-time kids)
+        // Better: count actual care_dates per child. Use total from billing or reg count.
+        // For rate impact we actually need total child-days, compute directly:
+        const totalFullChildDays = last3.reduce((s, m) => {
+            const reg = monthStats[m.key][r.id];
+            if (!reg) return s;
+            // Each registration_date row is one child-day — count is total care dates for that room/month/type
+            return s + reg.fullDates.size * reg.fullEnroll.size; // approx
+        }, 0) / n;
+        // Actually, let me count actual entries in regDates for this room/month/type
+        const countChildDays = (moKey, roomId, dtype) => {
+            return regDates.filter(rd =>
+                rd.room_id === roomId &&
+                (rd.care_date||'').startsWith(moKey) &&
+                rd.day_type === dtype
+            ).length;
+        };
+        const avgActualFullChildDays = last3.reduce((s, m) => s + countChildDays(m.key, r.id, 'full'), 0) / n;
+        const avgActualHalfChildDays = last3.reduce((s, m) => s + countChildDays(m.key, r.id, 'half'), 0) / n;
+
+        // Avg days per enrolled child per month
+        const avgDaysPerFullChild = avgFullEnroll > 0
+            ? avgActualFullChildDays / avgFullEnroll
+            : (avgFullSchoolDays > 0 ? avgFullSchoolDays : 18);
+        const avgDaysPerHalfChild = avgHalfEnroll > 0
+            ? avgActualHalfChildDays / avgHalfEnroll
+            : (avgHalfSchoolDays > 0 ? avgHalfSchoolDays : 14);
+
+        const totalEnroll = avgFullEnroll + avgHalfEnroll;
+        const staffNeeded = r.staffRatio > 0 ? Math.ceil(totalEnroll / r.staffRatio) : 1;
+
+        roomData[r.id] = {
+            room: r,
+            avgNetBilled,
+            avgActualFullChildDays, avgActualHalfChildDays,
+            avgFullEnroll:  Math.round(avgFullEnroll  * 10) / 10,
+            avgHalfEnroll:  Math.round(avgHalfEnroll  * 10) / 10,
+            avgFullSchoolDays: Math.round(avgFullSchoolDays * 10) / 10,
+            avgDaysPerFullChild: Math.round(avgDaysPerFullChild * 10) / 10,
+            avgDaysPerHalfChild: Math.round(avgDaysPerHalfChild * 10) / 10,
+            totalEnroll:    Math.round(totalEnroll    * 10) / 10,
+            availableSlots: Math.max(0, r.capacity - Math.round(totalEnroll)),
+            staffNeeded,
+            hasLiveRegData: avgFullEnroll > 0 || avgHalfEnroll > 0,
+        };
+    });
+
+    // Center-wide avg days per child (fallback for new/coming_soon rooms)
+    const roomsWithReg = Object.values(roomData).filter(rd => rd.hasLiveRegData && rd.avgFullEnroll > 0);
+    const centerAvgDaysPerFull = roomsWithReg.length > 0
+        ? roomsWithReg.reduce((s, rd) => s + rd.avgDaysPerFullChild, 0) / roomsWithReg.length
+        : 18;
+    const centerAvgDaysPerHalf = roomsWithReg.length > 0
+        ? roomsWithReg.filter(rd => rd.avgHalfEnroll > 0)
+                      .reduce((s, rd) => s + rd.avgDaysPerHalfChild, 0) /
+          Math.max(1, roomsWithReg.filter(rd => rd.avgHalfEnroll > 0).length)
+        : 14;
+
+    // Avg hourly staff rate
+    const hourlyStaff   = allStaff.filter(s => s.pay_type !== 'salary' && s.active !== false);
+    const avgHourlyRate = hourlyStaff.length > 0
+        ? hourlyStaff.reduce((s, st) => s + (parseFloat(st.hourly_rate) || 0), 0) / hourlyStaff.length
+        : 0;
+
+    _roomModelData = { roomData, last3, pnlData, centerAvgDaysPerFull, centerAvgDaysPerHalf, avgHourlyRate };
+    return _roomModelData;
+}
+
 async function renderRoomRateGrid() {
     const grid = document.getElementById('modelRoomGrid');
     if (!grid) return;
-    await loadRateSettings();
-    // Active rooms + coming_soon (for new-room modeling)
-    const rooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
-    if (!rooms.length) { grid.innerHTML = '<p class="empty-hint">No rooms found.</p>'; return; }
-    const hasHalf = rooms.some(r => !r.fullDayOnly);
+    grid.innerHTML = '<p class="empty-hint">Loading room data…</p>';
 
-    grid.innerHTML = `
-        <div style="overflow-x:auto">
-        <table class="report-table" style="max-width:860px;margin-bottom:.25rem">
-            <thead>
-                <tr>
-                    <th rowspan="2">Room</th>
-                    <th class="report-num" colspan="2" style="border-bottom:1px solid #e5e7eb;text-align:center">Full Day</th>
-                    ${hasHalf ? `<th class="report-num" colspan="2" style="border-bottom:1px solid #e5e7eb;text-align:center">Half Day</th>` : ''}
-                    <th class="report-num" colspan="${hasHalf ? 2 : 1}" style="border-bottom:1px solid #e5e7eb;text-align:center">Enrollment Change</th>
-                </tr>
-                <tr>
-                    <th class="report-num">Rate</th>
-                    <th class="report-num">+$/day</th>
-                    ${hasHalf ? `<th class="report-num">Rate</th><th class="report-num">+$/day</th>` : ''}
-                    <th class="report-num">+/- Full Day kids</th>
-                    ${hasHalf ? `<th class="report-num">+/- Half Day kids</th>` : ''}
-                </tr>
-            </thead>
-            <tbody>
-                ${rooms.map(r => {
-                    const isNew = r.status === 'coming_soon';
-                    return `<tr${isNew ? ' style="background:#fefce8"' : ''}>
-                        <td>${escHtml(r.label)}${isNew ? ' <span style="font-size:.75em;color:#d97706;font-weight:600">(new)</span>' : ''}</td>
-                        <td class="report-num" style="color:#6b7280;font-size:.9em">${isNew ? '—' : `$${r.fullDayRate || 0}`}</td>
-                        <td class="report-num">
-                            <input type="number" step="1" min="0" value="0"
-                                class="form-control" style="width:68px;text-align:right;display:inline-block"
-                                data-model-room="${escHtml(r.id)}" data-model-type="full-rate">
-                        </td>
-                        ${hasHalf ? (r.fullDayOnly
-                            ? `<td class="report-num" style="color:#9ca3af;font-size:.8em" colspan="2">Full day only</td>`
-                            : `<td class="report-num" style="color:#6b7280;font-size:.9em">${isNew ? '—' : `$${r.halfDayRate || 0}`}</td>
-                               <td class="report-num">
-                                   <input type="number" step="1" min="0" value="0"
-                                       class="form-control" style="width:68px;text-align:right;display:inline-block"
-                                       data-model-room="${escHtml(r.id)}" data-model-type="half-rate">
-                               </td>`) : ''}
-                        <td class="report-num">
-                            <input type="number" step="1" value="0"
-                                class="form-control" style="width:68px;text-align:right;display:inline-block"
-                                data-model-room="${escHtml(r.id)}" data-model-type="full-enroll">
-                        </td>
-                        ${hasHalf ? (r.fullDayOnly
-                            ? `<td></td>`
-                            : `<td class="report-num">
-                                   <input type="number" step="1" value="0"
-                                       class="form-control" style="width:68px;text-align:right;display:inline-block"
-                                       data-model-room="${escHtml(r.id)}" data-model-type="half-enroll">
-                               </td>`) : ''}
-                    </tr>`;
-                }).join('')}
-            </tbody>
-        </table>
-        </div>
-        <p style="font-size:.8em;color:#6b7280;margin-bottom:0">
-            Rate +$/day: dollar increase per care day. Enrollment change: positive adds children, negative removes.
-            ${rooms.some(r => r.status === 'coming_soon') ? 'Yellow rows are upcoming rooms — set enrollment to model their impact.' : ''}
-        </p>`;
+    try {
+        const { roomData } = await _buildRoomModelData();
+        const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
+        const hasHalf     = activeRooms.some(r => !r.fullDayOnly);
+
+        const overviewRows = activeRooms.map(r => {
+            const rd = roomData[r.id];
+            const enrollStr = rd.avgFullEnroll > 0 || rd.avgHalfEnroll > 0
+                ? `${rd.avgFullEnroll > 0 ? rd.avgFullEnroll+' FD' : ''}${rd.avgHalfEnroll > 0 ? (rd.avgFullEnroll > 0 ? ', ' : '') + rd.avgHalfEnroll+' HD' : ''}`
+                : '<span style="color:#9ca3af">None recorded</span>';
+            const daysStr = rd.hasLiveRegData
+                ? `${rd.avgDaysPerFullChild}/mo FD${rd.avgHalfEnroll > 0 ? `, ${rd.avgDaysPerHalfChild}/mo HD` : ''}`
+                : '<span style="color:#9ca3af;font-size:.8em">No registration data</span>';
+            const slotsStyle = rd.availableSlots === 0 ? 'color:#dc2626' : rd.availableSlots <= 2 ? 'color:#d97706' : 'color:#16a34a';
+            return `<tr${r.status === 'coming_soon' ? ' style="background:#fefce8"' : ''}>
+                <td>${escHtml(r.label)}${r.status === 'coming_soon' ? ' <span style="font-size:.75em;color:#d97706">(upcoming)</span>' : ''}</td>
+                <td class="report-num">${r.capacity}</td>
+                <td class="report-num">${enrollStr}</td>
+                <td class="report-num" style="${slotsStyle}">${rd.availableSlots > 0 ? rd.availableSlots : 'Full'}</td>
+                <td class="report-num">${daysStr}</td>
+                <td class="report-num">${rd.staffNeeded}</td>
+            </tr>`;
+        }).join('');
+
+        const inputRows = activeRooms.map(r => {
+            const rd = roomData[r.id];
+            return `<tr>
+                <td>${escHtml(r.label)}</td>
+                <td class="report-num">
+                    <input type="number" step="1" min="0" value="0" class="form-control"
+                        style="width:70px;text-align:right;display:inline-block"
+                        data-model-room="${escHtml(r.id)}" data-model-type="full-rate">
+                </td>
+                ${hasHalf ? (r.fullDayOnly
+                    ? '<td style="color:#9ca3af;font-size:.8em;text-align:center">FD only</td>'
+                    : `<td class="report-num"><input type="number" step="1" min="0" value="0" class="form-control"
+                        style="width:70px;text-align:right;display:inline-block"
+                        data-model-room="${escHtml(r.id)}" data-model-type="half-rate"></td>`) : ''}
+                <td class="report-num">
+                    <input type="number" step="1" value="0" class="form-control"
+                        style="width:70px;text-align:right;display:inline-block"
+                        data-model-room="${escHtml(r.id)}" data-model-type="full-enroll">
+                </td>
+                ${hasHalf ? (r.fullDayOnly
+                    ? '<td></td>'
+                    : `<td class="report-num"><input type="number" step="1" value="0" class="form-control"
+                        style="width:70px;text-align:right;display:inline-block"
+                        data-model-room="${escHtml(r.id)}" data-model-type="half-enroll"></td>`) : ''}
+            </tr>`;
+        }).join('');
+
+        grid.innerHTML = `
+            <details open>
+                <summary style="cursor:pointer;font-weight:600;margin-bottom:.5rem;font-size:.95rem">
+                    ▸ Current Room Utilization (last 3 months)
+                </summary>
+                <div style="overflow-x:auto;margin-bottom:.75rem">
+                <table class="report-table" style="max-width:720px">
+                    <thead><tr>
+                        <th>Room</th>
+                        <th class="report-num">Capacity</th>
+                        <th class="report-num">Avg Enrolled</th>
+                        <th class="report-num">Open Slots</th>
+                        <th class="report-num">Avg Days/Child/Mo</th>
+                        <th class="report-num">Staff Needed</th>
+                    </tr></thead>
+                    <tbody>${overviewRows}</tbody>
+                </table>
+                </div>
+                <p style="font-size:.8em;color:#6b7280;margin:0">
+                    Enrollment and days/child from actual registration history.
+                    Staff needed = ceil(enrolled ÷ staff-to-child ratio).
+                </p>
+            </details>
+
+            <div style="margin-top:1.1rem">
+            <h5 style="margin:0 0 .4rem;font-size:.92rem;font-weight:600">Rate &amp; Enrollment Adjustments</h5>
+            <div style="overflow-x:auto">
+            <table class="report-table" style="max-width:700px">
+                <thead>
+                    <tr>
+                        <th rowspan="2">Room</th>
+                        <th class="report-num" colspan="${hasHalf ? 2 : 1}" style="text-align:center;border-bottom:1px solid #e5e7eb">Rate Increase ($/day)</th>
+                        <th class="report-num" colspan="${hasHalf ? 2 : 1}" style="text-align:center;border-bottom:1px solid #e5e7eb">Enrollment Change (kids)</th>
+                    </tr>
+                    <tr>
+                        <th class="report-num">Full Day</th>
+                        ${hasHalf ? '<th class="report-num">Half Day</th>' : ''}
+                        <th class="report-num">Full Day</th>
+                        ${hasHalf ? '<th class="report-num">Half Day</th>' : ''}
+                    </tr>
+                </thead>
+                <tbody>${inputRows}</tbody>
+            </table>
+            </div>
+            <p style="font-size:.8em;color:#6b7280;margin:.25rem 0 0">
+                Enrollment +/− uses each room's actual historical avg days/child. New rooms use center average.
+            </p>
+            </div>`;
+
+    } catch (e) {
+        grid.innerHTML = `<p class="import-error">Error loading room data: ${escHtml(e.message)}</p>`;
+    }
 }
 
 async function runFinanceModel() {
@@ -552,89 +746,83 @@ async function runFinanceModel() {
     container.innerHTML = '<p class="empty-hint">Calculating…</p>';
 
     try {
+        if (!_roomModelData) await _buildRoomModelData();
+        const { roomData, last3, pnlData, centerAvgDaysPerFull, centerAvgDaysPerHalf, avgHourlyRate } = _roomModelData;
+
         // Collect per-room inputs
-        const roomInputs = {}; // { roomId: { fullRate, halfRate, fullEnroll, halfEnroll } }
+        const roomInputs = {};
         document.querySelectorAll('[data-model-room]').forEach(inp => {
             const roomId = inp.dataset.modelRoom;
             const type   = inp.dataset.modelType;
-            if (!roomInputs[roomId]) roomInputs[roomId] = { fullRate: 0, halfRate: 0, fullEnroll: 0, halfEnroll: 0 };
-            roomInputs[roomId][type.replace('-', '_').replace('_rate', 'Rate').replace('_enroll', 'Enroll')] = parseFloat(inp.value) || 0;
+            if (!roomInputs[roomId]) roomInputs[roomId] = {};
+            roomInputs[roomId][type] = parseFloat(inp.value) || 0;
         });
 
-        // Last 3 complete months
-        const today = new Date();
-        const last3Keys = [];
-        for (let i = 1; i <= 3; i++) {
-            const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-            last3Keys.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`);
-        }
+        const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
+        const hasHalfAny  = activeRooms.some(r => !r.fullDayOnly);
 
-        // Billing summary for per-room baseline
-        const allBilling = await fetchBillingSummary();
-        const recentBilling = allBilling.filter(b =>
-            last3Keys.some(k => (b.month || '').substring(0, 7) === k.substring(0, 7))
-        );
-
-        await loadRateSettings();
-        const modelRooms  = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
-        const hasHalfAny  = modelRooms.some(r => !r.fullDayOnly);
-        const roomProjections = [];
         let totalBaseRev = 0, totalProjRev = 0;
+        let totalAdditionalStaff = 0, totalAdditionalStaffCost = 0;
+        const roomProjections = [];
 
-        modelRooms.forEach(r => {
-            const rows     = recentBilling.filter(b => b.room_id === r.id);
-            const n        = last3Keys.length;
-            const avgFull  = rows.reduce((s, b) => s + (b.full_days  || 0), 0) / n;
-            const avgHalf  = rows.reduce((s, b) => s + (b.half_days  || 0), 0) / n;
-            const avgNet   = rows.reduce((s, b) => s + (b.net_billed || 0), 0) / n;
-            const inp      = roomInputs[r.id] || {};
-            const fullRateInc  = inp.fullRate  || 0;
-            const halfRateInc  = inp.halfRate  || 0;
-            const fullEnroll   = inp.fullEnroll || 0;
-            const halfEnroll   = inp.halfEnroll || 0;
+        activeRooms.forEach(r => {
+            const rd  = roomData[r.id];
+            if (!rd) return;
+            const inp = roomInputs[r.id] || {};
 
-            const projFDRate = (r.fullDayRate || 0) + fullRateInc;
-            const projHDRate = (r.halfDayRate || 0) + halfRateInc;
+            const fullRateInc   = inp['full-rate']    || 0;
+            const halfRateInc   = inp['half-rate']    || 0;
+            const fullEnrollInc = inp['full-enroll']  || 0;
+            const halfEnrollInc = inp['half-enroll']  || 0;
 
-            // Revenue from rate increase on existing days
-            const rateRevInc = fullRateInc * avgFull + halfRateInc * avgHalf;
-            // Revenue from enrollment change (new kids × projected rate × avg work days)
-            const enrollRevInc = fullEnroll * projFDRate * MODEL_AVG_WORK_DAYS
-                               + halfEnroll * projHDRate * MODEL_AVG_WORK_DAYS;
+            // Rate change revenue: applied to the actual child-days already happening
+            const rateRevInc = fullRateInc * rd.avgActualFullChildDays
+                             + halfRateInc * rd.avgActualHalfChildDays;
+
+            // Enrollment change revenue: uses actual avg days/child for this room
+            const daysPerFull = rd.hasLiveRegData ? rd.avgDaysPerFullChild : centerAvgDaysPerFull;
+            const daysPerHalf = rd.hasLiveRegData ? rd.avgDaysPerHalfChild : centerAvgDaysPerHalf;
+            const projFDRate  = (r.fullDayRate  || 0) + fullRateInc;
+            const projHDRate  = (r.halfDayRate  || 0) + halfRateInc;
+            const enrollRevInc = fullEnrollInc * daysPerFull * projFDRate
+                               + halfEnrollInc * daysPerHalf * projHDRate;
+
             const totalRevInc = rateRevInc + enrollRevInc;
+            totalBaseRev += rd.avgNetBilled;
+            totalProjRev += rd.avgNetBilled + totalRevInc;
 
-            totalBaseRev += avgNet;
-            totalProjRev += avgNet + totalRevInc;
+            // Staff impact
+            const newTotalEnroll  = Math.max(0, rd.totalEnroll + fullEnrollInc + halfEnrollInc);
+            const newStaffNeeded  = r.staffRatio > 0 ? Math.ceil(newTotalEnroll / r.staffRatio) : 0;
+            const additionalStaff = Math.max(0, newStaffNeeded - rd.staffNeeded);
+            const additionalStaffCost = additionalStaff * avgHourlyRate * 160;
+            totalAdditionalStaff     += additionalStaff;
+            totalAdditionalStaffCost += additionalStaffCost;
 
-            const anyChange = fullRateInc || halfRateInc || fullEnroll || halfEnroll;
             roomProjections.push({
                 id: r.id, label: r.label, isNew: r.status === 'coming_soon',
                 fullDayOnly: r.fullDayOnly,
-                avgFull: Math.round(avgFull * 10) / 10,
-                avgHalf: Math.round(avgHalf * 10) / 10,
-                fullRateInc, halfRateInc, fullEnroll, halfEnroll,
-                baseRev: avgNet, rateRevInc, enrollRevInc,
-                totalRevInc, projRev: avgNet + totalRevInc,
-                anyChange,
+                baseRev: rd.avgNetBilled,
+                rateRevInc, enrollRevInc, totalRevInc,
+                projRev: rd.avgNetBilled + totalRevInc,
+                fullEnrollInc, halfEnrollInc, fullRateInc, halfRateInc,
+                daysPerFull, daysPerHalf,
+                additionalStaff, additionalStaffCost,
+                anyChange: fullRateInc || halfRateInc || fullEnrollInc || halfEnrollInc,
             });
         });
 
-        // Baseline labor from recent PnL
-        const fmtD   = d => d.toISOString().split('T')[0];
-        const toDate = new Date(); toDate.setDate(0);
-        const fromDate = new Date(toDate); fromDate.setMonth(fromDate.getMonth() - 2); fromDate.setDate(1);
-        const pnl    = await _buildRoomPnlData(fmtD(fromDate), fmtD(toDate));
-        const { months } = pnl;
-
+        // Baseline labor from the same PnL data used for revenue
+        const { months } = pnlData;
         let sumLab = 0;
         months.forEach(mo => {
-            sumLab += pnl.hasFallbackLabor ? (pnl.centerLaborByMonth[mo] || 0)
-                    : Object.values(pnl.data[mo] || {}).reduce((s, r) => s + (r.labor || 0), 0);
+            sumLab += pnlData.hasFallbackLabor ? (pnlData.centerLaborByMonth[mo] || 0)
+                    : Object.values(pnlData.data[mo] || {}).reduce((s, r) => s + (r.labor || 0), 0);
         });
-        const baseLab = months.length ? sumLab / months.length : 0;
-        const projLab = baseLab + (baseLab * salInc) + (wageInc > 0 ? _estimateHourlyWageImpact(wageInc) : 0);
+        const baseLab    = months.length ? sumLab / months.length : 0;
+        const projLabWage = baseLab + (baseLab * salInc) + (wageInc > 0 ? _estimateHourlyWageImpact(wageInc) : 0);
 
-        // Average fixed expenses (%-based computed per scenario)
+        // Fixed + one-time expenses
         const avgFixedExp = months.reduce((s, mo) => {
             const moNum = parseInt(mo.split('-')[1]);
             const items = _expenseConfig?.items || [];
@@ -643,65 +831,73 @@ async function runFinanceModel() {
             return s + fixed + oneTime;
         }, 0) / (months.length || 1);
 
-        const payrollPctRate = (_expenseConfig?.items||[])
-            .filter(i => i.type === 'payroll_pct')
-            .reduce((s, i) => s + (parseFloat(i.amount)||0), 0) / 100;
-        const revenuePctRate = (_expenseConfig?.items||[])
-            .filter(i => i.type === 'revenue_pct')
-            .reduce((s, i) => s + (parseFloat(i.amount)||0), 0) / 100;
+        const payrollPctRate = (_expenseConfig?.items||[]).filter(i => i.type === 'payroll_pct').reduce((s, i) => s + (parseFloat(i.amount)||0), 0) / 100;
+        const revenuePctRate = (_expenseConfig?.items||[]).filter(i => i.type === 'revenue_pct').reduce((s, i) => s + (parseFloat(i.amount)||0), 0) / 100;
 
         const scenarios = [
-            { label: 'Current',       rev: totalBaseRev, lab: baseLab },
-            { label: 'Rate+Enroll',   rev: totalProjRev, lab: baseLab },
-            { label: 'Wage Changes',  rev: totalBaseRev, lab: projLab },
-            { label: 'All Changes',   rev: totalProjRev, lab: projLab },
+            { label: 'Current',            rev: totalBaseRev, lab: baseLab },
+            { label: 'Rate + Enrollment',  rev: totalProjRev, lab: baseLab + totalAdditionalStaffCost },
+            { label: 'Wage Changes',       rev: totalBaseRev, lab: projLabWage },
+            { label: 'All Changes',        rev: totalProjRev, lab: projLabWage + totalAdditionalStaffCost },
         ];
 
         const fmt$   = v => '$' + Math.round(v).toLocaleString();
         const fmtPct = v => isFinite(v) ? v.toFixed(1) + '%' : '—';
-
-        const cols = scenarios.map(s => {
+        const cols   = scenarios.map(s => {
             const exp = avgFixedExp + s.lab * payrollPctRate + s.rev * revenuePctRate;
             const net = s.rev - s.lab - exp;
-            const pct = s.rev > 0 ? (net / s.rev * 100) : 0;
+            const pct = s.rev > 0 ? net / s.rev * 100 : 0;
             return { ...s, exp, net, pct };
         });
 
         const changedRooms = roomProjections.filter(r => r.anyChange || r.baseRev > 0);
+        const staffAlert = totalAdditionalStaff > 0
+            ? `<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:.75rem;margin-bottom:1rem">
+                <strong>⚠ Staffing:</strong> The enrollment changes require approximately
+                <strong>${totalAdditionalStaff} additional staff member${totalAdditionalStaff > 1 ? 's' : ''}</strong>
+                (~${fmt$(totalAdditionalStaffCost)}/month at avg $${Math.round(avgHourlyRate)}/hr × 160 hrs).
+                Already included in "Rate + Enrollment" and "All Changes" scenarios.
+               </div>` : '';
 
         container.innerHTML = `
+            ${staffAlert}
             ${changedRooms.length ? `
             <h4 style="margin:0 0 .5rem">Revenue Impact by Room</h4>
             <div style="overflow-x:auto;margin-bottom:1.5rem">
-            <table class="report-table" style="max-width:780px">
+            <table class="report-table" style="max-width:820px">
                 <thead><tr>
                     <th>Room</th>
-                    <th class="report-num">Current Rev/mo</th>
+                    <th class="report-num">Avg Rev/mo</th>
                     <th class="report-num">Rate Change</th>
                     <th class="report-num">Enrollment Change</th>
+                    <th class="report-num">Staff Cost</th>
                     <th class="report-num">Projected Rev/mo</th>
                 </tr></thead>
                 <tbody>
-                    ${changedRooms.map(r => `<tr${r.isNew ? ' style="background:#fefce8"' : ''}>
-                        <td>${escHtml(r.label)}${r.isNew ? ' <span style="font-size:.75em;color:#d97706">(new)</span>' : ''}</td>
-                        <td class="report-num">${r.baseRev > 0 ? fmt$(r.baseRev) : '<span style="color:#9ca3af">—</span>'}</td>
-                        <td class="report-num" style="color:${r.rateRevInc > 0 ? '#16a34a' : '#9ca3af'}">
-                            ${r.rateRevInc ? '+' + fmt$(r.rateRevInc) : '—'}
-                            ${r.fullRateInc || r.halfRateInc ? `<br><span style="font-size:.78em;color:#6b7280">${[r.fullRateInc ? `FD +$${r.fullRateInc}/day` : '', r.halfRateInc ? `HD +$${r.halfRateInc}/day` : ''].filter(Boolean).join(', ')}</span>` : ''}
-                        </td>
-                        <td class="report-num" style="color:${r.enrollRevInc > 0 ? '#16a34a' : r.enrollRevInc < 0 ? '#dc2626' : '#9ca3af'}">
-                            ${r.enrollRevInc ? (r.enrollRevInc > 0 ? '+' : '') + fmt$(r.enrollRevInc) : '—'}
-                            ${r.fullEnroll || r.halfEnroll ? `<br><span style="font-size:.78em;color:#6b7280">${[r.fullEnroll ? `${r.fullEnroll > 0 ? '+' : ''}${r.fullEnroll} FD` : '', r.halfEnroll ? `${r.halfEnroll > 0 ? '+' : ''}${r.halfEnroll} HD` : ''].filter(Boolean).join(', ')} kids</span>` : ''}
-                        </td>
-                        <td class="report-num"><strong>${fmt$(r.projRev)}</strong></td>
-                    </tr>`).join('')}
-                    <tr class="report-total-row">
-                        <td><strong>Total</strong></td>
-                        <td class="report-num"><strong>${fmt$(totalBaseRev)}</strong></td>
-                        <td class="report-num" style="color:#16a34a"><strong>${totalProjRev - totalBaseRev > 0 ? '+' + fmt$(totalProjRev - totalBaseRev) : '—'}</strong></td>
-                        <td></td>
-                        <td class="report-num"><strong>${fmt$(totalProjRev)}</strong></td>
-                    </tr>
+                ${changedRooms.map(r => `<tr>
+                    <td>${escHtml(r.label)}${r.isNew ? ' <span style="font-size:.75em;color:#d97706">(new)</span>' : ''}</td>
+                    <td class="report-num">${r.baseRev > 0 ? fmt$(r.baseRev) : '<span style="color:#9ca3af">—</span>'}</td>
+                    <td class="report-num" style="color:${r.rateRevInc ? '#16a34a' : '#9ca3af'}">
+                        ${r.rateRevInc ? '+'+fmt$(r.rateRevInc) : '—'}
+                        ${r.fullRateInc||r.halfRateInc ? `<br><span style="font-size:.78em;color:#6b7280">${[r.fullRateInc?`FD +$${r.fullRateInc}/day`:'',r.halfRateInc?`HD +$${r.halfRateInc}/day`:''].filter(Boolean).join(', ')}</span>` : ''}
+                    </td>
+                    <td class="report-num" style="color:${r.enrollRevInc !== 0 ? (r.enrollRevInc > 0 ? '#16a34a' : '#dc2626') : '#9ca3af'}">
+                        ${r.enrollRevInc ? (r.enrollRevInc > 0 ? '+' : '') + fmt$(r.enrollRevInc) : '—'}
+                        ${r.fullEnrollInc||r.halfEnrollInc ? `<br><span style="font-size:.78em;color:#6b7280">${[r.fullEnrollInc?`${r.fullEnrollInc>0?'+':''}${r.fullEnrollInc} FD (~${r.daysPerFull.toFixed(1)} d/mo)`:'',r.halfEnrollInc?`${r.halfEnrollInc>0?'+':''}${r.halfEnrollInc} HD (~${r.daysPerHalf.toFixed(1)} d/mo)`:''].filter(Boolean).join('<br>')}</span>` : ''}
+                    </td>
+                    <td class="report-num" style="color:${r.additionalStaffCost > 0 ? '#ef4444' : '#9ca3af'}">
+                        ${r.additionalStaffCost > 0 ? '+'+fmt$(r.additionalStaffCost)+`<br><span style="font-size:.78em">+${r.additionalStaff} staff</span>` : '—'}
+                    </td>
+                    <td class="report-num"><strong>${fmt$(r.projRev)}</strong></td>
+                </tr>`).join('')}
+                <tr class="report-total-row">
+                    <td><strong>Total</strong></td>
+                    <td class="report-num"><strong>${fmt$(totalBaseRev)}</strong></td>
+                    <td class="report-num" style="color:#16a34a"><strong>${roomProjections.reduce((s,r)=>s+r.rateRevInc,0) > 0 ? '+'+fmt$(roomProjections.reduce((s,r)=>s+r.rateRevInc,0)) : '—'}</strong></td>
+                    <td class="report-num" style="color:#16a34a"><strong>${roomProjections.reduce((s,r)=>s+r.enrollRevInc,0) > 0 ? '+'+fmt$(roomProjections.reduce((s,r)=>s+r.enrollRevInc,0)) : '—'}</strong></td>
+                    <td class="report-num" style="color:#ef4444"><strong>${totalAdditionalStaffCost > 0 ? '+'+fmt$(totalAdditionalStaffCost) : '—'}</strong></td>
+                    <td class="report-num"><strong>${fmt$(totalProjRev)}</strong></td>
+                </tr>
                 </tbody>
             </table>
             </div>` : ''}
@@ -713,26 +909,25 @@ async function runFinanceModel() {
                     ${cols.map(c => `<th class="report-num">${escHtml(c.label)}</th>`).join('')}
                 </tr></thead>
                 <tbody>
-                    <tr><td>Monthly Revenue</td>${cols.map(c => `<td class="report-num report-revenue">${fmt$(c.rev)}</td>`).join('')}</tr>
-                    <tr><td>Monthly Labor</td>${cols.map(c => `<td class="report-num">${fmt$(c.lab)}</td>`).join('')}</tr>
-                    <tr><td>Monthly Expenses</td>${cols.map(c => `<td class="report-num">${c.exp > 0 ? fmt$(c.exp) : '—'}</td>`).join('')}</tr>
-                    <tr class="report-total-row"><td>Monthly Net</td>${cols.map(c => `<td class="report-num" style="${c.net < 0 ? 'color:#dc2626' : ''}">${fmt$(c.net)}</td>`).join('')}</tr>
-                    <tr><td>Annual Net</td>${cols.map(c => `<td class="report-num">${fmt$(c.net * 12)}</td>`).join('')}</tr>
-                    <tr><td>Margin %</td>${cols.map(c => `<td class="report-num">${fmtPct(c.pct)}</td>`).join('')}</tr>
+                    <tr><td>Monthly Revenue</td>${cols.map(c=>`<td class="report-num report-revenue">${fmt$(c.rev)}</td>`).join('')}</tr>
+                    <tr><td>Monthly Labor</td>${cols.map(c=>`<td class="report-num">${fmt$(c.lab)}</td>`).join('')}</tr>
+                    <tr><td>Monthly Expenses</td>${cols.map(c=>`<td class="report-num">${c.exp>0?fmt$(c.exp):'—'}</td>`).join('')}</tr>
+                    <tr class="report-total-row"><td>Monthly Net</td>${cols.map(c=>`<td class="report-num" style="${c.net<0?'color:#dc2626':''}">${fmt$(c.net)}</td>`).join('')}</tr>
+                    <tr><td>Annual Net</td>${cols.map(c=>`<td class="report-num">${fmt$(c.net*12)}</td>`).join('')}</tr>
+                    <tr><td>Margin %</td>${cols.map(c=>`<td class="report-num">${fmtPct(c.pct)}</td>`).join('')}</tr>
                 </tbody>
             </table>
             </div>
             <p style="font-size:.8em;color:#6b7280;margin-top:.5rem">
-                Based on billing data from ${last3Keys.map(k => FIN_MONTH_SHORT[parseInt(k.split('-')[1]) - 1]).reverse().join(', ')}.
-                Enrollment change revenue estimated at ${MODEL_AVG_WORK_DAYS} care days/month per child.
-                ${avgFixedExp === 0 && payrollPctRate === 0 && revenuePctRate === 0 ? 'Add expense lines to include fixed costs.' : ''}
+                Revenue baseline uses the same calculation as the Financial Dashboard (${last3.map(m => FIN_MONTH_SHORT[parseInt(m.key.split('-')[1])-1]).reverse().join(', ')}).
+                Enrollment impact uses each room's actual avg days/child from registration history.
+                ${avgHourlyRate > 0 ? `Staff cost: $${Math.round(avgHourlyRate)}/hr avg × 160 hrs/mo.` : 'Add staff hourly rates to include staffing cost.'}
             </p>`;
 
     } catch (e) {
         container.innerHTML = `<p class="import-error">Error: ${escHtml(e.message)}</p>`;
     }
 }
-
 
 // Estimate additional monthly labor cost from an hourly wage increase
 // Uses allStaffData if available, otherwise falls back to a rough ratio
