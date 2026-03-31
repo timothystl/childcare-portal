@@ -2058,22 +2058,16 @@ async function _buildRoomPnlData(fromDate, toDate) {
     const centerLaborByMonth = {}; // mo → total cost (only populated when no schedule data)
     if (scheduleRows.length === 0) {
         try {
-            const [hoursRows, staffList] = await Promise.all([
-                fetchStaffHours(fromDate, toDate),
-                fetchAllStaff({ includeInactive: true }),
-            ]);
-            const staffById = new Map(staffList.map(s => [s.id, s]));
+            const hoursRows = await fetchStaffHoursWithPay(fromDate, toDate);
             hoursRows.forEach(h => {
-                const mo   = h.work_date.substring(0, 7);
+                const mo = h.work_date.substring(0, 7);
                 if (mo < fromMo || mo > toMo) return;
-                const s    = staffById.get(h.staff_id);
-                if (!s) return;
                 let cost = 0;
-                if (s.pay_type === 'salary') {
+                if (h.pay_type === 'salary') {
                     // Each hours entry = 1 working day
-                    cost = (s.salary_biweekly || 0) / 10;
+                    cost = h.salary_biweekly / 10;
                 } else {
-                    cost = (s.hourly_rate || 0) * (h.hours_worked || 0);
+                    cost = h.hourly_rate * h.hours_worked;
                 }
                 centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + cost;
             });
