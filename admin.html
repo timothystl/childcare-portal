@@ -977,10 +977,12 @@
                                 <select id="expenseTypeInput" class="form-control">
                                     <option value="monthly">Monthly (recurring)</option>
                                     <option value="annual">Annual (one-time)</option>
+                                    <option value="payroll_pct">Payroll Tax % of wages</option>
+                                    <option value="revenue_pct">Payment Processing % of revenue</option>
                                 </select>
                             </div>
                             <div>
-                                <label style="font-weight:600;font-size:.875rem">Amount ($) *</label>
+                                <label id="expenseAmountLabel" style="font-weight:600;font-size:.875rem">Amount ($) *</label>
                                 <input id="expenseAmountInput" type="number" step="0.01" class="form-control" placeholder="0.00">
                             </div>
                         </div>
