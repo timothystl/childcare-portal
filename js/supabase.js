@@ -1739,6 +1739,25 @@ async function saveHistoricalPayroll(records) {
     if (error) throw error;
 }
 
+// ── Expense Config (Finance tab) ─────────────────────────────
+// Shape: { items: [{ id, label, type:'monthly'|'annual', amount, month:1-12|null, notes }] }
+async function fetchExpenseConfig() {
+    if (!sbClient) return { items: [] };
+    const { data } = await sbClient.from('settings').select('value')
+        .eq('key', 'expense_config').maybeSingle();
+    const raw = data?.value;
+    if (!raw) return { items: [] };
+    if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return { items: [] }; } }
+    return (raw && typeof raw === 'object') ? raw : { items: [] };
+}
+
+async function saveExpenseConfig(config) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('settings')
+        .upsert({ key: 'expense_config', value: config }, { onConflict: 'key' });
+    if (error) throw error;
+}
+
 async function sendPasswordReset(email) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient.auth.resetPasswordForEmail(email, {
