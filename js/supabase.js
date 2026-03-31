@@ -1347,6 +1347,36 @@ async function upsertStaffHours(staffId, workDate, hoursWorked, notes) {
     if (error) throw error;
 }
 
+/**
+ * Fetches staff hours joined with staff pay info for a date range.
+ * Used by the Room P&L fallback when no schedule data exists.
+ * @returns {Promise<Array<{staff_id, staff_name, work_date, hours_worked, pay_type, hourly_rate, salary_biweekly}>>}
+ */
+async function fetchStaffHoursWithPay(startDate, endDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_hours')
+        .select(`
+            staff_id,
+            work_date,
+            hours_worked,
+            staff:staff_id(name, pay_type, hourly_rate, salary_biweekly)
+        `)
+        .gte('work_date', startDate)
+        .lte('work_date', endDate)
+        .order('work_date');
+    if (error) throw error;
+    return (data || []).map(r => ({
+        staff_id:        r.staff_id,
+        staff_name:      r.staff?.name ?? '(unknown)',
+        work_date:       r.work_date,
+        hours_worked:    parseFloat(r.hours_worked) || 0,
+        pay_type:        r.staff?.pay_type ?? 'hourly',
+        hourly_rate:     parseFloat(r.staff?.hourly_rate) || 0,
+        salary_biweekly: parseFloat(r.staff?.salary_biweekly) || 0,
+    }));
+}
+
 // ============================================================
 // STAFF SCHEDULES  (auto-fill planner persistence)
 // ============================================================
