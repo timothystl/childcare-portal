@@ -2103,12 +2103,16 @@ async function _buildRoomPnlData(fromDate, toDate) {
 
     if (scheduleRows.length === 0) {
         try {
-            // Fetch all three data sources in parallel
-            const [histRecords, hoursRowsAll, allStaff] = await Promise.all([
+            // Fetch all data sources used by the Payroll Report
+            const [histRecords, hoursRowsAll, allStaff, clockEventsAll] = await Promise.all([
                 fetchHistoricalPayroll(),
                 fetchStaffHoursWithPay(fromDate, toDate),
                 fetchAllStaff({ includeInactive: true }),
+                fetchClockEventsForRange(fromDate, toDate),
             ]);
+
+            // Staff lookup by ID (for clock events which don't carry pay info)
+            const staffById = new Map(allStaff.map(s => [s.id, s]));
 
             // Build a lookup: set of date strings (YYYY-MM-DD) covered by historical records
             // so logged-hours entries on those dates aren't double-counted.
@@ -2144,39 +2148,79 @@ async function _buildRoomPnlData(fromDate, toDate) {
                 });
             });
 
-            // ── Tier 2: Logged staff hours for dates NOT covered by a historical record ──
-            // This fills in days within a month that no payroll record covers (e.g. Feb 16–28
-            // when only Feb 2–15 has a historical record).
+            // ── Tier 2: Mirror Payroll Report for dates NOT covered by historical ──
+            // Hourly staff: staff_hours entries + clock_events for days not yet synced
+            // Salary staff: salary_biweekly per pay period (no clock-in required)
+
+            function calcClockHrs(ev) {
+                if (!ev.clock_in || !ev.clock_out) return 0;
+                const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
+                if (ms < 10 * 60 * 1000) return 0;
+                return Math.round(ms / 3600000 * 100) / 100;
+            }
+
+            // Set of (staff_id|work_date) keys already in staff_hours (for non-hist dates)
+            const manualHrsKeys = new Set(
+                hoursRowsAll
+                    .filter(h => !histCoveredDates.has(h.work_date))
+                    .map(h => `${h.staff_id}|${h.work_date}`)
+            );
+
+            // Hourly staff from staff_hours on non-historical dates
             hoursRowsAll.forEach(h => {
                 const mo = h.work_date.substring(0, 7);
                 if (mo < fromMo || mo > toMo) return;
-                if (histCoveredDates.has(h.work_date)) return; // already in historical total
-                const cost = h.pay_type === 'salary'
-                    ? h.salary_biweekly / 10
-                    : h.hourly_rate * h.hours_worked;
-                centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + cost;
+                if (histCoveredDates.has(h.work_date)) return;
+                if (h.pay_type === 'salary') return; // salary handled via pay periods below
+                centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + h.hourly_rate * h.hours_worked;
                 if (!centerLaborSource[mo]) centerLaborSource[mo] = 'hours';
             });
 
-            // ── Tier 3: Salary estimate only for months with zero data at all ─────────
+            // Hourly staff from clock_events on dates not yet synced to staff_hours
+            clockEventsAll.forEach(ev => {
+                const mo = (ev.work_date || '').substring(0, 7);
+                if (mo < fromMo || mo > toMo) return;
+                if (histCoveredDates.has(ev.work_date)) return;
+                if (manualHrsKeys.has(`${ev.staff_id}|${ev.work_date}`)) return;
+                const hrs = calcClockHrs(ev);
+                if (hrs <= 0) return;
+                const s = staffById.get(ev.staff_id);
+                if (!s || s.pay_type === 'salary') return;
+                centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + (s.hourly_rate || 0) * hrs;
+                if (!centerLaborSource[mo]) centerLaborSource[mo] = 'hours';
+            });
+
+            // Salary staff: add salary_biweekly per pay period for days not in histCoveredDates
+            // Prorated across months when a period spans a month boundary.
             const salaryStaff = allStaff.filter(s => s.pay_type === 'salary' && (s.salary_biweekly || 0) > 0);
             if (salaryStaff.length > 0) {
-                let [ey, em] = fromMo.split('-').map(Number);
-                while (true) {
-                    const mo = `${ey}-${String(em).padStart(2, '0')}`;
-                    if (mo > toMo) break;
-                    if (!centerLaborByMonth[mo]) {
-                        const daysInMo = new Date(ey, em, 0).getDate();
-                        let workDays = 0;
-                        for (let d = 1; d <= daysInMo; d++) {
-                            const dow = new Date(ey, em - 1, d).getDay();
-                            if (dow >= 1 && dow <= 5) workDays++;
+                const totalSalaryPerPeriod = salaryStaff.reduce((sum, s) => sum + (s.salary_biweekly || 0), 0);
+                _buildPayrollPeriodList().forEach(p => {
+                    if (p.end < fromDate || p.start > toDate) return;
+                    // Walk work days, counting uncovered days per month
+                    const moUncoveredDays = {};
+                    let totalWorkDays = 0;
+                    const d = new Date(p.start + 'T12:00:00');
+                    const e = new Date(p.end   + 'T12:00:00');
+                    while (d <= e) {
+                        const dow = d.getDay();
+                        if (dow >= 1 && dow <= 5) {
+                            totalWorkDays++;
+                            const ds = d.toISOString().split('T')[0];
+                            const mo = ds.substring(0, 7);
+                            if (!histCoveredDates.has(ds) && mo >= fromMo && mo <= toMo) {
+                                moUncoveredDays[mo] = (moUncoveredDays[mo] || 0) + 1;
+                            }
                         }
-                        const est = salaryStaff.reduce((s, st) => s + (st.salary_biweekly / 10) * workDays, 0);
-                        if (est > 0) { centerLaborByMonth[mo] = est; centerLaborSource[mo] = 'salary_estimate'; }
+                        d.setDate(d.getDate() + 1);
                     }
-                    if (em === 12) { ey++; em = 1; } else { em++; }
-                }
+                    if (totalWorkDays === 0) return;
+                    Object.entries(moUncoveredDays).forEach(([mo, days]) => {
+                        const contribution = totalSalaryPerPeriod * days / totalWorkDays;
+                        centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + contribution;
+                        if (!centerLaborSource[mo]) centerLaborSource[mo] = 'hours';
+                    });
+                });
             }
         } catch (e) {
             console.warn('Center-wide labor fallback failed:', e);
