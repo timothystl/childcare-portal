@@ -2107,11 +2107,16 @@ async function _buildRoomPnlData(fromDate, toDate) {
             ]);
 
             // ── Tier 1: Historical Payroll Records ──────────────────────────
+            console.log('[PnL] Raw historical records fetched:', JSON.stringify(histRecords));
             histRecords.forEach(r => {
                 const parsed = _parsePayrollLabel(r.label);
-                if (!parsed) return;
+                if (!parsed) {
+                    console.warn('[PnL] Could not parse label:', JSON.stringify(r.label));
+                    return;
+                }
                 const { start, end } = parsed;
                 const totalWorkDays = _workDaysInRange(start, end);
+                console.log(`[PnL] Record "${r.label}" → start=${start.toISOString()} end=${end.toISOString()} totalWorkDays=${totalWorkDays} total_paid=${r.total_paid}`);
                 if (totalWorkDays === 0) return;
                 // Walk each day in period, tally working days per month
                 const moWorkDays = {};
@@ -2125,14 +2130,17 @@ async function _buildRoomPnlData(fromDate, toDate) {
                     }
                     d.setDate(d.getDate() + 1);
                 }
+                console.log(`[PnL]   → moWorkDays:`, JSON.stringify(moWorkDays));
                 // Prorate total_paid by proportion of working days in each month
                 Object.entries(moWorkDays).forEach(([mo, days]) => {
                     if (mo < fromMo || mo > toMo) return;
-                    centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) +
-                        (parseFloat(r.total_paid) * days / totalWorkDays);
+                    const contribution = parseFloat(r.total_paid) * days / totalWorkDays;
+                    console.log(`[PnL]   → month ${mo}: ${days}/${totalWorkDays} days → $${contribution.toFixed(2)}`);
+                    centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + contribution;
                     centerLaborSource[mo] = 'historical';
                 });
             });
+            console.log('[PnL] Final centerLaborByMonth:', JSON.stringify(centerLaborByMonth));
 
             // ── Tier 2: Logged staff hours (for months not covered by history) ──
             hoursRowsAll.forEach(h => {
