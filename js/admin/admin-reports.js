@@ -2061,25 +2061,57 @@ async function _buildRoomPnlData(fromDate, toDate) {
         });
     });
 
-    // ── Fallback: center-wide labor from staff_hours when no schedule data ─
-    // When schedules haven't been saved, compute total labor per month from
-    // actual clock/manual hours so the P&L still shows meaningful totals.
-    const centerLaborByMonth = {}; // mo → total cost (only populated when no schedule data)
+    // ── Fallback: center-wide labor from staff_hours + salary estimates ──────
+    // When schedules haven't been saved:
+    //   1. Use actual logged staff hours where available (per-month).
+    //   2. For months with no logged hours, estimate salary staff costs from
+    //      their biweekly salary × working days in that month.
+    // This ensures historical months without clocked hours still show
+    // meaningful labor costs for salary employees.
+    const centerLaborByMonth = {}; // mo → total cost
+    const centerLaborSource  = {}; // mo → 'hours' | 'salary_estimate'
     if (scheduleRows.length === 0) {
         try {
-            const hoursRows = await fetchStaffHoursWithPay(fromDate, toDate);
+            const [hoursRows, allStaff] = await Promise.all([
+                fetchStaffHoursWithPay(fromDate, toDate),
+                fetchAllStaff({ includeInactive: true }),
+            ]);
+            // Tally costs from logged hours
             hoursRows.forEach(h => {
                 const mo = h.work_date.substring(0, 7);
                 if (mo < fromMo || mo > toMo) return;
-                let cost = 0;
-                if (h.pay_type === 'salary') {
-                    // Each hours entry = 1 working day
-                    cost = h.salary_biweekly / 10;
-                } else {
-                    cost = h.hourly_rate * h.hours_worked;
-                }
+                const cost = h.pay_type === 'salary'
+                    ? h.salary_biweekly / 10        // each hours entry = 1 working day
+                    : h.hourly_rate * h.hours_worked;
                 centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + cost;
+                centerLaborSource[mo]  = 'hours';
             });
+
+            // For months still missing labor data, estimate from salary staff
+            const salaryStaff = allStaff.filter(s => s.pay_type === 'salary' && (s.salary_biweekly || 0) > 0);
+            if (salaryStaff.length > 0) {
+                let [ey, em] = fromMo.split('-').map(Number);
+                while (true) {
+                    const mo = `${ey}-${String(em).padStart(2, '0')}`;
+                    if (mo > toMo) break;
+                    if (!centerLaborByMonth[mo]) {
+                        // Count Mon–Fri working days in this calendar month
+                        const daysInMonth = new Date(ey, em, 0).getDate();
+                        let workDays = 0;
+                        for (let d = 1; d <= daysInMonth; d++) {
+                            const dow = new Date(ey, em - 1, d).getDay();
+                            if (dow >= 1 && dow <= 5) workDays++;
+                        }
+                        const estimated = salaryStaff.reduce(
+                            (sum, s) => sum + (s.salary_biweekly / 10) * workDays, 0);
+                        if (estimated > 0) {
+                            centerLaborByMonth[mo] = estimated;
+                            centerLaborSource[mo]  = 'salary_estimate';
+                        }
+                    }
+                    if (em === 12) { ey++; em = 1; } else { em++; }
+                }
+            }
         } catch (e) {
             console.warn('Center-wide labor fallback failed:', e);
         }
@@ -2118,7 +2150,8 @@ async function _buildRoomPnlData(fromDate, toDate) {
 
     const months = Object.keys(data).sort();
     const hasFallbackLabor = scheduleRows.length === 0 && Object.keys(centerLaborByMonth).length > 0;
-    return { months, rooms, data, hasScheduleData: scheduleRows.length > 0, centerLaborByMonth, hasFallbackLabor };
+    return { months, rooms, data, hasScheduleData: scheduleRows.length > 0,
+             centerLaborByMonth, centerLaborSource, hasFallbackLabor };
 }
 
 async function generateRoomPnl() {
@@ -2131,7 +2164,7 @@ async function generateRoomPnl() {
 
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
-        const { months, rooms, data, hasScheduleData, centerLaborByMonth, hasFallbackLabor } = await _buildRoomPnlData(fromDate, toDate);
+        const { months, rooms, data, hasScheduleData, centerLaborByMonth, centerLaborSource, hasFallbackLabor } = await _buildRoomPnlData(fromDate, toDate);
 
         if (!months.length) {
             container.innerHTML = '<p class="empty-hint">No data found for the selected range.</p>';
@@ -2178,7 +2211,12 @@ async function generateRoomPnl() {
             const moPct    = moRev > 0 ? (moMargin / moRev) * 100 : 0;
 
             const labCell  = moLab > 0 ? fmt$(moLab) : '—';
-            const labNote  = hasFallbackLabor && centerLab > 0 ? ' <span title="Center-wide total from logged hours — save room schedules for per-room breakdown" style="font-size:0.75em;opacity:0.7">*</span>' : '';
+            const src = centerLaborSource?.[mo];
+            const labNote  = hasFallbackLabor && centerLab > 0
+                ? src === 'salary_estimate'
+                    ? ' <span title="Salary estimate — no logged hours found for this month. Based on salary staff × working days." style="font-size:0.75em;opacity:0.7">~est</span>'
+                    : ' <span title="Center-wide total from logged staff hours — save room schedules for per-room breakdown" style="font-size:0.75em;opacity:0.7">*</span>'
+                : '';
 
             return `<tr>
                 <td class="staff-date-cell">${label}</td>
@@ -2210,12 +2248,17 @@ async function generateRoomPnl() {
         const grandMargin = grandRev - grandLab;
         const grandPct    = grandRev > 0 ? (grandMargin / grandRev) * 100 : 0;
 
+        const hasEstimates = hasFallbackLabor && Object.values(centerLaborSource || {}).includes('salary_estimate');
         let laborBanner = '';
         if (!hasScheduleData) {
             if (hasFallbackLabor) {
+                const estNote = hasEstimates
+                    ? ' Months marked <em>~est</em> use salary-staff estimates (no hours logged for that month).'
+                    : '';
                 laborBanner = `<p class="import-warning" style="margin-bottom:8px;background:#fff3e0;color:#e65100;padding:8px 12px;border-radius:4px;border-left:3px solid #ff9800">
-                    ⚠️ No saved room schedules found — labor totals (*) are center-wide from logged staff hours and cannot be broken down by room.
-                    Save schedules on the Staffing tab to enable per-room labor allocation.
+                    ⚠️ No saved room schedules found — labor totals are center-wide and cannot be broken down by room.
+                    * = from logged staff hours. ~est = estimated from salary staff × working days.${estNote}
+                    Save schedules on the Staffing tab to enable per-room allocation.
                 </p>`;
             } else {
                 laborBanner = `<p class="import-error" style="margin-bottom:8px">
@@ -2229,7 +2272,7 @@ async function generateRoomPnl() {
             ${laborBanner}
             <div class="ar-summary-meta">
                 <span class="ar-total-badge">$${Math.round(grandRev).toLocaleString('en-US')} revenue</span>
-                <span class="ar-discount-badge">$${Math.round(grandLab).toLocaleString('en-US')} labor${hasFallbackLabor ? '*' : ''}</span>
+                <span class="ar-discount-badge">$${Math.round(grandLab).toLocaleString('en-US')} labor${hasEstimates ? ' (~est)' : hasFallbackLabor ? '*' : ''}</span>
                 <span class="ar-total-badge" style="background:${grandMargin >= 0 ? '#e8f5e9;color:#2e7d32' : '#ffebee;color:#c62828'}">$${Math.round(Math.abs(grandMargin)).toLocaleString('en-US')} ${grandMargin >= 0 ? 'margin' : 'loss'} (${Math.round(grandPct)}%)</span>
             </div>
             <div class="table-wrapper report-table-wrap">
@@ -2253,7 +2296,7 @@ async function generateRoomPnl() {
                             <td><strong>Totals</strong></td>
                             ${totalCells}
                             <td class="report-num report-revenue ar-total-col"><strong>${fmt$(grandRev)}</strong></td>
-                            <td class="report-num ar-total-col"><strong>${fmt$(grandLab)}${hasFallbackLabor ? '*' : ''}</strong></td>
+                            <td class="report-num ar-total-col"><strong>${fmt$(grandLab)}${hasEstimates ? '~' : hasFallbackLabor ? '*' : ''}</strong></td>
                             <td class="report-num ar-total-col"${marginStyle(grandMargin)}><strong>${(grandMargin < 0 ? '−' : '') + fmt$(grandMargin)}</strong></td>
                             <td class="report-num ar-total-col"${marginStyle(grandPct)}><strong>${fmtPct(grandPct)}</strong></td>
                         </tr>
