@@ -2061,33 +2061,87 @@ async function _buildRoomPnlData(fromDate, toDate) {
         });
     });
 
-    // ── Fallback: center-wide labor from staff_hours + salary estimates ──────
-    // When schedules haven't been saved:
-    //   1. Use actual logged staff hours where available (per-month).
-    //   2. For months with no logged hours, estimate salary staff costs from
-    //      their biweekly salary × working days in that month.
-    // This ensures historical months without clocked hours still show
-    // meaningful labor costs for salary employees.
+    // ── Fallback: center-wide labor when no room schedules saved ─────────────
+    // Priority order:
+    //   1. Historical Payroll Records (Staffing tab) — actual total paid per period
+    //   2. Logged staff hours (staff_hours table)    — for months not in history
+    //   3. Salary estimates from staff table          — absolute last resort
     const centerLaborByMonth = {}; // mo → total cost
-    const centerLaborSource  = {}; // mo → 'hours' | 'salary_estimate'
+    const centerLaborSource  = {}; // mo → 'historical' | 'hours' | 'salary_estimate'
+
+    // Helper: parse "Month Day[, Year] - Month Day, Year" label → {start, end} Date objects
+    function _parsePayrollLabel(label) {
+        const m = label.match(/^(.+?)\s*[-–]\s*(.+)$/);
+        if (!m) return null;
+        const [, rawStart, rawEnd] = m;
+        const end = new Date(rawEnd.trim());
+        if (isNaN(end)) return null;
+        let start = new Date(rawStart.trim());
+        if (isNaN(start)) {
+            start = new Date(`${rawStart.trim()}, ${end.getFullYear()}`);
+            if (isNaN(start)) return null;
+            // If parsed start month is after end month, it belongs to the prior year
+            if (start.getMonth() > end.getMonth()) {
+                start = new Date(`${rawStart.trim()}, ${end.getFullYear() - 1}`);
+            }
+        }
+        return isNaN(start) ? null : { start, end };
+    }
+
+    // Helper: count Mon–Fri days in a date range (inclusive)
+    function _workDaysInRange(start, end) {
+        let n = 0;
+        const d = new Date(start); d.setHours(12);
+        const e = new Date(end);   e.setHours(12);
+        while (d <= e) { const dow = d.getDay(); if (dow >= 1 && dow <= 5) n++; d.setDate(d.getDate() + 1); }
+        return n;
+    }
+
     if (scheduleRows.length === 0) {
         try {
-            const [hoursRows, allStaff] = await Promise.all([
-                fetchStaffHoursWithPay(fromDate, toDate),
-                fetchAllStaff({ includeInactive: true }),
-            ]);
-            // Tally costs from logged hours
+            // ── Tier 1: Historical Payroll Records ──────────────────────────
+            const histRecords = await fetchHistoricalPayroll();
+            histRecords.forEach(r => {
+                const parsed = _parsePayrollLabel(r.label);
+                if (!parsed) return;
+                const { start, end } = parsed;
+                const totalWorkDays = _workDaysInRange(start, end);
+                if (totalWorkDays === 0) return;
+                // Walk each day in period, tally working days per month
+                const moWorkDays = {};
+                const d = new Date(start); d.setHours(12);
+                const e = new Date(end);   e.setHours(12);
+                while (d <= e) {
+                    const dow = d.getDay();
+                    if (dow >= 1 && dow <= 5) {
+                        const mo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                        moWorkDays[mo] = (moWorkDays[mo] || 0) + 1;
+                    }
+                    d.setDate(d.getDate() + 1);
+                }
+                // Prorate total_paid by proportion of working days in each month
+                Object.entries(moWorkDays).forEach(([mo, days]) => {
+                    if (mo < fromMo || mo > toMo) return;
+                    centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) +
+                        (parseFloat(r.total_paid) * days / totalWorkDays);
+                    centerLaborSource[mo] = 'historical';
+                });
+            });
+
+            // ── Tier 2: Logged staff hours (for months not covered by history) ──
+            const hoursRows = await fetchStaffHoursWithPay(fromDate, toDate);
             hoursRows.forEach(h => {
                 const mo = h.work_date.substring(0, 7);
-                if (mo < fromMo || mo > toMo) return;
+                if (mo < fromMo || mo > toMo || centerLaborSource[mo] === 'historical') return;
                 const cost = h.pay_type === 'salary'
-                    ? h.salary_biweekly / 10        // each hours entry = 1 working day
+                    ? h.salary_biweekly / 10
                     : h.hourly_rate * h.hours_worked;
                 centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + cost;
                 centerLaborSource[mo]  = 'hours';
             });
 
-            // For months still missing labor data, estimate from salary staff
+            // ── Tier 3: Salary estimate (months with no data at all) ─────────
+            const allStaff = await fetchAllStaff({ includeInactive: true });
             const salaryStaff = allStaff.filter(s => s.pay_type === 'salary' && (s.salary_biweekly || 0) > 0);
             if (salaryStaff.length > 0) {
                 let [ey, em] = fromMo.split('-').map(Number);
@@ -2095,19 +2149,14 @@ async function _buildRoomPnlData(fromDate, toDate) {
                     const mo = `${ey}-${String(em).padStart(2, '0')}`;
                     if (mo > toMo) break;
                     if (!centerLaborByMonth[mo]) {
-                        // Count Mon–Fri working days in this calendar month
-                        const daysInMonth = new Date(ey, em, 0).getDate();
+                        const daysInMo = new Date(ey, em, 0).getDate();
                         let workDays = 0;
-                        for (let d = 1; d <= daysInMonth; d++) {
+                        for (let d = 1; d <= daysInMo; d++) {
                             const dow = new Date(ey, em - 1, d).getDay();
                             if (dow >= 1 && dow <= 5) workDays++;
                         }
-                        const estimated = salaryStaff.reduce(
-                            (sum, s) => sum + (s.salary_biweekly / 10) * workDays, 0);
-                        if (estimated > 0) {
-                            centerLaborByMonth[mo] = estimated;
-                            centerLaborSource[mo]  = 'salary_estimate';
-                        }
+                        const est = salaryStaff.reduce((s, st) => s + (st.salary_biweekly / 10) * workDays, 0);
+                        if (est > 0) { centerLaborByMonth[mo] = est; centerLaborSource[mo] = 'salary_estimate'; }
                     }
                     if (em === 12) { ey++; em = 1; } else { em++; }
                 }
@@ -2212,10 +2261,12 @@ async function generateRoomPnl() {
 
             const labCell  = moLab > 0 ? fmt$(moLab) : '—';
             const src = centerLaborSource?.[mo];
-            const labNote  = hasFallbackLabor && centerLab > 0
-                ? src === 'salary_estimate'
-                    ? ' <span title="Salary estimate — no logged hours found for this month. Based on salary staff × working days." style="font-size:0.75em;opacity:0.7">~est</span>'
-                    : ' <span title="Center-wide total from logged staff hours — save room schedules for per-room breakdown" style="font-size:0.75em;opacity:0.7">*</span>'
+            const labNote = hasFallbackLabor && centerLab > 0
+                ? src === 'historical'
+                    ? ' <span title="From Historical Payroll Records, prorated across months by working days" style="font-size:0.75em;opacity:0.7">📋</span>'
+                    : src === 'salary_estimate'
+                        ? ' <span title="Salary estimate — no payroll data found for this month" style="font-size:0.75em;opacity:0.7">~est</span>'
+                        : ' <span title="From logged staff hours" style="font-size:0.75em;opacity:0.7">*</span>'
                 : '';
 
             return `<tr>
@@ -2248,22 +2299,25 @@ async function generateRoomPnl() {
         const grandMargin = grandRev - grandLab;
         const grandPct    = grandRev > 0 ? (grandMargin / grandRev) * 100 : 0;
 
-        const hasEstimates = hasFallbackLabor && Object.values(centerLaborSource || {}).includes('salary_estimate');
+        const sources = Object.values(centerLaborSource || {});
+        const hasEstimates = hasFallbackLabor && sources.includes('salary_estimate');
+        const hasHistorical = hasFallbackLabor && sources.includes('historical');
         let laborBanner = '';
         if (!hasScheduleData) {
             if (hasFallbackLabor) {
-                const estNote = hasEstimates
-                    ? ' Months marked <em>~est</em> use salary-staff estimates (no hours logged for that month).'
-                    : '';
+                const sourceNote = hasHistorical
+                    ? '📋 = from Historical Payroll Records. * = from logged staff hours.' +
+                      (hasEstimates ? ' ~est = salary estimate (no data for that month).' : '')
+                    : '* = from logged staff hours.' + (hasEstimates ? ' ~est = salary estimate.' : '');
                 laborBanner = `<p class="import-warning" style="margin-bottom:8px;background:#fff3e0;color:#e65100;padding:8px 12px;border-radius:4px;border-left:3px solid #ff9800">
-                    ⚠️ No saved room schedules found — labor totals are center-wide and cannot be broken down by room.
-                    * = from logged staff hours. ~est = estimated from salary staff × working days.${estNote}
+                    ⚠️ No saved room schedules — labor totals are center-wide and cannot be broken down by room.
+                    ${sourceNote}
                     Save schedules on the Staffing tab to enable per-room allocation.
                 </p>`;
             } else {
                 laborBanner = `<p class="import-error" style="margin-bottom:8px">
-                    ⚠️ No schedule or staff hours data found for this period — labor costs show as $0.
-                    Use the Staffing tab to auto-fill and save schedules.
+                    ⚠️ No payroll data found for this period — labor shows as $0.
+                    Add Historical Payroll Records on the Staffing tab or save staff schedules.
                 </p>`;
             }
         }
