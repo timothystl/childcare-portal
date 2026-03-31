@@ -1954,7 +1954,7 @@ async function fetchRegistrationDatesForRange(fromDate, toDate) {
             room_id:         rd.room_id,
         }));
 }
-}
+
 async function upsertBillingSummary(row) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
