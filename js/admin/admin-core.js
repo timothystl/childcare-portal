@@ -138,11 +138,11 @@ function _resetRoleRestrictions() {
         .forEach(btn => { btn.style.display = ''; });
 }
 
-// Auto-restore session if already logged in
-(async () => {
+// Auto-restore session if already logged in — wait for all scripts to load first
+document.addEventListener('DOMContentLoaded', async () => {
     const session = await getAdminSession();
     if (session) showDashboard();
-})();
+});
 
 // ============================================================
 // SHARED CONSTANTS
