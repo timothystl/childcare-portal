@@ -76,7 +76,7 @@ async function generateFinanceDashboard() {
             const rev  = _moRev(pnl, mo);
             const lab  = _moLab(pnl, mo);
             const moNum = parseInt(mo.split('-')[1]);
-            const exp  = _monthlyExpenseBurden(moNum);
+            const exp  = _monthlyExpenseBurden(moNum, lab, rev);
             totalRev += rev;
             totalLab += lab;
             totalExp += exp;
@@ -312,14 +312,19 @@ function setupExpenseLines() {
     document.getElementById('expenseFormSave')
         ?.addEventListener('click', saveExpenseLine);
     document.getElementById('expenseTypeInput')
-        ?.addEventListener('change', _toggleExpenseMonth);
+        ?.addEventListener('change', _toggleExpenseFields);
     loadExpenseLines();
 }
 
-function _toggleExpenseMonth() {
+function _toggleExpenseFields() {
     const type = document.getElementById('expenseTypeInput')?.value;
     const wrap = document.getElementById('expenseMonthWrap');
     if (wrap) wrap.style.display = type === 'annual' ? '' : 'none';
+    const lbl = document.getElementById('expenseAmountLabel');
+    const isPct = type === 'payroll_pct' || type === 'revenue_pct';
+    if (lbl) lbl.textContent = isPct ? 'Rate (%) *' : 'Amount ($) *';
+    const inp = document.getElementById('expenseAmountInput');
+    if (inp) inp.placeholder = isPct ? 'e.g. 7.65' : '0.00';
 }
 
 async function loadExpenseLines() {
@@ -348,8 +353,14 @@ function renderExpenseLines() {
             <td>${escHtml(item.label)}</td>
             <td>${item.type === 'annual'
                 ? `Annual — ${MONTH_NAMES_FIN[(item.month || 1) - 1]}`
+                : item.type === 'payroll_pct'
+                ? '% of wages (auto)'
+                : item.type === 'revenue_pct'
+                ? '% of revenue (auto)'
                 : 'Monthly'}</td>
-            <td class="report-num">${item.amount < 0 ? '-' : ''}$${Math.abs(parseFloat(item.amount)||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            <td class="report-num">${(item.type === 'payroll_pct' || item.type === 'revenue_pct')
+                ? `${parseFloat(item.amount||0).toFixed(2)}%`
+                : `${item.amount < 0 ? '-' : ''}$${Math.abs(parseFloat(item.amount)||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`}</td>
             <td class="report-num" style="color:#6b7280;font-size:.85em">${escHtml(item.notes||'')}</td>
             <td style="white-space:nowrap">
                 <button class="btn-link" data-exp-edit="${escHtml(item.id)}">Edit</button>
@@ -391,7 +402,7 @@ function openExpenseForm(item) {
     document.getElementById('expenseMonthInput').value  = item?.month  || 1;
     document.getElementById('expenseNotesInput').value  = item?.notes  || '';
     document.getElementById('expenseFormStatus').textContent = '';
-    _toggleExpenseMonth();
+    _toggleExpenseFields();
     document.getElementById('expenseFormWrap').classList.remove('hidden');
     document.getElementById('expenseLabelInput').focus();
 }
@@ -439,12 +450,19 @@ async function deleteExpenseLine(id) {
 }
 
 // Helper: total monthly expense burden for a given month number (1-12)
-function _monthlyExpenseBurden(moNum) {
+// Pass laborAmount so payroll_pct items can auto-calculate.
+// Pass revenueAmount so revenue_pct items (e.g. payment processor fee) auto-calculate.
+function _monthlyExpenseBurden(moNum, laborAmount = 0, revenueAmount = 0) {
     const items = _expenseConfig?.items || [];
-    const fixed   = items.filter(i => i.type === 'monthly').reduce((s, i) => s + (parseFloat(i.amount)||0), 0);
-    const oneTime = items.filter(i => i.type === 'annual' && (i.month||1) === moNum)
-                         .reduce((s, i) => s + (parseFloat(i.amount)||0), 0);
-    return fixed + oneTime;
+    const fixed      = items.filter(i => i.type === 'monthly')
+                            .reduce((s, i) => s + (parseFloat(i.amount)||0), 0);
+    const oneTime    = items.filter(i => i.type === 'annual' && (i.month||1) === moNum)
+                            .reduce((s, i) => s + (parseFloat(i.amount)||0), 0);
+    const payrollTax = items.filter(i => i.type === 'payroll_pct')
+                            .reduce((s, i) => s + laborAmount * (parseFloat(i.amount)||0) / 100, 0);
+    const processorFee = items.filter(i => i.type === 'revenue_pct')
+                              .reduce((s, i) => s + revenueAmount * (parseFloat(i.amount)||0) / 100, 0);
+    return fixed + oneTime + payrollTax + processorFee;
 }
 
 // ============================================================
@@ -491,8 +509,21 @@ async function runFinanceModel() {
         const projRev   = baseRev * (1 + rateInc);
         const projLab   = baseLab + (baseLab * salInc) + (wageInc > 0 ? _estimateHourlyWageImpact(wageInc) : 0);
 
-        // Monthly expenses (use average across months)
-        const avgExpenses = months.reduce((s, mo) => s + _monthlyExpenseBurden(parseInt(mo.split('-')[1])), 0) / months.length;
+        // Average monthly fixed + annual expenses (not %-based — those are per-scenario)
+        const avgFixedExp = months.reduce((s, mo) => {
+            const moNum = parseInt(mo.split('-')[1]);
+            const items = _expenseConfig?.items || [];
+            const fixed   = items.filter(i => i.type === 'monthly').reduce((s2, i) => s2 + (parseFloat(i.amount)||0), 0);
+            const oneTime = items.filter(i => i.type === 'annual' && (i.month||1) === moNum).reduce((s2, i) => s2 + (parseFloat(i.amount)||0), 0);
+            return s + fixed + oneTime;
+        }, 0) / months.length;
+
+        const payrollPctRate = (_expenseConfig?.items||[])
+            .filter(i => i.type === 'payroll_pct')
+            .reduce((s, i) => s + (parseFloat(i.amount)||0), 0) / 100;
+        const revenuePctRate = (_expenseConfig?.items||[])
+            .filter(i => i.type === 'revenue_pct')
+            .reduce((s, i) => s + (parseFloat(i.amount)||0), 0) / 100;
 
         const scenarios = [
             { label: 'Current',            rev: baseRev, lab: baseLab },
@@ -506,9 +537,10 @@ async function runFinanceModel() {
         const fmtPct = v => isFinite(v) ? v.toFixed(1)+'%' : '—';
 
         const cols = scenarios.map(s => {
-            const net = s.rev - s.lab - avgExpenses;
+            const exp = avgFixedExp + s.lab * payrollPctRate + s.rev * revenuePctRate;
+            const net = s.rev - s.lab - exp;
             const pct = s.rev > 0 ? (net / s.rev * 100) : 0;
-            return { ...s, exp: avgExpenses, net, pct };
+            return { ...s, exp, net, pct };
         });
 
         container.innerHTML = `
