@@ -1182,20 +1182,62 @@
                 <button id="editDaysClose" class="rcal-close">✕</button>
             </div>
             <div id="editDaysBody" style="padding:0 0 8px"></div>
-            <div style="border-top:1px solid #eee;padding-top:16px;margin-top:8px">
-                <h4 style="margin:0 0 10px;font-size:.9em;color:#555;text-transform:uppercase;letter-spacing:.04em">Add a Day</h4>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                    <input type="date" id="editDaysDate" style="padding:6px 8px;border:1px solid #ddd;border-radius:8px;font-size:.9em">
-                    <select id="editDaysDayType" style="padding:6px 8px;border:1px solid #ddd;border-radius:8px;font-size:.9em">
-                        <option value="full">Full Day</option>
-                        <option value="half">Half Day</option>
-                    </select>
-                    <label style="font-size:.9em;display:flex;align-items:center;gap:4px">
+            <div style="border-top:1px solid #eee;padding-top:14px;margin-top:8px">
+                <!-- Infant recurring days reminder (Bear room only) -->
+                <div id="editDaysRecurringNote" style="display:none;background:#fef9c3;border:1px solid #f59e0b;
+                     border-radius:6px;padding:.45rem .75rem;margin-bottom:.65rem;font-size:.87em"></div>
+                <!-- Month navigator -->
+                <div id="editDaysCalNav" style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+                    <button type="button" id="editDaysCalPrev" class="btn-secondary" style="padding:.2rem .65rem;font-size:1rem;line-height:1">&#8592;</button>
+                    <strong id="editDaysCalLabel" style="flex:1;text-align:center;font-size:.95em"></strong>
+                    <button type="button" id="editDaysCalNext" class="btn-secondary" style="padding:.2rem .65rem;font-size:1rem;line-height:1">&#8594;</button>
+                </div>
+                <!-- Calendar grid — populated by JS -->
+                <div id="editDaysCalGrid" style="margin-bottom:.6rem"></div>
+                <!-- Day type + waitlist -->
+                <div style="display:flex;gap:.75rem;align-items:center;font-size:.88em;flex-wrap:wrap">
+                    <label>Type:
+                        <select id="editDaysDayType" style="padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-size:.9em;margin-left:4px">
+                            <option value="full">Full Day</option>
+                            <option value="half">Half Day</option>
+                        </select>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:4px">
                         <input type="checkbox" id="editDaysWaitlist"> Waitlisted
                     </label>
-                    <button id="editDaysAddBtn" class="btn-secondary">Add Day</button>
+                    <span style="color:#6b7280;font-size:.82em">Click a day to add · click again to remove</span>
                 </div>
                 <div id="editDaysError" style="color:#c62828;font-size:.85em;margin-top:6px;min-height:18px"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Bill Modal -->
+    <div id="editBillModal" class="rcal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="rcal-dialog" style="max-width:400px">
+            <div class="rcal-header">
+                <h2 class="rcal-title">Edit Bill</h2>
+                <button id="editBillClose" class="rcal-close">&#10005;</button>
+            </div>
+            <p id="editBillDesc" style="color:#6b7280;font-size:.9em;margin:0 0 .75rem"></p>
+            <div style="margin-bottom:.75rem">
+                <span style="font-size:.9em">Calculated amount: </span>
+                <strong id="editBillCalculated"></strong>
+            </div>
+            <div id="editBillOverrideNote" style="display:none;background:#fef9c3;border:1px solid #f59e0b;
+                 border-radius:6px;padding:.4rem .75rem;font-size:.85em;margin-bottom:.75rem">
+                Currently overridden: <strong id="editBillCurrentAmt"></strong>
+                <button type="button" id="editBillRemoveBtn" class="btn-xs" style="margin-left:.5rem">&#10005; Remove override</button>
+            </div>
+            <label style="display:block;margin-bottom:.75rem;font-size:.9em">
+                Override amount ($)
+                <input type="number" id="editBillAmount" step="0.01" min="0"
+                       style="display:block;width:140px;margin-top:.3rem;padding:6px 8px;
+                              border:1px solid #ddd;border-radius:6px;font-size:1em">
+            </label>
+            <div style="display:flex;gap:.5rem">
+                <button type="button" id="editBillSaveBtn" class="btn-primary">Save Override</button>
+                <button type="button" id="editBillCancelBtn" class="btn-secondary">Cancel</button>
             </div>
         </div>
     </div>

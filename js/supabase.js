@@ -883,6 +883,21 @@ async function archiveFamily(id) {
     return updateFamily(id, { active: false });
 }
 
+// Fetch a single student's recurring_days by parent email + child name.
+// Returns a string like "Mon,Tue,Fri" or null.
+async function fetchStudentRecurringDays(parentEmail, childName) {
+    if (!sbClient) return null;
+    const { data, error } = await sbClient
+        .from('families')
+        .select('students(child_name, recurring_days)')
+        .eq('parent_email', parentEmail)
+        .maybeSingle();
+    if (error || !data) return null;
+    const student = (data.students || []).find(s =>
+        (s.child_name || '').toLowerCase() === (childName || '').toLowerCase());
+    return student?.recurring_days || null;
+}
+
 async function restoreFamily(id) {
     return updateFamily(id, { active: true });
 }
@@ -2020,6 +2035,20 @@ async function deleteBillingSummary(month, roomId) {
 // BILLING OVERRIDES
 // Per-child per-month manual billing amount overrides.
 // ============================================================
+
+// Fetch a single billing override for one child/month, or null if none.
+async function fetchBillingOverride(month, parentEmail, childName) {
+    if (!sbClient) return null;
+    const { data, error } = await sbClient
+        .from('billing_overrides')
+        .select('override_amount')
+        .eq('month', month)
+        .eq('parent_email', parentEmail)
+        .eq('child_name', childName)
+        .maybeSingle();
+    if (error) { console.warn('fetchBillingOverride:', error); return null; }
+    return data;
+}
 
 // Fetch all billing overrides for a given month ('YYYY-MM')
 async function fetchBillingOverrides(month) {

@@ -2936,3 +2936,62 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     color: #1e3a5f;
     font-weight: 600;
 }
+
+/* ── Edit Days Calendar Grid ───────────────────────────────────── */
+#editDaysCalGrid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+}
+.cal-day-hdr {
+    text-align: center;
+    font-size: .72em;
+    font-weight: 600;
+    color: #6b7280;
+    padding: 2px 0;
+}
+.cal-day {
+    text-align: center;
+    padding: 6px 2px;
+    border-radius: 5px;
+    cursor: pointer;
+    border: 1px solid #e5e7eb;
+    font-size: .84em;
+    min-width: 28px;
+    user-select: none;
+    transition: background .1s;
+}
+.cal-day.other-month {
+    color: #d1d5db;
+    background: #f9fafb;
+    border-color: transparent;
+    cursor: default;
+    pointer-events: none;
+}
+.cal-day.weekend {
+    background: #f3f4f6;
+    color: #9ca3af;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.cal-day.sel-full {
+    background: #16a34a;
+    color: #fff;
+    border-color: #15803d;
+    font-weight: 600;
+}
+.cal-day.sel-half {
+    background: #2563eb;
+    color: #fff;
+    border-color: #1d4ed8;
+    font-weight: 600;
+}
+.cal-day.sel-waitlist {
+    background: #f59e0b;
+    color: #fff;
+    border-color: #d97706;
+}
+.cal-day:not(.other-month):not(.weekend):not(.sel-full):not(.sel-half):not(.sel-waitlist):hover {
+    background: #e0f2fe;
+    border-color: #bae6fd;
+}
