@@ -269,6 +269,10 @@ function openStaffForm(staff = null) {
     });
     document.getElementById('sfMaxHours').value = avail.maxHours != null ? avail.maxHours : 40;
     document.getElementById('sfMaxDays').value  = avail.maxDays  != null ? avail.maxDays  : 5;
+    const excl = avail.excluded_rooms || [];
+    document.querySelectorAll('.sfExcludeRoom').forEach(cb => {
+        cb.checked = excl.includes(cb.dataset.roomId);
+    });
 
     document.getElementById('staffFormStatus').textContent = '';
     document.getElementById('staffEditForm').classList.remove('hidden');
@@ -313,6 +317,10 @@ async function onSaveStaffMember() {
     });
     const maxHours = parseFloat(document.getElementById('sfMaxHours').value) || 40;
     const maxDays  = parseInt(document.getElementById('sfMaxDays').value, 10) || 5;
+    const excluded_rooms = [];
+    document.querySelectorAll('.sfExcludeRoom').forEach(cb => {
+        if (cb.checked) excluded_rooms.push(cb.dataset.roomId);
+    });
     const savingId     = editingStaffId;
 
     try {
@@ -337,7 +345,7 @@ async function onSaveStaffMember() {
             if (typeof staffAvailability !== 'object' || Array.isArray(staffAvailability) || staffAvailability === null) {
                 staffAvailability = {};
             }
-            staffAvailability[staffId] = { dayPeriods, maxHours, maxDays };
+            staffAvailability[staffId] = { dayPeriods, maxHours, maxDays, excluded_rooms };
             saveStaffAvailability(staffAvailability).catch(console.error);
         }
         loadStaffList();
