@@ -3013,3 +3013,67 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     background: #f0f4ff !important;
     border-color: #c7d2fe !important;
 }
+
+/* ── Admin New Registration Calendar (Mon–Fri grid) ───────── */
+#adminRegCalGrid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+}
+.ar-cal-hdr {
+    text-align: center;
+    font-size: .72em;
+    font-weight: 700;
+    color: #6b7280;
+    padding: 3px 0;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+.ar-cal-day {
+    min-height: 54px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    padding: 6px 8px;
+    cursor: pointer;
+    background: #fff;
+    transition: background .1s, border-color .1s;
+}
+.ar-cal-day.other-month {
+    background: #f9fafb;
+    border-color: transparent;
+    cursor: default;
+    pointer-events: none;
+}
+.ar-cal-day.past {
+    background: #f3f4f6;
+    color: #9ca3af;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.ar-cal-day.sel-full {
+    background: #16a34a;
+    border-color: #15803d;
+    color: #fff;
+}
+.ar-cal-day.sel-half {
+    background: #2563eb;
+    border-color: #1d4ed8;
+    color: #fff;
+}
+.ar-cal-day:not(.other-month):not(.past):not(.sel-full):not(.sel-half):hover {
+    background: #f0f9ff;
+    border-color: #7dd3fc;
+}
+.ar-day-num {
+    display: block;
+    font-weight: 600;
+    font-size: .9em;
+    line-height: 1;
+}
+.ar-day-badge {
+    display: block;
+    font-size: .7em;
+    font-weight: 600;
+    margin-top: 4px;
+    opacity: .9;
+}

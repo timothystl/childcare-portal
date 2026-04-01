@@ -1325,32 +1325,44 @@ function _arRenderCal() {
                     'July','August','September','October','November','December'];
     label.textContent = `${MONTHS[_arMonth]} ${_arYear}`;
 
-    const today      = new Date(); today.setHours(0, 0, 0, 0);
-    const firstDow   = new Date(_arYear, _arMonth, 1).getDay();
-    const daysInMonth = new Date(_arYear, _arMonth + 1, 0).getDate();
+    const today       = new Date(); today.setHours(0, 0, 0, 0);
+    const lastOfMonth = new Date(_arYear, _arMonth + 1, 0);
 
-    let html = ['Su','Mo','Tu','We','Th','Fr','Sa'].map(d =>
-        `<div class="cal-day-hdr">${d}</div>`).join('');
-    for (let i = 0; i < firstDow; i++) html += '<div class="cal-day other-month"></div>';
+    // Find the Monday on or before the 1st of the month
+    const firstOfMonth = new Date(_arYear, _arMonth, 1);
+    const dow1 = firstOfMonth.getDay(); // 0=Sun
+    const daysBack = dow1 === 0 ? 6 : dow1 - 1;
+    const startMon = new Date(firstOfMonth);
+    startMon.setDate(startMon.getDate() - daysBack);
 
-    for (let day = 1; day <= daysInMonth; day++) {
-        const d       = new Date(_arYear, _arMonth, day);
-        const dow     = d.getDay();
-        const dateStr = `${_arYear}-${String(_arMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-        const sel     = _arDates.get(dateStr);
-        let cls = 'cal-day';
-        if (dow === 0 || dow === 6) cls += ' weekend';
-        else if (d < today)         cls += ' past';
-        else if (sel === 'full')    cls += ' sel-full';
-        else if (sel === 'half')    cls += ' sel-half';
-        const badge = sel ? `<span class="ar-cal-badge">${sel === 'half' ? '½' : 'F'}</span>` : '';
-        html += `<div class="${cls}" data-date="${dateStr}">${day}${badge}</div>`;
+    let html = ['MON','TUE','WED','THU','FRI'].map(d =>
+        `<div class="ar-cal-hdr">${d}</div>`).join('');
+
+    let weekStart = new Date(startMon);
+    while (weekStart <= lastOfMonth) {
+        for (let wd = 0; wd < 5; wd++) {
+            const curr = new Date(weekStart);
+            curr.setDate(weekStart.getDate() + wd);
+            const inMonth = curr.getMonth() === _arMonth && curr.getFullYear() === _arYear;
+            const dateStr = `${curr.getFullYear()}-${String(curr.getMonth()+1).padStart(2,'0')}-${String(curr.getDate()).padStart(2,'0')}`;
+            const isPast  = curr < today;
+            const sel     = _arDates.get(dateStr);
+
+            let cls = 'ar-cal-day';
+            if (!inMonth)         cls += ' other-month';
+            else if (isPast)      cls += ' past';
+            else if (sel==='full') cls += ' sel-full';
+            else if (sel==='half') cls += ' sel-half';
+
+            const badge   = sel ? `<span class="ar-day-badge">${sel === 'half' ? '½ Day' : 'Full Day'}</span>` : '';
+            const attr    = (inMonth && !isPast) ? ` data-date="${dateStr}"` : '';
+            html += `<div class="${cls}"${attr}><span class="ar-day-num">${curr.getDate()}</span>${badge}</div>`;
+        }
+        weekStart.setDate(weekStart.getDate() + 7);
     }
-    const rem = (firstDow + daysInMonth) % 7;
-    if (rem) for (let i = rem; i < 7; i++) html += '<div class="cal-day other-month"></div>';
 
     grid.innerHTML = html;
-    grid.querySelectorAll('.cal-day:not(.other-month):not(.weekend):not(.past)').forEach(cell => {
+    grid.querySelectorAll('.ar-cal-day[data-date]').forEach(cell => {
         cell.addEventListener('click', () => _arDayClick(cell.dataset.date));
     });
 }
