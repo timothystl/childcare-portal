@@ -132,6 +132,7 @@ function renderTable(data) {
                 <td class="discount-cell">${discLabel}</td>
                 <td class="actions-cell">
                     <button class="btn-secondary btn-edit-days" data-id="${reg.id}">Edit Days</button>
+                    <button class="btn-secondary btn-edit-bill" data-id="${reg.id}" title="Edit Bill">&#128178; Bill</button>
                     <button class="btn-delete" data-id="${reg.id}">Delete</button>
                 </td>
             </tr>`;
@@ -159,21 +160,56 @@ function renderTable(data) {
             if (reg) openEditDaysModal(reg);
         });
     });
+
+    tbody.querySelectorAll('.btn-edit-bill').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const id  = e.currentTarget.getAttribute('data-id');
+            const reg = allRegistrations.find(r => String(r.id) === id);
+            if (reg) openEditBillModal(reg);
+        });
+    });
 }
 
 // ============================================================
 // EDIT DAYS MODAL
 // ============================================================
-let editDaysReg = null;
+let editDaysReg    = null;
+let _calViewYear   = null;
+let _calViewMonth  = null; // 0-indexed
 
 function openEditDaysModal(reg) {
     editDaysReg = reg;
     document.getElementById('editDaysTitle').textContent =
         `Edit Days — ${reg.child_name}`;
-    document.getElementById('editDaysDate').value = '';
     document.getElementById('editDaysDayType').value = 'full';
     document.getElementById('editDaysWaitlist').checked = false;
     document.getElementById('editDaysError').textContent = '';
+
+    // Initialize calendar to the month of the first care date, or current month
+    const firstDate = (reg.registration_dates || [])
+        .slice().sort((a, b) => a.care_date.localeCompare(b.care_date))[0];
+    const seed = firstDate ? new Date(firstDate.care_date + 'T12:00:00') : new Date();
+    _calViewYear  = seed.getFullYear();
+    _calViewMonth = seed.getMonth();
+
+    // Infant (Bear room) recurring days reminder
+    const noteEl = document.getElementById('editDaysRecurringNote');
+    noteEl.style.display = 'none';
+    noteEl.textContent   = '';
+    const bearRoom = ROOMS.find(r => r.ageMaxMonths != null && r.ageMaxMonths <= 12);
+    const isInfant = bearRoom && reg.room_id === bearRoom.id;
+    if (isInfant) {
+        fetchStudentRecurringDays(reg.parent_email, reg.child_name).then(recurDays => {
+            if (recurDays) {
+                noteEl.textContent = `\uD83D\uDD01 Infant schedule: ${recurDays.replace(/,/g, ', ')} — enter these days for each month`;
+            } else {
+                noteEl.textContent = '\u2139\uFE0F No recurring days set for this infant — edit in Families to add a reminder';
+            }
+            noteEl.style.display = 'block';
+        }).catch(() => {});
+    }
+
+    renderEditCalGrid();
     renderEditDaysList();
     document.getElementById('editDaysModal').classList.remove('hidden');
 }
@@ -241,48 +277,211 @@ document.getElementById('editDaysClose')?.addEventListener('click', () => {
     editDaysReg = null;
 });
 
-document.getElementById('editDaysAddBtn')?.addEventListener('click', async () => {
-    const dateVal  = document.getElementById('editDaysDate').value;
-    const dayType  = document.getElementById('editDaysDayType').value;
-    const waitlist = document.getElementById('editDaysWaitlist').checked;
-    const errEl    = document.getElementById('editDaysError');
+document.getElementById('editDaysCalPrev')?.addEventListener('click', () => {
+    _calViewMonth--;
+    if (_calViewMonth < 0) { _calViewMonth = 11; _calViewYear--; }
+    renderEditCalGrid();
+});
+document.getElementById('editDaysCalNext')?.addEventListener('click', () => {
+    _calViewMonth++;
+    if (_calViewMonth > 11) { _calViewMonth = 0; _calViewYear++; }
+    renderEditCalGrid();
+});
 
-    if (!dateVal) { errEl.textContent = 'Please select a date.'; return; }
-    if (!editDaysReg) return;
+function renderEditCalGrid() {
+    const grid  = document.getElementById('editDaysCalGrid');
+    const label = document.getElementById('editDaysCalLabel');
+    if (!grid || !label) return;
 
-    // Check for duplicate
-    if ((editDaysReg.registration_dates || []).some(d => d.care_date === dateVal)) {
-        errEl.textContent = 'That date is already on this registration.';
-        return;
+    const DAYS_SHORT = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    const MONTHS     = ['January','February','March','April','May','June',
+                        'July','August','September','October','November','December'];
+    label.textContent = `${MONTHS[_calViewMonth]} ${_calViewYear}`;
+
+    // Build a set of existing care dates for fast lookup
+    const existingMap = {}; // care_date -> registration_date obj
+    (editDaysReg?.registration_dates || []).forEach(d => { existingMap[d.care_date] = d; });
+
+    // First day of month and total days
+    const firstDow = new Date(_calViewYear, _calViewMonth, 1).getDay(); // 0=Sun
+    const daysInMonth = new Date(_calViewYear, _calViewMonth + 1, 0).getDate();
+
+    let html = DAYS_SHORT.map(d => `<div class="cal-day-hdr">${d}</div>`).join('');
+
+    // Blank cells before the 1st
+    for (let i = 0; i < firstDow; i++) {
+        html += '<div class="cal-day other-month"></div>';
     }
 
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${_calViewYear}-${String(_calViewMonth + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const dow = new Date(_calViewYear, _calViewMonth, day).getDay();
+        const isWeekend = dow === 0 || dow === 6;
+        const existing  = existingMap[dateStr];
+        let cls = 'cal-day';
+        if (isWeekend) {
+            cls += ' weekend';
+        } else if (existing) {
+            cls += existing.waitlisted ? ' sel-waitlist' : (existing.day_type === 'half' ? ' sel-half' : ' sel-full');
+        }
+        const title = existing
+            ? `${existing.day_type === 'half' ? 'Half Day' : 'Full Day'}${existing.waitlisted ? ' (Waitlisted)' : ''} — click to remove`
+            : (isWeekend ? '' : 'Click to add');
+        html += `<div class="${cls}" data-date="${dateStr}" title="${title}">${day}</div>`;
+    }
+
+    // Fill trailing cells to complete last week row
+    const totalCells = firstDow + daysInMonth;
+    const remainder  = totalCells % 7;
+    if (remainder > 0) {
+        for (let i = remainder; i < 7; i++) html += '<div class="cal-day other-month"></div>';
+    }
+
+    grid.innerHTML = html;
+
+    grid.querySelectorAll('.cal-day:not(.other-month):not(.weekend)').forEach(cell => {
+        cell.addEventListener('click', () => _handleCalDayClick(cell.dataset.date));
+    });
+}
+
+async function _handleCalDayClick(dateStr) {
+    if (!editDaysReg) return;
+    const errEl    = document.getElementById('editDaysError');
     errEl.textContent = '';
-    const btn = document.getElementById('editDaysAddBtn');
-    btn.disabled = true;
-    try {
-        const regSnapshot = editDaysReg; // capture before reload
-        await addRegistrationDate(editDaysReg.id, editDaysReg.room_id, dateVal, dayType, waitlist);
-        // Reload registration to get the new date's ID
-        const fresh = await fetchAllRegistrations();
-        allRegistrations = fresh;
-        editDaysReg = fresh.find(r => r.id === editDaysReg.id) || editDaysReg;
-        renderEditDaysList();
-        renderTable(allRegistrations);
-        document.getElementById('editDaysDate').value = '';
-        // Notify parent (non-blocking)
-        if (!waitlist) {
-            const dateLabel  = friendlyShort(dateVal);
-            const typeLabel  = dayType === 'half' ? 'half day' : 'full day';
+
+    const existing = (editDaysReg.registration_dates || []).find(d => d.care_date === dateStr);
+
+    if (existing) {
+        // Remove
+        if (!confirm(`Remove ${friendlyShort(dateStr)} from this registration?`)) return;
+        try {
+            const removedDate = existing;
+            await deleteRegistrationDate(existing.id);
+            editDaysReg.registration_dates = editDaysReg.registration_dates.filter(d => d.id !== existing.id);
+            allRegistrations = allRegistrations.map(r => r.id === editDaysReg.id ? editDaysReg : r);
+            renderEditCalGrid();
+            renderEditDaysList();
+            renderTable(allRegistrations);
             _sendSchedulePush(
-                regSnapshot.parent_email,
-                regSnapshot.child_name,
+                editDaysReg.parent_email, editDaysReg.child_name,
                 'Schedule Update — Timothy Lutheran MDO',
-                `${regSnapshot.child_name} has been added on ${dateLabel} (${typeLabel}).`
+                `${editDaysReg.child_name}'s care day on ${friendlyShort(removedDate.care_date)} has been removed.`
             );
+        } catch (err) {
+            errEl.textContent = 'Remove failed: ' + err.message;
+        }
+    } else {
+        // Add
+        const dayType  = document.getElementById('editDaysDayType').value;
+        const waitlist = document.getElementById('editDaysWaitlist').checked;
+        try {
+            const regSnapshot = editDaysReg;
+            await addRegistrationDate(editDaysReg.id, editDaysReg.room_id, dateStr, dayType, waitlist);
+            const fresh = await fetchAllRegistrations();
+            allRegistrations = fresh;
+            editDaysReg = fresh.find(r => r.id === editDaysReg.id) || editDaysReg;
+            renderEditCalGrid();
+            renderEditDaysList();
+            renderTable(allRegistrations);
+            if (!waitlist) {
+                const typeLabel = dayType === 'half' ? 'half day' : 'full day';
+                _sendSchedulePush(
+                    regSnapshot.parent_email, regSnapshot.child_name,
+                    'Schedule Update — Timothy Lutheran MDO',
+                    `${regSnapshot.child_name} has been added on ${friendlyShort(dateStr)} (${typeLabel}).`
+                );
+            }
+        } catch (err) {
+            errEl.textContent = 'Add failed: ' + err.message;
+        }
+    }
+}
+
+// ============================================================
+// EDIT BILL MODAL
+// ============================================================
+let _editBillReg   = null;
+let _editBillMonth = null;
+
+async function openEditBillModal(reg) {
+    _editBillReg = reg;
+
+    // Determine month from first care date
+    const dates = (reg.registration_dates || [])
+        .slice().sort((a, b) => a.care_date.localeCompare(b.care_date));
+    if (!dates.length) {
+        alert('No care dates on this registration — cannot edit bill.');
+        return;
+    }
+    _editBillMonth = dates[0].care_date.slice(0, 7); // YYYY-MM
+
+    const calculated = calcRegistrationBill(reg);
+    const [y, m]     = _editBillMonth.split('-').map(Number);
+    const monthLabel = `${MONTH_NAMES_ADMIN[m - 1]} ${y}`;
+
+    document.getElementById('editBillDesc').textContent       = `${monthLabel} — ${reg.child_name}`;
+    document.getElementById('editBillCalculated').textContent = `$${calculated.toFixed(2)}`;
+    document.getElementById('editBillAmount').value           = calculated.toFixed(2);
+
+    const overrideNote = document.getElementById('editBillOverrideNote');
+    overrideNote.style.display = 'none';
+
+    try {
+        const existing = await fetchBillingOverride(_editBillMonth, reg.parent_email, reg.child_name);
+        if (existing) {
+            document.getElementById('editBillCurrentAmt').textContent = `$${parseFloat(existing.override_amount).toFixed(2)}`;
+            document.getElementById('editBillAmount').value            = parseFloat(existing.override_amount).toFixed(2);
+            overrideNote.style.display = 'block';
         }
     } catch (err) {
-        errEl.textContent = 'Add failed: ' + err.message;
+        console.warn('fetchBillingOverride failed:', err);
+    }
+
+    document.getElementById('editBillModal').classList.remove('hidden');
+}
+
+document.getElementById('editBillClose')?.addEventListener('click', () => {
+    document.getElementById('editBillModal').classList.add('hidden');
+    _editBillReg = null; _editBillMonth = null;
+});
+document.getElementById('editBillCancelBtn')?.addEventListener('click', () => {
+    document.getElementById('editBillModal').classList.add('hidden');
+    _editBillReg = null; _editBillMonth = null;
+});
+
+document.getElementById('editBillSaveBtn')?.addEventListener('click', async () => {
+    if (!_editBillReg || !_editBillMonth) return;
+    const amount = parseFloat(document.getElementById('editBillAmount').value);
+    if (isNaN(amount) || amount < 0) { alert('Please enter a valid amount.'); return; }
+    const btn = document.getElementById('editBillSaveBtn');
+    btn.disabled = true;
+    try {
+        await upsertBillingOverride({
+            month:           _editBillMonth,
+            parent_email:    _editBillReg.parent_email,
+            child_name:      _editBillReg.child_name,
+            override_amount: amount,
+        });
+        document.getElementById('editBillModal').classList.add('hidden');
+        renderTable(allRegistrations); // refresh bill column
+    } catch (err) {
+        alert('Save failed: ' + err.message);
     } finally {
+        btn.disabled = false;
+    }
+});
+
+document.getElementById('editBillRemoveBtn')?.addEventListener('click', async () => {
+    if (!_editBillReg || !_editBillMonth) return;
+    if (!confirm('Remove the billing override? The calculated amount will be restored.')) return;
+    const btn = document.getElementById('editBillRemoveBtn');
+    btn.disabled = true;
+    try {
+        await deleteBillingOverride(_editBillMonth, _editBillReg.parent_email, _editBillReg.child_name);
+        document.getElementById('editBillModal').classList.add('hidden');
+        renderTable(allRegistrations);
+    } catch (err) {
+        alert('Remove failed: ' + err.message);
         btn.disabled = false;
     }
 });
