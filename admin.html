@@ -610,35 +610,6 @@
                 </div>
             </section>
 
-            <!-- Attendance & Revenue (unified) -->
-            <section class="admin-section collapsible-section" id="attendanceRevenueSection">
-                <h2>📊 Attendance &amp; Revenue</h2>
-                <p class="section-desc">Monthly attendance and net revenue across all rooms. Historical months use imported data; current and future months reflect live registrations. Click any month row to view daily detail.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="arDateFrom">From</label>
-                        <input type="date" id="arDateFrom">
-                    </div>
-                    <div class="roster-field">
-                        <label for="arDateTo">To</label>
-                        <input type="date" id="arDateTo">
-                    </div>
-                    <div class="roster-field">
-                        <label for="arRoomFilter">Room</label>
-                        <select id="arRoomFilter">
-                            <option value="">All Rooms</option>
-                        </select>
-                    </div>
-                    <div class="roster-btns">
-                        <button id="generateArBtn" class="btn-secondary">Generate</button>
-                        <button id="exportArBtn" class="btn-primary">&#8595; Export Excel</button>
-                    </div>
-                </div>
-                <div id="arContent">
-                    <p class="empty-hint">Select a date range above and click Generate.</p>
-                </div>
-            </section>
-
             <!-- Family Billing Summary -->
             <section class="admin-section collapsible-section" id="familyBillingSection">
                 <h2>👨‍👩‍👧 Family Billing Summary</h2>
@@ -656,29 +627,6 @@
                 </div>
                 <div id="familyBillingContent">
                     <p class="empty-hint">Select a month above and click Generate.</p>
-                </div>
-            </section>
-
-            <!-- Room P&L -->
-            <section class="admin-section collapsible-section" id="roomPnlSection">
-                <h2>💰 Room Profitability (P&amp;L)</h2>
-                <p class="section-desc">Monthly revenue vs. labor cost per room. Labor is calculated from saved staff schedules — run the auto-fill planner and save a schedule for each week to populate cost data. Salary staff costs are prorated by shift hours.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="pnlDateFrom">From</label>
-                        <input type="date" id="pnlDateFrom">
-                    </div>
-                    <div class="roster-field">
-                        <label for="pnlDateTo">To</label>
-                        <input type="date" id="pnlDateTo">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="generateRoomPnlBtn" class="btn-secondary">Generate</button>
-                        <button id="exportRoomPnlBtn" class="btn-primary">&#8595; Export Excel</button>
-                    </div>
-                </div>
-                <div id="roomPnlContent">
-                    <p class="empty-hint">Select a date range above and click Generate.</p>
                 </div>
             </section>
 
@@ -1035,6 +983,58 @@
                 </div>
                 <button id="runModelBtn" class="btn-primary">Run Model</button>
                 <div id="modelResults" style="margin-top:1.25rem"></div>
+            </section>
+
+            <!-- Attendance & Revenue (unified) -->
+            <section class="admin-section collapsible-section" id="attendanceRevenueSection">
+                <h2>📊 Attendance &amp; Revenue</h2>
+                <p class="section-desc">Monthly attendance and net revenue across all rooms. Historical months use imported data; current and future months reflect live registrations. Click any month row to view daily detail.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="arDateFrom">From</label>
+                        <input type="date" id="arDateFrom">
+                    </div>
+                    <div class="roster-field">
+                        <label for="arDateTo">To</label>
+                        <input type="date" id="arDateTo">
+                    </div>
+                    <div class="roster-field">
+                        <label for="arRoomFilter">Room</label>
+                        <select id="arRoomFilter">
+                            <option value="">All Rooms</option>
+                        </select>
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateArBtn" class="btn-secondary">Generate</button>
+                        <button id="exportArBtn" class="btn-primary">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="arContent">
+                    <p class="empty-hint">Select a date range above and click Generate.</p>
+                </div>
+            </section>
+
+            <!-- Room P&L -->
+            <section class="admin-section collapsible-section" id="roomPnlSection">
+                <h2>💰 Room Profitability (P&amp;L)</h2>
+                <p class="section-desc">Monthly revenue vs. labor cost per room. Labor is calculated from saved staff schedules — run the auto-fill planner and save a schedule for each week to populate cost data. Salary staff costs are prorated by shift hours.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="pnlDateFrom">From</label>
+                        <input type="date" id="pnlDateFrom">
+                    </div>
+                    <div class="roster-field">
+                        <label for="pnlDateTo">To</label>
+                        <input type="date" id="pnlDateTo">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateRoomPnlBtn" class="btn-secondary">Generate</button>
+                        <button id="exportRoomPnlBtn" class="btn-primary">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="roomPnlContent">
+                    <p class="empty-hint">Select a date range above and click Generate.</p>
+                </div>
             </section>
 
         </div><!-- /#tab-finance -->
