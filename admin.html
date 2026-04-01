@@ -136,7 +136,10 @@
         <div class="tab-pane hidden" id="tab-registrations">
 
             <section class="table-section collapsible-section" id="allRegistrationsSection">
-                <h2>All Registrations</h2>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+                    <h2 style="margin:0">All Registrations</h2>
+                    <button id="adminNewRegBtn" class="btn-primary" style="font-size:.875rem">&#43; New Registration</button>
+                </div>
                 <div class="filters">
                     <input type="text" id="searchInput" placeholder="Search by parent, child, or email…">
                     <select id="roomFilter">
@@ -1170,6 +1173,65 @@
             <div class="merge-footer">
                 <button type="button" id="mergeCancelBtn" class="btn-ghost">Cancel</button>
                 <button type="button" id="mergeConfirmBtn" class="btn-warning">Merge &amp; Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin New Registration Modal -->
+    <div id="adminRegModal" class="rcal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="rcal-dialog" style="max-width:600px;max-height:90vh;overflow-y:auto">
+            <div class="rcal-header">
+                <h2 class="rcal-title">New Registration</h2>
+                <button id="adminRegClose" class="rcal-close">&#10005;</button>
+            </div>
+
+            <!-- Step 1: Child search -->
+            <div id="adminRegStep1">
+                <p style="font-size:.88em;color:#6b7280;margin:0 0 .6rem">Search by child name, parent name, or email.</p>
+                <input id="adminRegSearch" type="text" placeholder="Type to search families…" autocomplete="off"
+                       style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:8px;
+                              font-size:.9em;box-sizing:border-box;margin-bottom:.5rem">
+                <div id="adminRegResults"></div>
+            </div>
+
+            <!-- Step 2+3: Calendar + review (shown after child selected) -->
+            <div id="adminRegMain" style="display:none">
+                <!-- Selected child banner -->
+                <div style="display:flex;align-items:center;gap:.75rem;background:#f0f4ff;
+                            border-radius:8px;padding:.5rem .75rem;margin-bottom:.75rem;font-size:.88em">
+                    <span><strong id="adminRegChildName"></strong>
+                          <span style="color:#6b7280;margin-left:.4rem" id="adminRegChildRoom"></span></span>
+                    <button type="button" id="adminRegChangeChild" class="btn-xs" style="margin-left:auto">&#9664; Change</button>
+                </div>
+
+                <!-- Month navigator -->
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+                    <button type="button" id="adminRegCalPrev" class="btn-secondary" style="padding:.2rem .65rem;font-size:1rem;line-height:1">&#8592;</button>
+                    <strong id="adminRegCalLabel" style="flex:1;text-align:center;font-size:.95em"></strong>
+                    <button type="button" id="adminRegCalNext" class="btn-secondary" style="padding:.2rem .65rem;font-size:1rem;line-height:1">&#8594;</button>
+                </div>
+
+                <!-- Calendar grid -->
+                <div id="adminRegCalGrid" style="margin-bottom:.5rem"></div>
+
+                <!-- Inline day-type picker (appears below grid on day click) -->
+                <div id="adminRegDayPicker" style="display:none;background:#f8fafc;border:1px solid #bfdbfe;
+                     border-radius:8px;padding:.6rem .75rem;margin-bottom:.5rem">
+                    <p id="adminRegPickerDate" style="font-weight:600;font-size:.9em;margin:0 0 .4rem"></p>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                        <button type="button" id="adminRegPickerFull" class="btn-primary" style="font-size:.85rem"></button>
+                        <button type="button" id="adminRegPickerHalf" class="btn-secondary" style="font-size:.85rem"></button>
+                        <button type="button" id="adminRegPickerCancel" class="btn-ghost" style="font-size:.85rem">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Review: selected dates + billing -->
+                <div id="adminRegReview"></div>
+
+                <div id="adminRegError" style="color:#c62828;font-size:.85em;min-height:1.1em;margin:.3rem 0"></div>
+                <button type="button" id="adminRegSubmit" class="btn-primary" disabled style="margin-top:.25rem;width:100%">
+                    Create Registration
+                </button>
             </div>
         </div>
     </div>
