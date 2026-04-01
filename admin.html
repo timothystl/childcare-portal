@@ -827,6 +827,19 @@
                     </div>
                     <div class="staff-form-row">
                         <div class="fm-field">
+                            <label>Exclude from Rooms <span style="font-weight:400;color:var(--text-muted)">(floaters — skip these in auto-scheduler)</span></label>
+                            <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px">
+                                <label style="font-size:.88em"><input type="checkbox" class="sfExcludeRoom" data-room-id="bear"> &#x1F43B; Bear</label>
+                                <label style="font-size:.88em"><input type="checkbox" class="sfExcludeRoom" data-room-id="bee"> &#x1F41D; Bee</label>
+                                <label style="font-size:.88em"><input type="checkbox" class="sfExcludeRoom" data-room-id="turtle"> &#x1F422; Turtle</label>
+                                <label style="font-size:.88em"><input type="checkbox" class="sfExcludeRoom" data-room-id="goose"> &#x1FAB6; Goose</label>
+                                <label style="font-size:.88em"><input type="checkbox" class="sfExcludeRoom" data-room-id="owl"> &#x1F989; Owl</label>
+                                <label style="font-size:.88em"><input type="checkbox" class="sfExcludeRoom" data-room-id="summer"> &#x2600;&#xFE0F; Summer</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="staff-form-row">
+                        <div class="fm-field">
                             <label>Shift Availability by Day</label>
                             <table class="shift-pref-grid">
                                 <thead>
@@ -1264,21 +1277,19 @@
                 </div>
                 <!-- Calendar grid — populated by JS -->
                 <div id="editDaysCalGrid" style="margin-bottom:.75rem"></div>
-                <!-- Day type + waitlist -->
-                <div style="display:flex;gap:.75rem;align-items:center;font-size:.88em;flex-wrap:wrap;
-                            padding-top:.75rem;border-top:1px solid var(--border)">
-                    <label>Type:
-                        <select id="editDaysDayType" style="padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-size:.9em;margin-left:4px">
-                            <option value="full">Full Day</option>
-                            <option value="half">Half Day</option>
-                        </select>
-                    </label>
-                    <label style="display:flex;align-items:center;gap:4px">
-                        <input type="checkbox" id="editDaysWaitlist"> Waitlisted
-                    </label>
-                    <span style="color:var(--text-muted);font-size:.82em">Click a day to add · click again to remove</span>
+                <!-- Inline day picker (shown when an empty weekday is clicked) -->
+                <div id="editDaysPicker" style="display:none;background:#f8fafc;border:1px solid #bfdbfe;
+                     border-radius:8px;padding:.75rem 1rem;margin-bottom:.75rem">
+                    <p id="editDaysPickerDate" style="font-weight:600;font-size:.9em;margin:0 0 .5rem;color:var(--navy)"></p>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                        <button type="button" id="editDaysPickerFull" class="btn-primary" style="font-size:.85rem">Full Day</button>
+                        <button type="button" id="editDaysPickerHalf" class="btn-secondary" style="font-size:.85rem">Half Day</button>
+                        <button type="button" id="editDaysPickerWaitlist" class="btn-secondary" style="font-size:.85rem">Waitlisted</button>
+                        <button type="button" id="editDaysPickerCancel" class="btn-ghost" style="font-size:.85rem">Cancel</button>
+                    </div>
                 </div>
-                <div id="editDaysError" style="color:#c62828;font-size:.85em;margin-top:6px;min-height:18px"></div>
+                <p style="color:var(--text-muted);font-size:.82em;margin:0 0 4px">Click a day to add &middot; click again to remove</p>
+                <div id="editDaysError" style="color:#c62828;font-size:.85em;margin-top:4px;min-height:18px"></div>
             </div>
         </div>
     </div>

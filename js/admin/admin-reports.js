@@ -655,8 +655,9 @@ async function autoFillStaffSchedule() {
                     const availDays = avail?.dayPeriods
                         ? Object.keys(avail.dayPeriods).filter(d => avail.dayPeriods[d]?.length > 0)
                         : (avail?.days ?? ['Mon','Tue','Wed','Thu','Fri']);
+                    const excluded = avail?.excluded_rooms || [];
                     return availDays.includes(dayName) &&
-                        (s.room_id === room.id || !s.room_id); // room match or float
+                        (s.room_id === room.id || (!s.room_id && !excluded.includes(room.id))); // room match or float (not excluded)
                 });
 
                 // Sort by hours used ascending so we spread load evenly

@@ -173,16 +173,17 @@ function renderTable(data) {
 // ============================================================
 // EDIT DAYS MODAL
 // ============================================================
-let editDaysReg    = null;
+let editDaysReg        = null;
+let _editDaysPickDate  = null;
 let _calViewYear   = null;
 let _calViewMonth  = null; // 0-indexed
 
 function openEditDaysModal(reg) {
     editDaysReg = reg;
+    _editDaysPickDate = null;
     document.getElementById('editDaysTitle').textContent =
         `Edit Days — ${reg.child_name}`;
-    document.getElementById('editDaysDayType').value = 'full';
-    document.getElementById('editDaysWaitlist').checked = false;
+    document.getElementById('editDaysPicker').style.display = 'none';
     document.getElementById('editDaysError').textContent = '';
 
     // Initialize calendar to the month of the first care date, or current month
@@ -280,12 +281,23 @@ document.getElementById('editDaysClose')?.addEventListener('click', () => {
 document.getElementById('editDaysCalPrev')?.addEventListener('click', () => {
     _calViewMonth--;
     if (_calViewMonth < 0) { _calViewMonth = 11; _calViewYear--; }
+    _editDaysPickDate = null;
+    document.getElementById('editDaysPicker').style.display = 'none';
     renderEditCalGrid();
 });
 document.getElementById('editDaysCalNext')?.addEventListener('click', () => {
     _calViewMonth++;
     if (_calViewMonth > 11) { _calViewMonth = 0; _calViewYear++; }
+    _editDaysPickDate = null;
+    document.getElementById('editDaysPicker').style.display = 'none';
     renderEditCalGrid();
+});
+document.getElementById('editDaysPickerFull')?.addEventListener('click',     () => _editDaysPickSelect('full', false));
+document.getElementById('editDaysPickerHalf')?.addEventListener('click',     () => _editDaysPickSelect('half', false));
+document.getElementById('editDaysPickerWaitlist')?.addEventListener('click', () => _editDaysPickSelect('full', true));
+document.getElementById('editDaysPickerCancel')?.addEventListener('click',   () => {
+    _editDaysPickDate = null;
+    document.getElementById('editDaysPicker').style.display = 'none';
 });
 
 function renderEditCalGrid() {
@@ -371,29 +383,39 @@ async function _handleCalDayClick(dateStr) {
             errEl.textContent = 'Remove failed: ' + err.message;
         }
     } else {
-        // Add
-        const dayType  = document.getElementById('editDaysDayType').value;
-        const waitlist = document.getElementById('editDaysWaitlist').checked;
-        try {
-            const regSnapshot = editDaysReg;
-            await addRegistrationDate(editDaysReg.id, editDaysReg.room_id, dateStr, dayType, waitlist);
-            const fresh = await fetchAllRegistrations();
-            allRegistrations = fresh;
-            editDaysReg = fresh.find(r => r.id === editDaysReg.id) || editDaysReg;
-            renderEditCalGrid();
-            renderEditDaysList();
-            renderTable(allRegistrations);
-            if (!waitlist) {
-                const typeLabel = dayType === 'half' ? 'half day' : 'full day';
-                _sendSchedulePush(
-                    regSnapshot.parent_email, regSnapshot.child_name,
-                    'Schedule Update — Timothy Lutheran MDO',
-                    `${regSnapshot.child_name} has been added on ${friendlyShort(dateStr)} (${typeLabel}).`
-                );
-            }
-        } catch (err) {
-            errEl.textContent = 'Add failed: ' + err.message;
+        // Show inline picker
+        _editDaysPickDate = dateStr;
+        document.getElementById('editDaysPickerDate').textContent = friendlyShort(dateStr);
+        document.getElementById('editDaysPicker').style.display = '';
+        errEl.textContent = '';
+    }
+}
+
+async function _editDaysPickSelect(dayType, waitlist) {
+    if (!_editDaysPickDate || !editDaysReg) return;
+    const dateStr = _editDaysPickDate;
+    _editDaysPickDate = null;
+    document.getElementById('editDaysPicker').style.display = 'none';
+    const errEl = document.getElementById('editDaysError');
+    try {
+        const regSnapshot = editDaysReg;
+        await addRegistrationDate(editDaysReg.id, editDaysReg.room_id, dateStr, dayType, waitlist);
+        const fresh = await fetchAllRegistrations();
+        allRegistrations = fresh;
+        editDaysReg = fresh.find(r => r.id === editDaysReg.id) || editDaysReg;
+        renderEditCalGrid();
+        renderEditDaysList();
+        renderTable(allRegistrations);
+        if (!waitlist) {
+            const typeLabel = dayType === 'half' ? 'half day' : 'full day';
+            _sendSchedulePush(
+                regSnapshot.parent_email, regSnapshot.child_name,
+                'Schedule Update — Timothy Lutheran MDO',
+                `${regSnapshot.child_name} has been added on ${friendlyShort(dateStr)} (${typeLabel}).`
+            );
         }
+    } catch (err) {
+        errEl.textContent = 'Add failed: ' + err.message;
     }
 }
 
@@ -1186,6 +1208,7 @@ let _arYear      = null;
 let _arMonth     = null;   // 0-indexed
 let _arDates     = new Map(); // dateStr → 'full'|'half'
 let _arPickDate  = null;
+let _arCapacity  = {}; // dateStr → booked count for current month/room
 
 document.getElementById('adminNewRegBtn')?.addEventListener('click', _openAdminRegModal);
 document.getElementById('adminRegClose')?.addEventListener('click',  _closeAdminRegModal);
@@ -1200,13 +1223,13 @@ document.getElementById('adminRegCalPrev')?.addEventListener('click', () => {
     if (--_arMonth < 0) { _arMonth = 11; _arYear--; }
     document.getElementById('adminRegDayPicker').style.display = 'none';
     _arPickDate = null;
-    _arRenderCal();
+    _arLoadCapacity();
 });
 document.getElementById('adminRegCalNext')?.addEventListener('click', () => {
     if (++_arMonth > 11) { _arMonth = 0; _arYear++; }
     document.getElementById('adminRegDayPicker').style.display = 'none';
     _arPickDate = null;
-    _arRenderCal();
+    _arLoadCapacity();
 });
 document.getElementById('adminRegPickerFull')?.addEventListener('click',   () => _arPickSelect('full'));
 document.getElementById('adminRegPickerHalf')?.addEventListener('click',   () => _arPickSelect('half'));
@@ -1312,8 +1335,23 @@ function _arSelectChild(family, student) {
     document.getElementById('adminRegMain').style.display    = '';
     document.getElementById('adminRegDayPicker').style.display = 'none';
 
-    _arRenderCal();
+    _arLoadCapacity();
     _arRenderReview();
+}
+
+async function _arLoadCapacity() {
+    _arCapacity = {};
+    if (!_arRoom) { _arRenderCal(); return; }
+    const daysInMonth = new Date(_arYear, _arMonth + 1, 0).getDate();
+    const dates = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dow = new Date(_arYear, _arMonth, d).getDay();
+        if (dow >= 1 && dow <= 5) {
+            dates.push(`${_arYear}-${String(_arMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+        }
+    }
+    try { _arCapacity = await fetchCapacityForDates(_arRoom.id, dates); } catch(e) { /* ignore */ }
+    _arRenderCal();
 }
 
 function _arRenderCal() {
@@ -1356,7 +1394,17 @@ function _arRenderCal() {
 
             const badge   = sel ? `<span class="ar-day-badge">${sel === 'half' ? '½ Day' : 'Full Day'}</span>` : '';
             const attr    = (inMonth && !isPast) ? ` data-date="${dateStr}"` : '';
-            html += `<div class="${cls}"${attr}><span class="ar-day-num">${curr.getDate()}</span>${badge}</div>`;
+            let capBadge  = '';
+            if (inMonth && !isPast && !sel) {
+                const cap    = _arRoom?.capacity || 0;
+                const booked = _arCapacity[dateStr] || 0;
+                if (cap > 0) {
+                    const avail  = cap - booked;
+                    const capCls = avail <= 0 ? 'ar-cap-full' : avail <= 2 ? 'ar-cap-near' : 'ar-cap-open';
+                    capBadge     = `<span class="ar-cap-badge ${capCls}">${booked}/${cap}</span>`;
+                }
+            }
+            html += `<div class="${cls}"${attr}><span class="ar-day-num">${curr.getDate()}</span>${badge}${capBadge}</div>`;
         }
         weekStart.setDate(weekStart.getDate() + 7);
     }

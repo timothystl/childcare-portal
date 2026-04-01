@@ -3077,3 +3077,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     margin-top: 4px;
     opacity: .9;
 }
+.ar-cap-badge { display:block; font-size:.68em; font-weight:600; margin-top:3px; border-radius:3px; padding:1px 3px; text-align:center; }
+.ar-cap-open  { color:#15803d; background:#dcfce7; }
+.ar-cap-near  { color:#b45309; background:#fef3c7; }
+.ar-cap-full  { color:#b91c1c; background:#fee2e2; }
