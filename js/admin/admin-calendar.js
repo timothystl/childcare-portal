@@ -192,8 +192,8 @@ function openEditDaysModal(reg) {
     _calViewYear  = seed.getFullYear();
     _calViewMonth = seed.getMonth();
 
-    // Infant (Bear room) recurring days reminder
-    const noteEl = document.getElementById('editDaysRecurringNote');
+    // Infant (Bear room) recurring days reminder note
+    const noteEl  = document.getElementById('editDaysRecurringNote');
     noteEl.style.display = 'none';
     noteEl.textContent   = '';
     const bearRoom = ROOMS.find(r => r.ageMaxMonths != null && r.ageMaxMonths <= 12);
@@ -201,9 +201,9 @@ function openEditDaysModal(reg) {
     if (isInfant) {
         fetchStudentRecurringDays(reg.parent_email, reg.child_name).then(recurDays => {
             if (recurDays) {
-                noteEl.textContent = `\uD83D\uDD01 Infant schedule: ${recurDays.replace(/,/g, ', ')} — enter these days for each month`;
+                noteEl.textContent = `\uD83D\uDD01 Recurring schedule: ${recurDays.replace(/,/g, ', ')}`;
             } else {
-                noteEl.textContent = '\u2139\uFE0F No recurring days set for this infant — edit in Families to add a reminder';
+                noteEl.textContent = '\u2139\uFE0F No recurring days set for this infant — set them in Families';
             }
             noteEl.style.display = 'block';
         }).catch(() => {});
