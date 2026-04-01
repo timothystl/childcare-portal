@@ -436,14 +436,7 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
  */
 async function fetchAllRegistrations({ sinceDate = null, untilDate = null } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    // Default: only load this month and next month (filtered by submission date).
-    // Pass sinceDate / untilDate to load a custom range when needed (e.g. for reports).
-    const now = new Date();
-    const defaultSince = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const defaultUntil = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59).toISOString();
-    const since = sinceDate || defaultSince;
-    const until = untilDate || defaultUntil;
-    const { data, error } = await sbClient
+    let query = sbClient
         .from('registrations')
         .select(`
             id, created_at, status,
@@ -451,9 +444,10 @@ async function fetchAllRegistrations({ sinceDate = null, untilDate = null } = {}
             child_name, child_age, child_dob, room_id,
             registration_dates ( id, care_date, waitlisted, day_type, room_id, change_fee )
         `)
-        .gte('created_at', since)
-        .lte('created_at', until)
         .order('created_at', { ascending: false });
+    if (sinceDate) query = query.gte('created_at', sinceDate);
+    if (untilDate) query = query.lte('created_at', untilDate);
+    const { data, error } = await query;
     if (error) throw error;
     return data || [];
 }
