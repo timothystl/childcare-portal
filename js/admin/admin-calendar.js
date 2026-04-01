@@ -1174,6 +1174,279 @@ function showOverrideStatus(val, saved) {
 }
 
 
+// ============================================================
+// ADMIN NEW REGISTRATION MODAL
+// Director-facing registration flow mirroring the parent form.
+// ============================================================
+let _arFamilies  = null;   // lazy-loaded family cache
+let _arFamily    = null;
+let _arStudent   = null;
+let _arRoom      = null;
+let _arYear      = null;
+let _arMonth     = null;   // 0-indexed
+let _arDates     = new Map(); // dateStr → 'full'|'half'
+let _arPickDate  = null;
+
+document.getElementById('adminNewRegBtn')?.addEventListener('click', _openAdminRegModal);
+document.getElementById('adminRegClose')?.addEventListener('click',  _closeAdminRegModal);
+document.getElementById('adminRegChangeChild')?.addEventListener('click', () => {
+    document.getElementById('adminRegStep1').style.display = '';
+    document.getElementById('adminRegMain').style.display  = 'none';
+    document.getElementById('adminRegSearch').value = '';
+    document.getElementById('adminRegResults').innerHTML = '';
+    _arFamily = null; _arStudent = null; _arRoom = null; _arDates = new Map();
+});
+document.getElementById('adminRegCalPrev')?.addEventListener('click', () => {
+    if (--_arMonth < 0) { _arMonth = 11; _arYear--; }
+    document.getElementById('adminRegDayPicker').style.display = 'none';
+    _arPickDate = null;
+    _arRenderCal();
+});
+document.getElementById('adminRegCalNext')?.addEventListener('click', () => {
+    if (++_arMonth > 11) { _arMonth = 0; _arYear++; }
+    document.getElementById('adminRegDayPicker').style.display = 'none';
+    _arPickDate = null;
+    _arRenderCal();
+});
+document.getElementById('adminRegPickerFull')?.addEventListener('click',   () => _arPickSelect('full'));
+document.getElementById('adminRegPickerHalf')?.addEventListener('click',   () => _arPickSelect('half'));
+document.getElementById('adminRegPickerCancel')?.addEventListener('click', () => {
+    document.getElementById('adminRegDayPicker').style.display = 'none';
+    _arPickDate = null;
+});
+document.getElementById('adminRegSearch')?.addEventListener('input', _arRunSearch);
+document.getElementById('adminRegSubmit')?.addEventListener('click', _arSubmit);
+
+async function _openAdminRegModal() {
+    _arFamily   = null; _arStudent = null; _arRoom   = null;
+    _arDates    = new Map(); _arPickDate = null;
+
+    document.getElementById('adminRegSearch').value         = '';
+    document.getElementById('adminRegResults').innerHTML    = '';
+    document.getElementById('adminRegStep1').style.display  = '';
+    document.getElementById('adminRegMain').style.display   = 'none';
+    document.getElementById('adminRegDayPicker').style.display = 'none';
+    document.getElementById('adminRegError').textContent    = '';
+    document.getElementById('adminRegModal').classList.remove('hidden');
+
+    if (!_arFamilies) {
+        document.getElementById('adminRegResults').innerHTML =
+            '<p style="color:#888;font-size:.85em;padding:4px 0">Loading families…</p>';
+        try {
+            _arFamilies = await fetchAllFamilies();
+            document.getElementById('adminRegResults').innerHTML = '';
+        } catch (err) {
+            document.getElementById('adminRegResults').innerHTML =
+                `<p style="color:#dc2626;font-size:.85em">Load failed: ${escHtml(err.message)}</p>`;
+        }
+    }
+}
+
+function _closeAdminRegModal() {
+    document.getElementById('adminRegModal').classList.add('hidden');
+}
+
+function _arRunSearch() {
+    const q   = (document.getElementById('adminRegSearch').value || '').toLowerCase().trim();
+    const out = document.getElementById('adminRegResults');
+    if (!_arFamilies || !q) { out.innerHTML = ''; return; }
+
+    const hits = [];
+    for (const fam of _arFamilies) {
+        if (hits.length >= 12) break;
+        const matchFam = (fam.parent_name  || '').toLowerCase().includes(q)
+                      || (fam.parent_email || '').toLowerCase().includes(q);
+        for (const st of (fam.students || [])) {
+            if (hits.length >= 12) break;
+            if (matchFam || (st.child_name || '').toLowerCase().includes(q)) {
+                hits.push({ fam, st });
+            }
+        }
+    }
+
+    if (!hits.length) {
+        out.innerHTML = '<p style="color:#888;font-size:.85em;padding:4px 0">No matches.</p>';
+        return;
+    }
+    out.innerHTML = hits.map((h, i) => {
+        const room = _arResolveRoom(h.st);
+        return `<div class="ar-result-row" data-idx="${i}"
+            style="padding:7px 10px;cursor:pointer;border-radius:6px;border:1px solid #e5e7eb;
+                   margin-bottom:4px;font-size:.88em;background:#fff">
+            <strong>${escHtml(h.st.child_name)}</strong>
+            <span style="color:#6b7280;margin-left:6px">${escHtml(room?.label || '—')}</span>
+            <span style="color:#9ca3af;margin-left:6px">— ${escHtml(h.fam.parent_name || h.fam.parent_email || '')}</span>
+        </div>`;
+    }).join('');
+    out.querySelectorAll('.ar-result-row').forEach(row => {
+        row.addEventListener('click', () => {
+            const { fam, st } = hits[parseInt(row.dataset.idx)];
+            _arSelectChild(fam, st);
+        });
+    });
+}
+
+function _arResolveRoom(student) {
+    if (student.room_override) return ROOMS.find(r => r.id === student.room_override) || null;
+    const dob = student.child_dob;
+    if (!dob) return ROOMS.find(r => r.status === 'active') || ROOMS[0];
+    const ageMonths = Math.floor((Date.now() - new Date(dob)) / (1000 * 60 * 60 * 24 * 30.44));
+    return ROOMS.find(r => r.ageMinMonths != null && r.ageMaxMonths != null
+        && ageMonths >= r.ageMinMonths && ageMonths <= r.ageMaxMonths)
+        || ROOMS.find(r => r.status === 'active') || ROOMS[0];
+}
+
+function _arSelectChild(family, student) {
+    _arFamily  = family;
+    _arStudent = student;
+    _arRoom    = _arResolveRoom(student);
+    _arDates   = new Map();
+
+    const now = new Date();
+    _arYear  = now.getFullYear();
+    _arMonth = now.getMonth();
+
+    document.getElementById('adminRegChildName').textContent = student.child_name;
+    document.getElementById('adminRegChildRoom').textContent = _arRoom?.label || '—';
+    document.getElementById('adminRegStep1').style.display   = 'none';
+    document.getElementById('adminRegMain').style.display    = '';
+    document.getElementById('adminRegDayPicker').style.display = 'none';
+
+    _arRenderCal();
+    _arRenderReview();
+}
+
+function _arRenderCal() {
+    const grid  = document.getElementById('adminRegCalGrid');
+    const label = document.getElementById('adminRegCalLabel');
+    if (!grid || !label) return;
+
+    const MONTHS = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+    label.textContent = `${MONTHS[_arMonth]} ${_arYear}`;
+
+    const today      = new Date(); today.setHours(0, 0, 0, 0);
+    const firstDow   = new Date(_arYear, _arMonth, 1).getDay();
+    const daysInMonth = new Date(_arYear, _arMonth + 1, 0).getDate();
+
+    let html = ['Su','Mo','Tu','We','Th','Fr','Sa'].map(d =>
+        `<div class="cal-day-hdr">${d}</div>`).join('');
+    for (let i = 0; i < firstDow; i++) html += '<div class="cal-day other-month"></div>';
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const d       = new Date(_arYear, _arMonth, day);
+        const dow     = d.getDay();
+        const dateStr = `${_arYear}-${String(_arMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const sel     = _arDates.get(dateStr);
+        let cls = 'cal-day';
+        if (dow === 0 || dow === 6) cls += ' weekend';
+        else if (d < today)         cls += ' past';
+        else if (sel === 'full')    cls += ' sel-full';
+        else if (sel === 'half')    cls += ' sel-half';
+        const badge = sel ? `<span class="ar-cal-badge">${sel === 'half' ? '½' : 'F'}</span>` : '';
+        html += `<div class="${cls}" data-date="${dateStr}">${day}${badge}</div>`;
+    }
+    const rem = (firstDow + daysInMonth) % 7;
+    if (rem) for (let i = rem; i < 7; i++) html += '<div class="cal-day other-month"></div>';
+
+    grid.innerHTML = html;
+    grid.querySelectorAll('.cal-day:not(.other-month):not(.weekend):not(.past)').forEach(cell => {
+        cell.addEventListener('click', () => _arDayClick(cell.dataset.date));
+    });
+}
+
+function _arDayClick(dateStr) {
+    // Click selected day → deselect
+    if (_arDates.has(dateStr)) {
+        _arDates.delete(dateStr);
+        document.getElementById('adminRegDayPicker').style.display = 'none';
+        _arPickDate = null;
+        _arRenderCal(); _arRenderReview();
+        return;
+    }
+    // Show picker
+    _arPickDate = dateStr;
+    const room    = _arRoom;
+    const fdRate  = room?.fullDayRate ?? 0;
+    const hdRate  = room?.halfDayRate ?? 0;
+    document.getElementById('adminRegPickerDate').textContent  = friendlyShort(dateStr);
+    document.getElementById('adminRegPickerFull').textContent  = `Full Day — $${fdRate}`;
+    const halfBtn = document.getElementById('adminRegPickerHalf');
+    if (hdRate && !room?.fullDayOnly) {
+        halfBtn.textContent  = `Half Day — $${hdRate}`;
+        halfBtn.style.display = '';
+    } else {
+        halfBtn.style.display = 'none';
+    }
+    document.getElementById('adminRegDayPicker').style.display = '';
+}
+
+function _arPickSelect(type) {
+    if (!_arPickDate) return;
+    _arDates.set(_arPickDate, type);
+    _arPickDate = null;
+    document.getElementById('adminRegDayPicker').style.display = 'none';
+    _arRenderCal(); _arRenderReview();
+}
+
+function _arRenderReview() {
+    const el = document.getElementById('adminRegReview');
+    if (!_arDates.size) {
+        el.innerHTML = '<p style="color:#9ca3af;font-size:.85em;margin:.4rem 0 0">No days selected — click weekdays on the calendar above.</p>';
+        document.getElementById('adminRegSubmit').disabled = true;
+        return;
+    }
+    const room = _arRoom;
+    let total = 0;
+    const rows = [..._arDates.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, type]) => {
+            const rate = type === 'full' ? (room?.fullDayRate || 0) : (room?.halfDayRate || 0);
+            const disc = _arStudent?.discount_type === 'staff'   ? rate
+                       : _arStudent?.discount_type === 'custom'  ? rate * (_arStudent.discount_value || 0) / 100 : 0;
+            const net  = rate - disc;
+            total += net;
+            return `<div style="display:flex;justify-content:space-between;font-size:.85em;padding:2px 0">
+                <span>${friendlyShort(date)} &mdash; ${type === 'half' ? 'Half Day' : 'Full Day'}</span>
+                <span>$${net.toFixed(2)}</span></div>`;
+        });
+    el.innerHTML = `<div style="border-top:1px solid #e5e7eb;padding-top:.6rem;margin-top:.4rem">
+        ${rows.join('')}
+        <div style="display:flex;justify-content:space-between;font-weight:600;font-size:.9em;
+                    border-top:1px solid #e5e7eb;padding-top:.4rem;margin-top:.4rem">
+            <span>${_arDates.size} day${_arDates.size > 1 ? 's' : ''}</span>
+            <span>$${total.toFixed(2)}</span>
+        </div>
+    </div>`;
+    document.getElementById('adminRegSubmit').disabled = false;
+}
+
+async function _arSubmit() {
+    if (!_arFamily || !_arStudent || !_arDates.size) return;
+    const btn = document.getElementById('adminRegSubmit');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    document.getElementById('adminRegError').textContent = '';
+    try {
+        const confirmedDates = [..._arDates.entries()].map(([date, dayType]) => ({ date, dayType }));
+        const dob = _arStudent.child_dob || null;
+        const ageMonths = dob ? Math.floor((Date.now() - new Date(dob)) / (1000 * 60 * 60 * 24 * 30.44)) : null;
+        await submitRegistration({
+            parent:         { name: _arFamily.parent_name, email: _arFamily.parent_email, phone: _arFamily.parent_phone },
+            child:          { name: _arStudent.child_name, ageMonths, dob },
+            roomId:         _arRoom?.id,
+            confirmedDates,
+            status:         'confirmed',
+        });
+        _closeAdminRegModal();
+        await loadRegistrations();
+    } catch (err) {
+        document.getElementById('adminRegError').textContent = 'Save failed: ' + err.message;
+        btn.disabled = false;
+        btn.textContent = 'Create Registration';
+    }
+}
+
 // FILTERS
 // ============================================================
 function setupFilters() {

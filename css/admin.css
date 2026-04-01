@@ -2995,3 +2995,21 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     background: #e0f2fe;
     border-color: #bae6fd;
 }
+.cal-day.past {
+    color: #d1d5db;
+    background: #f9fafb;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.ar-cal-badge {
+    display: block;
+    font-size: .6em;
+    font-weight: 700;
+    line-height: 1;
+    margin-top: 1px;
+    letter-spacing: .01em;
+}
+.ar-result-row:hover {
+    background: #f0f4ff !important;
+    border-color: #c7d2fe !important;
+}
