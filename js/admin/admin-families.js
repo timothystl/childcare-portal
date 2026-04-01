@@ -780,7 +780,7 @@ function renderModalChildRows() {
                     </div>
                 </div>
                 <div class="fm-child-recurring">
-                    <label style="font-size:.82em;color:#555;font-weight:600;display:block;margin-bottom:4px">Recurring Days <span style="font-weight:400;color:#888">(pre-fill calendar each month)</span></label>
+                    <label style="font-size:.82em;color:#555;font-weight:600;display:block;margin-bottom:4px">Recurring Days <span style="font-weight:400;color:#888">(reminder shown when entering care days)</span></label>
                     <div style="display:flex;gap:8px;flex-wrap:wrap">
                         ${['Mon','Tue','Wed','Thu','Fri'].map(day => {
                             const rd = Array.isArray(child.recurring_days) ? child.recurring_days : [];
