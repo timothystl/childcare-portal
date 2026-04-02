@@ -90,17 +90,6 @@ let editingStaffId     = null;
 let staffAvailability  = {};   // { staffId: { days: [...], maxHours: 40 } }
 
 function setupStaffRoster() {
-    // Toggle Staff Roster visibility (shown below Payroll)
-    document.getElementById('toggleStaffRosterBtn')?.addEventListener('click', () => {
-        const section = document.getElementById('staffRosterSection');
-        const btn     = document.getElementById('toggleStaffRosterBtn');
-        const visible = section.style.display !== 'none';
-        section.style.display = visible ? 'none' : '';
-        btn.textContent = visible ? '👥 Show Staff Roster' : '👥 Hide Staff Roster';
-        btn.classList.toggle('btn-active', !visible);
-        if (!visible && !allStaffData.length) loadStaffList();
-    });
-
     document.getElementById('addStaffBtn')?.addEventListener('click', () => openStaffForm());
     document.getElementById('cancelStaffBtn')?.addEventListener('click', closeStaffForm);
     document.getElementById('saveStaffBtn')?.addEventListener('click', onSaveStaffMember);

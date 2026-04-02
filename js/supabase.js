@@ -1154,7 +1154,11 @@ async function loadRateSettings() {
             .eq('key', 'room_rates')
             .maybeSingle();
         if (error || !data) return false;
-        const rates = data.value;
+        const raw   = data.value;
+        const rates = typeof raw === 'string'
+            ? (() => { try { return JSON.parse(raw); } catch { return null; } })()
+            : raw;
+        if (!rates || typeof rates !== 'object' || Array.isArray(rates)) return false;
         // Merge fetched rates into ROOMS array
         ROOMS.forEach(room => {
             const r = rates[room.id];
