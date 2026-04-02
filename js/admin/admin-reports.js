@@ -403,12 +403,11 @@ async function exportFamilyBillingReport() {
 // STAFF SCHEDULING
 // ============================================================
 function setupStaffScheduling() {
-    document.getElementById('generateStaffBtn')?.addEventListener('click', generateStaffSchedule);
     document.getElementById('autoFillStaffBtn')?.addEventListener('click', autoFillStaffSchedule);
     document.getElementById('saveScheduleBtn')?.addEventListener('click', saveStaffSchedule);
     document.getElementById('exportStaffBtn')?.addEventListener('click', exportStaffSchedule);
 
-    // Default to the Monday of the current week
+    // Default to the Monday of the current week, then auto-load
     const el = document.getElementById('staffWeekOf');
     if (el) {
         const today = new Date();
@@ -416,7 +415,50 @@ function setupStaffScheduling() {
         const monday = new Date(today);
         monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
         el.value = monday.toISOString().split('T')[0];
+        el.addEventListener('change', _loadScheduleForWeek);
     }
+    // Auto-load the current week's schedule on tab open
+    _loadScheduleForWeek();
+}
+
+// Convert flat DB rows back to the nested assignments structure
+function _dbRowsToAssignments(rows, weekDates) {
+    const assignments = {};
+    weekDates.forEach(d => {
+        assignments[d] = {};
+        ROOMS.forEach(r => { assignments[d][r.id] = { am: [], pm: [] }; });
+    });
+    rows.forEach(row => {
+        const slot = assignments[row.work_date]?.[row.room_id];
+        if (slot) slot[row.shift].push(row.staff_name);
+    });
+    return assignments;
+}
+
+// Auto-load saved schedule for the selected week; fall back to requirements view
+async function _loadScheduleForWeek() {
+    const weekOf = document.getElementById('staffWeekOf')?.value;
+    if (!weekOf) return;
+    const weekDates = _buildWeekDates(weekOf);
+    if (!weekDates.length) {
+        document.getElementById('staffContent').innerHTML =
+            '<p class="empty-hint">No school days in this week (all days are weekends or closures).</p>';
+        return;
+    }
+    const counts = _buildShiftCounts(weekDates);
+    try {
+        const rows = await fetchStaffScheduleWeek(weekDates[0], weekDates[weekDates.length - 1]);
+        if (rows.length) {
+            const assignments    = _dbRowsToAssignments(rows, weekDates);
+            _autoFillAssignments = assignments;
+            _autoFillWeekDates   = weekDates;
+            _autoFillCounts      = counts;
+            renderAutoFillSchedule(weekDates, assignments, counts);
+            return;
+        }
+    } catch (_) { /* fall through */ }
+    // No saved schedule — show staffing requirements only
+    renderStaffSchedule(weekDates, counts);
 }
 
 function _buildWeekDates(weekOf) {
@@ -944,132 +986,6 @@ async function saveStaffSchedule() {
 }
 
 // ============================================================
-
-// HISTORICAL PAYROLL RECORDS
-// ============================================================
-
-let _historicalPayrollRecords = [];
-let _editingHistoricalId = null;
-
-function setupHistoricalPayroll() {
-    document.getElementById('addHistoricalPayrollBtn')?.addEventListener('click', () => openHistoricalPayrollForm(null));
-    document.getElementById('saveHistoricalPayrollBtn')?.addEventListener('click', saveHistoricalPayrollRecord);
-    document.getElementById('cancelHistoricalPayrollBtn')?.addEventListener('click', closeHistoricalPayrollForm);
-    loadHistoricalPayroll();
-}
-
-async function loadHistoricalPayroll() {
-    try {
-        _historicalPayrollRecords = await fetchHistoricalPayroll();
-        renderHistoricalPayroll();
-    } catch (err) {
-        const container = document.getElementById('historicalPayrollContent');
-        if (container) container.innerHTML = `<p class="import-error">Error loading records: ${escHtml(err.message)}</p>`;
-    }
-}
-
-function renderHistoricalPayroll() {
-    const container = document.getElementById('historicalPayrollContent');
-    if (!container) return;
-    if (!_historicalPayrollRecords.length) {
-        container.innerHTML = '<p class="empty-hint">No historical payroll records yet. Click &ldquo;+ Add Record&rdquo; to add one.</p>';
-        return;
-    }
-    const rows = _historicalPayrollRecords.map(r => `
-        <tr>
-            <td><strong>${escHtml(r.label)}</strong></td>
-            <td class="report-num report-revenue">$${parseFloat(r.total_paid || 0).toFixed(2)}</td>
-            <td>${escHtml(r.notes || '—')}</td>
-            <td>
-                <button class="btn-ghost btn-sm" data-hp-edit="${escHtml(r.id)}">Edit</button>
-                <button class="btn-danger btn-sm" data-hp-delete="${escHtml(r.id)}" style="margin-left:4px">Delete</button>
-            </td>
-        </tr>`).join('');
-    container.innerHTML = `
-        <div class="table-wrapper report-table-wrap">
-            <table class="report-table payroll-table">
-                <thead>
-                    <tr>
-                        <th>Period</th>
-                        <th class="report-num">Total Paid</th>
-                        <th>Notes</th>
-                        <th style="width:140px">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </div>`;
-    container.querySelectorAll('[data-hp-edit]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const record = _historicalPayrollRecords.find(r => r.id === btn.dataset.hpEdit);
-            if (record) openHistoricalPayrollForm(record);
-        });
-    });
-    container.querySelectorAll('[data-hp-delete]').forEach(btn => {
-        btn.addEventListener('click', () => deleteHistoricalPayrollRecord(btn.dataset.hpDelete));
-    });
-}
-
-function openHistoricalPayrollForm(record) {
-    _editingHistoricalId = record ? record.id : null;
-    document.getElementById('historicalPayrollFormTitle').textContent =
-        record ? 'Edit Historical Payroll Record' : 'Add Historical Payroll Record';
-    document.getElementById('hpLabel').value = record?.label || '';
-    document.getElementById('hpAmount').value = record?.total_paid != null ? record.total_paid : '';
-    document.getElementById('hpNotes').value = record?.notes || '';
-    document.getElementById('historicalPayrollFormStatus').textContent = '';
-    document.getElementById('historicalPayrollForm').classList.remove('hidden');
-    document.getElementById('hpLabel').focus();
-}
-
-function closeHistoricalPayrollForm() {
-    document.getElementById('historicalPayrollForm').classList.add('hidden');
-    _editingHistoricalId = null;
-}
-
-async function saveHistoricalPayrollRecord() {
-    const label  = document.getElementById('hpLabel').value.trim();
-    const amount = document.getElementById('hpAmount').value;
-    const notes  = document.getElementById('hpNotes').value.trim();
-    const status = document.getElementById('historicalPayrollFormStatus');
-
-    if (!label)  { status.textContent = 'Period label is required.'; return; }
-    if (amount === '' || isNaN(parseFloat(amount))) { status.textContent = 'Please enter a valid amount.'; return; }
-
-    const btn = document.getElementById('saveHistoricalPayrollBtn');
-    btn.disabled = true;
-    status.textContent = 'Saving…';
-
-    try {
-        let records = [..._historicalPayrollRecords];
-        if (_editingHistoricalId) {
-            const idx = records.findIndex(r => r.id === _editingHistoricalId);
-            if (idx >= 0) records[idx] = { ...records[idx], label, total_paid: parseFloat(amount), notes };
-        } else {
-            records.push({ id: crypto.randomUUID(), label, total_paid: parseFloat(amount), notes });
-        }
-        await saveHistoricalPayroll(records);
-        _historicalPayrollRecords = records;
-        renderHistoricalPayroll();
-        closeHistoricalPayrollForm();
-    } catch (err) {
-        status.textContent = 'Save failed: ' + err.message;
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-async function deleteHistoricalPayrollRecord(id) {
-    if (!confirm('Delete this historical payroll record?')) return;
-    try {
-        const records = _historicalPayrollRecords.filter(r => r.id !== id);
-        await saveHistoricalPayroll(records);
-        _historicalPayrollRecords = records;
-        renderHistoricalPayroll();
-    } catch (err) {
-        alert('Delete failed: ' + err.message);
-    }
-}
 
 // ============================================================
 // PAYROLL REPORT
