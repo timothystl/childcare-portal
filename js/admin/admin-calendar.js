@@ -1187,7 +1187,7 @@ async function setupWindowOverride() {
 function showOverrideStatus(val, saved) {
     const el = document.getElementById('overrideStatus');
     const labels = {
-        auto:   '⚙️ Auto — open days 1–20, closed days 21+ each month.',
+        auto:   '⚙️ Auto — open 9 AM Central on the 1st through 11:59 PM Central on the 15th each month.',
         open:   '🟢 Force Open — registration is open for all parents right now.',
         closed: '🔴 Force Closed — registration is blocked for all parents right now.',
     };

@@ -251,7 +251,7 @@ Controls whether parents can currently register for care days.
 
 | Setting | Effect |
 |---------|--------|
-| **Auto** | Registration is open days 1–20 of the month, closed days 21+ |
+| **Auto** | Registration is open from 9 AM Central on the 1st through 11:59 PM Central on the 15th |
 | **Force Open** | Registration is open regardless of the date |
 | **Force Closed** | Registration is blocked regardless of the date |
 
@@ -306,7 +306,7 @@ A full-month attendance roster, one page per room, listing enrolled children for
 2. Click **Generate Roster**.
 3. Click **🖨️ Print Roster** to print or save as PDF.
 
-Best practice: generate this after the registration window closes (after the 20th of the prior month) to capture the complete roster.
+Best practice: generate this after the registration window closes (after the 15th of the prior month) to capture the complete roster.
 
 ### Attendance & Revenue
 

@@ -21,15 +21,23 @@ const studentDataMap    = new Map();  // studentId -> { dob, roomOverride } — 
 
 // ============================================================
 // REGISTRATION WINDOW
-// - mode 'confirmed' : day 1–15  → form enabled, dates saved as confirmed
-// - mode 'closed'    : day 16+   → registration closed (no waitlist)
+// - mode 'confirmed' : 9 AM Central on the 1st through 11:59 PM Central on the 15th
+// - mode 'closed'    : all other times (no waitlist)
+// Uses America/Chicago so DST adjustments (CST/CDT) are handled automatically.
 // ============================================================
+function getCentralTimeNow() {
+    const now   = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago',
+        year: 'numeric', month: 'numeric', day: 'numeric',
+        hour: 'numeric', hour12: false,
+    }).formatToParts(now);
+    const get = (type) => parseInt(parts.find(p => p.type === type).value, 10);
+    return { year: get('year'), month: get('month') - 1, day: get('day'), hour: get('hour') };
+}
+
 function getRegistrationWindow() {
-    const today  = new Date();
-    today.setHours(0, 0, 0, 0);
-    const day    = today.getDate();
-    const year   = today.getFullYear();
-    const month  = today.getMonth();
+    const { year, month, day, hour } = getCentralTimeNow();
 
     const targetDate  = new Date(year, month + 1, 1);
     const targetLabel = MONTH_NAMES[targetDate.getMonth()] + ' ' + targetDate.getFullYear();
@@ -37,11 +45,21 @@ function getRegistrationWindow() {
     const deadlineDate  = new Date(year, month, 15);
     const deadlineLabel = deadlineDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
-    let mode = day <= 15 ? 'confirmed' : 'closed';
+    // Open: from 9 AM Central on the 1st through end of the 15th (midnight → closed)
+    const opensToday = (day === 1 && hour < 9);  // It's the 1st but not yet 9 AM
+    let mode;
+    if (day < 1 || day > 15) {
+        mode = 'closed';
+    } else if (opensToday) {
+        mode = 'closed';  // Before 9 AM Central on the 1st
+    } else {
+        mode = 'confirmed';
+    }
+
     if (regWindowOverride === 'open')   mode = 'confirmed';
     if (regWindowOverride === 'closed') mode = 'closed';
 
-    return { mode, targetDate, targetLabel, deadlineLabel };
+    return { mode, opensToday, targetDate, targetLabel, deadlineLabel };
 }
 
 function getTargetMonthKey() {
@@ -71,6 +89,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             banner.className = 'reg-window-banner locked';
             if (regWindowOverride === 'closed') {
                 banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed — this month's space is full. To inquire about availability, <a href="mailto:mdo@timothystl.org">contact the office</a>.`;
+            } else if (win.opensToday) {
+                banner.innerHTML = `🕘 Registration for <strong>${win.targetLabel}</strong> opens today at <strong>9 AM Central time</strong>. Come back then!`;
             } else {
                 banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed. Deadline was <strong>${win.deadlineLabel}</strong>.`;
             }
@@ -860,6 +880,8 @@ function resetForNextFamily() {
             banner.className = 'reg-window-banner locked';
             if (regWindowOverride === 'closed') {
                 banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed — this month's space is full. To inquire about availability, <a href="mailto:mdo@timothystl.org">contact the office</a>.`;
+            } else if (win.opensToday) {
+                banner.innerHTML = `🕘 Registration for <strong>${win.targetLabel}</strong> opens today at <strong>9 AM Central time</strong>. Come back then!`;
             } else {
                 banner.innerHTML = `🔒 Registration for <strong>${win.targetLabel}</strong> is currently closed. Deadline was <strong>${win.deadlineLabel}</strong>.`;
             }
