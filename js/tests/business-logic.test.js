@@ -95,7 +95,9 @@ function effectiveRate(baseRate, discountType, discountValue) {
     return baseRate;
 }
 
-function getRegistrationWindow(today, override = 'auto') {
+// centralHour simulates the current hour (0–23) in America/Chicago time.
+// Defaults to 12 (noon) so existing tests that don't care about time still pass.
+function getRegistrationWindow(today, override = 'auto', centralHour = 12) {
     const day   = today.getDate();
     const year  = today.getFullYear();
     const month = today.getMonth();
@@ -103,7 +105,14 @@ function getRegistrationWindow(today, override = 'auto') {
     const targetDate  = new Date(year, month + 1, 1);
     const deadlineDate = new Date(year, month, 15);
 
-    let mode = day <= 15 ? 'confirmed' : 'closed';
+    let mode;
+    if (day < 1 || day > 15) {
+        mode = 'closed';
+    } else if (day === 1 && centralHour < 9) {
+        mode = 'closed';  // Before 9 AM Central on the 1st
+    } else {
+        mode = 'confirmed';
+    }
     if (override === 'open')   mode = 'confirmed';
     if (override === 'closed') mode = 'closed';
 
@@ -281,8 +290,14 @@ describe('effectiveRate — discount calculation', () => {
 });
 
 describe('getRegistrationWindow — registration open/close logic', () => {
-    test('day 1 → open (mode: confirmed)', () => {
-        expect(getRegistrationWindow(new Date('2026-03-01')).mode).toBe('confirmed');
+    test('day 1 at 9 AM → open (mode: confirmed)', () => {
+        expect(getRegistrationWindow(new Date('2026-03-01'), 'auto', 9).mode).toBe('confirmed');
+    });
+    test('day 1 at 8:59 AM → closed (before 9 AM)', () => {
+        expect(getRegistrationWindow(new Date('2026-03-01'), 'auto', 8).mode).toBe('closed');
+    });
+    test('day 1 at midnight → closed (before 9 AM)', () => {
+        expect(getRegistrationWindow(new Date('2026-03-01'), 'auto', 0).mode).toBe('closed');
     });
     test('day 15 → open (boundary)', () => {
         expect(getRegistrationWindow(new Date('2026-03-15')).mode).toBe('confirmed');
@@ -296,8 +311,11 @@ describe('getRegistrationWindow — registration open/close logic', () => {
     test('override "open" forces mode to confirmed even after day 15', () => {
         expect(getRegistrationWindow(new Date('2026-03-20'), 'open').mode).toBe('confirmed');
     });
-    test('override "closed" forces mode to closed even on day 1', () => {
-        expect(getRegistrationWindow(new Date('2026-03-01'), 'closed').mode).toBe('closed');
+    test('override "open" forces mode to confirmed even before 9 AM on the 1st', () => {
+        expect(getRegistrationWindow(new Date('2026-03-01'), 'open', 7).mode).toBe('confirmed');
+    });
+    test('override "closed" forces mode to closed even on day 1 at 9 AM', () => {
+        expect(getRegistrationWindow(new Date('2026-03-01'), 'closed', 9).mode).toBe('closed');
     });
     test('target month is always next calendar month', () => {
         const win = getRegistrationWindow(new Date('2026-03-10'));

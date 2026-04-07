@@ -20,7 +20,7 @@ You will need your **parent email address** and your **4-digit PIN** for both pa
 
 ### When Can I Register?
 
-The registration window is normally **open during the first 20 days of each month**. After the 20th, the window closes while the office finalizes the next month's roster. You will see a banner at the top of the page telling you whether registration is currently open or closed.
+The registration window is normally **open from 9 AM Central time on the 1st through 11:59 PM Central time on the 15th of each month**. After the 15th, the window closes while the office finalizes the next month's roster. You will see a banner at the top of the page telling you whether registration is currently open or closed.
 
 ---
 

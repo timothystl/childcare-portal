@@ -1,7 +1,10 @@
 -- Migration: enforce_registration_window.sql
 -- Adds a BEFORE INSERT trigger on the registrations table that enforces the
--- registration window server-side (days 1–15 of the month), respecting the
--- admin-configurable reg_window_override setting stored in the settings table.
+-- registration window server-side, respecting the admin-configurable
+-- reg_window_override setting stored in the settings table.
+--
+-- Window: 9 AM Central (America/Chicago, DST-aware) on the 1st of the month
+-- through 11:59 PM Central on the 15th of the month.
 --
 -- Without this, a technically-savvy parent could bypass the client-side check
 -- by calling the Supabase REST API directly or using DevTools to re-enable the
@@ -20,7 +23,9 @@ SECURITY DEFINER
 AS $$
 DECLARE
     v_override text;
+    v_now      timestamp;   -- current time in America/Chicago (DST-aware)
     v_day      int;
+    v_hour     int;
 BEGIN
     -- Admins are authenticated Supabase users — they bypass the window check.
     IF auth.role() = 'authenticated' THEN
@@ -51,11 +56,15 @@ BEGIN
                   HINT    = 'Contact the office if you believe this is an error.';
     END IF;
 
-    -- Default (no override or 'auto'): allow only on days 1–15 of the current month.
-    -- Uses UTC; the 15-day window is wide enough that timezone edge cases are minor.
-    v_day := EXTRACT(DAY FROM NOW() AT TIME ZONE 'UTC')::int;
+    -- Default (no override or 'auto'): allow only from 9 AM Central on the 1st
+    -- through 11:59 PM Central on the 15th of the month.
+    -- America/Chicago handles CST (UTC-6) and CDT (UTC-5) automatically.
+    v_now  := NOW() AT TIME ZONE 'America/Chicago';
+    v_day  := EXTRACT(DAY  FROM v_now)::int;
+    v_hour := EXTRACT(HOUR FROM v_now)::int;
+
     IF v_day > 15 THEN
-        RAISE EXCEPTION 'Registration window is closed. Registrations are accepted on days 1–15 of each month (today is the %).',
+        RAISE EXCEPTION 'Registration window is closed. Registrations are accepted from 9 AM Central on the 1st through 11:59 PM Central on the 15th of each month (today is the %).',
             CASE v_day
                 WHEN 11 THEN '11th'
                 WHEN 12 THEN '12th'
@@ -68,7 +77,13 @@ BEGIN
                 END
             END
             USING ERRCODE = 'P0001',
-                  HINT    = 'Registration opens again on the 1st of next month.';
+                  HINT    = 'Registration opens again at 9 AM Central on the 1st of next month.';
+    END IF;
+
+    IF v_day = 1 AND v_hour < 9 THEN
+        RAISE EXCEPTION 'Registration window is not yet open. Registration opens at 9 AM Central time on the 1st of each month.'
+            USING ERRCODE = 'P0001',
+                  HINT    = 'Please check back at 9 AM Central time.';
     END IF;
 
     RETURN NEW;
