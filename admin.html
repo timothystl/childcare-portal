@@ -541,6 +541,25 @@
                 </div>
             </section>
 
+            <!-- Enrollment Forms -->
+            <section class="admin-section collapsible-section" id="enrollmentFormsSection">
+                <h2>📋 Enrollment Forms</h2>
+                <p class="section-desc">Upload the forms new families need to complete. They appear as download cards on the public <a href="/enroll" target="_blank">/enroll page</a>. PDF, Word (.doc/.docx), 10 MB max per file.</p>
+                <div id="enrollmentFormsList" style="margin-top:12px;"></div>
+                <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                    <p style="font-weight:600;font-size:.9em;margin-bottom:10px;">Add a form</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                        <input type="text" id="newEnrollFormName" placeholder="Form name (e.g. Child Enrollment Form)" class="form-input">
+                        <input type="text" id="newEnrollFormDesc" placeholder="Short description (optional)" class="form-input">
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                        <input type="file" id="newEnrollFormFile" accept=".pdf,.doc,.docx" style="font-size:.9em;">
+                        <button id="uploadEnrollFormBtn" class="btn-primary" style="padding:6px 16px;">⬆️ Upload</button>
+                        <span id="uploadEnrollFormStatus" class="rates-status"></span>
+                    </div>
+                </div>
+            </section>
+
             <!-- Room Rates & Settings -->
             <section class="admin-section collapsible-section" id="ratesSection">
                 <h2>⚙️ Room Rates &amp; Settings</h2>

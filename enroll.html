@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Enroll your child in Timothy Lutheran's Mother's Day Out program. Download the required forms to get started.">
+  <title>Enroll — Mother's Day Out · Timothy Lutheran Church</title>
+  <link rel="icon" type="image/png" href="/images/logo.png">
+  <link rel="apple-touch-icon" href="/images/logo.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#01294A">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy:      #01294A;
+      --navy-lt:   #013d6b;
+      --navy-dk:   #010f1a;
+      --sun:       #F5B731;
+      --sun-lt:    #FDE598;
+      --sun-pale:  #FFF8E1;
+      --green:     #5BAD8B;
+      --green-lt:  #C8EADC;
+      --green-pale:#EAF5EF;
+      --tang:      #E97D55;
+      --tang-pale: #FDEEE8;
+      --cream:     #FDFAF0;
+      --linen:     #FAF7ED;
+      --border:    #E8E0CC;
+      --text:      #2E2A22;
+      --text-muted:#7A6E5A;
+      --white:     #FFFFFF;
+      --font-head: 'Lora', Georgia, serif;
+      --font-body: 'Nunito', system-ui, sans-serif;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 22px;
+      --shadow-card: 0 2px 12px rgba(1,41,74,.06);
+      --shadow-lift: 0 6px 32px rgba(1,41,74,.12);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: var(--font-body); font-size: 16px; color: var(--text); background: var(--cream); line-height: 1.65; }
+    img { display: block; max-width: 100%; }
+    a { color: var(--navy); }
+    a:hover { color: var(--navy-lt); }
+
+    .container { max-width: 860px; margin: 0 auto; padding: 0 28px; }
+
+    /* NAV */
+    .nav { position: sticky; top: 0; z-index: 100; background: var(--green-lt); padding: 0 28px; border-bottom: 3px solid var(--sun); }
+    .nav-inner { max-width: 1080px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 64px; }
+    .nav-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+    .nav-brand img { width: 42px; height: 42px; border-radius: 50%; background: white; padding: 2px; }
+    .nav-brand-text { font-size: 14px; font-weight: 800; color: var(--navy); line-height: 1.2; }
+    .nav-brand-text span { display: block; font-size: 11px; font-weight: 600; color: var(--green); letter-spacing: .04em; }
+    .nav-right { display: flex; align-items: center; gap: 8px; }
+    .nav-link { font-size: 13px; font-weight: 700; color: rgba(1,41,74,.8); text-decoration: none; padding: 6px 12px; border-radius: var(--radius-sm); }
+    .nav-link:hover { background: rgba(1,41,74,.1); color: var(--navy); }
+    .nav-cta-btn { display: inline-flex; align-items: center; font-size: 13px; font-weight: 800; color: var(--navy); background: var(--sun); padding: 7px 16px; border-radius: var(--radius-sm); text-decoration: none; }
+    .nav-cta-btn:hover { background: var(--sun-lt); color: var(--navy); }
+    .nav-menu-wrap { position: relative; }
+    .nav-menu-btn { display: flex; align-items: center; justify-content: center; background: none; border: 1.5px solid rgba(1,41,74,.2); border-radius: var(--radius-sm); cursor: pointer; padding: 6px 10px; color: var(--navy); font-size: 18px; line-height: 1; }
+    .nav-menu-btn:hover { background: rgba(1,41,74,.08); }
+    .nav-dropdown { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lift); list-style: none; min-width: 210px; padding: 6px 0; z-index: 200; }
+    .nav-dropdown.open { display: block; }
+    .nav-dropdown li a { display: block; font-size: 14px; font-weight: 700; color: var(--navy); text-decoration: none; padding: 10px 18px; }
+    .nav-dropdown li a:hover { background: var(--linen); }
+    .nav-dropdown li + li { border-top: 1px solid var(--border); }
+    @media(max-width:500px) { .nav-link { display: none; } }
+
+    /* PAGE HEADER */
+    .page-header { background: var(--linen); border-bottom: 2px solid var(--border); padding: 52px 28px; }
+    .page-header .container { max-width: 860px; }
+    .page-eyebrow { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--green); margin-bottom: 12px; }
+    .page-header h1 { font-family: var(--font-head); font-size: clamp(26px, 3.5vw, 38px); font-weight: 700; color: var(--navy); line-height: 1.2; margin-bottom: 12px; }
+    .page-header p { font-size: 16px; color: var(--text-muted); max-width: 560px; line-height: 1.7; }
+
+    /* BUTTONS */
+    .btn { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-body); font-size: 15px; font-weight: 800; padding: 14px 28px; border-radius: var(--radius-sm); text-decoration: none; transition: transform .15s, box-shadow .15s, background .15s; cursor: pointer; border: none; line-height: 1; }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary { background: var(--navy); color: var(--white); box-shadow: 0 4px 16px rgba(1,41,74,.25); }
+    .btn-primary:hover { background: var(--navy-lt); color: white; box-shadow: 0 6px 20px rgba(1,41,74,.3); }
+    .btn-secondary { background: var(--sun); color: var(--navy); box-shadow: 0 4px 14px rgba(245,183,49,.3); }
+    .btn-secondary:hover { background: var(--sun-lt); color: var(--navy); }
+
+    /* FORMS SECTION */
+    .forms-section { padding: 52px 28px; }
+    .forms-grid { display: grid; gap: 20px; margin-top: 32px; }
+
+    .form-card { background: var(--white); border: 1px solid var(--border); border-left: 4px solid var(--sun); border-radius: var(--radius-md); padding: 24px 28px; box-shadow: var(--shadow-card); display: flex; align-items: center; justify-content: space-between; gap: 20px; transition: box-shadow .2s, transform .2s; }
+    .form-card:hover { box-shadow: var(--shadow-lift); transform: translateY(-2px); }
+    .form-card:nth-child(2) { border-left-color: var(--green); }
+    .form-card:nth-child(3) { border-left-color: var(--tang); }
+    .form-card:nth-child(4) { border-left-color: var(--navy); }
+    .form-card-body { min-width: 0; }
+    .form-card-name { font-family: var(--font-head); font-size: 18px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+    .form-card-desc { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+    .form-card-action { flex-shrink: 0; }
+    @media(max-width:560px) {
+      .form-card { flex-direction: column; align-items: flex-start; }
+    }
+
+    /* CAPACITY BANNER */
+    .capacity-banner { background: var(--tang-pale); border: 2px solid var(--tang); border-radius: var(--radius-md); padding: 28px 32px; margin-top: 32px; }
+    .capacity-banner h2 { font-family: var(--font-head); font-size: 22px; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+    .capacity-banner p { font-size: 15px; color: var(--text-muted); line-height: 1.7; margin-bottom: 16px; }
+    .capacity-banner .btn-row { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    /* LOADING / EMPTY */
+    .forms-loading { color: var(--text-muted); font-size: .95em; padding: 24px 0; }
+    .forms-empty { background: var(--linen); border: 1px dashed var(--border); border-radius: var(--radius-md); padding: 32px 28px; text-align: center; margin-top: 32px; }
+    .forms-empty p { color: var(--text-muted); font-size: 15px; line-height: 1.7; }
+
+    /* INSTRUCTIONS CALLOUT */
+    .instructions-callout { background: var(--sun-pale); border: 1.5px solid var(--sun); border-radius: var(--radius-md); padding: 20px 24px; margin-top: 28px; display: flex; gap: 14px; align-items: flex-start; }
+    .instructions-callout-icon { font-size: 1.5em; line-height: 1; flex-shrink: 0; }
+    .instructions-callout p { font-size: 14px; color: var(--navy); line-height: 1.7; margin: 0; }
+
+    /* FOOTER */
+    .site-footer { background: var(--navy-dk); padding: 40px 28px 28px; }
+    .footer-inner { max-width: 860px; margin: 0 auto; display: flex; justify-content: space-between; align-items: flex-start; gap: 40px; flex-wrap: wrap; margin-bottom: 28px; }
+    .footer-brand img { width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.08); padding: 2px; margin-bottom: 10px; }
+    .footer-brand p { font-size: 13px; color: rgba(255,255,255,.5); line-height: 1.7; max-width: 240px; }
+    .footer-links { display: flex; flex-direction: column; gap: 8px; }
+    .footer-links a { font-size: 13px; color: rgba(255,255,255,.6); text-decoration: none; }
+    .footer-links a:hover { color: var(--sun); }
+    .footer-base { max-width: 860px; margin: 0 auto; padding-top: 20px; border-top: 1px solid rgba(255,255,255,.08); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .footer-base p { font-size: 12px; color: rgba(255,255,255,.35); }
+    .footer-base a { color: rgba(255,255,255,.45); }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <img src="/images/logo.png" alt="Timothy Lutheran MDO">
+      <div class="nav-brand-text">Mother's Day Out<span>Timothy Lutheran Church</span></div>
+    </a>
+    <div class="nav-right">
+      <a href="/#contact" class="nav-link">Contact Us</a>
+      <a href="/calendar" class="nav-cta-btn">📅 Request Care Days</a>
+      <div class="nav-menu-wrap">
+        <button class="nav-menu-btn" id="navMenuBtn" aria-label="More pages">☰</button>
+        <ul class="nav-dropdown" id="navDropdown">
+          <li><a href="/#classrooms">Classrooms &amp; Rates</a></li>
+          <li><a href="/#our-staff">Our Staff</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+          <li><a href="/calendar">Request Care Days</a></li>
+          <li><a href="https://www.timothystl.org">Timothy Lutheran Church</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="page-header">
+  <div class="container">
+    <div class="page-eyebrow">New Families</div>
+    <h1>Enrollment Forms</h1>
+    <p>Download and complete the forms below, then return them to the MDO office. We'll get your family set up within a few business days.</p>
+  </div>
+</div>
+
+<section class="forms-section">
+  <div class="container">
+
+    <!-- Capacity banner (shown when enrollment is full) -->
+    <div id="capacityBanner" class="capacity-banner" style="display:none;">
+      <h2>We're currently at capacity.</h2>
+      <p>We're not accepting new enrollments at this time, but we'd love to keep you in mind for when a spot opens up. Join our waitlist or reach out to the director directly.</p>
+      <div class="btn-row">
+        <a href="/calendar" class="btn btn-primary">⏳ Join the Waitlist</a>
+        <a href="mailto:mdo@timothystl.org" class="btn btn-secondary">✉️ Contact the Director</a>
+      </div>
+    </div>
+
+    <!-- Forms list (hidden when at capacity) -->
+    <div id="formsWrap">
+      <p id="formsLoading" class="forms-loading">Loading forms…</p>
+
+      <div id="formsGrid" class="forms-grid" style="display:none;"></div>
+
+      <div id="formsEmpty" class="forms-empty" style="display:none;">
+        <p>Forms will be available here soon. In the meantime, please <a href="mailto:mdo@timothystl.org">contact the office</a> for enrollment information.</p>
+      </div>
+
+      <div class="instructions-callout" id="formsCallout" style="display:none;">
+        <div class="instructions-callout-icon">📬</div>
+        <p>Once you've completed all the forms, return them to the MDO office at <strong>6704 Fyler Ave, St. Louis, MO 63139</strong>, or email them to <a href="mailto:mdo@timothystl.org">mdo@timothystl.org</a>. We'll reach out within a few business days to confirm enrollment.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img src="/images/logo.png" alt="Timothy Lutheran MDO">
+      <p>Mother's Day Out at Timothy Lutheran Church — faith-based childcare in Lindenwood Park, St. Louis.</p>
+    </div>
+    <div class="footer-links">
+      <a href="/">← Back to Main Site</a>
+      <a href="/calendar">Request Care Days</a>
+      <a href="/lookup">View My Schedule</a>
+      <a href="mailto:mdo@timothystl.org">mdo@timothystl.org</a>
+      <a href="tel:+13147830523">314-783-0523</a>
+    </div>
+  </div>
+  <div class="footer-base">
+    <p>© 2026 Timothy Lutheran Church · Mother's Day Out</p>
+    <p><a href="/privacy">Privacy Policy</a></p>
+  </div>
+</footer>
+
+<script>
+  // Nav dropdown
+  var navMenuBtn = document.getElementById('navMenuBtn');
+  var navDropdown = document.getElementById('navDropdown');
+  navMenuBtn.addEventListener('click', function(e) { e.stopPropagation(); navDropdown.classList.toggle('open'); });
+  document.addEventListener('click', function() { navDropdown.classList.remove('open'); });
+  navDropdown.querySelectorAll('a').forEach(function(a) { a.addEventListener('click', function() { navDropdown.classList.remove('open'); }); });
+</script>
+
+<script>
+  // Load enrollment forms and capacity state from Supabase settings (public read).
+  (async function () {
+    var KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
+    var headers = { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY };
+
+    try {
+      var [formsRes, capRes] = await Promise.all([
+        fetch('/sb/rest/v1/settings?key=eq.enrollment_forms&select=value',        { headers }),
+        fetch('/sb/rest/v1/settings?key=eq.enrollment_at_capacity&select=value',  { headers }),
+      ]);
+
+      var formsRows = formsRes.ok  ? await formsRes.json()  : [];
+      var capRows   = capRes.ok    ? await capRes.json()    : [];
+
+      var atCapacity = capRows.length  && (capRows[0].value === true  || capRows[0].value === 'true');
+      var forms      = formsRows.length && Array.isArray(formsRows[0].value) ? formsRows[0].value : [];
+
+      document.getElementById('formsLoading').style.display = 'none';
+
+      if (atCapacity) {
+        document.getElementById('capacityBanner').style.display = 'block';
+        document.getElementById('formsWrap').style.display      = 'none';
+        return;
+      }
+
+      if (!forms.length) {
+        document.getElementById('formsEmpty').style.display = 'block';
+        return;
+      }
+
+      // Render form cards
+      var grid = document.getElementById('formsGrid');
+      var esc  = function(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+      grid.innerHTML = forms.map(function(f) {
+        return '<div class="form-card">'
+          + '<div class="form-card-body">'
+          + '<div class="form-card-name">📄 ' + esc(f.name) + '</div>'
+          + (f.description ? '<div class="form-card-desc">' + esc(f.description) + '</div>' : '')
+          + '</div>'
+          + '<div class="form-card-action">'
+          + '<a href="' + esc(f.url) + '" class="btn btn-secondary" target="_blank" rel="noopener" download>⬇️ Download</a>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+
+      grid.style.display = 'grid';
+      document.getElementById('formsCallout').style.display = 'flex';
+
+    } catch (_) {
+      // Fail gracefully — show the empty/contact message
+      document.getElementById('formsLoading').style.display = 'none';
+      document.getElementById('formsEmpty').style.display   = 'block';
+    }
+  })();
+</script>
+
+</body>
+</html>
