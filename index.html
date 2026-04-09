@@ -504,7 +504,11 @@
         <h3>New Families — Enroll</h3>
         <p>Download and complete the enrollment packet from our Google Drive. Return it to the MDO office and we'll get your family added to the system within a few days.</p>
         <ul><li>Child enrollment form</li><li>Health and immunization record</li><li>Emergency contact &amp; authorization</li><li>Photo / media consent</li></ul>
-        <a href="https://drive.google.com/drive/folders/15e0mHuJicv4k9VdaIe0VaFW53SqcDlh2?usp=sharing" class="btn btn-secondary" target="_blank" rel="noopener">📁 Download Enrollment Forms</a>
+        <a id="enrollmentFormsBtn" href="https://drive.google.com/drive/folders/15e0mHuJicv4k9VdaIe0VaFW53SqcDlh2?usp=sharing" class="btn btn-secondary" target="_blank" rel="noopener">📁 Download Enrollment Forms</a>
+        <div id="enrollmentFullMsg" style="display:none;margin-top:14px;padding:12px 16px;background:rgba(0,0,0,.25);border-radius:8px;">
+          <p style="margin:0 0 6px;font-weight:600;color:#fca5a5;">We're currently at capacity for new enrollments.</p>
+          <p style="margin:0;font-size:.9em;color:rgba(255,255,255,.8);">To be notified when a spot opens, <a href="/calendar" style="color:#fde68a;text-decoration:underline;">join our waitlist</a> or <a href="mailto:mdo@timothystl.org" style="color:#fde68a;text-decoration:underline;">contact the director</a>.</p>
+        </div>
       </div>
       <div class="enroll-card">
         <h3>Current Families — Request Days</h3>
@@ -640,6 +644,27 @@
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js');
   }
+</script>
+<script>
+  // Enrollment capacity check — grey out the forms button when admin marks us as full.
+  // Fails open: if the fetch errors or returns nothing, the normal button stays visible.
+  (async function () {
+    try {
+      var KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
+      var res = await fetch('/sb/rest/v1/settings?key=eq.enrollment_at_capacity&select=value', {
+        headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY }
+      });
+      if (!res.ok) return;
+      var rows = await res.json();
+      if (!rows.length) return;
+      var val = rows[0].value;
+      if (val !== true && val !== 'true') return;
+      var btn = document.getElementById('enrollmentFormsBtn');
+      var msg = document.getElementById('enrollmentFullMsg');
+      if (btn) { btn.style.opacity = '0.4'; btn.style.pointerEvents = 'none'; btn.setAttribute('aria-disabled', 'true'); }
+      if (msg) msg.style.display = 'block';
+    } catch (_) {}
+  })();
 </script>
 </body>
 </html>

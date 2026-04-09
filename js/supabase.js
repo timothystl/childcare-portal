@@ -1199,6 +1199,17 @@ async function saveSummerCampSetting(hidden) {
     await upsertSetting('hide_summer_camp', hidden);
 }
 
+// Load enrollment-at-capacity flag from Supabase.
+async function loadEnrollmentCapacitySetting() {
+    const val = await fetchSetting('enrollment_at_capacity');
+    return val === true || val === 'true';
+}
+
+// Save enrollment-at-capacity flag to Supabase.
+async function saveEnrollmentCapacitySetting(atCapacity) {
+    await upsertSetting('enrollment_at_capacity', atCapacity);
+}
+
 // Load staff-to-child ratios from Supabase and merge into ROOMS array.
 async function loadRatioSettings() {
     if (!sbClient) return false;
