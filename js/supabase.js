@@ -1210,6 +1210,37 @@ async function saveEnrollmentCapacitySetting(atCapacity) {
     await upsertSetting('enrollment_at_capacity', atCapacity);
 }
 
+// Load enrollment forms metadata (array of {id, name, description, filename, url}).
+async function loadEnrollmentForms() {
+    const val = await fetchSetting('enrollment_forms');
+    if (!Array.isArray(val)) return [];
+    return val;
+}
+
+// Save enrollment forms metadata array to settings.
+async function saveEnrollmentForms(forms) {
+    await upsertSetting('enrollment_forms', forms);
+}
+
+// Upload a file to the enrollment-forms storage bucket and return its public URL.
+async function uploadEnrollmentFormFile(file, filename) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.storage.from('enrollment-forms').upload(filename, file, {
+        contentType: file.type || 'application/pdf',
+        upsert: false,
+    });
+    if (error) throw error;
+    const { data } = sbClient.storage.from('enrollment-forms').getPublicUrl(filename);
+    return data.publicUrl;
+}
+
+// Delete a file from the enrollment-forms storage bucket.
+async function deleteEnrollmentFormFile(filename) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.storage.from('enrollment-forms').remove([filename]);
+    if (error) throw error;
+}
+
 // Load staff-to-child ratios from Supabase and merge into ROOMS array.
 async function loadRatioSettings() {
     if (!sbClient) return false;

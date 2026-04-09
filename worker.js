@@ -283,6 +283,13 @@ export default {
       request = new Request(rewritten.toString(), request);
     }
 
+    // Rewrite /enroll → /enroll.html
+    if (url.pathname === '/enroll') {
+      const rewritten = new URL(request.url);
+      rewritten.pathname = '/enroll.html';
+      request = new Request(rewritten.toString(), request);
+    }
+
     // Static assets
     const response    = await env.ASSETS.fetch(request);
     const newHeaders  = new Headers(response.headers);

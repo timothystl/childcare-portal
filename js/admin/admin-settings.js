@@ -78,6 +78,105 @@ async function setupEnrollmentCapacity() {
 }
 
 // ============================================================
+// ENROLLMENT FORMS MANAGEMENT
+// ============================================================
+const _esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function renderEnrollmentFormsList(forms) {
+    const container = document.getElementById('enrollmentFormsList');
+    if (!container) return;
+    if (!forms.length) {
+        container.innerHTML = '<p style="color:var(--text-muted,#888);font-size:.9em;">No forms uploaded yet.</p>';
+        return;
+    }
+    container.innerHTML = forms.map(f => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--linen,#faf7ed);border:1px solid var(--border,#e0d8c8);border-radius:8px;margin-bottom:8px;">
+            <div style="min-width:0;">
+                <div style="font-weight:600;font-size:.93em;">${_esc(f.name)}</div>
+                ${f.description ? `<div style="font-size:.83em;color:var(--text-muted,#888);margin-top:2px;">${_esc(f.description)}</div>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                <a href="${_esc(f.url)}" target="_blank" style="font-size:.83em;color:var(--navy,#01294a);font-weight:700;">📄 Preview</a>
+                <button class="btn-danger-sm" onclick="deleteEnrollmentForm('${_esc(f.id)}')">🗑️ Delete</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function setupEnrollmentForms() {
+    const uploadBtn = document.getElementById('uploadEnrollFormBtn');
+    if (!uploadBtn) return;
+
+    const forms = await loadEnrollmentForms();
+    renderEnrollmentFormsList(forms);
+
+    uploadBtn.addEventListener('click', async () => {
+        const nameEl   = document.getElementById('newEnrollFormName');
+        const descEl   = document.getElementById('newEnrollFormDesc');
+        const fileEl   = document.getElementById('newEnrollFormFile');
+        const statusEl = document.getElementById('uploadEnrollFormStatus');
+        const name = nameEl?.value.trim();
+        const file = fileEl?.files[0];
+
+        if (!name) { showToast('Please enter a form name.'); return; }
+        if (!file) { showToast('Please select a file to upload.'); return; }
+
+        uploadBtn.disabled    = true;
+        uploadBtn.textContent = 'Uploading…';
+        if (statusEl) statusEl.textContent = '';
+
+        try {
+            const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const filename = `${Date.now()}-${safeName}`;
+            const publicUrl = await uploadEnrollmentFormFile(file, filename);
+
+            const current = await loadEnrollmentForms();
+            current.push({
+                id:          crypto.randomUUID(),
+                name,
+                description: descEl?.value.trim() || '',
+                filename,
+                url:         publicUrl,
+            });
+            await saveEnrollmentForms(current);
+            renderEnrollmentFormsList(current);
+
+            if (nameEl)   nameEl.value   = '';
+            if (descEl)   descEl.value   = '';
+            if (fileEl)   fileEl.value   = '';
+
+            if (statusEl) {
+                statusEl.textContent = '✓ Uploaded!';
+                statusEl.style.color = '#2e7d32';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+        } catch (err) {
+            if (statusEl) { statusEl.textContent = '⚠️ ' + err.message; statusEl.style.color = '#c62828'; }
+            console.error('uploadEnrollForm:', err);
+        } finally {
+            uploadBtn.disabled    = false;
+            uploadBtn.textContent = '⬆️ Upload';
+        }
+    });
+}
+
+async function deleteEnrollmentForm(id) {
+    if (!confirm('Delete this form? It will be removed from the /enroll page immediately.')) return;
+    try {
+        let forms = await loadEnrollmentForms();
+        const form = forms.find(f => f.id === id);
+        if (!form) return;
+        await deleteEnrollmentFormFile(form.filename);
+        forms = forms.filter(f => f.id !== id);
+        await saveEnrollmentForms(forms);
+        renderEnrollmentFormsList(forms);
+    } catch (err) {
+        alert('Failed to delete form: ' + err.message);
+        console.error('deleteEnrollmentForm:', err);
+    }
+}
+
+// ============================================================
 // OFFER EMAIL LINKS (global settings)
 // ============================================================
 function setupOfferLinks() {
