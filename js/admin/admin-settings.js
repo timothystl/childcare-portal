@@ -43,6 +43,41 @@ async function setupSummerCamp() {
 }
 
 // ============================================================
+// NEW FAMILY ENROLLMENT CAPACITY SETTING
+// ============================================================
+async function setupEnrollmentCapacity() {
+    const toggle   = document.getElementById('enrollmentAtCapacityToggle');
+    const btn      = document.getElementById('saveEnrollmentCapacityBtn');
+    const statusEl = document.getElementById('enrollmentCapacityStatus');
+    if (!toggle || !btn) return;
+
+    toggle.checked = await loadEnrollmentCapacitySetting();
+
+    btn.addEventListener('click', async () => {
+        btn.disabled    = true;
+        btn.textContent = 'Saving…';
+        if (statusEl) statusEl.textContent = '';
+        try {
+            await saveEnrollmentCapacitySetting(toggle.checked);
+            if (statusEl) {
+                statusEl.textContent = '✓ Saved!';
+                statusEl.style.color = '#2e7d32';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+        } catch (err) {
+            if (statusEl) {
+                statusEl.textContent = '⚠️ ' + err.message;
+                statusEl.style.color = '#c62828';
+            }
+            console.error('setupEnrollmentCapacity:', err);
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = '💾 Save';
+        }
+    });
+}
+
+// ============================================================
 // OFFER EMAIL LINKS (global settings)
 // ============================================================
 function setupOfferLinks() {

@@ -527,6 +527,20 @@
                 </div>
             </section>
 
+            <!-- New Family Enrollment Capacity -->
+            <section class="admin-section collapsible-section" id="enrollmentCapacitySection">
+                <h2>🚫 New Family Enrollment</h2>
+                <p class="section-desc">When checked, the "Download Enrollment Forms" button on the public website is greyed out and replaced with a message directing families to the waitlist or director. Uncheck to re-open enrollment.</p>
+                <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+                    <label style="display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer;">
+                        <input type="checkbox" id="enrollmentAtCapacityToggle" style="width:18px;height:18px;cursor:pointer;">
+                        Enrollment is at capacity — disable new family enrollment form
+                    </label>
+                    <button id="saveEnrollmentCapacityBtn" class="btn-primary" style="padding:6px 16px;">💾 Save</button>
+                    <span id="enrollmentCapacityStatus" class="rates-status"></span>
+                </div>
+            </section>
+
             <!-- Room Rates & Settings -->
             <section class="admin-section collapsible-section" id="ratesSection">
                 <h2>⚙️ Room Rates &amp; Settings</h2>
