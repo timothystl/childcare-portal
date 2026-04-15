@@ -2182,3 +2182,124 @@ async function fetchAuditLog() {
     if (error) throw error;
     return data || [];
 }
+
+// ============================================================
+// STAFF SCHEDULE TIMES  (auto clock-out enforcement)
+// ============================================================
+
+/**
+ * Fetch schedule-time rows for a given work date.
+ * @param {string} workDate - YYYY-MM-DD
+ * @returns {Promise<Array>}
+ */
+async function fetchScheduleTimes(workDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_schedule_times')
+        .select('staff_id, scheduled_start, lunch_out, lunch_in, scheduled_end, notes')
+        .eq('work_date', workDate);
+    if (error) throw error;
+    return data || [];
+}
+
+/**
+ * Upsert schedule-time rows for a given work date.
+ * Each row: { staff_id, work_date, scheduled_start, lunch_out, lunch_in, scheduled_end, notes }
+ * @param {Array} rows
+ * @returns {Promise<void>}
+ */
+async function upsertScheduleTimes(rows) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    if (!rows.length) return;
+    const { error } = await sbClient
+        .from('staff_schedule_times')
+        .upsert(rows, { onConflict: 'staff_id,work_date' });
+    if (error) throw error;
+}
+
+/**
+ * Delete schedule-time rows for staff who were cleared from the form.
+ * @param {string[]} staffIds
+ * @param {string}   workDate
+ * @returns {Promise<void>}
+ */
+async function deleteScheduleTimes(staffIds, workDate) {
+    if (!sbClient || !staffIds.length) return;
+    const { error } = await sbClient
+        .from('staff_schedule_times')
+        .delete()
+        .eq('work_date', workDate)
+        .in('staff_id', staffIds);
+    if (error) throw error;
+}
+
+// ============================================================
+// AUTO CLOCK-OUT LOG
+// ============================================================
+
+/**
+ * Fetch auto clock-out log entries within a date range.
+ * @param {string} startDate - YYYY-MM-DD
+ * @param {string} endDate   - YYYY-MM-DD
+ * @returns {Promise<Array>}
+ */
+async function fetchAutoClockoutLog(startDate, endDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('auto_clockout_log')
+        .select('id, created_at, work_date, staff_name, trigger_type, scheduled_time, actual_clock_out, alert_sent, alert_sent_at')
+        .gte('work_date', startDate)
+        .lte('work_date', endDate)
+        .order('actual_clock_out', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+// ============================================================
+// CLOCK ENFORCEMENT SETTINGS  (geofence, director email, shift defaults)
+// ============================================================
+
+async function fetchGeofenceSetting() {
+    if (!sbClient) return { enabled: false, lat: 0, lng: 0, radius_meters: 200 };
+    const { data } = await sbClient
+        .from('settings').select('value').eq('key', 'geofence').maybeSingle();
+    return data?.value ?? { enabled: false, lat: 0, lng: 0, radius_meters: 200 };
+}
+
+async function saveGeofenceSetting(cfg) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'geofence', value: cfg }, { onConflict: 'key' });
+    if (error) throw error;
+}
+
+async function fetchDirectorEmailSetting() {
+    if (!sbClient) return '';
+    const { data } = await sbClient
+        .from('settings').select('value').eq('key', 'director_email').maybeSingle();
+    return typeof data?.value === 'string' ? data.value : '';
+}
+
+async function saveDirectorEmailSetting(email) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'director_email', value: email }, { onConflict: 'key' });
+    if (error) throw error;
+}
+
+async function fetchShiftDefaults() {
+    if (!sbClient) return {};
+    const { data } = await sbClient
+        .from('settings').select('value').eq('key', 'shift_defaults').maybeSingle();
+    return data?.value ?? {};
+}
+
+async function saveShiftDefaults(defaults) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'shift_defaults', value: defaults }, { onConflict: 'key' });
+    if (error) throw error;
+}

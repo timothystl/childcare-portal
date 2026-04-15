@@ -531,12 +531,88 @@ async function refreshClockStatus() {
     }
 }
 
+// ── Geofencing ────────────────────────────────────────────────
+/** Haversine distance in metres between two lat/lng points. */
+function haversineMetres(lat1, lng1, lat2, lng2) {
+    const R  = 6371000; // Earth radius metres
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lng2 - lng1) * Math.PI / 180;
+    const a  = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+/** Fetch geofence config from settings table. Returns null if disabled/missing. */
+async function getGeofenceConfig() {
+    try {
+        const { data, error } = await sb
+            .from('settings')
+            .select('value')
+            .eq('key', 'geofence')
+            .maybeSingle();
+        if (error || !data) return null;
+        const cfg = data.value;
+        if (!cfg?.enabled) return null;
+        if (typeof cfg.lat !== 'number' || typeof cfg.lng !== 'number') return null;
+        return cfg; // { enabled, lat, lng, radius_meters }
+    } catch { return null; }
+}
+
+/**
+ * Check whether the device is within the facility geofence.
+ * Resolves to { ok: true } on pass, { ok: false, reason: '…' } on fail.
+ * Always resolves (never rejects) — if location is unavailable and geofence
+ * is enabled we block the clock-in.
+ */
+async function checkGeofence() {
+    const cfg = await getGeofenceConfig();
+    if (!cfg) return { ok: true }; // geofence disabled — always allow
+
+    return new Promise(resolve => {
+        if (!navigator.geolocation) {
+            resolve({ ok: false, reason: 'Location services are not available on this device. Geofencing is required to clock in.' });
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            pos => {
+                const dist = haversineMetres(
+                    pos.coords.latitude, pos.coords.longitude,
+                    cfg.lat, cfg.lng
+                );
+                if (dist <= cfg.radius_meters) {
+                    resolve({ ok: true });
+                } else {
+                    resolve({
+                        ok: false,
+                        reason: `You appear to be outside the facility (${Math.round(dist)} m away). Please clock in on-site.`
+                    });
+                }
+            },
+            err => {
+                let reason = 'Location access was denied. Enable location permissions and try again.';
+                if (err.code === 3) reason = 'Location request timed out. Please try again.';
+                resolve({ ok: false, reason });
+            },
+            { timeout: 8000, maximumAge: 30000, enableHighAccuracy: true }
+        );
+    });
+}
+
 // ── Clock In ─────────────────────────────────────────────────
 document.getElementById('btnClockIn').addEventListener('click', async () => {
     setMsg('', '');
     const btn = document.getElementById('btnClockIn');
-    btn.disabled = true; btn.textContent = 'Clocking in…';
+    btn.disabled = true; btn.textContent = 'Checking location…';
     try {
+        // Geofence check before writing any DB record
+        const geo = await checkGeofence();
+        if (!geo.ok) {
+            setMsg(geo.reason, 'err');
+            return;
+        }
+
+        btn.textContent = 'Clocking in…';
         const now = new Date().toISOString();
         // INSERT a new event row each time — supports multiple shifts per day
         const { error } = await sb.from('staff_clock_events')
@@ -566,7 +642,7 @@ document.getElementById('btnClockOut').addEventListener('click', async () => {
         const now = new Date().toISOString();
         // Update only the specific open event by ID — not all rows for this staff+day
         const { error } = await sb.from('staff_clock_events')
-            .update({ clock_out: now })
+            .update({ clock_out: now, clock_out_method: 'manual' })
             .eq('id', openEventId);
         if (error) throw error;
         setMsg('Clocked out. Have a great rest of your day!', 'ok');
