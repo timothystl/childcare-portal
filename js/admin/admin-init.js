@@ -46,13 +46,10 @@ async function initDashboard() {
     setupStaffScheduling();
     setupStaffRoster();
     setupHoursEntry();
-    setupScheduleTimes();
-    setupAutoClockoutLog();
     setupPayrollReport();
     setupExtraReports();
     setupWaitlistAdmin();
     setupAdminRoles();
-    setupClockEnforcement();
     setupFinanceDashboard();
     setupTabs();
     setupCollapsibles();
