@@ -586,70 +586,6 @@
                 </div>
             </section>
 
-            <!-- Clock Enforcement Settings -->
-            <section class="admin-section collapsible-section" id="clockEnforcementSection">
-                <h2>⏰ Clock Enforcement Settings</h2>
-                <p class="section-desc">Configure geofencing for the staff clock-in page, the director alert email, and the default shift times used when you click "Apply Defaults" on the Schedule Times tab.</p>
-
-                <!-- Director email -->
-                <div class="rates-actions" style="align-items:flex-start;flex-direction:column;gap:10px;margin-bottom:24px;">
-                    <label style="font-weight:600;">Director Alert Email</label>
-                    <p class="section-desc" style="margin:0 0 6px;">This address receives an email whenever an auto clock-out fires.</p>
-                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                        <input type="email" id="directorEmailInput" placeholder="director@example.com"
-                               class="family-search-input" style="width:280px;">
-                        <button id="saveDirectorEmailBtn" class="btn-primary">💾 Save</button>
-                        <span id="directorEmailStatus" class="rates-status"></span>
-                    </div>
-                </div>
-
-                <!-- Geofence -->
-                <label style="font-weight:600;">Geofence</label>
-                <p class="section-desc" style="margin:4px 0 10px;">When enabled, staff must be physically on-site to clock in. Radius is in metres — 150–300 m is a good starting point for a single building.</p>
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-                    <label style="display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer;">
-                        <input type="checkbox" id="geofenceEnabledToggle" style="width:18px;height:18px;cursor:pointer;">
-                        Enable geofence on clock-in page
-                    </label>
-                </div>
-                <div class="staff-form-row" style="flex-wrap:wrap;gap:12px;">
-                    <div class="fm-field">
-                        <label>Latitude</label>
-                        <input type="number" id="geofenceLatInput" step="0.000001" placeholder="e.g. 38.653200"
-                               class="rate-input" style="width:160px;">
-                    </div>
-                    <div class="fm-field">
-                        <label>Longitude</label>
-                        <input type="number" id="geofenceLngInput" step="0.000001" placeholder="e.g. -90.314200"
-                               class="rate-input" style="width:160px;">
-                    </div>
-                    <div class="fm-field">
-                        <label>Radius (metres)</label>
-                        <input type="number" id="geofenceRadiusInput" step="1" min="50" placeholder="200"
-                               class="rate-input" style="width:110px;">
-                    </div>
-                </div>
-                <p class="section-desc" style="margin:8px 0 14px;">
-                    <strong>Tip:</strong> Open Google Maps, right-click the building, and choose "What's here?" to get precise coordinates.
-                </p>
-                <div class="rates-actions">
-                    <button id="saveGeofenceBtn" class="btn-primary">💾 Save Geofence</button>
-                    <span id="geofenceStatus" class="rates-status"></span>
-                </div>
-
-                <!-- Shift defaults -->
-                <hr style="margin:28px 0;border:none;border-top:1px solid var(--border);">
-                <label style="font-weight:600;">Default Shift Times</label>
-                <p class="section-desc" style="margin:4px 0 14px;">These defaults are pre-filled when you click "Apply Defaults" on the Schedule Times tab. Leave Lunch Out blank for shifts with no lunch break.</p>
-                <div id="shiftDefaultsWrap">
-                    <p class="empty-hint">Loading…</p>
-                </div>
-                <div class="rates-actions" style="margin-top:14px;">
-                    <button id="saveShiftDefaultsBtn" class="btn-primary">💾 Save Defaults</button>
-                    <span id="shiftDefaultsStatus" class="rates-status"></span>
-                </div>
-            </section>
-
             <!-- Offer Email Links -->
             <section class="admin-section collapsible-section" id="offerLinksSection">
                 <h2>🔗 Offer Email Links</h2>
@@ -788,49 +724,6 @@
                 </div>
                 <div id="hoursEntryContent">
                     <p class="empty-hint">Select a date and click Load to enter hours.</p>
-                </div>
-            </section>
-
-            <!-- Schedule Times (auto clock-out enforcement) -->
-            <section class="admin-section collapsible-section" id="scheduleTimesSection">
-                <h2>🕐 Schedule Times</h2>
-                <p class="section-desc">Set each staff member's scheduled punch-out times for a given day. The automated enforcement job uses these times to apply a 15-minute grace window before auto-clocking someone out. Leave a row blank to exempt that staff member from auto clock-out for that day.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="schedTimesDate">Date</label>
-                        <input type="date" id="schedTimesDate">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="loadSchedTimesBtn" class="btn-secondary">Load</button>
-                        <button id="applyShiftDefaultsBtn" class="btn-ghost" title="Pre-fill times from the shift defaults in Settings">Apply Defaults</button>
-                        <button id="saveSchedTimesBtn" class="btn-primary">💾 Save Times</button>
-                    </div>
-                </div>
-                <div id="schedTimesContent">
-                    <p class="empty-hint">Select a date and click Load to set schedule times.</p>
-                </div>
-                <span id="schedTimesStatus" class="rates-status"></span>
-            </section>
-
-            <!-- Auto Clock-Out Audit Log -->
-            <section class="admin-section collapsible-section" id="autoClockoutLogSection">
-                <h2>🔒 Auto Clock-Out Log</h2>
-                <p class="section-desc">Compliance audit trail of every automatic clock-out applied by the enforcement job. Use this to review incidents and verify director alerts were sent.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="aclStartDate">From</label>
-                        <input type="date" id="aclStartDate">
-                    </div>
-                    <div class="roster-field">
-                        <label for="aclEndDate">To</label>
-                        <input type="date" id="aclEndDate">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="loadAclBtn" class="btn-secondary">Load Log</button>
-                    </div>
-                </div>
-                <div id="aclContent">
-                    <p class="empty-hint">Select a date range and click Load Log.</p>
                 </div>
             </section>
 
