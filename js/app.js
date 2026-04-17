@@ -33,7 +33,8 @@ function getCentralTimeNow() {
         hour: 'numeric', hour12: false,
     }).formatToParts(now);
     const get = (type) => parseInt(parts.find(p => p.type === type).value, 10);
-    return { year: get('year'), month: get('month') - 1, day: get('day'), hour: get('hour') };
+    // hour12:false can return 24 for midnight in some environments; normalise to 0.
+    return { year: get('year'), month: get('month') - 1, day: get('day'), hour: get('hour') % 24 };
 }
 
 function getRegistrationWindow() {
@@ -46,12 +47,10 @@ function getRegistrationWindow() {
     const deadlineLabel = deadlineDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
     // Open: from 9 AM Central on the 1st through end of the 15th (midnight → closed)
-    const opensToday = (day === 1 && hour < 9);  // It's the 1st but not yet 9 AM
+    const opensToday = (day === 1 && hour < 9);
     let mode;
-    if (day < 1 || day > 15) {
+    if (day > 15 || opensToday) {
         mode = 'closed';
-    } else if (opensToday) {
-        mode = 'closed';  // Before 9 AM Central on the 1st
     } else {
         mode = 'confirmed';
     }
@@ -63,8 +62,9 @@ function getRegistrationWindow() {
 }
 
 function getTargetMonthKey() {
-    const { targetDate } = getRegistrationWindow();
-    return `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`;
+    const { year, month } = getCentralTimeNow();
+    const target = new Date(year, month + 1, 1);
+    return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}`;
 }
 
 // ============================================================

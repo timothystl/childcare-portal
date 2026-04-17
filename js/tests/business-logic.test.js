@@ -105,11 +105,10 @@ function getRegistrationWindow(today, override = 'auto', centralHour = 12) {
     const targetDate  = new Date(year, month + 1, 1);
     const deadlineDate = new Date(year, month, 15);
 
+    const opensToday = (day === 1 && centralHour < 9);
     let mode;
-    if (day < 1 || day > 15) {
+    if (day > 15 || opensToday) {
         mode = 'closed';
-    } else if (day === 1 && centralHour < 9) {
-        mode = 'closed';  // Before 9 AM Central on the 1st
     } else {
         mode = 'confirmed';
     }
@@ -118,6 +117,7 @@ function getRegistrationWindow(today, override = 'auto', centralHour = 12) {
 
     return {
         mode,
+        opensToday,
         targetDate,
         targetLabel:  ['January','February','March','April','May','June',
                        'July','August','September','October','November','December'][targetDate.getMonth()]
