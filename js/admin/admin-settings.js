@@ -97,10 +97,14 @@ function renderEnrollmentFormsList(forms) {
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
                 <a href="${_esc(f.url)}" target="_blank" style="font-size:.83em;color:var(--navy,#01294a);font-weight:700;">📄 Preview</a>
-                <button class="btn-danger-sm" onclick="deleteEnrollmentForm('${_esc(f.id)}')">🗑️ Delete</button>
+                <button class="btn-danger-sm" data-delete-form-id="${_esc(f.id)}">🗑️ Delete</button>
             </div>
         </div>
     `).join('');
+
+    container.querySelectorAll('[data-delete-form-id]').forEach(btn => {
+        btn.addEventListener('click', () => deleteEnrollmentForm(btn.dataset.deleteFormId));
+    });
 }
 
 async function setupEnrollmentForms() {
@@ -166,12 +170,14 @@ async function deleteEnrollmentForm(id) {
         let forms = await loadEnrollmentForms();
         const form = forms.find(f => f.id === id);
         if (!form) return;
+        // Remove metadata first — if storage delete fails the entry is already gone
+        // from the page, and the orphaned file is harmless.
+        const updated = forms.filter(f => f.id !== id);
+        await saveEnrollmentForms(updated);
+        renderEnrollmentFormsList(updated);
         await deleteEnrollmentFormFile(form.filename);
-        forms = forms.filter(f => f.id !== id);
-        await saveEnrollmentForms(forms);
-        renderEnrollmentFormsList(forms);
     } catch (err) {
-        alert('Failed to delete form: ' + err.message);
+        showToast('Failed to delete form: ' + err.message);
         console.error('deleteEnrollmentForm:', err);
     }
 }
