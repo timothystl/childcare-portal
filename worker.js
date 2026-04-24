@@ -118,6 +118,27 @@ async function sendWebPush(sub, payload, env) {
   });
 }
 
+// Verifies a family session token issued by the family-lookup Edge Function.
+// Token format: "{familyId}:{expiryMs}:{b64url(HMAC-SHA256(secret, familyId:expiryMs))}"
+async function verifyFamilyToken(token, secret, expectedFamilyId) {
+  try {
+    const parts = token.split(':');
+    if (parts.length !== 3) return false;
+    const [tokenFamilyId, expStr, sig] = parts;
+    if (tokenFamilyId !== expectedFamilyId) return false;
+    if (Date.now() > parseInt(expStr, 10)) return false;
+    const keyBytes = new TextEncoder().encode(secret);
+    const key = await crypto.subtle.importKey(
+      'raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify'],
+    );
+    const sigBytes = b64urlDecode(sig);
+    const msg = new TextEncoder().encode(`${tokenFamilyId}:${expStr}`);
+    return crypto.subtle.verify('HMAC', key, sigBytes, msg);
+  } catch {
+    return false;
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -184,6 +205,13 @@ export default {
       if (!family_id || !endpoint || !p256dh || !auth) {
         return new Response('Missing fields', { status: 400 });
       }
+
+      // Require a valid HMAC session token to prevent unauthenticated registrations.
+      const bearer = (request.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+      const tokenOk = bearer
+        ? await verifyFamilyToken(bearer, env.FAMILY_SESSION_SECRET ?? '', family_id)
+        : false;
+      if (!tokenOk) return new Response('Unauthorized', { status: 401 });
       const res = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions`, {
         method:  'POST',
         headers: {

@@ -744,18 +744,23 @@ async function familyLogin(email, pin) {
 }
 
 /**
- * Convenience wrapper around familyLogin for the parent portal.
- * Returns { family, isParent2 } on success, null on wrong credentials, throws on locked.
+ * Authenticates via the family-lookup Edge Function (same logic as the RPC but
+ * also returns a short-lived sessionToken for securing push subscriptions).
+ * Returns { family, isParent2, sessionToken } on success, { error } on locked, null otherwise.
  * @param {string}        email - Parent email
  * @param {string|number} pin   - 4-digit PIN
- * @returns {Promise<FamilyLoginResult|null>}
+ * @returns {Promise<{family:object,isParent2:boolean,sessionToken:string}|{error:string}|null>}
  */
 async function lookupFamilyForRegistration(email, pin) {
     if (!sbClient) return null;
     try {
-        const result = await familyLogin(email, pin);
-        if (!result || result.error === 'not_found' || result.error === 'invalid_pin') return null;
-        return result; // { family, isParent2 }
+        const { data, error } = await sbClient.functions.invoke('family-lookup', {
+            body: { email, pin: String(pin) },
+        });
+        if (error || !data) return null;
+        if (data.error === 'login_locked') return { error: 'login_locked' };
+        if (data.error) return null;
+        return { family: data.family, isParent2: data.isParent2, sessionToken: data.sessionToken ?? null };
     } catch (_) {
         return null;
     }

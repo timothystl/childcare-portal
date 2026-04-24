@@ -10,6 +10,7 @@ const DAY_HEADERS_MF = ['Mon','Tue','Wed','Thu','Fri'];
 // ============================================================
 let currentDate         = new Date();
 let selectedFamily      = null;     // { id, parent_name, parent_email, parent_phone, pin, students:[] }
+let _familySessionToken = null;    // short-lived HMAC token issued at login, passed to push-subscribe
 let selectedChildren    = [];       // [{ name, dob, room: ROOMS[i], isNew: bool, studentId: string|null }]
 let selectedDates       = new Map();  // 'YYYY-MM-DD' -> { dayType: 'full'|'half' }
 let capacityCache       = {};         // { roomId: { 'YYYY-MM-DD': count } }
@@ -202,6 +203,7 @@ async function runEmailPinLookup() {
             showToast('No family found matching that email and PIN. Please contact the office if you need help.');
             return;
         }
+        _familySessionToken = result.sessionToken ?? null;
         selectFamily(result.family, result.isParent2);
     } catch {
         showToast('Lookup failed. Please try again.');
@@ -243,15 +245,16 @@ function selectFamily(family, isParent2 = false) {
 
     // Offer push notifications now that we know the family's UUID
     if (typeof initPushNotifications === 'function') {
-        initPushNotifications(family.id);
+        initPushNotifications(family.id, _familySessionToken);
     }
 
     renderChildSection();
 }
 
 function resetFamilyLookup() {
-    selectedFamily   = null;
-    selectedChildren = [];
+    selectedFamily      = null;
+    _familySessionToken = null;
+    selectedChildren    = [];
     studentDataMap.clear();
 
     const emailInput = document.getElementById('familyEmailInput');
