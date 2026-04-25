@@ -243,19 +243,30 @@ function printSchedule() {
 // GDPR / CCPA DATA CONTROLS
 // ============================================================
 
-// Download My Data — exports all registration data as a JSON file
+// Download My Data — exports all family data as a JSON file (CCPA/GDPR access right)
 function downloadMyData() {
-    if (!_currentFamily || !_currentRegistrations.length) return;
+    if (!_currentFamily) return;
 
     const exportData = {
         exported_at:  new Date().toISOString(),
         family: {
-            parent_name:  _currentFamily.parent_name,
-            parent_email: _currentFamily.parent_email,
-            parent_phone: _currentFamily.parent_phone,
-            parent2_name: _currentFamily.parent2_name  || null,
+            parent_name:   _currentFamily.parent_name   || null,
+            parent_email:  _currentFamily.parent_email  || null,
+            parent_phone:  _currentFamily.parent_phone  || null,
+            parent2_name:  _currentFamily.parent2_name  || null,
             parent2_email: _currentFamily.parent2_email || null,
+            parent2_phone: _currentFamily.parent2_phone || null,
         },
+        children: (_currentFamily.students || []).map(s => ({
+            id:             s.id,
+            child_name:     s.child_name,
+            child_dob:      s.child_dob      || null,
+            room_override:  s.room_override  || null,
+            discount_type:  s.discount_type  || null,
+            discount_value: s.discount_value ?? null,
+            discount_note:  s.discount_note  || null,
+            recurring_days: s.recurring_days || null,
+        })),
         registrations: _currentRegistrations.map(reg => ({
             id:           reg.id,
             submitted_at: reg.created_at,
@@ -279,33 +290,34 @@ function downloadMyData() {
     URL.revokeObjectURL(url);
 }
 
-// Request Account Deletion — sends a message to admin via the messages table
+// Request Account Deletion — inserts into deletion_requests table for structured tracking
 async function submitDeletionRequest() {
-    const note   = (document.getElementById('deletionNote')?.value || '').trim();
-    const status = document.getElementById('deletionStatus');
-    const btn    = document.getElementById('submitDeletionBtn');
+    const note      = (document.getElementById('deletionNote')?.value || '').trim();
+    const statusEl  = document.getElementById('deletionStatus');
+    const btn       = document.getElementById('submitDeletionBtn');
 
     if (!_currentFamily) return;
 
     btn.disabled    = true;
     btn.textContent = 'Sending…';
-    status.classList.add('hidden');
+    statusEl.classList.add('hidden');
 
     try {
-        await addMessage({
-            parentName:  _currentFamily.parent_name,
+        await submitFamilyDeletionRequest({
+            familyId:    _currentFamily.id,
             parentEmail: _currentFamily.parent_email,
-            message: `ACCOUNT DELETION REQUEST\n\nThe family has requested deletion of their account and all associated records under data privacy rights.\n\n${note ? 'Note: ' + note : ''}`,
+            parentName:  _currentFamily.parent_name || null,
+            reason:      note || null,
         });
-        status.textContent = '✅ Your deletion request has been received. We will process it within 30 days and confirm by email.';
-        status.style.color = '#2e7d32';
-        status.classList.remove('hidden');
+        statusEl.textContent = '✅ Your deletion request has been received. We will process it within 30 days and send a confirmation to ' + _currentFamily.parent_email + '.';
+        statusEl.style.color = '#2e7d32';
+        statusEl.classList.remove('hidden');
         document.getElementById('deletionNote').value = '';
         btn.textContent = 'Sent';
     } catch (err) {
-        status.textContent = '⚠️ Could not send request: ' + err.message + '. Please email mdo@timothystl.org directly.';
-        status.style.color = '#c62828';
-        status.classList.remove('hidden');
+        statusEl.textContent = '⚠️ Could not send request: ' + err.message + '. Please email mdo@timothystl.org directly.';
+        statusEl.style.color = '#c62828';
+        statusEl.classList.remove('hidden');
         btn.disabled    = false;
         btn.textContent = 'Send Deletion Request';
     }
