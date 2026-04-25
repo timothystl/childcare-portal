@@ -2,6 +2,15 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const ALLOWED_ORIGIN = "https://mdo.timothystl.org";
 
+function escHtml(s: string): string {
+    return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function corsHeaders(req: Request): Record<string, string> {
     const origin = req.headers.get("origin") || "";
     return {
@@ -74,10 +83,10 @@ serve(async (req) => {
         <!-- Body -->
         <tr>
           <td style="padding:32px 32px 24px;">
-            <p style="margin:0 0 16px;color:#333;font-size:16px;">Dear ${parentName},</p>
+            <p style="margin:0 0 16px;color:#333;font-size:16px;">Dear ${escHtml(parentName)},</p>
 
             <p style="color:#333;font-size:15px;line-height:1.6;">
-              Your care schedule for <strong>${childList}</strong> has been registered for <strong>${monthLabel}</strong>.
+              Your care schedule for <strong>${escHtml(childList)}</strong> has been registered for <strong>${escHtml(monthLabel)}</strong>.
               Here's your confirmation:
             </p>
 
@@ -128,7 +137,7 @@ serve(async (req) => {
                 from:     fromEmail,
                 to:       [parentEmail],
                 reply_to: replyTo,
-                subject:  `Schedule Confirmation — ${childList} — ${monthLabel}`,
+                subject:  `Schedule Confirmation — ${String(childList ?? '')} — ${String(monthLabel ?? '')}`,
                 html,
             }),
         });

@@ -1134,7 +1134,7 @@ async function lookupFamilyByEmailAndPin(email, pin) {
     if (!sbClient) return null;
     try {
         const result = await familyLogin(email, pin);
-        if (!result || result.error === 'not_found' || result.error === 'invalid_pin') return null;
+        if (!result || result.error === 'not_found' || result.error === 'invalid_pin' || result.error === 'invalid_credentials') return null;
         if (result.error === 'login_locked') return { login_locked: true };
         // Return shape expected by callers: id, parent_email (login email), login_locked
         const loginEmail = result.isParent2 ? result.family.parent2_email : result.family.parent_email;
