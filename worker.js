@@ -227,6 +227,13 @@ export default {
 
     // ── POST /send-push — send a notification (admin only) ──────────────────
     if (url.pathname === '/send-push' && request.method === 'POST') {
+      // Reject cross-origin requests to prevent a logged-in admin's browser
+      // from being tricked into sending fake notifications via CSRF.
+      const reqOrigin = request.headers.get('Origin');
+      if (reqOrigin && !ALLOWED_ORIGINS.has(reqOrigin)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+
       // Verify the caller holds a valid Supabase session (admin is authenticated)
       const bearer = request.headers.get('Authorization');
       if (!bearer) return new Response('Unauthorized', { status: 401 });

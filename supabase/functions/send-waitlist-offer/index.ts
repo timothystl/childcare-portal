@@ -2,6 +2,15 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const ALLOWED_ORIGIN = "https://mdo.timothystl.org";
 
+function escHtml(s: string): string {
+    return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function corsHeaders(req: Request): Record<string, string> {
     const origin = req.headers.get("origin") || "";
     return {
@@ -44,7 +53,7 @@ serve(async (req) => {
         );
 
         const notesBlock = offerNotes
-            ? `<p style="background:#fffbeb;border-left:4px solid #f59e0b;padding:10px 14px;border-radius:4px;color:#444;margin:20px 0;">${offerNotes}</p>`
+            ? `<p style="background:#fffbeb;border-left:4px solid #f59e0b;padding:10px 14px;border-radius:4px;color:#444;margin:20px 0;">${escHtml(offerNotes)}</p>`
             : "";
 
         const links: string[] = Array.isArray(papeworkLinks) ? papeworkLinks : [];
@@ -53,7 +62,7 @@ serve(async (req) => {
                  <p style="margin:0 0 10px;font-weight:700;color:#0369a1;font-size:14px;">📄 Enrollment Paperwork</p>
                  <p style="margin:0 0 8px;color:#444;font-size:14px;">Please complete the following form(s) before your child's start date:</p>
                  <ul style="margin:0;padding-left:20px;">
-                   ${links.map(url => `<li style="margin-bottom:6px;"><a href="${url}" style="color:#4f46e5;">${url}</a></li>`).join('')}
+                   ${links.map(url => `<li style="margin-bottom:6px;"><a href="${escHtml(url)}" style="color:#4f46e5;">${escHtml(url)}</a></li>`).join('')}
                  </ul>
                </div>`
             : "";
@@ -62,7 +71,7 @@ serve(async (req) => {
             ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px 20px;margin:20px 0;">
                  <p style="margin:0 0 10px;font-weight:700;color:#166534;font-size:14px;">📱 Procare Parent App</p>
                  <p style="margin:0 0 8px;color:#444;font-size:14px;">We use Procare to manage attendance, billing, and communication. Please enroll using the link below:</p>
-                 <a href="${procareLink}" style="display:inline-block;background:#4f46e5;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:700;font-size:14px;">Enroll in Procare</a>
+                 <a href="${escHtml(procareLink)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:700;font-size:14px;">Enroll in Procare</a>
                </div>`
             : "";
 
@@ -86,10 +95,10 @@ serve(async (req) => {
         <!-- Body -->
         <tr>
           <td style="padding:32px 32px 24px;">
-            <p style="margin:0 0 16px;color:#333;font-size:16px;">Dear ${parentName},</p>
+            <p style="margin:0 0 16px;color:#333;font-size:16px;">Dear ${escHtml(parentName)},</p>
 
             <p style="color:#333;font-size:15px;line-height:1.6;">
-              We're so excited to let you know — <strong>a spot has opened up for ${childName}</strong> at Timothy Lutheran Church Mother's Day Out, and we'd love to have your family join us!
+              We're so excited to let you know — <strong>a spot has opened up for ${escHtml(childName)}</strong> at Timothy Lutheran Church Mother's Day Out, and we'd love to have your family join us!
             </p>
 
             ${notesBlock}
@@ -140,7 +149,7 @@ serve(async (req) => {
                 from:     fromEmail,
                 to:       [parentEmail],
                 reply_to: replyTo,
-                subject:  `A Spot is Available for ${childName} — Timothy Lutheran MDO`,
+                subject:  `A Spot is Available for ${String(childName ?? '')} — Timothy Lutheran MDO`,
                 html,
             }),
         });

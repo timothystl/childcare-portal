@@ -17,7 +17,6 @@ async function buildFamilyToken(familyId: string): Promise<string> {
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
   return `${familyId}:${exp}:${sig}`
 }
-const MAX_ATTEMPTS = 5
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': CORS_ORIGIN,
@@ -41,76 +40,37 @@ Deno.serve(async (req) => {
 
     if (!email || !pin) return json({ error: 'missing_params' }, 400)
 
-    // Service-role client — bypasses RLS so we can update attempt counters
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
     const parsedPin = parseInt(pin, 10)
-    if (isNaN(parsedPin)) return json({ error: 'invalid_pin', attempts_left: MAX_ATTEMPTS })
+    if (isNaN(parsedPin)) return json({ error: 'invalid_credentials' })
 
-    const fields = [
-      'id', 'parent_name', 'parent_email', 'parent_phone',
-      'pin', 'parent2_name', 'parent2_email', 'parent2_phone', 'parent2_pin',
-      'registration_locked', 'login_locked', 'login_attempts',
-      'students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)',
-    ].join(', ')
-    // NOTE: pin/parent2_pin are fetched only for server-side verification — they are stripped before returning to client
+    // Delegate to the Postgres RPC which uses bcrypt (pgcrypto) and handles
+    // attempt tracking + lockout atomically in a single DB transaction.
+    const { data, error } = await supabase.rpc('family_login', {
+      p_email: email,
+      p_pin:   parsedPin,
+    })
 
-    // Try parent 1 first, then parent 2
-    const { data: byP1 } = await supabase
-      .from('families')
-      .select(fields)
-      .ilike('parent_email', email)
-      .maybeSingle()
+    if (error) return json({ error: 'server_error', message: error.message }, 500)
 
-    const { data: byP2 } = !byP1
-      ? await supabase
-          .from('families')
-          .select(fields)
-          .ilike('parent2_email', email)
-          .maybeSingle()
-      : { data: null }
-
-    const family = byP1 ?? byP2
-    const isParent2 = !byP1 && !!byP2
-
-    if (!family) return json({ error: 'not_found' })
-
-    // If login is already locked, reject immediately
-    if (family.login_locked) return json({ error: 'login_locked' })
-
-    // Verify PIN
-    const expectedPin = isParent2 ? family.parent2_pin : family.pin
-    if (parsedPin !== expectedPin) {
-      const newAttempts = (family.login_attempts ?? 0) + 1
-      const shouldLock = newAttempts >= MAX_ATTEMPTS
-
-      await supabase
-        .from('families')
-        .update({ login_attempts: newAttempts, ...(shouldLock ? { login_locked: true } : {}) })
-        .eq('id', family.id)
-
-      if (shouldLock) return json({ error: 'login_locked' })
-
-      return json({ error: 'invalid_pin', attempts_left: MAX_ATTEMPTS - newAttempts })
+    // Normalize: never distinguish "not found" from "wrong PIN" — prevents
+    // attackers from using the API to enumerate which emails are registered.
+    if (!data || data.error === 'not_found' || data.error === 'invalid_pin') {
+      return json({ error: 'invalid_credentials', attempts_left: data?.attempts_left ?? null })
     }
 
-    // Success — reset attempt counter
-    await supabase
-      .from('families')
-      .update({ login_attempts: 0 })
-      .eq('id', family.id)
+    if (data.error === 'login_locked') return json({ error: 'login_locked' })
+    if (data.error) return json({ error: 'server_error' }, 500)
 
-    // Strip server-only fields — client must never receive PINs or attempt counters
-    const { pin: _p, parent2_pin: _p2, login_attempts: _a, ...safeFamily } = family
+    // Success — issue a short-lived HMAC token so the Cloudflare Worker can
+    // verify that push subscription calls come from an authenticated family.
+    const sessionToken = await buildFamilyToken(data.family.id)
 
-    // Issue a short-lived HMAC-signed token so the Cloudflare Worker can verify
-    // that the push-subscribe caller is actually this authenticated family.
-    const sessionToken = await buildFamilyToken(safeFamily.id)
-
-    return json({ family: safeFamily, isParent2, sessionToken })
+    return json({ family: data.family, isParent2: data.isParent2, sessionToken })
 
   } catch (err) {
     return json({ error: 'server_error', message: (err as Error).message }, 500)
