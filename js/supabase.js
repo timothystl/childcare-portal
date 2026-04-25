@@ -1021,6 +1021,14 @@ async function addMessage({ parentName, parentEmail, message }) {
     if (error) throw error;
 }
 
+async function submitFamilyDeletionRequest({ familyId, parentEmail, parentName, reason }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('deletion_requests')
+        .insert({ family_id: familyId, parent_email: parentEmail, parent_name: parentName, reason });
+    if (error) throw error;
+}
+
 async function fetchMessages(showArchived = false) {
     if (!sbClient) throw new Error('Supabase not configured.');
     // Try with is_archived column; fall back gracefully if it hasn't been added yet
@@ -1136,9 +1144,10 @@ async function lookupFamilyByEmailAndPin(email, pin) {
         const result = await familyLogin(email, pin);
         if (!result || result.error === 'not_found' || result.error === 'invalid_pin' || result.error === 'invalid_credentials') return null;
         if (result.error === 'login_locked') return { login_locked: true };
-        // Return shape expected by callers: id, parent_email (login email), login_locked
+        // Return the full family object so callers have all fields for display and export.
+        // Override parent_email with the login email so the portal shows the right address.
         const loginEmail = result.isParent2 ? result.family.parent2_email : result.family.parent_email;
-        return { id: result.family.id, parent_email: loginEmail, login_locked: false };
+        return { ...result.family, parent_email: loginEmail, login_locked: false };
     } catch (_) {
         return null;
     }
