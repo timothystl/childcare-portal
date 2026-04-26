@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>MDO Staff &amp; Parent Manual — Timothy Lutheran MDO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Nunito',sans-serif;font-size:.95rem;color:#2E2A22;background:#fff;display:flex;min-height:100vh}
+a{color:#01294A}
+h1,h2,h3{font-family:'Lora',Georgia,serif;color:#01294A}
+/* SIDEBAR */
+.sidebar{width:240px;min-width:240px;background:#01294A;color:#fff;position:fixed;top:0;left:0;height:100vh;overflow-y:auto;padding:0 0 40px;z-index:100}
+.sidebar-logo{padding:20px 16px 12px;font-family:'Lora',serif;font-size:1rem;font-weight:700;color:#F5B731;border-bottom:1px solid rgba(255,255,255,.15);line-height:1.3}
+.sidebar-logo span{display:block;font-family:'Nunito',sans-serif;font-size:.75rem;color:rgba(255,255,255,.6);font-weight:400;margin-top:2px}
+.nav-group{padding:10px 0 4px}
+.nav-group-label{font-size:.7rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.45);padding:6px 16px 4px}
+.nav-link{display:block;padding:5px 16px;font-size:.82rem;color:rgba(255,255,255,.75);text-decoration:none;line-height:1.4;border-left:3px solid transparent;transition:background .15s,color .15s}
+.nav-link:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav-link.active{background:rgba(245,183,49,.15);color:#F5B731;border-left-color:#F5B731}
+/* MAIN */
+.content{margin-left:240px;flex:1;min-width:0}
+.manual-header{background:#01294A;color:#fff;padding:36px 48px 28px}
+.manual-header h1{font-size:1.9rem;color:#F5B731;margin-bottom:6px}
+.header-sub{font-size:.85rem;color:rgba(255,255,255,.65)}
+.manual-body{padding:0 48px 80px;max-width:900px}
+.part-label{font-family:'Lora',serif;font-size:1.1rem;font-weight:700;color:#fff;background:#01294A;padding:10px 20px;margin:40px -48px 0;letter-spacing:.02em}
+.part-b-label{background:#5BAD8B}
+.part-b-wrap{background:#FDFAF0;border:2px solid #E8E0CC;border-radius:10px;padding:28px 32px;margin-top:24px}
+section{padding:28px 0;border-bottom:1px solid #E8E0CC}
+section:last-child{border-bottom:none}
+section h2{font-size:1.25rem;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #E8E0CC}
+section h3{font-size:1rem;font-weight:700;color:#01294A;margin:16px 0 8px;font-family:'Nunito',sans-serif}
+p{line-height:1.7;margin-bottom:10px}
+ul,ol{margin:8px 0 12px 20px;line-height:1.7}
+li{margin-bottom:4px}
+strong{font-weight:700}
+/* CALLOUTS */
+.warn{background:#fff5f5;border-left:4px solid #dc2626;border-radius:6px;padding:12px 16px;margin:14px 0;font-size:.9rem}
+.warn::before{content:'⚠️  ';font-style:normal}
+.info{background:#eff6ff;border-left:4px solid #3b82f6;border-radius:6px;padding:12px 16px;margin:14px 0;font-size:.9rem}
+.info::before{content:'ℹ️  '}
+.tip{background:#fffbeb;border-left:4px solid #F5B731;border-radius:6px;padding:12px 16px;margin:14px 0;font-size:.9rem}
+.tip::before{content:'💡  '}
+.share-callout{background:#5BAD8B;color:#fff;border-radius:8px;padding:12px 18px;font-weight:700;font-size:.95rem;margin-bottom:16px}
+.print-btn{background:#01294A;color:#fff;border:none;border-radius:6px;padding:9px 18px;font-family:'Nunito',sans-serif;font-size:.9rem;font-weight:700;cursor:pointer;margin-bottom:24px}
+.print-btn:hover{background:#023a6b}
+/* TABLES */
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.9rem}
+th{background:#01294A;color:#fff;padding:9px 12px;text-align:left;font-family:'Nunito',sans-serif;font-weight:700}
+td{padding:8px 12px;border-bottom:1px solid #E8E0CC}
+tr:nth-child(even) td{background:#faf7f2}
+/* MOBILE */
+@media(max-width:768px){
+  .sidebar{position:relative;width:100%;height:auto;min-width:0}
+  .content{margin-left:0}
+  .manual-body{padding:0 20px 60px}
+  .part-label{margin:32px -20px 0}
+}
+/* PRINT PART B */
+@media print{
+  body:not(.printing-partb) .part-b-wrap{display:block}
+  body.printing-partb .sidebar,body.printing-partb .manual-header,body.printing-partb .part-label,body.printing-partb #part-a,body.printing-partb section[id^="a"],body.printing-partb .print-btn{display:none!important}
+  body.printing-partb .content{margin-left:0}
+  body.printing-partb .part-b-wrap{border:none;padding:0}
+}
+</style>
+</head>
+<body>
+<nav class="sidebar" id="sidebar">
+<div class="sidebar-logo">MDO Manual<span>Timothy Lutheran MDO</span></div>
+<div class="nav-group">
+  <div class="nav-group-label">Staff &amp; Admin Guide</div>
+  <a class="nav-link" href="#a1" data-sec="a1">A1 · Getting In</a>
+  <a class="nav-link" href="#a2" data-sec="a2">A2 · Classrooms</a>
+  <a class="nav-link" href="#a3" data-sec="a3">A3 · Care Calendar</a>
+  <a class="nav-link" href="#a4" data-sec="a4">A4 · Families</a>
+  <a class="nav-link" href="#a5" data-sec="a5">A5 · Messages</a>
+  <a class="nav-link" href="#a6" data-sec="a6">A6 · Waitlist</a>
+  <a class="nav-link" href="#a7" data-sec="a7">A7 · Reports</a>
+  <a class="nav-link" href="#a8" data-sec="a8">A8 · Staffing</a>
+  <a class="nav-link" href="#a9" data-sec="a9">A9 · Finance</a>
+  <a class="nav-link" href="#a10" data-sec="a10">A10 · Settings</a>
+  <a class="nav-link" href="#a11" data-sec="a11">A11 · Auto Updates</a>
+  <a class="nav-link" href="#a12" data-sec="a12">A12 · Needs Developer</a>
+  <a class="nav-link" href="#a13" data-sec="a13">A13 · Rooms Reference</a>
+  <a class="nav-link" href="#a14" data-sec="a14">A14 · Asking Claude</a>
+</div>
+<div class="nav-group">
+  <div class="nav-group-label">Parent Guide</div>
+  <a class="nav-link" href="#b1" data-sec="b1">B1 · Check Your Schedule</a>
+  <a class="nav-link" href="#b2" data-sec="b2">B2 · Reading Your Schedule</a>
+  <a class="nav-link" href="#b3" data-sec="b3">B3 · Printing</a>
+  <a class="nav-link" href="#b4" data-sec="b4">B4 · Download Your Data</a>
+  <a class="nav-link" href="#b5" data-sec="b5">B5 · Request Deletion</a>
+  <a class="nav-link" href="#b6" data-sec="b6">B6 · Forgot PIN / Locked Out</a>
+  <a class="nav-link" href="#b7" data-sec="b7">B7 · Troubleshooting</a>
+</div>
+</nav>
+<main class="content">
+<header class="manual-header">
+  <div class="header-inner">
+    <h1>MDO Operations Manual</h1>
+    <p class="header-sub">Timothy Lutheran Church Mother's Day Out &nbsp;·&nbsp; Last updated: April 2026</p>
+  </div>
+</header>
+<div class="manual-body">
+<!-- PART A -->
+<div class="part-label" id="part-a">PART A — Staff &amp; Admin Guide</div>
+<section id="a1">
+<h2>A1 · Getting In</h2>
+<h3>Admin Portal</h3>
+<ol>
+  <li>Go to <strong>admin.html</strong> on your MDO site.</li>
+  <li>Enter your admin email address and password, then click <strong>Sign In</strong>.</li>
+  <li>Your session stays active for <strong>30 minutes of inactivity</strong>, then logs out automatically.</li>
+</ol>
+<div class="info">Only staff with an admin account can access this portal. Contact your developer to add or remove admin accounts.</div>
+<h3>Staff Clock-In Kiosk</h3>
+<ol>
+  <li>Go to <strong>clockin.html</strong> on a shared device (tablet or computer at the front desk).</li>
+  <li>Staff enter their personal <strong>4-digit PIN</strong> and tap <strong>Clock In</strong> or <strong>Clock Out</strong>.</li>
+  <li>Each punch is recorded with a timestamp. Multiple shifts per day are supported.</li>
+  <li>Staff PINs are set in the <strong>Staffing tab</strong> — see section A8.</li>
+</ol>
+</section>
+<section id="a2">
+<h2>A2 · Classrooms Tab</h2>
+<p>Use this tab to see who is enrolled on any given day — your daily attendance roster.</p>
+<h3>Viewing the Daily Roster</h3>
+<ol>
+  <li>Click the <strong>Classrooms</strong> tab.</li>
+  <li>Pick a date using the date picker.</li>
+  <li>Optionally choose a specific room from the room filter (leave blank to see all rooms).</li>
+  <li>Click <strong>View Roster</strong>.</li>
+  <li>Children are grouped by room. Each row shows the child's name, day type (Full or Half), and the rate charged.</li>
+</ol>
+<h3>Exporting / Printing the Roster</h3>
+<ol>
+  <li>After generating the roster, click <strong>Export Roster</strong>.</li>
+  <li>A print-formatted page opens in a new window.</li>
+  <li>Use your browser's print dialog (Ctrl+P / Cmd+P) to print or save as PDF.</li>
+</ol>
+<div class="info">The roster only shows <strong>confirmed</strong> registrations — waitlisted children do not appear.</div>
+<div class="tip">Requires developer: changing room capacity numbers or age range boundaries.</div>
+</section>
+<section id="a3">
+<h2>A3 · Care Calendar Tab</h2>
+<p>This tab shows enrollment across the full month as a grid per room. Green cells are open care days. Click any cell to see who is enrolled that day.</p>
+<h3>Registration Window Override</h3>
+<p>By default the enrollment window <strong>opens automatically at 9 AM on the 15th of each month</strong>. You can override this:</p>
+<ol>
+  <li>Find the <strong>Registration Window</strong> dropdown in this tab.</li>
+  <li>Select <strong>Force Open</strong> to open enrollment early, or <strong>Force Closed</strong> to pause it.</li>
+  <li>Click <strong>Save</strong>.</li>
+  <li>When you're ready to go back to the normal schedule, select <strong>Auto</strong> and click Save again.</li>
+</ol>
+<div class="warn">Leaving it on Force Open means enrollment never closes. Always set it back to Auto when done.</div>
+<h3>Adding a Closure (Holiday / Snow Day)</h3>
+<ol>
+  <li>Scroll to the <strong>Closures</strong> section in this tab.</li>
+  <li>Enter the date and an optional reason (e.g. "Thanksgiving Break").</li>
+  <li>Click <strong>Add Closure</strong>. The day is immediately blocked on the parent calendar.</li>
+  <li>To remove a closure, find it in the list and click <strong>Remove</strong>.</li>
+</ol>
+<h3>Notifying Parents of a Closure</h3>
+<ol>
+  <li>Enter the closure date and reason as above.</li>
+  <li>Click <strong>🔔 Notify Parents</strong>.</li>
+  <li>A push notification is sent to all parents who have notifications enabled on their device.</li>
+</ol>
+<div class="info">Push notifications only reach parents who have allowed notifications in their browser. Not all parents will receive them — always follow up with an email for important closures.</div>
+</section>
+<section id="a4">
+<h2>A4 · Families Tab</h2>
+<p>Search, create, and manage all family accounts.</p>
+<h3>Searching for a Family</h3>
+<p>Type a name or email in the search box. Results are paginated 20 per page — use the Prev/Next buttons to browse.</p>
+<h3>Editing a Family</h3>
+<ol>
+  <li>Find the family and click <strong>✏ Edit</strong>.</li>
+  <li>Update parent name, email, phone, or Parent 2 details.</li>
+  <li>To add a child, click <strong>+ Add Child</strong>. Fill in name, date of birth, and optionally a room override.</li>
+  <li>To remove a child row, click the <strong>✕</strong> button next to that child.</li>
+  <li>Click <strong>Save</strong>.</li>
+</ol>
+<div class="info">Leave <strong>Room Override</strong> blank and the system assigns the child to the correct room automatically based on their date of birth.</div>
+<h3>Generating a New PIN</h3>
+<ol>
+  <li>Open the family's edit modal.</li>
+  <li>Click <strong>New PIN</strong> (or <strong>New PIN 2</strong> for the second parent).</li>
+  <li>A 4-digit PIN appears — copy it and give it to the family.</li>
+  <li>Click Save.</li>
+</ol>
+<div class="warn">You cannot retrieve a PIN after closing the modal. Write it down before saving.</div>
+<h3>Locking / Unlocking Registration</h3>
+<ul>
+  <li>Click <strong>🔒 Lock Reg</strong> to prevent a family from adding new registrations (e.g., outstanding balance).</li>
+  <li>Click <strong>🔓 Unlock Reg</strong> to restore their access.</li>
+</ul>
+<h3>Unlocking a Locked Login</h3>
+<p>If a parent enters the wrong PIN 5 times in a row, their login locks automatically. Click <strong>🔓 Unlock Login</strong> next to their name to restore access.</p>
+<h3>Archiving &amp; Restoring</h3>
+<ul>
+  <li><strong>Archive</strong> — hides the family from the active list. Use at year-end. Their data is preserved.</li>
+  <li><strong>↩ Restore</strong> — brings an archived family back to the active list.</li>
+  <li><strong>Archive Summer Families</strong> — one-click button to archive all families enrolled only in Summer Camp.</li>
+</ul>
+<h3>Merging Duplicate Families</h3>
+<p>Click <strong>Merge</strong> on one of the duplicate records. Select the record to merge into and confirm. All registrations are moved to the surviving record.</p>
+<h3>Deleting a Family</h3>
+<div class="warn">Delete permanently removes the family and ALL their data including registrations. This cannot be undone.</div>
+<ol>
+  <li>Click <strong>🗑 Delete</strong> next to the family.</li>
+  <li>Confirm the dialog. The family is gone immediately.</li>
+</ol>
+<h3>Importing Families (Bulk)</h3>
+<ol>
+  <li>Prepare a CSV or XLSX with columns: <code>parent_name, parent_email, parent_phone, child_name, child_dob</code>.</li>
+  <li>Click <strong>⬆ Import</strong> and upload your file.</li>
+  <li>Review the preview table, then click <strong>Import</strong> to confirm.</li>
+</ol>
+<h3>Data Health Banner</h3>
+<p>A yellow banner appears when families have missing email addresses, phone numbers, or child dates of birth. Click <strong>Show Issues Only</strong> to filter to just those families.</p>
+</section>
+<section id="a5">
+<h2>A5 · Messages Tab</h2>
+<p>Incoming messages submitted by parents through the "Contact Us" form on the public site.</p>
+<ul>
+  <li>Unread messages are highlighted with a <strong>New</strong> badge.</li>
+  <li>Click the parent's email address to open your email client and reply directly.</li>
+  <li>Click <strong>Mark as Read</strong> once you've reviewed a message.</li>
+  <li>Click <strong>📥 Archive</strong> to hide a message from the main view (it's not deleted).</li>
+  <li>Click <strong>🗑 Delete</strong> to permanently remove a message.</li>
+  <li>Toggle <strong>Show Archived</strong> to review archived messages.</li>
+</ul>
+<div class="warn">Delete is permanent. Archive is the safer option if you might need the message later.</div>
+</section>
+<section id="a6">
+<h2>A6 · Waitlist Tab</h2>
+<p>Manage families who have applied for a spot but aren't yet enrolled.</p>
+<h3>Reading the Waitlist</h3>
+<p>Each row shows the parent name, child name, room requested, how many days they've been waiting, and current status: <strong>Pending</strong>, <strong>Spot Offered</strong>, <strong>Accepted</strong>, or <strong>Archived</strong>. Offers past their deadline are flagged with ⚠️.</p>
+<h3>Offering a Spot</h3>
+<ol>
+  <li>Click <strong>🎉 Offer a Spot</strong> next to the family.</li>
+  <li>Set an offer <strong>deadline date</strong> (how long they have to respond).</li>
+  <li>Optionally add the ProCare enrollment link and any notes for the family.</li>
+  <li>Click <strong>Send Spot Offer</strong>. An email goes to the parent automatically.</li>
+</ol>
+<h3>After the Family Responds</h3>
+<ul>
+  <li>If they accept: click <strong>✓ Mark Accepted</strong>.</li>
+  <li>If they don't respond or decline: click <strong>Archive ▾</strong>, choose a reason, and confirm.</li>
+</ul>
+<div class="tip">After archiving a declined family, you can re-offer to the next person on the list.</div>
+</section>
+<section id="a7">
+<h2>A7 · Reports Tab</h2>
+<h3>Family Billing Report</h3>
+<ol>
+  <li>Pick a month from the dropdown.</li>
+  <li>Click <strong>Generate</strong>.</li>
+  <li>The report shows each family's full days, half days, change fees, sibling discounts, and amount owed.</li>
+  <li>To override a family's amount (e.g. apply a credit): click the <strong>✏</strong> pencil on their row, enter the new amount, click Save.</li>
+  <li>Click <strong>Export CSV</strong> to download a spreadsheet, or <strong>Print</strong> to open a printable version.</li>
+</ol>
+<div class="info">Automatic adjustments applied by the system: <strong>$5 change fee</strong> per date changed after the window closes · <strong>$10 sibling discount</strong> per additional child in the same family. These appear as separate line items.</div>
+<div class="tip">Requires developer to change the $5 or $10 amounts.</div>
+<h3>Staff Schedule Report</h3>
+<ol>
+  <li>Pick a week start date.</li>
+  <li>Click <strong>Generate</strong>.</li>
+  <li>The report shows AM/PM shifts, enrolled child counts per room, and required staff based on your set ratios.</li>
+  <li>Click <strong>🪄 Auto-Fill Names</strong> to have the system suggest staff assignments based on recorded availability.</li>
+  <li>Click <strong>Export</strong> to download as CSV.</li>
+</ol>
+</section>
+<section id="a8">
+<h2>A8 · Staffing Tab</h2>
+<h3>Staff Roster</h3>
+<ul>
+  <li>Click <strong>+ Add Staff Member</strong> to add a new person. Fields: name, role, hourly rate or biweekly salary, room assignment, 4-digit clock-in PIN, hire date.</li>
+  <li>Click <strong>Edit</strong> on any row to update their details.</li>
+  <li>Click <strong>Deactivate</strong> to remove someone from scheduling and the kiosk without deleting their history. Click again to reactivate.</li>
+  <li>Click <strong>🗑 Delete</strong> to permanently remove the staff member.</li>
+  <li>Toggle <strong>Show Inactive</strong> to see deactivated staff.</li>
+</ul>
+<div class="warn">Deleting a staff member is permanent. Deactivate instead if you may need their clock-in history.</div>
+<h3>Staff Ratios</h3>
+<p>Set the maximum number of children one staff member may supervise in each room.</p>
+<ol>
+  <li>Enter a number in each room's ratio field. Typical state minimums: Bear 4, Bee 4, Turtle/Goose/Owl 8.</li>
+  <li>Click <strong>💾 Save Ratios</strong>.</li>
+</ol>
+<p>These ratios are used by the staff schedule report to flag understaffed days.</p>
+</section>
+<section id="a9">
+<h2>A9 · Finance Tab</h2>
+<h3>Finance Dashboard</h3>
+<ol>
+  <li>Select a year and click <strong>Generate Dashboard</strong>.</li>
+  <li>The dashboard shows monthly revenue, per-room breakdown, and a profit/loss trend chart.</li>
+  <li>Click <strong>Year-over-Year</strong> to compare two consecutive program years side by side.</li>
+</ol>
+<h3>Expense Lines</h3>
+<p>Add your recurring monthly costs so the P&amp;L view reflects real operating profit.</p>
+<ol>
+  <li>Click <strong>+ Add Expense</strong>.</li>
+  <li>Enter a category name (e.g. "Utilities"), the monthly amount, and whether it's fixed or variable.</li>
+  <li>Click <strong>Save</strong>. The expense appears in all P&amp;L charts going forward.</li>
+  <li>Click <strong>Edit</strong> or <strong>Delete</strong> on any row to update or remove it.</li>
+</ol>
+<h3>Modeling Tool</h3>
+<p>Simulate what revenue would look like if rates or enrollment changed — without touching real data. Enter hypothetical rates or capacity numbers and click <strong>Run Model</strong> to see the projected impact.</p>
+</section>
+<section id="a10">
+<h2>A10 · Settings Tab</h2>
+<h3>Room Rates</h3>
+<ol>
+  <li>The rates table shows each room's full-day rate, half-day rate, weekly full rate, weekly half rate, and age range.</li>
+  <li>Click into any field to edit the value.</li>
+  <li>Click <strong>Save Rates</strong>. Changes take effect immediately for new registrations.</li>
+</ol>
+<div class="info">Weekly rates apply when a child books all 5 weekdays in a single week with the same day type. Leave blank to charge the per-day rate instead.</div>
+<h3>Summer Camp Visibility</h3>
+<p>Toggle <strong>Hide Summer Camp</strong> to remove the Summer Camp room from the parent registration page. Use this when summer enrollment is not yet open. Click <strong>💾 Save</strong>.</p>
+<h3>Enrollment at Capacity</h3>
+<p>Toggle <strong>Enrollment at Capacity</strong> to display an "enrollment full" message on the parent portal across all rooms — without closing individual rooms in the calendar. Click <strong>💾 Save</strong>.</p>
+<h3>Enrollment Forms</h3>
+<ol>
+  <li>Click <strong>Upload Form</strong> to add a PDF (health form, parent handbook, emergency contacts, etc.).</li>
+  <li>Enter a name and optional description for the form.</li>
+  <li>The form appears as a download link on the parent registration page immediately.</li>
+  <li>Click <strong>🗑 Delete</strong> to remove a form.</li>
+</ol>
+<h3>Waitlist Offer Links</h3>
+<p>Set the default ProCare enrollment URL and any supplementary links that are included in waitlist offer emails. Click <strong>💾 Save Links</strong>.</p>
+</section>
+<section id="a11">
+<h2>A11 · Things That Update Automatically</h2>
+<p>You don't need to do anything for these — the system handles them on its own.</p>
+<ul>
+  <li><strong>Room assignment</strong> — when a new child is added, the system assigns the correct room based on their date of birth.</li>
+  <li><strong>Registration window</strong> — enrollment opens automatically at 9 AM on the 15th of each month.</li>
+  <li><strong>Change fee</strong> — a $5 fee is added automatically when staff edit a care date after the registration window has closed.</li>
+  <li><strong>Sibling discount</strong> — a $10 discount per additional child is applied automatically at billing time for families with more than one enrolled child.</li>
+  <li><strong>Schedule confirmation emails</strong> — sent automatically to parents when they submit a registration.</li>
+  <li><strong>Waitlist offer emails</strong> — sent automatically when you click "Send Spot Offer" in the Waitlist tab.</li>
+  <li><strong>Push notifications</strong> — sent to subscribed parents when you click "🔔 Notify Parents" in the Care Calendar tab.</li>
+</ul>
+</section>
+<section id="a12">
+<h2>A12 · Things That Require a Developer</h2>
+<p>These cannot be changed through the admin portal — ask your developer (or ask Claude in a new session).</p>
+<ul>
+  <li>Room capacity numbers (e.g. changing Bear Room from 8 to 10)</li>
+  <li>The registration window schedule — currently the 15th at 9 AM Central</li>
+  <li>The $5 change fee or $10 sibling discount amounts</li>
+  <li>Adding or renaming rooms</li>
+  <li>Opening the Goose Room — currently "Coming Soon", requires a state inspection before a developer can set the capacity and activate it</li>
+  <li>The facility name, address, phone, or contact email on the public-facing pages</li>
+  <li>Email template content (beyond the offer notes field in the Waitlist tab)</li>
+  <li>The Privacy Policy text</li>
+  <li>Adding or removing admin accounts</li>
+</ul>
+</section>
+<section id="a13">
+<h2>A13 · Rooms Reference</h2>
+<table>
+  <thead>
+    <tr><th>Room</th><th>Ages</th><th>Capacity</th><th>Full Day</th><th>Half Day</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>🐻 Bear</td><td>Birth – 12 mo</td><td>8</td><td>$80</td><td>—</td><td>Full day only</td></tr>
+    <tr><td>🐝 Bee</td><td>12 – 24 mo</td><td>16</td><td>$75</td><td>$55</td><td></td></tr>
+    <tr><td>🐢 Turtle</td><td>24 – 30 mo</td><td>11</td><td>$75</td><td>$45</td><td></td></tr>
+    <tr><td>🪿 Goose</td><td>30 – 36 mo</td><td>TBD</td><td>$75</td><td>$45</td><td>Coming Soon</td></tr>
+    <tr><td>🦉 Owl</td><td>36+ mo</td><td>11</td><td>$75</td><td>$45</td><td></td></tr>
+    <tr><td>☀️ Summer Camp</td><td>4 – 9 yr</td><td>25</td><td>$75</td><td>—</td><td>Seasonal, full day only</td></tr>
+  </tbody>
+</table>
+<div class="tip">Rates shown are defaults. Current rates may differ if they've been updated in the Settings tab. Always check Settings → Room Rates for the live amounts.</div>
+</section>
+<section id="a14">
+<h2>A14 · Asking Claude to Make Changes</h2>
+<div class="tip">
+  <strong>Start a new Claude Code session</strong> in the childcare-portal project folder and describe what you need. Be specific — say the current value and the new value.
+</div>
+<h3>Good examples:</h3>
+<ul>
+  <li>"Change the Bear Room capacity from 8 to 10."</li>
+  <li>"Update the Owl Room half-day rate to $50."</li>
+  <li>"Add a closure for May 26, 2026 — Memorial Day."</li>
+  <li>"Change the registration window to open on the 10th instead of the 15th."</li>
+  <li>"Make the Goose Room active with a capacity of 12."</li>
+  <li>"Add the church office phone number (314-555-0100) to the contact page."</li>
+</ul>
+<h3>Tips</h3>
+<ul>
+  <li>Always mention <strong>what it is now</strong> and <strong>what you want it to be</strong>.</li>
+  <li>For anything involving real family data (deletions, merges, bulk changes), ask Claude to show you the change before applying it.</li>
+  <li>If Claude proposes a change you're unsure about, just say "stop" or "don't do that" — it won't proceed without your approval.</li>
+  <li>Claude can read the codebase and explain what any button or feature does if you're unsure.</li>
+</ul>
+</section>
+<!-- PART B -->
+<div class="part-label part-b-label" id="part-b">PART B — Parent Guide</div>
+<div class="part-b-wrap">
+<div class="share-callout">📋 Share this guide with new families at enrollment.</div>
+<button class="print-btn" onclick="printPartB()">🖨 Print Parent Guide</button>
+<section id="b1">
+<h2>B1 · How to Check Your Schedule</h2>
+<ol>
+  <li>Go to the MDO parent portal — your director will give you the link (it ends in <strong>/lookup.html</strong>).</li>
+  <li>Enter the <strong>email address</strong> you used when you enrolled.</li>
+  <li>Enter your <strong>4-digit PIN</strong> — given to you by the MDO office when your account was created.</li>
+  <li>Click <strong>Look Up My Schedule</strong>.</li>
+  <li>Your confirmed care days for this month and next month appear, grouped by child.</li>
+</ol>
+<div class="info">If you don't know your PIN, contact the MDO office — PINs cannot be reset online. See section B6.</div>
+</section>
+<section id="b2">
+<h2>B2 · Reading Your Schedule</h2>
+<ul>
+  <li>Each child has their own card, showing their classroom name.</li>
+  <li>Care days appear as small chips — <strong>Full</strong> means a full care day, <strong>½</strong> means a half day.</li>
+  <li>Days are grouped by month, with a subtotal for each month and a grand total at the bottom.</li>
+  <li>Only <strong>confirmed</strong> care days are shown — waitlisted days do not appear here.</li>
+</ul>
+<div class="tip">If a day you expected to see is missing, contact the MDO office — it may still be on the waitlist.</div>
+</section>
+<section id="b3">
+<h2>B3 · Printing Your Schedule</h2>
+<ol>
+  <li>After looking up your schedule, click the <strong>Print</strong> button at the top of the results.</li>
+  <li>Your browser's print dialog will open.</li>
+  <li>To save a PDF copy, choose <strong>Save as PDF</strong> from the destination/printer options.</li>
+</ol>
+</section>
+<section id="b4">
+<h2>B4 · Downloading Your Data</h2>
+<p>You have the right to download a copy of all information we hold about your family. This is your right under the California Consumer Privacy Act (CCPA).</p>
+<ol>
+  <li>After looking up your schedule, scroll down to the <strong>Data &amp; Privacy</strong> section.</li>
+  <li>Click <strong>Download My Data</strong>.</li>
+  <li>A file downloads to your device containing your family details, children's information, and your full registration history.</li>
+</ol>
+</section>
+<section id="b5">
+<h2>B5 · Requesting Account Deletion</h2>
+<p>You can ask us to delete your family's account and all associated records at any time.</p>
+<ol>
+  <li>After looking up your schedule, scroll down to the <strong>Data &amp; Privacy</strong> section.</li>
+  <li>Click <strong>Request Account Deletion</strong>.</li>
+  <li>Optionally enter a reason in the text box.</li>
+  <li>Click <strong>Send Deletion Request</strong>.</li>
+  <li>A confirmation message will appear. The office will process your request within <strong>30 days</strong>.</li>
+</ol>
+<div class="info">Records required for financial or legal compliance may be kept for the minimum legally required period even after your account is deleted.</div>
+</section>
+<section id="b6">
+<h2>B6 · Forgot Your PIN or Locked Out?</h2>
+<div class="warn">PINs cannot be reset online. You must contact the MDO office to get a new PIN.</div>
+<ul>
+  <li>If you've forgotten your PIN, call or email the MDO office and they'll generate a new one for you.</li>
+  <li>If you enter the wrong PIN <strong>5 times in a row</strong>, your login locks automatically for security.</li>
+  <li>To unlock your login, contact the office — they can unlock it from the admin portal immediately.</li>
+</ul>
+<p><strong>Office email:</strong> <a href="mailto:mdo@timothystl.org">mdo@timothystl.org</a></p>
+</section>
+<section id="b7">
+<h2>B7 · Troubleshooting</h2>
+<ul>
+  <li><strong>"Email and PIN do not match"</strong> — Make sure you're using the exact email address you provided when enrolling. PINs are 4 digits only — no letters or spaces.</li>
+  <li><strong>Page not loading</strong> — Try a different browser (Chrome or Safari work best) or check your internet connection.</li>
+  <li><strong>Schedule looks wrong or a day is missing</strong> — Contact the office. A day may still be waitlisted, or there may be a data entry issue.</li>
+  <li><strong>Can't see this month's dates</strong> — The portal shows the current month and next month only. For older records, download your data (see section B4).</li>
+</ul>
+<p>For anything else, contact us at <a href="mailto:mdo@timothystl.org">mdo@timothystl.org</a>.</p>
+</section>
+</div>
+</div>
+</main>
+<script>
+function printPartB(){
+  document.body.classList.add('printing-partb');
+  window.print();
+  document.body.classList.remove('printing-partb');
+}
+// sidebar active highlight
+const sections=document.querySelectorAll('section[id]');
+const navLinks=document.querySelectorAll('.nav-link');
+window.addEventListener('scroll',()=>{
+  let cur='';
+  sections.forEach(s=>{if(s.getBoundingClientRect().top<=120)cur=s.id;});
+  navLinks.forEach(l=>{l.classList.toggle('active',l.dataset.sec===cur);});
+},{passive:true});
+</script>
+</body>
+</html>
