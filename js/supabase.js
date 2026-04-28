@@ -185,11 +185,11 @@ const ROOMS = [
  * @property {string}      parent_name
  * @property {string}      parent_email
  * @property {string}      parent_phone
- * @property {number|null} pin                   - Hashed PIN (plaintext pre-migration)
+ * @property {boolean}     [has_pin]             - True if a primary-parent PIN is set
  * @property {string|null} parent2_name
  * @property {string|null} parent2_email
  * @property {string|null} parent2_phone
- * @property {number|null} parent2_pin
+ * @property {boolean}     [has_parent2_pin]     - True if a parent-2 PIN is set
  * @property {boolean}     [registration_locked] - Blocks new registrations when true
  * @property {boolean}     [login_locked]        - Blocks PIN login when true
  * @property {Student[]}   [students]            - Present when fetched with a join
@@ -660,7 +660,7 @@ async function searchFamilies(query) {
     try {
         const { data, error } = await sbClient
             .from('families')
-            .select('id, parent_name, parent_email, parent_phone, pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
+            .select('id, parent_name, parent_email, parent_phone, has_pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
             .or(`parent_name.ilike.%${query}%,parent_email.ilike.%${query}%`)
             .order('parent_name')
             .limit(8);
@@ -691,7 +691,7 @@ async function searchFamiliesFromRegistrations(query) {
                     parent_name:  r.parent_name,
                     parent_email: r.parent_email,
                     parent_phone: r.parent_phone,
-                    pin:          null,
+                    has_pin:      false,
                     students:     [],
                 });
             }
@@ -708,22 +708,6 @@ async function searchFamiliesFromRegistrations(query) {
         return [...map.values()];
     } catch (_) {
         return [];
-    }
-}
-
-async function lookupFamilyByPin(pin) {
-    if (!sbClient) return null;
-    try {
-        const parsedPin = parseInt(pin, 10);
-        const { data, error } = await sbClient
-            .from('families')
-            .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, registration_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
-            .or(`pin.eq.${parsedPin},parent2_pin.eq.${parsedPin}`)
-            .maybeSingle();
-        if (error) { console.error('lookupFamilyByPin:', error); return null; }
-        return data || null;
-    } catch (_) {
-        return null;
     }
 }
 
@@ -768,61 +752,73 @@ async function lookupFamilyForRegistration(email, pin) {
 
 /**
  * Creates a new family, or updates the existing one if the email already exists.
- * Auto-generates a unique 4-digit PIN if none is provided.
- * @param {Object}      params
- * @param {string}      params.parentName
- * @param {string}      params.parentEmail
- * @param {string}      [params.parentPhone]
- * @param {number|null} [params.pin]          - Explicit PIN; auto-generated if omitted
- * @param {string|null} [params.parent2Name]
- * @param {string|null} [params.parent2Email]
- * @param {string|null} [params.parent2Phone]
- * @param {number|null} [params.parent2Pin]
+ * Auto-generates a 4-digit PIN if none is provided. PINs are written via the
+ * set_family_pin RPC, which bcrypt-hashes them server-side.
+ * @param {Object}             params
+ * @param {string}             params.parentName
+ * @param {string}             params.parentEmail
+ * @param {string}             [params.parentPhone]
+ * @param {string|number|null} [params.pin]          - Explicit PIN; auto-generated if omitted
+ * @param {string|null}        [params.parent2Name]
+ * @param {string|null}        [params.parent2Email]
+ * @param {string|null}        [params.parent2Phone]
+ * @param {string|number|null} [params.parent2Pin]
  * @returns {Promise<Family>}
  */
 async function createFamily({ parentName, parentEmail, parentPhone, pin: providedPin = null,
                               parent2Name = null, parent2Email = null, parent2Phone = null, parent2Pin = null }) {
     if (!sbClient) throw new Error('Supabase not configured.');
 
+    // PINs are stored as bcrypt hashes; route every write through the RPC so
+    // plaintext never lands in a column.
+    async function applyPin(familyId, newPin, isParent2) {
+        if (newPin === null || newPin === '' || newPin === undefined) return;
+        const { error } = await sbClient.rpc('set_family_pin', {
+            p_family_id:  familyId,
+            p_new_pin:    String(newPin),
+            p_is_parent2: isParent2,
+        });
+        if (error) throw error;
+    }
+
     if (parentEmail) {
         const { data: existing } = await sbClient
-            .from('families').select('id, pin')
+            .from('families').select('id')
             .eq('parent_email', parentEmail).maybeSingle();
         if (existing) {
             const updateData = { parent_name: parentName, parent_phone: parentPhone || '' };
-            if (providedPin !== null) updateData.pin = providedPin;
             if (parent2Name !== null) updateData.parent2_name = parent2Name || null;
             if (parent2Email !== null) updateData.parent2_email = parent2Email || null;
             if (parent2Phone !== null) updateData.parent2_phone = parent2Phone || null;
-            if (parent2Pin !== null) updateData.parent2_pin = parent2Pin || null;
             await sbClient.from('families').update(updateData).eq('id', existing.id);
+            await applyPin(existing.id, providedPin,  false);
+            await applyPin(existing.id, parent2Pin,   true);
             const { data: updated } = await sbClient
                 .from('families')
-                .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, students(id, child_name, child_dob, room_override, recurring_days)')
+                .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, students(id, child_name, child_dob, room_override, recurring_days)')
                 .eq('id', existing.id).single();
             return updated;
         }
     }
 
-    let pin = providedPin;
-    if (!pin) {
-        for (let i = 0; i < 10; i++) {
-            const candidate = Math.floor(1000 + Math.random() * 9000);
-            const { data: exists } = await sbClient
-                .from('families').select('id').eq('pin', candidate).maybeSingle();
-            if (!exists) { pin = candidate; break; }
-        }
-    }
+    const pin = providedPin || Math.floor(1000 + Math.random() * 9000);
 
     const { data, error } = await sbClient
         .from('families')
-        .insert({ parent_name: parentName, parent_email: parentEmail || '', parent_phone: parentPhone || '', pin,
+        .insert({ parent_name: parentName, parent_email: parentEmail || '', parent_phone: parentPhone || '',
                   parent2_name: parent2Name || null, parent2_email: parent2Email || null,
-                  parent2_phone: parent2Phone || null, parent2_pin: parent2Pin || null })
-        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin')
+                  parent2_phone: parent2Phone || null })
+        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin')
         .single();
     if (error) throw error;
-    return data;
+    await applyPin(data.id, pin,        false);
+    await applyPin(data.id, parent2Pin, true);
+    // Refresh so has_pin reflects the just-set hash
+    const { data: refreshed } = await sbClient
+        .from('families')
+        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin')
+        .eq('id', data.id).single();
+    return refreshed || data;
 }
 
 /**
@@ -857,7 +853,7 @@ async function fetchAllFamilies({ includeArchived = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, pin, parent2_name, parent2_email, parent2_phone, parent2_pin, created_at, active, group, registration_locked, login_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
+        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, created_at, active, group, registration_locked, login_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
         .order('parent_name');
     if (!includeArchived) query = query.eq('active', true);
     const { data, error } = await query;
