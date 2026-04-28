@@ -10,7 +10,7 @@
 function getFamilyIssues(f) {
     const issues = [];
     if (!f.parent_email)  issues.push({ level: 'critical', label: 'No email',  tip: 'Primary parent has no email — cannot log in or receive confirmations.' });
-    if (!f.pin)           issues.push({ level: 'critical', label: 'No PIN',    tip: 'Primary parent has no PIN — cannot log into the parent portal.' });
+    if (!f.has_pin)       issues.push({ level: 'critical', label: 'No PIN',    tip: 'Primary parent has no PIN — cannot log into the parent portal.' });
     if (!f.parent_phone)  issues.push({ level: 'warning',  label: 'No phone',  tip: 'Primary parent has no phone number on file.' });
     return issues;
 }
@@ -507,11 +507,11 @@ function renderFamiliesList(families) {
         `<option value="${r.id}">${r.label}</option>`
     ).join('');
 
-    const parentRow = (name, email, phone, pin) => {
+    const parentRow = (name, email, phone, hasPin) => {
         if (!name && !email) return '';
         return `<div class="family-parent-row">
             <span class="family-row-name">${escHtml(name || '')}</span>
-            <span class="family-pin-badge">${pin ? `PIN: ${pin}` : ''}</span>
+            <span class="family-pin-badge">${hasPin ? 'PIN set' : ''}</span>
             <span class="family-row-meta">${escHtml(email || '')}${email && phone ? ' &middot; ' : ''}${escHtml(phone || '')}</span>
             <span></span>
         </div>`;
@@ -541,7 +541,7 @@ function renderFamiliesList(families) {
                         <div class="family-row-top">
                             <div class="family-parent-row">
                                 <span class="family-row-name">${escHtml(f.parent_name || '')}</span>
-                                <span class="family-pin-badge">${f.pin ? `PIN: ${f.pin}` : ''}</span>
+                                <span class="family-pin-badge">${f.has_pin ? 'PIN set' : ''}</span>
                                 ${issuesBadgeHtml(famIssues)}
                                 <span class="family-row-meta">${escHtml(f.parent_email || '')}${f.parent_email && f.parent_phone ? ' &middot; ' : ''}${escHtml(f.parent_phone || '')}</span>
                                 <div class="family-row-actions">
@@ -561,7 +561,7 @@ function renderFamiliesList(families) {
                                     <button class="fm-delete-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Permanently delete this family">🗑 Delete</button>
                                 </div>
                             </div>
-                            ${(f.parent2_name || f.parent2_email) ? parentRow(f.parent2_name, f.parent2_email, f.parent2_phone, f.parent2_pin) : ''}
+                            ${(f.parent2_name || f.parent2_email) ? parentRow(f.parent2_name, f.parent2_email, f.parent2_phone, f.has_parent2_pin) : ''}
                         </div>
                         ${kids.length ? `
                             <ul class="family-students">
@@ -685,11 +685,17 @@ function openFamilyModal(family = null) {
         document.getElementById('fmParentName').value    = family.parent_name  || '';
         document.getElementById('fmParentEmail').value   = family.parent_email || '';
         document.getElementById('fmParentPhone').value   = family.parent_phone || '';
-        document.getElementById('fmPin').value           = family.pin          || '';
+        // PINs are bcrypt-hashed; we can't show the existing PIN. Leave blank
+        // — submitting blank keeps the current PIN, typing a new one replaces it.
+        const pinInput  = document.getElementById('fmPin');
+        const p2PinInput = document.getElementById('fmParent2Pin');
+        pinInput.value = '';
+        p2PinInput.value = '';
+        pinInput.placeholder  = family.has_pin         ? 'Leave blank to keep current PIN' : '4-digit';
+        p2PinInput.placeholder = family.has_parent2_pin ? 'Leave blank to keep current PIN' : '4-digit';
         document.getElementById('fmParent2Name').value   = family.parent2_name  || '';
         document.getElementById('fmParent2Email').value  = family.parent2_email || '';
         document.getElementById('fmParent2Phone').value  = family.parent2_phone || '';
-        document.getElementById('fmParent2Pin').value    = family.parent2_pin   || '';
         // Group radio
         const grp = family.group || 'regular';
         document.querySelectorAll('input[name="fmGroup"]').forEach(r => {
@@ -701,9 +707,13 @@ function openFamilyModal(family = null) {
         // Clear all fields
         ['fmParentName','fmParentEmail','fmParentPhone',
          'fmParent2Name','fmParent2Email','fmParent2Phone','fmParent2Pin'].forEach(id => {
-            document.getElementById(id).value = '';
+            const el = document.getElementById(id);
+            el.value = '';
+            if (id === 'fmParent2Pin') el.placeholder = '4-digit';
         });
-        document.getElementById('fmPin').value = generateLocalPin();
+        const pinInput = document.getElementById('fmPin');
+        pinInput.value = generateLocalPin();
+        pinInput.placeholder = '4-digit';
         document.querySelectorAll('input[name="fmGroup"]').forEach(r => {
             r.checked = (r.value === 'regular');
         });
@@ -869,13 +879,16 @@ async function saveFamilyModal() {
         const parentEmail = document.getElementById('fmParentEmail').value.trim();
         const parentPhone = document.getElementById('fmParentPhone').value.trim();
         const pinVal      = document.getElementById('fmPin').value.trim();
-        const pin         = pinVal ? parseInt(pinVal, 10) : null;
         const p2Name      = document.getElementById('fmParent2Name').value.trim()  || null;
         const p2Email     = document.getElementById('fmParent2Email').value.trim() || null;
         const p2Phone     = document.getElementById('fmParent2Phone').value.trim() || null;
         const p2PinVal    = document.getElementById('fmParent2Pin').value.trim();
-        const p2Pin       = p2PinVal ? parseInt(p2PinVal, 10) : null;
         const group       = document.querySelector('input[name="fmGroup"]:checked')?.value || 'regular';
+
+        // PINs go through the secure RPC (bcrypt-hashed server-side). Blank
+        // means "leave the existing PIN unchanged" on edit.
+        if (pinVal   && !/^\d{4,8}$/.test(pinVal))   { alert('Primary PIN must be 4–8 digits.'); return; }
+        if (p2PinVal && !/^\d{4,8}$/.test(p2PinVal)) { alert('Parent 2 PIN must be 4–8 digits.'); return; }
 
         if (!parentName) { alert('Parent name is required.'); return; }
 
@@ -884,9 +897,10 @@ async function saveFamilyModal() {
         if (!editingFamilyId) {
             // ---- CREATE ----
             const fam = await createFamily({
-                parentName, parentEmail, parentPhone, pin: pin || null,
+                parentName, parentEmail, parentPhone,
+                pin: pinVal || null,
                 parent2Name: p2Name, parent2Email: p2Email,
-                parent2Phone: p2Phone, parent2Pin: p2Pin,
+                parent2Phone: p2Phone, parent2Pin: p2PinVal || null,
             });
             // Set group (createFamily doesn't set it)
             await updateFamily(fam.id, { group });
@@ -910,13 +924,13 @@ async function saveFamilyModal() {
                 parent_name:  parentName,
                 parent_email: parentEmail,
                 parent_phone: parentPhone,
-                pin:          pin || null,
                 parent2_name:  p2Name,
                 parent2_email: p2Email,
                 parent2_phone: p2Phone,
-                parent2_pin:   p2Pin,
                 group,
             });
+            if (pinVal)   await setFamilyPin(editingFamilyId, pinVal,   false);
+            if (p2PinVal) await setFamilyPin(editingFamilyId, p2PinVal, true);
 
             // Reconcile children
             const origIds = familyModalChildren.map(c => c.id).filter(Boolean);
