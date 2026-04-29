@@ -908,7 +908,7 @@ function setupFormListeners() {
         if (e.target === document.getElementById('successModal')) resetForNextFamily();
     });
 
-    document.getElementById('prevMonth').addEventListener('click', async () => {
+    document.getElementById('prevMonth')?.addEventListener('click', async () => {
         closeDayPicker();
         const target   = getRegistrationWindow().targetDate;
         const atTarget = currentDate.getFullYear() === target.getFullYear() &&
@@ -919,7 +919,7 @@ function setupFormListeners() {
         renderCalendar();
     });
 
-    document.getElementById('nextMonth').addEventListener('click', async () => {
+    document.getElementById('nextMonth')?.addEventListener('click', async () => {
         closeDayPicker();
         const target   = getRegistrationWindow().targetDate;
         const atTarget = currentDate.getFullYear() === target.getFullYear() &&
