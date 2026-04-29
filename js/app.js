@@ -119,6 +119,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupFamilyLookup();
     setupFormListeners();
     setupContactModal();
+    setupForgotPinModal();
 
     const closures = await fetchClosures();
     closureMap = new Map(closures.map(c => [c.close_date, c.reason || '']));
@@ -982,6 +983,56 @@ function setupContactModal() {
         } finally {
             if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Send Message'; }
         }
+    });
+}
+
+// ============================================================
+// FORGOT PIN MODAL — self-service reset link
+// ============================================================
+function setupForgotPinModal() {
+    const link        = document.getElementById('forgotPinLink');
+    const modal       = document.getElementById('forgotPinModal');
+    const closeBtn    = document.getElementById('closeForgotPinModal');
+    const sendBtn     = document.getElementById('sendForgotPinBtn');
+    const emailEl     = document.getElementById('forgotPinEmail');
+    const statusEl    = document.getElementById('forgotPinStatus');
+
+    if (!link || !modal) return;
+
+    function open() {
+        // Pre-fill from the email field on the calendar form, if any.
+        const e = document.getElementById('familyEmailInput')?.value.trim() || '';
+        emailEl.value = e;
+        statusEl.classList.add('hidden');
+        statusEl.textContent = '';
+        modal.style.display = 'flex';
+        emailEl.focus();
+    }
+    function close() {
+        modal.style.display = 'none';
+    }
+
+    link.addEventListener('click', e => { e.preventDefault(); open(); });
+    closeBtn?.addEventListener('click', close);
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });
+
+    sendBtn.addEventListener('click', async () => {
+        const email = emailEl.value.trim();
+        if (!email || !email.includes('@')) {
+            statusEl.textContent = 'Please enter a valid email address.';
+            statusEl.classList.remove('hidden');
+            return;
+        }
+        sendBtn.disabled    = true;
+        sendBtn.textContent = 'Sending…';
+        try {
+            await requestPinReset(email);
+        } catch (_) { /* server intentionally hides errors */ }
+        // Always show the same message — never reveal whether the email is registered.
+        statusEl.textContent = 'If we have an account with that email, a reset link is on its way. The link expires in 1 hour.';
+        statusEl.classList.remove('hidden');
+        sendBtn.disabled    = false;
+        sendBtn.textContent = 'Send Reset Link';
     });
 }
 

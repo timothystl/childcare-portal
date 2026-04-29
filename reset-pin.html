@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" href="/images/logo.png">
+  <link rel="apple-touch-icon" href="/images/logo.png">
+  <meta name="theme-color" content="#01294A">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset PIN — Timothy Lutheran Church MDO</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/lookup.css">
+</head>
+<body class="lookup-body">
+
+  <div class="lookup-screen">
+    <div class="lookup-card">
+      <div class="lookup-logo">
+        <img src="images/logo.png" alt="Timothy Lutheran Church" class="site-logo site-logo-lookup"
+             onerror="this.outerHTML='🏫'">
+      </div>
+      <h1>Reset Your PIN</h1>
+      <p class="lookup-sub">Choose a new 4-digit PIN. Use only digits.</p>
+
+      <div id="resetForm">
+        <div class="form-group">
+          <label for="newPin">New PIN</label>
+          <input type="text" id="newPin" placeholder="4 digits" maxlength="8"
+                 inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="confirmPin">Confirm PIN</label>
+          <input type="text" id="confirmPin" placeholder="4 digits" maxlength="8"
+                 inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="off">
+        </div>
+        <button id="resetBtn" class="btn-primary lookup-btn">Set New PIN</button>
+        <p id="resetError" class="login-error hidden"></p>
+      </div>
+
+      <div id="resetSuccess" class="hidden" style="text-align:center;padding:8px 0">
+        <p style="font-size:1.05em;margin:8px 0 16px"><strong>✓ PIN updated.</strong></p>
+        <p style="color:#555;margin:0 0 20px">You can now sign in with your new PIN.</p>
+        <a href="/calendar" class="btn-primary lookup-btn" style="display:inline-block;text-decoration:none">Continue to Sign In</a>
+      </div>
+
+      <div class="lookup-footer-links">
+        <a href="/calendar">← Back to Sign In</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js?v=34"></script>
+  <script src="js/error-monitor.js"></script>
+  <script src="js/reset-pin.js?v=1"></script>
+</body>
+</html>
