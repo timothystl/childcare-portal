@@ -1,0 +1,9 @@
+project_id = "dahdstopsumxnqvdclmy"
+
+# `family-lookup` is intentionally callable without an Authorization JWT.
+# It performs its own credential check (email + PIN via family_login RPC),
+# and forcing JWT verification at the gateway breaks the parent portal
+# whenever the SDK happens to attach a session token the gateway can't
+# verify (e.g. ES256 admin sessions when the project mixes signing keys).
+[functions.family-lookup]
+verify_jwt = false
