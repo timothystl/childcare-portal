@@ -738,15 +738,23 @@ async function familyLogin(email, pin) {
 async function lookupFamilyForRegistration(email, pin) {
     if (!sbClient) return null;
     try {
-        // Force the anon key on this call. Without this, the SDK auto-attaches
-        // the current Supabase auth session (the admin's ES256 JWT if the same
-        // browser is signed into the admin panel), and the Edge Functions
-        // gateway rejects ES256 with UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM.
-        const { data, error } = await sbClient.functions.invoke('family-lookup', {
-            body:    { email, pin: String(pin) },
-            headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+        // Call the Edge Function via raw fetch through our same-origin /sb proxy.
+        // We avoid sbClient.functions.invoke() because it (a) auto-attaches the
+        // current auth session token — which the function gateway rejected with
+        // UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM under ES256 keys — and
+        // (b) was observed to send an empty body in this environment, causing
+        // the function to throw "Unexpected end of JSON input".
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/family-lookup`, {
+            method:  'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                apikey:          SUPABASE_ANON_KEY,
+                Authorization:  `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ email, pin: String(pin) }),
         });
-        if (error || !data) return null;
+        const data = await res.json().catch(() => null);
+        if (!data) return null;
         if (data.error === 'login_locked') return { error: 'login_locked' };
         if (data.error) return null;
         return { family: data.family, isParent2: data.isParent2, sessionToken: data.sessionToken ?? null };
