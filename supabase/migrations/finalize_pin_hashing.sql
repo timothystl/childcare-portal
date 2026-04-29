@@ -28,7 +28,10 @@ CREATE OR REPLACE FUNCTION public.family_login(p_email text, p_pin int)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+-- pgcrypto's crypt() / gen_salt() live in the `extensions` schema on
+-- Supabase, so include it on the path; keep `public` first so the
+-- function still resolves `families` / `students` against this schema.
+SET search_path = public, extensions
 AS $$
 DECLARE
     v_family    families%ROWTYPE;
@@ -126,7 +129,7 @@ CREATE OR REPLACE FUNCTION public.set_family_pin(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
     v_hash text;
