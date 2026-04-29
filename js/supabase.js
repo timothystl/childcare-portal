@@ -738,8 +738,13 @@ async function familyLogin(email, pin) {
 async function lookupFamilyForRegistration(email, pin) {
     if (!sbClient) return null;
     try {
+        // Force the anon key on this call. Without this, the SDK auto-attaches
+        // the current Supabase auth session (the admin's ES256 JWT if the same
+        // browser is signed into the admin panel), and the Edge Functions
+        // gateway rejects ES256 with UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM.
         const { data, error } = await sbClient.functions.invoke('family-lookup', {
-            body: { email, pin: String(pin) },
+            body:    { email, pin: String(pin) },
+            headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
         });
         if (error || !data) return null;
         if (data.error === 'login_locked') return { error: 'login_locked' };
