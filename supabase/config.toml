@@ -7,3 +7,10 @@ project_id = "dahdstopsumxnqvdclmy"
 # verify (e.g. ES256 admin sessions when the project mixes signing keys).
 [functions.family-lookup]
 verify_jwt = false
+
+# `request-pin-reset` is also called from unauthenticated parent pages
+# (the "Forgot PIN?" flow on /calendar). It does its own input handling
+# and always responds 200 to avoid leaking whether an email exists, so
+# JWT verification adds nothing.
+[functions.request-pin-reset]
+verify_jwt = false

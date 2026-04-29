@@ -735,6 +735,32 @@ async function familyLogin(email, pin) {
  * @param {string|number} pin   - 4-digit PIN
  * @returns {Promise<{family:object,isParent2:boolean,sessionToken:string}|{error:string}|null>}
  */
+/**
+ * Triggers the self-service "forgot PIN" flow. Always resolves true once
+ * the request is sent — the server intentionally returns the same
+ * response whether or not the email is registered, so we don't expose
+ * registration status to anyone calling this.
+ * @param {string} email
+ * @returns {Promise<boolean>}
+ */
+async function requestPinReset(email) {
+    if (!sbClient || !email) return false;
+    try {
+        await fetch(`${SUPABASE_URL}/functions/v1/request-pin-reset`, {
+            method:  'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                apikey:         SUPABASE_ANON_KEY,
+                Authorization:  `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ email }),
+        });
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
 async function lookupFamilyForRegistration(email, pin) {
     if (!sbClient) return null;
     try {

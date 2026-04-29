@@ -54,6 +54,7 @@
                             <button type="button" id="familyPinBtn" class="btn-secondary">Find My Family</button>
                         </div>
                     </div>
+                    <p class="hint" style="margin-top:6px"><a href="#" id="forgotPinLink" style="color:#01294A;text-decoration:underline;cursor:pointer">Forgot your PIN?</a></p>
 
                     <!-- Shown once a family is selected -->
                     <div id="familySelectedBar" class="family-selected-bar hidden">
@@ -156,6 +157,24 @@
                         <button type="submit" class="btn-primary">Send Message</button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <!-- Forgot PIN Modal -->
+        <div id="forgotPinModal" class="modal" role="dialog" aria-modal="true">
+            <div class="modal-content contact-modal-content">
+                <div class="modal-icon contact-modal-icon">🔑</div>
+                <h2>Reset Your PIN</h2>
+                <p style="color:#666;margin-bottom:18px;font-size:.93em;">Enter your parent email address. If we have an account on file we'll email you a one-time link to choose a new PIN.</p>
+                <div class="form-group">
+                    <label for="forgotPinEmail">Email Address</label>
+                    <input type="email" id="forgotPinEmail" placeholder="parent@example.com" autocomplete="email">
+                </div>
+                <p id="forgotPinStatus" class="hidden" style="margin:8px 0;color:#01294A;font-size:.92em"></p>
+                <div class="contact-form-actions">
+                    <button type="button" id="closeForgotPinModal" class="btn-ghost">Close</button>
+                    <button type="button" id="sendForgotPinBtn" class="btn-primary">Send Reset Link</button>
+                </div>
             </div>
         </div>
 
