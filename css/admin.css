@@ -1939,6 +1939,23 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     .family-pin-badge  { grid-column: 2; grid-row: 1; }
     .family-row-meta   { grid-column: 1 / -1; }
     .family-row-actions{ grid-column: 1 / -1; }
+
+    /* Tab bar — horizontal scroll strip on mobile */
+    .admin-tabs {
+        padding: 0 8px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        top: 0;
+    }
+    .admin-tabs::-webkit-scrollbar { display: none; }
+    .admin-tab-btn {
+        padding: 10px 14px 8px;
+        font-size: .82em;
+    }
+
+    /* Report tables — allow horizontal scroll on narrow screens */
+    .report-table-wrap { overflow-x: auto; }
 }
 
 /* ============================================================
