@@ -17,7 +17,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=9">
+    <link rel="stylesheet" href="css/admin.css?v=10">
 </head>
 <body class="admin-body">
 
@@ -1203,7 +1203,15 @@
                     <div id="adminRegResults"></div>
                 </div>
 
-                <!-- Step 2+3: Calendar + review (shown after child selected) -->
+                <!-- Step 2: Child picker (shown when family has 2+ children) -->
+                <div id="adminRegStep2" style="display:none">
+                    <p style="font-size:.88em;font-weight:600;color:var(--text-muted);margin:0 0 .6rem">Select a child:</p>
+                    <div id="adminRegChildList"></div>
+                    <button type="button" id="adminRegStep2Back" class="btn-ghost"
+                            style="margin-top:.5rem;font-size:.85rem">&#8592; Back to search</button>
+                </div>
+
+                <!-- Step 3: Calendar + review (shown after child selected) -->
                 <div id="adminRegMain" style="display:none">
                     <!-- Selected child banner -->
                     <div style="display:flex;align-items:center;gap:.75rem;background:var(--green-lt);
