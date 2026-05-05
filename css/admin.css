@@ -3060,7 +3060,14 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     border-color: #1d4ed8;
     color: #fff;
 }
-.ar-cal-day:not(.other-month):not(.past):not(.sel-full):not(.sel-half):hover {
+.ar-cal-day--booked {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    color: #1e3a5f;
+    cursor: default;
+}
+.ar-cal-day--booked:hover { background: #dbeafe; border-color: #93c5fd; }
+.ar-cal-day:not(.other-month):not(.past):not(.sel-full):not(.sel-half):not(.ar-cal-day--booked):hover {
     background: #f0f9ff;
     border-color: #7dd3fc;
 }

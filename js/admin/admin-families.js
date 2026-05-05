@@ -126,6 +126,13 @@ function setupFamilies() {
             return;
         }
 
+        const calBtn = e.target.closest('.fm-cal-btn[data-family-id]');
+        if (calBtn) {
+            const fam = allFamiliesData.find(f => f.id === calBtn.dataset.familyId);
+            if (fam) openAdminRegModalForFamily(fam);
+            return;
+        }
+
         const lockBtn = e.target.closest('.fm-lock-btn[data-family-id]');
         if (lockBtn) {
             doSetFamilyLock(lockBtn.dataset.familyId, true);
@@ -551,6 +558,7 @@ function renderFamiliesList(families) {
                                     ${f.login_locked ? `<span class="family-badge-login-locked" title="Login locked — too many failed attempts">🚫 Login Locked</span><button class="fm-login-unlock-btn btn-secondary" data-family-id="${f.id}" title="Unlock login access">🔓 Unlock Login</button>` : ''}
                                     ${!archived
                                         ? `<button class="fm-edit-btn" data-family-id="${f.id}" title="Edit family">✏ Edit</button>
+                                           <button class="fm-cal-btn btn-secondary" data-family-id="${f.id}" title="Enter care calendar for this family">&#128197; Enter Calendar</button>
                                            <button class="fm-archive-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Archive family">Archive</button>`
                                         : `<button class="fm-restore-btn" data-family-id="${f.id}" title="Restore family">↩ Restore</button>`
                                     }

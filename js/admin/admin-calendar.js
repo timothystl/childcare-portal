@@ -1200,24 +1200,39 @@ function showOverrideStatus(val, saved) {
 // ADMIN NEW REGISTRATION MODAL
 // Director-facing registration flow mirroring the parent form.
 // ============================================================
-let _arFamilies  = null;   // lazy-loaded family cache
-let _arFamily    = null;
-let _arStudent   = null;
-let _arRoom      = null;
-let _arYear      = null;
-let _arMonth     = null;   // 0-indexed
-let _arDates     = new Map(); // dateStr → 'full'|'half'
-let _arPickDate  = null;
-let _arCapacity  = {}; // dateStr → booked count for current month/room
+let _arFamilies       = null;   // lazy-loaded family cache
+let _arFamily         = null;
+let _arStudent        = null;
+let _arRoom           = null;
+let _arYear           = null;
+let _arMonth          = null;   // 0-indexed
+let _arDates          = new Map(); // dateStr → 'full'|'half'
+let _arPickDate       = null;
+let _arCapacity       = {}; // dateStr → booked count for current month/room
+let _arSelectedFamily = null; // tracks selected family for "Change" nav
 
 document.getElementById('adminNewRegBtn')?.addEventListener('click', _openAdminRegModal);
 document.getElementById('adminRegClose')?.addEventListener('click',  _closeAdminRegModal);
 document.getElementById('adminRegChangeChild')?.addEventListener('click', () => {
-    document.getElementById('adminRegStep1').style.display = '';
-    document.getElementById('adminRegMain').style.display  = 'none';
-    document.getElementById('adminRegSearch').value = '';
-    document.getElementById('adminRegResults').innerHTML = '';
     _arFamily = null; _arStudent = null; _arRoom = null; _arDates = new Map();
+    document.getElementById('adminRegMain').style.display = 'none';
+    if (_arSelectedFamily && (_arSelectedFamily.students || []).length > 1) {
+        // Multi-child family — go back to child picker
+        _arShowChildPicker(_arSelectedFamily, _arSelectedFamily.students);
+    } else {
+        // Single child or unknown — go back to search
+        _arSelectedFamily = null;
+        document.getElementById('adminRegStep1').style.display = '';
+        document.getElementById('adminRegStep2').style.display = 'none';
+        document.getElementById('adminRegSearch').value = '';
+        document.getElementById('adminRegResults').innerHTML = '';
+    }
+});
+
+document.getElementById('adminRegStep2Back')?.addEventListener('click', () => {
+    document.getElementById('adminRegStep2').style.display = 'none';
+    document.getElementById('adminRegStep1').style.display = '';
+    _arSelectedFamily = null;
 });
 document.getElementById('adminRegCalPrev')?.addEventListener('click', () => {
     if (--_arMonth < 0) { _arMonth = 11; _arYear--; }
@@ -1241,15 +1256,16 @@ document.getElementById('adminRegSearch')?.addEventListener('input', _arRunSearc
 document.getElementById('adminRegSubmit')?.addEventListener('click', _arSubmit);
 
 async function _openAdminRegModal() {
-    _arFamily   = null; _arStudent = null; _arRoom   = null;
-    _arDates    = new Map(); _arPickDate = null;
+    _arFamily = null; _arStudent = null; _arRoom = null;
+    _arDates  = new Map(); _arPickDate = null; _arSelectedFamily = null;
 
-    document.getElementById('adminRegSearch').value         = '';
-    document.getElementById('adminRegResults').innerHTML    = '';
-    document.getElementById('adminRegStep1').style.display  = '';
-    document.getElementById('adminRegMain').style.display   = 'none';
+    document.getElementById('adminRegSearch').value            = '';
+    document.getElementById('adminRegResults').innerHTML       = '';
+    document.getElementById('adminRegStep1').style.display     = '';
+    document.getElementById('adminRegStep2').style.display     = 'none';
+    document.getElementById('adminRegMain').style.display      = 'none';
     document.getElementById('adminRegDayPicker').style.display = 'none';
-    document.getElementById('adminRegError').textContent    = '';
+    document.getElementById('adminRegError').textContent       = '';
     document.getElementById('adminRegModal').classList.remove('hidden');
 
     if (!_arFamilies) {
@@ -1274,39 +1290,84 @@ function _arRunSearch() {
     const out = document.getElementById('adminRegResults');
     if (!_arFamilies || !q) { out.innerHTML = ''; return; }
 
-    const hits = [];
+    // Group matching children by family
+    const byFamily = new Map();
     for (const fam of _arFamilies) {
-        if (hits.length >= 12) break;
         const matchFam = (fam.parent_name  || '').toLowerCase().includes(q)
                       || (fam.parent_email || '').toLowerCase().includes(q);
         for (const st of (fam.students || [])) {
-            if (hits.length >= 12) break;
             if (matchFam || (st.child_name || '').toLowerCase().includes(q)) {
-                hits.push({ fam, st });
+                if (!byFamily.has(fam.id)) byFamily.set(fam.id, { fam, students: [] });
+                byFamily.get(fam.id).students.push(st);
             }
         }
+        if (byFamily.size >= 8) break;
     }
 
-    if (!hits.length) {
+    if (!byFamily.size) {
         out.innerHTML = '<p style="color:#888;font-size:.85em;padding:4px 0">No matches.</p>';
         return;
     }
-    out.innerHTML = hits.map((h, i) => {
-        const room = _arResolveRoom(h.st);
-        return `<div class="ar-result-row" data-idx="${i}"
-            style="padding:7px 10px;cursor:pointer;border-radius:6px;border:1px solid #e5e7eb;
+
+    const famHits = [...byFamily.values()];
+    out.innerHTML = famHits.map((h, i) => {
+        const childNames = h.students.map(s => escHtml(s.child_name)).join(', ');
+        const count      = h.students.length;
+        return `<div class="ar-result-row" data-fam-idx="${i}"
+            style="padding:8px 10px;cursor:pointer;border-radius:6px;border:1px solid #e5e7eb;
                    margin-bottom:4px;font-size:.88em;background:#fff">
-            <strong>${escHtml(h.st.child_name)}</strong>
-            <span style="color:#6b7280;margin-left:6px">${escHtml(room?.label || '—')}</span>
-            <span style="color:#9ca3af;margin-left:6px">— ${escHtml(h.fam.parent_name || h.fam.parent_email || '')}</span>
+            <strong>${escHtml(h.fam.parent_name || h.fam.parent_email || '')}</strong>
+            <span style="color:#6b7280;font-size:.9em;margin-left:6px">
+                ${count === 1 ? childNames : `${count} children: ${childNames}`}
+            </span>
         </div>`;
     }).join('');
+
     out.querySelectorAll('.ar-result-row').forEach(row => {
+        row.addEventListener('mouseenter', () => { row.style.background = '#f0f4ff'; });
+        row.addEventListener('mouseleave', () => { row.style.background = '#fff'; });
         row.addEventListener('click', () => {
-            const { fam, st } = hits[parseInt(row.dataset.idx)];
-            _arSelectChild(fam, st);
+            const { fam, students } = famHits[parseInt(row.dataset.famIdx)];
+            if (students.length === 1) {
+                _arSelectChild(fam, students[0]);
+            } else {
+                _arShowChildPicker(fam, students);
+            }
         });
     });
+}
+
+function _arShowChildPicker(fam, students) {
+    document.getElementById('adminRegStep1').style.display = 'none';
+    document.getElementById('adminRegStep2').style.display = '';
+    document.getElementById('adminRegMain').style.display  = 'none';
+
+    const list = document.getElementById('adminRegChildList');
+    list.innerHTML = students.map((st, i) => {
+        const room   = _arResolveRoom(st);
+        const dobStr = st.child_dob
+            ? new Date(st.child_dob + 'T00:00:00').toLocaleDateString('en-US',
+                { month: 'short', day: 'numeric', year: 'numeric' })
+            : '';
+        return `<div class="ar-result-row ar-child-pick-row" data-child-idx="${i}"
+            style="padding:9px 12px;cursor:pointer;border-radius:8px;border:1px solid #e5e7eb;
+                   margin-bottom:6px;font-size:.9em;background:#fff">
+            <strong>${escHtml(st.child_name)}</strong>
+            <span style="color:#6b7280;margin-left:8px">${escHtml(room?.label || '—')}</span>
+            ${dobStr ? `<span style="color:#9ca3af;margin-left:8px;font-size:.88em">${dobStr}</span>` : ''}
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.ar-child-pick-row').forEach(row => {
+        row.addEventListener('mouseenter', () => { row.style.background = '#f0f4ff'; });
+        row.addEventListener('mouseleave', () => { row.style.background = '#fff'; });
+        row.addEventListener('click', () => {
+            _arSelectChild(fam, students[parseInt(row.dataset.childIdx)]);
+        });
+    });
+
+    // Store family so "Change" can return to Step 2
+    _arSelectedFamily = fam;
 }
 
 function _arResolveRoom(student) {
@@ -1320,10 +1381,11 @@ function _arResolveRoom(student) {
 }
 
 function _arSelectChild(family, student) {
-    _arFamily  = family;
-    _arStudent = student;
-    _arRoom    = _arResolveRoom(student);
-    _arDates   = new Map();
+    _arFamily         = family;
+    _arStudent        = student;
+    _arRoom           = _arResolveRoom(student);
+    _arDates          = new Map();
+    _arSelectedFamily = family;
 
     const now = new Date();
     _arYear  = now.getFullYear();
@@ -1332,6 +1394,7 @@ function _arSelectChild(family, student) {
     document.getElementById('adminRegChildName').textContent = student.child_name;
     document.getElementById('adminRegChildRoom').textContent = _arRoom?.label || '—';
     document.getElementById('adminRegStep1').style.display   = 'none';
+    document.getElementById('adminRegStep2').style.display   = 'none';
     document.getElementById('adminRegMain').style.display    = '';
     document.getElementById('adminRegDayPicker').style.display = 'none';
 
@@ -1359,6 +1422,9 @@ function _arRenderCal() {
     const label = document.getElementById('adminRegCalLabel');
     if (!grid || !label) return;
 
+    // Apply grid layout inline so stale CSS cache can't break it
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:.75rem';
+
     const MONTHS = ['January','February','March','April','May','June',
                     'July','August','September','October','November','December'];
     label.textContent = `${MONTHS[_arMonth]} ${_arYear}`;
@@ -1366,9 +1432,22 @@ function _arRenderCal() {
     const today       = new Date(); today.setHours(0, 0, 0, 0);
     const lastOfMonth = new Date(_arYear, _arMonth + 1, 0);
 
+    // Build set of already-booked dates for this child
+    const alreadyBooked = new Set();
+    if (_arFamily && _arStudent) {
+        const email = (_arFamily.parent_email || '').toLowerCase();
+        const name  = (_arStudent.child_name  || '').toLowerCase();
+        allRegistrations
+            .filter(r => (r.parent_email || '').toLowerCase() === email &&
+                         (r.child_name  || '').toLowerCase() === name)
+            .forEach(r => (r.registration_dates || []).forEach(d => {
+                if (!d.waitlisted) alreadyBooked.add(d.care_date);
+            }));
+    }
+
     // Find the Monday on or before the 1st of the month
     const firstOfMonth = new Date(_arYear, _arMonth, 1);
-    const dow1 = firstOfMonth.getDay(); // 0=Sun
+    const dow1    = firstOfMonth.getDay(); // 0=Sun
     const daysBack = dow1 === 0 ? 6 : dow1 - 1;
     const startMon = new Date(firstOfMonth);
     startMon.setDate(startMon.getDate() - daysBack);
@@ -1379,32 +1458,59 @@ function _arRenderCal() {
     let weekStart = new Date(startMon);
     while (weekStart <= lastOfMonth) {
         for (let wd = 0; wd < 5; wd++) {
-            const curr = new Date(weekStart);
+            const curr    = new Date(weekStart);
             curr.setDate(weekStart.getDate() + wd);
             const inMonth = curr.getMonth() === _arMonth && curr.getFullYear() === _arYear;
+
+            if (!inMonth) {
+                html += '<div class="ar-cal-day other-month"></div>';
+                continue;
+            }
+
             const dateStr = `${curr.getFullYear()}-${String(curr.getMonth()+1).padStart(2,'0')}-${String(curr.getDate()).padStart(2,'0')}`;
-            const isPast  = curr < today;
-            const sel     = _arDates.get(dateStr);
+            const isPast   = curr < today;
+            const isClosed = allClosureDates.has(dateStr);
+            const sel      = _arDates.get(dateStr);
+            const booked   = alreadyBooked.has(dateStr);
 
             let cls = 'ar-cal-day';
-            if (!inMonth)         cls += ' other-month';
-            else if (isPast)      cls += ' past';
-            else if (sel==='full') cls += ' sel-full';
-            else if (sel==='half') cls += ' sel-half';
+            if (isPast || isClosed) {
+                cls += ' past';
+            } else if (booked) {
+                cls += ' ar-cal-day--booked';
+            } else if (sel === 'full') {
+                cls += ' sel-full';
+            } else if (sel === 'half') {
+                cls += ' sel-half';
+            }
 
-            const badge   = sel ? `<span class="ar-day-badge">${sel === 'half' ? '½ Day' : 'Full Day'}</span>` : '';
-            const attr    = (inMonth && !isPast) ? ` data-date="${dateStr}"` : '';
-            let capBadge  = '';
-            if (inMonth && !isPast && !sel) {
+            const isSelectable = inMonth && !isPast && !isClosed && !booked;
+            const attr = isSelectable ? ` data-date="${dateStr}"` : '';
+
+            // Badge: selected type, already-booked label, or capacity count
+            let badge = '';
+            if (sel) {
+                badge = `<span class="ar-day-badge">${sel === 'half' ? '½ Day' : 'Full Day'}</span>`;
+            } else if (booked) {
+                badge = `<span class="ar-cap-badge" style="background:#bfdbfe;color:#1e3a5f;border-color:#93c5fd">Booked</span>`;
+            } else if (isClosed) {
+                badge = `<span class="ar-cap-badge" style="background:#f3f4f6;color:#6b7280">Closed</span>`;
+            } else if (!isPast) {
                 const cap    = _arRoom?.capacity || 0;
-                const booked = _arCapacity[dateStr] || 0;
+                const cnt    = _arCapacity[dateStr] || 0;
                 if (cap > 0) {
-                    const avail  = cap - booked;
-                    const capCls = avail <= 0 ? 'ar-cap-full' : avail <= 2 ? 'ar-cap-near' : 'ar-cap-open';
-                    capBadge     = `<span class="ar-cap-badge ${capCls}">${booked}/${cap}</span>`;
+                    const capCls = cnt >= cap ? 'ar-cap-full' : cnt >= cap - 2 ? 'ar-cap-near' : 'ar-cap-open';
+                    badge = `<span class="ar-cap-badge ${capCls}">${cnt}/${cap}</span>`;
                 }
             }
-            html += `<div class="${cls}"${attr}><span class="ar-day-num">${curr.getDate()}</span>${badge}${capBadge}</div>`;
+
+            const title = booked ? 'Already booked for this child'
+                        : isClosed ? 'Closed'
+                        : isPast   ? ''
+                        : 'Click to add';
+            html += `<div class="${cls}"${attr} title="${title}">
+                <span class="ar-day-num">${curr.getDate()}</span>${badge}
+            </div>`;
         }
         weekStart.setDate(weekStart.getDate() + 7);
     }
@@ -1479,6 +1585,40 @@ function _arRenderReview() {
         </div>
     </div>`;
     document.getElementById('adminRegSubmit').disabled = false;
+}
+
+// Entry point from the Families tab — opens the modal with the family pre-selected.
+// Skips search (Step 1); goes to child picker (Step 2) for multi-child families,
+// or directly to the calendar (Step 3) for single-child families.
+function openAdminRegModalForFamily(family) {
+    _arFamily = null; _arStudent = null; _arRoom = null;
+    _arDates  = new Map(); _arPickDate = null;
+    _arSelectedFamily = family;
+
+    document.getElementById('adminRegError').textContent       = '';
+    document.getElementById('adminRegDayPicker').style.display = 'none';
+
+    const students = (family.students || []).filter(s => s.child_name);
+    if (students.length === 1) {
+        document.getElementById('adminRegStep1').style.display = 'none';
+        document.getElementById('adminRegStep2').style.display = 'none';
+        _arSelectChild(family, students[0]);
+    } else if (students.length > 1) {
+        document.getElementById('adminRegStep1').style.display = 'none';
+        document.getElementById('adminRegMain').style.display  = 'none';
+        _arShowChildPicker(family, students);
+    } else {
+        // No students yet — fall back to search
+        document.getElementById('adminRegSearch').value        = family.parent_name || '';
+        document.getElementById('adminRegStep1').style.display = '';
+        document.getElementById('adminRegStep2').style.display = 'none';
+        document.getElementById('adminRegMain').style.display  = 'none';
+        if (!_arFamilies) {
+            fetchAllFamilies().then(f => { _arFamilies = f; }).catch(() => {});
+        }
+    }
+
+    document.getElementById('adminRegModal').classList.remove('hidden');
 }
 
 async function _arSubmit() {
