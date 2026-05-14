@@ -1089,13 +1089,27 @@ async function _buildPayrollData(startVal, endVal) {
     });
 
     // Build per-day detail for each staff member (used by click-to-expand in the report)
-    // Each entry: { work_date, hours, source }
+    // Each entry: { work_date, hours, source, events? }
     // source: 'manual' = typed in by admin, 'clock-sync' = synced from clock-in, 'clock' = live clock calc
-    const periodDetailMap = new Map(); // staff_id → [{ work_date, hours, source }]
+    // events: [{clockIn, clockOut}] — individual clock punches for clock and clock-sync days
+
+    // Index all period clock events by staffId|date so we can attach them to detail entries
+    const clockEventsByDay = new Map(); // staffId|date → [{clockIn, clockOut}]
+    periodClockEvents.forEach(ev => {
+        if (!ev.clock_in || !ev.clock_out) return;
+        if (calcClockHrs(ev) <= 0) return;
+        const key = manualKey(ev.staff_id, ev.work_date);
+        if (!clockEventsByDay.has(key)) clockEventsByDay.set(key, []);
+        clockEventsByDay.get(key).push({ clockIn: ev.clock_in, clockOut: ev.clock_out });
+    });
+
+    const periodDetailMap = new Map(); // staff_id → [{ work_date, hours, source, events }]
     periodHrs.forEach(h => {
         const source = (h.notes || '').toLowerCase().includes('clock') ? 'clock-sync' : 'manual';
         if (!periodDetailMap.has(h.staff_id)) periodDetailMap.set(h.staff_id, []);
-        periodDetailMap.get(h.staff_id).push({ work_date: h.work_date, hours: parseFloat(h.hours_worked), source });
+        const key = manualKey(h.staff_id, h.work_date);
+        const events = clockEventsByDay.get(key) || [];
+        periodDetailMap.get(h.staff_id).push({ work_date: h.work_date, hours: parseFloat(h.hours_worked), source, events });
     });
     // Add clock-only days (not yet synced to staff_hours)
     const clockOnlyDayMap = new Map(); // `staffId|date` → accumulated hours
@@ -1109,7 +1123,8 @@ async function _buildPayrollData(startVal, endVal) {
     clockOnlyDayMap.forEach((hrs, key) => {
         const [staffId, work_date] = key.split('|');
         if (!periodDetailMap.has(staffId)) periodDetailMap.set(staffId, []);
-        periodDetailMap.get(staffId).push({ work_date, hours: hrs, source: 'clock' });
+        const events = clockEventsByDay.get(key) || [];
+        periodDetailMap.get(staffId).push({ work_date, hours: hrs, source: 'clock', events });
     });
     // Sort each staff's detail entries by date
     periodDetailMap.forEach(entries => entries.sort((a, b) => a.work_date.localeCompare(b.work_date)));
@@ -1192,8 +1207,15 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 : d.source === 'clock'
                 ? '<span style="font-size:.75em;color:#9a6700">clock only</span>'
                 : '<span style="font-size:.75em;color:#166534">manual</span>';
+            const timesHtml = (d.events || []).map(ev => {
+                const fmt = ts => new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                return `<span style="font-size:.75em;color:#374151;white-space:nowrap">${fmt(ev.clockIn)}&nbsp;–&nbsp;${fmt(ev.clockOut)}</span>`;
+            }).join('<span style="color:#9ca3af;margin:0 4px">·</span>');
             return `<tr class="payroll-detail-row" style="display:none">
-                <td colspan="2" class="billing-indent" style="padding-left:2.5rem">${dateLabel} ${sourceChip}</td>
+                <td colspan="2" class="billing-indent" style="padding-left:2.5rem">
+                    ${dateLabel} ${sourceChip}
+                    ${timesHtml ? `<div style="margin-top:2px;padding-left:.25rem">${timesHtml}</div>` : ''}
+                </td>
                 <td class="report-num payroll-hrs">${d.hours.toFixed(2)}</td>
                 <td colspan="3"></td>
             </tr>`;

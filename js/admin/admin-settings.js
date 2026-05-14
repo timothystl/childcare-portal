@@ -392,11 +392,12 @@ function renderRatesTable() {
                 </tr>
             </thead>
             <tbody>
-                ${ROOMS.filter(r => r.status !== 'seasonal').map(room => `
+                ${ROOMS.map(room => `
                     <tr data-room-id="${room.id}">
                         <td class="rates-room-label">
                             <strong>${escHtml(room.label)}</strong>
                             ${room.status === 'coming_soon' ? '<span class="rates-badge-soon">Coming Soon</span>' : ''}
+                            ${room.status === 'seasonal' ? '<span class="rates-badge-soon" style="background:#e0f2fe;color:#0369a1">Seasonal</span>' : ''}
                             <span class="rates-ages">${escHtml(room.ages)}</span>
                         </td>
                         <td>
