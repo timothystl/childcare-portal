@@ -76,6 +76,7 @@ function renderWaitlistQuickList() {
     const container = document.getElementById('wlQuickListContent');
     if (!container) return;
 
+    const searchQ      = (document.getElementById('wlSearchInput')?.value || '').toLowerCase().trim();
     const statusFilter = document.getElementById('wlStatusFilter')?.value || 'active';
     const roomFilter   = document.getElementById('wlRoomFilter')?.value   || '';
 
@@ -94,6 +95,14 @@ function renderWaitlistQuickList() {
             if (roomFilter === 'tbd') return !a.child_dob && !a.expected_due_date;
             return wlDeriveRoom(a) === roomFilter;
         });
+    }
+
+    if (searchQ) {
+        apps = apps.filter(a =>
+            (a.child_name   || '').toLowerCase().includes(searchQ) ||
+            (a.parent_name  || '').toLowerCase().includes(searchQ) ||
+            (a.parent_email || '').toLowerCase().includes(searchQ)
+        );
     }
 
     // Priority sort baseline (sibling priority stays as tiebreaker for position)
@@ -787,6 +796,7 @@ function _normDateStr(val) {
 
 function setupWaitlistAdmin() {
     document.getElementById('refreshWaitlistBtn')?.addEventListener('click', loadWaitlistApplications);
+    document.getElementById('wlSearchInput')?.addEventListener('input', renderWaitlistQuickList);
     document.getElementById('wlStatusFilter')?.addEventListener('change', () => { renderWaitlistAdmin(); renderWaitlistQuickList(); });
     document.getElementById('wlRoomFilter')?.addEventListener('change', () => { renderWaitlistAdmin(); renderWaitlistQuickList(); });
 

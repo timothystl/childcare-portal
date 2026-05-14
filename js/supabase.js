@@ -641,6 +641,38 @@ async function checkExistingRegistration(email, monthKey, childName = null) {
     }
 }
 
+// Check if ANY registration exists for this child name in the given month, regardless of which parent submitted it.
+// Used to prevent a second parent from re-registering a child that the first parent already scheduled.
+async function checkExistingRegistrationByChild(monthKey, childName) {
+    if (!sbClient || !childName) return null;
+    try {
+        const { data: regs, error: regErr } = await sbClient
+            .from('registrations')
+            .select('id, created_at, child_name, parent_email, parent_name')
+            .ilike('child_name', childName);
+        if (regErr || !regs || !regs.length) return null;
+
+        const ids = regs.map(r => r.id);
+        const [yr, mo] = monthKey.split('-');
+        const nextMo = mo === '12'
+            ? `${parseInt(yr) + 1}-01`
+            : `${yr}-${String(parseInt(mo) + 1).padStart(2, '0')}`;
+        const { data: dates, error: datesErr } = await sbClient
+            .from('registration_dates')
+            .select('id')
+            .in('registration_id', ids)
+            .gte('care_date', monthKey + '-01')
+            .lt('care_date', nextMo + '-01')
+            .eq('waitlisted', false)
+            .limit(1);
+        if (datesErr) return null;
+        if (!(dates && dates.length > 0)) return null;
+        return regs[0];
+    } catch {
+        return null;
+    }
+}
+
 // ============================================================
 // FAMILIES & STUDENTS
 // ============================================================

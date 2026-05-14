@@ -1101,8 +1101,10 @@ async function handleSubmit(e) {
             }
 
             // Hard block: one submission per child per month, across all devices.
-            // Checks Supabase directly so a different computer cannot bypass it.
-            const existingReg = await checkExistingRegistration(parentEmail, targetMonthKey, child.name);
+            // Checks by this parent's email first, then by child name only (catches parent 2
+            // trying to re-register a child that parent 1 already scheduled).
+            const existingReg = await checkExistingRegistration(parentEmail, targetMonthKey, child.name)
+                             || await checkExistingRegistrationByChild(targetMonthKey, child.name);
             if (existingReg) {
                 const submittedOn = existingReg.created_at
                     ? ` on ${new Date(existingReg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`

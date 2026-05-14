@@ -1293,10 +1293,12 @@ function _arRunSearch() {
     // Group matching children by family
     const byFamily = new Map();
     for (const fam of _arFamilies) {
-        const matchFam = (fam.parent_name  || '').toLowerCase().includes(q)
-                      || (fam.parent_email || '').toLowerCase().includes(q);
         for (const st of (fam.students || [])) {
-            if (matchFam || (st.child_name || '').toLowerCase().includes(q)) {
+            const matchChild = (st.child_name || '').toLowerCase().includes(q);
+            const matchFam   = (fam.parent_name  || '').toLowerCase().includes(q)
+                            || (fam.parent_email || '').toLowerCase().includes(q)
+                            || (fam.parent2_name || '').toLowerCase().includes(q);
+            if (matchChild || matchFam) {
                 if (!byFamily.has(fam.id)) byFamily.set(fam.id, { fam, students: [] });
                 byFamily.get(fam.id).students.push(st);
             }
@@ -1710,9 +1712,9 @@ function applyFilters() {
 
     let filtered = allRegistrations.filter(reg => {
         const matchSearch = !search ||
+            (reg.child_name   || '').toLowerCase().includes(search) ||
             (reg.parent_name  || '').toLowerCase().includes(search) ||
-            (reg.parent_email || '').toLowerCase().includes(search) ||
-            (reg.child_name   || '').toLowerCase().includes(search);
+            (reg.parent_email || '').toLowerCase().includes(search);
         const matchRoom      = !room      || reg.room_id === room;
         const matchCareMonth = !careMonth || (reg.registration_dates || []).some(d =>
             d.care_date && d.care_date.startsWith(careMonth));
