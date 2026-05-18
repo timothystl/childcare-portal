@@ -371,7 +371,7 @@ async function deleteClosure(closeDate) {
  * @param {string}      [params.status]        - Registration status (default: 'confirmed')
  * @returns {Promise<Registration>} The created registration row
  */
-async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates = [], status = 'confirmed' }) {
+async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates = [], status = 'confirmed', submittedBy = 'parent1' }) {
     if (!sbClient) throw new Error('Supabase is not configured yet.');
 
     const { data: reg, error: regError } = await sbClient
@@ -385,6 +385,7 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
             child_dob:    child.dob || null,
             room_id:      roomId,
             status:       status,
+            submitted_by: submittedBy,
         })
         .select()
         .single();

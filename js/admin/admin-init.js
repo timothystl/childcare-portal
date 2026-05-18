@@ -33,6 +33,7 @@ async function initDashboard() {
     setupMonthlyRoster();
     setupAttendanceRevenue();
     setupFamilyBilling();
+    setupMissingCalendarReport();
     setupWindowOverride();
     setupFamilies();
     setupMessages();

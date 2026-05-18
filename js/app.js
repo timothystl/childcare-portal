@@ -10,6 +10,7 @@ const DAY_HEADERS_MF = ['Mon','Tue','Wed','Thu','Fri'];
 // ============================================================
 let currentDate         = new Date();
 let selectedFamily      = null;     // { id, parent_name, parent_email, parent_phone, pin, students:[] }
+let _isParent2          = false;   // whether the logged-in parent is parent 2
 let _familySessionToken = null;    // short-lived HMAC token issued at login, passed to push-subscribe
 let selectedChildren    = [];       // [{ name, dob, room: ROOMS[i], isNew: bool, studentId: string|null }]
 let selectedDates       = new Map();  // 'YYYY-MM-DD' -> { dayType: 'full'|'half' }
@@ -215,6 +216,8 @@ async function runEmailPinLookup() {
 
 
 function selectFamily(family, isParent2 = false) {
+    _isParent2 = isParent2;
+
     // Check if registration is locked for nonpayment
     if (family.registration_locked) {
         showToast('Registration is currently unavailable for this family. Please contact the office to resolve your account balance.');
@@ -255,6 +258,7 @@ function selectFamily(family, isParent2 = false) {
 function resetFamilyLookup() {
     selectedFamily      = null;
     _familySessionToken = null;
+    _isParent2          = false;
     selectedChildren    = [];
     studentDataMap.clear();
 
@@ -1120,6 +1124,7 @@ async function handleSubmit(e) {
                     confirmedDates,
                     waitlistDates: [],
                     status: 'confirmed',
+                    submittedBy: _isParent2 ? 'parent2' : 'parent1',
                 });
                 results.push({ child, reg });
             } catch (childErr) {
