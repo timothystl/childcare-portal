@@ -157,6 +157,7 @@
                         <thead>
                             <tr>
                                 <th data-col="submitted" class="sortable">Submitted</th>
+                                <th>Entered By</th>
                                 <th data-col="parent" class="sortable">Parent</th>
                                 <th data-col="email" class="sortable">Email</th>
                                 <th>Phone</th>
@@ -170,7 +171,7 @@
                             </tr>
                         </thead>
                         <tbody id="regTableBody">
-                            <tr><td colspan="10" class="loading-cell">Loading registrations…</td></tr>
+                            <tr><td colspan="12" class="loading-cell">Loading registrations…</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -684,6 +685,24 @@
                 </div>
             </section>
 
+            <!-- Missing Care Calendar Report -->
+            <section class="admin-section collapsible-section" id="missingCalendarSection">
+                <h2>⚠️ Missing Care Calendar Report</h2>
+                <p class="section-desc">Shows which active children do not have a care calendar (registration) submitted for the selected month. Use this after the registration window closes to follow up with families who haven't registered.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="missingCalendarMonth">Month</label>
+                        <input type="month" id="missingCalendarMonth">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateMissingCalendarBtn" class="btn-secondary">Generate Report</button>
+                        <button id="exportMissingCalendarBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="missingCalendarContent">
+                    <p class="empty-hint">Select a month above and click Generate Report.</p>
+                </div>
+            </section>
 
         </div><!-- /#tab-reports -->
 

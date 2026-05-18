@@ -27,7 +27,7 @@ async function _sendSchedulePush(parentEmail, childName, title, body) {
 // ============================================================
 async function loadRegistrations() {
     document.getElementById('regTableBody').innerHTML =
-        '<tr><td colspan="10" class="loading-cell">Loading…</td></tr>';
+        '<tr><td colspan="12" class="loading-cell">Loading…</td></tr>';
     try {
         allRegistrations = await fetchAllRegistrations();
         populateCareMonthFilter();
@@ -81,7 +81,7 @@ function renderTable(data) {
 
     const tbody = document.getElementById('regTableBody');
     if (!data.length) {
-        tbody.innerHTML = '<tr><td colspan="11" class="loading-cell">No registrations found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="loading-cell">No registrations found.</td></tr>';
         return;
     }
 
@@ -89,6 +89,12 @@ function renderTable(data) {
         const room  = ROOMS.find(r => r.id === reg.room_id) || { label: reg.room_id };
         const dates = (reg.registration_dates || [])
             .sort((a, b) => a.care_date.localeCompare(b.care_date));
+
+        const submittedByLabel = {
+            parent1: 'Parent 1',
+            parent2: 'Parent 2',
+            admin:   'Admin',
+        }[reg.submitted_by] || (reg.submitted_by || '—');
 
         // Date chips — show ½ day or Full
         const datesHtml = dates.map(d => {
@@ -121,6 +127,7 @@ function renderTable(data) {
         return `
             <tr data-id="${reg.id}" data-room="${reg.room_id}">
                 <td>${submitted}</td>
+                <td class="submitted-by-cell">${escHtml(submittedByLabel)}</td>
                 <td>${escHtml(reg.parent_name)}</td>
                 <td><a href="mailto:${escHtml(reg.parent_email)}">${escHtml(reg.parent_email)}</a></td>
                 <td>${escHtml(reg.parent_phone)}</td>
@@ -246,6 +253,14 @@ function renderEditDaysList() {
             try {
                 const removedDate = editDaysReg.registration_dates.find(d => String(d.id) === String(dateId));
                 await deleteRegistrationDate(dateId);
+                if (removedDate) {
+                    await logAdminAction('remove_date', 'registration', String(editDaysReg.id), {
+                        child_name:   editDaysReg.child_name,
+                        parent_email: editDaysReg.parent_email,
+                        care_date:    removedDate.care_date,
+                        day_type:     removedDate.day_type,
+                    });
+                }
                 // Update local state
                 editDaysReg.registration_dates = editDaysReg.registration_dates.filter(
                     d => String(d.id) !== String(dateId)
@@ -369,6 +384,12 @@ async function _handleCalDayClick(dateStr) {
         try {
             const removedDate = existing;
             await deleteRegistrationDate(existing.id);
+            await logAdminAction('remove_date', 'registration', String(editDaysReg.id), {
+                child_name:   editDaysReg.child_name,
+                parent_email: editDaysReg.parent_email,
+                care_date:    removedDate.care_date,
+                day_type:     removedDate.day_type,
+            });
             editDaysReg.registration_dates = editDaysReg.registration_dates.filter(d => d.id !== existing.id);
             allRegistrations = allRegistrations.map(r => r.id === editDaysReg.id ? editDaysReg : r);
             renderEditCalGrid();
@@ -400,6 +421,13 @@ async function _editDaysPickSelect(dayType, waitlist) {
     try {
         const regSnapshot = editDaysReg;
         await addRegistrationDate(editDaysReg.id, editDaysReg.room_id, dateStr, dayType, waitlist);
+        await logAdminAction('add_date', 'registration', String(editDaysReg.id), {
+            child_name:   editDaysReg.child_name,
+            parent_email: editDaysReg.parent_email,
+            care_date:    dateStr,
+            day_type:     dayType,
+            waitlisted:   waitlist,
+        });
         const fresh = await fetchAllRegistrations();
         allRegistrations = fresh;
         editDaysReg = fresh.find(r => r.id === editDaysReg.id) || editDaysReg;
@@ -972,6 +1000,13 @@ async function _aadConfirm() {
         }
 
         await addRegistrationDate(_aadSelected.id, _aadRoomId, _aadDateStr, dayType, false, changeFee);
+        await logAdminAction('add_date', 'registration', String(_aadSelected.id), {
+            child_name:   _aadSelected.child_name,
+            parent_email: _aadSelected.parent_email,
+            care_date:    _aadDateStr,
+            day_type:     dayType,
+            change_fee:   changeFee,
+        });
 
         // Reload registration data
         allRegistrations = await fetchAllRegistrations();
@@ -1633,12 +1668,20 @@ async function _arSubmit() {
         const confirmedDates = [..._arDates.entries()].map(([date, dayType]) => ({ date, dayType }));
         const dob = _arStudent.child_dob || null;
         const ageMonths = dob ? Math.floor((Date.now() - new Date(dob)) / (1000 * 60 * 60 * 24 * 30.44)) : null;
-        await submitRegistration({
+        const newReg = await submitRegistration({
             parent:         { name: _arFamily.parent_name, email: _arFamily.parent_email, phone: _arFamily.parent_phone },
             child:          { name: _arStudent.child_name, ageMonths, dob },
             roomId:         _arRoom?.id,
             confirmedDates,
             status:         'confirmed',
+            submittedBy:    'admin',
+        });
+        await logAdminAction('create', 'registration', String(newReg.id), {
+            child_name:   _arStudent.child_name,
+            parent_name:  _arFamily.parent_name,
+            parent_email: _arFamily.parent_email,
+            room_id:      _arRoom?.id,
+            dates:        confirmedDates.map(d => d.date),
         });
         _closeAdminRegModal();
         await loadRegistrations();
@@ -1781,19 +1824,21 @@ function baseRow(reg, roomLabel, date, status, dayType) {
     const room = ROOMS.find(r => r.label === roomLabel);
     const rate = dayType === 'Half Day' ? room?.halfDayRate : room?.fullDayRate;
     const bill = calcRegistrationBill(reg);
+    const submittedByLabel = { parent1: 'Parent 1', parent2: 'Parent 2', admin: 'Admin' }[reg.submitted_by] || (reg.submitted_by || '');
     return {
-        'Submitted':   new Date(reg.created_at).toLocaleDateString('en-US'),
-        'Parent Name': reg.parent_name,
-        'Email':       reg.parent_email,
-        'Phone':       reg.parent_phone,
-        'Child Name':  reg.child_name,
-        'DOB':         reg.child_dob || '',
-        'Room':        roomLabel,
-        'Care Date':   date,
-        'Day Type':    dayType,
-        'Status':      status,
-        'Rate':        date && rate ? `$${rate}` : '',
-        'Total Bill':  `$${bill.toFixed(2)}`,
+        'Submitted':    new Date(reg.created_at).toLocaleDateString('en-US'),
+        'Entered By':   submittedByLabel,
+        'Parent Name':  reg.parent_name,
+        'Email':        reg.parent_email,
+        'Phone':        reg.parent_phone,
+        'Child Name':   reg.child_name,
+        'DOB':          reg.child_dob || '',
+        'Room':         roomLabel,
+        'Care Date':    date,
+        'Day Type':     dayType,
+        'Status':       status,
+        'Rate':         date && rate ? `$${rate}` : '',
+        'Total Bill':   `$${bill.toFixed(2)}`,
     };
 }
 

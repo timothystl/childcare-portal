@@ -3057,3 +3057,146 @@ function _renderPlannerContent(room, monthKey, days, sourceType, candidates, ful
 }
 
 // ============================================================
+// MISSING CARE CALENDAR REPORT
+// Shows children with no registration for a given month.
+// ============================================================
+function setupMissingCalendarReport() {
+    const now = new Date();
+    const el = document.getElementById('missingCalendarMonth');
+    if (el) el.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    document.getElementById('generateMissingCalendarBtn')?.addEventListener('click', generateMissingCalendarReport);
+    document.getElementById('exportMissingCalendarBtn')?.addEventListener('click', exportMissingCalendarReport);
+}
+
+let _missingCalendarData = [];
+
+async function generateMissingCalendarReport() {
+    const monthVal = document.getElementById('missingCalendarMonth')?.value;
+    if (!monthVal) { alert('Please select a month.'); return; }
+
+    const contentEl = document.getElementById('missingCalendarContent');
+    const exportBtn = document.getElementById('exportMissingCalendarBtn');
+    contentEl.innerHTML = '<p class="empty-hint">Generating…</p>';
+    if (exportBtn) exportBtn.style.display = 'none';
+
+    try {
+        if (allFamiliesData.length === 0) await loadFamilies();
+        if (allRegistrations.length === 0) allRegistrations = await fetchAllRegistrations();
+
+        const [y, m] = monthVal.split('-').map(Number);
+        const monthLabel = `${MONTH_NAMES_ADMIN[m - 1]} ${y}`;
+
+        // Build set of child names that have at least one confirmed (non-waitlisted) date in this month
+        const registeredChildren = new Set();
+        allRegistrations.forEach(reg => {
+            const hasDateInMonth = (reg.registration_dates || []).some(d =>
+                !d.waitlisted && d.care_date && d.care_date.startsWith(monthVal)
+            );
+            if (hasDateInMonth) {
+                registeredChildren.add((reg.child_name || '').toLowerCase().trim());
+            }
+        });
+
+        // Collect all active students from active families
+        const missing = [];
+        const activeFamilies = allFamiliesData.filter(f => f.active !== false);
+        activeFamilies.forEach(fam => {
+            (fam.students || []).forEach(st => {
+                const key = (st.child_name || '').toLowerCase().trim();
+                if (!registeredChildren.has(key)) {
+                    const room = _resolveRoomForStudent(st);
+                    missing.push({
+                        childName:   st.child_name,
+                        parentName:  fam.parent_name,
+                        parentEmail: fam.parent_email,
+                        parentPhone: fam.parent_phone,
+                        parent2Name: fam.parent2_name || '',
+                        parent2Email: fam.parent2_email || '',
+                        roomLabel:   room?.label || '—',
+                    });
+                }
+            });
+        });
+
+        _missingCalendarData = missing;
+
+        if (!missing.length) {
+            contentEl.innerHTML = `<p class="empty-hint">✅ All active children have a care calendar for ${escHtml(monthLabel)}.</p>`;
+            return;
+        }
+
+        // Sort by room then child name
+        missing.sort((a, b) => a.roomLabel.localeCompare(b.roomLabel) || a.childName.localeCompare(b.childName));
+
+        const rows = missing.map(r => `
+            <tr>
+                <td>${escHtml(r.childName)}</td>
+                <td>${escHtml(r.roomLabel)}</td>
+                <td>${escHtml(r.parentName)}</td>
+                <td><a href="mailto:${escHtml(r.parentEmail)}">${escHtml(r.parentEmail)}</a></td>
+                <td>${escHtml(r.parentPhone || '—')}</td>
+                <td>${r.parent2Name ? escHtml(r.parent2Name) : '—'}</td>
+                <td>${r.parent2Email ? `<a href="mailto:${escHtml(r.parent2Email)}">${escHtml(r.parent2Email)}</a>` : '—'}</td>
+            </tr>`).join('');
+
+        contentEl.innerHTML = `
+            <p style="margin-bottom:.75rem;font-size:.9em;color:#555">
+                <strong>${missing.length}</strong> child${missing.length !== 1 ? 'ren' : ''} without a care calendar for <strong>${escHtml(monthLabel)}</strong>.
+            </p>
+            <div class="table-wrapper report-table-wrap">
+                <table class="report-table" id="missingCalendarTable">
+                    <thead>
+                        <tr>
+                            <th>Child</th>
+                            <th>Room</th>
+                            <th>Parent / Guardian</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Parent 2</th>
+                            <th>Parent 2 Email</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+
+        if (exportBtn) exportBtn.style.display = '';
+    } catch (err) {
+        contentEl.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function _resolveRoomForStudent(student) {
+    if (student.room_override) return ROOMS.find(r => r.id === student.room_override) || null;
+    const dob = student.child_dob;
+    if (!dob) return null;
+    const ageMonths = Math.floor((Date.now() - new Date(dob + 'T00:00:00')) / (1000 * 60 * 60 * 24 * 30.44));
+    return ROOMS.find(r =>
+        r.ageMinMonths != null && r.ageMaxMonths != null &&
+        ageMonths >= r.ageMinMonths && ageMonths <= r.ageMaxMonths
+    ) || null;
+}
+
+function exportMissingCalendarReport() {
+    if (!_missingCalendarData.length) { alert('Generate the report first.'); return; }
+    const monthVal  = document.getElementById('missingCalendarMonth')?.value || 'unknown';
+    const rows = _missingCalendarData.map(r => ({
+        'Child Name':     r.childName,
+        'Room':           r.roomLabel,
+        'Parent Name':    r.parentName,
+        'Email':          r.parentEmail,
+        'Phone':          r.parentPhone || '',
+        'Parent 2 Name':  r.parent2Name || '',
+        'Parent 2 Email': r.parent2Email || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Missing Calendars');
+    ws['!cols'] = Object.keys(rows[0]).map(k => ({
+        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
+    }));
+    XLSX.writeFile(wb, `missing-calendars-${monthVal}.xlsx`);
+}
+
+// ============================================================
