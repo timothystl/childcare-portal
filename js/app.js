@@ -361,17 +361,19 @@ function renderChildSection() {
                         recurringDays: rdRaw ? rdRaw.split(',').filter(Boolean) : [],
                     });
                     onChildrenChanged();
-                    // Non-blocking: warn if already registered for the target month
+                    // Non-blocking: warn if already registered for the target month.
+                    // Checks by this parent's email first, then by child name (catches parent 2).
                     const monthKey = getTargetMonthKey();
                     const email    = selectedFamily?.parent_email;
-                    if (email) {
-                        checkExistingRegistration(email, monthKey, childName).then(existing => {
-                            if (existing) {
-                                const { targetLabel } = getRegistrationWindow();
-                                showToast(`⚠️ ${childName} may already be registered for ${targetLabel}. Verify before submitting.`);
-                            }
-                        }).catch(() => {});
-                    }
+                    Promise.all([
+                        email ? checkExistingRegistration(email, monthKey, childName) : Promise.resolve(null),
+                        checkExistingRegistrationByChild(monthKey, childName),
+                    ]).then(([byEmail, byChild]) => {
+                        if (byEmail || byChild) {
+                            const { targetLabel } = getRegistrationWindow();
+                            showToast(`⚠️ ${childName} may already be registered for ${targetLabel}. Verify before submitting.`);
+                        }
+                    }).catch(() => {});
                 }
             } else {
                 const idx = selectedChildren.findIndex(c => c.studentId === studentId);

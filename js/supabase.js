@@ -660,7 +660,7 @@ async function checkExistingRegistrationByChild(monthKey, childName) {
             : `${yr}-${String(parseInt(mo) + 1).padStart(2, '0')}`;
         const { data: dates, error: datesErr } = await sbClient
             .from('registration_dates')
-            .select('id')
+            .select('registration_id')
             .in('registration_id', ids)
             .gte('care_date', monthKey + '-01')
             .lt('care_date', nextMo + '-01')
@@ -668,7 +668,9 @@ async function checkExistingRegistrationByChild(monthKey, childName) {
             .limit(1);
         if (datesErr) return null;
         if (!(dates && dates.length > 0)) return null;
-        return regs[0];
+        // Return the specific registration that has dates in this month so
+        // the created_at shown in the error message matches the actual conflict.
+        return regs.find(r => r.id === dates[0].registration_id) || regs[0];
     } catch {
         return null;
     }
