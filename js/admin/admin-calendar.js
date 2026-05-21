@@ -622,26 +622,21 @@ function renderCapacityOverview() {
     });
 
     const cards = ROOMS.map(room => {
-        if (room.status === 'coming_soon') {
-            return `
-            <div class="cap-card cap-card--soon" data-room-id="${room.id}" data-month-key="${key}" role="button" tabindex="0" title="View ${room.label} calendar" style="opacity:.75;">
-                <h3>${room.label}</h3>
-                <p class="cap-meta">Coming Soon — capacity TBD</p>
-                <div class="progress-bar"><div class="progress-fill bar-green" style="width:0%"></div></div>
-                <p class="cap-pct">Pending state inspection</p>
-                <p class="cap-card-hint">Click to view calendar →</p>
-            </div>`;
-        }
-        const used  = counts[room.id] || 0;
-        const cap   = room.capacity * workingDays;
-        const pct   = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
-        const color = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
+        const used    = counts[room.id] || 0;
+        const hasCap  = room.capacity != null && room.capacity > 0;
+        const cap     = hasCap ? room.capacity * workingDays : 0;
+        const pct     = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+        const color   = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
+        const metaTxt = hasCap
+            ? `Max ${room.capacity}/day &middot; ${used} booking${used !== 1 ? 's' : ''}`
+            : `Capacity TBD &middot; ${used} booking${used !== 1 ? 's' : ''}`;
+        const pctTxt  = hasCap ? `${pct}% utilisation` : 'Utilisation pending capacity';
         return `
             <div class="cap-card" data-room-id="${room.id}" data-month-key="${key}" role="button" tabindex="0" title="View ${room.label} calendar">
                 <h3>${room.label}</h3>
-                <p class="cap-meta">Max ${room.capacity}/day &middot; ${used} booking${used !== 1 ? 's' : ''}</p>
+                <p class="cap-meta">${metaTxt}</p>
                 <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
-                <p class="cap-pct">${pct}% utilisation</p>
+                <p class="cap-pct">${pctTxt}</p>
                 <p class="cap-card-hint">Click to view calendar →</p>
             </div>`;
     }).join('');
