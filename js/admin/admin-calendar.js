@@ -624,11 +624,12 @@ function renderCapacityOverview() {
     const cards = ROOMS.map(room => {
         if (room.status === 'coming_soon') {
             return `
-            <div class="cap-card cap-card--soon" style="opacity:.65;">
+            <div class="cap-card cap-card--soon" data-room-id="${room.id}" data-month-key="${key}" role="button" tabindex="0" title="View ${room.label} calendar" style="opacity:.75;">
                 <h3>${room.label}</h3>
                 <p class="cap-meta">Coming Soon — capacity TBD</p>
                 <div class="progress-bar"><div class="progress-fill bar-green" style="width:0%"></div></div>
                 <p class="cap-pct">Pending state inspection</p>
+                <p class="cap-card-hint">Click to view calendar →</p>
             </div>`;
         }
         const used  = counts[room.id] || 0;
