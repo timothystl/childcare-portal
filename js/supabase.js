@@ -64,8 +64,8 @@ const ROOMS = [
         ages:           '30 – 36 months',
         ageMinMonths:   30,
         ageMaxMonths:   35,
-        capacity:       null,   // pending state inspection — set once licensed
-        status:         'coming_soon',
+        capacity:       12,
+        status:         'active',
         fullDayOnly:    false,
         fullDayRate:    75,
         halfDayRate:    45,
