@@ -9,6 +9,8 @@ let dashboardInitDone = false;
 async function initDashboard() {
     if (dashboardInitDone) return;
     dashboardInitDone = true;
+    const versionBadge = document.getElementById('versionBadge');
+    if (versionBadge) versionBadge.textContent = window.__BUILD_VERSION__ || 'dev';
     populateRoomFilter();
     populateRosterRoomFilter();
     populateWlRoomFilter();

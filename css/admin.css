@@ -56,6 +56,19 @@
     box-shadow: var(--shadow-card);
 }
 .admin-header h1 { font-size: 1.4em; color: var(--navy); font-family: var(--font-body); font-weight: 800; }
+.version-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: .55em;
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #6b7280;
+    background: #f3f4f6;
+    border-radius: 10px;
+    vertical-align: middle;
+    letter-spacing: .02em;
+}
 .sub-label        { color: var(--green); font-size: .88em; margin-top: 2px; font-weight: 600; }
 
 /* Logo + title group on left side of admin header */
