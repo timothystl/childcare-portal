@@ -18,14 +18,31 @@
 // remain unmodified so development still works without building.
 // ============================================================
 
-const esbuild  = require('esbuild');
-const fs       = require('fs');
-const path     = require('path');
+const esbuild      = require('esbuild');
+const fs           = require('fs');
+const path         = require('path');
+const { execSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 
 if (!fs.existsSync(DIST)) fs.mkdirSync(DIST, { recursive: true });
+
+// ── Build version (short SHA + date) ──────────────────────────
+// Cloudflare Pages sets CF_PAGES_COMMIT_SHA; locally we fall back to `git rev-parse`.
+function writeBuildVersion() {
+    let sha = process.env.CF_PAGES_COMMIT_SHA || '';
+    if (!sha) {
+        try { sha = execSync('git rev-parse HEAD', { cwd: ROOT }).toString().trim(); }
+        catch { sha = ''; }
+    }
+    const shortSha = sha ? sha.slice(0, 7) : 'dev';
+    const date     = new Date().toISOString().slice(0, 10);
+    const contents = `window.__BUILD_VERSION__ = ${JSON.stringify(`${shortSha} · ${date}`)};\n`;
+    fs.writeFileSync(path.join(ROOT, 'js/build-version.js'), contents);
+    console.log('[build] version:', `${shortSha} · ${date}`);
+}
+writeBuildVersion();
 
 const watch = process.argv.includes('--watch');
 
