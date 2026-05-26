@@ -1121,8 +1121,9 @@ async function _buildPayrollData(startVal, endVal) {
         clockOnlyDayMap.set(key, (clockOnlyDayMap.get(key) || 0) + hrs);
     });
     clockOnlyDayMap.forEach((hrs, key) => {
-        const [staffIdStr, work_date] = key.split('|');
-        const staffId = Number(staffIdStr); // match the numeric key used for manual entries
+        const sepIdx = key.indexOf('|');
+        const staffId = key.slice(0, sepIdx);
+        const work_date = key.slice(sepIdx + 1);
         if (!periodDetailMap.has(staffId)) periodDetailMap.set(staffId, []);
         const events = clockEventsByDay.get(key) || [];
         periodDetailMap.get(staffId).push({ work_date, hours: hrs, source: 'clock', events });
