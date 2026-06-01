@@ -242,6 +242,13 @@ async function generateFamilyBillingReport() {
     const container  = document.getElementById('familyBillingContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
 
+    // Ensure family data (and therefore discounts) is always fresh so staff/custom-discounted
+    // families are billed correctly even when the Families tab hasn't been opened this session.
+    try {
+        allFamiliesData = await fetchAllFamilies({ includeArchived: true });
+        _discountMap = null;
+    } catch (e) { console.warn('Could not load families for discount map:', e); }
+
     // Load any manual billing overrides for this month
     let overrideRows = [];
     try { overrideRows = await fetchBillingOverrides(monthVal); } catch (e) { console.warn('fetchBillingOverrides:', e); }
