@@ -1241,6 +1241,7 @@ let _arDates          = new Map(); // dateStr → 'full'|'half'
 let _arPickDate       = null;
 let _arCapacity       = {}; // dateStr → booked count for current month/room
 let _arSelectedFamily = null; // tracks selected family for "Change" nav
+let _arBookedMap      = new Map(); // dateStr → { day_type, reg_id } for already-booked dates
 
 document.getElementById('adminNewRegBtn')?.addEventListener('click', _openAdminRegModal);
 document.getElementById('adminRegClose')?.addEventListener('click',  _closeAdminRegModal);
@@ -1465,8 +1466,8 @@ function _arRenderCal() {
     const today       = new Date(); today.setHours(0, 0, 0, 0);
     const lastOfMonth = new Date(_arYear, _arMonth + 1, 0);
 
-    // Build set of already-booked dates for this child
-    const alreadyBooked = new Set();
+    // Build map of already-booked dates for this child: dateStr → { day_type, reg_id }
+    _arBookedMap = new Map();
     if (_arFamily && _arStudent) {
         const email = (_arFamily.parent_email || '').toLowerCase();
         const name  = (_arStudent.child_name  || '').toLowerCase();
@@ -1474,7 +1475,7 @@ function _arRenderCal() {
             .filter(r => (r.parent_email || '').toLowerCase() === email &&
                          (r.child_name  || '').toLowerCase() === name)
             .forEach(r => (r.registration_dates || []).forEach(d => {
-                if (!d.waitlisted) alreadyBooked.add(d.care_date);
+                if (!d.waitlisted) _arBookedMap.set(d.care_date, { day_type: d.day_type || 'full', reg_id: r.id });
             }));
     }
 
@@ -1500,11 +1501,12 @@ function _arRenderCal() {
                 continue;
             }
 
-            const dateStr = `${curr.getFullYear()}-${String(curr.getMonth()+1).padStart(2,'0')}-${String(curr.getDate()).padStart(2,'0')}`;
+            const dateStr  = `${curr.getFullYear()}-${String(curr.getMonth()+1).padStart(2,'0')}-${String(curr.getDate()).padStart(2,'0')}`;
             const isPast   = curr < today;
             const isClosed = allClosureDates.has(dateStr);
-            const sel      = _arDates.get(dateStr);
-            const booked   = alreadyBooked.has(dateStr);
+            const sel       = _arDates.get(dateStr);
+            const bookedInfo = _arBookedMap.get(dateStr);
+            const booked    = !!bookedInfo;
 
             let cls = 'ar-cal-day';
             if (isPast || isClosed) {
@@ -1517,15 +1519,16 @@ function _arRenderCal() {
                 cls += ' sel-half';
             }
 
-            const isSelectable = inMonth && !isPast && !isClosed && !booked;
-            const attr = isSelectable ? ` data-date="${dateStr}"` : '';
+            // Booked days are clickable (to open edit modal); past/closed are not
+            const attr = (!isPast && !isClosed) ? ` data-date="${dateStr}"` : '';
 
-            // Badge: selected type, already-booked label, or capacity count
+            // Badge: selected type, already-booked with day type, or capacity count
             let badge = '';
             if (sel) {
                 badge = `<span class="ar-day-badge">${sel === 'half' ? '½ Day' : 'Full Day'}</span>`;
             } else if (booked) {
-                badge = `<span class="ar-cap-badge" style="background:#bfdbfe;color:#1e3a5f;border-color:#93c5fd">Booked</span>`;
+                const typeLabel = bookedInfo.day_type === 'half' ? '½ Day' : 'Full Day';
+                badge = `<span class="ar-cap-badge" style="background:#bfdbfe;color:#1e3a5f;border-color:#93c5fd">${typeLabel}</span>`;
             } else if (isClosed) {
                 badge = `<span class="ar-cap-badge" style="background:#f3f4f6;color:#6b7280">Closed</span>`;
             } else if (!isPast) {
@@ -1537,9 +1540,10 @@ function _arRenderCal() {
                 }
             }
 
-            const title = booked ? 'Already booked for this child'
-                        : isClosed ? 'Closed'
-                        : isPast   ? ''
+            const bookedTitle = booked ? `${bookedInfo.day_type === 'half' ? '½ Day' : 'Full Day'} — click to edit` : '';
+            const title = booked    ? bookedTitle
+                        : isClosed  ? 'Closed'
+                        : isPast    ? ''
                         : 'Click to add';
             html += `<div class="${cls}"${attr} title="${title}">
                 <span class="ar-day-num">${curr.getDate()}</span>${badge}
@@ -1555,6 +1559,17 @@ function _arRenderCal() {
 }
 
 function _arDayClick(dateStr) {
+    // Click already-booked day → close this modal and open Edit Days for that registration
+    const bookedInfo = _arBookedMap.get(dateStr);
+    if (bookedInfo) {
+        const reg = allRegistrations.find(r => r.id === bookedInfo.reg_id);
+        if (reg) {
+            _closeAdminRegModal();
+            openEditDaysModal(reg);
+        }
+        return;
+    }
+
     // Click selected day → deselect
     if (_arDates.has(dateStr)) {
         _arDates.delete(dateStr);
