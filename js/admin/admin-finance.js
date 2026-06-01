@@ -36,6 +36,9 @@ function _destroyChart(key) {
 function _financeYear() {
     return parseInt(document.getElementById('financeYear')?.value || new Date().getFullYear());
 }
+function _financeMonth() {
+    return document.getElementById('financeMonth')?.value || '';
+}
 
 // ── Helpers ──────────────────────────────────────────────────
 const FIN_MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -51,9 +54,15 @@ function _fmt$(v) { return '$' + Math.round(v).toLocaleString(); }
 
 // ── Financial Dashboard ───────────────────────────────────────
 async function generateFinanceDashboard() {
-    const year = _financeYear();
+    const year  = _financeYear();
+    const month = _financeMonth();
     const container = document.getElementById('financeDashContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
+
+    if (month) {
+        await _generateMonthDetail(year, month, container);
+        return;
+    }
 
     try {
         // Ensure expense config is loaded before rendering KPIs
@@ -187,6 +196,104 @@ async function generateFinanceDashboard() {
             }
         );
 
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+// ── Single-Month Detail View ──────────────────────────────────
+async function _generateMonthDetail(year, month, container) {
+    const mo       = `${year}-${month}`;
+    const fromDate = `${mo}-01`;
+    const lastDay  = new Date(year, parseInt(month), 0).getDate();
+    const toDate   = `${mo}-${String(lastDay).padStart(2, '0')}`;
+    const label    = `${['January','February','March','April','May','June','July','August','September','October','November','December'][parseInt(month)-1]} ${year}`;
+
+    try {
+        if (!_expenseConfig) _expenseConfig = await fetchExpenseConfig();
+        const pnl = await _buildRoomPnlData(fromDate, toDate);
+        const moData = pnl.data[mo] || {};
+
+        let totalRev = 0, totalLab = 0, totalAtt = 0;
+        const roomRows = ROOMS.filter(r => moData[r.id]).map(r => {
+            const d = moData[r.id];
+            totalRev += d.revenue || 0;
+            totalLab += d.labor   || 0;
+            totalAtt += d.attendees || 0;
+            return { label: r.label, attendees: d.attendees || 0, revenue: d.revenue || 0, labor: d.labor || 0 };
+        });
+
+        const moNum  = parseInt(month);
+        const totalExp = _monthlyExpenseBurden(moNum, totalLab, totalRev);
+        const totalNet = totalRev - totalLab - totalExp;
+        const labPct   = totalRev > 0 ? totalLab / totalRev * 100 : 0;
+        const netPct   = totalRev > 0 ? totalNet / totalRev * 100 : 0;
+        const hasExp   = totalExp > 0;
+        const marginClass = netPct >= 30 ? 'fin-positive' : netPct >= 15 ? 'fin-warn' : 'fin-negative';
+
+        const roomRowsHtml = roomRows.map(r => {
+            const net = r.revenue - r.labor;
+            return `<tr>
+                <td>${escHtml(r.label)}</td>
+                <td class="report-num">${r.attendees}</td>
+                <td class="report-num report-revenue">${_fmt$(r.revenue)}</td>
+                <td class="report-num">${_fmt$(r.labor)}</td>
+                <td class="report-num ${net >= 0 ? 'fin-positive' : 'fin-negative'}">${_fmt$(net)}</td>
+            </tr>`;
+        }).join('');
+
+        container.innerHTML = `
+            <h3 style="margin:0 0 1rem">${escHtml(label)}</h3>
+            <div class="fin-kpi-row">
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Revenue</span>
+                    <span class="fin-kpi-value fin-positive">${_fmt$(totalRev)}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Labor</span>
+                    <span class="fin-kpi-value">${_fmt$(totalLab)}</span>
+                </div>
+                ${hasExp ? `<div class="fin-kpi">
+                    <span class="fin-kpi-label">Other Expenses</span>
+                    <span class="fin-kpi-value">${_fmt$(totalExp)}</span>
+                </div>` : ''}
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Net${hasExp ? '' : ' (before expenses)'}</span>
+                    <span class="fin-kpi-value ${marginClass}">${_fmt$(totalNet)}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Net Margin %</span>
+                    <span class="fin-kpi-value ${marginClass}">${netPct.toFixed(1)}%</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Labor % of Revenue</span>
+                    <span class="fin-kpi-value ${labPct <= 70 ? 'fin-positive' : 'fin-negative'}">
+                        ${totalRev > 0 ? labPct.toFixed(1) + '%' : '—'}
+                        <span class="fin-kpi-target">target ≤ 70%</span>
+                    </span>
+                </div>
+            </div>
+            <table class="report-table" style="margin-top:1.5rem">
+                <thead>
+                    <tr>
+                        <th>Room</th>
+                        <th class="report-num">Days</th>
+                        <th class="report-num">Revenue</th>
+                        <th class="report-num">Labor</th>
+                        <th class="report-num">Net (Rev−Lab)</th>
+                    </tr>
+                </thead>
+                <tbody>${roomRowsHtml}</tbody>
+                <tfoot>
+                    <tr style="font-weight:700;border-top:2px solid #cbd5e1">
+                        <td>Total</td>
+                        <td class="report-num">${totalAtt}</td>
+                        <td class="report-num report-revenue">${_fmt$(totalRev)}</td>
+                        <td class="report-num">${_fmt$(totalLab)}</td>
+                        <td class="report-num ${marginClass}">${_fmt$(totalRev - totalLab)}</td>
+                    </tr>
+                </tfoot>
+            </table>`;
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
     }
