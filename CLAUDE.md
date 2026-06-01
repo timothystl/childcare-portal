@@ -8,12 +8,17 @@ Always use descriptive branch names in the format `type/short-description` (e.g.
 
 ## Version numbering
 
-The app version is in `package.json` (`"version": "x.y"`). **For every PR:**
-1. Bump the minor version in `package.json` (e.g. `1.3` → `1.4`)
-2. Update `js/build-version.js` to match: `window.__BUILD_VERSION__ = "v1.4";`
-3. Commit both files in the same commit as the change
+The app version uses **semantic versioning** (`major.minor.patch`) stored in `package.json`. **For every PR**, bump the appropriate part and update `js/build-version.js` to match:
 
-Both files must be committed together — `js/build-version.js` is what the live site actually reads, regardless of whether it loads the bundled or unbundled JS.
+| Change type | Example | When to use |
+|---|---|---|
+| `patch` | `1.9.0` → `1.9.1` | Bug fixes, small tweaks |
+| `minor` | `1.9.1` → `1.10.0` | New features, meaningful additions |
+| `major` | `1.x.x` → `2.0.0` | Radical redesigns, breaking changes |
+
+Both `package.json` and `js/build-version.js` must be committed together in the same commit as the change — `js/build-version.js` is what the live site actually reads, regardless of whether it loads the bundled or unbundled JS.
+
+Current version: `2.0.0` (reset patch/minor to 0 when moving to a new major).
 
 ---
 
