@@ -70,10 +70,53 @@ async function generateFinanceDashboard() {
             _expenseConfig = await fetchExpenseConfig();
         }
 
-        const pnl = await _buildRoomPnlData(`${year}-01-01`, `${year}-12-31`);
-        const { months } = pnl;
+        // Labor comes from _buildRoomPnlData (staff schedules/clock events).
+        // Revenue comes from _buildFamilyBillingData per month — same calculation as the
+        // month detail view and Family Billing report — to guarantee consistent numbers.
+        const [pnl] = await Promise.all([
+            _buildRoomPnlData(`${year}-01-01`, `${year}-12-31`),
+        ]);
 
-        if (!months.length) {
+        // Fresh data for revenue calculation
+        try { allFamiliesData = await fetchAllFamilies({ includeArchived: true }); _discountMap = null; } catch(e) {}
+        try { const f = await fetchAllRegistrations(); if (f?.length) allRegistrations = f; } catch(e) {}
+
+        // Billing overrides for all months in parallel
+        const allMoList = Array.from({length: 12}, (_, i) => `${year}-${String(i+1).padStart(2,'0')}`);
+        const overridesByMo = new Map();
+        await Promise.all(allMoList.map(async mo => {
+            try {
+                const rows = await fetchBillingOverrides(mo);
+                overridesByMo.set(mo, new Map(rows.map(r => [
+                    `${(r.parent_email||'').toLowerCase()}:${(r.child_name||'').toLowerCase()}`,
+                    parseFloat(r.override_amount),
+                ])));
+            } catch(e) {}
+        }));
+
+        // Live revenue per month via Family Billing calculation
+        const liveRevByMo = {};
+        allMoList.forEach(mo => {
+            const families = _buildFamilyBillingData(mo, overridesByMo.get(mo) || new Map());
+            liveRevByMo[mo] = families.reduce((s, fam) => s + fam.children.reduce((cs, c) =>
+                cs + (c.hasOverride ? c.overrideAmount : c.subtotal) + (c.changeFees || 0), 0), 0);
+        });
+
+        // Historical billing_summary totals — used as fallback for months with no live registrations
+        const historicalRevByMo = {};
+        try {
+            const rows = await fetchBillingSummary();
+            rows.forEach(r => {
+                const mo = (r.month || '').substring(0, 7);
+                if (mo.startsWith(String(year))) historicalRevByMo[mo] = (historicalRevByMo[mo] || 0) + (parseFloat(r.net_billed) || 0);
+            });
+        } catch(e) {}
+
+        // Combine: use live rev if > 0, else fall back to historical (e.g. Jan-Mar manual entries)
+        const { months } = pnl;
+        const allMonths = [...new Set([...months, ...Object.keys(historicalRevByMo)])].sort();
+
+        if (!allMonths.length) {
             container.innerHTML = '<p class="empty-hint">No data found for this year.</p>';
             return;
         }
@@ -81,8 +124,8 @@ async function generateFinanceDashboard() {
         let totalRev = 0, totalLab = 0, totalExp = 0;
         const moRevArr = [], moLabArr = [], moExpArr = [], moNetArr = [], moLabPctArr = [], moLabels = [];
 
-        months.forEach(mo => {
-            const rev  = _moRev(pnl, mo);
+        allMonths.forEach(mo => {
+            const rev  = liveRevByMo[mo] > 0 ? liveRevByMo[mo] : (historicalRevByMo[mo] || 0);
             const lab  = _moLab(pnl, mo);
             const moNum = parseInt(mo.split('-')[1]);
             const exp  = _monthlyExpenseBurden(moNum, lab, rev);
