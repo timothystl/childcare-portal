@@ -28,17 +28,11 @@ const DIST = path.join(ROOT, 'dist');
 if (!fs.existsSync(DIST)) fs.mkdirSync(DIST, { recursive: true });
 
 // ── Build version ─────────────────────────────────────────────
-function getBuildVersion() {
-    const { execSync }  = require('child_process');
-    const pkg           = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-    let buildNum = '';
-    try {
-        buildNum = '.' + execSync('git rev-list --count HEAD', { cwd: ROOT }).toString().trim();
-    } catch (e) { /* not a git repo or git unavailable — omit build number */ }
-    return `v${pkg.version}${buildNum}`;
-}
-const BUILD_VERSION = getBuildVersion();
-// Write standalone file for dev (non-bundled) usage
+// Version comes from package.json only — no git commit count — so the
+// committed js/build-version.js is always the canonical source of truth
+// regardless of whether the site serves bundled or unbundled JS.
+const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+const BUILD_VERSION = `v${pkg.version}`;
 fs.writeFileSync(path.join(ROOT, 'js/build-version.js'), `window.__BUILD_VERSION__ = ${JSON.stringify(BUILD_VERSION)};\n`);
 console.log('[build] version:', BUILD_VERSION);
 
