@@ -70,7 +70,7 @@ async function generateFinanceDashboard() {
             _expenseConfig = await fetchExpenseConfig();
         }
 
-        const pnl = await _buildRoomPnlData(`${year}-01-01`, `${year}-12-31`, { skipHistoricalOverride: true });
+        const pnl = await _buildRoomPnlData(`${year}-01-01`, `${year}-12-31`);
         const { months } = pnl;
 
         if (!months.length) {
