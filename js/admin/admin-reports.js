@@ -1506,13 +1506,17 @@ async function _buildArDataMap(fromDate, toDate, { skipHistoricalOverride = fals
         });
     }
 
-    // Step 2: historical billing_summary overwrites live per room+month (unless caller opts out)
+    // Step 2: historical billing_summary overwrites live per room+month (unless caller opts out).
+    // Only applied for months strictly before the current month so stale rows never override
+    // live calculations for the current or future months.
     if (!skipHistoricalOverride) {
+        const currentMo = new Date().toISOString().substring(0, 7);
         let historical = [];
         try { historical = await fetchBillingSummary(); } catch (e) { console.warn('billing_summary unavailable:', e); }
         historical.forEach(row => {
             const mo = (row.month || '').substring(0, 7);
             if (mo < fromMo || mo > toMo) return;
+            if (mo >= currentMo) return; // never override live data for current/future months
             if (!map[mo]) map[mo] = {};
             map[mo][row.room_id] = {
                 attendees: (row.half_days || 0) + (row.full_days || 0),
