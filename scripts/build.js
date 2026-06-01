@@ -10,7 +10,7 @@
 //   dist/supabase.min.js   — shared data layer
 //   dist/app.min.js        — parent portal
 //   dist/lookup.min.js     — schedule lookup
-//   dist/admin.min.js      — admin dashboard (all 10 modules bundled)
+//   dist/admin.min.js      — admin dashboard (all modules bundled)
 //   dist/error-monitor.min.js
 //
 // HTML pages are automatically updated to reference dist/ files
@@ -28,19 +28,19 @@ const DIST = path.join(ROOT, 'dist');
 if (!fs.existsSync(DIST)) fs.mkdirSync(DIST, { recursive: true });
 
 // ── Build version ─────────────────────────────────────────────
-function writeBuildVersion() {
+function getBuildVersion() {
     const { execSync }  = require('child_process');
     const pkg           = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
     let buildNum = '';
     try {
         buildNum = '.' + execSync('git rev-list --count HEAD', { cwd: ROOT }).toString().trim();
     } catch (e) { /* not a git repo or git unavailable — omit build number */ }
-    const version  = `v${pkg.version}${buildNum}`;
-    const contents = `window.__BUILD_VERSION__ = ${JSON.stringify(version)};\n`;
-    fs.writeFileSync(path.join(ROOT, 'js/build-version.js'), contents);
-    console.log('[build] version:', version);
+    return `v${pkg.version}${buildNum}`;
 }
-writeBuildVersion();
+const BUILD_VERSION = getBuildVersion();
+// Write standalone file for dev (non-bundled) usage
+fs.writeFileSync(path.join(ROOT, 'js/build-version.js'), `window.__BUILD_VERSION__ = ${JSON.stringify(BUILD_VERSION)};\n`);
+console.log('[build] version:', BUILD_VERSION);
 
 const watch = process.argv.includes('--watch');
 
@@ -82,21 +82,94 @@ const ENTRIES = [
         outfile: 'dist/admin.min.js',
         stdin: {
             contents: [
+                // Inline version so it's baked into the bundle at build time
+                `window.__BUILD_VERSION__ = ${JSON.stringify(BUILD_VERSION)};`,
                 'js/admin/admin-core.js',
                 'js/admin/admin-init.js',
                 'js/admin/admin-calendar.js',
                 'js/admin/admin-classrooms.js',
                 'js/admin/admin-families.js',
                 'js/admin/admin-reports.js',
+                'js/admin/admin-finance.js',
                 'js/admin/admin-staffing.js',
                 'js/admin/admin-messages.js',
                 'js/admin/admin-settings.js',
                 'js/admin/admin-waitlist.js',
-            ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
+            ].map((f, i) => i === 0 ? f : fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
         },
     },
 ];
+
+// ── HTML patching ─────────────────────────────────────────────
+// Replaces dev <script> tags with the production bundles so the
+// built HTML loads minified files from dist/ instead of source js/.
+const HTML_PATCHES = [
+    {
+        file: 'admin.html',
+        // Remove individual admin script tags + build-version tag, replace with bundle
+        remove: [
+            /<script src="js\/build-version\.js"><\/script>\n/,
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-core\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-init\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-calendar\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-classrooms\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-families\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-reports\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-staffing\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-messages\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-settings\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-waitlist\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-finance\.js"><\/script>\n/,
+        ],
+        // Insert bundles before </body>
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/error-monitor.min.js"></script>`,
+            `    <script src="dist/admin.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'index.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/app\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/error-monitor.min.js"></script>`,
+            `    <script src="dist/app.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'lookup.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/lookup\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/error-monitor.min.js"></script>`,
+            `    <script src="dist/lookup.min.js"></script>`,
+        ],
+    },
+];
+
+function patchHtml() {
+    HTML_PATCHES.forEach(({ file, remove, insert }) => {
+        const filePath = path.join(ROOT, file);
+        if (!fs.existsSync(filePath)) return;
+        let html = fs.readFileSync(filePath, 'utf8');
+        remove.forEach(re => { html = html.replace(re, ''); });
+        html = html.replace('</body>', insert.join('\n') + '\n</body>');
+        fs.writeFileSync(filePath, html);
+        console.log('[build] patched', file);
+    });
+}
 
 // ── Build ─────────────────────────────────────────────────────
 const BASE_OPTS = {
@@ -115,6 +188,7 @@ async function build() {
             outfile: path.join(ROOT, entry.outfile),
         });
     }
+    if (!watch) patchHtml();
     console.log('\n✓ Build complete →', DIST);
 }
 
