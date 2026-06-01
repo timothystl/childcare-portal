@@ -70,7 +70,7 @@ async function generateFinanceDashboard() {
             _expenseConfig = await fetchExpenseConfig();
         }
 
-        const pnl = await _buildRoomPnlData(`${year}-01-01`, `${year}-12-31`);
+        const pnl = await _buildRoomPnlData(`${year}-01-01`, `${year}-12-31`, { skipHistoricalOverride: true });
         const { months } = pnl;
 
         if (!months.length) {
@@ -235,25 +235,36 @@ async function _generateMonthDetail(year, month, container) {
         families.forEach(fam => {
             fam.children.forEach(c => {
                 const billed = (c.hasOverride ? c.overrideAmount : c.subtotal) + (c.changeFees || 0);
-                if (!roomRevMap[c.roomId]) roomRevMap[c.roomId] = { revenue: 0, attendees: 0 };
-                roomRevMap[c.roomId].revenue   += billed;
-                roomRevMap[c.roomId].attendees += c.fullDays + (c.halfDays || 0);
+                if (!roomRevMap[c.roomId]) roomRevMap[c.roomId] = { revenue: 0, fullDays: 0, halfDays: 0 };
+                roomRevMap[c.roomId].revenue  += billed;
+                roomRevMap[c.roomId].fullDays += c.fullDays || 0;
+                roomRevMap[c.roomId].halfDays += c.halfDays || 0;
             });
         });
 
-        const pnl = await _buildRoomPnlData(fromDate, toDate);
+        const pnl = await _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride: true });
         const moData = pnl.data[mo] || {};
 
-        let totalRev = 0, totalLab = 0, totalAtt = 0;
+        // When no room-level schedules are saved, labor is a center-wide total, not per-room.
+        const centerLab = pnl.hasFallbackLabor ? (pnl.centerLaborByMonth?.[mo] || 0) : 0;
+        const laborNote = pnl.hasFallbackLabor && centerLab > 0
+            ? `<p style="margin:.5rem 0 1rem;font-size:.85em;color:#92400e">⚠ No room schedules saved — labor total is center-wide and cannot be split by room.</p>`
+            : (!pnl.hasFallbackLabor && !pnl.hasScheduleData
+                ? `<p style="margin:.5rem 0 1rem;font-size:.85em;color:#6b7280">No payroll data found for this period — labor shows as $0.</p>`
+                : '');
+
+        let totalRev = 0, totalLab = centerLab, totalFull = 0, totalHalf = 0;
         const activeRoomIds = new Set([...Object.keys(roomRevMap), ...Object.keys(moData)]);
         const roomRows = ROOMS.filter(r => activeRoomIds.has(r.id)).map(r => {
-            const rev = roomRevMap[r.id]?.revenue   || 0;
-            const att = roomRevMap[r.id]?.attendees || 0;
-            const lab = moData[r.id]?.labor         || 0;
-            totalRev += rev;
-            totalLab += lab;
-            totalAtt += att;
-            return { label: r.label, attendees: att, revenue: rev, labor: lab };
+            const rev  = roomRevMap[r.id]?.revenue  || 0;
+            const full = roomRevMap[r.id]?.fullDays || 0;
+            const half = roomRevMap[r.id]?.halfDays || 0;
+            const lab  = pnl.hasFallbackLabor ? 0 : (moData[r.id]?.labor || 0);
+            totalRev  += rev;
+            if (!pnl.hasFallbackLabor) totalLab += lab;
+            totalFull += full;
+            totalHalf += half;
+            return { label: r.label, fullDays: full, halfDays: half, revenue: rev, labor: lab };
         });
 
         const moNum  = parseInt(month);
@@ -268,22 +279,32 @@ async function _generateMonthDetail(year, month, container) {
             const net = r.revenue - r.labor;
             return `<tr>
                 <td>${escHtml(r.label)}</td>
-                <td class="report-num">${r.attendees}</td>
+                <td class="report-num">${r.fullDays || '—'}</td>
+                <td class="report-num">${r.halfDays || '—'}</td>
                 <td class="report-num report-revenue">${_fmt$(r.revenue)}</td>
-                <td class="report-num">${_fmt$(r.labor)}</td>
+                <td class="report-num">${r.labor > 0 ? _fmt$(r.labor) : (pnl.hasFallbackLabor ? '—' : _fmt$(0))}</td>
                 <td class="report-num ${net >= 0 ? 'fin-positive' : 'fin-negative'}">${_fmt$(net)}</td>
             </tr>`;
         }).join('');
 
         container.innerHTML = `
             <h3 style="margin:0 0 1rem">${escHtml(label)}</h3>
+            ${laborNote}
             <div class="fin-kpi-row">
                 <div class="fin-kpi">
                     <span class="fin-kpi-label">Revenue</span>
                     <span class="fin-kpi-value fin-positive">${_fmt$(totalRev)}</span>
                 </div>
                 <div class="fin-kpi">
-                    <span class="fin-kpi-label">Labor</span>
+                    <span class="fin-kpi-label">Full Days</span>
+                    <span class="fin-kpi-value">${totalFull.toLocaleString()}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Half Days</span>
+                    <span class="fin-kpi-value">${totalHalf.toLocaleString()}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Labor${pnl.hasFallbackLabor ? ' (center)' : ''}</span>
                     <span class="fin-kpi-value">${_fmt$(totalLab)}</span>
                 </div>
                 ${hasExp ? `<div class="fin-kpi">
@@ -310,7 +331,8 @@ async function _generateMonthDetail(year, month, container) {
                 <thead>
                     <tr>
                         <th>Room</th>
-                        <th class="report-num">Days</th>
+                        <th class="report-num">Full Days</th>
+                        <th class="report-num">Half Days</th>
                         <th class="report-num">Revenue</th>
                         <th class="report-num">Labor</th>
                         <th class="report-num">Net (Rev−Lab)</th>
@@ -320,9 +342,10 @@ async function _generateMonthDetail(year, month, container) {
                 <tfoot>
                     <tr style="font-weight:700;border-top:2px solid #cbd5e1">
                         <td>Total</td>
-                        <td class="report-num">${totalAtt}</td>
+                        <td class="report-num">${totalFull}</td>
+                        <td class="report-num">${totalHalf}</td>
                         <td class="report-num report-revenue">${_fmt$(totalRev)}</td>
-                        <td class="report-num">${_fmt$(totalLab)}</td>
+                        <td class="report-num">${_fmt$(totalLab)}${pnl.hasFallbackLabor && totalLab > 0 ? '*' : ''}</td>
                         <td class="report-num ${marginClass}">${_fmt$(totalRev - totalLab)}</td>
                     </tr>
                 </tfoot>

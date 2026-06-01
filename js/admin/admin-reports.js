@@ -1378,8 +1378,8 @@ function setupAttendanceRevenue() {
 
 // Build unified data map for any date range.
 // Returns { 'YYYY-MM': { [roomId]: { attendees, netBilled, liveDisc, histDisc? }, _discounts } }
-// Historical billing_summary rows take precedence over live calculations for the same room+month.
-async function _buildArDataMap(fromDate, toDate) {
+// Historical billing_summary rows take precedence over live calculations unless skipHistoricalOverride=true.
+async function _buildArDataMap(fromDate, toDate, { skipHistoricalOverride = false } = {}) {
     const fromMo = fromDate.substring(0, 7);
     const toMo   = toDate.substring(0, 7);
     const map    = {};
@@ -1506,20 +1506,22 @@ async function _buildArDataMap(fromDate, toDate) {
         });
     }
 
-    // Step 2: historical billing_summary overwrites live per room+month
-    let historical = [];
-    try { historical = await fetchBillingSummary(); } catch (e) { console.warn('billing_summary unavailable:', e); }
-    historical.forEach(row => {
-        const mo = (row.month || '').substring(0, 7);
-        if (mo < fromMo || mo > toMo) return;
-        if (!map[mo]) map[mo] = {};
-        map[mo][row.room_id] = {
-            attendees: (row.half_days || 0) + (row.full_days || 0),
-            netBilled: parseFloat(row.net_billed) || 0,
-            histDisc:  parseFloat(row.discount)   || 0,
-            liveDisc:  0,
-        };
-    });
+    // Step 2: historical billing_summary overwrites live per room+month (unless caller opts out)
+    if (!skipHistoricalOverride) {
+        let historical = [];
+        try { historical = await fetchBillingSummary(); } catch (e) { console.warn('billing_summary unavailable:', e); }
+        historical.forEach(row => {
+            const mo = (row.month || '').substring(0, 7);
+            if (mo < fromMo || mo > toMo) return;
+            if (!map[mo]) map[mo] = {};
+            map[mo][row.room_id] = {
+                attendees: (row.half_days || 0) + (row.full_days || 0),
+                netBilled: parseFloat(row.net_billed) || 0,
+                histDisc:  parseFloat(row.discount)   || 0,
+                liveDisc:  0,
+            };
+        });
+    }
 
     // Step 3: sum total discounts per month (historical discount per room takes precedence over live)
     Object.keys(map).forEach(mo => {
@@ -1972,13 +1974,13 @@ function setupExtraReports() {
  * Returns { months, rooms, data }
  *   data[mo][roomId] = { revenue, labor, margin, attendees }
  */
-async function _buildRoomPnlData(fromDate, toDate) {
+async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = false } = {}) {
     const fromMo = fromDate.substring(0, 7);
     const toMo   = toDate.substring(0, 7);
 
     // Fetch revenue and schedule data in parallel
     const [arMap, scheduleRows] = await Promise.all([
-        _buildArDataMap(fromDate, toDate),
+        _buildArDataMap(fromDate, toDate, { skipHistoricalOverride }),
         fetchStaffScheduleRange(fromDate, toDate).catch(e => {
             console.warn('fetchStaffScheduleRange failed:', e);
             return [];
