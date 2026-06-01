@@ -6,6 +6,12 @@ Always use descriptive branch names in the format `type/short-description` (e.g.
 
 ---
 
+## Version numbering
+
+The app version is in `package.json` (`"version": "x.y"`). The build script appends an auto-incrementing commit count as the patch number (e.g. `v1.2.115`), so the patch never needs manual bumping. **Always bump the minor version (`x.Y`) in `package.json` for every PR** — every change, no exceptions. Include the bump in the same commit/PR as the change.
+
+---
+
 ## Project overview
 
 Timothy Lutheran MDO (Mother's Day Out) registration portal. Parents register children for monthly care days; admins manage scheduling, billing, payroll, and the waitlist.
