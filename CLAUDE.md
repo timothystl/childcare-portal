@@ -18,7 +18,7 @@ The app version uses **semantic versioning** (`major.minor.patch`) stored in `pa
 
 Both `package.json` and `js/build-version.js` must be committed together in the same commit as the change — `js/build-version.js` is what the live site actually reads, regardless of whether it loads the bundled or unbundled JS.
 
-Current version: `2.0.0` (reset patch/minor to 0 when moving to a new major).
+Current version: `1.10.0`. Major version `2.0.0` is reserved for a radical redesign of the app.
 
 ---
 
