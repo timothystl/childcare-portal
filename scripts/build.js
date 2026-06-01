@@ -29,8 +29,13 @@ if (!fs.existsSync(DIST)) fs.mkdirSync(DIST, { recursive: true });
 
 // ── Build version ─────────────────────────────────────────────
 function writeBuildVersion() {
-    const pkg      = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-    const version  = `v${pkg.version}`;
+    const { execSync }  = require('child_process');
+    const pkg           = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    let buildNum = '';
+    try {
+        buildNum = '.' + execSync('git rev-list --count HEAD', { cwd: ROOT }).toString().trim();
+    } catch (e) { /* not a git repo or git unavailable — omit build number */ }
+    const version  = `v${pkg.version}${buildNum}`;
     const contents = `window.__BUILD_VERSION__ = ${JSON.stringify(version)};\n`;
     fs.writeFileSync(path.join(ROOT, 'js/build-version.js'), contents);
     console.log('[build] version:', version);
