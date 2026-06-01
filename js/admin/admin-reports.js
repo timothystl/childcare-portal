@@ -1471,7 +1471,7 @@ async function _buildArDataMap(fromDate, toDate) {
             });
             for (const [mo, moDates] of moGroups) {
                 const sibMap = moSibDiscMap.get(mo) || new Map();
-                let calcSubtotal = 0, baseTotal = 0;
+                let calcSubtotal = 0, baseTotal = 0, changeFees = 0;
                 // Apply sibling discount per date (same as _buildFamilyBillingData)
                 moDates.forEach(d => {
                     const base     = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
@@ -1479,16 +1479,18 @@ async function _buildArDataMap(fromDate, toDate) {
                     const sib      = sibMap.get(`${reg.child_name}:${d.care_date}`) || 0;
                     calcSubtotal  += Math.max(0, effRate - sib);
                     baseTotal     += base;
+                    changeFees    += Number(d.change_fee) || 0;
                 });
 
                 const overridesMap = overridesByMonth.get(mo);
-                const billedAmount = overridesMap?.has(overrideKey) ? overridesMap.get(overrideKey) : calcSubtotal;
+                const baseCharge   = overridesMap?.has(overrideKey) ? overridesMap.get(overrideKey) : calcSubtotal;
+                const billedAmount = baseCharge + changeFees;
 
                 if (!map[mo]) map[mo] = {};
                 if (!map[mo][reg.room_id]) map[mo][reg.room_id] = { attendees: 0, netBilled: 0, liveDisc: 0 };
                 map[mo][reg.room_id].attendees += moDates.length;
                 map[mo][reg.room_id].netBilled += billedAmount;
-                map[mo][reg.room_id].liveDisc  += Math.max(0, baseTotal - billedAmount);
+                map[mo][reg.room_id].liveDisc  += Math.max(0, baseTotal - baseCharge);
             }
         });
     }
