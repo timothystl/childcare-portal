@@ -1224,7 +1224,7 @@
     <div id="adminRegModal" class="rcal-overlay hidden" role="dialog" aria-modal="true">
         <div class="rcal-dialog" style="max-width:600px">
             <div class="rcal-header">
-                <h2 class="rcal-title">New Registration</h2>
+                <h2 id="adminRegTitle" class="rcal-title">New Registration</h2>
                 <button id="adminRegClose" class="rcal-close">&#10005;</button>
             </div>
             <div class="rcal-body">
@@ -1275,6 +1275,7 @@
                         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
                             <button type="button" id="adminRegPickerFull" class="btn-primary" style="font-size:.85rem"></button>
                             <button type="button" id="adminRegPickerHalf" class="btn-secondary" style="font-size:.85rem"></button>
+                            <button type="button" id="adminRegPickerRemove" class="btn-danger" style="font-size:.85rem;display:none">Remove Day</button>
                             <button type="button" id="adminRegPickerCancel" class="btn-ghost" style="font-size:.85rem">Cancel</button>
                         </div>
                     </div>
