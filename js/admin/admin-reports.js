@@ -1388,7 +1388,7 @@ async function _buildArDataMap(fromDate, toDate) {
     // which would miss families who registered earlier in the year.
     let regsForReport = allRegistrations;
     try {
-        regsForReport = await fetchAllRegistrations({ sinceDate: '2020-01-01', untilDate: new Date().toISOString() });
+        regsForReport = await fetchAllRegistrations({ sinceDate: '2020-01-01' });
     } catch (e) { console.warn('Could not fetch full registration history; falling back to loaded data:', e); }
     const dmap = getDiscountMap();
 
