@@ -1383,12 +1383,12 @@ async function _buildArDataMap(fromDate, toDate) {
         allFamiliesData = await fetchAllFamilies({ includeArchived: true });
         _discountMap = null; // force rebuild from freshly loaded data
     } catch (e) { console.warn('Could not load families for discount map:', e); }
-    // Fetch all registrations for the report range regardless of when they were submitted.
-    // The global allRegistrations only covers recently-submitted registrations (last ~2 months),
-    // which would miss families who registered earlier in the year.
+    // Fetch all registrations with no created_at filter — any date restriction (sinceDate/untilDate)
+    // causes PostgreSQL to exclude rows with NULL created_at via a false NULL comparison,
+    // which silently drops those registrations from the revenue calculation.
     let regsForReport = allRegistrations;
     try {
-        regsForReport = await fetchAllRegistrations({ sinceDate: '2020-01-01' });
+        regsForReport = await fetchAllRegistrations();
     } catch (e) { console.warn('Could not fetch full registration history; falling back to loaded data:', e); }
     const dmap = getDiscountMap();
 
