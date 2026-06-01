@@ -1241,7 +1241,9 @@ let _arDates          = new Map(); // dateStr → 'full'|'half'
 let _arPickDate       = null;
 let _arCapacity       = {}; // dateStr → booked count for current month/room
 let _arSelectedFamily = null; // tracks selected family for "Change" nav
-let _arBookedMap      = new Map(); // dateStr → { day_type, reg_id } for already-booked dates
+let _arBookedMap      = new Map(); // dateStr → { day_type, reg_id, date_id } for already-booked dates
+let _arPickIsBooked   = false;    // true when picker is open for an existing booked date
+let _arPickBookedInfo = null;     // { day_type, reg_id, date_id } for the booked date being edited
 
 document.getElementById('adminNewRegBtn')?.addEventListener('click', _openAdminRegModal);
 document.getElementById('adminRegClose')?.addEventListener('click',  _closeAdminRegModal);
@@ -1280,9 +1282,12 @@ document.getElementById('adminRegCalNext')?.addEventListener('click', () => {
 });
 document.getElementById('adminRegPickerFull')?.addEventListener('click',   () => _arPickSelect('full'));
 document.getElementById('adminRegPickerHalf')?.addEventListener('click',   () => _arPickSelect('half'));
+document.getElementById('adminRegPickerRemove')?.addEventListener('click', () => _arPickRemoveBooked());
 document.getElementById('adminRegPickerCancel')?.addEventListener('click', () => {
     document.getElementById('adminRegDayPicker').style.display = 'none';
     _arPickDate = null;
+    _arPickIsBooked   = false;
+    _arPickBookedInfo = null;
 });
 document.getElementById('adminRegSearch')?.addEventListener('input', _arRunSearch);
 document.getElementById('adminRegSubmit')?.addEventListener('click', _arSubmit);
@@ -1315,6 +1320,11 @@ async function _openAdminRegModal() {
 
 function _closeAdminRegModal() {
     document.getElementById('adminRegModal').classList.add('hidden');
+    const titleEl = document.getElementById('adminRegTitle');
+    if (titleEl) titleEl.textContent = 'New Registration';
+    const submitBtn = document.getElementById('adminRegSubmit');
+    if (submitBtn) submitBtn.textContent = 'Create Registration';
+    _arPickIsBooked = false; _arPickBookedInfo = null;
 }
 
 function _arRunSearch() {
@@ -1425,6 +1435,18 @@ function _arSelectChild(family, student) {
     _arYear  = now.getFullYear();
     _arMonth = now.getMonth();
 
+    const email = (family.parent_email || '').toLowerCase();
+    const name  = (student.child_name  || '').toLowerCase();
+    const hasExisting = allRegistrations.some(r =>
+        (r.parent_email || '').toLowerCase() === email &&
+        (r.child_name   || '').toLowerCase() === name
+    );
+    const titleEl = document.getElementById('adminRegTitle');
+    if (titleEl) titleEl.textContent = hasExisting ? `Edit Calendar — ${student.child_name}` : 'New Registration';
+
+    const submitBtn = document.getElementById('adminRegSubmit');
+    if (submitBtn) submitBtn.textContent = hasExisting ? 'Add New Days' : 'Create Registration';
+
     document.getElementById('adminRegChildName').textContent = student.child_name;
     document.getElementById('adminRegChildRoom').textContent = _arRoom?.label || '—';
     document.getElementById('adminRegStep1').style.display   = 'none';
@@ -1475,7 +1497,7 @@ function _arRenderCal() {
             .filter(r => (r.parent_email || '').toLowerCase() === email &&
                          (r.child_name  || '').toLowerCase() === name)
             .forEach(r => (r.registration_dates || []).forEach(d => {
-                if (!d.waitlisted) _arBookedMap.set(d.care_date, { day_type: d.day_type || 'full', reg_id: r.id });
+                if (!d.waitlisted) _arBookedMap.set(d.care_date, { day_type: d.day_type || 'full', reg_id: r.id, date_id: d.id });
             }));
     }
 
@@ -1512,23 +1534,22 @@ function _arRenderCal() {
             if (isPast || isClosed) {
                 cls += ' past';
             } else if (booked) {
-                cls += ' ar-cal-day--booked';
+                cls += bookedInfo.day_type === 'half' ? ' sel-half' : ' sel-full';
             } else if (sel === 'full') {
                 cls += ' sel-full';
             } else if (sel === 'half') {
                 cls += ' sel-half';
             }
 
-            // Booked days are clickable (to open edit modal); past/closed are not
+            // Booked and new-selected days are clickable; past/closed are not
             const attr = (!isPast && !isClosed) ? ` data-date="${dateStr}"` : '';
 
-            // Badge: selected type, already-booked with day type, or capacity count
+            // Badge: selected type, booked type, or capacity count
             let badge = '';
             if (sel) {
                 badge = `<span class="ar-day-badge">${sel === 'half' ? '½ Day' : 'Full Day'}</span>`;
             } else if (booked) {
-                const typeLabel = bookedInfo.day_type === 'half' ? '½ Day' : 'Full Day';
-                badge = `<span class="ar-cap-badge" style="background:#bfdbfe;color:#1e3a5f;border-color:#93c5fd">${typeLabel}</span>`;
+                badge = `<span class="ar-day-badge">${bookedInfo.day_type === 'half' ? '½ Day' : 'Full Day'}</span>`;
             } else if (isClosed) {
                 badge = `<span class="ar-cap-badge" style="background:#f3f4f6;color:#6b7280">Closed</span>`;
             } else if (!isPast) {
@@ -1540,8 +1561,7 @@ function _arRenderCal() {
                 }
             }
 
-            const bookedTitle = booked ? `${bookedInfo.day_type === 'half' ? '½ Day' : 'Full Day'} — click to edit` : '';
-            const title = booked    ? bookedTitle
+            const title = booked    ? `${bookedInfo.day_type === 'half' ? '½ Day' : 'Full Day'} — click to edit`
                         : isClosed  ? 'Closed'
                         : isPast    ? ''
                         : 'Click to add';
@@ -1559,18 +1579,34 @@ function _arRenderCal() {
 }
 
 function _arDayClick(dateStr) {
-    // Click already-booked day → close this modal and open Edit Days for that registration
+    const room   = _arRoom;
+    const fdRate = room?.fullDayRate ?? 0;
+    const hdRate = room?.halfDayRate ?? 0;
+
+    // Click an already-booked day → show inline edit picker (change type or remove)
     const bookedInfo = _arBookedMap.get(dateStr);
     if (bookedInfo) {
-        const reg = allRegistrations.find(r => r.id === bookedInfo.reg_id);
-        if (reg) {
-            _closeAdminRegModal();
-            openEditDaysModal(reg);
+        _arPickDate       = dateStr;
+        _arPickIsBooked   = true;
+        _arPickBookedInfo = bookedInfo;
+        document.getElementById('adminRegPickerDate').textContent = friendlyShort(dateStr);
+        const fullBtn = document.getElementById('adminRegPickerFull');
+        const halfBtn = document.getElementById('adminRegPickerHalf');
+        const removeBtn = document.getElementById('adminRegPickerRemove');
+        fullBtn.textContent  = `Full Day — $${fdRate}`;
+        fullBtn.style.display = bookedInfo.day_type === 'full' ? 'none' : '';
+        if (hdRate && !room?.fullDayOnly) {
+            halfBtn.textContent   = `Half Day — $${hdRate}`;
+            halfBtn.style.display = bookedInfo.day_type === 'half' ? 'none' : '';
+        } else {
+            halfBtn.style.display = 'none';
         }
+        removeBtn.style.display = '';
+        document.getElementById('adminRegDayPicker').style.display = '';
         return;
     }
 
-    // Click selected day → deselect
+    // Click newly-selected day → deselect
     if (_arDates.has(dateStr)) {
         _arDates.delete(dateStr);
         document.getElementById('adminRegDayPicker').style.display = 'none';
@@ -1578,16 +1614,17 @@ function _arDayClick(dateStr) {
         _arRenderCal(); _arRenderReview();
         return;
     }
-    // Show picker
-    _arPickDate = dateStr;
-    const room    = _arRoom;
-    const fdRate  = room?.fullDayRate ?? 0;
-    const hdRate  = room?.halfDayRate ?? 0;
-    document.getElementById('adminRegPickerDate').textContent  = friendlyShort(dateStr);
-    document.getElementById('adminRegPickerFull').textContent  = `Full Day — $${fdRate}`;
+
+    // Click empty day → show add picker
+    _arPickDate       = dateStr;
+    _arPickIsBooked   = false;
+    _arPickBookedInfo = null;
+    document.getElementById('adminRegPickerDate').textContent = friendlyShort(dateStr);
+    document.getElementById('adminRegPickerFull').textContent = `Full Day — $${fdRate}`;
+    document.getElementById('adminRegPickerRemove').style.display = 'none';
     const halfBtn = document.getElementById('adminRegPickerHalf');
     if (hdRate && !room?.fullDayOnly) {
-        halfBtn.textContent  = `Half Day — $${hdRate}`;
+        halfBtn.textContent   = `Half Day — $${hdRate}`;
         halfBtn.style.display = '';
     } else {
         halfBtn.style.display = 'none';
@@ -1595,12 +1632,51 @@ function _arDayClick(dateStr) {
     document.getElementById('adminRegDayPicker').style.display = '';
 }
 
-function _arPickSelect(type) {
+async function _arPickSelect(type) {
     if (!_arPickDate) return;
+    document.getElementById('adminRegDayPicker').style.display = 'none';
+
+    if (_arPickIsBooked && _arPickBookedInfo) {
+        // Live-save: change day type on an existing booked date
+        const info    = _arPickBookedInfo;
+        const dateStr = _arPickDate;
+        _arPickDate = null; _arPickIsBooked = false; _arPickBookedInfo = null;
+        const reg = allRegistrations.find(r => r.id === info.reg_id);
+        if (!reg || info.day_type === type) return; // no-op if same type
+        const errEl = document.getElementById('adminRegError');
+        try {
+            await deleteRegistrationDate(info.date_id);
+            await addRegistrationDate(reg.id, reg.room_id, dateStr, type, false);
+            const fresh = await fetchAllRegistrations();
+            allRegistrations = fresh;
+            _arRenderCal();
+        } catch (err) {
+            errEl.textContent = 'Update failed: ' + err.message;
+        }
+        return;
+    }
+
+    // New date: add to pending map
     _arDates.set(_arPickDate, type);
     _arPickDate = null;
-    document.getElementById('adminRegDayPicker').style.display = 'none';
     _arRenderCal(); _arRenderReview();
+}
+
+async function _arPickRemoveBooked() {
+    if (!_arPickIsBooked || !_arPickBookedInfo) return;
+    document.getElementById('adminRegDayPicker').style.display = 'none';
+    const info    = _arPickBookedInfo;
+    const dateStr = _arPickDate;
+    _arPickDate = null; _arPickIsBooked = false; _arPickBookedInfo = null;
+    const errEl = document.getElementById('adminRegError');
+    try {
+        await deleteRegistrationDate(info.date_id);
+        const fresh = await fetchAllRegistrations();
+        allRegistrations = fresh;
+        _arRenderCal();
+    } catch (err) {
+        errEl.textContent = 'Remove failed: ' + err.message;
+    }
 }
 
 function _arRenderReview() {
