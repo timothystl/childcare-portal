@@ -1,5 +1,11 @@
 # Childcare Portal — Claude Code Guide
 
+## Git branch naming
+
+Always use descriptive branch names in the format `type/short-description` (e.g. `fix/billing-change-fees`, `feat/add-goose-room`, `chore/update-deps`). Never use auto-generated random names.
+
+---
+
 ## Project overview
 
 Timothy Lutheran MDO (Mother's Day Out) registration portal. Parents register children for monthly care days; admins manage scheduling, billing, payroll, and the waitlist.
