@@ -203,6 +203,7 @@ function _buildFamilyBillingData(monthVal, overridesMap = new Map()) {
                                   disc.type === 'custom' ? `${disc.value}% off` : '—';
                 childMap.set(reg.child_name, {
                     childName:      reg.child_name,
+                    roomId:         reg.room_id,
                     roomLabel:      room?.label || reg.room_id,
                     fullDays,
                     halfDays,
@@ -242,12 +243,15 @@ async function generateFamilyBillingReport() {
     const container  = document.getElementById('familyBillingContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
 
-    // Ensure family data (and therefore discounts) is always fresh so staff/custom-discounted
-    // families are billed correctly even when the Families tab hasn't been opened this session.
+    // Always load fresh families and registrations so discounts and new entries are up to date.
     try {
         allFamiliesData = await fetchAllFamilies({ includeArchived: true });
         _discountMap = null;
     } catch (e) { console.warn('Could not load families for discount map:', e); }
+    try {
+        const fresh = await fetchAllRegistrations();
+        if (fresh && fresh.length) allRegistrations = fresh;
+    } catch (e) { console.warn('Could not refresh registrations:', e); }
 
     // Load any manual billing overrides for this month
     let overrideRows = [];

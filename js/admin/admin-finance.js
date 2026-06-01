@@ -211,16 +211,49 @@ async function _generateMonthDetail(year, month, container) {
 
     try {
         if (!_expenseConfig) _expenseConfig = await fetchExpenseConfig();
+
+        // Revenue: use the same Family Billing calculation so both reports always agree.
+        // Labor: still fetched via _buildRoomPnlData (uses staff schedules/clock events).
+        try {
+            allFamiliesData = await fetchAllFamilies({ includeArchived: true });
+            _discountMap = null;
+        } catch (e) { console.warn('Could not load families:', e); }
+        try {
+            const fresh = await fetchAllRegistrations();
+            if (fresh && fresh.length) allRegistrations = fresh;
+        } catch (e) { console.warn('Could not refresh registrations:', e); }
+
+        let overrideRows = [];
+        try { overrideRows = await fetchBillingOverrides(`${year}-${month}`); } catch (e) {}
+        const overridesMap = new Map(overrideRows.map(r => [
+            `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+            parseFloat(r.override_amount),
+        ]));
+
+        const families = _buildFamilyBillingData(`${year}-${month}`, overridesMap);
+        const roomRevMap = {};
+        families.forEach(fam => {
+            fam.children.forEach(c => {
+                const billed = (c.hasOverride ? c.overrideAmount : c.subtotal) + (c.changeFees || 0);
+                if (!roomRevMap[c.roomId]) roomRevMap[c.roomId] = { revenue: 0, attendees: 0 };
+                roomRevMap[c.roomId].revenue   += billed;
+                roomRevMap[c.roomId].attendees += c.fullDays + (c.halfDays || 0);
+            });
+        });
+
         const pnl = await _buildRoomPnlData(fromDate, toDate);
         const moData = pnl.data[mo] || {};
 
         let totalRev = 0, totalLab = 0, totalAtt = 0;
-        const roomRows = ROOMS.filter(r => moData[r.id]).map(r => {
-            const d = moData[r.id];
-            totalRev += d.revenue || 0;
-            totalLab += d.labor   || 0;
-            totalAtt += d.attendees || 0;
-            return { label: r.label, attendees: d.attendees || 0, revenue: d.revenue || 0, labor: d.labor || 0 };
+        const activeRoomIds = new Set([...Object.keys(roomRevMap), ...Object.keys(moData)]);
+        const roomRows = ROOMS.filter(r => activeRoomIds.has(r.id)).map(r => {
+            const rev = roomRevMap[r.id]?.revenue   || 0;
+            const att = roomRevMap[r.id]?.attendees || 0;
+            const lab = moData[r.id]?.labor         || 0;
+            totalRev += rev;
+            totalLab += lab;
+            totalAtt += att;
+            return { label: r.label, attendees: att, revenue: rev, labor: lab };
         });
 
         const moNum  = parseInt(month);
