@@ -945,6 +945,11 @@ async function loadArView() {
     _blArMonth = month;
 
     try {
+        // Ensure registrations are loaded (may not be if Finance/Reports tab was never visited)
+        if (!allRegistrations || allRegistrations.length === 0) {
+            allRegistrations = await fetchAllRegistrations();
+        }
+
         // Auto-create billing cycle for this month if needed
         const cycle = await getOrCreateBillingCycle(month);
 
@@ -1374,6 +1379,10 @@ async function generateBillingDashboard() {
 async function _syncAllMonthsForYear(year) {
     const now = new Date();
     const maxMonth = year < now.getFullYear() ? 12 : now.getMonth() + 1;
+
+    if (!allRegistrations || allRegistrations.length === 0) {
+        allRegistrations = await fetchAllRegistrations();
+    }
 
     const families = (allFamiliesData && allFamiliesData.length > 0)
         ? allFamiliesData
