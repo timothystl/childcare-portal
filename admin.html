@@ -69,6 +69,7 @@
             <button class="admin-tab-btn" data-tab="reports">📊 Reports</button>
             <button class="admin-tab-btn" data-tab="staffing">👷 Staffing</button>
             <button class="admin-tab-btn" data-tab="finance">💰 Finance</button>
+            <button class="admin-tab-btn" data-tab="billing">🏦 Billing</button>
             <button class="admin-tab-btn" data-tab="settings">⚙️ Settings</button>
         </nav>
 
@@ -1085,6 +1086,120 @@
 
         </div><!-- /#tab-finance -->
 
+        <!-- ── BILLING TAB ──────────────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-billing">
+
+            <!-- Billing sub-tab nav -->
+            <div class="billing-sub-nav" id="billingSubNav">
+                <button class="billing-sub-btn active" data-billing-tab="rates">Rates</button>
+                <button class="billing-sub-btn" data-billing-tab="invoices">Invoices</button>
+                <button class="billing-sub-btn" data-billing-tab="payments">CSV Import</button>
+                <button class="billing-sub-btn" data-billing-tab="ar">AR</button>
+                <button class="billing-sub-btn" data-billing-tab="bldash">Dashboard</button>
+            </div>
+
+            <!-- ── Rates sub-tab ───────────────────────────── -->
+            <div class="billing-sub-pane" id="bst-rates">
+                <section class="admin-section" id="billingRatesSection">
+                    <h2>💰 Family Rate Management</h2>
+                    <p class="section-desc">Set per-family monthly billing rates. Each change creates an immutable history record — old rates are preserved.</p>
+                    <div class="filters" style="margin-bottom:12px">
+                        <input type="search" id="rateSearchInput" placeholder="Search family…" autocomplete="off">
+                        <button id="refreshRatesBtn" class="btn-secondary">&#8635; Refresh</button>
+                    </div>
+                    <div id="ratesTableWrap-billing">
+                        <p class="empty-hint">Click Refresh to load family rates.</p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ── Invoices sub-tab ────────────────────────── -->
+            <div class="billing-sub-pane hidden" id="bst-invoices">
+                <section class="admin-section" id="billingInvoicesSection">
+                    <h2>🧾 Invoice Generation</h2>
+                    <p class="section-desc">Create billing cycles, generate draft invoices, apply per-family adjustments, then finalize to lock the cycle.</p>
+                    <div class="billing-cycle-bar">
+                        <div class="roster-field">
+                            <label for="invoiceCycleSelect">Billing Cycle</label>
+                            <select id="invoiceCycleSelect">
+                                <option value="">— select or create —</option>
+                            </select>
+                        </div>
+                        <div class="roster-field">
+                            <label for="newCycleMonth">New Cycle Month</label>
+                            <input type="month" id="newCycleMonth">
+                        </div>
+                        <button id="createCycleBtn" class="btn-primary">+ Create Cycle</button>
+                        <button id="generateInvoicesBtn" class="btn-secondary" disabled>Generate Invoices</button>
+                        <button id="finalizeCycleBtn" class="btn-warning" disabled>Finalize &amp; Close Cycle</button>
+                    </div>
+                    <div id="invoicePreviewWrap">
+                        <p class="empty-hint">Select or create a billing cycle, then click Generate Invoices.</p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ── Payments (CSV Import) sub-tab ──────────── -->
+            <div class="billing-sub-pane hidden" id="bst-payments">
+                <section class="admin-section" id="billingPaymentsSection">
+                    <h2>📂 CSV Payment Import — Procare</h2>
+                    <p class="section-desc">Upload a Procare payment export CSV. Map columns, review matches, then confirm to create payment records. Each import is logged as an audit batch.</p>
+                    <div class="families-import-row" style="margin-bottom:16px">
+                        <label class="file-upload-label" for="paymentCsvInput">📂 Choose CSV File</label>
+                        <input type="file" id="paymentCsvInput" accept=".csv,.xlsx" class="hidden-file-input">
+                        <span id="paymentCsvFileName" class="families-file-name">No file chosen</span>
+                        <button id="clearPaymentCsvBtn" class="btn-ghost" style="display:none">✕ Clear</button>
+                    </div>
+                    <div id="paymentImportWrap">
+                        <p class="empty-hint">Choose a Procare CSV export file to begin the import wizard.</p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ── AR sub-tab ──────────────────────────────── -->
+            <div class="billing-sub-pane hidden" id="bst-ar">
+                <section class="admin-section" id="billingArSection">
+                    <h2>📋 Accounts Receivable</h2>
+                    <p class="section-desc">Outstanding balances, payment status per family, and registration lock controls for overdue accounts.</p>
+                    <div class="filters" style="margin-bottom:12px">
+                        <select id="arStatusFilter" style="flex:0 0 auto;min-width:160px">
+                            <option value="all">All Statuses</option>
+                            <option value="overdue">Overdue</option>
+                            <option value="partial">Partial</option>
+                            <option value="paid">Paid</option>
+                            <option value="no_invoice">No Invoice</option>
+                        </select>
+                        <button id="refreshArBtn" class="btn-secondary">&#8635; Refresh</button>
+                        <button id="lockAllOverdueBtn" class="btn-warning">🔒 Lock All Overdue</button>
+                        <button id="exportArCsvBtn" class="btn-primary">&#8595; Export CSV</button>
+                    </div>
+                    <div id="arTableWrap">
+                        <p class="empty-hint">Click Refresh to load accounts receivable data.</p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ── Dashboard sub-tab ───────────────────────── -->
+            <div class="billing-sub-pane hidden" id="bst-bldash">
+                <section class="admin-section" id="billingDashSection">
+                    <h2>📊 Revenue Dashboard</h2>
+                    <p class="section-desc">Monthly collection rate, year-to-date trends, year-over-year comparison, and scholarship summary.</p>
+                    <div class="roster-controls" style="margin-bottom:16px">
+                        <div class="roster-field">
+                            <label for="blDashYear">Year</label>
+                            <select id="blDashYear"></select>
+                        </div>
+                        <button id="generateBlDashBtn" class="btn-primary">Generate</button>
+                        <button id="exportBlDashBtn" class="btn-secondary">&#8595; Export CSV</button>
+                    </div>
+                    <div id="blDashContent">
+                        <p class="empty-hint">Select a year and click Generate to load the dashboard.</p>
+                    </div>
+                </section>
+            </div>
+
+        </div><!-- /#tab-billing -->
+
     </div>
 
     <!-- Room Capacity Calendar Modal -->
@@ -1415,7 +1530,192 @@
     <script src="js/admin/admin-settings.js"></script>
     <script src="js/admin/admin-waitlist.js"></script>
     <script src="js/admin/admin-finance.js"></script>
+    <script src="js/admin/admin-billing.js"></script>
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
+
+    <!-- ── BILLING MODALS ─────────────────────────────────── -->
+
+    <!-- Set / Edit Rate Modal -->
+    <div id="billingRateModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog" style="max-width:520px">
+            <div class="fm-dialog-header">
+                <h3 id="billingRateModalTitle">Set Monthly Rate</h3>
+                <button id="billingRateModalCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+                <div class="fm-section">
+                    <div class="fm-section-label">Family</div>
+                    <p id="billingRateModalFamilyName" style="font-weight:700;margin:0;font-size:1.05em"></p>
+                </div>
+                <div class="fm-section">
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="brMonthlyRate">Monthly Rate ($) *</label>
+                            <input type="number" id="brMonthlyRate" min="0" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="fm-field fm-field-grow">
+                            <label for="brEffectiveDate">Effective Date *</label>
+                            <input type="date" id="brEffectiveDate">
+                        </div>
+                    </div>
+                    <div class="fm-row">
+                        <div class="fm-field" style="min-width:160px">
+                            <label for="brDiscountType">Discount Type</label>
+                            <select id="brDiscountType">
+                                <option value="none">None</option>
+                                <option value="staff">Staff (100% off)</option>
+                                <option value="custom">Custom ($)</option>
+                            </select>
+                        </div>
+                        <div class="fm-field fm-field-grow" id="brDiscountAmountWrap">
+                            <label for="brDiscountAmount">Discount Amount ($)</label>
+                            <input type="number" id="brDiscountAmount" min="0" step="0.01" placeholder="0.00">
+                        </div>
+                    </div>
+                    <div class="fm-field">
+                        <label for="brDiscountNote">Note (optional)</label>
+                        <input type="text" id="brDiscountNote" placeholder="e.g. Staff family discount">
+                    </div>
+                </div>
+            </div>
+            <div class="fm-dialog-footer">
+                <span id="billingRateModalStatus" class="rates-status" style="flex:1"></span>
+                <button id="billingRateModalCancelBtn" class="btn-ghost">Cancel</button>
+                <button id="billingRateModalSaveBtn" class="btn-primary">Save Rate</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rate History Modal -->
+    <div id="billingRateHistoryModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog" style="max-width:620px">
+            <div class="fm-dialog-header">
+                <h3>Rate History — <span id="brhFamilyName"></span></h3>
+                <button id="billingRateHistoryCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+                <div id="brhHistoryTableWrap">
+                    <p class="empty-hint">Loading…</p>
+                </div>
+            </div>
+            <div class="fm-dialog-footer">
+                <button id="billingRateHistoryCloseBtnFooter" class="btn-ghost">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Record Payment Modal -->
+    <div id="billingPaymentModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog" style="max-width:480px">
+            <div class="fm-dialog-header">
+                <h3>Record Payment</h3>
+                <button id="bpmCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+                <div class="fm-section">
+                    <div class="fm-section-label">Family</div>
+                    <p id="bpmFamilyName" style="font-weight:700;margin:0 0 4px"></p>
+                    <p id="bpmInvoiceInfo" style="font-size:.88em;color:var(--text-muted);margin:0"></p>
+                </div>
+                <div class="fm-section">
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="bpmAmount">Amount ($) *</label>
+                            <input type="number" id="bpmAmount" min="0.01" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="fm-field fm-field-grow">
+                            <label for="bpmDate">Payment Date *</label>
+                            <input type="date" id="bpmDate">
+                        </div>
+                    </div>
+                    <div class="fm-field">
+                        <label for="bpmMethod">Method *</label>
+                        <select id="bpmMethod">
+                            <option value="check">Check</option>
+                            <option value="cash">Cash</option>
+                            <option value="ach">ACH</option>
+                            <option value="card">Card</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="fm-field">
+                        <label for="bpmNote">Note (optional)</label>
+                        <input type="text" id="bpmNote" placeholder="Check #, reference, etc.">
+                    </div>
+                </div>
+            </div>
+            <div class="fm-dialog-footer">
+                <span id="bpmModalStatus" class="rates-status" style="flex:1"></span>
+                <button id="bpmCancelBtn" class="btn-ghost">Cancel</button>
+                <button id="bpmSaveBtn" class="btn-primary">Record Payment</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lock with Reason Modal -->
+    <div id="billingLockModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog" style="max-width:440px">
+            <div class="fm-dialog-header">
+                <h3>Lock Registration</h3>
+                <button id="blmCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+                <div class="fm-section">
+                    <div class="fm-section-label">Family</div>
+                    <p id="blmFamilyName" style="font-weight:700;margin:0 0 12px"></p>
+                    <div class="fm-field">
+                        <label for="blmLockReason">Reason for lock * <span style="font-weight:400;color:var(--text-muted)">(required)</span></label>
+                        <textarea id="blmLockReason" rows="3" placeholder="e.g. Overdue balance for January 2026…" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:.9em;resize:vertical"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="fm-dialog-footer">
+                <span id="blmModalStatus" class="rates-status" style="flex:1"></span>
+                <button id="blmCancelBtn" class="btn-ghost">Cancel</button>
+                <button id="blmConfirmBtn" class="btn-warning">🔒 Lock Registration</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CSV Column Mapping Modal -->
+    <div id="billingImportMapModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog" style="max-width:560px">
+            <div class="fm-dialog-header">
+                <h3>Map CSV Columns</h3>
+                <button id="bimCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+                <div class="fm-section">
+                    <div class="fm-section-label">File</div>
+                    <p id="bimFilename" style="margin:0 0 12px;font-size:.9em;color:var(--text-muted)"></p>
+                    <p style="font-size:.88em;color:var(--text-muted);margin:0 0 16px">Match each required field to a column in your CSV. Auto-detected suggestions are pre-selected.</p>
+                    <div class="bl-col-map-row">
+                        <div class="bl-col-map-field">
+                            <label>Family / Parent Name *</label>
+                            <select id="bimFamilyCol"><option value="">— select column —</option></select>
+                        </div>
+                        <div class="bl-col-map-field">
+                            <label>Amount ($) *</label>
+                            <select id="bimAmountCol"><option value="">— select column —</option></select>
+                        </div>
+                        <div class="bl-col-map-field">
+                            <label>Payment Date *</label>
+                            <select id="bimDateCol"><option value="">— select column —</option></select>
+                        </div>
+                        <div class="bl-col-map-field">
+                            <label>Method (optional)</label>
+                            <select id="bimMethodCol"><option value="">(none)</option></select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="fm-dialog-footer">
+                <button id="bimCancelBtn" class="btn-ghost">Cancel</button>
+                <button id="bimPreviewBtn" class="btn-primary">Preview Matches ›</button>
+            </div>
+        </div>
+    </div>
+
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js');
