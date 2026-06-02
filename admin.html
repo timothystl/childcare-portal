@@ -1091,36 +1091,9 @@
 
             <!-- Billing sub-tab nav -->
             <div class="billing-sub-nav" id="billingSubNav">
-                <button class="billing-sub-btn active" data-billing-tab="invoices">Invoices</button>
+                <button class="billing-sub-btn active" data-billing-tab="ar">AR</button>
                 <button class="billing-sub-btn" data-billing-tab="payments">CSV Import</button>
-                <button class="billing-sub-btn" data-billing-tab="ar">AR</button>
                 <button class="billing-sub-btn" data-billing-tab="bldash">Dashboard</button>
-            </div>
-
-            <!-- ── Invoices sub-tab ────────────────────────── -->
-            <div class="billing-sub-pane" id="bst-invoices">
-                <section class="admin-section" id="billingInvoicesSection">
-                    <h2>🧾 Invoice Generation</h2>
-                    <p class="section-desc">Create billing cycles, generate draft invoices, apply per-family adjustments, then finalize to lock the cycle.</p>
-                    <div class="billing-cycle-bar">
-                        <div class="roster-field">
-                            <label for="invoiceCycleSelect">Billing Cycle</label>
-                            <select id="invoiceCycleSelect">
-                                <option value="">— select or create —</option>
-                            </select>
-                        </div>
-                        <div class="roster-field">
-                            <label for="newCycleMonth">New Cycle Month</label>
-                            <input type="month" id="newCycleMonth">
-                        </div>
-                        <button id="createCycleBtn" class="btn-primary">+ Create Cycle</button>
-                        <button id="generateInvoicesBtn" class="btn-secondary" disabled>Generate Invoices</button>
-                        <button id="finalizeCycleBtn" class="btn-warning" disabled>Finalize &amp; Close Cycle</button>
-                    </div>
-                    <div id="invoicePreviewWrap">
-                        <p class="empty-hint">Select or create a billing cycle, then click Generate Invoices.</p>
-                    </div>
-                </section>
             </div>
 
             <!-- ── Payments (CSV Import) sub-tab ──────────── -->
@@ -1141,12 +1114,16 @@
             </div>
 
             <!-- ── AR sub-tab ──────────────────────────────── -->
-            <div class="billing-sub-pane hidden" id="bst-ar">
+            <div class="billing-sub-pane" id="bst-ar">
                 <section class="admin-section" id="billingArSection">
                     <h2>📋 Accounts Receivable</h2>
-                    <p class="section-desc">Outstanding balances, payment status per family, and registration lock controls for overdue accounts.</p>
-                    <div class="filters" style="margin-bottom:12px">
-                        <select id="arStatusFilter" style="flex:0 0 auto;min-width:160px">
+                    <p class="section-desc">Select a month to auto-sync invoices from registrations and view payment status per family.</p>
+                    <div class="billing-cycle-bar" style="margin-bottom:12px">
+                        <div class="roster-field">
+                            <label for="arMonthSelect">Month</label>
+                            <input type="month" id="arMonthSelect">
+                        </div>
+                        <select id="arStatusFilter" style="min-width:160px">
                             <option value="all">All Statuses</option>
                             <option value="overdue">Overdue</option>
                             <option value="partial">Partial</option>

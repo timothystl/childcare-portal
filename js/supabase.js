@@ -2293,6 +2293,24 @@ async function insertBillingCycle(month) {
     return data;
 }
 
+async function getOrCreateBillingCycle(month) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: existing, error: findErr } = await sbClient
+        .from('billing_cycles')
+        .select('*')
+        .eq('month', month)
+        .maybeSingle();
+    if (findErr) throw findErr;
+    if (existing) return existing;
+    const { data, error } = await sbClient
+        .from('billing_cycles')
+        .insert({ month })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
 async function updateBillingCycle(id, fields) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient

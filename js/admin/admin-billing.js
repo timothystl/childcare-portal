@@ -1,24 +1,20 @@
 // ============================================================
-// MODULE: Admin Billing (Invoices, Payments, AR, Dashboard)
-// Sub-tabs: Invoices | Payments (CSV) | AR | Dashboard
+// MODULE: Admin Billing (AR, CSV Import, Dashboard)
+// Sub-tabs: AR | CSV Import | Dashboard
 // ============================================================
 
 // ============================================================
 // STATE
 // ============================================================
 let _billingCharts = {};
-let _currentCycleId = null;
 let _arData = [];
 let _csvParsedRows = [];         // raw rows from uploaded CSV
 let _csvHeaders = [];
-let _cyclesLoaded = false;
 let _arLoaded = false;
 let _blDashLoaded = false;
 let _paymentModalContext = {};   // {familyId, invoiceId, familyName, finalAmount}
 let _lockModalContext = {};      // {familyId, familyName, isLocking}
-
-// Internal: all cycles array
-let _billingCycles = [];
+let _arMonth = '';               // selected AR month (YYYY-MM)
 
 // ============================================================
 // ENTRY POINT
@@ -32,19 +28,13 @@ function setupBilling() {
         });
     });
 
-    // Invoices tab
-    document.getElementById('invoiceCycleSelect')
-        ?.addEventListener('change', onCycleSelect);
-    document.getElementById('createCycleBtn')
-        ?.addEventListener('click', createBillingCycle);
-    document.getElementById('generateInvoicesBtn')
-        ?.addEventListener('click', () => {
-            if (_currentCycleId) generateDraftInvoices(_currentCycleId);
-        });
-    document.getElementById('finalizeCycleBtn')
-        ?.addEventListener('click', () => {
-            if (_currentCycleId) finalizeCycle(_currentCycleId);
-        });
+    // AR month selector — default to current month, reload on change
+    const arMonthSel = document.getElementById('arMonthSelect');
+    if (arMonthSel) {
+        const now = new Date();
+        arMonthSel.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        arMonthSel.addEventListener('change', () => { _arLoaded = false; loadArView(); });
+    }
 
     // Payments tab
     const csvInput = document.getElementById('paymentCsvInput');
@@ -121,9 +111,7 @@ function _switchBillingSubTab(target, clickedBtn) {
     if (pane) pane.classList.remove('hidden');
 
     // Lazy-load data on first open
-    if (target === 'invoices' && !_cyclesLoaded) {
-        loadBillingCycles();
-    } else if (target === 'ar' && !_arLoaded) {
+    if (target === 'ar' && !_arLoaded) {
         loadArView();
     } else if (target === 'bldash' && !_blDashLoaded) {
         setupBillingDashYear();
@@ -131,7 +119,7 @@ function _switchBillingSubTab(target, clickedBtn) {
 }
 
 // ============================================================
-// INVOICES SUB-TAB
+// INVOICES SUB-TAB (legacy — kept for dashboard data only)
 // ============================================================
 async function loadBillingCycles() {
     const sel = document.getElementById('invoiceCycleSelect');
@@ -974,99 +962,123 @@ function renderPaymentHistory(payments, finalAmount, containerId) {
 // ============================================================
 async function loadArView() {
     const wrap = document.getElementById('arTableWrap');
-    if (wrap) wrap.innerHTML = '<p class="empty-hint">Loading…</p>';
+    if (wrap) wrap.innerHTML = '<p class="empty-hint">Syncing billing data…</p>';
+
+    const arMonthSel = document.getElementById('arMonthSelect');
+    const now = new Date();
+    const month = arMonthSel?.value ||
+        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    _arMonth = month;
 
     try {
-        // Fetch all needed data in parallel
-        const activeFamilies = (allFamiliesData || []).filter(f => f.active !== false);
+        // Auto-create billing cycle for this month if needed
+        const cycle = await getOrCreateBillingCycle(month);
 
-        // Fetch all cycles then all invoices
-        const cycles   = await fetchBillingCycles();
-        const closedCycleIds = cycles
-            .filter(c => c.status === 'closed')
-            .map(c => c.id);
+        // Load families if not yet loaded
+        const families = (allFamiliesData && allFamiliesData.length > 0)
+            ? allFamiliesData
+            : await fetchAllFamilies({ includeArchived: false });
 
-        // Fetch invoices per closed cycle in parallel
-        const invoiceArrays = await Promise.all(
-            closedCycleIds.map(cid => fetchInvoicesForCycle(cid).catch(() => []))
-        );
-        const allInvoices = invoiceArrays.flat();
+        // Load billing overrides for this month
+        const overrideRows = await fetchBillingOverrides(month);
+        const overridesMap = new Map();
+        overrideRows.forEach(row => {
+            const key = `${(row.parent_email || '').toLowerCase()}:${(row.child_name || '').toLowerCase()}`;
+            overridesMap.set(key, parseFloat(row.override_amount || 0));
+        });
 
-        // Fetch payments per family in parallel (limit concurrency by batching)
+        // Calculate billing from registrations (same calc as Finance dashboard)
+        const billingResults = _buildFamilyBillingData(month, overridesMap);
+
+        // Fetch existing invoices to preserve paid/partial status
+        const existingInvoices = await fetchInvoicesForCycle(cycle.id);
+        const existingByFamily = new Map(existingInvoices.map(inv => [String(inv.family_id), inv]));
+
+        // Auto-upsert invoices for all families with registrations this month
+        const upserted = await Promise.all(billingResults.map(async result => {
+            const fam = families.find(f =>
+                (f.parent_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase() ||
+                (f.parent2_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase()
+            );
+            if (!fam) return null;
+
+            let baseAmount = 0, discountAmount = 0, finalAmount = 0;
+            (result.children || []).forEach(child => {
+                baseAmount     += (child.subtotal || 0) + (child.changeFees || 0) + (child.discountDollar || 0) + (child.sibDiscount || 0);
+                discountAmount += (child.discountDollar || 0) + (child.sibDiscount || 0);
+                finalAmount    += child.hasOverride
+                    ? parseFloat(child.overrideAmount || 0)
+                    : (child.subtotal || 0) + (child.changeFees || 0);
+            });
+            baseAmount     = Math.round(baseAmount * 100) / 100;
+            discountAmount = Math.round(discountAmount * 100) / 100;
+            finalAmount    = Math.round(Math.max(0, finalAmount) * 100) / 100;
+
+            const existing = existingByFamily.get(String(fam.id));
+            if (existing && ['paid', 'partial'].includes(existing.status)) {
+                // Only update amounts — preserve payment status
+                return updateBillingInvoice(existing.id, {
+                    base_amount: baseAmount, discount_amount: discountAmount, final_amount: finalAmount,
+                });
+            }
+            return upsertBillingInvoice({
+                cycle_id:          cycle.id,
+                family_id:         fam.id,
+                base_amount:       baseAmount,
+                discount_amount:   discountAmount,
+                adjustment_amount: existing?.adjustment_amount || 0,
+                adjustment_note:   existing?.adjustment_note  || '',
+                final_amount:      finalAmount,
+                status:            existing?.status || 'draft',
+            });
+        }));
+
+        const invoices        = upserted.filter(Boolean);
+        const invoiceByFamily = new Map(invoices.map(inv => [String(inv.family_id), inv]));
+
+        // Fetch payments only for families that have invoices this month
+        const familiesWithInvoice = families.filter(f => invoiceByFamily.has(String(f.id)));
         const paymentArrays = await Promise.all(
-            activeFamilies.map(f => fetchPaymentsForFamily(f.id).catch(() => []))
+            familiesWithInvoice.map(f => fetchPaymentsForFamily(f.id).catch(() => []))
         );
         const paymentsByFamily = {};
-        activeFamilies.forEach((f, i) => { paymentsByFamily[f.id] = paymentArrays[i]; });
+        familiesWithInvoice.forEach((f, i) => { paymentsByFamily[f.id] = paymentArrays[i]; });
 
-        _arData = buildArData(activeFamilies, allInvoices, paymentsByFamily);
+        _arData = familiesWithInvoice.map(family => {
+            const inv      = invoiceByFamily.get(String(family.id));
+            const payments = (paymentsByFamily[family.id] || [])
+                .filter(p => p.invoice_id == null || String(p.invoice_id) === String(inv?.id));
+
+            const billed      = parseFloat(inv?.final_amount || 0);
+            const collected   = payments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+            const outstanding = Math.max(0, billed - collected);
+
+            let status;
+            if (outstanding <= 0 && billed > 0)                      status = 'paid';
+            else if (collected > 0)                                   status = 'partial';
+            else if (billed > 0 && outstanding > 0 && collected === 0) status = 'overdue';
+            else                                                       status = 'no_invoice';
+
+            return {
+                familyId:    family.id,
+                familyName:  family.parent_name || '(unnamed)',
+                familyEmail: family.parent_email || '',
+                invoiceId:   inv?.id || null,
+                billed,
+                collected,
+                outstanding,
+                daysSince:   null,
+                status,
+                isLocked:    !!family.registration_locked,
+                lockReason:  family.registration_lock_reason || '',
+            };
+        });
+
         _arLoaded = true;
         renderArTable(_arData);
     } catch (err) {
-        if (wrap) wrap.innerHTML = `<p class="empty-hint">Error loading AR data: ${escHtml(err.message)}</p>`;
-        alert('Failed to load AR data: ' + err.message);
+        if (wrap) wrap.innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
     }
-}
-
-function buildArData(families, allInvoices, paymentsByFamily) {
-    // Group invoices by family_id
-    const invByFamily = {};
-    allInvoices.forEach(inv => {
-        if (!invByFamily[inv.family_id]) invByFamily[inv.family_id] = [];
-        invByFamily[inv.family_id].push(inv);
-    });
-
-    return families.map(family => {
-        const invoices  = (invByFamily[family.id] || [])
-            .filter(inv => ['finalized', 'paid', 'partial'].includes(inv.status));
-
-        // Most recent finalized invoice
-        const mostRecent = invoices.sort((a, b) =>
-            (b.finalized_at || b.created_at || '') > (a.finalized_at || a.created_at || '') ? 1 : -1
-        )[0] || null;
-
-        const payments  = paymentsByFamily[family.id] || [];
-        const invoicePayments = mostRecent
-            ? payments.filter(p => String(p.invoice_id) === String(mostRecent.id))
-            : payments;
-
-        const billed    = mostRecent ? parseFloat(mostRecent.final_amount || 0) : 0;
-        const collected = invoicePayments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
-        const outstanding = Math.max(0, billed - collected);
-
-        let daysSince = null;
-        if (mostRecent?.finalized_at) {
-            const diff = Date.now() - new Date(mostRecent.finalized_at).getTime();
-            daysSince  = Math.floor(diff / (1000 * 60 * 60 * 24));
-        }
-
-        let status;
-        if (!mostRecent) {
-            status = 'no_invoice';
-        } else if (outstanding <= 0) {
-            status = 'paid';
-        } else if (collected > 0) {
-            status = 'partial';
-        } else if (daysSince != null && daysSince > 30) {
-            status = 'overdue';
-        } else {
-            status = 'partial';
-        }
-
-        return {
-            familyId:    family.id,
-            familyName:  family.parent_name || '(unnamed)',
-            familyEmail: family.parent_email || '',
-            invoiceId:   mostRecent ? mostRecent.id : null,
-            billed,
-            collected,
-            outstanding,
-            daysSince,
-            status,
-            isLocked:    !!family.registration_locked,
-            lockReason:  family.registration_lock_reason || '',
-        };
-    });
 }
 
 function renderArTable(data) {
