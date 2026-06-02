@@ -1345,29 +1345,32 @@ function setupBillingDashYear() {
 async function generateBillingDashboard() {
     const year = parseInt(document.getElementById('blDashYear')?.value || new Date().getFullYear());
     const container = document.getElementById('blDashContent');
-    if (container) container.innerHTML = '<p class="empty-hint">Loading dashboard…</p>';
+    if (container) container.innerHTML = '<p class="empty-hint">Syncing billing data for all months…</p>';
 
     const genBtn = document.getElementById('generateBlDashBtn');
     if (genBtn) genBtn.disabled = true;
 
     try {
-        const { cycles, invoices, payments } = await fetchBillingDashData(year);
-        const metrics = computeDashMetrics(cycles, invoices, payments, year);
+        // Auto-sync all months that have registration data (so AR tab visit isn't needed first)
+        await _syncAllMonthsForYear(year);
+
+        const [{ cycles, invoices, payments }, manualRevenue] = await Promise.all([
+            fetchBillingDashData(year),
+            fetchSetting('billing_manual_revenue').then(v => v || {}),
+        ]);
+        const metrics = computeDashMetrics(cycles, invoices, payments, year, manualRevenue);
 
         _blDashLoaded = true;
-
         if (container) container.innerHTML = '';
 
         renderBillingKpis(metrics, container);
 
-        // Chart for expected vs collected
         const chartWrap = document.createElement('div');
         chartWrap.className = 'fin-chart-wrap';
         chartWrap.innerHTML = '<h4 class="fin-chart-title">Expected vs. Collected by Month</h4><canvas id="blMainChart"></canvas>';
         if (container) container.appendChild(chartWrap);
         renderBlExpectedVsCollectedChart(metrics.monthData);
 
-        // YOY chart (prior year)
         if (metrics.priorYearData) {
             const yoyWrap = document.createElement('div');
             yoyWrap.className = 'fin-chart-wrap';
@@ -1376,15 +1379,15 @@ async function generateBillingDashboard() {
             renderBlYoyChart(metrics.monthData, metrics.priorYearData);
         }
 
-        // Discount summary
         const discWrap = document.createElement('div');
         discWrap.innerHTML = '<h4>Discount Summary</h4>';
         if (container) container.appendChild(discWrap);
         renderDiscountSummaryTable(invoices, discWrap);
 
-        document.getElementById('exportBlDashBtn').disabled = false;
+        // Manual revenue override table (for months without family-level registration data)
+        renderManualRevenueTable(year, metrics.monthData, manualRevenue, container);
 
-        // Store for export
+        document.getElementById('exportBlDashBtn').disabled = false;
         document.getElementById('blDashContent').dataset.metricsYear = year;
     } catch (err) {
         if (container) container.innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
@@ -1392,6 +1395,72 @@ async function generateBillingDashboard() {
     } finally {
         if (genBtn) genBtn.disabled = false;
     }
+}
+
+async function _syncAllMonthsForYear(year) {
+    const now = new Date();
+    const maxMonth = year < now.getFullYear() ? 12 : now.getMonth() + 1;
+
+    const families = (allFamiliesData && allFamiliesData.length > 0)
+        ? allFamiliesData
+        : await fetchAllFamilies({ includeArchived: false });
+
+    const overridesByMonth = {};
+
+    // Run month syncs in parallel
+    await Promise.all(
+        Array.from({ length: maxMonth }, (_, i) => i + 1).map(async m => {
+            const month = `${year}-${String(m).padStart(2, '0')}`;
+
+            if (!overridesByMonth[month]) {
+                const rows = await fetchBillingOverrides(month);
+                overridesByMonth[month] = new Map(rows.map(r => [
+                    `${(r.parent_email||'').toLowerCase()}:${(r.child_name||'').toLowerCase()}`,
+                    parseFloat(r.override_amount || 0),
+                ]));
+            }
+
+            const billingResults = _buildFamilyBillingData(month, overridesByMonth[month]);
+            if (!billingResults.length) return; // No registrations this month — skip
+
+            const cycle = await getOrCreateBillingCycle(month);
+            const existingInvoices = await fetchInvoicesForCycle(cycle.id);
+            const existingByFamily = new Map(existingInvoices.map(inv => [String(inv.family_id), inv]));
+
+            await Promise.all(billingResults.map(async result => {
+                const fam = families.find(f =>
+                    (f.parent_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase() ||
+                    (f.parent2_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase()
+                );
+                if (!fam) return;
+
+                let baseAmount = 0, discountAmount = 0, finalAmount = 0;
+                (result.children || []).forEach(child => {
+                    baseAmount     += (child.subtotal || 0) + (child.changeFees || 0) + (child.discountDollar || 0) + (child.sibDiscount || 0);
+                    discountAmount += (child.discountDollar || 0) + (child.sibDiscount || 0);
+                    finalAmount    += child.hasOverride
+                        ? parseFloat(child.overrideAmount || 0)
+                        : (child.subtotal || 0) + (child.changeFees || 0);
+                });
+                baseAmount     = Math.round(baseAmount * 100) / 100;
+                discountAmount = Math.round(discountAmount * 100) / 100;
+                finalAmount    = Math.round(Math.max(0, finalAmount) * 100) / 100;
+
+                const existing = existingByFamily.get(String(fam.id));
+                if (existing && ['paid', 'partial'].includes(existing.status)) {
+                    return updateBillingInvoice(existing.id, { base_amount: baseAmount, discount_amount: discountAmount, final_amount: finalAmount });
+                }
+                return upsertBillingInvoice({
+                    cycle_id: cycle.id, family_id: fam.id,
+                    base_amount: baseAmount, discount_amount: discountAmount,
+                    adjustment_amount: existing?.adjustment_amount || 0,
+                    adjustment_note: existing?.adjustment_note || '',
+                    final_amount: finalAmount,
+                    status: existing?.status || 'draft',
+                });
+            }));
+        })
+    );
 }
 
 async function fetchBillingDashData(year) {
@@ -1423,10 +1492,9 @@ async function fetchBillingDashData(year) {
     return { cycles: safe, invoices, payments };
 }
 
-function computeDashMetrics(cycles, invoices, payments, year) {
+function computeDashMetrics(cycles, invoices, payments, year, manualRevenue = {}) {
     const BL_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-    // Group by month
     const monthData = {};
     for (let m = 1; m <= 12; m++) {
         const moKey = `${year}-${String(m).padStart(2,'0')}`;
@@ -1434,15 +1502,21 @@ function computeDashMetrics(cycles, invoices, payments, year) {
             (inv.cycle_month || '').startsWith(moKey) &&
             ['draft', 'finalized', 'paid', 'partial'].includes(inv.status)
         );
-        const expected  = moInvoices.reduce((s, inv) => s + parseFloat(inv.final_amount || 0), 0);
+        const invoiceTotal = moInvoices.reduce((s, inv) => s + parseFloat(inv.final_amount || 0), 0);
+        // Use manual override when no family-level invoices exist for this month
+        const manualAmt = parseFloat(manualRevenue[moKey] || 0);
+        const expected  = invoiceTotal > 0 ? invoiceTotal : manualAmt;
+
         const moPayments = payments.filter(p => (p.cycle_month || '').startsWith(moKey));
         const collected  = moPayments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
         const outstanding = Math.max(0, expected - collected);
         const collectionRate = expected > 0 ? collected / expected : 0;
 
         monthData[moKey] = {
-            label: BL_MONTHS[m - 1],
+            label:        BL_MONTHS[m - 1],
             expected,
+            invoiceTotal,
+            manualAmt,
             collected,
             outstanding,
             collectionRate,
@@ -1630,6 +1704,67 @@ function renderDiscountSummaryTable(invoices, container) {
             <tbody>${rows}</tbody>
         </table>`;
     if (container) container.appendChild(div);
+}
+
+function renderManualRevenueTable(year, monthData, manualRevenue, container) {
+    const BL_MONTH_NAMES = ['January','February','March','April','May','June',
+                            'July','August','September','October','November','December'];
+    const rows = Object.entries(monthData).map(([moKey, mo], i) => {
+        const hasInvoices = mo.invoiceTotal > 0;
+        const manual = mo.manualAmt || '';
+        return `<tr>
+            <td style="padding:6px 12px">${BL_MONTH_NAMES[i]}</td>
+            <td style="padding:6px 12px;color:${hasInvoices ? 'var(--navy)' : 'var(--text-muted)'}">
+                ${hasInvoices ? `$${mo.invoiceTotal.toFixed(2)} (${hasInvoices ? 'from registrations' : ''})` : '—'}
+            </td>
+            <td style="padding:6px 12px">
+                ${hasInvoices
+                    ? '<span style="color:var(--text-muted);font-size:.85em">n/a — using registration data</span>'
+                    : `<input type="number" step="0.01" min="0" placeholder="0.00"
+                          value="${escHtml(String(manual))}"
+                          data-month="${moKey}"
+                          class="bl-manual-rev-input"
+                          style="width:120px;padding:4px 8px;border:1px solid var(--border);border-radius:4px">`
+                }
+            </td>
+        </tr>`;
+    }).join('');
+
+    const wrap = document.createElement('div');
+    wrap.style.marginTop = '24px';
+    wrap.innerHTML = `
+        <h4 style="margin-bottom:8px">Manual Revenue Overrides
+            <span style="font-size:.78em;font-weight:400;color:var(--text-muted);margin-left:8px">
+                For months without family-level registration data — enter a total. Saves automatically.
+            </span>
+        </h4>
+        <table style="border-collapse:collapse;font-size:.9em;width:100%;max-width:640px">
+            <thead>
+                <tr style="background:var(--warm-gray)">
+                    <th style="padding:6px 12px;text-align:left">Month</th>
+                    <th style="padding:6px 12px;text-align:left">Registration Revenue</th>
+                    <th style="padding:6px 12px;text-align:left">Manual Override</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+        <p id="blManualRevStatus" style="font-size:.85em;color:var(--text-muted);margin-top:6px"></p>`;
+    if (container) container.appendChild(wrap);
+
+    wrap.querySelectorAll('.bl-manual-rev-input').forEach(input => {
+        input.addEventListener('change', async () => {
+            const month = input.dataset.month;
+            const val   = parseFloat(input.value) || 0;
+            const current = await fetchSetting('billing_manual_revenue') || {};
+            if (val > 0) current[month] = val; else delete current[month];
+            await upsertSetting('billing_manual_revenue', current);
+            const status = document.getElementById('blManualRevStatus');
+            if (status) {
+                status.textContent = `Saved manual override for ${month}.`;
+                setTimeout(() => { status.textContent = ''; }, 2500);
+            }
+        });
+    });
 }
 
 function exportBlDashCsv() {
