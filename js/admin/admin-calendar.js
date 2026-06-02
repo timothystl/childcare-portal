@@ -996,6 +996,15 @@ async function _aadConfirm() {
         }
 
         await addRegistrationDate(_aadSelected.id, _aadRoomId, _aadDateStr, dayType, false, changeFee);
+
+        // Add day rate + change fee to the family's invoice for this month
+        try {
+            const room = ROOMS.find(r => r.id === _aadRoomId);
+            const dayRate = dayType === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+            const month   = _aadDateStr.substring(0, 7);
+            await addDayToInvoiceByEmail(_aadSelected.parent_email, month, dayRate, changeFee);
+        } catch (_) { /* non-blocking */ }
+
         await logAdminAction('add_date', 'registration', String(_aadSelected.id), {
             child_name:   _aadSelected.child_name,
             parent_email: _aadSelected.parent_email,
@@ -1770,6 +1779,21 @@ async function _arSubmit() {
             room_id:      _arRoom?.id,
             dates:        confirmedDates.map(d => d.date),
         });
+
+        // Create billing invoice — same calculation as the review panel
+        try {
+            const room = _arRoom;
+            let total = 0;
+            for (const [, type] of _arDates.entries()) {
+                const rate = type === 'full' ? (room?.fullDayRate || 0) : (room?.halfDayRate || 0);
+                const disc = _arStudent?.discount_type === 'staff'  ? rate
+                           : _arStudent?.discount_type === 'custom' ? rate * (_arStudent.discount_value || 0) / 100 : 0;
+                total += rate - disc;
+            }
+            const monthKey = [..._arDates.keys()][0].substring(0, 7);
+            await createInvoiceByEmail(_arFamily.parent_email, monthKey, Math.round(total * 100) / 100);
+        } catch (_) { /* non-blocking */ }
+
         _closeAdminRegModal();
         await loadRegistrations();
     } catch (err) {
