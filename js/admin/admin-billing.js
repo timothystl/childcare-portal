@@ -14,7 +14,7 @@ let _arLoaded = false;
 let _blDashLoaded = false;
 let _paymentModalContext = {};   // {familyId, invoiceId, familyName, finalAmount}
 let _lockModalContext = {};      // {familyId, familyName, isLocking}
-let _arMonth = '';               // selected AR month (YYYY-MM)
+let _blArMonth = '';               // selected AR month (YYYY-MM)
 
 // ============================================================
 // ENTRY POINT
@@ -968,7 +968,7 @@ async function loadArView() {
     const now = new Date();
     const month = arMonthSel?.value ||
         `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    _arMonth = month;
+    _blArMonth = month;
 
     try {
         // Auto-create billing cycle for this month if needed
