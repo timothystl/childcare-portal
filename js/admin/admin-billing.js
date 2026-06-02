@@ -1,18 +1,16 @@
 // ============================================================
-// MODULE: Admin Billing (Rates, Invoices, Payments, AR, Dashboard)
-// Sub-tabs: Rates | Invoices | Payments (CSV) | AR | Dashboard
+// MODULE: Admin Billing (Invoices, Payments, AR, Dashboard)
+// Sub-tabs: Invoices | Payments (CSV) | AR | Dashboard
 // ============================================================
 
 // ============================================================
 // STATE
 // ============================================================
 let _billingCharts = {};
-let _allRates = [];              // cached [{family_id, family_name, rates: [...]}]
 let _currentCycleId = null;
 let _arData = [];
 let _csvParsedRows = [];         // raw rows from uploaded CSV
 let _csvHeaders = [];
-let _ratesLoaded = false;
 let _cyclesLoaded = false;
 let _arLoaded = false;
 let _blDashLoaded = false;
@@ -33,28 +31,6 @@ function setupBilling() {
             _switchBillingSubTab(target, btn);
         });
     });
-
-    // Rates tab
-    document.getElementById('refreshRatesBtn')
-        ?.addEventListener('click', () => { _ratesLoaded = false; loadFamilyRates(); });
-    document.getElementById('rateSearchInput')
-        ?.addEventListener('input', e => {
-            renderBillingRatesTable(_allRates, e.target.value.trim());
-        });
-    document.getElementById('brDiscountType')
-        ?.addEventListener('change', e => {
-            const wrap = document.getElementById('brDiscountAmountWrap');
-            if (!wrap) return;
-            wrap.classList.toggle('hidden', e.target.value === 'none' || e.target.value === 'staff');
-        });
-    document.getElementById('billingRateModalSaveBtn')
-        ?.addEventListener('click', saveRateFromModal);
-    document.getElementById('billingRateModalCancelBtn')
-        ?.addEventListener('click', _closeBillingRateModal);
-    document.getElementById('billingRateModalCloseBtn')
-        ?.addEventListener('click', _closeBillingRateModal);
-    document.getElementById('billingRateHistoryCloseBtn')
-        ?.addEventListener('click', () => document.getElementById('billingRateHistoryModal')?.classList.add('hidden'));
 
     // Invoices tab
     document.getElementById('invoiceCycleSelect')
@@ -130,8 +106,8 @@ function setupBilling() {
         ?.addEventListener('click', exportBlDashCsv);
 
     // Open first sub-tab by default
-    const firstBtn = document.querySelector('.billing-sub-btn[data-billing-tab="rates"]');
-    if (firstBtn) _switchBillingSubTab('rates', firstBtn);
+    const firstBtn = document.querySelector('.billing-sub-btn[data-billing-tab="invoices"]');
+    if (firstBtn) _switchBillingSubTab('invoices', firstBtn);
 }
 
 // ============================================================
@@ -146,267 +122,13 @@ function _switchBillingSubTab(target, clickedBtn) {
     if (pane) pane.classList.remove('hidden');
 
     // Lazy-load data on first open
-    if (target === 'rates' && !_ratesLoaded) {
-        loadFamilyRates();
-    } else if (target === 'invoices' && !_cyclesLoaded) {
+    if (target === 'invoices' && !_cyclesLoaded) {
         loadBillingCycles();
     } else if (target === 'ar' && !_arLoaded) {
         loadArView();
     } else if (target === 'bldash' && !_blDashLoaded) {
         setupBillingDashYear();
     }
-}
-
-// ============================================================
-// RATES SUB-TAB
-// ============================================================
-async function loadFamilyRates() {
-    const wrap = document.getElementById('ratesTableWrap-billing');
-    if (wrap) wrap.innerHTML = '<p class="empty-hint">Loading rates…</p>';
-
-    try {
-        const rows = await fetchAllCurrentRates();
-
-        // Group by family_id, keeping only the latest effective_date per family
-        const latestByFamily = rows.reduce((acc, row) => {
-            if (!acc[row.family_id]) {
-                acc[row.family_id] = row;
-            } else {
-                if ((row.effective_date || '') > (acc[row.family_id].effective_date || '')) {
-                    acc[row.family_id] = row;
-                }
-            }
-            return acc;
-        }, {});
-
-        // Also gather all rows per family for history
-        const allByFamily = rows.reduce((acc, row) => {
-            if (!acc[row.family_id]) acc[row.family_id] = [];
-            acc[row.family_id].push(row);
-            return acc;
-        }, {});
-
-        // Merge with allFamiliesData for names
-        const familyMap = {};
-        (allFamiliesData || []).forEach(f => { familyMap[f.id] = f; });
-
-        // Build _allRates: one entry per family (all active families, rate or not)
-        _allRates = (allFamiliesData || []).filter(f => f.active !== false).map(f => {
-            const latestRate = latestByFamily[f.id] || null;
-            const histRates = allByFamily[f.id] || [];
-            return {
-                family_id:    f.id,
-                family_name:  f.parent_name || '(unnamed)',
-                family_email: f.parent_email || '',
-                latestRate,
-                histRates,
-            };
-        });
-
-        _ratesLoaded = true;
-        renderBillingRatesTable(_allRates, document.getElementById('rateSearchInput')?.value.trim() || '');
-    } catch (err) {
-        if (wrap) wrap.innerHTML = `<p class="empty-hint">Error loading rates: ${escHtml(err.message)}</p>`;
-    }
-}
-
-function renderBillingRatesTable(rates, searchTerm) {
-    const wrap = document.getElementById('ratesTableWrap-billing');
-    if (!wrap) return;
-
-    let filtered = rates;
-    if (searchTerm) {
-        const lc = searchTerm.toLowerCase();
-        filtered = rates.filter(r =>
-            (r.family_name || '').toLowerCase().includes(lc) ||
-            (r.family_email || '').toLowerCase().includes(lc)
-        );
-    }
-
-    if (!filtered.length) {
-        wrap.innerHTML = '<p class="empty-hint">No data yet. Set rates for families to see them here.</p>';
-        return;
-    }
-
-    const rows = filtered.map(r => {
-        const lr = r.latestRate;
-        const rateCell = lr
-            ? `$${parseFloat(lr.monthly_rate || 0).toFixed(2)}`
-            : '<span style="color:var(--muted)">—</span>';
-        const effDate = lr
-            ? _fmtDate(lr.effective_date)
-            : '<span style="color:var(--muted)">—</span>';
-        const discount = lr
-            ? _fmtDiscount(lr.discount_type, lr.discount_amount)
-            : '<span style="color:var(--muted)">—</span>';
-
-        return `<tr data-family-id="${escHtml(r.family_id)}">
-            <td>${escHtml(r.family_name)}<br><small style="color:var(--muted)">${escHtml(r.family_email)}</small></td>
-            <td>${rateCell}</td>
-            <td>${effDate}</td>
-            <td>${discount}</td>
-            <td>
-                <button class="btn-xs" onclick="openSetRateModal('${escHtml(r.family_id)}')">
-                    ${lr ? 'Update Rate' : 'Set Rate'}
-                </button>
-                <button class="btn-xs" onclick="openRateHistoryModal('${escHtml(r.family_id)}')">▸ History</button>
-            </td>
-        </tr>`;
-    }).join('');
-
-    wrap.innerHTML = `
-        <div class="table-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Family</th>
-                        <th>Current Rate</th>
-                        <th>Eff. Date</th>
-                        <th>Discount</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </div>`;
-}
-
-function openSetRateModal(familyId) {
-    const entry = _allRates.find(r => r.family_id === familyId);
-    const familyName = entry ? entry.family_name : 'Family';
-    const lr = entry ? entry.latestRate : null;
-
-    const titleEl = document.getElementById('billingRateModalTitle');
-    const nameEl  = document.getElementById('billingRateModalFamilyName');
-    const statusEl = document.getElementById('billingRateModalStatus');
-    if (titleEl)  titleEl.textContent = lr ? 'Update Rate' : 'Set Rate';
-    if (nameEl)   nameEl.textContent  = familyName;
-    if (statusEl) statusEl.textContent = '';
-
-    const today = _todayStr();
-    const rateInput = document.getElementById('brMonthlyRate');
-    const dateInput = document.getElementById('brEffectiveDate');
-    const discType  = document.getElementById('brDiscountType');
-    const discAmt   = document.getElementById('brDiscountAmount');
-    const discWrap  = document.getElementById('brDiscountAmountWrap');
-    const discNote  = document.getElementById('brDiscountNote');
-
-    if (rateInput) rateInput.value = lr ? parseFloat(lr.monthly_rate || 0).toFixed(2) : '';
-    if (dateInput) dateInput.value = today;
-    if (discType)  discType.value  = lr ? (lr.discount_type || 'none') : 'none';
-    if (discAmt)   discAmt.value   = lr ? (lr.discount_amount || '') : '';
-    if (discNote)  discNote.value  = lr ? (lr.discount_note || '') : '';
-    if (discWrap) {
-        const dt = discType ? discType.value : 'none';
-        discWrap.classList.toggle('hidden', dt === 'none' || dt === 'staff');
-    }
-
-    // Store context on modal
-    const modal = document.getElementById('billingRateModal');
-    if (modal) {
-        modal.dataset.familyId = familyId;
-        modal.classList.remove('hidden');
-    }
-}
-
-async function saveRateFromModal() {
-    const modal    = document.getElementById('billingRateModal');
-    const familyId = modal?.dataset.familyId;
-    const statusEl = document.getElementById('billingRateModalStatus');
-    const saveBtn  = document.getElementById('billingRateModalSaveBtn');
-
-    if (!familyId) return;
-
-    const monthlyRate   = parseFloat(document.getElementById('brMonthlyRate')?.value || '');
-    const effectiveDate = document.getElementById('brEffectiveDate')?.value?.trim();
-    const discountType  = document.getElementById('brDiscountType')?.value || 'none';
-    const discountAmt   = parseFloat(document.getElementById('brDiscountAmount')?.value || '0') || 0;
-    const discountNote  = document.getElementById('brDiscountNote')?.value?.trim() || '';
-
-    if (!monthlyRate || isNaN(monthlyRate) || monthlyRate <= 0) {
-        if (statusEl) statusEl.textContent = 'Monthly rate is required.';
-        return;
-    }
-    if (!effectiveDate) {
-        if (statusEl) statusEl.textContent = 'Effective date is required.';
-        return;
-    }
-
-    if (saveBtn) saveBtn.disabled = true;
-    if (statusEl) statusEl.textContent = 'Saving…';
-
-    try {
-        const row = {
-            family_id:       familyId,
-            monthly_rate:    monthlyRate,
-            effective_date:  effectiveDate,
-            discount_type:   discountType,
-            discount_amount: (discountType !== 'none' && discountType !== 'staff') ? discountAmt : 0,
-            discount_note:   discountNote,
-        };
-        await insertFamilyRate(row);
-        await logAdminAction('set_rate', 'family_rate', null, {
-            family_id:      familyId,
-            monthly_rate:   monthlyRate,
-            effective_date: effectiveDate,
-        });
-        _ratesLoaded = false;
-        await loadFamilyRates();
-        _closeBillingRateModal();
-    } catch (err) {
-        if (statusEl) statusEl.textContent = 'Error: ' + err.message;
-        alert('Failed to save rate: ' + err.message);
-    } finally {
-        if (saveBtn) saveBtn.disabled = false;
-    }
-}
-
-async function openRateHistoryModal(familyId) {
-    const entry = _allRates.find(r => r.family_id === familyId);
-    const familyName = entry ? entry.family_name : 'Family';
-
-    const nameEl = document.getElementById('brhFamilyName');
-    const wrapEl = document.getElementById('brhHistoryTableWrap');
-    if (nameEl) nameEl.textContent = familyName;
-    if (wrapEl) wrapEl.innerHTML = '<p class="empty-hint">Loading…</p>';
-
-    document.getElementById('billingRateHistoryModal')?.classList.remove('hidden');
-
-    try {
-        const rows = await fetchFamilyRates(familyId);
-        if (!rows.length) {
-            if (wrapEl) wrapEl.innerHTML = '<p class="empty-hint">No rate history for this family.</p>';
-            return;
-        }
-        const tableRows = rows.map(r => `<tr>
-            <td>${_fmtDate(r.effective_date)}</td>
-            <td>$${parseFloat(r.monthly_rate || 0).toFixed(2)}</td>
-            <td>${_fmtDiscount(r.discount_type, r.discount_amount)}</td>
-            <td>${escHtml(r.discount_note || '—')}</td>
-        </tr>`).join('');
-
-        if (wrapEl) wrapEl.innerHTML = `
-            <div class="table-wrapper">
-                <table>
-                    <thead><tr>
-                        <th>Effective Date</th><th>Monthly Rate</th><th>Discount</th><th>Note</th>
-                    </tr></thead>
-                    <tbody>${tableRows}</tbody>
-                </table>
-            </div>`;
-    } catch (err) {
-        if (wrapEl) wrapEl.innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
-    }
-}
-
-function _closeBillingRateModal() {
-    const modal = document.getElementById('billingRateModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        delete modal.dataset.familyId;
-    }
-    const statusEl = document.getElementById('billingRateModalStatus');
-    if (statusEl) statusEl.textContent = '';
 }
 
 // ============================================================
@@ -514,7 +236,12 @@ async function createBillingCycle() {
 }
 
 async function generateDraftInvoices(cycleId) {
-    if (!_ratesLoaded) await loadFamilyRates();
+    const cycle = _billingCycles.find(c => c.id === cycleId);
+    const monthVal = cycle ? cycle.month : null;
+    if (!monthVal) {
+        alert('Cannot determine month for this billing cycle.');
+        return;
+    }
 
     const previewWrap = document.getElementById('invoicePreviewWrap');
     if (previewWrap) previewWrap.innerHTML = '<p class="empty-hint">Generating invoices…</p>';
@@ -523,63 +250,79 @@ async function generateDraftInvoices(cycleId) {
     if (genBtn) genBtn.disabled = true;
 
     try {
-        const activeFamilies = (allFamiliesData || []).filter(f => f.active !== false);
-        const rateMap = {};
-        _allRates.forEach(r => { rateMap[r.family_id] = r; });
+        // Load billing overrides for this month (from existing billing_overrides table)
+        const overrideRows = await fetchBillingOverrides(monthVal);
+        const overridesMap = new Map();
+        overrideRows.forEach(row => {
+            const key = `${(row.parent_email || '').toLowerCase()}:${(row.child_name || '').toLowerCase()}`;
+            overridesMap.set(key, parseFloat(row.override_amount || 0));
+        });
 
-        const invoices   = [];
-        let   skippedCnt = 0;
+        // Use existing billing calculation
+        const familyBillingResults = _buildFamilyBillingData(monthVal, overridesMap);
 
-        for (const family of activeFamilies) {
-            const entry = rateMap[family.id];
-            if (!entry || !entry.latestRate) {
-                skippedCnt++;
-                continue;
-            }
+        const invoices = [];
+        let skippedCnt = 0;
 
-            const lr = entry.latestRate;
-            const baseAmount = parseFloat(lr.monthly_rate || 0);
-            let   discountAmount = 0;
+        for (const result of familyBillingResults) {
+            // Find matching family record for the UUID
+            const fam = (allFamiliesData || []).find(f =>
+                (f.parent_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase() ||
+                (f.parent2_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase()
+            );
+            if (!fam) { skippedCnt++; continue; }
 
-            if (lr.discount_type === 'staff') {
-                discountAmount = baseAmount;
-            } else if (lr.discount_type === 'custom') {
-                discountAmount = parseFloat(lr.discount_amount || 0);
-            }
+            // Compute totals from children
+            let baseAmount = 0;
+            let discountAmount = 0;
+            let finalAmount = 0;
 
-            const finalAmount = Math.max(0, baseAmount - discountAmount);
+            (result.children || []).forEach(child => {
+                const childBase = (child.subtotal || 0) + (child.changeFees || 0) + (child.discountDollar || 0) + (child.sibDiscount || 0);
+                const childDisc = (child.discountDollar || 0) + (child.sibDiscount || 0);
+                const childFinal = child.hasOverride
+                    ? parseFloat(child.overrideAmount || 0)
+                    : (child.subtotal || 0) + (child.changeFees || 0);
+                baseAmount    += childBase;
+                discountAmount += childDisc;
+                finalAmount   += childFinal;
+            });
+
+            baseAmount     = Math.round(baseAmount * 100) / 100;
+            discountAmount = Math.round(discountAmount * 100) / 100;
+            finalAmount    = Math.round(Math.max(0, finalAmount) * 100) / 100;
 
             const row = await upsertBillingInvoice({
-                cycle_id:        cycleId,
-                family_id:       family.id,
-                base_amount:     baseAmount,
-                discount_amount: discountAmount,
-                discount_type:   lr.discount_type || 'none',
+                cycle_id:         cycleId,
+                family_id:        fam.id,
+                base_amount:      baseAmount,
+                discount_amount:  discountAmount,
                 adjustment_amount: 0,
-                adjustment_note: '',
-                final_amount:    finalAmount,
-                status:          'draft',
+                adjustment_note:  '',
+                final_amount:     finalAmount,
+                status:           'draft',
             });
+
             invoices.push({
                 ...row,
-                parent_name:  family.parent_name,
-                parent_email: family.parent_email,
+                parent_name:  result.parentName,
+                parent_email: result.parentEmail,
             });
         }
 
-        // Enable finalize button now that invoices exist
         _setInvoiceBtns(true, invoices.length > 0);
-
         renderInvoicePreview(invoices);
 
         if (skippedCnt > 0) {
             const hint = document.createElement('p');
             hint.className = 'empty-hint';
-            hint.textContent = `${skippedCnt} ${skippedCnt === 1 ? 'family was' : 'families were'} skipped (no rate set).`;
+            hint.style.marginTop = '8px';
+            hint.textContent = `${skippedCnt} ${skippedCnt === 1 ? 'family was' : 'families were'} skipped (no registrations found for this month or no family record match).`;
             previewWrap?.appendChild(hint);
         }
 
         await logAdminAction('generate_invoices', 'billing_cycle', cycleId, {
+            month: monthVal,
             count: invoices.length,
             skipped: skippedCnt,
         });

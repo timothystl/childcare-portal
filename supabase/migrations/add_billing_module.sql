@@ -2,30 +2,10 @@
 -- BILLING MODULE  v1.11.0
 -- ============================================================
 
--- ── 1. family_rates ──────────────────────────────────────────
--- Immutable per-family rate history. To change a rate, INSERT a
--- new row with a new effective_date — never UPDATE old rows.
-CREATE TABLE IF NOT EXISTS family_rates (
-    id              BIGSERIAL       PRIMARY KEY,
-    family_id       UUID            NOT NULL REFERENCES families(id) ON DELETE CASCADE,
-    monthly_rate    NUMERIC(10,2)   NOT NULL,
-    discount_type   TEXT            NOT NULL DEFAULT 'none', -- 'none'|'staff'|'custom'
-    discount_amount NUMERIC(10,2)   NOT NULL DEFAULT 0,      -- $ off the monthly_rate
-    discount_note   TEXT,
-    effective_date  DATE            NOT NULL,
-    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    created_by      TEXT            NOT NULL
-);
+-- Invoices are generated from each family's registered care days
+-- (via the existing billing calculation), not from a separate rate table.
 
-CREATE INDEX IF NOT EXISTS family_rates_family_idx
-    ON family_rates (family_id, effective_date DESC);
-
-ALTER TABLE family_rates ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Auth access" ON family_rates
-    FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
-
--- ── 2. billing_cycles ────────────────────────────────────────
+-- ── 1. billing_cycles ────────────────────────────────────────
 -- One row per billing period (month). Status flows: 'open' → 'closed'.
 CREATE TABLE IF NOT EXISTS billing_cycles (
     id          BIGSERIAL   PRIMARY KEY,

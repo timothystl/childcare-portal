@@ -2272,38 +2272,6 @@ async function fetchAuditLog() {
 // BILLING MODULE HELPERS
 // ============================================================
 
-async function fetchFamilyRates(familyId) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
-        .from('family_rates')
-        .select('*')
-        .eq('family_id', familyId)
-        .order('effective_date', { ascending: false });
-    if (error) throw error;
-    return data || [];
-}
-
-async function fetchAllCurrentRates() {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
-        .from('family_rates')
-        .select('*')
-        .order('effective_date', { ascending: false });
-    if (error) throw error;
-    return data || [];
-}
-
-async function insertFamilyRate(row) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
-        .from('family_rates')
-        .insert(row)
-        .select()
-        .single();
-    if (error) throw error;
-    return data;
-}
-
 async function fetchBillingCycles() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
