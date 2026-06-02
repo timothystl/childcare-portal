@@ -2195,17 +2195,12 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     box-shadow: 0 2px 6px rgba(0,0,0,.05);
 }
 
-/* Desktop: tab buttons rendered as a flex row */
-.tab-btn-container {
-    display: flex;
-    flex: 1;
+/* Desktop-only: tab buttons as a flex row; mobile hamburger elements are hidden */
+@media (min-width: 701px) {
+    .tab-btn-container { display: flex; flex: 1; }
+    .mobile-tab-bar { display: none; }
+    .mobile-nav-backdrop { display: none; }
 }
-
-/* Mobile bar (current section + toggle) — hidden on desktop */
-.mobile-tab-bar { display: none; }
-
-/* Mobile backdrop — hidden until menu opens */
-.mobile-nav-backdrop { display: none; }
 
 .admin-tab-btn {
     background: none;
