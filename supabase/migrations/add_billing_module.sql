@@ -1,12 +1,11 @@
 -- ============================================================
--- BILLING MODULE  v1.11.0
+-- BILLING MODULE  v1.11.1
 -- ============================================================
 
 -- Invoices are generated from each family's registered care days
 -- (via the existing billing calculation), not from a separate rate table.
 
 -- ── 1. billing_cycles ────────────────────────────────────────
--- One row per billing period (month). Status flows: 'open' → 'closed'.
 CREATE TABLE IF NOT EXISTS billing_cycles (
     id          BIGSERIAL   PRIMARY KEY,
     month       CHAR(7)     NOT NULL UNIQUE, -- 'YYYY-MM'
@@ -18,21 +17,21 @@ CREATE TABLE IF NOT EXISTS billing_cycles (
 );
 
 ALTER TABLE billing_cycles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Auth access" ON billing_cycles
+DROP POLICY IF EXISTS "Auth access" ON billing_cycles;
+CREATE POLICY "Auth access" ON billing_cycles
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 
--- ── 3. billing_invoices ──────────────────────────────────────
--- One per family per cycle. Generated as 'draft', locked when cycle closes.
+-- ── 2. billing_invoices ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS billing_invoices (
     id                BIGSERIAL       PRIMARY KEY,
     cycle_id          BIGINT          NOT NULL REFERENCES billing_cycles(id) ON DELETE RESTRICT,
     family_id         UUID            NOT NULL REFERENCES families(id) ON DELETE RESTRICT,
     base_amount       NUMERIC(10,2)   NOT NULL DEFAULT 0,
     discount_amount   NUMERIC(10,2)   NOT NULL DEFAULT 0,
-    adjustment_amount NUMERIC(10,2)   NOT NULL DEFAULT 0, -- positive=surcharge, negative=credit
+    adjustment_amount NUMERIC(10,2)   NOT NULL DEFAULT 0,
     adjustment_note   TEXT,
-    final_amount      NUMERIC(10,2)   NOT NULL DEFAULT 0, -- base - discount + adjustment
+    final_amount      NUMERIC(10,2)   NOT NULL DEFAULT 0,
     status            TEXT            NOT NULL DEFAULT 'draft', -- 'draft'|'finalized'|'paid'|'partial'
     generated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     finalized_at      TIMESTAMPTZ,
@@ -44,12 +43,12 @@ CREATE INDEX IF NOT EXISTS billing_invoices_family_idx  ON billing_invoices (fam
 CREATE INDEX IF NOT EXISTS billing_invoices_status_idx  ON billing_invoices (status);
 
 ALTER TABLE billing_invoices ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Auth access" ON billing_invoices
+DROP POLICY IF EXISTS "Auth access" ON billing_invoices;
+CREATE POLICY "Auth access" ON billing_invoices
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 
--- ── 4. billing_import_batches ────────────────────────────────
--- Audit trail for Procare CSV uploads. Created before payments so FK works.
+-- ── 3. billing_import_batches ────────────────────────────────
 CREATE TABLE IF NOT EXISTS billing_import_batches (
     id            BIGSERIAL   PRIMARY KEY,
     imported_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -62,12 +61,12 @@ CREATE TABLE IF NOT EXISTS billing_import_batches (
 );
 
 ALTER TABLE billing_import_batches ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Auth access" ON billing_import_batches
+DROP POLICY IF EXISTS "Auth access" ON billing_import_batches;
+CREATE POLICY "Auth access" ON billing_import_batches
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 
--- ── 5. billing_payments ──────────────────────────────────────
--- Individual payment records. invoice_id is nullable for unlinked payments.
+-- ── 4. billing_payments ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS billing_payments (
     id              BIGSERIAL       PRIMARY KEY,
     family_id       UUID            NOT NULL REFERENCES families(id) ON DELETE RESTRICT,
@@ -88,10 +87,11 @@ CREATE INDEX IF NOT EXISTS billing_payments_batch_idx    ON billing_payments (im
 CREATE INDEX IF NOT EXISTS billing_payments_date_idx     ON billing_payments (payment_date DESC);
 
 ALTER TABLE billing_payments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Auth access" ON billing_payments
+DROP POLICY IF EXISTS "Auth access" ON billing_payments;
+CREATE POLICY "Auth access" ON billing_payments
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 
--- ── 6. Extend families table ─────────────────────────────────
+-- ── 5. Extend families table ─────────────────────────────────
 ALTER TABLE families
     ADD COLUMN IF NOT EXISTS registration_lock_reason TEXT;
