@@ -205,6 +205,7 @@ function printAllRoomsRoster() {
                     <span class="day-badge ${k.dayType === 'half' ? 'half' : 'full'}">${k.dayType === 'half' ? 'Half' : 'Full'}</span>
                 </div>`).join('')
             : '<div class="empty-room">—</div>';
+        const twoCol = kids.length > 12 ? ' two-col' : '';
 
         return `
             <div class="room-block">
@@ -212,7 +213,7 @@ function printAllRoomsRoster() {
                     <span class="room-label">${escHtml(room.label)}</span>
                     <span class="room-count">${countLabel}</span>
                 </div>
-                <div class="kids-list">${rows}</div>
+                <div class="kids-list${twoCol}">${rows}</div>
             </div>`;
     }).join('');
 
@@ -224,20 +225,13 @@ function printAllRoomsRoster() {
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: landscape; margin: 0.4in 0.45in; }
-  html, body {
-    height: 7.7in; /* 8.5in - 2×0.4in margins */
-    overflow: hidden;
-  }
   body {
     font-family: Arial, Helvetica, sans-serif;
     color: #111;
     font-size: 9pt;
-    width: 10.1in; /* 11in - 2×0.45in margins */
-    display: flex;
-    flex-direction: column;
+    width: 10.1in;
   }
   .page-header {
-    flex-shrink: 0;
     display: flex;
     justify-content: space-between;
     align-items: baseline;
@@ -245,56 +239,33 @@ function printAllRoomsRoster() {
     padding-bottom: 5px;
     margin-bottom: 8px;
   }
-  .page-header h1 {
-    font-size: 12pt;
-    font-weight: 700;
-  }
-  .page-header .sub {
-    font-size: 9pt;
-    color: #555;
-    font-weight: 400;
-  }
-  .page-header .printed {
-    font-size: 7.5pt;
-    color: #999;
-  }
+  .page-header h1 { font-size: 12pt; font-weight: 700; }
+  .page-header .sub { font-size: 9pt; color: #555; font-weight: 400; }
+  .page-header .printed { font-size: 7.5pt; color: #999; }
   .rooms-grid {
-    flex: 1;
-    min-height: 0;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(2, 1fr);
     gap: 8px 12px;
   }
   .room-block {
     border: 1px solid #ccc;
     border-radius: 3px;
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
   }
   .room-header {
-    flex-shrink: 0;
     background: #f2f2f2;
     border-bottom: 1px solid #ccc;
     padding: 4px 8px;
   }
-  .room-label {
-    font-weight: 700;
-    font-size: 10pt;
-    display: block;
+  .room-label { font-weight: 700; font-size: 10pt; display: block; }
+  .room-count { font-size: 7.5pt; color: #666; }
+  .kids-list { padding: 2px 0; }
+  .kids-list.two-col {
+    columns: 2;
+    column-gap: 0;
+    padding: 0;
   }
-  .room-count {
-    font-size: 7.5pt;
-    color: #666;
-  }
-  .kids-list {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    padding: 2px 0;
-  }
+  .kids-list.two-col .kid-row { break-inside: avoid; }
   .kid-row {
     display: flex;
     justify-content: space-between;
@@ -325,7 +296,20 @@ function printAllRoomsRoster() {
     <span class="printed">Timothy Lutheran MDO &nbsp;·&nbsp; Printed ${new Date().toLocaleString('en-US')}</span>
   </div>
   <div class="rooms-grid">${roomBlocks}</div>
-  <script>window.addEventListener('load', function() { window.print(); });<\/script>
+  <script>
+    window.addEventListener('load', function() {
+      var PAGE_H = 7.7 * 96;   // printable height in CSS px (8.5in - 2×0.4in margins)
+      var MIN_SCALE = 7 / 9;   // floor: ~7pt from 9pt base — don't go smaller than this
+      var h = document.body.scrollHeight;
+      if (h > PAGE_H) {
+        var s = Math.max(PAGE_H / h, MIN_SCALE);
+        document.body.style.transformOrigin = 'top left';
+        document.body.style.transform = 'scale(' + s + ')';
+        document.body.style.width = (10.1 / s) + 'in';
+      }
+      window.print();
+    });
+  <\/script>
 </body>
 </html>`;
 
