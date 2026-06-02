@@ -85,6 +85,7 @@ const ENTRIES = [
                 'js/admin/admin-families.js',
                 'js/admin/admin-reports.js',
                 'js/admin/admin-finance.js',
+                'js/admin/admin-billing.js',
                 'js/admin/admin-staffing.js',
                 'js/admin/admin-messages.js',
                 'js/admin/admin-settings.js',
@@ -117,6 +118,7 @@ const HTML_PATCHES = [
             /<script src="js\/admin\/admin-settings\.js"><\/script>\n/,
             /<script src="js\/admin\/admin-waitlist\.js"><\/script>\n/,
             /<script src="js\/admin\/admin-finance\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-billing\.js"><\/script>\n/,
         ],
         // Insert bundles before </body>
         insert: [

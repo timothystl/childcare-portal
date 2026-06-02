@@ -971,8 +971,9 @@ async function restoreFamily(id) {
     return updateFamily(id, { active: true });
 }
 
-async function setFamilyRegistrationLock(id, locked) {
-    return updateFamily(id, { registration_locked: locked });
+async function setFamilyRegistrationLock(id, locked, reason = null) {
+    const updates = { registration_locked: locked, registration_lock_reason: reason };
+    return updateFamily(id, updates);
 }
 
 async function setFamilyLoginLock(id, locked) {
@@ -2263,6 +2264,184 @@ async function fetchAuditLog() {
     const { data, error } = await sbClient
         .from('admin_audit_log_recent')
         .select('*');
+    if (error) throw error;
+    return data || [];
+}
+
+// ============================================================
+// BILLING MODULE HELPERS
+// ============================================================
+
+async function fetchFamilyRates(familyId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('family_rates')
+        .select('*')
+        .eq('family_id', familyId)
+        .order('effective_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+async function fetchAllCurrentRates() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('family_rates')
+        .select('*')
+        .order('effective_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+async function insertFamilyRate(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('family_rates')
+        .insert(row)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function fetchBillingCycles() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_cycles')
+        .select('*')
+        .order('month', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+async function insertBillingCycle(month) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_cycles')
+        .insert({ month })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function updateBillingCycle(id, fields) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_cycles')
+        .update(fields)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function fetchInvoicesForCycle(cycleId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_invoices')
+        .select('*, families(parent_name, parent_email)')
+        .eq('cycle_id', cycleId)
+        .order('family_id');
+    if (error) throw error;
+    return data || [];
+}
+
+async function fetchInvoicesForFamily(familyId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_invoices')
+        .select('*, billing_cycles(month)')
+        .eq('family_id', familyId)
+        .order('generated_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+async function upsertBillingInvoice(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_invoices')
+        .upsert(row, { onConflict: 'cycle_id,family_id' })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function updateBillingInvoice(id, fields) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_invoices')
+        .update(fields)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function fetchPaymentsForFamily(familyId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_payments')
+        .select('*')
+        .eq('family_id', familyId)
+        .order('payment_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+async function fetchPaymentsForInvoice(invoiceId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_payments')
+        .select('*')
+        .eq('invoice_id', invoiceId)
+        .order('payment_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+async function insertBillingPayment(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_payments')
+        .insert(row)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function insertImportBatch(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_import_batches')
+        .insert(row)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function fetchAllBillingInvoices() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_invoices')
+        .select('*, billing_cycles(month)')
+        .order('generated_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+async function fetchAllBillingPayments() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_payments')
+        .select('*')
+        .order('payment_date', { ascending: false });
     if (error) throw error;
     return data || [];
 }

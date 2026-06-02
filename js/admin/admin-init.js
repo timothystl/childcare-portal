@@ -54,6 +54,7 @@ async function initDashboard() {
     setupWaitlistAdmin();
     setupAdminRoles();
     setupFinanceDashboard();
+    setupBilling();
     setupTabs();
     setupCollapsibles();
     document.getElementById('refreshBtn').addEventListener('click', () => {
@@ -63,6 +64,7 @@ async function initDashboard() {
         else if (active === 'messages')  loadMessages();
         else if (active === 'waitlist')  loadWaitlist();
         else if (active === 'staffing')  loadStaffList();
+        else if (active === 'billing') { /* billing sub-tabs handle their own refresh */ }
         else loadRegistrations(); // daily / settings / reports — fall back to registrations
     });
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);

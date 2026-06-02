@@ -3118,3 +3118,218 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .ar-cap-open  { color:#15803d; background:#dcfce7; }
 .ar-cap-near  { color:#b45309; background:#fef3c7; }
 .ar-cap-full  { color:#b91c1c; background:#fee2e2; }
+
+/* ── BILLING MODULE ─────────────────────────────────────────── */
+
+/* Billing sub-tab nav */
+.billing-sub-nav {
+    display: flex;
+    gap: 4px;
+    padding: 12px 32px 0;
+    border-bottom: 2px solid var(--border);
+    background: var(--white);
+    position: sticky;
+    top: 73px;
+    z-index: 50;
+    flex-wrap: wrap;
+}
+.billing-sub-btn {
+    padding: 8px 18px;
+    border: none;
+    border-bottom: 3px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    font-size: .9em;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-radius: 6px 6px 0 0;
+    transition: color .15s, background .15s;
+}
+.billing-sub-btn.active {
+    color: var(--navy);
+    border-bottom-color: var(--navy);
+    background: var(--linen);
+}
+.billing-sub-btn:hover:not(.active) {
+    color: var(--navy);
+    background: var(--warm-gray);
+}
+.billing-sub-pane {
+    padding-top: 0;
+}
+
+/* AR status badges */
+.bl-badge-paid {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: .78em;
+    font-weight: 700;
+    background: var(--green-lt);
+    color: #1a5c3e;
+}
+.bl-badge-partial {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: .78em;
+    font-weight: 700;
+    background: #fef3c7;
+    color: #92400e;
+}
+.bl-badge-overdue {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: .78em;
+    font-weight: 700;
+    background: var(--tang-pale);
+    color: #7a2a18;
+}
+.bl-badge-none {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: .78em;
+    font-weight: 700;
+    background: var(--warm-gray);
+    color: var(--text-muted);
+}
+
+/* CSV import confidence indicators */
+.bl-conf-high { color: #16a34a; font-weight: 700; }
+.bl-conf-med  { color: #d97706; font-weight: 700; }
+.bl-conf-low  { color: #dc2626; font-weight: 700; }
+
+/* Rate history toggle rows */
+.bl-history-row { background: var(--linen); font-size: .86em; }
+.bl-history-row td { padding: 6px 12px; color: var(--text-muted); }
+
+/* Billing cycle controls bar */
+.billing-cycle-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 16px;
+}
+
+/* Overpayment badge */
+.bl-overpay-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: .78em;
+    font-weight: 700;
+    background: #fef3c7;
+    color: #92400e;
+    margin-left: 6px;
+}
+
+/* AR detail expansion row */
+.bl-detail-row td {
+    background: var(--linen);
+    padding: 16px 24px;
+}
+.bl-detail-row .table-wrapper {
+    margin-bottom: 12px;
+}
+
+/* Billing inline inputs (invoice adjustments) */
+.bl-adj-input {
+    width: 80px;
+    padding: 4px 6px;
+    font-size: .88em;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+}
+.bl-adj-note-input {
+    width: 160px;
+    padding: 4px 6px;
+    font-size: .88em;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+}
+.bl-adj-input:focus,
+.bl-adj-note-input:focus {
+    outline: none;
+    border-color: var(--navy);
+}
+
+/* Import wizard steps */
+.bl-import-step {
+    background: var(--linen);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+}
+.bl-import-step h4 {
+    margin: 0 0 12px;
+    font-size: .95em;
+    color: var(--navy);
+}
+.bl-col-map-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.bl-col-map-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 160px;
+}
+.bl-col-map-field label {
+    font-size: .82em;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.bl-col-map-field select {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: .9em;
+}
+
+/* Import summary */
+.bl-import-summary {
+    background: var(--green-lt);
+    color: #1a5c3e;
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-weight: 600;
+    margin-top: 12px;
+}
+
+/* Dashboard chart containers */
+.bl-charts-row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin: 20px 0;
+}
+.bl-chart-wrap {
+    flex: 1;
+    min-width: 300px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+}
+.bl-chart-wrap h4 {
+    margin: 0 0 12px;
+    font-size: .9em;
+    color: var(--navy);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+@media (max-width: 700px) {
+    .billing-sub-nav { padding: 8px 12px 0; }
+    .billing-sub-btn { padding: 6px 12px; font-size: .82em; }
+    .bl-charts-row { flex-direction: column; }
+}
