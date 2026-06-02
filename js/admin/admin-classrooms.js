@@ -223,23 +223,30 @@ function printAllRoomsRoster() {
 <title>Daily Roster — ${dateLabel}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: landscape; margin: 0.45in 0.5in; }
+  @page { size: landscape; margin: 0.4in 0.45in; }
+  html, body {
+    height: 7.7in; /* 8.5in - 2×0.4in margins */
+    overflow: hidden;
+  }
   body {
     font-family: Arial, Helvetica, sans-serif;
     color: #111;
-    font-size: 10pt;
-    width: 10in;
+    font-size: 9pt;
+    width: 10.1in; /* 11in - 2×0.45in margins */
+    display: flex;
+    flex-direction: column;
   }
   .page-header {
+    flex-shrink: 0;
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    border-bottom: 2.5px solid #333;
-    padding-bottom: 6px;
-    margin-bottom: 12px;
+    border-bottom: 2px solid #333;
+    padding-bottom: 5px;
+    margin-bottom: 8px;
   }
   .page-header h1 {
-    font-size: 13pt;
+    font-size: 12pt;
     font-weight: 700;
   }
   .page-header .sub {
@@ -248,65 +255,68 @@ function printAllRoomsRoster() {
     font-weight: 400;
   }
   .page-header .printed {
-    font-size: 8pt;
+    font-size: 7.5pt;
     color: #999;
   }
   .rooms-grid {
+    flex: 1;
+    min-height: 0;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 10px 14px;
+    grid-template-rows: repeat(2, 1fr);
+    gap: 8px 12px;
   }
   .room-block {
     border: 1px solid #ccc;
-    border-radius: 4px;
+    border-radius: 3px;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
   .room-header {
+    flex-shrink: 0;
     background: #f2f2f2;
     border-bottom: 1px solid #ccc;
-    padding: 5px 9px;
+    padding: 4px 8px;
   }
   .room-label {
     font-weight: 700;
-    font-size: 10.5pt;
+    font-size: 10pt;
     display: block;
   }
   .room-count {
-    font-size: 8pt;
+    font-size: 7.5pt;
     color: #666;
   }
   .kids-list {
-    padding: 3px 0;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: 2px 0;
   }
   .kid-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 4px 9px;
+    padding: 3px 8px;
     border-bottom: 1px solid #f0f0f0;
-    font-size: 9.5pt;
+    font-size: 9pt;
   }
   .kid-row:last-child { border-bottom: none; }
   .kid-name { font-weight: 500; }
   .day-badge {
-    font-size: 7.5pt;
+    font-size: 7pt;
     font-weight: 700;
-    padding: 2px 7px;
-    border-radius: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
     letter-spacing: 0.02em;
     white-space: nowrap;
     flex-shrink: 0;
   }
   .day-badge.full { background: #d1fae5; color: #065f46; }
   .day-badge.half { background: #fef3c7; color: #92400e; }
-  .empty-room { padding: 6px 9px; color: #bbb; font-size: 9pt; }
-  .page-footer {
-    position: fixed;
-    bottom: 0.3in;
-    right: 0.5in;
-    font-size: 7.5pt;
-    color: #bbb;
-  }
+  .empty-room { padding: 5px 8px; color: #bbb; font-size: 8.5pt; }
 </style>
 </head>
 <body>
@@ -315,7 +325,6 @@ function printAllRoomsRoster() {
     <span class="printed">Timothy Lutheran MDO &nbsp;·&nbsp; Printed ${new Date().toLocaleString('en-US')}</span>
   </div>
   <div class="rooms-grid">${roomBlocks}</div>
-  <div class="page-footer">Timothy Lutheran MDO</div>
   <script>window.addEventListener('load', function() { window.print(); });<\/script>
 </body>
 </html>`;
