@@ -1084,7 +1084,12 @@ function renderArTable(data) {
             ? `<button class="btn-xs btn-warn" onclick="doSetFamilyLockWithReason('${escHtml(r.familyId)}', false, null, '${escHtml(r.familyName)}')">Unlock</button>`
             : `<button class="btn-xs btn-danger" onclick="openLockWithReasonModal('${escHtml(r.familyId)}', '${escHtml(r.familyName)}')">Lock</button>`;
 
-        const days = r.daysSince != null ? r.daysSince : '—';
+        // Billed cell: editable input when no invoice; clickable value when invoice exists
+        const billedCell = r.billed > 0
+            ? `<span class="bl-editable-amount" title="Click to edit" onclick="startEditBilledAmount('${escHtml(r.familyId)}',${r.billed})">$${r.billed.toFixed(2)} <small style="opacity:.45;cursor:pointer">✎</small></span>`
+            : `<input type="number" class="bl-adj-input" style="width:78px" step="0.01" min="0" placeholder="Set amount"
+                 onblur="saveBilledAmount('${escHtml(r.familyId)}',this.value)"
+                 onkeydown="if(event.key==='Enter')this.blur()">`;
 
         return `<tr data-family-id="${escHtml(r.familyId)}">
             <td>
@@ -1092,10 +1097,9 @@ function renderArTable(data) {
                 ${r.isLocked ? '<span class="bl-badge bl-badge-overdue" title="Registration locked">Locked</span>' : ''}
                 <br><small style="color:var(--muted)">${escHtml(r.familyEmail)}</small>
             </td>
-            <td>${r.billed > 0 ? '$' + r.billed.toFixed(2) : '—'}</td>
+            <td id="bl-billed-cell-${escHtml(r.familyId)}">${billedCell}</td>
             <td>${r.collected > 0 ? '$' + r.collected.toFixed(2) : '—'}</td>
             <td>${r.outstanding > 0 ? '$' + r.outstanding.toFixed(2) : '—'}</td>
-            <td>${days}</td>
             <td>${getArStatusBadge(r.status)}</td>
             <td>
                 <button class="btn-xs" onclick="toggleArRowDetail('${escHtml(r.familyId)}')">▸ Details</button>
@@ -1113,16 +1117,56 @@ function renderArTable(data) {
             <table id="arTable">
                 <thead><tr>
                     <th>Family</th>
-                    <th>Billed</th>
+                    <th>Billed <small style="opacity:.5;font-weight:normal">(click to edit)</small></th>
                     <th>Collected</th>
                     <th>Outstanding</th>
-                    <th>Days</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
         </div>`;
+}
+
+function startEditBilledAmount(familyId, currentVal) {
+    const cell = document.getElementById(`bl-billed-cell-${familyId}`);
+    if (!cell) return;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'bl-adj-input';
+    input.style.width = '78px';
+    input.step = '0.01';
+    input.min = '0';
+    input.value = currentVal.toFixed(2);
+    input.addEventListener('blur',    () => saveBilledAmount(familyId, input.value));
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+    cell.innerHTML = '';
+    cell.appendChild(input);
+    input.focus();
+    input.select();
+}
+
+async function saveBilledAmount(familyId, rawVal) {
+    const amount = parseFloat(rawVal);
+    if (isNaN(amount) || amount < 0) return;
+    const month = _blArMonth;
+    if (!month) return;
+    try {
+        const cycle = await getOrCreateBillingCycle(month);
+        await upsertBillingInvoice({
+            cycle_id:         cycle.id,
+            family_id:        familyId,
+            base_amount:      amount,
+            discount_amount:  0,
+            adjustment_amount: 0,
+            final_amount:     amount,
+            status:           'draft',
+        });
+        _arLoaded = false;
+        await loadArView();
+    } catch (err) {
+        alert('Error saving billing amount: ' + err.message);
+    }
 }
 
 function getArStatusBadge(status) {
@@ -1151,7 +1195,7 @@ async function toggleArRowDetail(familyId) {
     const detailTr = document.createElement('tr');
     detailTr.className = 'bl-detail-row';
     detailTr.dataset.detailFamily = familyId;
-    detailTr.innerHTML = `<td colspan="7"><p class="empty-hint">Loading…</p></td>`;
+    detailTr.innerHTML = `<td colspan="6"><p class="empty-hint">Loading…</p></td>`;
     mainRow.after(detailTr);
 
     try {
