@@ -945,77 +945,101 @@ async function loadArView() {
     _blArMonth = month;
 
     try {
-        // Load families and billing cycle in parallel
-        const [familiesRaw, cycle] = await Promise.all([
-            (allFamiliesData && allFamiliesData.length > 0)
-                ? Promise.resolve(allFamiliesData)
-                : fetchAllFamilies({ includeArchived: false }),
-            getOrCreateBillingCycle(month),
-        ]);
+        // Mirror the Family Billing Report: always fetch fresh with includeArchived:true
+        // so families with active=NULL are included and discount map is current
+        allFamiliesData = await fetchAllFamilies({ includeArchived: true });
+        _discountMap = null;
+        const freshRegs = await fetchAllRegistrations();
+        if (freshRegs && freshRegs.length) allRegistrations = freshRegs;
 
-        // Only active (non-archived) families
-        const families = familiesRaw.filter(f => f.active !== false && !f.archived);
+        const families = allFamiliesData;
 
-        // Best-effort: sync billing amounts from registrations for families that have them
+        // Get/create billing cycle for this month
+        const cycle = await getOrCreateBillingCycle(month);
+
+        // Sync invoices from registrations (same calc as Family Billing Report)
+        let syncStatus = '';
         try {
-            if (!allRegistrations || allRegistrations.length === 0) {
-                allRegistrations = await fetchAllRegistrations();
-            }
-            if (allRegistrations.length > 0) {
-                const overrideRows = await fetchBillingOverrides(month);
-                const overridesMap = new Map();
-                overrideRows.forEach(row => {
-                    const key = `${(row.parent_email || '').toLowerCase()}:${(row.child_name || '').toLowerCase()}`;
-                    overridesMap.set(key, parseFloat(row.override_amount || 0));
-                });
+            let overrideRows = [];
+            try { overrideRows = await fetchBillingOverrides(month); } catch (e) { /* non-fatal */ }
+            const overridesMap = new Map(overrideRows.map(r => [
+                `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+                parseFloat(r.override_amount || 0),
+            ]));
 
-                const billingResults = _buildFamilyBillingData(month, overridesMap);
-                const existingInvs   = await fetchInvoicesForCycle(cycle.id);
-                const existingByFam  = new Map(existingInvs.map(inv => [String(inv.family_id), inv]));
+            const billingResults = _buildFamilyBillingData(month, overridesMap);
+            const existingInvs   = await fetchInvoicesForCycle(cycle.id);
+            const existingByFam  = new Map(existingInvs.map(inv => [String(inv.family_id), inv]));
 
-                await Promise.all(billingResults.map(async result => {
-                    const fam = families.find(f =>
-                        (f.parent_email  || '').toLowerCase() === (result.parentEmail || '').toLowerCase() ||
-                        (f.parent2_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase()
-                    );
-                    if (!fam) return;
+            let synced = 0;
+            const unmatched = [];
 
-                    let baseAmount = 0, discountAmount = 0, finalAmount = 0;
-                    (result.children || []).forEach(child => {
-                        baseAmount     += (child.subtotal || 0) + (child.changeFees || 0) + (child.discountDollar || 0) + (child.sibDiscount || 0);
-                        discountAmount += (child.discountDollar || 0) + (child.sibDiscount || 0);
-                        finalAmount    += child.hasOverride
-                            ? parseFloat(child.overrideAmount || 0)
-                            : (child.subtotal || 0) + (child.changeFees || 0);
-                    });
-                    baseAmount     = Math.round(baseAmount * 100) / 100;
-                    discountAmount = Math.round(discountAmount * 100) / 100;
-                    finalAmount    = Math.round(Math.max(0, finalAmount) * 100) / 100;
+            for (const result of billingResults) {
+                // 1) Email match (primary + secondary)
+                let fam = result.parentEmail
+                    ? families.find(f =>
+                        (f.parent_email  || '').toLowerCase() === result.parentEmail.toLowerCase() ||
+                        (f.parent2_email || '').toLowerCase() === result.parentEmail.toLowerCase())
+                    : null;
 
-                    const existing = existingByFam.get(String(fam.id));
-                    if (existing && ['paid', 'partial'].includes(existing.status)) {
-                        await updateBillingInvoice(existing.id, {
-                            base_amount: baseAmount, discount_amount: discountAmount, final_amount: finalAmount,
-                        });
-                    } else {
-                        await upsertBillingInvoice({
-                            cycle_id:          cycle.id,
-                            family_id:         fam.id,
-                            base_amount:       baseAmount,
-                            discount_amount:   discountAmount,
-                            adjustment_amount: existing?.adjustment_amount || 0,
-                            adjustment_note:   existing?.adjustment_note  || '',
-                            final_amount:      finalAmount,
-                            status:            existing?.status || 'draft',
-                        });
+                // 2) Fallback: any child name matches a student in a family
+                if (!fam && result.children?.length) {
+                    for (const child of result.children) {
+                        fam = families.find(f =>
+                            (f.students || []).some(s =>
+                                s.child_name?.toLowerCase() === child.childName?.toLowerCase()
+                            )
+                        );
+                        if (fam) break;
                     }
-                }));
+                }
+
+                if (!fam) { unmatched.push(result.parentName || result.parentEmail || '?'); continue; }
+
+                let baseAmount = 0, discountAmount = 0, finalAmount = 0;
+                (result.children || []).forEach(child => {
+                    baseAmount     += (child.subtotal || 0) + (child.changeFees || 0) + (child.discountDollar || 0) + (child.sibDiscount || 0);
+                    discountAmount += (child.discountDollar || 0) + (child.sibDiscount || 0);
+                    finalAmount    += child.hasOverride
+                        ? parseFloat(child.overrideAmount || 0)
+                        : (child.subtotal || 0) + (child.changeFees || 0);
+                });
+                baseAmount     = Math.round(baseAmount * 100) / 100;
+                discountAmount = Math.round(discountAmount * 100) / 100;
+                finalAmount    = Math.round(Math.max(0, finalAmount) * 100) / 100;
+
+                const existing = existingByFam.get(String(fam.id));
+                if (existing && ['paid', 'partial'].includes(existing.status)) {
+                    await updateBillingInvoice(existing.id, {
+                        base_amount: baseAmount, discount_amount: discountAmount, final_amount: finalAmount,
+                    });
+                } else {
+                    await upsertBillingInvoice({
+                        cycle_id:          cycle.id,
+                        family_id:         fam.id,
+                        base_amount:       baseAmount,
+                        discount_amount:   discountAmount,
+                        adjustment_amount: existing?.adjustment_amount || 0,
+                        adjustment_note:   existing?.adjustment_note  || '',
+                        final_amount:      finalAmount,
+                        status:            existing?.status || 'draft',
+                    });
+                }
+                synced++;
             }
-        } catch (_syncErr) {
-            // Billing sync failed — still show families with whatever invoice data exists
+
+            if (billingResults.length === 0) {
+                syncStatus = `No registrations found for ${month}.`;
+            } else if (unmatched.length) {
+                syncStatus = `Synced ${synced} invoice${synced !== 1 ? 's' : ''}. ${unmatched.length} registration${unmatched.length !== 1 ? 's' : ''} had no matching family record: ${unmatched.join(', ')}`;
+            } else {
+                syncStatus = `Synced ${synced} invoice${synced !== 1 ? 's' : ''} from registrations.`;
+            }
+        } catch (syncErr) {
+            syncStatus = `⚠️ Invoice sync error: ${syncErr.message}`;
         }
 
-        // Load invoices and all payments for the month in parallel
+        // Load invoices and payments for the month
         const [invoices, monthPayments] = await Promise.all([
             fetchInvoicesForCycle(cycle.id),
             fetchPaymentsForMonth(month).catch(() => []),
@@ -1023,7 +1047,6 @@ async function loadArView() {
 
         const invoiceByFamily = new Map(invoices.map(inv => [String(inv.family_id), inv]));
 
-        // Group payments by family_id
         const paymentsByFamily = {};
         monthPayments.forEach(p => {
             const fid = String(p.family_id);
@@ -1031,7 +1054,6 @@ async function loadArView() {
             paymentsByFamily[fid].push(p);
         });
 
-        // Build AR data for ALL active families
         _arData = families.map(family => {
             const inv      = invoiceByFamily.get(String(family.id));
             const payments = paymentsByFamily[String(family.id)] || [];
@@ -1061,13 +1083,13 @@ async function loadArView() {
         });
 
         _arLoaded = true;
-        renderArTable(_arData);
+        renderArTable(_arData, syncStatus);
     } catch (err) {
         if (wrap) wrap.innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
     }
 }
 
-function renderArTable(data) {
+function renderArTable(data, syncStatus = '') {
     const wrap = document.getElementById('arTableWrap');
     if (!wrap) return;
 
@@ -1075,7 +1097,9 @@ function renderArTable(data) {
     const filtered  = filterVal ? data.filter(r => r.status === filterVal) : data;
 
     if (!filtered.length) {
-        wrap.innerHTML = '<p class="empty-hint">No AR data found for the selected filter.</p>';
+        const statusHtml = syncStatus
+            ? `<p class="empty-hint" style="color:var(--tang)">${escHtml(syncStatus)}</p>` : '';
+        wrap.innerHTML = statusHtml + '<p class="empty-hint">No AR data found for the selected filter.</p>';
         return;
     }
 
@@ -1113,6 +1137,7 @@ function renderArTable(data) {
     }).join('');
 
     wrap.innerHTML = `
+        ${syncStatus ? `<p class="empty-hint" style="margin-bottom:8px;color:${syncStatus.startsWith('⚠') ? 'var(--tang)' : 'var(--text-muted)'}">${escHtml(syncStatus)}</p>` : ''}
         <div class="table-wrapper">
             <table id="arTable">
                 <thead><tr>
@@ -1431,42 +1456,51 @@ async function _syncAllMonthsForYear(year) {
     const now = new Date();
     const maxMonth = year < now.getFullYear() ? 12 : now.getMonth() + 1;
 
-    if (!allRegistrations || allRegistrations.length === 0) {
-        allRegistrations = await fetchAllRegistrations();
-    }
+    // Always fetch fresh, same pattern as Family Billing Report
+    allFamiliesData = await fetchAllFamilies({ includeArchived: true });
+    _discountMap = null;
+    const freshRegs = await fetchAllRegistrations();
+    if (freshRegs && freshRegs.length) allRegistrations = freshRegs;
 
-    const families = (allFamiliesData && allFamiliesData.length > 0)
-        ? allFamiliesData
-        : await fetchAllFamilies({ includeArchived: false });
-
-    const overridesByMonth = {};
+    const families = allFamiliesData;
 
     // Run month syncs in parallel
     await Promise.all(
         Array.from({ length: maxMonth }, (_, i) => i + 1).map(async m => {
             const month = `${year}-${String(m).padStart(2, '0')}`;
 
-            if (!overridesByMonth[month]) {
-                const rows = await fetchBillingOverrides(month);
-                overridesByMonth[month] = new Map(rows.map(r => [
-                    `${(r.parent_email||'').toLowerCase()}:${(r.child_name||'').toLowerCase()}`,
-                    parseFloat(r.override_amount || 0),
-                ]));
-            }
+            let overrideRows = [];
+            try { overrideRows = await fetchBillingOverrides(month); } catch (e) { /* non-fatal */ }
+            const overridesMap = new Map(overrideRows.map(r => [
+                `${(r.parent_email||'').toLowerCase()}:${(r.child_name||'').toLowerCase()}`,
+                parseFloat(r.override_amount || 0),
+            ]));
 
-            const billingResults = _buildFamilyBillingData(month, overridesByMonth[month]);
-            if (!billingResults.length) return; // No registrations this month — skip
+            const billingResults = _buildFamilyBillingData(month, overridesMap);
+            if (!billingResults.length) return;
 
             const cycle = await getOrCreateBillingCycle(month);
             const existingInvoices = await fetchInvoicesForCycle(cycle.id);
             const existingByFamily = new Map(existingInvoices.map(inv => [String(inv.family_id), inv]));
 
-            await Promise.all(billingResults.map(async result => {
-                const fam = families.find(f =>
-                    (f.parent_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase() ||
-                    (f.parent2_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase()
-                );
-                if (!fam) return;
+            for (const result of billingResults) {
+                // Email match first, then child name fallback
+                let fam = result.parentEmail
+                    ? families.find(f =>
+                        (f.parent_email  || '').toLowerCase() === result.parentEmail.toLowerCase() ||
+                        (f.parent2_email || '').toLowerCase() === result.parentEmail.toLowerCase())
+                    : null;
+                if (!fam && result.children?.length) {
+                    for (const child of result.children) {
+                        fam = families.find(f =>
+                            (f.students || []).some(s =>
+                                s.child_name?.toLowerCase() === child.childName?.toLowerCase()
+                            )
+                        );
+                        if (fam) break;
+                    }
+                }
+                if (!fam) continue;
 
                 let baseAmount = 0, discountAmount = 0, finalAmount = 0;
                 (result.children || []).forEach(child => {
@@ -1482,17 +1516,18 @@ async function _syncAllMonthsForYear(year) {
 
                 const existing = existingByFamily.get(String(fam.id));
                 if (existing && ['paid', 'partial'].includes(existing.status)) {
-                    return updateBillingInvoice(existing.id, { base_amount: baseAmount, discount_amount: discountAmount, final_amount: finalAmount });
+                    await updateBillingInvoice(existing.id, { base_amount: baseAmount, discount_amount: discountAmount, final_amount: finalAmount });
+                } else {
+                    await upsertBillingInvoice({
+                        cycle_id: cycle.id, family_id: fam.id,
+                        base_amount: baseAmount, discount_amount: discountAmount,
+                        adjustment_amount: existing?.adjustment_amount || 0,
+                        adjustment_note: existing?.adjustment_note || '',
+                        final_amount: finalAmount,
+                        status: existing?.status || 'draft',
+                    });
                 }
-                return upsertBillingInvoice({
-                    cycle_id: cycle.id, family_id: fam.id,
-                    base_amount: baseAmount, discount_amount: discountAmount,
-                    adjustment_amount: existing?.adjustment_amount || 0,
-                    adjustment_note: existing?.adjustment_note || '',
-                    final_amount: finalAmount,
-                    status: existing?.status || 'draft',
-                });
-            }));
+            }
         })
     );
 }
