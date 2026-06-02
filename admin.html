@@ -1103,20 +1103,21 @@
             <!-- Accounts Receivable -->
             <section class="admin-section collapsible-section" id="billingArSection">
                 <h2>📋 Accounts Receivable</h2>
-                <p class="section-desc">Select a month to auto-sync invoices from registrations and view payment status per family.</p>
+                <p class="section-desc">View payment status per family for a selected month. Invoices are created automatically when registrations are submitted.</p>
                 <div class="billing-cycle-bar" style="margin-bottom:12px">
                     <div class="roster-field">
                         <label for="arMonthSelect">Month</label>
                         <input type="month" id="arMonthSelect">
                     </div>
                     <select id="arStatusFilter" style="min-width:160px">
-                        <option value="all">All Statuses</option>
+                        <option value="">All Statuses</option>
                         <option value="overdue">Overdue</option>
                         <option value="partial">Partial</option>
                         <option value="paid">Paid</option>
                         <option value="no_invoice">No Invoice</option>
                     </select>
                     <button id="refreshArBtn" class="btn-secondary">&#8635; Refresh</button>
+                    <button id="backfillInvoicesBtn" class="btn-secondary" title="Create invoices for past months from existing registration data. Will not overwrite existing invoices.">📥 Backfill Past Invoices</button>
                     <button id="lockAllOverdueBtn" class="btn-warning">🔒 Lock All Overdue</button>
                     <button id="exportArCsvBtn" class="btn-primary">&#8595; Export CSV</button>
                 </div>
