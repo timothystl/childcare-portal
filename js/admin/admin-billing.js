@@ -39,7 +39,7 @@ function setupBilling() {
         ?.addEventListener('click', () => { _ratesLoaded = false; loadFamilyRates(); });
     document.getElementById('rateSearchInput')
         ?.addEventListener('input', e => {
-            renderRatesTable(_allRates, e.target.value.trim());
+            renderBillingRatesTable(_allRates, e.target.value.trim());
         });
     document.getElementById('brDiscountType')
         ?.addEventListener('change', e => {
@@ -204,13 +204,13 @@ async function loadFamilyRates() {
         });
 
         _ratesLoaded = true;
-        renderRatesTable(_allRates, document.getElementById('rateSearchInput')?.value.trim() || '');
+        renderBillingRatesTable(_allRates, document.getElementById('rateSearchInput')?.value.trim() || '');
     } catch (err) {
         if (wrap) wrap.innerHTML = `<p class="empty-hint">Error loading rates: ${escHtml(err.message)}</p>`;
     }
 }
 
-function renderRatesTable(rates, searchTerm) {
+function renderBillingRatesTable(rates, searchTerm) {
     const wrap = document.getElementById('ratesTableWrap-billing');
     if (!wrap) return;
 
