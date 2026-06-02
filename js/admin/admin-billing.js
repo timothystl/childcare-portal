@@ -1432,7 +1432,7 @@ function computeDashMetrics(cycles, invoices, payments, year) {
         const moKey = `${year}-${String(m).padStart(2,'0')}`;
         const moInvoices = invoices.filter(inv =>
             (inv.cycle_month || '').startsWith(moKey) &&
-            ['finalized', 'paid', 'partial'].includes(inv.status)
+            ['draft', 'finalized', 'paid', 'partial'].includes(inv.status)
         );
         const expected  = moInvoices.reduce((s, inv) => s + parseFloat(inv.final_amount || 0), 0);
         const moPayments = payments.filter(p => (p.cycle_month || '').startsWith(moKey));
