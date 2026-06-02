@@ -223,11 +223,12 @@ function printAllRoomsRoster() {
 <title>Daily Roster — ${dateLabel}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: 11in 8.5in landscape; margin: 0.45in 0.5in; }
+  @page { size: landscape; margin: 0.45in 0.5in; }
   body {
     font-family: Arial, Helvetica, sans-serif;
     color: #111;
     font-size: 10pt;
+    width: 10in;
   }
   .page-header {
     display: flex;
