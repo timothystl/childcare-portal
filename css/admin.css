@@ -1918,10 +1918,22 @@ tr.pending-approval:hover { background: var(--sun-pale); }
    RESPONSIVE ADMIN
    ============================================================ */
 @media (max-width: 700px) {
-    .admin-header { padding: 16px; }
+    .admin-header { padding: 12px 16px; gap: 8px; }
+    .admin-header h1 { font-size: 1.1em; }
     .filters, .capacity-section, .table-section { padding: 16px; }
-    .header-actions { gap: 6px; }
-    .btn-secondary, .btn-ghost, .btn-primary { padding: 8px 12px; font-size: .82em; }
+    /* Scroll buttons horizontally instead of wrapping to a second row */
+    .header-actions {
+        gap: 6px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        width: 100%;
+    }
+    .header-actions::-webkit-scrollbar { display: none; }
+    /* Hide logged-in email — not critical on small screens */
+    .current-user-display { display: none; }
+    .btn-secondary, .btn-ghost, .btn-primary { padding: 8px 12px; font-size: .82em; flex-shrink: 0; }
     .families-import-row { gap: 8px; }
     .families-list { max-height: none; }
 
@@ -1953,19 +1965,98 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     .family-row-meta   { grid-column: 1 / -1; }
     .family-row-actions{ grid-column: 1 / -1; }
 
-    /* Tab bar — horizontal scroll strip on mobile */
+    /* Tab navigation — hamburger menu on mobile */
     .admin-tabs {
-        padding: 0 8px;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
+        padding: 0;
+        overflow: visible;
         top: 0;
+        flex-direction: column;
     }
-    .admin-tabs::-webkit-scrollbar { display: none; }
-    .admin-tab-btn {
-        padding: 10px 14px 8px;
+
+    /* Mobile bar: active tab label + toggle button */
+    .mobile-tab-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        min-height: 48px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .mobile-tab-name {
+        font-size: .95em;
+        font-weight: 700;
+        color: var(--navy);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .mobile-tab-toggle {
+        background: var(--navy);
+        color: var(--white);
+        border: none;
+        border-radius: 8px;
+        padding: 8px 14px;
         font-size: .82em;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: var(--font-body);
+        flex-shrink: 0;
+        transition: background .2s;
     }
+    .mobile-tab-toggle:active { background: var(--sun); color: var(--navy); }
+
+    /* Tab button list — hidden by default, drops down when menu is open */
+    .tab-btn-container {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        background: var(--white);
+        box-shadow: 0 6px 24px rgba(0,0,0,.18);
+        z-index: 200;
+        max-height: calc(100svh - 160px);
+        overflow-y: auto;
+        border-top: 1px solid var(--border);
+    }
+
+    .admin-tabs.mobile-open .tab-btn-container {
+        display: flex;
+    }
+
+    .admin-tab-btn {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        text-align: left;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--warm-gray);
+        border-right: none;
+        margin-bottom: 0;
+        font-size: 1em;
+        white-space: normal;
+    }
+    .admin-tab-btn:last-child { border-bottom: none; }
+    .admin-tab-btn.active {
+        background: var(--green-lt);
+        border-left: 4px solid var(--sun);
+        padding-left: 16px;
+        border-bottom-color: transparent;
+    }
+    .admin-tab-btn:hover { font-weight: 700; background: var(--warm-gray); }
+
+    /* Backdrop — close menu on outside tap */
+    .mobile-nav-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.3);
+        z-index: 95;
+    }
+    .mobile-nav-backdrop.hidden { display: none; }
 
     /* Report tables — allow horizontal scroll on narrow screens */
     .report-table-wrap { overflow-x: auto; }
@@ -2103,6 +2194,18 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     z-index: 90;
     box-shadow: 0 2px 6px rgba(0,0,0,.05);
 }
+
+/* Desktop: tab buttons rendered as a flex row */
+.tab-btn-container {
+    display: flex;
+    flex: 1;
+}
+
+/* Mobile bar (current section + toggle) — hidden on desktop */
+.mobile-tab-bar { display: none; }
+
+/* Mobile backdrop — hidden until menu opens */
+.mobile-nav-backdrop { display: none; }
 
 .admin-tab-btn {
     background: none;

@@ -308,13 +308,35 @@ async function loadClosureList() {
 // TABS
 // ============================================================
 function setupTabs() {
-    const btns  = document.querySelectorAll('#adminTabs .admin-tab-btn');
-    const panes = document.querySelectorAll('.tab-pane');
+    const btns           = document.querySelectorAll('#adminTabs .admin-tab-btn');
+    const panes          = document.querySelectorAll('.tab-pane');
+    const adminTabs      = document.getElementById('adminTabs');
+    const mobileTabName  = document.getElementById('mobileTabName');
+    const mobileToggle   = document.getElementById('mobileTabToggle');
+    const backdrop       = document.getElementById('mobileNavBackdrop');
+
+    function closeMobileMenu() {
+        adminTabs.classList.remove('mobile-open');
+        backdrop.classList.add('hidden');
+        if (mobileToggle) {
+            mobileToggle.textContent = '☰ Menu';
+            mobileToggle.setAttribute('aria-expanded', 'false');
+        }
+    }
 
     function activate(tab) {
         btns.forEach(b  => b.classList.toggle('active', b.dataset.tab === tab));
         panes.forEach(p => p.classList.toggle('hidden', p.id !== 'tab-' + tab));
         localStorage.setItem('adminActiveTab', tab);
+
+        // Update mobile label to show the active tab name
+        if (mobileTabName) {
+            const activeBtn = [...btns].find(b => b.dataset.tab === tab);
+            if (activeBtn) mobileTabName.textContent = activeBtn.textContent;
+        }
+
+        closeMobileMenu();
+
         // Lazy-load heavy data the first time each tab is opened
         if (tab === 'families'  && allFamiliesData.length === 0) loadFamilies();
         if (tab === 'staffing'  && allStaffData.length === 0)    loadStaffList();
@@ -323,6 +345,20 @@ function setupTabs() {
     }
 
     btns.forEach(btn => btn.addEventListener('click', () => activate(btn.dataset.tab)));
+
+    // Mobile hamburger toggle
+    if (mobileToggle) {
+        mobileToggle.addEventListener('click', () => {
+            const isOpen = adminTabs.classList.toggle('mobile-open');
+            backdrop.classList.toggle('hidden', !isOpen);
+            mobileToggle.textContent = isOpen ? '✕ Close' : '☰ Menu';
+            mobileToggle.setAttribute('aria-expanded', String(isOpen));
+        });
+    }
+
+    if (backdrop) {
+        backdrop.addEventListener('click', closeMobileMenu);
+    }
 
     // Restore last-used tab, defaulting to 'daily'
     const saved = localStorage.getItem('adminActiveTab') || 'daily';
