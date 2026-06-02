@@ -105,9 +105,8 @@ function setupBilling() {
     document.getElementById('exportBlDashBtn')
         ?.addEventListener('click', exportBlDashCsv);
 
-    // Open first sub-tab by default
-    const firstBtn = document.querySelector('.billing-sub-btn[data-billing-tab="invoices"]');
-    if (firstBtn) _switchBillingSubTab('invoices', firstBtn);
+    // Sub-tab visual state is set by HTML defaults (invoices pane has no hidden class).
+    // Data loads lazily when the user first opens the billing main tab (see setupTabs).
 }
 
 // ============================================================

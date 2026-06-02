@@ -319,6 +319,7 @@ function setupTabs() {
         if (tab === 'families'  && allFamiliesData.length === 0) loadFamilies();
         if (tab === 'staffing'  && allStaffData.length === 0)    loadStaffList();
         if (tab === 'messages'  && !_messagesLoaded)             { _messagesLoaded = true; loadMessages(); }
+        if (tab === 'billing'   && !_cyclesLoaded)               loadBillingCycles();
     }
 
     btns.forEach(btn => btn.addEventListener('click', () => activate(btn.dataset.tab)));
