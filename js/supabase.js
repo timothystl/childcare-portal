@@ -927,7 +927,7 @@ async function fetchAllFamilies({ includeArchived = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, created_at, active, group, registration_locked, login_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
+        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, created_at, active, group, registration_locked, registration_lock_reason, login_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
         .order('parent_name');
     if (!includeArchived) query = query.eq('active', true);
     const { data, error } = await query;
@@ -2447,6 +2447,37 @@ async function fetchPaymentsForMonth(month) {
         .gte('payment_date', start)
         .lt('payment_date', end)
         .order('payment_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+// ── Billing RPC wrappers ──────────────────────────────────────────────────────
+// These call SECURITY DEFINER functions that look up the family UUID server-side,
+// so the parent-facing app (anon key) can create invoices without direct table access.
+
+async function createInvoiceByEmail(email, month, amount) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('create_billing_invoice_by_email', {
+        p_email: email, p_month: month, p_amount: amount,
+    });
+    if (error) throw error;
+    return data;
+}
+
+async function addDayToInvoiceByEmail(email, month, dayAmount, changeFee = 0) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('add_day_to_invoice_by_email', {
+        p_email: email, p_month: month, p_day_amount: dayAmount, p_change_fee: changeFee,
+    });
+    if (error) throw error;
+    return data;
+}
+
+async function getOutstandingBalanceByEmail(email) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('get_outstanding_balance_by_email', {
+        p_email: email,
+    });
     if (error) throw error;
     return data || [];
 }
