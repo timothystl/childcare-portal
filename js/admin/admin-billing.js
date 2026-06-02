@@ -936,7 +936,7 @@ function renderPaymentHistory(payments, finalAmount, containerId) {
 // ============================================================
 async function loadArView() {
     const wrap = document.getElementById('arTableWrap');
-    if (wrap) wrap.innerHTML = '<p class="empty-hint">Syncing billing data…</p>';
+    if (wrap) wrap.innerHTML = '<p class="empty-hint">Loading…</p>';
 
     const arMonthSel = document.getElementById('arMonthSelect');
     const now = new Date();
@@ -945,98 +945,106 @@ async function loadArView() {
     _blArMonth = month;
 
     try {
-        // Ensure registrations are loaded (may not be if Finance/Reports tab was never visited)
-        if (!allRegistrations || allRegistrations.length === 0) {
-            allRegistrations = await fetchAllRegistrations();
+        // Load families and billing cycle in parallel
+        const [familiesRaw, cycle] = await Promise.all([
+            (allFamiliesData && allFamiliesData.length > 0)
+                ? Promise.resolve(allFamiliesData)
+                : fetchAllFamilies({ includeArchived: false }),
+            getOrCreateBillingCycle(month),
+        ]);
+
+        // Only active (non-archived) families
+        const families = familiesRaw.filter(f => f.active !== false && !f.archived);
+
+        // Best-effort: sync billing amounts from registrations for families that have them
+        try {
+            if (!allRegistrations || allRegistrations.length === 0) {
+                allRegistrations = await fetchAllRegistrations();
+            }
+            if (allRegistrations.length > 0) {
+                const overrideRows = await fetchBillingOverrides(month);
+                const overridesMap = new Map();
+                overrideRows.forEach(row => {
+                    const key = `${(row.parent_email || '').toLowerCase()}:${(row.child_name || '').toLowerCase()}`;
+                    overridesMap.set(key, parseFloat(row.override_amount || 0));
+                });
+
+                const billingResults = _buildFamilyBillingData(month, overridesMap);
+                const existingInvs   = await fetchInvoicesForCycle(cycle.id);
+                const existingByFam  = new Map(existingInvs.map(inv => [String(inv.family_id), inv]));
+
+                await Promise.all(billingResults.map(async result => {
+                    const fam = families.find(f =>
+                        (f.parent_email  || '').toLowerCase() === (result.parentEmail || '').toLowerCase() ||
+                        (f.parent2_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase()
+                    );
+                    if (!fam) return;
+
+                    let baseAmount = 0, discountAmount = 0, finalAmount = 0;
+                    (result.children || []).forEach(child => {
+                        baseAmount     += (child.subtotal || 0) + (child.changeFees || 0) + (child.discountDollar || 0) + (child.sibDiscount || 0);
+                        discountAmount += (child.discountDollar || 0) + (child.sibDiscount || 0);
+                        finalAmount    += child.hasOverride
+                            ? parseFloat(child.overrideAmount || 0)
+                            : (child.subtotal || 0) + (child.changeFees || 0);
+                    });
+                    baseAmount     = Math.round(baseAmount * 100) / 100;
+                    discountAmount = Math.round(discountAmount * 100) / 100;
+                    finalAmount    = Math.round(Math.max(0, finalAmount) * 100) / 100;
+
+                    const existing = existingByFam.get(String(fam.id));
+                    if (existing && ['paid', 'partial'].includes(existing.status)) {
+                        await updateBillingInvoice(existing.id, {
+                            base_amount: baseAmount, discount_amount: discountAmount, final_amount: finalAmount,
+                        });
+                    } else {
+                        await upsertBillingInvoice({
+                            cycle_id:          cycle.id,
+                            family_id:         fam.id,
+                            base_amount:       baseAmount,
+                            discount_amount:   discountAmount,
+                            adjustment_amount: existing?.adjustment_amount || 0,
+                            adjustment_note:   existing?.adjustment_note  || '',
+                            final_amount:      finalAmount,
+                            status:            existing?.status || 'draft',
+                        });
+                    }
+                }));
+            }
+        } catch (_syncErr) {
+            // Billing sync failed — still show families with whatever invoice data exists
         }
 
-        // Auto-create billing cycle for this month if needed
-        const cycle = await getOrCreateBillingCycle(month);
+        // Load invoices and all payments for the month in parallel
+        const [invoices, monthPayments] = await Promise.all([
+            fetchInvoicesForCycle(cycle.id),
+            fetchPaymentsForMonth(month).catch(() => []),
+        ]);
 
-        // Load families if not yet loaded
-        const families = (allFamiliesData && allFamiliesData.length > 0)
-            ? allFamiliesData
-            : await fetchAllFamilies({ includeArchived: false });
-
-        // Load billing overrides for this month
-        const overrideRows = await fetchBillingOverrides(month);
-        const overridesMap = new Map();
-        overrideRows.forEach(row => {
-            const key = `${(row.parent_email || '').toLowerCase()}:${(row.child_name || '').toLowerCase()}`;
-            overridesMap.set(key, parseFloat(row.override_amount || 0));
-        });
-
-        // Calculate billing from registrations (same calc as Finance dashboard)
-        const billingResults = _buildFamilyBillingData(month, overridesMap);
-
-        // Fetch existing invoices to preserve paid/partial status
-        const existingInvoices = await fetchInvoicesForCycle(cycle.id);
-        const existingByFamily = new Map(existingInvoices.map(inv => [String(inv.family_id), inv]));
-
-        // Auto-upsert invoices for all families with registrations this month
-        const upserted = await Promise.all(billingResults.map(async result => {
-            const fam = families.find(f =>
-                (f.parent_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase() ||
-                (f.parent2_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase()
-            );
-            if (!fam) return null;
-
-            let baseAmount = 0, discountAmount = 0, finalAmount = 0;
-            (result.children || []).forEach(child => {
-                baseAmount     += (child.subtotal || 0) + (child.changeFees || 0) + (child.discountDollar || 0) + (child.sibDiscount || 0);
-                discountAmount += (child.discountDollar || 0) + (child.sibDiscount || 0);
-                finalAmount    += child.hasOverride
-                    ? parseFloat(child.overrideAmount || 0)
-                    : (child.subtotal || 0) + (child.changeFees || 0);
-            });
-            baseAmount     = Math.round(baseAmount * 100) / 100;
-            discountAmount = Math.round(discountAmount * 100) / 100;
-            finalAmount    = Math.round(Math.max(0, finalAmount) * 100) / 100;
-
-            const existing = existingByFamily.get(String(fam.id));
-            if (existing && ['paid', 'partial'].includes(existing.status)) {
-                // Only update amounts — preserve payment status
-                return updateBillingInvoice(existing.id, {
-                    base_amount: baseAmount, discount_amount: discountAmount, final_amount: finalAmount,
-                });
-            }
-            return upsertBillingInvoice({
-                cycle_id:          cycle.id,
-                family_id:         fam.id,
-                base_amount:       baseAmount,
-                discount_amount:   discountAmount,
-                adjustment_amount: existing?.adjustment_amount || 0,
-                adjustment_note:   existing?.adjustment_note  || '',
-                final_amount:      finalAmount,
-                status:            existing?.status || 'draft',
-            });
-        }));
-
-        const invoices        = upserted.filter(Boolean);
         const invoiceByFamily = new Map(invoices.map(inv => [String(inv.family_id), inv]));
 
-        // Fetch payments only for families that have invoices this month
-        const familiesWithInvoice = families.filter(f => invoiceByFamily.has(String(f.id)));
-        const paymentArrays = await Promise.all(
-            familiesWithInvoice.map(f => fetchPaymentsForFamily(f.id).catch(() => []))
-        );
+        // Group payments by family_id
         const paymentsByFamily = {};
-        familiesWithInvoice.forEach((f, i) => { paymentsByFamily[f.id] = paymentArrays[i]; });
+        monthPayments.forEach(p => {
+            const fid = String(p.family_id);
+            if (!paymentsByFamily[fid]) paymentsByFamily[fid] = [];
+            paymentsByFamily[fid].push(p);
+        });
 
-        _arData = familiesWithInvoice.map(family => {
+        // Build AR data for ALL active families
+        _arData = families.map(family => {
             const inv      = invoiceByFamily.get(String(family.id));
-            const payments = (paymentsByFamily[family.id] || [])
-                .filter(p => p.invoice_id == null || String(p.invoice_id) === String(inv?.id));
+            const payments = paymentsByFamily[String(family.id)] || [];
 
             const billed      = parseFloat(inv?.final_amount || 0);
             const collected   = payments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
             const outstanding = Math.max(0, billed - collected);
 
             let status;
-            if (outstanding <= 0 && billed > 0)                      status = 'paid';
-            else if (collected > 0)                                   status = 'partial';
-            else if (billed > 0 && outstanding > 0 && collected === 0) status = 'overdue';
-            else                                                       status = 'no_invoice';
+            if (billed === 0 && collected === 0) status = 'no_invoice';
+            else if (outstanding <= 0 && billed > 0) status = 'paid';
+            else if (collected > 0)                  status = 'partial';
+            else                                     status = 'overdue';
 
             return {
                 familyId:    family.id,
@@ -1046,7 +1054,6 @@ async function loadArView() {
                 billed,
                 collected,
                 outstanding,
-                daysSince:   null,
                 status,
                 isLocked:    !!family.registration_locked,
                 lockReason:  family.registration_lock_reason || '',

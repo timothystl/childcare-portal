@@ -2431,3 +2431,22 @@ async function fetchAllBillingPayments() {
     if (error) throw error;
     return data || [];
 }
+
+// Fetch all payments whose payment_date falls within a given YYYY-MM month
+async function fetchPaymentsForMonth(month) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const y = parseInt(month.slice(0, 4), 10);
+    const m = parseInt(month.slice(5, 7), 10);
+    const nextY = m === 12 ? y + 1 : y;
+    const nextM = m === 12 ? 1 : m + 1;
+    const start = `${month}-01`;
+    const end   = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+    const { data, error } = await sbClient
+        .from('billing_payments')
+        .select('*')
+        .gte('payment_date', start)
+        .lt('payment_date', end)
+        .order('payment_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
