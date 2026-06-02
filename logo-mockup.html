@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>myMDO Logo Concepts</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f4f4f4;
+    padding: 40px;
+    color: #222;
+  }
+  h2 { color: #555; font-weight: 400; margin: 40px 0 16px; font-size: 13px; text-transform: uppercase; letter-spacing: .1em; }
+  .row { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 8px; }
+  .card {
+    background: white;
+    border-radius: 12px;
+    padding: 40px 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    min-width: 220px;
+  }
+  .card.dark { background: #1a2b4a; }
+  .card.mid  { background: #2e5fa3; }
+
+  /* ── Concept A: two-weight wordmark ── */
+  .logo-a { display: flex; align-items: baseline; gap: 1px; }
+  .logo-a .my  { font-size: 28px; font-weight: 300; color: #2e5fa3; letter-spacing: -.5px; }
+  .logo-a .mdo { font-size: 32px; font-weight: 700; color: #1a2b4a; letter-spacing: -1px; }
+  .card.dark .logo-a .my  { color: #7eb3f5; }
+  .card.dark .logo-a .mdo { color: #ffffff; }
+  .card.mid  .logo-a .my  { color: #c8dfff; }
+  .card.mid  .logo-a .mdo { color: #ffffff; }
+
+  /* ── Concept B: stacked with tagline ── */
+  .logo-b { text-align: center; }
+  .logo-b .my  { display: block; font-size: 13px; font-weight: 400; color: #2e5fa3; letter-spacing: .25em; text-transform: uppercase; margin-bottom: 2px; }
+  .logo-b .mdo { display: block; font-size: 42px; font-weight: 800; color: #1a2b4a; letter-spacing: -2px; line-height: 1; }
+  .logo-b .sub { display: block; font-size: 10px; color: #888; letter-spacing: .2em; text-transform: uppercase; margin-top: 6px; }
+  .card.dark .logo-b .my  { color: #7eb3f5; }
+  .card.dark .logo-b .mdo { color: #ffffff; }
+  .card.dark .logo-b .sub { color: #7eb3f5aa; }
+
+  /* ── Concept C: badge / icon lockup ── */
+  .logo-c { display: flex; align-items: center; gap: 14px; }
+  .logo-c .icon {
+    width: 48px; height: 48px; border-radius: 12px;
+    background: #2e5fa3;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .card.dark .logo-c .icon { background: #7eb3f5; }
+  .logo-c .icon span { font-size: 22px; font-weight: 800; color: white; letter-spacing: -1px; }
+  .card.dark .logo-c .icon span { color: #1a2b4a; }
+  .logo-c .text .my  { font-size: 12px; font-weight: 400; color: #2e5fa3; letter-spacing: .2em; text-transform: uppercase; }
+  .logo-c .text .mdo { font-size: 26px; font-weight: 700; color: #1a2b4a; letter-spacing: -1px; line-height: 1; }
+  .card.dark .logo-c .text .my  { color: #7eb3f5; }
+  .card.dark .logo-c .text .mdo { color: #ffffff; }
+
+  /* ── Admin variant ── */
+  .admin-tag {
+    font-size: 10px; font-weight: 600; letter-spacing: .15em;
+    text-transform: uppercase; color: #2e5fa3;
+    background: #e8f0fc; border-radius: 4px;
+    padding: 2px 6px; margin-left: 8px;
+    vertical-align: middle;
+  }
+  .card.dark .admin-tag { background: #ffffff22; color: #7eb3f5; }
+
+  .divider { border: none; border-top: 1px solid #ddd; margin: 48px 0; }
+</style>
+</head>
+<body>
+
+<h1 style="font-size:20px;font-weight:600;margin:0 0 4px">myMDO — Logo Concepts</h1>
+<p style="color:#888;font-size:14px;margin:0 0 32px">Three directions · light + dark backgrounds</p>
+
+<!-- CONCEPT A -->
+<h2>Concept A — Two-weight wordmark (simplest)</h2>
+<div class="row">
+  <div class="card">
+    <div class="logo-a"><span class="my">my</span><span class="mdo">MDO</span></div>
+  </div>
+  <div class="card dark">
+    <div class="logo-a"><span class="my">my</span><span class="mdo">MDO</span></div>
+  </div>
+  <div class="card mid">
+    <div class="logo-a"><span class="my">my</span><span class="mdo">MDO</span></div>
+  </div>
+</div>
+<div class="row">
+  <div class="card">
+    <div class="logo-a"><span class="my">my</span><span class="mdo">MDO</span> <span class="admin-tag">Admin</span></div>
+  </div>
+  <div class="card dark">
+    <div class="logo-a"><span class="my">my</span><span class="mdo">MDO</span> <span class="admin-tag">Admin</span></div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- CONCEPT B -->
+<h2>Concept B — Stacked with Timothy label</h2>
+<div class="row">
+  <div class="card">
+    <div class="logo-b">
+      <span class="my">my</span>
+      <span class="mdo">MDO</span>
+      <span class="sub">Timothy Lutheran</span>
+    </div>
+  </div>
+  <div class="card dark">
+    <div class="logo-b">
+      <span class="my">my</span>
+      <span class="mdo">MDO</span>
+      <span class="sub">Timothy Lutheran</span>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- CONCEPT C -->
+<h2>Concept C — Icon badge lockup</h2>
+<div class="row">
+  <div class="card">
+    <div class="logo-c">
+      <div class="icon"><span>M</span></div>
+      <div class="text">
+        <div class="my">my</div>
+        <div class="mdo">MDO</div>
+      </div>
+    </div>
+  </div>
+  <div class="card dark">
+    <div class="logo-c">
+      <div class="icon"><span>M</span></div>
+      <div class="text">
+        <div class="my">my</div>
+        <div class="mdo">MDO</div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="logo-c">
+      <div class="icon"><span>M</span></div>
+      <div class="text">
+        <div class="my">my</div>
+        <div class="mdo">MDO <span class="admin-tag">Admin</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p style="color:#aaa;font-size:12px;margin-top:48px">Colors shown are illustrative — swap to match Timothy Lutheran's brand colors.</p>
+</body>
+</html>
