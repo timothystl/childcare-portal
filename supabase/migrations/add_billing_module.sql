@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS billing_cycles (
 );
 
 ALTER TABLE billing_cycles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Auth access" ON billing_cycles
+CREATE POLICY IF NOT EXISTS "Auth access" ON billing_cycles
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 
@@ -44,7 +44,7 @@ CREATE INDEX IF NOT EXISTS billing_invoices_family_idx  ON billing_invoices (fam
 CREATE INDEX IF NOT EXISTS billing_invoices_status_idx  ON billing_invoices (status);
 
 ALTER TABLE billing_invoices ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Auth access" ON billing_invoices
+CREATE POLICY IF NOT EXISTS "Auth access" ON billing_invoices
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS billing_import_batches (
 );
 
 ALTER TABLE billing_import_batches ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Auth access" ON billing_import_batches
+CREATE POLICY IF NOT EXISTS "Auth access" ON billing_import_batches
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 
@@ -88,7 +88,7 @@ CREATE INDEX IF NOT EXISTS billing_payments_batch_idx    ON billing_payments (im
 CREATE INDEX IF NOT EXISTS billing_payments_date_idx     ON billing_payments (payment_date DESC);
 
 ALTER TABLE billing_payments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Auth access" ON billing_payments
+CREATE POLICY IF NOT EXISTS "Auth access" ON billing_payments
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 
