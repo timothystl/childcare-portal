@@ -249,6 +249,11 @@ async function generateDraftInvoices(cycleId) {
     if (genBtn) genBtn.disabled = true;
 
     try {
+        // allFamiliesData is lazy-loaded when the Families tab opens; fetch here if not yet loaded
+        const families = (allFamiliesData && allFamiliesData.length > 0)
+            ? allFamiliesData
+            : await fetchAllFamilies({ includeArchived: false });
+
         // Load billing overrides for this month (from existing billing_overrides table)
         const overrideRows = await fetchBillingOverrides(monthVal);
         const overridesMap = new Map();
@@ -265,7 +270,7 @@ async function generateDraftInvoices(cycleId) {
 
         for (const result of familyBillingResults) {
             // Find matching family record for the UUID
-            const fam = (allFamiliesData || []).find(f =>
+            const fam = families.find(f =>
                 (f.parent_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase() ||
                 (f.parent2_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase()
             );
