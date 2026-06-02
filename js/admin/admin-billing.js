@@ -53,6 +53,8 @@ function setupBilling() {
         ?.addEventListener('click', lockAllOverdue);
     document.getElementById('refreshArBtn')
         ?.addEventListener('click', () => { _arLoaded = false; loadArView(); });
+    document.getElementById('backfillInvoicesBtn')
+        ?.addEventListener('click', backfillAllInvoices);
     document.getElementById('exportArCsvBtn')
         ?.addEventListener('click', exportArCsv);
 
@@ -934,6 +936,113 @@ function renderPaymentHistory(payments, finalAmount, containerId) {
 // ============================================================
 // AR SUB-TAB
 // ============================================================
+
+async function backfillAllInvoices() {
+    if (!confirm(
+        'Backfill invoices from registration history?\n\n' +
+        'This will create invoices for all past months where a family has ' +
+        'registrations but no invoice yet. Existing invoices will not be changed.'
+    )) return;
+
+    const btn = document.getElementById('backfillInvoicesBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Backfilling…'; }
+    const wrap = document.getElementById('arTableWrap');
+    if (wrap) wrap.innerHTML = '<p class="empty-hint">Backfilling invoices from registration data — this may take a moment…</p>';
+
+    try {
+        // Fresh fetch so discount map and registrations are current
+        allFamiliesData = await fetchAllFamilies({ includeArchived: true });
+        _discountMap = null;
+        const freshRegs = await fetchAllRegistrations();
+        if (freshRegs && freshRegs.length) allRegistrations = freshRegs;
+
+        // Collect every unique YYYY-MM that appears in registration dates
+        const monthSet = new Set();
+        allRegistrations.forEach(reg => {
+            (reg.registration_dates || []).forEach(d => {
+                if (d.care_date) monthSet.add(d.care_date.substring(0, 7));
+            });
+        });
+        const months = [...monthSet].sort();
+
+        if (!months.length) {
+            alert('No registration data found to backfill.');
+            return;
+        }
+
+        let totalCreated = 0;
+        let totalSkipped = 0; // already had an invoice or no family match
+
+        for (const month of months) {
+            let overrideRows = [];
+            try { overrideRows = await fetchBillingOverrides(month); } catch (_) { }
+            const overridesMap = new Map(overrideRows.map(r => [
+                `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+                parseFloat(r.override_amount || 0),
+            ]));
+
+            const billingResults = _buildFamilyBillingData(month, overridesMap);
+            if (!billingResults.length) continue;
+
+            const cycle = await getOrCreateBillingCycle(month);
+            const existingInvoices = await fetchInvoicesForCycle(cycle.id);
+            const existingByFamily = new Map(existingInvoices.map(inv => [String(inv.family_id), inv]));
+
+            for (const result of billingResults) {
+                const fam = allFamiliesData.find(f =>
+                    (f.parent_email  || '').toLowerCase() === (result.parentEmail || '').toLowerCase() ||
+                    (f.parent2_email || '').toLowerCase() === (result.parentEmail || '').toLowerCase()
+                );
+                if (!fam || existingByFamily.has(String(fam.id))) { totalSkipped++; continue; }
+
+                let baseAmount = 0, discountAmount = 0, finalAmount = 0;
+                (result.children || []).forEach(child => {
+                    baseAmount     += (child.subtotal || 0) + (child.changeFees || 0) + (child.discountDollar || 0) + (child.sibDiscount || 0);
+                    discountAmount += (child.discountDollar || 0) + (child.sibDiscount || 0);
+                    finalAmount    += child.hasOverride
+                        ? parseFloat(child.overrideAmount || 0)
+                        : (child.subtotal || 0) + (child.changeFees || 0);
+                });
+                baseAmount     = Math.round(baseAmount * 100) / 100;
+                discountAmount = Math.round(discountAmount * 100) / 100;
+                finalAmount    = Math.round(Math.max(0, finalAmount) * 100) / 100;
+
+                await upsertBillingInvoice({
+                    cycle_id:          cycle.id,
+                    family_id:         fam.id,
+                    base_amount:       baseAmount,
+                    discount_amount:   discountAmount,
+                    adjustment_amount: 0,
+                    adjustment_note:   '',
+                    final_amount:      finalAmount,
+                    status:            'draft',
+                });
+                totalCreated++;
+            }
+        }
+
+        await logAdminAction('backfill_invoices', 'billing_invoices', null, {
+            months_processed: months.length,
+            invoices_created: totalCreated,
+        });
+
+        alert(
+            `Backfill complete.\n\n` +
+            `Created ${totalCreated} invoice${totalCreated !== 1 ? 's' : ''} ` +
+            `across ${months.length} month${months.length !== 1 ? 's' : ''}.` +
+            (totalSkipped > 0 ? `\n${totalSkipped} skipped (already had an invoice or no matching family).` : '')
+        );
+
+        _arLoaded = false;
+        await loadArView();
+    } catch (err) {
+        alert('Backfill failed: ' + err.message);
+        if (wrap) wrap.innerHTML = `<p class="empty-hint">Backfill error: ${escHtml(err.message)}</p>`;
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '📥 Backfill Past Invoices'; }
+    }
+}
+
 async function loadArView() {
     const wrap = document.getElementById('arTableWrap');
     if (wrap) wrap.innerHTML = '<p class="empty-hint">Loading…</p>';
@@ -1009,7 +1118,7 @@ function renderArTable(data) {
     if (!wrap) return;
 
     const filterVal = document.getElementById('arStatusFilter')?.value || '';
-    const filtered  = filterVal ? data.filter(r => r.status === filterVal) : data;
+    const filtered  = (filterVal && filterVal !== 'all') ? data.filter(r => r.status === filterVal) : data;
 
     if (!filtered.length) {
         wrap.innerHTML = '<p class="empty-hint">No AR data found for the selected filter.</p>';
