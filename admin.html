@@ -1089,75 +1089,62 @@
         <!-- ── BILLING TAB ──────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-billing">
 
-            <!-- Billing sub-tab nav -->
-            <div class="billing-sub-nav" id="billingSubNav">
-                <button class="billing-sub-btn active" data-billing-tab="ar">AR</button>
-                <button class="billing-sub-btn" data-billing-tab="payments">CSV Import</button>
-                <button class="billing-sub-btn" data-billing-tab="bldash">Dashboard</button>
-            </div>
+            <!-- Accounts Receivable -->
+            <section class="admin-section collapsible-section" id="billingArSection">
+                <h2>📋 Accounts Receivable</h2>
+                <p class="section-desc">Select a month to auto-sync invoices from registrations and view payment status per family.</p>
+                <div class="billing-cycle-bar" style="margin-bottom:12px">
+                    <div class="roster-field">
+                        <label for="arMonthSelect">Month</label>
+                        <input type="month" id="arMonthSelect">
+                    </div>
+                    <select id="arStatusFilter" style="min-width:160px">
+                        <option value="all">All Statuses</option>
+                        <option value="overdue">Overdue</option>
+                        <option value="partial">Partial</option>
+                        <option value="paid">Paid</option>
+                        <option value="no_invoice">No Invoice</option>
+                    </select>
+                    <button id="refreshArBtn" class="btn-secondary">&#8635; Refresh</button>
+                    <button id="lockAllOverdueBtn" class="btn-warning">🔒 Lock All Overdue</button>
+                    <button id="exportArCsvBtn" class="btn-primary">&#8595; Export CSV</button>
+                </div>
+                <div id="arTableWrap">
+                    <p class="empty-hint">Click Refresh to load accounts receivable data.</p>
+                </div>
+            </section>
 
-            <!-- ── Payments (CSV Import) sub-tab ──────────── -->
-            <div class="billing-sub-pane hidden" id="bst-payments">
-                <section class="admin-section" id="billingPaymentsSection">
-                    <h2>📂 CSV Payment Import — Procare</h2>
-                    <p class="section-desc">Upload a Procare payment export CSV. Map columns, review matches, then confirm to create payment records. Each import is logged as an audit batch.</p>
-                    <div class="families-import-row" style="margin-bottom:16px">
-                        <label class="file-upload-label" for="paymentCsvInput">📂 Choose CSV File</label>
-                        <input type="file" id="paymentCsvInput" accept=".csv,.xlsx" class="hidden-file-input">
-                        <span id="paymentCsvFileName" class="families-file-name">No file chosen</span>
-                        <button id="clearPaymentCsvBtn" class="btn-ghost" style="display:none">✕ Clear</button>
-                    </div>
-                    <div id="paymentImportWrap">
-                        <p class="empty-hint">Choose a Procare CSV export file to begin the import wizard.</p>
-                    </div>
-                </section>
-            </div>
+            <!-- CSV Payment Import -->
+            <section class="admin-section collapsible-section" id="billingPaymentsSection">
+                <h2>📂 CSV Payment Import — Procare</h2>
+                <p class="section-desc">Upload a Procare payment export CSV. Map columns, review matches, then confirm to create payment records. Each import is logged as an audit batch.</p>
+                <div class="families-import-row" style="margin-bottom:16px">
+                    <label class="file-upload-label" for="paymentCsvInput">📂 Choose CSV File</label>
+                    <input type="file" id="paymentCsvInput" accept=".csv,.xlsx" class="hidden-file-input">
+                    <span id="paymentCsvFileName" class="families-file-name">No file chosen</span>
+                    <button id="clearPaymentCsvBtn" class="btn-ghost" style="display:none">✕ Clear</button>
+                </div>
+                <div id="paymentImportWrap">
+                    <p class="empty-hint">Choose a Procare CSV export file to begin the import wizard.</p>
+                </div>
+            </section>
 
-            <!-- ── AR sub-tab ──────────────────────────────── -->
-            <div class="billing-sub-pane" id="bst-ar">
-                <section class="admin-section" id="billingArSection">
-                    <h2>📋 Accounts Receivable</h2>
-                    <p class="section-desc">Select a month to auto-sync invoices from registrations and view payment status per family.</p>
-                    <div class="billing-cycle-bar" style="margin-bottom:12px">
-                        <div class="roster-field">
-                            <label for="arMonthSelect">Month</label>
-                            <input type="month" id="arMonthSelect">
-                        </div>
-                        <select id="arStatusFilter" style="min-width:160px">
-                            <option value="all">All Statuses</option>
-                            <option value="overdue">Overdue</option>
-                            <option value="partial">Partial</option>
-                            <option value="paid">Paid</option>
-                            <option value="no_invoice">No Invoice</option>
-                        </select>
-                        <button id="refreshArBtn" class="btn-secondary">&#8635; Refresh</button>
-                        <button id="lockAllOverdueBtn" class="btn-warning">🔒 Lock All Overdue</button>
-                        <button id="exportArCsvBtn" class="btn-primary">&#8595; Export CSV</button>
+            <!-- Revenue Dashboard -->
+            <section class="admin-section collapsible-section" id="billingDashSection">
+                <h2>📊 Revenue Dashboard</h2>
+                <p class="section-desc">Monthly collection rate, year-to-date trends, year-over-year comparison, and scholarship summary.</p>
+                <div class="roster-controls" style="margin-bottom:16px">
+                    <div class="roster-field">
+                        <label for="blDashYear">Year</label>
+                        <select id="blDashYear"></select>
                     </div>
-                    <div id="arTableWrap">
-                        <p class="empty-hint">Click Refresh to load accounts receivable data.</p>
-                    </div>
-                </section>
-            </div>
-
-            <!-- ── Dashboard sub-tab ───────────────────────── -->
-            <div class="billing-sub-pane hidden" id="bst-bldash">
-                <section class="admin-section" id="billingDashSection">
-                    <h2>📊 Revenue Dashboard</h2>
-                    <p class="section-desc">Monthly collection rate, year-to-date trends, year-over-year comparison, and scholarship summary.</p>
-                    <div class="roster-controls" style="margin-bottom:16px">
-                        <div class="roster-field">
-                            <label for="blDashYear">Year</label>
-                            <select id="blDashYear"></select>
-                        </div>
-                        <button id="generateBlDashBtn" class="btn-primary">Generate</button>
-                        <button id="exportBlDashBtn" class="btn-secondary">&#8595; Export CSV</button>
-                    </div>
-                    <div id="blDashContent">
-                        <p class="empty-hint">Select a year and click Generate to load the dashboard.</p>
-                    </div>
-                </section>
-            </div>
+                    <button id="generateBlDashBtn" class="btn-primary">Generate</button>
+                    <button id="exportBlDashBtn" class="btn-secondary">&#8595; Export CSV</button>
+                </div>
+                <div id="blDashContent">
+                    <p class="empty-hint">Select a year and click Generate to load the dashboard.</p>
+                </div>
+            </section>
 
         </div><!-- /#tab-billing -->
 

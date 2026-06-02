@@ -20,14 +20,6 @@ let _blArMonth = '';               // selected AR month (YYYY-MM)
 // ENTRY POINT
 // ============================================================
 function setupBilling() {
-    // Sub-tab navigation
-    document.querySelectorAll('.billing-sub-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const target = btn.dataset.billingTab;
-            _switchBillingSubTab(target, btn);
-        });
-    });
-
     // AR month selector — default to current month, reload on change
     const arMonthSel = document.getElementById('arMonthSelect');
     if (arMonthSel) {
@@ -99,24 +91,6 @@ function setupBilling() {
     // Data loads lazily when the user first opens the billing main tab (see setupTabs).
 }
 
-// ============================================================
-// SUB-TAB NAVIGATION
-// ============================================================
-function _switchBillingSubTab(target, clickedBtn) {
-    document.querySelectorAll('.billing-sub-btn').forEach(b => b.classList.remove('active'));
-    if (clickedBtn) clickedBtn.classList.add('active');
-
-    document.querySelectorAll('.billing-sub-pane').forEach(p => p.classList.add('hidden'));
-    const pane = document.getElementById('bst-' + target);
-    if (pane) pane.classList.remove('hidden');
-
-    // Lazy-load data on first open
-    if (target === 'ar' && !_arLoaded) {
-        loadArView();
-    } else if (target === 'bldash' && !_blDashLoaded) {
-        setupBillingDashYear();
-    }
-}
 
 // ============================================================
 // INVOICES SUB-TAB (legacy — kept for dashboard data only)
