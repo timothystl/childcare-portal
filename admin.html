@@ -1091,30 +1091,14 @@
 
             <!-- Billing sub-tab nav -->
             <div class="billing-sub-nav" id="billingSubNav">
-                <button class="billing-sub-btn active" data-billing-tab="rates">Rates</button>
-                <button class="billing-sub-btn" data-billing-tab="invoices">Invoices</button>
+                <button class="billing-sub-btn active" data-billing-tab="invoices">Invoices</button>
                 <button class="billing-sub-btn" data-billing-tab="payments">CSV Import</button>
                 <button class="billing-sub-btn" data-billing-tab="ar">AR</button>
                 <button class="billing-sub-btn" data-billing-tab="bldash">Dashboard</button>
             </div>
 
-            <!-- ── Rates sub-tab ───────────────────────────── -->
-            <div class="billing-sub-pane" id="bst-rates">
-                <section class="admin-section" id="billingRatesSection">
-                    <h2>💰 Family Rate Management</h2>
-                    <p class="section-desc">Set per-family monthly billing rates. Each change creates an immutable history record — old rates are preserved.</p>
-                    <div class="filters" style="margin-bottom:12px">
-                        <input type="search" id="rateSearchInput" placeholder="Search family…" autocomplete="off">
-                        <button id="refreshRatesBtn" class="btn-secondary">&#8635; Refresh</button>
-                    </div>
-                    <div id="ratesTableWrap-billing">
-                        <p class="empty-hint">Click Refresh to load family rates.</p>
-                    </div>
-                </section>
-            </div>
-
             <!-- ── Invoices sub-tab ────────────────────────── -->
-            <div class="billing-sub-pane hidden" id="bst-invoices">
+            <div class="billing-sub-pane" id="bst-invoices">
                 <section class="admin-section" id="billingInvoicesSection">
                     <h2>🧾 Invoice Generation</h2>
                     <p class="section-desc">Create billing cycles, generate draft invoices, apply per-family adjustments, then finalize to lock the cycle.</p>
@@ -1534,75 +1518,6 @@
     <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 
     <!-- ── BILLING MODALS ─────────────────────────────────── -->
-
-    <!-- Set / Edit Rate Modal -->
-    <div id="billingRateModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
-        <div class="fm-dialog" style="max-width:520px">
-            <div class="fm-dialog-header">
-                <h3 id="billingRateModalTitle">Set Monthly Rate</h3>
-                <button id="billingRateModalCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
-            </div>
-            <div class="fm-dialog-body">
-                <div class="fm-section">
-                    <div class="fm-section-label">Family</div>
-                    <p id="billingRateModalFamilyName" style="font-weight:700;margin:0;font-size:1.05em"></p>
-                </div>
-                <div class="fm-section">
-                    <div class="fm-row">
-                        <div class="fm-field fm-field-grow">
-                            <label for="brMonthlyRate">Monthly Rate ($) *</label>
-                            <input type="number" id="brMonthlyRate" min="0" step="0.01" placeholder="0.00">
-                        </div>
-                        <div class="fm-field fm-field-grow">
-                            <label for="brEffectiveDate">Effective Date *</label>
-                            <input type="date" id="brEffectiveDate">
-                        </div>
-                    </div>
-                    <div class="fm-row">
-                        <div class="fm-field" style="min-width:160px">
-                            <label for="brDiscountType">Discount Type</label>
-                            <select id="brDiscountType">
-                                <option value="none">None</option>
-                                <option value="staff">Staff (100% off)</option>
-                                <option value="custom">Custom ($)</option>
-                            </select>
-                        </div>
-                        <div class="fm-field fm-field-grow" id="brDiscountAmountWrap">
-                            <label for="brDiscountAmount">Discount Amount ($)</label>
-                            <input type="number" id="brDiscountAmount" min="0" step="0.01" placeholder="0.00">
-                        </div>
-                    </div>
-                    <div class="fm-field">
-                        <label for="brDiscountNote">Note (optional)</label>
-                        <input type="text" id="brDiscountNote" placeholder="e.g. Staff family discount">
-                    </div>
-                </div>
-            </div>
-            <div class="fm-dialog-footer">
-                <span id="billingRateModalStatus" class="rates-status" style="flex:1"></span>
-                <button id="billingRateModalCancelBtn" class="btn-ghost">Cancel</button>
-                <button id="billingRateModalSaveBtn" class="btn-primary">Save Rate</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Rate History Modal -->
-    <div id="billingRateHistoryModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
-        <div class="fm-dialog" style="max-width:620px">
-            <div class="fm-dialog-header">
-                <h3>Rate History — <span id="brhFamilyName"></span></h3>
-                <button id="billingRateHistoryCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
-            </div>
-            <div class="fm-dialog-body">
-                <div id="brhHistoryTableWrap">
-                    <p class="empty-hint">Loading…</p>
-                </div>
-            </div>
-            <div class="fm-dialog-footer">
-                <button id="billingRateHistoryCloseBtnFooter" class="btn-ghost">Close</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Record Payment Modal -->
     <div id="billingPaymentModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
