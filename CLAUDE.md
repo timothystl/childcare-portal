@@ -8,17 +8,23 @@ Always use descriptive branch names in the format `type/short-description` (e.g.
 
 ## Version numbering
 
-The app version uses **semantic versioning** (`major.minor.patch`) stored in `package.json`. **For every PR**, bump the appropriate part and update `js/build-version.js` to match:
+The app version uses **semantic versioning** (`major.minor.patch`) stored in `package.json`.
 
-| Change type | Example | When to use |
-|---|---|---|
-| `patch` | `1.9.0` → `1.9.1` | Bug fixes, small tweaks |
-| `minor` | `1.9.1` → `1.10.0` | New features, meaningful additions |
-| `major` | `1.x.x` → `2.0.0` | Radical redesigns, breaking changes |
+**For every PR, run `npm run bump` before committing.** This script increments the patch version in both `package.json` and `js/build-version.js` atomically — never edit either file by hand.
 
-Both `package.json` and `js/build-version.js` must be committed together in the same commit as the change — `js/build-version.js` is what the live site actually reads, regardless of whether it loads the bundled or unbundled JS.
+```bash
+npm run bump          # patch: 1.13.2 → 1.13.3
+```
 
-**Always read `package.json` to get the current version before bumping** — never assume a version from memory or this file. Major version `2.0.0` is reserved for a radical redesign of the app.
+`js/build-version.js` is what the live site actually reads (bundled or not), so both files must stay in sync. The `bump` script guarantees that.
+
+For minor or major bumps (new features, breaking changes), edit `package.json` manually first, then run `npm run bump` to sync `js/build-version.js`, or just edit the version number in both files together.
+
+| Change type | When to use |
+|---|---|
+| `patch` | Bug fixes, small tweaks (use `npm run bump`) |
+| `minor` | New features, meaningful additions |
+| `major` | Radical redesigns, breaking changes (reserved for 2.0.0) |
 
 ---
 
