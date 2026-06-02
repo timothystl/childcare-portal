@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Logo Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Nunito:wght@400;800&display=swap" rel="stylesheet">
+<style>
+  body { background: #FDFAF0; font-family: Nunito, sans-serif; padding: 40px; }
+  .row { display: flex; gap: 40px; align-items: center; margin-bottom: 40px; flex-wrap: wrap; }
+  .card { background: white; border-radius: 14px; padding: 32px 40px; box-shadow: 0 2px 12px rgba(1,41,74,.08); }
+  .card.dark { background: #01294A; }
+  label { display: block; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #7A6E5A; margin-bottom: 16px; }
+  .dark label { color: #5BAD8B; }
+
+  .logo { display: inline-flex; align-items: baseline; line-height: 1; }
+  .logo .my  { font-family: 'Dancing Script', cursive; font-size: 52px; font-weight: 700; color: #5BAD8B; }
+  .logo .mdo { font-family: 'Nunito', sans-serif; font-size: 52px; font-weight: 800; color: #01294A; line-height: 1; }
+  .dark .logo .mdo { color: white; }
+
+  .lockup { display: inline-block; }
+  .lockup .wordmark { display: flex; align-items: baseline; }
+  .lockup .underline { height: 3px; background: #F5B731; border-radius: 2px; margin-top: 4px; }
+  .lockup .sub { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: #01294A; margin-top: 5px; font-weight: 400; }
+  .dark .lockup .sub { color: #7eb3f5; }
+
+  .badge {
+    display: inline-block; background: #F5B731; color: #01294A;
+    font-size: 12px; font-weight: 800; letter-spacing: .05em;
+    padding: 3px 12px; border-radius: 20px; margin-left: 12px;
+    vertical-align: middle; position: relative; top: -6px;
+  }
+</style>
+</head>
+<body>
+
+<div class="row">
+  <div class="card">
+    <label>Parent-facing (light)</label>
+    <div class="lockup">
+      <div class="wordmark">
+        <span class="logo"><span class="my">my</span><span class="mdo">MDO</span></span>
+      </div>
+      <div class="underline" style="width:100%"></div>
+      <div class="sub">Timothy Lutheran Church</div>
+    </div>
+  </div>
+
+  <div class="card dark">
+    <label>Parent-facing (dark nav)</label>
+    <div class="lockup">
+      <div class="wordmark">
+        <span class="logo"><span class="my">my</span><span class="mdo">MDO</span></span>
+      </div>
+      <div class="underline" style="width:100%"></div>
+      <div class="sub">Timothy Lutheran Church</div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="card">
+    <label>Admin variant (light)</label>
+    <div class="lockup">
+      <div class="wordmark">
+        <span class="logo"><span class="my">my</span><span class="mdo">MDO</span></span>
+        <span class="badge">Admin</span>
+      </div>
+      <div class="underline" style="width:280px"></div>
+      <div class="sub">Timothy Lutheran Church</div>
+    </div>
+  </div>
+
+  <div class="card dark">
+    <label>Admin variant (dark nav)</label>
+    <div class="lockup">
+      <div class="wordmark">
+        <span class="logo"><span class="my">my</span><span class="mdo">MDO</span></span>
+        <span class="badge">Admin</span>
+      </div>
+      <div class="underline" style="width:280px"></div>
+      <div class="sub">Timothy Lutheran Church</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

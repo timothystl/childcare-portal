@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 90" width="400" height="90">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&amp;family=Nunito:wght@800;400');
+      .my   { font-family: 'Dancing Script', cursive; font-size: 54px; font-weight: 700; fill: #5BAD8B; }
+      .mdo  { font-family: 'Nunito', sans-serif; font-size: 54px; font-weight: 800; fill: #01294A; }
+      .sub  { font-family: 'Nunito', sans-serif; font-size: 10px; font-weight: 400; fill: #01294A; letter-spacing: 1.5px; }
+      .badge-bg { fill: #F5B731; rx: 10; }
+      .badge-text { font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; fill: #01294A; letter-spacing: .5px; }
+    </style>
+  </defs>
+  <!-- wordmark -->
+  <text class="my"  x="4"   y="58">my</text>
+  <text class="mdo" x="108" y="58">MDO</text>
+  <!-- yellow underline -->
+  <rect x="4" y="64" width="272" height="3" rx="1.5" fill="#F5B731"/>
+  <!-- subtitle -->
+  <text class="sub" x="4" y="80">TIMOTHY LUTHERAN CHURCH</text>
+  <!-- Admin badge -->
+  <rect x="288" y="32" width="68" height="24" rx="12" fill="#F5B731"/>
+  <text class="badge-text" x="322" y="49" text-anchor="middle">Admin</text>
+</svg>
