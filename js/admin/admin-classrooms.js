@@ -8,6 +8,7 @@
 function setupRoster() {
     document.getElementById('viewRosterBtn').addEventListener('click', viewRoster);
     document.getElementById('exportRosterBtn').addEventListener('click', exportRoster);
+    document.getElementById('printAllRoomsBtn').addEventListener('click', printAllRoomsRoster);
 }
 
 function getRosterForDate(date, roomId) {
@@ -166,6 +167,155 @@ function exportRoster() {
   <script>
     window.addEventListener('load', function() { window.print(); });
   <\/script>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) { alert('Pop-up was blocked. Please allow pop-ups for this site and try again.'); return; }
+    w.document.write(html);
+    w.document.close();
+}
+
+function printAllRoomsRoster() {
+    const date = document.getElementById('rosterDate').value;
+    if (!date) { alert('Please select a date first.'); return; }
+
+    const roster = getRosterForDate(date, null);
+    const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US',
+        { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+    // Build per-room child lists in ROOMS order (include every room, even empty)
+    const roomBlocks = ROOMS.map(room => {
+        const kids = roster.filter(r => r.roomId === room.id)
+            .sort((a, b) => a.childName.localeCompare(b.childName));
+        const fullCount = kids.filter(k => k.dayType !== 'half').length;
+        const halfCount = kids.filter(k => k.dayType === 'half').length;
+
+        const countParts = [];
+        if (fullCount) countParts.push(`${fullCount} full`);
+        if (halfCount) countParts.push(`${halfCount} half`);
+        const countLabel = kids.length
+            ? `${kids.length} child${kids.length !== 1 ? 'ren' : ''} (${countParts.join(', ')})`
+            : 'No registrations';
+
+        const rows = kids.length
+            ? kids.map(k => `
+                <div class="kid-row">
+                    <span class="kid-name">${escHtml(k.childName)}</span>
+                    <span class="day-badge ${k.dayType === 'half' ? 'half' : 'full'}">${k.dayType === 'half' ? 'Half' : 'Full'}</span>
+                </div>`).join('')
+            : '<div class="empty-room">—</div>';
+
+        return `
+            <div class="room-block">
+                <div class="room-header">
+                    <span class="room-label">${escHtml(room.label)}</span>
+                    <span class="room-count">${countLabel}</span>
+                </div>
+                <div class="kids-list">${rows}</div>
+            </div>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Daily Roster — ${dateLabel}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { size: 11in 8.5in landscape; margin: 0.45in 0.5in; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #111;
+    font-size: 10pt;
+  }
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 2.5px solid #333;
+    padding-bottom: 6px;
+    margin-bottom: 12px;
+  }
+  .page-header h1 {
+    font-size: 13pt;
+    font-weight: 700;
+  }
+  .page-header .sub {
+    font-size: 9pt;
+    color: #555;
+    font-weight: 400;
+  }
+  .page-header .printed {
+    font-size: 8pt;
+    color: #999;
+  }
+  .rooms-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px 14px;
+  }
+  .room-block {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .room-header {
+    background: #f2f2f2;
+    border-bottom: 1px solid #ccc;
+    padding: 5px 9px;
+  }
+  .room-label {
+    font-weight: 700;
+    font-size: 10.5pt;
+    display: block;
+  }
+  .room-count {
+    font-size: 8pt;
+    color: #666;
+  }
+  .kids-list {
+    padding: 3px 0;
+  }
+  .kid-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 9px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 9.5pt;
+  }
+  .kid-row:last-child { border-bottom: none; }
+  .kid-name { font-weight: 500; }
+  .day-badge {
+    font-size: 7.5pt;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .day-badge.full { background: #d1fae5; color: #065f46; }
+  .day-badge.half { background: #fef3c7; color: #92400e; }
+  .empty-room { padding: 6px 9px; color: #bbb; font-size: 9pt; }
+  .page-footer {
+    position: fixed;
+    bottom: 0.3in;
+    right: 0.5in;
+    font-size: 7.5pt;
+    color: #bbb;
+  }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Daily Classroom Roster &nbsp;<span class="sub">${escHtml(dateLabel)}</span></h1>
+    <span class="printed">Timothy Lutheran MDO &nbsp;·&nbsp; Printed ${new Date().toLocaleString('en-US')}</span>
+  </div>
+  <div class="rooms-grid">${roomBlocks}</div>
+  <div class="page-footer">Timothy Lutheran MDO</div>
+  <script>window.addEventListener('load', function() { window.print(); });<\/script>
 </body>
 </html>`;
 
