@@ -3443,11 +3443,44 @@ async function previewHistPayroll(idx, records) {
         </tr>`;
     }).join('');
 
+    const periodTotal = parseFloat(records[idx]?.total_paid) || 0;
+    const fmt$ = n => '$' + n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+
     previewEl.innerHTML = `<table style="width:100%;border-collapse:collapse">
         <thead><tr><th>Name / Match</th><th style="text-align:right">Gross Pay</th></tr></thead>
         <tbody>${tbody}</tbody>
     </table>
+    <div id="hist-running-${idx}" style="margin-top:10px;padding:8px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:.85em;display:flex;gap:16px;flex-wrap:wrap">
+        <span>Selected total: <strong id="hist-sel-total-${idx}">—</strong></span>
+        <span style="color:var(--text-muted)">Period total on file: <strong>${fmt$(periodTotal)}</strong></span>
+        <span id="hist-diff-${idx}" style="font-weight:600"></span>
+    </div>
     <p style="font-size:.78em;color:var(--text-muted);margin:6px 0 0">Unmatched names (orange ~) have a suggestion dropdown — pick the correct staff member or leave as "Float". Uncheck anyone not in the MDO program.</p>`;
+
+    // Wire up running total
+    const updateTotal = () => {
+        let sum = 0;
+        previewEl.querySelectorAll('.hist-row-check:checked').forEach(cb => {
+            const i = parseInt(cb.dataset.idx);
+            sum += parseFloat(matched[i]?.gross_pay) || 0;
+        });
+        const selEl  = document.getElementById(`hist-sel-total-${idx}`);
+        const diffEl = document.getElementById(`hist-diff-${idx}`);
+        if (selEl) selEl.textContent = fmt$(sum);
+        if (diffEl) {
+            const diff = sum - periodTotal;
+            const absDiff = Math.abs(diff);
+            if (absDiff < 0.05) {
+                diffEl.textContent = '✓ Matches period total';
+                diffEl.style.color = '#065f46';
+            } else {
+                diffEl.textContent = `${diff > 0 ? '+' : '−'}${fmt$(absDiff)} vs period total`;
+                diffEl.style.color = '#92400e';
+            }
+        }
+    };
+    previewEl.querySelectorAll('.hist-row-check').forEach(cb => cb.addEventListener('change', updateTotal));
+    updateTotal();
 
     confirmBtn.classList.remove('hidden');
     confirmBtn._matchedData = matched;
