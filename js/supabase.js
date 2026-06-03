@@ -1693,12 +1693,12 @@ async function getClockStatus(staffId, workDate) {
  * @param {string} workDate - ISO 8601 date (YYYY-MM-DD)
  * @returns {Promise<void>}
  */
-async function clockIn(staffId, workDate) {
+async function clockIn(staffId, workDate, roomId = null) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const now = new Date().toISOString();
     const { error } = await sbClient
         .from('staff_clock_events')
-        .insert({ staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null });
+        .insert({ staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null, room_id: roomId || null });
     if (error) throw error;
 }
 
@@ -1732,7 +1732,7 @@ async function fetchClockEventsForDate(workDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
         .from('staff_clock_events')
-        .select('id, staff_id, clock_in, clock_out, work_date')
+        .select('id, staff_id, clock_in, clock_out, work_date, room_id')
         .eq('work_date', workDate);
     if (error) throw error;
     return data || [];
@@ -1742,7 +1742,7 @@ async function fetchClockEventsForRange(startDate, endDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
         .from('staff_clock_events')
-        .select('id, staff_id, clock_in, clock_out, work_date')
+        .select('id, staff_id, clock_in, clock_out, work_date, room_id')
         .gte('work_date', startDate)
         .lte('work_date', endDate);
     if (error) throw error;

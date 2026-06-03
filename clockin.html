@@ -217,6 +217,44 @@
             margin-bottom: 16px;
         }
 
+        /* Room selection screen */
+        #roomScreen { display: none; }
+        .room-select-label {
+            font-size: .88em;
+            color: var(--text-muted);
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 14px;
+            font-family: var(--font-body);
+        }
+        .room-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .room-btn {
+            background: var(--white);
+            border: 2px solid var(--border);
+            border-radius: 14px;
+            padding: 16px 8px;
+            font-size: .95em;
+            font-family: var(--font-body);
+            font-weight: 700;
+            color: var(--text);
+            cursor: pointer;
+            transition: background .15s, border-color .15s, transform .1s;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        .room-btn:active { transform: scale(.96); }
+        .room-btn.selected {
+            background: var(--green-lt);
+            border-color: var(--green);
+            color: var(--navy);
+        }
+
         .btn-clock {
             width: 100%;
             padding: 18px;
@@ -316,6 +354,16 @@
         <div class="loading-wrap"><span class="spinner"></span></div>
     </div>
 
+    <!-- Room Selection Screen (clock-in only) -->
+    <div id="roomScreen">
+        <div class="welcome-name" id="roomStaffName"></div>
+        <div class="room-select-label">Which room are you in today?</div>
+        <div class="room-grid" id="roomGrid"></div>
+        <div class="msg" id="roomMsg"></div>
+        <button class="btn-clock btn-in" id="btnConfirmClockIn">Clock In</button>
+        <button class="btn-signout" id="btnRoomCancel">Cancel</button>
+    </div>
+
     <!-- Clock In/Out Screen -->
     <div id="clockScreen">
         <div class="welcome-name" id="staffName"></div>
@@ -345,10 +393,21 @@ const SUPABASE_URL      = window.location.origin + '/sb';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// ── Rooms available for clock-in selection ────────────────────
+const CLOCK_ROOMS = [
+    { id: 'bear',   label: '🐻 Bear' },
+    { id: 'bee',    label: '🐝 Bee' },
+    { id: 'turtle', label: '🐢 Turtle' },
+    { id: 'goose',  label: '🪿 Goose' },
+    { id: 'owl',    label: '🦉 Owl' },
+];
+
 // ── State ─────────────────────────────────────────────────────
-let pin        = '';
-let staffId    = null;
-let workDate   = todayStr();
+let pin           = '';
+let staffId       = null;
+let staffRoomId   = null; // staff.room_id (null = float)
+let selectedRoomId = null;
+let workDate      = todayStr();
 
 // ── Helpers ───────────────────────────────────────────────────
 function todayStr() {
@@ -386,6 +445,7 @@ function showError(msg) {
 function showScreen(name) {
     document.getElementById('pinScreen').style.display     = name === 'pin'     ? 'block' : 'none';
     document.getElementById('loadingScreen').style.display = name === 'loading' ? 'block' : 'none';
+    document.getElementById('roomScreen').style.display    = name === 'room'    ? 'block' : 'none';
     document.getElementById('clockScreen').style.display   = name === 'clock'   ? 'block' : 'none';
 }
 
@@ -450,7 +510,7 @@ async function verifyPin() {
     try {
         const { data, error } = await sb
             .from('staff')
-            .select('id, name, role, active')
+            .select('id, name, role, active, room_id')
             .eq('staff_pin', parseInt(pin, 10))
             .eq('active', true)
             .maybeSingle();
@@ -462,7 +522,8 @@ async function verifyPin() {
             return;
         }
 
-        staffId = data.id;
+        staffId     = data.id;
+        staffRoomId = data.room_id || null;
         document.getElementById('staffName').textContent = data.name;
         document.getElementById('staffRole').textContent = data.role || '';
         workDate = todayStr();
@@ -470,7 +531,13 @@ async function verifyPin() {
             new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
         await refreshClockStatus();
-        showScreen('clock');
+        // Route: clock-out goes straight to clock screen; clock-in needs room selection first
+        if (openEventId) {
+            showScreen('clock');
+        } else {
+            buildRoomScreen();
+            showScreen('room');
+        }
     } catch (err) {
         showScreen('pin');
         const msg = err?.message || String(err);
@@ -531,29 +598,69 @@ async function refreshClockStatus() {
     }
 }
 
-// ── Clock In ─────────────────────────────────────────────────
-document.getElementById('btnClockIn').addEventListener('click', async () => {
-    setMsg('', '');
-    const btn = document.getElementById('btnClockIn');
+// ── Room Selection ────────────────────────────────────────────
+function buildRoomScreen() {
+    document.getElementById('roomStaffName').textContent =
+        document.getElementById('staffName').textContent;
+    selectedRoomId = staffRoomId; // pre-select assigned room; null for floats
+    document.getElementById('roomMsg').textContent = '';
+
+    const grid = document.getElementById('roomGrid');
+    grid.innerHTML = CLOCK_ROOMS.map(r =>
+        `<button class="room-btn${selectedRoomId === r.id ? ' selected' : ''}" data-room="${r.id}">${r.label}</button>`
+    ).join('');
+    grid.querySelectorAll('.room-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedRoomId = btn.dataset.room;
+            grid.querySelectorAll('.room-btn').forEach(b =>
+                b.classList.toggle('selected', b.dataset.room === selectedRoomId));
+            document.getElementById('btnConfirmClockIn').disabled = false;
+        });
+    });
+
+    const confirmBtn = document.getElementById('btnConfirmClockIn');
+    confirmBtn.disabled = !selectedRoomId;
+    confirmBtn.textContent = 'Clock In';
+}
+
+document.getElementById('btnConfirmClockIn').addEventListener('click', async () => {
+    if (!selectedRoomId) return;
+    const btn = document.getElementById('btnConfirmClockIn');
     btn.disabled = true; btn.textContent = 'Clocking in…';
     try {
         const now = new Date().toISOString();
-        // INSERT a new event row each time — supports multiple shifts per day
         const { error } = await sb.from('staff_clock_events')
-            .insert({ staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null });
+            .insert({ staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null, room_id: selectedRoomId });
         if (error) throw error;
-        setMsg('Clocked in! Returning to PIN screen…', 'ok');
+        document.getElementById('roomMsg').textContent = 'Clocked in! Have a great day!';
+        document.getElementById('roomMsg').className = 'msg msg-ok';
         await refreshClockStatus();
         setTimeout(() => {
-            staffId = null; pin = '';
+            staffId = null; staffRoomId = null; selectedRoomId = null; pin = '';
             updateDots();
             document.getElementById('pinError').textContent = '';
-            document.getElementById('clockMsg').textContent = '';
+            document.getElementById('roomMsg').textContent = '';
             showScreen('pin');
         }, 2500);
     } catch (err) {
-        setMsg('Error: ' + err.message, 'err');
-    } finally { btn.disabled = false; btn.textContent = 'Clock In'; }
+        document.getElementById('roomMsg').textContent = 'Error: ' + err.message;
+        document.getElementById('roomMsg').className = 'msg msg-err';
+        btn.disabled = false; btn.textContent = 'Clock In';
+    }
+});
+
+document.getElementById('btnRoomCancel').addEventListener('click', () => {
+    staffId = null; staffRoomId = null; selectedRoomId = null; pin = '';
+    updateDots();
+    document.getElementById('pinError').textContent = '';
+    showScreen('pin');
+});
+
+// ── Clock In (second shift from clock screen) ─────────────────
+document.getElementById('btnClockIn').addEventListener('click', () => {
+    setMsg('', '');
+    buildRoomScreen();
+    showScreen('room');
 });
 
 // ── Clock Out ─────────────────────────────────────────────────
@@ -578,7 +685,7 @@ document.getElementById('btnClockOut').addEventListener('click', async () => {
 
 // ── Sign Out ──────────────────────────────────────────────────
 document.getElementById('btnSignOut').addEventListener('click', () => {
-    staffId = null; pin = '';
+    staffId = null; staffRoomId = null; selectedRoomId = null; pin = '';
     updateDots();
     document.getElementById('pinError').textContent = '';
     document.getElementById('clockMsg').textContent = '';
