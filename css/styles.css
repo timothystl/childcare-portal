@@ -76,6 +76,14 @@ header {
 }
 header h1 { font-size: 2em; margin-bottom: 6px; font-family: var(--font-head); color: var(--navy); }
 header p  { color: rgba(1,41,74,0.65); font-size: 1.05em; }
+.cal-registration-label {
+    font-family: var(--font-head);
+    font-style: italic;
+    font-size: 1.25em;
+    font-weight: 600;
+    color: var(--navy);
+    letter-spacing: .02em;
+}
 .site-footer {
     text-align: center;
     padding: 18px 0 10px;
