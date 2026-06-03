@@ -43,7 +43,7 @@
 }
 
 .admin-header {
-    background: var(--green-lt);
+    background: var(--navy);
     padding: 20px 32px;
     display: flex;
     justify-content: space-between;
@@ -56,7 +56,7 @@
     z-index: 100;
     box-shadow: var(--shadow-card);
 }
-.admin-header h1 { font-size: 1.4em; color: var(--navy); font-family: var(--font-body); font-weight: 800; }
+.admin-header h1 { font-size: 1.4em; color: var(--white); font-family: var(--font-body); font-weight: 800; }
 .version-badge {
     display: inline-block;
     margin-left: 8px;
@@ -64,8 +64,8 @@
     font-size: .55em;
     font-weight: 600;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    color: #6b7280;
-    background: #f3f4f6;
+    color: var(--navy);
+    background: var(--sun);
     border-radius: 10px;
     vertical-align: middle;
     letter-spacing: .02em;
@@ -87,9 +87,9 @@
 }
 .current-user-display {
     font-size: .82em;
-    color: var(--navy);
-    background: rgba(1,41,74,0.08);
-    border: 1px solid rgba(1,41,74,0.2);
+    color: var(--white);
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
     border-radius: 6px;
     padding: 4px 10px;
     white-space: nowrap;
