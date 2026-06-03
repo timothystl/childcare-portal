@@ -245,17 +245,17 @@
 }
 
 #regTable thead th {
-    background: var(--linen);
+    background: var(--warm-gray);
     color: var(--navy);
     padding: 12px 14px;
     text-align: left;
-    font-weight: 600;
+    font-weight: 700;
     white-space: nowrap;
-    border-bottom: 2px solid var(--border);
+    border-bottom: 2px solid var(--sun);
 }
 #regTable thead th.sortable { cursor: pointer; user-select: none; }
-#regTable thead th.sortable:hover { background: var(--warm-gray); }
-#regTable thead th.sort-active { background: var(--warm-gray); }
+#regTable thead th.sortable:hover { background: var(--border); }
+#regTable thead th.sort-active { background: var(--border); }
 .discount-cell { font-size: .85em; color: var(--navy-lt); font-weight: 500; }
 
 #regTable tbody tr { border-bottom: 1px solid var(--warm-gray); }
@@ -428,12 +428,12 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .9em;
 }
 .roster-table thead th {
-    background: var(--linen);
+    background: var(--warm-gray);
     color: var(--navy);
     padding: 10px 14px;
     text-align: left;
-    font-weight: 600;
-    border-bottom: 2px solid var(--border);
+    font-weight: 700;
+    border-bottom: 2px solid var(--sun);
 }
 .roster-table tbody tr { border-bottom: 1px solid var(--warm-gray); }
 .roster-table tbody tr:hover { background: var(--linen); }
@@ -559,13 +559,13 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .9em;
 }
 .report-table thead th {
-    background: var(--linen);
+    background: var(--warm-gray);
     color: var(--navy);
     padding: 11px 14px;
     text-align: left;
-    font-weight: 600;
+    font-weight: 700;
     white-space: nowrap;
-    border-bottom: 2px solid var(--border);
+    border-bottom: 2px solid var(--sun);
 }
 .report-table thead th:not(:first-child) { text-align: right; }
 .report-table tbody tr { border-bottom: 1px solid var(--warm-gray); }
