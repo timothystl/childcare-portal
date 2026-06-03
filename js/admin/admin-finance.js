@@ -47,8 +47,9 @@ function _moRev(pnl, mo) {
     return Object.values(pnl.data[mo] || {}).reduce((s, r) => s + (r.revenue || 0), 0);
 }
 function _moLab(pnl, mo) {
-    if (pnl.hasFallbackLabor) return pnl.centerLaborByMonth[mo] || 0;
-    return Object.values(pnl.data[mo] || {}).reduce((s, r) => s + (r.labor || 0), 0);
+    const perRoom = Object.values(pnl.data[mo] || {}).reduce((s, r) => s + (r.labor || 0), 0);
+    const center  = pnl.centerLaborByMonth?.[mo] || 0;
+    return perRoom + center;
 }
 function _fmt$(v) { return '$' + Math.round(v).toLocaleString(); }
 
@@ -299,11 +300,11 @@ async function _generateMonthDetail(year, month, container) {
                     ? `<p style="margin:.5rem 0 1rem;font-size:.85em;color:#6b7280">No payroll data found for this period — labor shows as $0.</p>`
                     : ''));
 
-        // totalLab starts with unallocated center portion; per-room costs added below
-        let totalRev = 0, totalLab = hasPerRoomLab ? centerLab : centerLab, totalFull = 0, totalHalf = 0;
+        let totalRev = 0, totalLab = centerLab, totalFull = 0, totalHalf = 0;
         const activeRoomIds = new Set([...Object.keys(roomRevMap), ...Object.keys(moData)]);
         const roomRows = ROOMS.filter(r => activeRoomIds.has(r.id)).map(r => {
-            const rev  = roomRevMap[r.id]?.revenue  || 0;
+            // Use live billing data when available; fall back to billing_summary for historical months
+            const rev  = roomRevMap[r.id]?.revenue  || moData[r.id]?.revenue  || 0;
             const full = roomRevMap[r.id]?.fullDays || 0;
             const half = roomRevMap[r.id]?.halfDays || 0;
             const lab  = hasPerRoomLab ? (moData[r.id]?.labor || 0) : 0;
