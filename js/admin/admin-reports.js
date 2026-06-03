@@ -3419,21 +3419,35 @@ async function previewHistPayroll(idx, records) {
 
     const tbody = matched.map((m, i) => {
         const cls   = m.matched ? 'match-yes' : 'match-float';
-        const icon  = m.matched ? '✓' : '~';
-        const room  = m.matched && m.room_id ? escHtml(m.room_id) : m.matched ? 'no room' : 'float';
         const gross = `$${parseFloat(m.gross_pay).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        let nameCell;
+        if (m.matched) {
+            const room = m.room_id ? escHtml(m.room_id) : 'no room';
+            nameCell = `<td><input type="checkbox" class="hist-row-check" data-idx="${i}" checked>
+                <span style="color:#065f46;font-weight:600">✓ ${escHtml(m.name)}</span>
+                <span style="font-size:.8em;color:var(--text-muted)"> → ${room}</span></td>`;
+        } else {
+            const opts = m.suggestions.map(s =>
+                `<option value="${s.id}" data-room="${s.room_id || ''}" data-pay="${s.pay_type || ''}">${escHtml(s.name)}${s.room_id ? ` (${escHtml(s.room_id)})` : ''}</option>`
+            ).join('');
+            nameCell = `<td><input type="checkbox" class="hist-row-check" data-idx="${i}" checked>
+                <span style="color:#92400e;font-weight:600">~ ${escHtml(m.name)}</span>
+                <select class="hist-name-override" data-idx="${i}" style="font-size:.8em;margin-left:6px;max-width:200px">
+                    <option value="">Float (unmatched)</option>
+                    ${opts}
+                </select></td>`;
+        }
         return `<tr class="${cls}" data-row-idx="${i}">
-            <td><input type="checkbox" class="hist-row-check" data-idx="${i}" checked> ${icon} ${escHtml(m.name)}</td>
-            <td>${room}</td>
+            ${nameCell}
             <td style="text-align:right">${gross}</td>
         </tr>`;
     }).join('');
 
-    previewEl.innerHTML = `<table>
-        <thead><tr><th>Include</th><th>Room</th><th>Gross Pay</th></tr></thead>
+    previewEl.innerHTML = `<table style="width:100%;border-collapse:collapse">
+        <thead><tr><th>Name / Match</th><th style="text-align:right">Gross Pay</th></tr></thead>
         <tbody>${tbody}</tbody>
     </table>
-    <p style="font-size:.78em;color:var(--text-muted);margin:6px 0 0">Uncheck names that are not MDO staff (e.g. pastor, church administrator) before confirming.</p>`;
+    <p style="font-size:.78em;color:var(--text-muted);margin:6px 0 0">Unmatched names (orange ~) have a suggestion dropdown — pick the correct staff member or leave as "Float". Uncheck anyone not in the MDO program.</p>`;
 
     confirmBtn.classList.remove('hidden');
     confirmBtn._matchedData = matched;
@@ -3459,13 +3473,29 @@ async function confirmSaveHistPayroll(idx, records, matched) {
     statusEl.textContent = 'Saving…';
     confirmBtn.disabled  = true;
 
+    // Read any manual overrides from the suggestion dropdowns
+    const overrides = {};
+    previewEl?.querySelectorAll('.hist-name-override').forEach(sel => {
+        const rowIdx = parseInt(sel.dataset.idx);
+        if (sel.value) {
+            overrides[rowIdx] = {
+                staff_id: parseInt(sel.value),
+                room_id:  sel.selectedOptions[0]?.dataset.room || null,
+                pay_type: sel.selectedOptions[0]?.dataset.pay  || null,
+            };
+        }
+    });
+
     const updated = records.map((r, i) => {
         if (i !== idx) return r;
-        const staffArr = filteredMatched.map(m => ({
-            name:      m.name,
-            staff_id:  m.staff_id || null,
-            gross_pay: parseFloat(m.gross_pay),
-        }));
+        const staffArr = filteredMatched.map(m => {
+            const ov = overrides[matched.indexOf(m)];
+            return {
+                name:      m.name,
+                staff_id:  ov?.staff_id ?? m.staff_id ?? null,
+                gross_pay: parseFloat(m.gross_pay),
+            };
+        });
         return { ...r, staff: staffArr };
     });
 
@@ -3562,8 +3592,23 @@ function matchStaffNames(rows, allStaff) {
     const tryReverse = name => {
         const parts = name.trim().split(/\s+/);
         if (parts.length < 2) return null;
-        // "Bolin Meagan" → "meagan bolin", "Daily Chelsea S" → "chelsea daily"
         return normalize(`${parts[1]} ${parts[0]}`);
+    };
+
+    // Score staff candidates by shared word tokens (for suggestions on unmatched rows)
+    const scoreSuggestions = (name, topN = 4) => {
+        const tokens = normalize(name).split(' ').filter(Boolean);
+        const revTokens = (tryReverse(name) || '').split(' ').filter(Boolean);
+        const allTokens = [...new Set([...tokens, ...revTokens])];
+        return staffNorm
+            .map(s => {
+                const sTokens = s._norm.split(' ');
+                const shared = allTokens.filter(t => sTokens.some(st => st.startsWith(t) || t.startsWith(st))).length;
+                return { ...s, score: shared };
+            })
+            .filter(s => s.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, topN);
     };
 
     return rows.map(row => {
@@ -3573,13 +3618,15 @@ function matchStaffNames(rows, allStaff) {
             const reversed = tryReverse(row.name);
             if (reversed) match = staffNorm.find(s => s._norm === reversed);
         }
+        const suggestions = match ? [] : scoreSuggestions(row.name);
         return {
-            name:      row.name,
-            gross_pay: row.gross_pay,
-            matched:   !!match,
-            staff_id:  match?.id   || null,
-            room_id:   match?.room_id || null,
-            pay_type:  match?.pay_type || null,
+            name:        row.name,
+            gross_pay:   row.gross_pay,
+            matched:     !!match,
+            staff_id:    match?.id      || null,
+            room_id:     match?.room_id || null,
+            pay_type:    match?.pay_type || null,
+            suggestions,
         };
     });
 }
