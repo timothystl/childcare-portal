@@ -2099,13 +2099,51 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
                     }
                     d.setDate(d.getDate() + 1);
                 }
-                // Prorate total_paid by proportion of working days in each month
-                Object.entries(moWorkDays).forEach(([mo, days]) => {
-                    if (mo < fromMo || mo > toMo) return;
-                    centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) +
-                        (parseFloat(r.total_paid) * days / totalWorkDays);
-                    centerLaborSource[mo] = 'historical';
-                });
+
+                if (Array.isArray(r.staff) && r.staff.length > 0) {
+                    // Per-person detail: allocate each staff member's gross_pay to their room (or float)
+                    const floatByMo = {};
+                    r.staff.forEach(s => {
+                        if (!s.gross_pay || s.gross_pay <= 0) return;
+                        // Find room_id for this staff_id (staffById built in Tier 2 block, but we need it here too)
+                        const staffRec = s.staff_id ? allStaff.find(a => a.id === s.staff_id) : null;
+                        const roomId = staffRec?.room_id || null;
+                        Object.entries(moWorkDays).forEach(([mo, days]) => {
+                            if (mo < fromMo || mo > toMo) return;
+                            const prorated = s.gross_pay * days / totalWorkDays;
+                            if (roomId && staffRec?.pay_type !== 'salary') {
+                                const key = `${mo}|${roomId}`;
+                                laborMap.set(key, (laborMap.get(key) || 0) + prorated);
+                            } else {
+                                floatByMo[mo] = (floatByMo[mo] || 0) + prorated;
+                            }
+                            centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0);
+                            centerLaborSource[mo] = 'historical_detail';
+                        });
+                    });
+                    // Distribute float/unmatched wages across rooms by attendance weight
+                    Object.entries(floatByMo).forEach(([mo, floatCost]) => {
+                        const moRooms = rooms.filter(r2 => (arMap[mo]?.[r2.id]?.attendees || 0) > 0);
+                        const totalAtt = moRooms.reduce((s, r2) => s + arMap[mo][r2.id].attendees, 0);
+                        if (totalAtt > 0) {
+                            moRooms.forEach(r2 => {
+                                const share = floatCost * arMap[mo][r2.id].attendees / totalAtt;
+                                const key = `${mo}|${r2.id}`;
+                                laborMap.set(key, (laborMap.get(key) || 0) + share);
+                            });
+                        } else {
+                            centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + floatCost;
+                        }
+                    });
+                } else {
+                    // Lump-sum: prorate total_paid by proportion of working days in each month
+                    Object.entries(moWorkDays).forEach(([mo, days]) => {
+                        if (mo < fromMo || mo > toMo) return;
+                        centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) +
+                            (parseFloat(r.total_paid) * days / totalWorkDays);
+                        centerLaborSource[mo] = 'historical';
+                    });
+                }
             });
 
             // ── Tier 2: Per-room allocation from manual hours + clock events ──
@@ -2320,12 +2358,14 @@ async function generateRoomPnl() {
 
             const labCell  = moLab > 0 ? fmt$(moLab) : '—';
             const src = centerLaborSource?.[mo];
-            const labNote = hasFallbackLabor && centerLab > 0
-                ? src === 'historical'
-                    ? ' <span title="From Historical Payroll Records, prorated across months by working days" style="font-size:0.75em;opacity:0.7">📋</span>'
-                    : src === 'salary_estimate'
-                        ? ' <span title="Salary estimate — no payroll data found for this month" style="font-size:0.75em;opacity:0.7">~est</span>'
-                        : ' <span title="From logged staff hours" style="font-size:0.75em;opacity:0.7">*</span>'
+            const labNote = (hasFallbackLabor && centerLab > 0) || src === 'historical_detail'
+                ? src === 'historical_detail'
+                    ? ' <span title="Allocated from imported per-person payroll records" style="font-size:0.75em;opacity:0.7">†</span>'
+                    : src === 'historical'
+                        ? ' <span title="From Historical Payroll Records, prorated across months by working days" style="font-size:0.75em;opacity:0.7">📋</span>'
+                        : src === 'salary_estimate'
+                            ? ' <span title="Salary estimate — no payroll data found for this month" style="font-size:0.75em;opacity:0.7">~est</span>'
+                            : ' <span title="From logged staff hours" style="font-size:0.75em;opacity:0.7">*</span>'
                 : '';
 
             return `<tr>
@@ -3263,6 +3303,374 @@ function exportMissingCalendarReport() {
         wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
     }));
     XLSX.writeFile(wb, `missing-calendars-${monthVal}.xlsx`);
+}
+
+// ── Historical Payroll Import ────────────────────────────────
+
+function setupHistoricalPayroll() {
+    loadHistoricalPayrollSection();
+}
+
+async function loadHistoricalPayrollSection() {
+    const el = document.getElementById('histPayrollContent');
+    if (!el) return;
+    el.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const records = await fetchHistoricalPayroll();
+        renderHistPayrollSection(records);
+    } catch (e) {
+        el.innerHTML = `<p class="empty-hint" style="color:var(--danger)">Failed to load: ${escHtml(e.message)}</p>`;
+    }
+}
+
+function renderHistPayrollSection(records) {
+    const el = document.getElementById('histPayrollContent');
+    if (!el) return;
+    if (!records || records.length === 0) {
+        el.innerHTML = '<p class="empty-hint">No historical payroll records found.</p>';
+        return;
+    }
+    const rows = records.map((r, idx) => {
+        const hasDetail = Array.isArray(r.staff) && r.staff.length > 0;
+        const badge = hasDetail
+            ? `<span class="hist-payroll-badge detail">Staff detail imported</span>`
+            : `<span class="hist-payroll-badge center-wide">Center-wide only</span>`;
+        const revertBtn = hasDetail
+            ? `<button class="btn-ghost btn-sm" data-hist-revert="${idx}">Revert</button>`
+            : '';
+        const total = parseFloat(r.total_paid) || 0;
+        return `
+        <div class="hist-payroll-row" id="hist-row-${idx}">
+            <div class="hist-payroll-header">
+                <span class="hist-payroll-label">${escHtml(r.label)}</span>
+                <span class="hist-payroll-amount">$${total.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
+                ${badge}
+                <div class="hist-payroll-actions">
+                    <button class="btn-secondary btn-sm" data-hist-import="${idx}">Import Staff Wages</button>
+                    ${revertBtn}
+                </div>
+            </div>
+            <div class="hist-payroll-import-area" id="hist-import-${idx}">
+                <p style="font-size:.82em;color:var(--text-muted);margin:0 0 6px">Paste payroll data from Excel (Ctrl+A → Ctrl+C on the sheet, then paste here). Supports QuickBooks payroll summary or ProCare export — format is auto-detected.</p>
+                <textarea id="hist-paste-${idx}" placeholder="QuickBooks: select all cells and paste the full sheet.&#10;ProCare: include the header row (Staff Name, Hours, Rate, Bonus, Gross Pay)."></textarea>
+                <div class="hist-import-actions">
+                    <button class="btn-secondary btn-sm" data-hist-preview="${idx}">Preview</button>
+                    <button class="btn-primary btn-sm hidden" id="hist-confirm-${idx}" data-hist-confirm="${idx}">Confirm &amp; Save</button>
+                    <span class="hist-import-status" id="hist-status-${idx}"></span>
+                </div>
+                <div class="hist-payroll-preview" id="hist-preview-${idx}"></div>
+            </div>
+        </div>`;
+    }).join('');
+    el.innerHTML = `<div class="hist-payroll-list">${rows}</div>`;
+
+    el.querySelectorAll('[data-hist-import]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.histImport);
+            const area = document.getElementById(`hist-import-${idx}`);
+            area.classList.toggle('open');
+            btn.textContent = area.classList.contains('open') ? 'Cancel' : 'Import Staff Wages';
+        });
+    });
+    el.querySelectorAll('[data-hist-preview]').forEach(btn => {
+        btn.addEventListener('click', () => previewHistPayroll(parseInt(btn.dataset.histPreview), records));
+    });
+    el.querySelectorAll('[data-hist-confirm]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.histConfirm);
+            btn._matchedData && confirmSaveHistPayroll(idx, records, btn._matchedData);
+        });
+    });
+    el.querySelectorAll('[data-hist-revert]').forEach(btn => {
+        btn.addEventListener('click', () => revertHistPayroll(parseInt(btn.dataset.histRevert), records));
+    });
+}
+
+async function previewHistPayroll(idx, records) {
+    const statusEl  = document.getElementById(`hist-status-${idx}`);
+    const previewEl = document.getElementById(`hist-preview-${idx}`);
+    const confirmBtn = document.getElementById(`hist-confirm-${idx}`);
+    const pasteText  = document.getElementById(`hist-paste-${idx}`)?.value || '';
+
+    statusEl.textContent = '';
+    previewEl.innerHTML  = '';
+    confirmBtn.classList.add('hidden');
+    confirmBtn._matchedData = null;
+
+    const parsed = parsePayrollPaste(pasteText);
+    if (parsed.length === 0) {
+        statusEl.textContent = 'No valid rows found. Paste must include a "Staff Name" header row (ProCare) or the full QuickBooks payroll summary.';
+        return;
+    }
+
+    statusEl.textContent = 'Matching names…';
+    let allStaff;
+    try {
+        allStaff = await fetchAllStaff({ includeInactive: true });
+    } catch (e) {
+        statusEl.textContent = `Error loading staff: ${e.message}`;
+        return;
+    }
+
+    const matched = matchStaffNames(parsed, allStaff);
+    const matchedCount = matched.filter(m => m.matched).length;
+    const floatCount   = matched.filter(m => !m.matched).length;
+    statusEl.textContent = `${matched.length} rows — ${matchedCount} matched, ${floatCount} unmatched. Uncheck anyone not in the MDO program before saving.`;
+
+    const tbody = matched.map((m, i) => {
+        const cls   = m.matched ? 'match-yes' : 'match-float';
+        const gross = `$${parseFloat(m.gross_pay).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        let nameCell;
+        if (m.matched) {
+            const room = m.room_id ? escHtml(m.room_id) : 'no room';
+            nameCell = `<td><input type="checkbox" class="hist-row-check" data-idx="${i}" checked>
+                <span style="color:#065f46;font-weight:600">✓ ${escHtml(m.name)}</span>
+                <span style="font-size:.8em;color:var(--text-muted)"> → ${room}</span></td>`;
+        } else {
+            // Suggestions first, then a divider, then all remaining staff alphabetically
+            const suggestedIds = new Set(m.suggestions.map(s => s.id));
+            const suggestOpts = m.suggestions.map(s =>
+                `<option value="${s.id}" data-room="${s.room_id || ''}" data-pay="${s.pay_type || ''}">${escHtml(s.name)}${s.room_id ? ` (${escHtml(s.room_id)})` : ''}</option>`
+            ).join('');
+            const otherOpts = allStaff
+                .filter(s => !suggestedIds.has(s.id))
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(s =>
+                    `<option value="${s.id}" data-room="${s.room_id || ''}" data-pay="${s.pay_type || ''}">${escHtml(s.name)}${s.room_id ? ` (${escHtml(s.room_id)})` : ''}</option>`
+                ).join('');
+            const divider = suggestOpts && otherOpts ? `<option disabled>──────────</option>` : '';
+            nameCell = `<td><input type="checkbox" class="hist-row-check" data-idx="${i}" checked>
+                <span style="color:#92400e;font-weight:600">~ ${escHtml(m.name)}</span>
+                <select class="hist-name-override" data-idx="${i}" style="font-size:.8em;margin-left:6px;max-width:200px">
+                    <option value="">Float (unmatched)</option>
+                    ${suggestOpts}${divider}${otherOpts}
+                </select></td>`;
+        }
+        return `<tr class="${cls}" data-row-idx="${i}">
+            ${nameCell}
+            <td style="text-align:right">${gross}</td>
+        </tr>`;
+    }).join('');
+
+    const periodTotal = parseFloat(records[idx]?.total_paid) || 0;
+    const fmt$ = n => '$' + n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+    previewEl.innerHTML = `<table style="width:100%;border-collapse:collapse">
+        <thead><tr><th>Name / Match</th><th style="text-align:right">Gross Pay</th></tr></thead>
+        <tbody>${tbody}</tbody>
+    </table>
+    <div id="hist-running-${idx}" style="margin-top:10px;padding:8px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:.85em;display:flex;gap:16px;flex-wrap:wrap">
+        <span>Selected total: <strong id="hist-sel-total-${idx}">—</strong></span>
+        <span style="color:var(--text-muted)">Period total on file: <strong>${fmt$(periodTotal)}</strong></span>
+        <span id="hist-diff-${idx}" style="font-weight:600"></span>
+    </div>
+    <p style="font-size:.78em;color:var(--text-muted);margin:6px 0 0">Unmatched names (orange ~) have a suggestion dropdown — pick the correct staff member or leave as "Float". Uncheck anyone not in the MDO program.</p>`;
+
+    // Wire up running total
+    const updateTotal = () => {
+        let sum = 0;
+        previewEl.querySelectorAll('.hist-row-check:checked').forEach(cb => {
+            const i = parseInt(cb.dataset.idx);
+            sum += parseFloat(matched[i]?.gross_pay) || 0;
+        });
+        const selEl  = document.getElementById(`hist-sel-total-${idx}`);
+        const diffEl = document.getElementById(`hist-diff-${idx}`);
+        if (selEl) selEl.textContent = fmt$(sum);
+        if (diffEl) {
+            const diff = sum - periodTotal;
+            const absDiff = Math.abs(diff);
+            if (absDiff < 0.05) {
+                diffEl.textContent = '✓ Matches period total';
+                diffEl.style.color = '#065f46';
+            } else {
+                diffEl.textContent = `${diff > 0 ? '+' : '−'}${fmt$(absDiff)} vs period total`;
+                diffEl.style.color = '#92400e';
+            }
+        }
+    };
+    previewEl.querySelectorAll('.hist-row-check').forEach(cb => cb.addEventListener('change', updateTotal));
+    updateTotal();
+
+    confirmBtn.classList.remove('hidden');
+    confirmBtn._matchedData = matched;
+    confirmBtn._previewEl   = previewEl;
+}
+
+async function confirmSaveHistPayroll(idx, records, matched) {
+    const statusEl  = document.getElementById(`hist-status-${idx}`);
+    const confirmBtn = document.getElementById(`hist-confirm-${idx}`);
+
+    // Read which rows are checked
+    const previewEl = confirmBtn._previewEl || document.getElementById(`hist-preview-${idx}`);
+    const checkedIdxs = new Set(
+        [...(previewEl?.querySelectorAll('.hist-row-check:checked') || [])].map(c => parseInt(c.dataset.idx))
+    );
+    const filteredMatched = matched.filter((_, i) => checkedIdxs.size === 0 || checkedIdxs.has(i));
+
+    if (filteredMatched.length === 0) {
+        statusEl.textContent = 'No rows selected — nothing to save.';
+        return;
+    }
+
+    statusEl.textContent = 'Saving…';
+    confirmBtn.disabled  = true;
+
+    // Read any manual overrides from the suggestion dropdowns
+    const overrides = {};
+    previewEl?.querySelectorAll('.hist-name-override').forEach(sel => {
+        const rowIdx = parseInt(sel.dataset.idx);
+        if (sel.value) {
+            overrides[rowIdx] = {
+                staff_id: parseInt(sel.value),
+                room_id:  sel.selectedOptions[0]?.dataset.room || null,
+                pay_type: sel.selectedOptions[0]?.dataset.pay  || null,
+            };
+        }
+    });
+
+    const updated = records.map((r, i) => {
+        if (i !== idx) return r;
+        const staffArr = filteredMatched.map(m => {
+            const ov = overrides[matched.indexOf(m)];
+            return {
+                name:      m.name,
+                staff_id:  ov?.staff_id ?? m.staff_id ?? null,
+                gross_pay: parseFloat(m.gross_pay),
+            };
+        });
+        return { ...r, staff: staffArr };
+    });
+
+    try {
+        await saveHistoricalPayroll(updated);
+        statusEl.textContent = 'Saved.';
+        setTimeout(() => loadHistoricalPayrollSection(), 600);
+    } catch (e) {
+        statusEl.textContent = `Error: ${e.message}`;
+        confirmBtn.disabled = false;
+    }
+}
+
+async function revertHistPayroll(idx, records) {
+    const r = records[idx];
+    if (!confirm(`Remove per-person staff data for "${r.label}"?\n\nThe lump-sum total ($${r.total_paid}) will be kept. The P&L will revert to center-wide allocation for this period.`)) return;
+
+    const updated = records.map((rec, i) => {
+        if (i !== idx) return rec;
+        const { staff: _removed, ...rest } = rec;
+        return rest;
+    });
+
+    try {
+        await saveHistoricalPayroll(updated);
+        loadHistoricalPayrollSection();
+    } catch (e) {
+        alert(`Error reverting: ${e.message}`);
+    }
+}
+
+function parsePayrollPaste(text) {
+    // QuickBooks pivot format: employees are columns, "Gross pay - total" is a row
+    if (/gross\s*pay\s*-\s*total/i.test(text)) {
+        return _parseQBOPayrollPaste(text);
+    }
+    // ProCare row-per-employee format: "Staff Name" column header
+    const lines = text.split(/\r?\n/).map(l => l.split('\t'));
+    let headerIdx = -1;
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i].some(c => /staff\s*name/i.test(c))) { headerIdx = i; break; }
+    }
+    if (headerIdx < 0) return [];
+
+    const header  = lines[headerIdx].map(c => c.trim().toLowerCase());
+    const nameCol  = header.findIndex(c => /staff\s*name/i.test(c));
+    const hrsCol   = header.findIndex(c => /^hours$/i.test(c));
+    const grossCol = header.findIndex(c => /gross\s*pay/i.test(c));
+    if (nameCol < 0 || grossCol < 0) return [];
+
+    const results = [];
+    for (let i = headerIdx + 1; i < lines.length; i++) {
+        const cols = lines[i];
+        const name = (cols[nameCol] || '').trim();
+        if (!name) break;
+        if (/MDO\s*TOTAL/i.test(name)) break;
+        if (/blank\s*space/i.test(name)) continue;
+        const hrsRaw = hrsCol >= 0 ? (cols[hrsCol] || '').trim() : '';
+        if (/salary/i.test(hrsRaw)) continue;
+        const grossRaw = (cols[grossCol] || '').replace(/[$,]/g, '').trim();
+        const gross = parseFloat(grossRaw);
+        if (isNaN(gross) || gross <= 0) continue;
+        results.push({ name, gross_pay: gross });
+    }
+    return results;
+}
+
+function _parseQBOPayrollPaste(text) {
+    const lines = text.split(/\r?\n/).map(l => l.split('\t'));
+    // Find the header row: first cell is "Item"
+    const headerIdx = lines.findIndex(l => /^item$/i.test((l[0] || '').trim()));
+    if (headerIdx < 0) return [];
+    // Employee names start at column 2 (skip "Item" and "Total")
+    const names = lines[headerIdx].slice(2).map(n => n.trim().replace(/^\*/, ''));
+    // Find the "Gross pay - total" row
+    const grossRow = lines.find(l => /gross\s*pay\s*-\s*total/i.test((l[0] || '').trim()));
+    if (!grossRow) return [];
+    const values = grossRow.slice(2);
+    const results = [];
+    names.forEach((name, i) => {
+        if (!name) return;
+        const gross = parseFloat((values[i] || '').replace(/[$,]/g, ''));
+        if (isNaN(gross) || gross <= 0) return;
+        results.push({ name, gross_pay: gross });
+    });
+    return results;
+}
+
+function matchStaffNames(rows, allStaff) {
+    const normalize = s => s.toLowerCase().trim().replace(/\s*\(.*?\)\s*/g, '').replace(/\s+/g, ' ');
+    const staffNorm = allStaff.map(s => ({ ...s, _norm: normalize(s.name) }));
+
+    // Try "Last First M" → "First Last" reversal for QuickBooks names
+    const tryReverse = name => {
+        const parts = name.trim().split(/\s+/);
+        if (parts.length < 2) return null;
+        return normalize(`${parts[1]} ${parts[0]}`);
+    };
+
+    // Score staff candidates by shared word tokens (for suggestions on unmatched rows)
+    const scoreSuggestions = (name, topN = 4) => {
+        const tokens = normalize(name).split(' ').filter(Boolean);
+        const revTokens = (tryReverse(name) || '').split(' ').filter(Boolean);
+        const allTokens = [...new Set([...tokens, ...revTokens])];
+        return staffNorm
+            .map(s => {
+                const sTokens = s._norm.split(' ');
+                const shared = allTokens.filter(t => sTokens.some(st => st.startsWith(t) || t.startsWith(st))).length;
+                return { ...s, score: shared };
+            })
+            .filter(s => s.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, topN);
+    };
+
+    return rows.map(row => {
+        const norm  = normalize(row.name);
+        let match   = staffNorm.find(s => s._norm === norm);
+        if (!match) {
+            const reversed = tryReverse(row.name);
+            if (reversed) match = staffNorm.find(s => s._norm === reversed);
+        }
+        const suggestions = match ? [] : scoreSuggestions(row.name);
+        return {
+            name:        row.name,
+            gross_pay:   row.gross_pay,
+            matched:     !!match,
+            staff_id:    match?.id      || null,
+            room_id:     match?.room_id || null,
+            pay_type:    match?.pay_type || null,
+            suggestions,
+        };
+    });
 }
 
 // ============================================================

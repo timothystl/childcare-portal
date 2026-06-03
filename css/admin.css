@@ -3438,3 +3438,65 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     .billing-sub-btn { padding: 6px 12px; font-size: .82em; }
     .bl-charts-row { flex-direction: column; }
 }
+
+/* ── Historical Payroll Import ─────────────────────────────── */
+.hist-payroll-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.hist-payroll-row {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--white);
+    overflow: hidden;
+}
+.hist-payroll-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+}
+.hist-payroll-label { font-weight: 600; font-size: .9em; flex: 1; min-width: 180px; }
+.hist-payroll-amount { color: var(--text-muted); font-size: .85em; white-space: nowrap; }
+.hist-payroll-badge {
+    font-size: .75em;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+.hist-payroll-badge.detail { background: #d1fae5; color: #065f46; }
+.hist-payroll-badge.center-wide { background: #fef3c7; color: #92400e; }
+.hist-payroll-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.hist-payroll-import-area {
+    padding: 12px 14px 14px;
+    border-top: 1px solid var(--border);
+    background: #f9fafb;
+    display: none;
+}
+.hist-payroll-import-area.open { display: block; }
+.hist-payroll-import-area textarea {
+    width: 100%;
+    min-height: 120px;
+    font-family: monospace;
+    font-size: .8em;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    box-sizing: border-box;
+    resize: vertical;
+}
+.hist-payroll-preview { margin-top: 12px; }
+.hist-payroll-preview table { width: 100%; border-collapse: collapse; font-size: .82em; }
+.hist-payroll-preview th {
+    text-align: left;
+    padding: 4px 8px;
+    background: var(--light-bg);
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+}
+.hist-payroll-preview td { padding: 4px 8px; border-bottom: 1px solid #f0f0f0; }
+.hist-payroll-preview tr.match-yes td:first-child { color: #065f46; font-weight: 600; }
+.hist-payroll-preview tr.match-float td:first-child { color: #92400e; font-weight: 600; }
+.hist-payroll-preview tr.match-skip td { color: #9ca3af; font-style: italic; }
+.hist-import-actions { margin-top: 10px; display: flex; gap: 8px; align-items: center; }
+.hist-import-status { font-size: .82em; color: var(--text-muted); }
+
