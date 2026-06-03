@@ -100,7 +100,7 @@ header p  { color: rgba(1,41,74,0.65); font-size: 1.05em; }
 .brand-bar { height: 3px; background: var(--sun); border-radius: 2px; margin-top: 3px; width: 100%; }
 .brand-sub { font-family: var(--font-body); font-weight: 400; letter-spacing: .15em; text-transform: uppercase; color: var(--navy); margin-top: 4px; }
 
-.brand-lockup--center { display: block; }
+.brand-lockup--center { display: block; width: fit-content; margin-left: auto; margin-right: auto; }
 .brand-lockup--center .brand-wordmark { justify-content: center; }
 .brand-lockup--center .brand-sub { text-align: center; }
 
@@ -119,12 +119,13 @@ header p  { color: rgba(1,41,74,0.65); font-size: 1.05em; }
 .brand-lockup--lg .brand-mdo { font-size: 46px; }
 .brand-lockup--lg .brand-sub { font-size: 11px; }
 
-.brand-with-badge { display: inline-flex; align-items: flex-start; gap: 10px; }
 .brand-badge {
-    display: inline-flex; align-items: center;
+    display: inline-block;
     background: var(--sun); color: var(--navy);
     font-family: var(--font-body); font-size: 11px; font-weight: 800; letter-spacing: .06em;
-    padding: 3px 10px; border-radius: 20px; flex-shrink: 0; margin-top: 5px;
+    padding: 3px 10px; border-radius: 20px;
+    vertical-align: middle; position: relative; top: -4px;
+    margin-left: 10px;
 }
 
 main { padding: 32px 36px; }
