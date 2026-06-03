@@ -50,6 +50,7 @@ async function initDashboard() {
     setupStaffRoster();
     setupHoursEntry();
     setupPayrollReport();
+    setupHistoricalPayroll();
     setupExtraReports();
     setupWaitlistAdmin();
     setupAdminRoles();
