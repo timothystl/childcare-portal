@@ -245,17 +245,17 @@
 }
 
 #regTable thead th {
-    background: var(--warm-gray);
-    color: var(--navy);
+    background: #1F5278;
+    color: var(--white);
     padding: 12px 14px;
     text-align: left;
-    font-weight: 700;
+    font-weight: 600;
     white-space: nowrap;
     border-bottom: 2px solid var(--sun);
 }
 #regTable thead th.sortable { cursor: pointer; user-select: none; }
-#regTable thead th.sortable:hover { background: var(--border); }
-#regTable thead th.sort-active { background: var(--border); }
+#regTable thead th.sortable:hover { background: #2a6490; }
+#regTable thead th.sort-active { background: #2a6490; }
 .discount-cell { font-size: .85em; color: var(--navy-lt); font-weight: 500; }
 
 #regTable tbody tr { border-bottom: 1px solid var(--warm-gray); }
@@ -428,11 +428,11 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .9em;
 }
 .roster-table thead th {
-    background: var(--warm-gray);
-    color: var(--navy);
+    background: #1F5278;
+    color: var(--white);
     padding: 10px 14px;
     text-align: left;
-    font-weight: 700;
+    font-weight: 600;
     border-bottom: 2px solid var(--sun);
 }
 .roster-table tbody tr { border-bottom: 1px solid var(--warm-gray); }
@@ -559,11 +559,11 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .9em;
 }
 .report-table thead th {
-    background: var(--warm-gray);
-    color: var(--navy);
+    background: #1F5278;
+    color: var(--white);
     padding: 11px 14px;
     text-align: left;
-    font-weight: 700;
+    font-weight: 600;
     white-space: nowrap;
     border-bottom: 2px solid var(--sun);
 }
@@ -604,24 +604,26 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .ar-room-header {
     text-align: center;
-    background: var(--linen);
-    border-left: 2px solid var(--border);
+    background: #1F5278;
+    color: var(--white);
+    border-left: 2px solid rgba(255,255,255,.2);
     font-size: 0.85em;
     white-space: nowrap;
 }
 .ar-room-header.ar-total-col {
-    background: var(--linen);
+    background: #1F5278;
 }
 .ar-sub-header {
     font-size: 0.78em;
     font-weight: 600;
-    color: var(--text-muted);
+    background: #1F5278;
+    color: rgba(255,255,255,.85);
     white-space: nowrap;
-    border-left: 1px solid var(--border);
+    border-left: 1px solid rgba(255,255,255,.15);
 }
 .ar-sub-header.ar-total-col {
-    background: var(--linen);
-    border-left: 2px solid var(--border);
+    background: #1F5278;
+    border-left: 2px solid rgba(255,255,255,.2);
 }
 .ar-total-col {
     background: var(--linen);
@@ -2454,16 +2456,18 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .staff-table { width: 100%; }
 
 .staff-room-header {
-    background: var(--linen);
+    background: #1F5278;
+    color: var(--white);
     text-align: center;
-    border-left: 2px solid var(--border);
+    border-left: 2px solid rgba(255,255,255,.2);
 }
 .staff-sub-head {
     font-size: .8em;
     font-weight: 600;
-    color: var(--navy);
+    background: #1F5278;
+    color: rgba(255,255,255,.85);
     text-align: center;
-    border-left: 1px solid var(--border);
+    border-left: 1px solid rgba(255,255,255,.15);
 }
 .staff-date-header { width: 160px; }
 .staff-date-cell   { white-space: nowrap; font-weight: 500; color: var(--text); }
