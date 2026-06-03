@@ -91,41 +91,40 @@ header p  { color: rgba(1,41,74,0.65); font-size: 1.05em; }
 .footer-program-link:hover { color: var(--white); border-bottom-color: var(--white); }
 
 /* ============================================================
-   SITE LOGO
+   BRAND LOCKUP (myMDO — script "my" + bold "MDO")
    ============================================================ */
-/* Main registration page header */
-.site-logo {
-    display: block;
-    margin: 0 auto 14px;
-    max-height: 90px;
-    max-width: 220px;
-    width: auto;
-    object-fit: contain;
-    filter: drop-shadow(0 2px 6px rgba(0,0,0,.18));
-}
+.brand-lockup { display: inline-block; line-height: 1; }
+.brand-wordmark { display: flex; align-items: baseline; }
+.brand-my  { font-family: 'Dancing Script', cursive; font-weight: 700; color: var(--green); }
+.brand-mdo { font-family: 'Nunito', sans-serif; font-weight: 800; color: var(--navy); }
+.brand-bar { height: 3px; background: var(--sun); border-radius: 2px; margin-top: 3px; width: 100%; }
+.brand-sub { font-family: var(--font-body); font-weight: 400; letter-spacing: .15em; text-transform: uppercase; color: var(--navy); margin-top: 4px; }
 
-/* Admin login card */
-.site-logo-login {
-    max-height: 70px;
-    max-width: 180px;
-    margin-bottom: 16px;
-}
+.brand-lockup--center { display: block; }
+.brand-lockup--center .brand-wordmark { justify-content: center; }
+.brand-lockup--center .brand-sub { text-align: center; }
 
-/* Admin dashboard header (inline with text) */
-.site-logo-admin {
-    max-height: 48px;
-    max-width: 120px;
-    margin: 0;
-    filter: none;
-    flex-shrink: 0;
-}
+.brand-lockup--dark .brand-mdo { color: #fff; }
+.brand-lockup--dark .brand-sub { color: rgba(255,255,255,.6); }
 
-/* Lookup / portal card */
-.site-logo-lookup {
-    max-height: 72px;
-    max-width: 180px;
-    margin: 0 auto;
-    filter: none;
+.brand-lockup--sm .brand-my,
+.brand-lockup--sm .brand-mdo { font-size: 26px; }
+.brand-lockup--sm .brand-sub { font-size: 8px; }
+
+.brand-lockup--md .brand-my,
+.brand-lockup--md .brand-mdo { font-size: 36px; }
+.brand-lockup--md .brand-sub { font-size: 10px; }
+
+.brand-lockup--lg .brand-my,
+.brand-lockup--lg .brand-mdo { font-size: 46px; }
+.brand-lockup--lg .brand-sub { font-size: 11px; }
+
+.brand-with-badge { display: inline-flex; align-items: flex-start; gap: 10px; }
+.brand-badge {
+    display: inline-flex; align-items: center;
+    background: var(--sun); color: var(--navy);
+    font-family: var(--font-body); font-size: 11px; font-weight: 800; letter-spacing: .06em;
+    padding: 3px 10px; border-radius: 20px; flex-shrink: 0; margin-top: 5px;
 }
 
 main { padding: 32px 36px; }
