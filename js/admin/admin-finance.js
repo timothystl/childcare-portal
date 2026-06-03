@@ -288,23 +288,27 @@ async function _generateMonthDetail(year, month, container) {
         const pnl = await _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride: true });
         const moData = pnl.data[mo] || {};
 
-        // When no room-level schedules are saved, labor is a center-wide total, not per-room.
+        const hasPerRoomLab = pnl.hasScheduleData || pnl.hasClockBasedLabor;
+        // centerLab = historical payroll + unallocated floats (included in totals even with per-room data)
         const centerLab = pnl.hasFallbackLabor ? (pnl.centerLaborByMonth?.[mo] || 0) : 0;
-        const laborNote = pnl.hasFallbackLabor && centerLab > 0
-            ? `<p style="margin:.5rem 0 1rem;font-size:.85em;color:#92400e">⚠ No room schedules saved — labor total is center-wide and cannot be split by room.</p>`
-            : (!pnl.hasFallbackLabor && !pnl.hasScheduleData
-                ? `<p style="margin:.5rem 0 1rem;font-size:.85em;color:#6b7280">No payroll data found for this period — labor shows as $0.</p>`
-                : '');
+        const laborNote = pnl.hasClockBasedLabor
+            ? `<p style="margin:.5rem 0 1rem;font-size:.85em;color:#2e7d32">ℹ Labor estimated from clock records — assigned staff direct to room; salaried overhead by attendance.</p>`
+            : (pnl.hasFallbackLabor && centerLab > 0
+                ? `<p style="margin:.5rem 0 1rem;font-size:.85em;color:#92400e">⚠ No room schedules saved — labor total is center-wide and cannot be split by room.</p>`
+                : (!pnl.hasFallbackLabor && !pnl.hasScheduleData
+                    ? `<p style="margin:.5rem 0 1rem;font-size:.85em;color:#6b7280">No payroll data found for this period — labor shows as $0.</p>`
+                    : ''));
 
-        let totalRev = 0, totalLab = centerLab, totalFull = 0, totalHalf = 0;
+        // totalLab starts with unallocated center portion; per-room costs added below
+        let totalRev = 0, totalLab = hasPerRoomLab ? centerLab : centerLab, totalFull = 0, totalHalf = 0;
         const activeRoomIds = new Set([...Object.keys(roomRevMap), ...Object.keys(moData)]);
         const roomRows = ROOMS.filter(r => activeRoomIds.has(r.id)).map(r => {
             const rev  = roomRevMap[r.id]?.revenue  || 0;
             const full = roomRevMap[r.id]?.fullDays || 0;
             const half = roomRevMap[r.id]?.halfDays || 0;
-            const lab  = pnl.hasFallbackLabor ? 0 : (moData[r.id]?.labor || 0);
+            const lab  = hasPerRoomLab ? (moData[r.id]?.labor || 0) : 0;
             totalRev  += rev;
-            if (!pnl.hasFallbackLabor) totalLab += lab;
+            if (hasPerRoomLab) totalLab += lab;
             totalFull += full;
             totalHalf += half;
             return { label: r.label, fullDays: full, halfDays: half, revenue: rev, labor: lab };
@@ -325,7 +329,7 @@ async function _generateMonthDetail(year, month, container) {
                 <td class="report-num">${r.fullDays || '—'}</td>
                 <td class="report-num">${r.halfDays || '—'}</td>
                 <td class="report-num report-revenue">${_fmt$(r.revenue)}</td>
-                <td class="report-num">${r.labor > 0 ? _fmt$(r.labor) : (pnl.hasFallbackLabor ? '—' : _fmt$(0))}</td>
+                <td class="report-num">${r.labor > 0 ? _fmt$(r.labor) : (hasPerRoomLab ? _fmt$(0) : '—')}</td>
                 <td class="report-num ${net >= 0 ? 'fin-positive' : 'fin-negative'}">${_fmt$(net)}</td>
             </tr>`;
         }).join('');

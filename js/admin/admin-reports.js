@@ -2108,9 +2108,10 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
                 });
             });
 
-            // ── Tier 2: Mirror Payroll Report for dates NOT covered by historical ──
-            // Hourly staff: staff_hours entries + clock_events for days not yet synced
-            // Salary staff: salary_biweekly per pay period (no clock-in required)
+            // ── Tier 2: Per-room allocation from manual hours + clock events ──
+            // Hourly assigned staff  → direct to their room (staff.room_id)
+            // Hourly float with room tag → direct to tagged room (ev.room_id)
+            // Hourly float without tag → unallocated (stays in centerLaborByMonth)
 
             function calcClockHrs(ev) {
                 if (!ev.clock_in || !ev.clock_out) return 0;
@@ -2126,17 +2127,25 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
                     .map(h => `${h.staff_id}|${h.work_date}`)
             );
 
-            // Hourly staff from staff_hours on non-historical dates
+            // Manual hours → per-room where staff has an assignment, else unallocated
             hoursRowsAll.forEach(h => {
                 const mo = h.work_date.substring(0, 7);
                 if (mo < fromMo || mo > toMo) return;
                 if (histCoveredDates.has(h.work_date)) return;
-                if (h.pay_type === 'salary') return; // salary handled via pay periods below
-                centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + h.hourly_rate * h.hours_worked;
-                if (!centerLaborSource[mo]) centerLaborSource[mo] = 'hours';
+                if (h.pay_type === 'salary') return;
+                const s = staffById.get(h.staff_id);
+                const roomId = s?.room_id;
+                const cost = (h.hourly_rate || 0) * h.hours_worked;
+                if (roomId) {
+                    const key = `${mo}|${roomId}`;
+                    laborMap.set(key, (laborMap.get(key) || 0) + cost);
+                } else {
+                    centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + cost;
+                    if (!centerLaborSource[mo]) centerLaborSource[mo] = 'hours';
+                }
             });
 
-            // Hourly staff from clock_events on dates not yet synced to staff_hours
+            // Clock events → per-room using ev.room_id first, then staff.room_id, else unallocated
             clockEventsAll.forEach(ev => {
                 const mo = (ev.work_date || '').substring(0, 7);
                 if (mo < fromMo || mo > toMo) return;
@@ -2146,18 +2155,25 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
                 if (hrs <= 0) return;
                 const s = staffById.get(ev.staff_id);
                 if (!s || s.pay_type === 'salary') return;
-                centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + (s.hourly_rate || 0) * hrs;
-                if (!centerLaborSource[mo]) centerLaborSource[mo] = 'hours';
+                const roomId = ev.room_id || s.room_id;
+                const cost = (s.hourly_rate || 0) * hrs;
+                if (roomId) {
+                    const key = `${mo}|${roomId}`;
+                    laborMap.set(key, (laborMap.get(key) || 0) + cost);
+                } else {
+                    // Float without a room tag: unallocated until they use the room picker at clock-in
+                    centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + cost;
+                    if (!centerLaborSource[mo]) centerLaborSource[mo] = 'hours';
+                }
             });
 
-            // Salary staff: add salary_biweekly per pay period for days not in histCoveredDates
-            // Prorated across months when a period spans a month boundary.
-            const salaryStaff = allStaff.filter(s => s.pay_type === 'salary' && (s.salary_biweekly || 0) > 0);
-            if (salaryStaff.length > 0) {
-                const totalSalaryPerPeriod = salaryStaff.reduce((sum, s) => sum + (s.salary_biweekly || 0), 0);
+            // ── Tier 3: Salaried overhead staff (no room) → attendance-weighted per room ──
+            // Director salary is split across rooms proportional to child-attendance each month.
+            const salaryOverhead = allStaff.filter(s => s.pay_type === 'salary' && !s.room_id && (s.salary_biweekly || 0) > 0);
+            if (salaryOverhead.length > 0) {
+                const totalOvhdPerPeriod = salaryOverhead.reduce((sum, s) => sum + (s.salary_biweekly || 0), 0);
                 _buildPayrollPeriodList().forEach(p => {
                     if (p.end < fromDate || p.start > toDate) return;
-                    // Walk work days, counting uncovered days per month
                     const moUncoveredDays = {};
                     let totalWorkDays = 0;
                     const d = new Date(p.start + 'T12:00:00');
@@ -2176,8 +2192,23 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
                     }
                     if (totalWorkDays === 0) return;
                     Object.entries(moUncoveredDays).forEach(([mo, days]) => {
-                        const contribution = totalSalaryPerPeriod * days / totalWorkDays;
-                        centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + contribution;
+                        const monthlyCost = totalOvhdPerPeriod * days / totalWorkDays;
+                        const moRooms = rooms.filter(r => (arMap[mo]?.[r.id]?.attendees || 0) > 0);
+                        const totalAtt = moRooms.reduce((s, r) => s + arMap[mo][r.id].attendees, 0);
+                        if (totalAtt > 0) {
+                            moRooms.forEach(r => {
+                                const share = monthlyCost * arMap[mo][r.id].attendees / totalAtt;
+                                const key = `${mo}|${r.id}`;
+                                laborMap.set(key, (laborMap.get(key) || 0) + share);
+                            });
+                        } else {
+                            // No attendance data: equal split
+                            const perRoom = monthlyCost / rooms.length;
+                            rooms.forEach(r => {
+                                const key = `${mo}|${r.id}`;
+                                laborMap.set(key, (laborMap.get(key) || 0) + perRoom);
+                            });
+                        }
                         if (!centerLaborSource[mo]) centerLaborSource[mo] = 'hours';
                     });
                 });
@@ -2220,8 +2251,9 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
 
     const months = Object.keys(data).sort();
     const hasFallbackLabor = scheduleRows.length === 0 && Object.keys(centerLaborByMonth).length > 0;
+    const hasClockBasedLabor = scheduleRows.length === 0 && laborMap.size > 0;
     return { months, rooms, data, hasScheduleData: scheduleRows.length > 0,
-             centerLaborByMonth, centerLaborSource, hasFallbackLabor };
+             centerLaborByMonth, centerLaborSource, hasFallbackLabor, hasClockBasedLabor };
 }
 
 async function generateRoomPnl() {
@@ -2234,7 +2266,7 @@ async function generateRoomPnl() {
 
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
-        const { months, rooms, data, hasScheduleData, centerLaborByMonth, centerLaborSource, hasFallbackLabor } = await _buildRoomPnlData(fromDate, toDate);
+        const { months, rooms, data, hasScheduleData, centerLaborByMonth, centerLaborSource, hasFallbackLabor, hasClockBasedLabor } = await _buildRoomPnlData(fromDate, toDate);
 
         if (!months.length) {
             container.innerHTML = '<p class="empty-hint">No data found for the selected range.</p>';
@@ -2263,17 +2295,23 @@ async function generateRoomPnl() {
                 roomTotals[r.id].margin    += d.margin;
                 roomTotals[r.id].attendees += d.attendees;
                 moRev += d.revenue;
-                // Only add room labor to moLab when we have schedule data (otherwise use center total below)
-                if (hasScheduleData) moLab += d.labor;
+                // Accumulate per-room labor when we have schedule or clock-based data
+                if (hasScheduleData || hasClockBasedLabor) moLab += d.labor;
                 return `<td class="report-num report-revenue">${d.revenue > 0 ? fmt$(d.revenue) : '—'}</td>` +
                        `<td class="report-num">${d.labor > 0 ? fmt$(d.labor) : '—'}</td>` +
                        `<td class="report-num"${marginStyle(d.margin)}>${d.revenue > 0 || d.labor > 0 ? (d.margin < 0 ? '−' : '') + fmt$(d.margin) : '—'}</td>` +
                        `<td class="report-num"${marginStyle(pct)}>${d.revenue > 0 || d.labor > 0 ? fmtPct(pct) : '—'}</td>`;
             }).join('');
 
-            // Use center-wide fallback labor for the totals column when no schedule data
-            const centerLab = hasFallbackLabor ? (centerLaborByMonth[mo] || 0) : 0;
-            moLab = hasScheduleData ? moLab : centerLab;
+            // Total-column labor: per-room sum + any unallocated (historical / untagged floats)
+            const centerLab = centerLaborByMonth[mo] || 0;
+            if (hasScheduleData) {
+                // moLab already summed from per-room schedule data
+            } else if (hasClockBasedLabor) {
+                moLab += centerLab; // add unallocated portion to the total
+            } else {
+                moLab = centerLab; // center-wide only
+            }
 
             grandRev += moRev;
             grandLab += moLab;
@@ -2325,7 +2363,14 @@ async function generateRoomPnl() {
         const hasHistorical = hasFallbackLabor && sources.includes('historical');
         let laborBanner = '';
         if (!hasScheduleData) {
-            if (hasFallbackLabor) {
+            if (hasClockBasedLabor) {
+                const unallocNote = hasFallbackLabor
+                    ? ' Untagged float hours and historical payroll records are included in totals only.'
+                    : '';
+                laborBanner = `<p class="import-warning" style="margin-bottom:8px;background:#e8f5e9;color:#2e7d32;padding:8px 12px;border-radius:4px;border-left:3px solid #4caf50">
+                    ℹ️ Labor estimated from clock records — assigned staff costs are direct to their room; salaried overhead is split by attendance.${unallocNote}
+                </p>`;
+            } else if (hasFallbackLabor) {
                 const sourceNote = hasHistorical
                     ? '📋 = from Historical Payroll Records. * = from logged staff hours.' +
                       (hasEstimates ? ' ~est = salary estimate (no data for that month).' : '')
@@ -2347,7 +2392,7 @@ async function generateRoomPnl() {
             ${laborBanner}
             <div class="ar-summary-meta">
                 <span class="ar-total-badge">$${Math.round(grandRev).toLocaleString('en-US')} revenue</span>
-                <span class="ar-discount-badge">$${Math.round(grandLab).toLocaleString('en-US')} labor${hasEstimates ? ' (~est)' : hasFallbackLabor ? '*' : ''}</span>
+                <span class="ar-discount-badge">$${Math.round(grandLab).toLocaleString('en-US')} labor${hasEstimates ? ' (~est)' : (hasFallbackLabor && !hasClockBasedLabor) ? '*' : ''}</span>
                 <span class="ar-total-badge" style="background:${grandMargin >= 0 ? '#e8f5e9;color:#2e7d32' : '#ffebee;color:#c62828'}">$${Math.round(Math.abs(grandMargin)).toLocaleString('en-US')} ${grandMargin >= 0 ? 'margin' : 'loss'} (${Math.round(grandPct)}%)</span>
             </div>
             <div class="table-wrapper report-table-wrap">
@@ -2371,7 +2416,7 @@ async function generateRoomPnl() {
                             <td><strong>Totals</strong></td>
                             ${totalCells}
                             <td class="report-num report-revenue ar-total-col"><strong>${fmt$(grandRev)}</strong></td>
-                            <td class="report-num ar-total-col"><strong>${fmt$(grandLab)}${hasEstimates ? '~' : hasFallbackLabor ? '*' : ''}</strong></td>
+                            <td class="report-num ar-total-col"><strong>${fmt$(grandLab)}${hasEstimates ? '~' : (hasFallbackLabor && !hasClockBasedLabor) ? '*' : ''}</strong></td>
                             <td class="report-num ar-total-col"${marginStyle(grandMargin)}><strong>${(grandMargin < 0 ? '−' : '') + fmt$(grandMargin)}</strong></td>
                             <td class="report-num ar-total-col"${marginStyle(grandPct)}><strong>${fmtPct(grandPct)}</strong></td>
                         </tr>
@@ -2388,7 +2433,7 @@ async function exportRoomPnl() {
     const toDate   = document.getElementById('pnlDateTo')?.value;
     if (!fromDate || !toDate) { alert('Please select a date range first.'); return; }
 
-    const { months, rooms, data, hasScheduleData, centerLaborByMonth, hasFallbackLabor } = await _buildRoomPnlData(fromDate, toDate);
+    const { months, rooms, data, hasScheduleData, centerLaborByMonth, hasFallbackLabor, hasClockBasedLabor } = await _buildRoomPnlData(fromDate, toDate);
     const fmtPct = v => isFinite(v) && v !== 0 ? `${Math.round(v)}%` : '';
 
     const rows = months.map(mo => {
@@ -2403,12 +2448,12 @@ async function exportRoomPnl() {
             row[`${r.label} Margin%`] = d.revenue || d.labor ? fmtPct(pct) : '';
         });
         const moRev = rooms.reduce((s, r) => s + (data[mo]?.[r.id]?.revenue || 0), 0);
-        // Use center-wide fallback when no schedule data, else sum room labors
-        const moLab = hasScheduleData
-            ? rooms.reduce((s, r) => s + (data[mo]?.[r.id]?.labor || 0), 0)
+        const moRoomLab = rooms.reduce((s, r) => s + (data[mo]?.[r.id]?.labor || 0), 0);
+        const moLab = (hasScheduleData || hasClockBasedLabor)
+            ? moRoomLab + (centerLaborByMonth[mo] || 0)
             : (centerLaborByMonth[mo] || 0);
         row['Total Revenue'] = `$${moRev.toFixed(2)}`;
-        row['Total Labor']   = moLab ? `$${moLab.toFixed(2)}${hasFallbackLabor ? ' (center total)' : ''}` : '';
+        row['Total Labor']   = moLab ? `$${moLab.toFixed(2)}${(!hasScheduleData && !hasClockBasedLabor && hasFallbackLabor) ? ' (center total)' : ''}` : '';
         row['Total Margin']  = `$${(moRev - moLab).toFixed(2)}`;
         row['Margin %']      = moRev > 0 ? fmtPct(((moRev - moLab) / moRev) * 100) : '';
         return row;
