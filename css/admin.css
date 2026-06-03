@@ -22,8 +22,7 @@
     box-shadow: 0 12px 48px rgba(1,41,74,.15);
     border: 1px solid rgba(1,41,74,.1);
 }
-.login-card h1 { color: var(--text); margin-bottom: 6px; }
-.login-card > p { color: var(--text-muted); margin-bottom: 28px; }
+
 
 .login-card .form-group { text-align: left; margin-bottom: 20px; }
 .login-card .btn-primary { width: 100%; }
