@@ -3427,14 +3427,23 @@ async function previewHistPayroll(idx, records) {
                 <span style="color:#065f46;font-weight:600">✓ ${escHtml(m.name)}</span>
                 <span style="font-size:.8em;color:var(--text-muted)"> → ${room}</span></td>`;
         } else {
-            const opts = m.suggestions.map(s =>
+            // Suggestions first, then a divider, then all remaining staff alphabetically
+            const suggestedIds = new Set(m.suggestions.map(s => s.id));
+            const suggestOpts = m.suggestions.map(s =>
                 `<option value="${s.id}" data-room="${s.room_id || ''}" data-pay="${s.pay_type || ''}">${escHtml(s.name)}${s.room_id ? ` (${escHtml(s.room_id)})` : ''}</option>`
             ).join('');
+            const otherOpts = allStaff
+                .filter(s => !suggestedIds.has(s.id))
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(s =>
+                    `<option value="${s.id}" data-room="${s.room_id || ''}" data-pay="${s.pay_type || ''}">${escHtml(s.name)}${s.room_id ? ` (${escHtml(s.room_id)})` : ''}</option>`
+                ).join('');
+            const divider = suggestOpts && otherOpts ? `<option disabled>──────────</option>` : '';
             nameCell = `<td><input type="checkbox" class="hist-row-check" data-idx="${i}" checked>
                 <span style="color:#92400e;font-weight:600">~ ${escHtml(m.name)}</span>
                 <select class="hist-name-override" data-idx="${i}" style="font-size:.8em;margin-left:6px;max-width:200px">
                     <option value="">Float (unmatched)</option>
-                    ${opts}
+                    ${suggestOpts}${divider}${otherOpts}
                 </select></td>`;
         }
         return `<tr class="${cls}" data-row-idx="${i}">
