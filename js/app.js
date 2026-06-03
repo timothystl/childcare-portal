@@ -252,17 +252,6 @@ function selectFamily(family, isParent2 = false) {
         initPushNotifications(family.id, _familySessionToken);
     }
 
-    // Check for outstanding balance and show a warning banner if any exists
-    getOutstandingBalanceByEmail(prefillEmail).then(rows => {
-        const banner = document.getElementById('balanceBanner');
-        if (!banner) return;
-        if (!rows || !rows.length) { banner.classList.add('hidden'); return; }
-        const total  = rows.reduce((s, r) => s + parseFloat(r.balance || 0), 0);
-        const months = rows.map(r => r.billing_month).join(', ');
-        banner.innerHTML = `⚠️ <strong>Outstanding balance of $${total.toFixed(2)}</strong> from ${months}. Please contact the office.`;
-        banner.classList.remove('hidden');
-    }).catch(() => {});
-
     renderChildSection();
 }
 
