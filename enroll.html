@@ -11,7 +11,7 @@
   <meta name="theme-color" content="#01294A">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
       --navy:      #01294A;
@@ -52,10 +52,19 @@
     /* NAV */
     .nav { position: sticky; top: 0; z-index: 100; background: var(--green-lt); padding: 0 28px; border-bottom: 3px solid var(--sun); }
     .nav-inner { max-width: 1080px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 64px; }
-    .nav-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
-    .nav-brand img { width: 42px; height: 42px; border-radius: 50%; background: white; padding: 2px; }
-    .nav-brand-text { font-size: 14px; font-weight: 800; color: var(--navy); line-height: 1.2; }
-    .nav-brand-text span { display: block; font-size: 11px; font-weight: 600; color: var(--green); letter-spacing: .04em; }
+    .nav-brand { display: flex; align-items: center; text-decoration: none; }
+    .brand-lockup { display: inline-block; line-height: 1; }
+    .brand-wordmark { display: flex; align-items: baseline; }
+    .brand-my  { font-family: 'Dancing Script', cursive; font-weight: 700; color: var(--green); }
+    .brand-mdo { font-family: 'Nunito', sans-serif; font-weight: 800; color: var(--navy); }
+    .brand-bar { height: 3px; background: var(--sun); border-radius: 2px; margin-top: 3px; width: 100%; }
+    .brand-sub { font-family: var(--font-body); font-weight: 400; letter-spacing: .15em; text-transform: uppercase; color: var(--navy); margin-top: 4px; }
+    .brand-lockup--sm .brand-my, .brand-lockup--sm .brand-mdo { font-size: 26px; }
+    .brand-lockup--sm .brand-sub { font-size: 8px; }
+    .brand-lockup--md .brand-my, .brand-lockup--md .brand-mdo { font-size: 36px; }
+    .brand-lockup--md .brand-sub { font-size: 10px; }
+    .brand-lockup--dark .brand-mdo { color: #fff; }
+    .brand-lockup--dark .brand-sub { color: rgba(255,255,255,.6); }
     .nav-right { display: flex; align-items: center; gap: 8px; }
     .nav-link { font-size: 13px; font-weight: 700; color: rgba(1,41,74,.8); text-decoration: none; padding: 6px 12px; border-radius: var(--radius-sm); }
     .nav-link:hover { background: rgba(1,41,74,.1); color: var(--navy); }
@@ -122,8 +131,8 @@
     /* FOOTER */
     .site-footer { background: var(--navy-dk); padding: 40px 28px 28px; }
     .footer-inner { max-width: 860px; margin: 0 auto; display: flex; justify-content: space-between; align-items: flex-start; gap: 40px; flex-wrap: wrap; margin-bottom: 28px; }
-    .footer-brand img { width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.08); padding: 2px; margin-bottom: 10px; }
-    .footer-brand p { font-size: 13px; color: rgba(255,255,255,.5); line-height: 1.7; max-width: 240px; }
+    .footer-brand { margin-bottom: 10px; }
+    .footer-brand p { font-size: 13px; color: rgba(255,255,255,.5); line-height: 1.7; max-width: 240px; margin-top: 12px; }
     .footer-links { display: flex; flex-direction: column; gap: 8px; }
     .footer-links a { font-size: 13px; color: rgba(255,255,255,.6); text-decoration: none; }
     .footer-links a:hover { color: var(--sun); }
@@ -136,9 +145,12 @@
 
 <nav class="nav">
   <div class="nav-inner">
-    <a href="/" class="nav-brand">
-      <img src="/images/logo.png" alt="Timothy Lutheran MDO">
-      <div class="nav-brand-text">Mother's Day Out<span>Timothy Lutheran Church</span></div>
+    <a href="/" class="nav-brand" aria-label="myMDO — Timothy Lutheran Church">
+      <div class="brand-lockup brand-lockup--sm">
+        <div class="brand-wordmark"><span class="brand-my">my</span><span class="brand-mdo">MDO</span></div>
+        <div class="brand-bar"></div>
+        <div class="brand-sub">Timothy Lutheran Church</div>
+      </div>
     </a>
     <div class="nav-right">
       <a href="/#contact" class="nav-link">Contact Us</a>
@@ -200,7 +212,11 @@
 <footer class="site-footer">
   <div class="footer-inner">
     <div class="footer-brand">
-      <img src="/images/logo.png" alt="Timothy Lutheran MDO">
+      <div class="brand-lockup brand-lockup--md brand-lockup--dark">
+        <div class="brand-wordmark"><span class="brand-my">my</span><span class="brand-mdo">MDO</span></div>
+        <div class="brand-bar"></div>
+        <div class="brand-sub">Timothy Lutheran Church</div>
+      </div>
       <p>Mother's Day Out at Timothy Lutheran Church — faith-based childcare in Lindenwood Park, St. Louis.</p>
     </div>
     <div class="footer-links">

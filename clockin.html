@@ -12,7 +12,7 @@
     <!-- Fonts: Sunlit Neighborhood brand system -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         /* ── Sunlit Neighborhood — Variation B: Staff Clock-In ── */
@@ -68,7 +68,17 @@
             border-top: 4px solid var(--sun);
         }
 
-        .logo { font-size: 2.2em; margin-bottom: 4px; }
+        .brand-lockup { display: inline-block; line-height: 1; }
+        .brand-wordmark { display: flex; align-items: baseline; }
+        .brand-my  { font-family: 'Dancing Script', cursive; font-weight: 700; color: var(--green); }
+        .brand-mdo { font-family: 'Nunito', sans-serif; font-weight: 800; color: var(--navy); }
+        .brand-bar { height: 3px; background: var(--sun); border-radius: 2px; margin-top: 3px; width: 100%; }
+        .brand-sub { font-family: var(--font-body); font-weight: 400; letter-spacing: .15em; text-transform: uppercase; color: var(--navy); margin-top: 4px; }
+        .brand-lockup--center { display: block; }
+        .brand-lockup--center .brand-wordmark { justify-content: center; }
+        .brand-lockup--center .brand-sub { text-align: center; }
+        .brand-lockup--md .brand-my, .brand-lockup--md .brand-mdo { font-size: 36px; }
+        .brand-lockup--md .brand-sub { font-size: 10px; }
         h1 {
             font-size: 1.3em;
             font-family: var(--font-head);
@@ -320,7 +330,11 @@
 </head>
 <body>
 <div class="card">
-    <div class="logo">🏫</div>
+    <div class="brand-lockup brand-lockup--md brand-lockup--center" style="margin:0 auto 10px;">
+      <div class="brand-wordmark"><span class="brand-my">my</span><span class="brand-mdo">MDO</span></div>
+      <div class="brand-bar"></div>
+      <div class="brand-sub">Timothy Lutheran Church</div>
+    </div>
     <h1>Staff Clock In / Out</h1>
     <p class="subtitle">Enter your 4-digit PIN to continue</p>
 
