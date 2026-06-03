@@ -8,18 +8,19 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    background: var(--linen);
+    background: #fcf8f0;
     padding: 20px;
 }
 
 .login-card {
-    background: var(--white);
+    background: #fcf8f0;
     border-radius: var(--radius-md);
     padding: 48px 40px;
     max-width: 400px;
     width: 100%;
     text-align: center;
-    box-shadow: 0 12px 48px rgba(0,0,0,.2);
+    box-shadow: 0 12px 48px rgba(1,41,74,.15);
+    border: 1px solid rgba(1,41,74,.1);
 }
 .login-card h1 { color: var(--text); margin-bottom: 6px; }
 .login-card > p { color: var(--text-muted); margin-bottom: 28px; }
