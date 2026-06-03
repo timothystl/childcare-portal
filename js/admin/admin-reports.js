@@ -3351,8 +3351,8 @@ function renderHistPayrollSection(records) {
                 </div>
             </div>
             <div class="hist-payroll-import-area" id="hist-import-${idx}">
-                <p style="font-size:.82em;color:var(--text-muted);margin:0 0 6px">Paste payroll data from Excel/ProCare (tab-separated). Include the header row.</p>
-                <textarea id="hist-paste-${idx}" placeholder="Staff Name&#9;Hours&#9;Rate&#9;Bonus&#9;Gross Pay&#10;Amy Ricketts&#9;40&#9;12.00&#9;0&#9;480.00&#10;…"></textarea>
+                <p style="font-size:.82em;color:var(--text-muted);margin:0 0 6px">Paste payroll data from Excel (Ctrl+A → Ctrl+C on the sheet, then paste here). Supports QuickBooks payroll summary or ProCare export — format is auto-detected.</p>
+                <textarea id="hist-paste-${idx}" placeholder="QuickBooks: select all cells and paste the full sheet.&#10;ProCare: include the header row (Staff Name, Hours, Rate, Bonus, Gross Pay)."></textarea>
                 <div class="hist-import-actions">
                     <button class="btn-secondary btn-sm" data-hist-preview="${idx}">Preview</button>
                     <button class="btn-primary btn-sm hidden" id="hist-confirm-${idx}" data-hist-confirm="${idx}">Confirm &amp; Save</button>
