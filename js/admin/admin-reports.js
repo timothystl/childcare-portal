@@ -1061,12 +1061,13 @@ function setupPayrollReport() {
 
 async function _buildPayrollData(startVal, endVal) {
     const ytdStart = `${endVal.substring(0, 4)}-01-01`;
-    const [allStaff, periodHrs, ytdHrs, periodClockEvents, ytdClockEvents] = await Promise.all([
+    const [allStaff, periodHrs, ytdHrs, periodClockEvents, ytdClockEvents, periodPtoRaw] = await Promise.all([
         fetchAllStaff({ includeInactive: true }),
         fetchStaffHours(startVal, endVal),
         fetchStaffHours(ytdStart, endVal),
         fetchClockEventsForRange(startVal, endVal),
         fetchClockEventsForRange(ytdStart, endVal),
+        fetchStaffPtoEntries(startVal),
     ]);
 
     // Build a set of (staff_id, work_date) keys that already have a manual hours entry
@@ -1142,10 +1143,19 @@ async function _buildPayrollData(startVal, endVal) {
     // Sort each staff's detail entries by date
     periodDetailMap.forEach(entries => entries.sort((a, b) => a.work_date.localeCompare(b.work_date)));
 
+    // Build PTO map and add PTO hours to periodMap for gross calc
+    const periodPtoMap = new Map(); // staff_id -> { used, earned }
+    periodPtoRaw.forEach(p => {
+        const used   = parseFloat(p.pto_hours_used)   || 0;
+        const earned = parseFloat(p.pto_hours_earned) || 0;
+        periodPtoMap.set(p.staff_id, { used, earned });
+        if (used > 0) periodMap.set(p.staff_id, (periodMap.get(p.staff_id) || 0) + used);
+    });
+
     // Include active staff + anyone with hours in the period
     const staff = allStaff.filter(s => s.active || periodMap.has(s.id));
     staff.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    return { staff, periodMap, ytdMap, periodDetailMap };
+    return { staff, periodMap, ytdMap, periodDetailMap, periodPtoMap };
 }
 
 async function generatePayrollReport() {
@@ -1156,11 +1166,71 @@ async function generatePayrollReport() {
     const container = document.getElementById('payrollContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
-        const { staff, periodMap, ytdMap, periodDetailMap } = await _buildPayrollData(startVal, endVal);
-        renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap);
+        const { staff, periodMap, ytdMap, periodDetailMap, periodPtoMap } = await _buildPayrollData(startVal, endVal);
+        renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap, periodPtoMap);
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
     }
+}
+
+function _renderPtoGrid(container, staff, periodStart, periodPtoMap) {
+    const hourlyStaff = staff.filter(s => s.pay_type === 'hourly' && s.active);
+    if (!hourlyStaff.length) return '';
+
+    const _ptoPending = {};
+
+    const rows = hourlyStaff.map(s => {
+        const pto    = periodPtoMap.get(s.id) || {};
+        const used   = pto.used   ?? '';
+        const earned = pto.earned ?? '';
+        return `<tr>
+            <td style="padding:6px 10px"><strong>${escHtml(s.name)}</strong></td>
+            <td style="padding:6px 8px">
+                <input type="number" min="0" step="0.25" value="${used}" placeholder="0"
+                    style="width:70px;padding:4px 6px;border:1.5px solid var(--admin-border);border-radius:6px;text-align:right"
+                    data-sid="${escHtml(s.id)}" data-field="used"
+                    oninput="_schedulePtoSave(this,'${escHtml(s.id)}','${periodStart}')">
+            </td>
+            <td style="padding:6px 8px">
+                <input type="number" min="0" step="0.25" value="${earned}" placeholder="0"
+                    style="width:70px;padding:4px 6px;border:1.5px solid var(--admin-border);border-radius:6px;text-align:right"
+                    data-sid="${escHtml(s.id)}" data-field="earned"
+                    oninput="_schedulePtoSave(this,'${escHtml(s.id)}','${periodStart}')">
+            </td>
+        </tr>`;
+    }).join('');
+
+    return `<div style="margin-bottom:20px;background:var(--admin-hover);border:1px solid var(--admin-border);border-radius:10px;overflow:hidden">
+        <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--admin-border)">
+            <strong style="font-size:.9rem">PTO Hours — This Period</strong>
+            <span style="font-size:.78rem;color:var(--text-muted)">Hourly staff only · auto-saves</span>
+            <span id="ptoSaveIndicator" style="font-size:.78rem;color:#166534;margin-left:auto;display:none">✓ Saved</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="background:var(--admin-section-bg)">
+                <th style="text-align:left;padding:6px 10px;font-size:.75rem;color:var(--text-muted)">Staff Member</th>
+                <th style="text-align:left;padding:6px 8px;font-size:.75rem;color:var(--text-muted)">PTO Used (hrs)</th>
+                <th style="text-align:left;padding:6px 8px;font-size:.75rem;color:var(--text-muted)">PTO Earned (hrs)</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    </div>`;
+}
+
+let _ptoPendingTimers = {};
+function _schedulePtoSave(input, staffId, periodStart) {
+    clearTimeout(_ptoPendingTimers[staffId]);
+    _ptoPendingTimers[staffId] = setTimeout(async () => {
+        const usedInput   = document.querySelector(`input[data-sid="${staffId}"][data-field="used"]`);
+        const earnedInput = document.querySelector(`input[data-sid="${staffId}"][data-field="earned"]`);
+        const used   = parseFloat(usedInput?.value)   || 0;
+        const earned = parseFloat(earnedInput?.value) || 0;
+        try {
+            await upsertStaffPtoEntry(staffId, periodStart, used, earned);
+            const ind = document.getElementById('ptoSaveIndicator');
+            if (ind) { ind.style.display = ''; clearTimeout(_ptoPendingTimers['_flash']); _ptoPendingTimers['_flash'] = setTimeout(() => { ind.style.display = 'none'; }, 1800); }
+        } catch(e) { console.error('PTO save error', e); }
+    }, 600);
 }
 
 function _calcYtdPeriods(startVal, endVal) {
@@ -1172,12 +1242,13 @@ function _calcYtdPeriods(startVal, endVal) {
     return Math.max(1, Math.ceil(days / 14));
 }
 
-function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap = new Map()) {
+function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap = new Map(), periodPtoMap = new Map()) {
     const container = document.getElementById('payrollContent');
     if (!staff.length) {
         container.innerHTML = '<p class="empty-hint">No staff data found.</p>';
         return;
     }
+    const ptoGridHtml = _renderPtoGrid(container, staff, startVal, periodPtoMap);
 
     let totPeriodPay = 0, totYtdPay = 0;
     const ytdPeriods = _calcYtdPeriods(startVal, endVal);
@@ -1199,13 +1270,15 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             ytdHrsStr      = '—';
             ytdPayStr      = ytdSal > 0 ? '$' + ytdSal.toFixed(2) : '—';
         } else {
-            const pHrs = periodMap.get(s.id) || 0;
-            const yHrs = ytdMap.get(s.id) || 0;
-            const rate = s.hourly_rate || 0;
+            const pHrs   = periodMap.get(s.id) || 0;   // already includes PTO used
+            const ptoUsed = (periodPtoMap.get(s.id) || {}).used || 0;
+            const yHrs   = ytdMap.get(s.id) || 0;
+            const rate   = s.hourly_rate || 0;
             totPeriodPay += pHrs * rate;
             totYtdPay    += yHrs * rate;
             rateStr       = `$${rate.toFixed(2)}/hr`;
-            periodHrsStr  = pHrs > 0 ? pHrs.toFixed(2) : '—';
+            const ptoNote = ptoUsed > 0 ? ` <span style="font-size:.75em;color:#7a5800">(incl. ${ptoUsed.toFixed(2)} PTO)</span>` : '';
+            periodHrsStr  = pHrs > 0 ? pHrs.toFixed(2) + ptoNote : '—';
             periodPayStr  = pHrs > 0 ? '$' + (pHrs * rate).toFixed(2) : '—';
             ytdHrsStr     = yHrs > 0 ? yHrs.toFixed(2) : '—';
             ytdPayStr     = yHrs > 0 ? '$' + (yHrs * rate).toFixed(2) : '—';
@@ -1253,6 +1326,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
     const periodLabel  = `${MONTH_NAMES_ADMIN[sm-1]} ${sd} – ${MONTH_NAMES_ADMIN[em-1]} ${ed}, ${ey}`;
 
     container.innerHTML = `
+        ${ptoGridHtml}
         <h3 class="report-month-title">Pay Period: ${periodLabel}</h3>
         <div class="table-wrapper report-table-wrap">
             <table class="report-table payroll-table">

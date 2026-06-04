@@ -1813,6 +1813,25 @@ async function deleteClockEvent(eventId) {
     if (error) throw error;
 }
 
+async function fetchStaffPtoEntries(periodStart) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_pto_entries')
+        .select('staff_id, pto_hours_used, pto_hours_earned')
+        .eq('period_start', periodStart);
+    if (error) throw error;
+    return data || [];
+}
+
+async function upsertStaffPtoEntry(staffId, periodStart, ptoUsed, ptoEarned) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('staff_pto_entries')
+        .upsert({ staff_id: staffId, period_start: periodStart, pto_hours_used: ptoUsed, pto_hours_earned: ptoEarned },
+                { onConflict: 'staff_id,period_start' });
+    if (error) throw error;
+}
+
 // ============================================================
 // STAFF AVAILABILITY  (stored in settings table as JSON blob)
 // ============================================================
