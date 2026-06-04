@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const ALLOWED_ORIGIN = "https://mdo.timothystl.org";
 
@@ -59,6 +60,25 @@ serve(async (req) => {
     }
 
     try {
+        // Require a valid admin session
+        const authHeader = req.headers.get("Authorization");
+        if (!authHeader) {
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+                status: 401, headers: { ...ch, "Content-Type": "application/json" },
+            });
+        }
+        const callerClient = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_ANON_KEY")!,
+            { global: { headers: { Authorization: authHeader } } },
+        );
+        const { data: { user }, error: authError } = await callerClient.auth.getUser();
+        if (authError || !user) {
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+                status: 401, headers: { ...ch, "Content-Type": "application/json" },
+            });
+        }
+
         const { parentName, parentEmail, childName, monthLabel, existingDates, addedDate, changeFee } =
             await req.json();
 

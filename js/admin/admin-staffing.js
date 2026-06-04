@@ -292,6 +292,9 @@ async function onSaveStaffMember() {
     const pinVal = document.getElementById('sfPin').value.trim();
     if (pinVal && (!/^\d{4}$/.test(pinVal))) { alert('PIN must be exactly 4 digits.'); return; }
 
+    const saveBtn = document.getElementById('saveStaffBtn');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
     const payType = document.getElementById('sfPayType').value;
 
     // Capture availability before closing the form
@@ -335,11 +338,14 @@ async function onSaveStaffMember() {
                 staffAvailability = {};
             }
             staffAvailability[staffId] = { dayPeriods, maxHours, maxDays, excluded_rooms };
-            saveStaffAvailability(staffAvailability).catch(console.error);
+            saveStaffAvailability(staffAvailability).catch(err => {
+                alert('Staff details saved but availability could not be saved: ' + err.message);
+            });
         }
         loadStaffList();
     } catch (err) {
         alert('Save failed: ' + err.message);
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
     }
 }
 
@@ -413,7 +419,7 @@ function renderRoomSelect(staffId, roomMap, eventsMap) {
     const options = ROOMS.map(r =>
         `<option value="${r.id}"${currentRoomId === r.id ? ' selected' : ''}>${r.label}</option>`
     ).join('');
-    return `<select class="room-today-select" data-staff-id="${staffId}" ${hasEvents ? '' : 'disabled'}>
+    return `<select class="room-today-select" data-staff-id="${staffId}" data-prev-value="${currentRoomId}" ${hasEvents ? '' : 'disabled'}>
         <option value="">—</option>
         ${options}
     </select>`;
@@ -568,12 +574,20 @@ async function loadHoursForDate() {
         // Room Today dropdown — update all clock events for this staff+date
         container.querySelectorAll('.room-today-select').forEach(sel => {
             sel.addEventListener('change', async () => {
-                const sid = sel.dataset.staffId;
+                if (currentAdminRole !== 'full') {
+                    alert('You do not have permission to update room assignments.');
+                    sel.value = sel.dataset.prevValue ?? '';
+                    return;
+                }
+                const sid  = sel.dataset.staffId;
+                const prev = sel.dataset.prevValue ?? '';
+                sel.dataset.prevValue = sel.value;
                 try {
                     await updateClockEventsRoom(sid, date, sel.value || null);
                 } catch (err) {
                     alert('Failed to update room: ' + err.message);
-                    await loadHoursForDate();
+                    sel.value = prev;
+                    sel.dataset.prevValue = prev;
                 }
             });
         });

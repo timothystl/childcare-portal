@@ -93,6 +93,24 @@ Deno.serve(async (req) => {
 
     if (!familyId) return ok()
 
+    // Rate-limit: one pending token per family every 15 minutes
+    const cooldown = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+    const { data: recent } = await supabase
+      .from('pin_reset_tokens')
+      .select('id')
+      .eq('family_id', familyId)
+      .gte('created_at', cooldown)
+      .limit(1)
+      .maybeSingle()
+    if (recent) return ok()
+
+    // Delete any expired tokens for this family before inserting a fresh one
+    await supabase
+      .from('pin_reset_tokens')
+      .delete()
+      .eq('family_id', familyId)
+      .lt('expires_at', new Date().toISOString())
+
     const token = generateToken()
     const expires_at = new Date(Date.now() + TOKEN_TTL_MS).toISOString()
 

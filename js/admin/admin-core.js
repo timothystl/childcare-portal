@@ -172,8 +172,3 @@ function friendlyShort(dateStr) {
         { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function escHtml(str) {
-    return String(str ?? '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}

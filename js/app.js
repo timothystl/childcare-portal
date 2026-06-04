@@ -1323,7 +1323,7 @@ function openPrintSchedule({ sortedDates, childNames, monthLabel, parentName }) 
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>${monthLabel} Care Schedule — ${parentName}</title>
+<title>${escHtml(monthLabel)} Care Schedule — ${escHtml(parentName)}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; padding: 48px; max-width: 600px; margin: 0 auto; color: #222; }
@@ -1339,7 +1339,7 @@ function openPrintSchedule({ sortedDates, childNames, monthLabel, parentName }) 
 </head>
 <body>
   <h1>${monthLabel} — Confirmed Care Schedule</h1>
-  <p class="sub">Family: <strong>${parentName}</strong> &nbsp;·&nbsp; Children: ${childNames.join(', ')}</p>
+  <p class="sub">Family: <strong>${escHtml(parentName)}</strong> &nbsp;·&nbsp; Children: ${childNames.map(escHtml).join(', ')}</p>
   <table>
     <thead><tr><th>Date</th><th>Type</th></tr></thead>
     <tbody>${rows}</tbody>

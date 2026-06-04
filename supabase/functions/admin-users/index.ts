@@ -47,6 +47,20 @@ serve(async (req) => {
             auth: { autoRefreshToken: false, persistSession: false },
         });
 
+        // Verify caller has 'full' admin role
+        const { data: roleSetting } = await adminClient
+            .from('settings')
+            .select('value')
+            .eq('key', 'admin_roles')
+            .maybeSingle();
+        const roles = roleSetting?.value || {};
+        const callerEmail = (user.email || '').toLowerCase().trim();
+        if (Object.keys(roles).length > 0 && roles[callerEmail] !== 'full') {
+            return new Response(JSON.stringify({ error: "Forbidden: full admin role required" }), {
+                status: 403, headers: { ...ch, "Content-Type": "application/json" },
+            });
+        }
+
         const body = await req.json();
         const { action, email, password, userId } = body;
 

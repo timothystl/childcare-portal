@@ -2041,7 +2041,6 @@ async function sendScheduleChangeEmail({ parentName, parentEmail, childName, mon
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.functions.invoke('send-schedule-change', {
         body: { parentName, parentEmail, childName, monthLabel, existingDates, addedDate, changeFee },
-        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
     });
     if (error) throw error;
     return data;
@@ -2081,43 +2080,6 @@ async function fetchAttendanceSummary({ month, roomId } = {}) {
     return data || [];
 }
 
-// Fetch confirmed, non-waitlisted care dates in a date range.
-// Returns flat array of { registration_id, care_date, day_type, room_id }.
-// Used by the Finance modeling tool to count actual enrollment and avg days/child.
-async function fetchRegistrationDatesForRange(fromDate, toDate) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-
-    // Step 1: Fetch all non-waitlisted care dates in the range (no join needed)
-    const { data: dates, error: datesErr } = await sbClient
-        .from('registration_dates')
-        .select('registration_id, care_date, day_type, room_id, waitlisted')
-        .gte('care_date', fromDate)
-        .lte('care_date', toDate)
-        .neq('waitlisted', true)
-        .limit(5000);
-    if (datesErr) throw datesErr;
-    if (!dates?.length) return [];
-
-    // Step 2: From those registration IDs, find which are 'confirmed'
-    const regIds = [...new Set(dates.map(d => d.registration_id).filter(Boolean))];
-    const { data: regs, error: regsErr } = await sbClient
-        .from('registrations')
-        .select('id')
-        .in('id', regIds)
-        .eq('status', 'confirmed');
-    if (regsErr) throw regsErr;
-
-    const confirmedIds = new Set((regs || []).map(r => r.id));
-
-    return dates
-        .filter(rd => confirmedIds.has(rd.registration_id))
-        .map(rd => ({
-            registration_id: rd.registration_id,
-            care_date:       rd.care_date,
-            day_type:        rd.day_type,
-            room_id:         rd.room_id,
-        }));
-}
 
 // Count currently confirmed registrations per room.
 // Returns { roomId: { total, full, half } } — used by finance modeling tool.

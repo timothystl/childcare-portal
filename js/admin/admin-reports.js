@@ -1403,13 +1403,18 @@ async function _buildArDataMap(fromDate, toDate, { skipHistoricalOverride = fals
     } catch (e) { console.warn('Could not fetch full registration history; falling back to loaded data:', e); }
     const dmap = getDiscountMap();
 
-    // Fetch billing overrides for every month in the report range
+    // Fetch billing overrides for every month in the report range (parallel)
     const overridesByMonth = new Map(); // 'YYYY-MM' → Map(parentEmail:childName → overrideAmount)
     {
+        const months = [];
         let [oy, om] = fromMo.split('-').map(Number);
         while (true) {
             const mo = `${oy}-${String(om).padStart(2, '0')}`;
             if (mo > toMo) break;
+            months.push(mo);
+            if (om === 12) { oy++; om = 1; } else { om++; }
+        }
+        await Promise.all(months.map(async mo => {
             try {
                 const rows = await fetchBillingOverrides(mo);
                 overridesByMonth.set(mo, new Map(rows.map(r => [
@@ -1417,8 +1422,7 @@ async function _buildArDataMap(fromDate, toDate, { skipHistoricalOverride = fals
                     parseFloat(r.override_amount),
                 ])));
             } catch (e) { console.warn(`fetchBillingOverrides(${mo}):`, e); }
-            if (om === 12) { oy++; om = 1; } else { om++; }
-        }
+        }));
     }
 
     // Group registrations by family — mirrors _buildFamilyBillingData exactly.
