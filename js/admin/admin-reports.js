@@ -244,14 +244,14 @@ async function generateFamilyBillingReport() {
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
 
     // Always load fresh families and registrations so discounts and new entries are up to date.
-    try {
-        allFamiliesData = await fetchAllFamilies({ includeArchived: true });
-        _discountMap = null;
-    } catch (e) { console.warn('Could not load families for discount map:', e); }
-    try {
-        const fresh = await fetchAllRegistrations();
-        if (fresh && fresh.length) allRegistrations = fresh;
-    } catch (e) { console.warn('Could not refresh registrations:', e); }
+    await Promise.all([
+        fetchAllFamilies({ includeArchived: true })
+            .then(d => { allFamiliesData = d; _discountMap = null; })
+            .catch(e => console.warn('Could not load families for discount map:', e)),
+        fetchAllRegistrations()
+            .then(d => { if (d?.length) allRegistrations = d; })
+            .catch(e => console.warn('Could not refresh registrations:', e)),
+    ]);
 
     // Load any manual billing overrides for this month
     let overrideRows = [];
@@ -1385,22 +1385,19 @@ async function _buildArDataMap(fromDate, toDate, { skipHistoricalOverride = fals
     const map    = {};
 
     // Step 1: build from live registrations
-    // Ensure family discount data is loaded — it's only lazy-loaded when the Families tab is opened,
-    // so a user who goes straight to Reports would have an empty discount map otherwise.
+    // Ensure family discount data and full registration history are loaded in parallel.
     // Always reload families with archived included so discount map is never stale.
-    // (The Families tab only loads active families by default, which would miss
-    // archived families' discounts if we reused that cached data.)
-    try {
-        allFamiliesData = await fetchAllFamilies({ includeArchived: true });
-        _discountMap = null; // force rebuild from freshly loaded data
-    } catch (e) { console.warn('Could not load families for discount map:', e); }
-    // Fetch all registrations with no created_at filter — any date restriction (sinceDate/untilDate)
-    // causes PostgreSQL to exclude rows with NULL created_at via a false NULL comparison,
-    // which silently drops those registrations from the revenue calculation.
+    // Fetch registrations with no date filter — any sinceDate/untilDate restriction causes
+    // PostgreSQL to exclude rows with NULL created_at, silently dropping revenue.
     let regsForReport = allRegistrations;
-    try {
-        regsForReport = await fetchAllRegistrations();
-    } catch (e) { console.warn('Could not fetch full registration history; falling back to loaded data:', e); }
+    await Promise.all([
+        fetchAllFamilies({ includeArchived: true })
+            .then(d => { allFamiliesData = d; _discountMap = null; })
+            .catch(e => console.warn('Could not load families for discount map:', e)),
+        fetchAllRegistrations()
+            .then(d => { if (d) { regsForReport = d; allRegistrations = d; } })
+            .catch(e => console.warn('Could not fetch full registration history; falling back to loaded data:', e)),
+    ]);
     const dmap = getDiscountMap();
 
     // Fetch billing overrides for every month in the report range (parallel)

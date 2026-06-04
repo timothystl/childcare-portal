@@ -374,6 +374,8 @@ async function deleteClosure(closeDate) {
 async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates = [], status = 'confirmed', submittedBy = 'parent1' }) {
     if (!sbClient) throw new Error('Supabase is not configured yet.');
 
+    const monthKey = confirmedDates[0]?.date?.slice(0, 7) || null;
+
     const { data: reg, error: regError } = await sbClient
         .from('registrations')
         .insert({
@@ -386,11 +388,17 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
             room_id:      roomId,
             status:       status,
             submitted_by: submittedBy,
+            month_key:    monthKey,
         })
         .select()
         .single();
 
-    if (regError) throw regError;
+    if (regError) {
+        if (regError.code === '23505') {
+            throw Object.assign(new Error(`${child.name} is already registered for this month. Please contact the office if you need to make changes.`), { code: '23505' });
+        }
+        throw regError;
+    }
 
     const dateRows = [
         ...confirmedDates.map(({ date, dayType }) => ({
