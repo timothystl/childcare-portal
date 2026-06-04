@@ -405,6 +405,20 @@ function _localTimeToISO(workDate, timeStr) {
     return new Date(`${workDate}T${timeStr}:00`).toISOString();
 }
 
+function renderRoomSelect(staffId, roomMap, eventsMap) {
+    const hasEvents = (eventsMap.get(staffId) || []).length > 0;
+    // Determine current room_id from the first event (all events are updated together)
+    const firstEvent = (eventsMap.get(staffId) || [])[0];
+    const currentRoomId = firstEvent?.room_id || '';
+    const options = ROOMS.map(r =>
+        `<option value="${r.id}"${currentRoomId === r.id ? ' selected' : ''}>${r.label}</option>`
+    ).join('');
+    return `<select class="room-today-select" data-staff-id="${staffId}" ${hasEvents ? '' : 'disabled'}>
+        <option value="">—</option>
+        ${options}
+    </select>`;
+}
+
 async function loadHoursForDate() {
     const date = document.getElementById('logHoursDate')?.value;
     if (!date) { alert('Please select a date.'); return; }
@@ -520,7 +534,7 @@ async function loadHoursForDate() {
                         return `
                             <tr data-staff-id="${s.id}">
                                 <td><strong>${escHtml(s.name)}</strong></td>
-                                <td>${escHtml(roomMap.get(s.id) || '—')}</td>
+                                <td>${renderRoomSelect(s.id, roomMap, eventsMap)}</td>
                                 <td>${renderEvents(s.id)}</td>
                                 <td>${clockedDisplay}</td>
                                 <td><input type="number" class="rate-input hours-input"
@@ -547,6 +561,19 @@ async function loadHoursForDate() {
                 } catch (err) {
                     alert('Clock-out failed: ' + err.message);
                     btn.disabled = false;
+                }
+            });
+        });
+
+        // Room Today dropdown — update all clock events for this staff+date
+        container.querySelectorAll('.room-today-select').forEach(sel => {
+            sel.addEventListener('change', async () => {
+                const sid = sel.dataset.staffId;
+                try {
+                    await updateClockEventsRoom(sid, date, sel.value || null);
+                } catch (err) {
+                    alert('Failed to update room: ' + err.message);
+                    await loadHoursForDate();
                 }
             });
         });
