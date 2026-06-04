@@ -207,14 +207,18 @@ function openEditDaysModal(reg) {
     const bearRoom = ROOMS.find(r => r.ageMaxMonths != null && r.ageMaxMonths <= 12);
     const isInfant = bearRoom && reg.room_id === bearRoom.id;
     if (isInfant) {
-        fetchStudentRecurringDays(reg.parent_email, reg.child_name).then(recurDays => {
-            if (recurDays) {
-                noteEl.textContent = `\uD83D\uDD01 Recurring schedule: ${recurDays.replace(/,/g, ', ')}`;
-            } else {
-                noteEl.textContent = '\u2139\uFE0F No recurring days set for this infant — set them in Families';
-            }
-            noteEl.style.display = 'block';
-        }).catch(() => {});
+        const family = (allFamiliesData || []).find(f =>
+            (f.parent_email || '').toLowerCase() === (reg.parent_email || '').toLowerCase() ||
+            (f.parent2_email || '').toLowerCase() === (reg.parent_email || '').toLowerCase());
+        const student = (family?.students || []).find(s =>
+            (s.child_name || '').toLowerCase() === (reg.child_name || '').toLowerCase());
+        const recurDays = student?.recurring_days || null;
+        if (recurDays) {
+            noteEl.textContent = `🔁 Recurring schedule: ${recurDays.replace(/,/g, ', ')}`;
+        } else {
+            noteEl.textContent = 'ℹ️ No recurring days set for this infant — set them in Families';
+        }
+        noteEl.style.display = 'block';
     }
 
     renderEditCalGrid();
