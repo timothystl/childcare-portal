@@ -3340,6 +3340,26 @@ function renderHistPayrollSection(records) {
             ? `<button class="btn-ghost btn-sm" data-hist-revert="${idx}">Revert</button>`
             : '';
         const total = parseFloat(r.total_paid) || 0;
+        let staffDetailHtml = '';
+        if (hasDetail) {
+            const importedTotal = r.staff.reduce((s, p) => s + (parseFloat(p.gross_pay) || 0), 0);
+            const staffRows = r.staff.map(p => {
+                const gross = `$${parseFloat(p.gross_pay).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+                const status = p.staff_id
+                    ? `<span style="color:var(--success,#2a7a2a)">✓ Matched</span>`
+                    : `<span style="color:#b07800">~ Float (attendance-weighted)</span>`;
+                return `<tr><td>${escHtml(p.name)}</td><td>${status}</td><td style="text-align:right">${gross}</td></tr>`;
+            }).join('');
+            const importedTotalFmt = `$${importedTotal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+            staffDetailHtml = `
+            <div class="hist-staff-detail" id="hist-detail-${idx}">
+                <table class="hist-payroll-preview" style="margin-top:8px">
+                    <thead><tr><th>Name</th><th>Status</th><th style="text-align:right">Gross Pay</th></tr></thead>
+                    <tbody>${staffRows}</tbody>
+                    <tfoot><tr style="font-weight:600"><td colspan="2">Imported total</td><td style="text-align:right">${importedTotalFmt}</td></tr></tfoot>
+                </table>
+            </div>`;
+        }
         return `
         <div class="hist-payroll-row" id="hist-row-${idx}">
             <div class="hist-payroll-header">
@@ -3347,10 +3367,12 @@ function renderHistPayrollSection(records) {
                 <span class="hist-payroll-amount">$${total.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
                 ${badge}
                 <div class="hist-payroll-actions">
+                    ${hasDetail ? `<button class="btn-ghost btn-sm" data-hist-detail="${idx}">▶ View Wages</button>` : ''}
                     <button class="btn-secondary btn-sm" data-hist-import="${idx}">Import Staff Wages</button>
                     ${revertBtn}
                 </div>
             </div>
+            ${staffDetailHtml}
             <div class="hist-payroll-import-area" id="hist-import-${idx}">
                 <p style="font-size:.82em;color:var(--text-muted);margin:0 0 6px">Paste payroll data from Excel (Ctrl+A → Ctrl+C on the sheet, then paste here). Supports QuickBooks payroll summary or ProCare export — format is auto-detected.</p>
                 <textarea id="hist-paste-${idx}" placeholder="QuickBooks: select all cells and paste the full sheet.&#10;ProCare: include the header row (Staff Name, Hours, Rate, Bonus, Gross Pay)."></textarea>
@@ -3365,6 +3387,14 @@ function renderHistPayrollSection(records) {
     }).join('');
     el.innerHTML = `<div class="hist-payroll-list">${rows}</div>`;
 
+    el.querySelectorAll('[data-hist-detail]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.histDetail);
+            const detail = document.getElementById(`hist-detail-${idx}`);
+            const open = detail.classList.toggle('open');
+            btn.textContent = open ? '▼ View Wages' : '▶ View Wages';
+        });
+    });
     el.querySelectorAll('[data-hist-import]').forEach(btn => {
         btn.addEventListener('click', () => {
             const idx = parseInt(btn.dataset.histImport);

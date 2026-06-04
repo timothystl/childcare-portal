@@ -3465,7 +3465,9 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .hist-payroll-badge.detail { background: #d1fae5; color: #065f46; }
 .hist-payroll-badge.center-wide { background: #fef3c7; color: #92400e; }
-.hist-payroll-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.hist-payroll-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.hist-staff-detail { padding: 10px 14px 14px; border-top: 1px solid var(--border); background: #f9fafb; display: none; }
+.hist-staff-detail.open { display: block; }
 .hist-payroll-import-area {
     padding: 12px 14px 14px;
     border-top: 1px solid var(--border);
