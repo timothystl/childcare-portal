@@ -3605,16 +3605,19 @@ function parsePayrollPaste(text) {
     if (/gross\s*pay\s*-\s*total/i.test(text)) {
         return _parseQBOPayrollPaste(text);
     }
-    // ProCare row-per-employee format: "Staff Name" column header
+    // Row-per-employee format: ProCare ("Staff Name" column) or QBO Payroll Summary ("Name" + "Gross pay" columns)
     const lines = text.split(/\r?\n/).map(l => l.split('\t'));
     let headerIdx = -1;
     for (let i = 0; i < lines.length; i++) {
-        if (lines[i].some(c => /staff\s*name/i.test(c))) { headerIdx = i; break; }
+        const row = lines[i];
+        const hasStaffName   = row.some(c => /staff\s*name/i.test(c));
+        const hasNameAndGross = row.some(c => /^name$/i.test(c.trim())) && row.some(c => /gross\s*pay/i.test(c.trim()));
+        if (hasStaffName || hasNameAndGross) { headerIdx = i; break; }
     }
     if (headerIdx < 0) return [];
 
     const header  = lines[headerIdx].map(c => c.trim().toLowerCase());
-    const nameCol  = header.findIndex(c => /staff\s*name/i.test(c));
+    const nameCol  = header.findIndex(c => /staff\s*name/i.test(c) || /^name$/i.test(c));
     const hrsCol   = header.findIndex(c => /^hours$/i.test(c));
     const grossCol = header.findIndex(c => /gross\s*pay/i.test(c));
     if (nameCol < 0 || grossCol < 0) return [];
@@ -3623,8 +3626,8 @@ function parsePayrollPaste(text) {
     for (let i = headerIdx + 1; i < lines.length; i++) {
         const cols = lines[i];
         const name = (cols[nameCol] || '').trim();
-        if (!name) break;
-        if (/MDO\s*TOTAL/i.test(name)) break;
+        if (!name) continue;
+        if (/MDO\s*TOTAL/i.test(name) || /^total$/i.test(name)) break;
         if (/blank\s*space/i.test(name)) continue;
         const hrsRaw = hrsCol >= 0 ? (cols[hrsCol] || '').trim() : '';
         if (/salary/i.test(hrsRaw)) continue;
@@ -3658,7 +3661,7 @@ function _parseQBOPayrollPaste(text) {
 }
 
 function matchStaffNames(rows, allStaff) {
-    const normalize = s => s.toLowerCase().trim().replace(/\s*\(.*?\)\s*/g, '').replace(/\s+/g, ' ');
+    const normalize = s => s.toLowerCase().trim().replace(/,/g, ' ').replace(/\s*\(.*?\)\s*/g, '').replace(/\s+/g, ' ').trim();
     const staffNorm = allStaff.map(s => ({ ...s, _norm: normalize(s.name) }));
 
     // Try "Last First M" → "First Last" reversal for QuickBooks names
