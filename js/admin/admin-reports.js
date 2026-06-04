@@ -2061,6 +2061,8 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
         return n;
     }
 
+    const rooms = ROOMS.filter(r => r.status !== 'seasonal');
+
     if (scheduleRows.length === 0) {
         try {
             // Fetch all data sources used by the Payroll Report
@@ -2258,7 +2260,6 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
 
     // ── Merge revenue + labor into a unified data map ───────
     const data  = {};
-    const rooms = ROOMS.filter(r => r.status !== 'seasonal');
 
     // Seed months from AR data
     Object.keys(arMap).sort().forEach(mo => {
