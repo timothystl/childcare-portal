@@ -2106,6 +2106,28 @@ async function fetchConfirmedEnrollmentByRoom() {
     return out;
 }
 
+async function fetchEnrollmentByRoomForMonths(monthKeys) {
+    if (!sbClient || !monthKeys.length) return {};
+    const { data, error } = await sbClient
+        .from('registrations')
+        .select('id, room_id, month')
+        .eq('status', 'confirmed')
+        .in('month', monthKeys);
+    if (error) throw error;
+    const countsByRoomMonth = {};
+    for (const reg of (data || [])) {
+        if (!countsByRoomMonth[reg.room_id]) countsByRoomMonth[reg.room_id] = {};
+        countsByRoomMonth[reg.room_id][reg.month] =
+            (countsByRoomMonth[reg.room_id][reg.month] || 0) + 1;
+    }
+    const avg = {};
+    for (const [roomId, monthCounts] of Object.entries(countsByRoomMonth)) {
+        const counts = Object.values(monthCounts);
+        avg[roomId] = Math.round(counts.reduce((s, c) => s + c, 0) / monthKeys.length * 10) / 10;
+    }
+    return avg;
+}
+
 async function upsertBillingSummary(row) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
