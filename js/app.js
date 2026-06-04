@@ -19,7 +19,7 @@ let closureMap          = new Map();  // 'YYYY-MM-DD' -> reason string
 let calendarLoading     = false;
 let pickerOpenDate      = null;
 let regWindowOverride   = 'auto';     // 'auto' | 'open' | 'closed'
-const studentDataMap    = new Map();  // studentId -> { dob, roomOverride } — kept in JS, not DOM
+const studentDataMap    = new Map();  // studentId -> { dob, roomOverride, discountType, discountValue } — kept in JS, not DOM
 
 // ============================================================
 // REGISTRATION WINDOW
@@ -312,8 +312,10 @@ function renderChildSection() {
     // Store sensitive fields in JS memory, not in DOM attributes
     students.forEach(s => {
         studentDataMap.set(String(s.id), {
-            dob:          s.child_dob || '',
-            roomOverride: s.room_override || '',
+            dob:           s.child_dob || '',
+            roomOverride:  s.room_override || '',
+            discountType:  s.discount_type  || 'none',
+            discountValue: parseFloat(s.discount_value || 0),
         });
     });
 
@@ -327,8 +329,6 @@ function renderChildSection() {
                     <input type="checkbox" class="child-card-checkbox"
                            data-student-id="${s.id}"
                            data-name="${escStr(s.child_name)}"
-                           data-discount-type="${escStr(s.discount_type || 'none')}"
-                           data-discount-value="${escStr(String(s.discount_value || 0))}"
                            data-recurring-days="${escStr(recurDays)}"
                            ${isSelected ? 'checked' : ''}>
                     <span class="child-card-name">${escStr(s.child_name.split(' ')[0])}</span>
@@ -356,8 +356,8 @@ function renderChildSection() {
                     const rdRaw = cb.dataset.recurringDays || '';
                     selectedChildren.push({
                         name: childName, dob: childDob, room, isNew: false, studentId,
-                        discountType:  cb.dataset.discountType  || 'none',
-                        discountValue: parseFloat(cb.dataset.discountValue || '0'),
+                        discountType:  sd.discountType  || 'none',
+                        discountValue: sd.discountValue || 0,
                         recurringDays: rdRaw ? rdRaw.split(',').filter(Boolean) : [],
                     });
                     onChildrenChanged();
