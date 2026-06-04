@@ -122,8 +122,8 @@ async function setupEnrollmentForms() {
         const name = nameEl?.value.trim();
         const file = fileEl?.files[0];
 
-        if (!name) { showToast('Please enter a form name.'); return; }
-        if (!file) { showToast('Please select a file to upload.'); return; }
+        if (!name) { alert('Please enter a form name.'); return; }
+        if (!file) { alert('Please select a file to upload.'); return; }
 
         uploadBtn.disabled    = true;
         uploadBtn.textContent = 'Uploading…';
@@ -177,7 +177,7 @@ async function deleteEnrollmentForm(id) {
         renderEnrollmentFormsList(updated);
         await deleteEnrollmentFormFile(form.filename);
     } catch (err) {
-        showToast('Failed to delete form: ' + err.message);
+        alert('Failed to delete form: ' + err.message);
         console.error('deleteEnrollmentForm:', err);
     }
 }

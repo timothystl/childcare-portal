@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const ALLOWED_ORIGIN = "https://mdo.timothystl.org";
 
@@ -35,6 +36,26 @@ serve(async (req) => {
             return new Response(
                 JSON.stringify({ error: "Missing required fields" }),
                 { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
+            );
+        }
+
+        // Verify the recipient email belongs to a registered family — prevents
+        // using this unauthenticated endpoint as a spam relay.
+        const serviceClient = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+            { auth: { autoRefreshToken: false, persistSession: false } },
+        );
+        const { data: family } = await serviceClient
+            .from("families")
+            .select("id")
+            .or(`parent_email.ilike.${parentEmail},parent2_email.ilike.${parentEmail}`)
+            .limit(1)
+            .maybeSingle();
+        if (!family) {
+            return new Response(
+                JSON.stringify({ error: "Recipient not found" }),
+                { status: 403, headers: { ...ch, "Content-Type": "application/json" } }
             );
         }
 

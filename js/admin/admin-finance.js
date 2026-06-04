@@ -693,8 +693,7 @@ function _monthlyExpenseBurden(moNum, laborAmount = 0, revenueAmount = 0) {
 
 // ============================================================
 // RATE / WAGE MODELING TOOL
-// Uses actual per-room revenue from _buildRoomPnlData() and
-// real enrollment counts from fetchRegistrationDatesForRange().
+// Uses actual per-room revenue from _buildRoomPnlData().
 // ============================================================
 let _roomModelData = null; // cache — cleared on tab switch
 

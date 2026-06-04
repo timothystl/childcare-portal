@@ -189,7 +189,7 @@ export default {
       }
 
       const resHeaders = new Headers(supabaseRes.headers);
-      resHeaders.set('Access-Control-Allow-Origin', url.origin);
+      resHeaders.set('Access-Control-Allow-Origin', allowedOrigin ?? '');
       resHeaders.set('Access-Control-Allow-Credentials', 'true');
 
       return new Response(supabaseRes.body, {
