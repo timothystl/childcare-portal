@@ -286,12 +286,27 @@ async function _generateMonthDetail(year, month, container) {
             });
         });
 
+        // For historical months with no live registrations, fall back to billing_summary
+        const liveTotal = Object.values(roomRevMap).reduce((s, v) => s + v.revenue, 0);
+        if (liveTotal === 0) {
+            try {
+                const summaryRows = await fetchBillingSummary();
+                summaryRows.forEach(row => {
+                    if ((row.month || '').substring(0, 7) !== mo) return;
+                    if (!roomRevMap[row.room_id]) roomRevMap[row.room_id] = { revenue: 0, fullDays: 0, halfDays: 0 };
+                    roomRevMap[row.room_id].revenue  += parseFloat(row.net_billed) || 0;
+                    roomRevMap[row.room_id].fullDays += row.full_days || 0;
+                    roomRevMap[row.room_id].halfDays += row.half_days || 0;
+                });
+            } catch (e) { console.warn('billing_summary fallback failed:', e); }
+        }
+
         const pnl = await _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride: true });
         const moData = pnl.data[mo] || {};
 
         const hasPerRoomLab = pnl.hasScheduleData || pnl.hasClockBasedLabor;
-        // centerLab = historical payroll + unallocated floats (included in totals even with per-room data)
-        const centerLab = pnl.hasFallbackLabor ? (pnl.centerLaborByMonth?.[mo] || 0) : 0;
+        // centerLab = any remaining unallocated labor (lump-sum periods not yet imported, untagged floats)
+        const centerLab = pnl.centerLaborByMonth?.[mo] || 0;
         const laborNote = pnl.hasClockBasedLabor
             ? `<p style="margin:.5rem 0 1rem;font-size:.85em;color:#2e7d32">ℹ Labor estimated from clock records — assigned staff direct to room; salaried overhead by attendance.</p>`
             : (pnl.hasFallbackLabor && centerLab > 0
