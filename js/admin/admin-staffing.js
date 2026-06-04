@@ -434,6 +434,13 @@ async function loadHoursForDate() {
                 eventsMap.get(ev.staff_id).push(ev);
             });
 
+        // Determine which room(s) each staff member clocked into today
+        const roomMap = new Map(); // staff_id -> display string
+        eventsMap.forEach((evs, staffId) => {
+            const rooms = [...new Set(evs.map(e => e.room_id).filter(Boolean))];
+            roomMap.set(staffId, rooms.map(id => ROOMS.find(r => r.id === id)?.label || id).join(', ') || '—');
+        });
+
         // Sum completed events per staff (≥10 min)
         const clockedMap = new Map();
         clockEvents.forEach(ev => {
@@ -497,7 +504,7 @@ async function loadHoursForDate() {
                 <thead>
                     <tr>
                         <th>Staff Member</th>
-                        <th>Role</th>
+                        <th>Room Today</th>
                         <th>Clock Events</th>
                         <th>Clocked Hrs</th>
                         <th>Hours Worked</th>
@@ -513,7 +520,7 @@ async function loadHoursForDate() {
                         return `
                             <tr data-staff-id="${s.id}">
                                 <td><strong>${escHtml(s.name)}</strong></td>
-                                <td>${escHtml(s.role || '—')}</td>
+                                <td>${escHtml(roomMap.get(s.id) || '—')}</td>
                                 <td>${renderEvents(s.id)}</td>
                                 <td>${clockedDisplay}</td>
                                 <td><input type="number" class="rate-input hours-input"
