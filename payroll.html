@@ -615,8 +615,8 @@
   <!-- Hours Entry (hourly staff) -->
   <div class="card hidden" id="hoursCard">
     <div class="card-header">
-      <h2>Hours &amp; PTO Entry</h2>
-      <span style="font-size:0.8rem;color:var(--text-muted);">Hourly staff only — auto-saves on change</span>
+      <h2>Enter Hours &amp; PTO Used</h2>
+      <span style="font-size:0.8rem;color:var(--text-muted);">Church hourly staff only — enter here before printing · auto-saves</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 100px 100px 100px;gap:10px;padding:0 12px 8px;align-items:end;">
       <div></div>
@@ -1223,25 +1223,22 @@ function renderMdoStaffBlock(s, gross) {
     const isSalary = s.pay_type === 'salary';
     const hours    = mdoPeriodMap.get(s.id) || 0;
     const room     = MDO_ROOMS[s.room_id] || 'Float';
-    const rateChip = isSalary
-        ? `$${fmtMoney(s.salary_biweekly)}/period`
-        : `$${Number(s.hourly_rate).toFixed(2)}/hr`;
 
-    let earningsLine = '';
+    let earningsLines = '';
     if (isSalary) {
-        earningsLine = lineItem('Salary', s.salary_biweekly);
+        earningsLines = lineItem('Salary', s.salary_biweekly);
     } else {
-        earningsLine = lineItem(`Hours (${hours.toFixed(2)} hrs × $${Number(s.hourly_rate).toFixed(2)})`, gross);
+        earningsLines = lineItem('Pay Rate', '$' + Number(s.hourly_rate).toFixed(2) + '/hr', true)
+                      + lineItem('Hours Worked', hours.toFixed(2) + ' hrs', true);
     }
 
     return `<div class="staff-block">
         <div class="staff-block-header">
             <span class="sname">${esc(s.name)}</span>
-            <span class="srole">${esc(s.role || '')}${s.role && room ? ' · ' : ''}${esc(room)}</span>
-            <span class="spay">${rateChip}</span>
+            <span class="srole">${esc(room)}</span>
         </div>
         <div class="line-items">
-            ${earningsLine}
+            ${earningsLines}
             <div class="line-item divider total">
                 <span>Gross Pay</span>
                 <span>$${fmtMoney(gross)}</span>
@@ -1276,8 +1273,8 @@ function renderStaffBlock(s, periodStart, gross) {
     if (isSalary) {
         earningsLine = lineItem('Base Salary', s.base_salary_biweekly);
     } else {
-        const earning = hours * s.hourly_rate;
-        earningsLine = lineItem(`Regular Hours (${hours} hrs × $${Number(s.hourly_rate).toFixed(2)})`, earning);
+        earningsLine = lineItem('Pay Rate', '$' + Number(s.hourly_rate).toFixed(2) + '/hr', true)
+                     + lineItem('Hours Worked', hours.toFixed(2) + ' hrs', true);
     }
 
     const housingLine   = s.housing_allowance_biweekly  > 0 ? lineItem('Housing Allowance', s.housing_allowance_biweekly)  : '';
@@ -1290,27 +1287,21 @@ function renderStaffBlock(s, periodStart, gross) {
     const b403Line      = b403 > 0 ? lineItemNeg(b403Label, b403) : '';
 
     let ptoLines = '';
-    if (!isSalary) {
+    if (!isSalary && ptoUsed > 0) {
         ptoLines = `
             <div class="line-item pto-row">
-                <span class="li-label">PTO Hours Used</span>
+                <span class="li-label">PTO Used</span>
                 <span class="li-val">${ptoUsed.toFixed(2)} hrs</span>
             </div>
             <div class="line-item pto-row">
-                <span class="li-label">PTO Hours Earned</span>
-                <span class="li-val">+${ptoEarned.toFixed(2)} hrs</span>
-            </div>
-            <div class="line-item pto-row">
                 <span class="li-label">PTO Balance</span>
-                <span class="li-val" style="color:${ptoBalance < 0 ? 'var(--red)' : 'var(--green)'};">${ptoBalance.toFixed(2)} hrs</span>
+                <span class="li-val" style="color:${ptoBalance < 0 ? 'var(--red)' : 'var(--green)'};">${ptoBalance.toFixed(2)} hrs remaining</span>
             </div>`;
     }
 
     return `<div class="staff-block">
         <div class="staff-block-header">
             <span class="sname">${esc(s.name)}</span>
-            <span class="srole">${esc(s.role || '')}</span>
-            <span class="spay">${rateChip}</span>
         </div>
         <div class="line-items">
             ${earningsLine}
@@ -1328,10 +1319,11 @@ function renderStaffBlock(s, periodStart, gross) {
     </div>`;
 }
 
-function lineItem(label, amount) {
+function lineItem(label, amount, plainText = false) {
+    const val = plainText ? esc(String(amount)) : '$' + fmtMoney(amount);
     return `<div class="line-item">
         <span class="li-label">${esc(label)}</span>
-        <span class="li-val">$${fmtMoney(amount)}</span>
+        <span class="li-val">${val}</span>
     </div>`;
 }
 
@@ -1355,8 +1347,9 @@ function calc403b(s, baseEarnings) {
 
 function calcGross(s) {
     const entry    = periodEntries[s.id] || {};
-    const hours    = Number(entry.hours_worked || 0);
-    const base     = s.pay_type === 'salary' ? Number(s.base_salary_biweekly) : hours * Number(s.hourly_rate);
+    const hours    = Number(entry.hours_worked   || 0);
+    const ptoUsed  = Number(entry.pto_hours_used || 0);
+    const base     = s.pay_type === 'salary' ? Number(s.base_salary_biweekly) : (hours + ptoUsed) * Number(s.hourly_rate);
     const b403     = calc403b(s, base);
     return base
         + Number(s.housing_allowance_biweekly)
