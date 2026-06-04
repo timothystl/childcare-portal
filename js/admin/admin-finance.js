@@ -722,10 +722,9 @@ async function _buildRoomModelData() {
 
     await loadRateSettings();
 
-    const [pnlData, allBilling, enrollByRoom, allStaff] = await Promise.all([
+    const [pnlData, allBilling, allStaff] = await Promise.all([
         _buildRoomPnlData(fromDate, toDate),
         fetchBillingSummary(),
-        fetchConfirmedEnrollmentByRoom(),
         fetchAllStaff({ includeInactive: false }),
     ]);
 
@@ -755,6 +754,10 @@ async function _buildRoomModelData() {
         return _roomModelData;
     }
 
+    // Fetch enrollment filtered to the exact months we're reporting on,
+    // then average monthly counts per room (not an all-time total)
+    const enrollByRoom = await fetchEnrollmentByRoomForMonths(last3.map(m => m.key));
+
     // Filter billing summary to our months
     const recentBilling = allBilling.filter(b =>
         last3.some(m => (b.month || '').substring(0, 7) === m.key)
@@ -776,7 +779,7 @@ async function _buildRoomModelData() {
         const avgFullChildDays = billingRows.reduce((s, b) => s + (b.full_days || 0), 0) / n;
         const avgHalfChildDays = billingRows.reduce((s, b) => s + (b.half_days || 0), 0) / n;
 
-        // Enrollment from confirmed registrations (current snapshot)
+        // Avg monthly enrollment across the last 3 months with revenue
         const enrollment = enrollByRoom[r.id] || 0;
 
         // Avg days per enrolled child: child-days ÷ enrollment
