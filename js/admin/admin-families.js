@@ -914,16 +914,14 @@ async function saveFamilyModal() {
             await updateFamily(fam.id, { group });
 
             for (const child of children) {
-                const student = await addStudent({
-                    familyId: fam.id,
-                    childName: child.child_name,
-                    childDob:  child.child_dob,
-                });
-                await updateStudent(student.id, {
-                    room_override:  child.room_override,
-                    discount_type:  child.discount_type,
-                    discount_value: child.discount_value,
-                    discount_note:  child.discount_note,
+                await addStudent({
+                    familyId:      fam.id,
+                    childName:     child.child_name,
+                    childDob:      child.child_dob,
+                    roomOverride:  child.room_override,
+                    discountType:  child.discount_type,
+                    discountValue: child.discount_value,
+                    discountNote:  child.discount_note,
                 });
             }
         } else {
@@ -962,17 +960,15 @@ async function saveFamilyModal() {
                         recurring_days: child.recurring_days?.length ? child.recurring_days : null,
                     });
                 } else {
-                    const student = await addStudent({
-                        familyId: editingFamilyId,
-                        childName: child.child_name,
-                        childDob:  child.child_dob,
-                    });
-                    await updateStudent(student.id, {
-                        room_override:  child.room_override,
-                        discount_type:  child.discount_type,
-                        discount_value: child.discount_value,
-                        discount_note:  child.discount_note,
-                        recurring_days: child.recurring_days?.length ? child.recurring_days : null,
+                    await addStudent({
+                        familyId:      editingFamilyId,
+                        childName:     child.child_name,
+                        childDob:      child.child_dob,
+                        roomOverride:  child.room_override,
+                        discountType:  child.discount_type,
+                        discountValue: child.discount_value,
+                        discountNote:  child.discount_note,
+                        recurringDays: child.recurring_days?.length ? child.recurring_days : null,
                     });
                 }
             }

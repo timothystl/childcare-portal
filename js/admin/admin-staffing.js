@@ -153,7 +153,7 @@ function renderStaffList(staff) {
             <tbody>
                 ${staff.map(s => {
                     const roomLabel  = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
-                    const pinDisplay = s.staff_pin != null ? String(s.staff_pin).padStart(4, '0') : '—';
+                    const pinDisplay = s.has_staff_pin ? '●●●●' : '—';
                     const isSalary   = s.pay_type === 'salary';
                     const payDisplay = isSalary
                         ? `<span class="pay-type-chip pay-salary">Salary</span> $${(s.salary_biweekly || 0).toFixed(2)}/period`
@@ -232,8 +232,9 @@ function openStaffForm(staff = null) {
     document.getElementById('sfRole').value      = staff?.role || '';
     document.getElementById('sfRoom').value      = staff?.room_id || '';
     document.getElementById('sfHireDate').value  = staff?.hire_date || '';
-    const rawPin = staff?.staff_pin;
-    document.getElementById('sfPin').value = rawPin != null ? String(rawPin).padStart(4, '0') : '';
+    const pinEl = document.getElementById('sfPin');
+    pinEl.value       = '';
+    pinEl.placeholder = staff?.has_staff_pin ? 'Leave blank to keep current PIN' : 'Set 4-digit PIN';
 
     const payType = staff?.pay_type || 'hourly';
     document.getElementById('sfPayType').value   = payType;

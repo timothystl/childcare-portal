@@ -911,7 +911,7 @@ async function createFamily({ parentName, parentEmail, parentPhone, pin: provide
  * @param {string|null} [params.childDob] - ISO 8601 date or null
  * @returns {Promise<Student>}
  */
-async function addStudent({ familyId, childName, childDob }) {
+async function addStudent({ familyId, childName, childDob, roomOverride = null, discountType = null, discountValue = null, discountNote = null, recurringDays = null }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: existing } = await sbClient
         .from('students').select('id')
@@ -919,7 +919,16 @@ async function addStudent({ familyId, childName, childDob }) {
     if (existing) return existing;
     const { data, error } = await sbClient
         .from('students')
-        .insert({ family_id: familyId, child_name: childName, child_dob: childDob || null })
+        .insert({
+            family_id:      familyId,
+            child_name:     childName,
+            child_dob:      childDob || null,
+            room_override:  roomOverride || null,
+            discount_type:  discountType || null,
+            discount_value: discountValue ?? null,
+            discount_note:  discountNote || null,
+            recurring_days: recurringDays || null,
+        })
         .select().single();
     if (error) throw error;
     return data;
@@ -1412,7 +1421,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('staff')
-        .select('id, name, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, staff_pin, created_at')
+        .select('id, name, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at')
         .order('name');
     if (!includeInactive) query = query.eq('active', true);
     const { data, error } = await query;
@@ -1430,17 +1439,24 @@ async function upsertStaffMember({ id = null, name, role, payType, hourlyRate, s
         salary_biweekly:  payType === 'salary' ? (salaryBiweekly || 0) : 0,
         room_id:          roomId || null,
         hire_date:        hireDate || null,
-        staff_pin:        staffPin ? parseInt(staffPin, 10) : null,
     };
+    let staffId = id;
     if (id) {
         const { error } = await sbClient.from('staff').update(record).eq('id', id);
         if (error) throw error;
-        return id;
     } else {
         const { data, error } = await sbClient.from('staff').insert(record).select('id').single();
         if (error) throw error;
-        return data?.id || null;
+        staffId = data?.id || null;
     }
+    if (staffPin && staffId) {
+        const { error } = await sbClient.rpc('set_staff_pin', {
+            p_staff_id: staffId,
+            p_new_pin:  parseInt(staffPin, 10),
+        });
+        if (error) throw error;
+    }
+    return staffId;
 }
 
 async function deleteStaff(id) {
@@ -1663,12 +1679,7 @@ async function fetchStaffScheduleRange(startDate, endDate) {
  */
 async function fetchStaffByPin(pin) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
-        .from('staff')
-        .select('id, name, role, room_id, pay_type')
-        .eq('staff_pin', parseInt(pin, 10))
-        .eq('active', true)
-        .maybeSingle();
+    const { data, error } = await sbClient.rpc('lookup_staff_by_pin', { p_pin: parseInt(pin, 10) });
     if (error) throw error;
     return data; // null if not found
 }

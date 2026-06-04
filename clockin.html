@@ -519,12 +519,7 @@ function checkLockout() {
 async function verifyPin() {
     showScreen('loading');
     try {
-        const { data, error } = await sb
-            .from('staff')
-            .select('id, name, role, active, room_id')
-            .eq('staff_pin', parseInt(pin, 10))
-            .eq('active', true)
-            .maybeSingle();
+        const { data, error } = await sb.rpc('lookup_staff_by_pin', { p_pin: parseInt(pin, 10) });
         if (error) throw error;
         if (!data) {
             recordFailedAttempt();
