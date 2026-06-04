@@ -405,6 +405,20 @@
 
     .line-item.pto-row { font-size: 0.82rem; }
 
+    .report-section-label {
+      font-family: var(--font-head);
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin: 20px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .report-section-label:first-child { margin-top: 0; }
+
     .report-grand-total {
       background: var(--navy);
       color: var(--white);
@@ -730,6 +744,13 @@ let periodEntries   = {};    // staffId -> {hours_worked, pto_hours_used, pto_ho
 let ptoCumulative   = {};    // staffId -> {earned, used} — all periods BEFORE current
 let editingStaffId  = null;
 let savePending     = {};    // staffId -> setTimeout handle
+let mdoStaff        = [];
+let mdoPeriodMap    = new Map();
+
+const MDO_ROOMS = {
+    bear: '🐻 Bear Room', bee: '🐝 Bee Room', turtle: '🐢 Turtle Room',
+    goose: '🪿 Goose Room', owl: '🦉 Owl Room', summer: '☀️ Summer Camp'
+};
 
 // ============================================================
 // INIT
@@ -1010,10 +1031,13 @@ async function onPeriodChange(value) {
     if (!value) return;
     const [periodStart, periodEnd] = value.split('|');
 
-    // Fetch period entries for this period
-    const { data: entries } = await sb.from('church_staff_period_entries')
-        .select('*')
-        .eq('period_start', periodStart);
+    // Load MDO staff data and church period entries in parallel
+    const [{ data: entries }] = await Promise.all([
+        sb.from('church_staff_period_entries')
+            .select('*')
+            .eq('period_start', periodStart),
+        loadMdoData(periodStart, periodEnd),
+    ]);
 
     periodEntries = {};
     (entries || []).forEach(e => { periodEntries[e.staff_id] = e; });
@@ -1032,6 +1056,46 @@ async function onPeriodChange(value) {
 
     renderHoursSection(periodStart);
     renderReport(periodStart, periodEnd);
+}
+
+// ============================================================
+// MDO STAFF DATA
+// ============================================================
+async function loadMdoData(periodStart, periodEnd) {
+    const [staffRes, hoursRes, clockRes] = await Promise.all([
+        sb.from('staff')
+            .select('id, name, role, pay_type, hourly_rate, salary_biweekly, room_id, active')
+            .eq('active', true)
+            .order('name'),
+        sb.from('staff_hours')
+            .select('staff_id, work_date, hours_worked')
+            .gte('work_date', periodStart)
+            .lte('work_date', periodEnd),
+        sb.from('staff_clock_events')
+            .select('staff_id, clock_in, clock_out, work_date')
+            .gte('work_date', periodStart)
+            .lte('work_date', periodEnd),
+    ]);
+
+    mdoStaff = staffRes.data || [];
+
+    const manualKeys = new Set((hoursRes.data || []).map(h => h.staff_id + '|' + h.work_date));
+
+    function clockHrs(ev) {
+        if (!ev.clock_in || !ev.clock_out) return 0;
+        const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
+        return ms < 600000 ? 0 : Math.round(ms / 3600000 * 100) / 100;
+    }
+
+    mdoPeriodMap = new Map();
+    (hoursRes.data || []).forEach(h => {
+        mdoPeriodMap.set(h.staff_id, (mdoPeriodMap.get(h.staff_id) || 0) + parseFloat(h.hours_worked));
+    });
+    (clockRes.data || []).forEach(ev => {
+        if (manualKeys.has(ev.staff_id + '|' + ev.work_date)) return;
+        const hrs = clockHrs(ev);
+        if (hrs > 0) mdoPeriodMap.set(ev.staff_id, (mdoPeriodMap.get(ev.staff_id) || 0) + hrs);
+    });
 }
 
 // ============================================================
@@ -1112,29 +1176,84 @@ function flashSaved() {
 // ============================================================
 function renderReport(periodStart, periodEnd) {
     const section = document.getElementById('reportSection');
-    if (!churchStaff.length) {
-        section.innerHTML = '<p style="color:var(--text-muted);font-size:0.9rem;">Add staff members to generate a report.</p>';
+    const label   = periodLabel(periodStart, periodEnd);
+    let grandTotal = 0;
+
+    // ── MDO section ──
+    let mdoHtml = '';
+    if (mdoStaff.length) {
+        mdoHtml = '<div class="report-section-label">MDO Staff</div>';
+        mdoStaff.forEach(s => {
+            const gross = calcMdoGross(s);
+            grandTotal += gross;
+            mdoHtml += renderMdoStaffBlock(s, gross);
+        });
+    }
+
+    // ── Church section ──
+    let churchHtml = '';
+    if (churchStaff.length) {
+        churchHtml = '<div class="report-section-label">Church Staff</div>';
+        churchStaff.forEach(s => {
+            const gross = calcGross(s);
+            grandTotal += gross;
+            churchHtml += renderStaffBlock(s, periodStart, gross);
+        });
+    }
+
+    if (!mdoStaff.length && !churchStaff.length) {
+        section.innerHTML = '<p style="color:var(--text-muted);font-size:0.9rem;">No staff found for this period.</p>';
         return;
     }
 
-    const label = periodLabel(periodStart, periodEnd);
-    let grandTotal = 0;
-    const blocks = churchStaff.map(s => {
-        const gross = calcGross(s);
-        grandTotal += gross;
-        return renderStaffBlock(s, periodStart, gross);
-    }).join('');
-
     section.innerHTML = `
         <div class="report-header">
-            <h2>Timothy Lutheran Church — Payroll</h2>
+            <h2>Timothy Lutheran — Combined Payroll</h2>
             <div class="report-period">Pay Period: ${label}</div>
         </div>
-        ${blocks}
+        ${mdoHtml}
+        ${churchHtml}
         <div class="report-grand-total">
             <span>Total Gross Pay</span>
             <span>$${fmtMoney(grandTotal)}</span>
         </div>`;
+}
+
+function renderMdoStaffBlock(s, gross) {
+    const isSalary = s.pay_type === 'salary';
+    const hours    = mdoPeriodMap.get(s.id) || 0;
+    const room     = MDO_ROOMS[s.room_id] || 'Float';
+    const rateChip = isSalary
+        ? `$${fmtMoney(s.salary_biweekly)}/period`
+        : `$${Number(s.hourly_rate).toFixed(2)}/hr`;
+
+    let earningsLine = '';
+    if (isSalary) {
+        earningsLine = lineItem('Salary', s.salary_biweekly);
+    } else {
+        earningsLine = lineItem(`Hours (${hours.toFixed(2)} hrs × $${Number(s.hourly_rate).toFixed(2)})`, gross);
+    }
+
+    return `<div class="staff-block">
+        <div class="staff-block-header">
+            <span class="sname">${esc(s.name)}</span>
+            <span class="srole">${esc(s.role || '')}${s.role && room ? ' · ' : ''}${esc(room)}</span>
+            <span class="spay">${rateChip}</span>
+        </div>
+        <div class="line-items">
+            ${earningsLine}
+            <div class="line-item divider total">
+                <span>Gross Pay</span>
+                <span>$${fmtMoney(gross)}</span>
+            </div>
+        </div>
+    </div>`;
+}
+
+function calcMdoGross(s) {
+    if (s.pay_type === 'salary') return Number(s.salary_biweekly);
+    const hours = mdoPeriodMap.get(s.id) || 0;
+    return hours * Number(s.hourly_rate);
 }
 
 function renderStaffBlock(s, periodStart, gross) {
