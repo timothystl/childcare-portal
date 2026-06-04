@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" href="/images/logo/myMDO_app_icon.png">
+  <meta charset="UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Church Payroll — Timothy Lutheran</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --navy:       #01294A;
+      --navy-lt:    #013d6b;
+      --sun:        #F5B731;
+      --sun-pale:   #FFF8E1;
+      --green:      #5BAD8B;
+      --green-pale: #EAF5EF;
+      --tang:       #E97D55;
+      --tang-pale:  #FDEEE8;
+      --cream:      #FDFAF0;
+      --linen:      #FAF7ED;
+      --warm-gray:  #F5F0E4;
+      --border:     #E8E0CC;
+      --text:       #2E2A22;
+      --text-muted: #7A6E5A;
+      --white:      #FFFFFF;
+      --red:        #C0392B;
+      --font-head:  'Lora', Georgia, serif;
+      --font-body:  'Nunito', system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--linen);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Login ── */
+    #loginScreen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--navy);
+    }
+
+    .login-card {
+      background: var(--white);
+      border-radius: 16px;
+      padding: 40px 36px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    }
+
+    .login-card h1 {
+      font-family: var(--font-head);
+      font-size: 1.4rem;
+      color: var(--navy);
+      margin-bottom: 6px;
+      text-align: center;
+    }
+
+    .login-card .subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 28px;
+    }
+
+    .form-group { margin-bottom: 16px; }
+
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 0.95rem;
+      color: var(--text);
+      background: var(--white);
+      transition: border-color 0.15s;
+    }
+
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--navy);
+    }
+
+    .btn-primary {
+      width: 100%;
+      padding: 11px;
+      background: var(--navy);
+      color: var(--white);
+      border: none;
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-primary:hover { background: var(--navy-lt); }
+    .btn-primary:disabled { opacity: 0.6; cursor: default; }
+
+    .btn-secondary {
+      padding: 8px 16px;
+      background: var(--warm-gray);
+      color: var(--text);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-secondary:hover { background: var(--border); }
+
+    .btn-danger {
+      padding: 6px 12px;
+      background: transparent;
+      color: var(--red);
+      border: 1.5px solid var(--red);
+      border-radius: 6px;
+      font-family: var(--font-body);
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-danger:hover { background: #fdecea; }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 0.8rem;
+    }
+
+    .error-msg {
+      color: var(--red);
+      font-size: 0.85rem;
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    .hidden { display: none !important; }
+
+    /* ── Dashboard layout ── */
+    #dashboard {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px 16px 60px;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .page-header h1 {
+      font-family: var(--font-head);
+      font-size: 1.5rem;
+      color: var(--navy);
+    }
+
+    .page-header .subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Cards / sections ── */
+    .card {
+      background: var(--white);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .card-header h2 {
+      font-family: var(--font-head);
+      font-size: 1.05rem;
+      color: var(--navy);
+    }
+
+    .toggle-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-family: var(--font-body);
+      padding: 4px 8px;
+    }
+
+    /* ── Staff table ── */
+    .staff-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    .staff-table th {
+      text-align: left;
+      padding: 8px 10px;
+      background: var(--warm-gray);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1.5px solid var(--border);
+    }
+
+    .staff-table td {
+      padding: 10px 10px;
+      border-bottom: 1px solid var(--warm-gray);
+      vertical-align: middle;
+    }
+
+    .staff-table tr:last-child td { border-bottom: none; }
+
+    .staff-table tr:hover td { background: var(--linen); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .badge-salary { background: var(--sun-pale); color: #7a5800; }
+    .badge-hourly { background: var(--green-pale); color: #2a6646; }
+
+    /* ── Period selector ── */
+    .period-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .period-row select {
+      flex: 1;
+      min-width: 220px;
+      padding: 9px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      background: var(--white);
+    }
+
+    /* ── Hours entry ── */
+    .hours-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .hours-row {
+      display: grid;
+      grid-template-columns: 1fr 100px 100px 100px;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      background: var(--linen);
+      border-radius: 8px;
+      font-size: 0.88rem;
+    }
+
+    .hours-row .staff-name { font-weight: 700; }
+    .hours-row .staff-role { color: var(--text-muted); font-size: 0.8rem; }
+
+    .hours-row input[type="number"] {
+      padding: 6px 8px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      font-family: var(--font-body);
+      font-size: 0.88rem;
+      text-align: right;
+      width: 100%;
+    }
+
+    .hours-row input[type="number"]:focus {
+      outline: none;
+      border-color: var(--navy);
+    }
+
+    .hours-col-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 700;
+    }
+
+    /* ── Report ── */
+    #reportSection { margin-top: 8px; }
+
+    .report-header {
+      margin-bottom: 20px;
+    }
+
+    .report-header h2 {
+      font-family: var(--font-head);
+      font-size: 1.3rem;
+      color: var(--navy);
+    }
+
+    .report-header .report-period {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .staff-block {
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .staff-block-header {
+      background: var(--navy);
+      color: var(--white);
+      padding: 10px 16px;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .staff-block-header .sname {
+      font-weight: 800;
+      font-size: 0.95rem;
+    }
+
+    .staff-block-header .srole {
+      font-size: 0.8rem;
+      opacity: 0.75;
+    }
+
+    .staff-block-header .spay {
+      margin-left: auto;
+      font-size: 0.78rem;
+      opacity: 0.7;
+    }
+
+    .line-items {
+      padding: 12px 16px;
+    }
+
+    .line-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 4px 0;
+      font-size: 0.88rem;
+    }
+
+    .line-item .li-label { color: var(--text-muted); }
+    .line-item .li-val   { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .line-item .li-neg   { color: var(--red); }
+
+    .line-item.divider {
+      border-top: 1.5px solid var(--border);
+      margin-top: 6px;
+      padding-top: 8px;
+    }
+
+    .line-item.total {
+      font-size: 1rem;
+      font-weight: 800;
+      color: var(--navy);
+    }
+
+    .line-item.pto-row { font-size: 0.82rem; }
+
+    .report-grand-total {
+      background: var(--navy);
+      color: var(--white);
+      padding: 14px 20px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 1.1rem;
+      font-weight: 800;
+      margin-top: 8px;
+    }
+
+    .print-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .btn-print {
+      padding: 9px 20px;
+      background: var(--sun);
+      color: var(--navy);
+      border: none;
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-print:hover { background: #e0a820; }
+
+    .save-indicator {
+      font-size: 0.8rem;
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(1,41,74,0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 16px;
+    }
+
+    .modal-box {
+      background: var(--white);
+      border-radius: 14px;
+      padding: 28px;
+      width: 100%;
+      max-width: 520px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-box h2 {
+      font-family: var(--font-head);
+      font-size: 1.1rem;
+      color: var(--navy);
+      margin-bottom: 20px;
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 24px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .form-row-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .field-hint {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ── Print styles ── */
+    @media print {
+      #loginScreen,
+      .page-header button,
+      #staffPanelCard,
+      .period-row,
+      #hoursCard,
+      .print-bar,
+      .toggle-btn { display: none !important; }
+
+      body { background: white; }
+      #dashboard { padding: 0; max-width: 100%; }
+      .page-header { border-bottom: 2px solid #999; margin-bottom: 16px; }
+      .page-header h1 { font-size: 1.1rem; }
+      .card { border: none; padding: 0; margin: 0; box-shadow: none; }
+
+      .staff-block {
+        border: 1px solid #ccc;
+        break-inside: avoid;
+        margin-bottom: 12px;
+      }
+
+      .staff-block-header { background: #01294A !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+      .report-grand-total { background: #01294A !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ LOGIN SCREEN ══ -->
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>Church Payroll</h1>
+    <p class="subtitle">Timothy Lutheran Church</p>
+    <div class="form-group">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email">
+    </div>
+    <div class="form-group">
+      <label for="loginPassword">Password</label>
+      <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
+    </div>
+    <button class="btn-primary" id="loginBtn">Sign In</button>
+    <p id="loginError" class="error-msg hidden">Incorrect email or password.</p>
+  </div>
+</div>
+
+<!-- ══ DASHBOARD ══ -->
+<div id="dashboard" class="hidden">
+  <div class="page-header">
+    <div>
+      <h1>Church Payroll</h1>
+      <div class="subtitle">Timothy Lutheran Church</div>
+    </div>
+    <button class="btn-secondary" id="logoutBtn">Sign Out</button>
+  </div>
+
+  <!-- Staff Management -->
+  <div class="card" id="staffPanelCard">
+    <div class="card-header">
+      <h2>Church Staff</h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn-secondary btn-sm" id="addStaffBtn">+ Add Staff</button>
+        <button class="toggle-btn" id="staffToggleBtn">Hide ▲</button>
+      </div>
+    </div>
+    <div id="staffPanelBody">
+      <table class="staff-table" id="staffTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Pay Type</th>
+            <th>Rate / Salary</th>
+            <th>Housing</th>
+            <th>Mileage</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="staffTableBody">
+          <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Period Selector -->
+  <div class="card">
+    <div class="card-header" style="margin-bottom:0;">
+      <h2>Pay Period</h2>
+    </div>
+    <div class="period-row" style="margin-top:14px;">
+      <select id="periodSelect"></select>
+      <span id="savingIndicator" class="save-indicator hidden">✓ Saved</span>
+    </div>
+  </div>
+
+  <!-- Hours Entry (hourly staff) -->
+  <div class="card hidden" id="hoursCard">
+    <div class="card-header">
+      <h2>Hours &amp; PTO Entry</h2>
+      <span style="font-size:0.8rem;color:var(--text-muted);">Hourly staff only — auto-saves on change</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 100px 100px 100px;gap:10px;padding:0 12px 8px;align-items:end;">
+      <div></div>
+      <div class="hours-col-label" style="text-align:right;">Hrs Worked</div>
+      <div class="hours-col-label" style="text-align:right;">PTO Used</div>
+      <div class="hours-col-label" style="text-align:right;">PTO Earned</div>
+    </div>
+    <div class="hours-grid" id="hoursGrid"></div>
+  </div>
+
+  <!-- Payroll Report -->
+  <div class="card" id="reportCard">
+    <div class="print-bar">
+      <button class="btn-print" id="printBtn" onclick="window.print()">🖨 Print Report</button>
+    </div>
+    <div id="reportSection">
+      <p style="color:var(--text-muted);font-size:0.9rem;">Select a pay period above to generate the report.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAFF MODAL ══ -->
+<div class="modal-backdrop hidden" id="staffModal">
+  <div class="modal-box">
+    <h2 id="modalTitle">Add Staff Member</h2>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="fName" placeholder="Jane Doe">
+      </div>
+      <div class="form-group">
+        <label>Role / Title</label>
+        <input type="text" id="fRole" placeholder="Lead Pastor">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Pay Type *</label>
+      <select id="fPayType">
+        <option value="salary">Salary (biweekly)</option>
+        <option value="hourly">Hourly</option>
+      </select>
+    </div>
+
+    <div id="salaryFields">
+      <div class="form-group">
+        <label>Base Salary — Biweekly ($)</label>
+        <input type="number" id="fBaseSalary" min="0" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+
+    <div id="hourlyFields" class="hidden">
+      <div class="form-group">
+        <label>Hourly Rate ($/hr)</label>
+        <input type="number" id="fHourlyRate" min="0" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Housing Allowance — Biweekly ($)</label>
+        <input type="number" id="fHousing" min="0" step="0.01" placeholder="0.00">
+        <div class="field-hint">Clergy housing — separate tax designation</div>
+      </div>
+      <div class="form-group">
+        <label>Insurance Opt-Out — Biweekly ($)</label>
+        <input type="number" id="fOptOut" min="0" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>HSA Contribution — Biweekly ($)</label>
+        <input type="number" id="fHSA" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>Mileage — Biweekly ($)</label>
+        <input type="number" id="fMileage" min="0" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>403(b) Deduction Type</label>
+      <select id="f403bType">
+        <option value="fixed">Fixed dollar amount per period</option>
+        <option value="percent">Percentage of base earnings</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label id="f403bAmountLabel">403(b) Amount ($)</label>
+      <input type="number" id="f403bAmount" min="0" step="0.0001" placeholder="0.00">
+      <div class="field-hint" id="f403bHint">Enter dollar amount deducted each period.</div>
+    </div>
+
+    <p id="modalError" class="error-msg hidden">Please fill in all required fields.</p>
+
+    <div class="modal-footer">
+      <button class="btn-secondary" id="modalCancelBtn">Cancel</button>
+      <button class="btn-primary" id="modalSaveBtn" style="width:auto;padding:10px 24px;">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// SUPABASE SETUP
+// ============================================================
+const SUPABASE_URL      = window.location.origin + '/sb';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const PAYROLL_ANCHOR_END = '2026-03-01';
+
+// ============================================================
+// STATE
+// ============================================================
+let churchStaff     = [];    // active staff records
+let periodEntries   = {};    // staffId -> {hours_worked, pto_hours_used, pto_hours_earned}
+let ptoCumulative   = {};    // staffId -> {earned, used} — all periods BEFORE current
+let editingStaffId  = null;
+let savePending     = {};    // staffId -> setTimeout handle
+
+// ============================================================
+// INIT
+// ============================================================
+(async () => {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+        showDashboard();
+    }
+})();
+
+document.getElementById('loginBtn').addEventListener('click', attemptLogin);
+document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
+document.getElementById('loginEmail').addEventListener('keydown',    e => { if (e.key === 'Enter') attemptLogin(); });
+
+async function attemptLogin() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const pwd   = document.getElementById('loginPassword').value;
+    const btn   = document.getElementById('loginBtn');
+    const err   = document.getElementById('loginError');
+
+    err.classList.add('hidden');
+    btn.disabled    = true;
+    btn.textContent = 'Signing in…';
+
+    const { error } = await sb.auth.signInWithPassword({ email, password: pwd });
+
+    if (error) {
+        err.classList.remove('hidden');
+        btn.disabled    = false;
+        btn.textContent = 'Sign In';
+    } else {
+        showDashboard();
+    }
+}
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+    document.getElementById('dashboard').classList.add('hidden');
+    document.getElementById('loginScreen').classList.remove('hidden');
+    document.getElementById('loginPassword').value = '';
+    document.getElementById('loginEmail').value    = '';
+});
+
+async function showDashboard() {
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    buildPeriodDropdown();
+    await loadStaff();
+    const sel = document.getElementById('periodSelect');
+    if (sel.value) await onPeriodChange(sel.value);
+}
+
+// ============================================================
+// PAY PERIOD DROPDOWN
+// ============================================================
+function buildPeriodDropdown() {
+    const sel    = document.getElementById('periodSelect');
+    const fmt    = d => d.toISOString().split('T')[0];
+    const anchor = new Date(PAYROLL_ANCHOR_END + 'T00:00:00');
+    const earliest = new Date('2026-01-01T00:00:00');
+    const latest   = new Date();
+    latest.setFullYear(latest.getFullYear() + 2);
+
+    let endDate = new Date(anchor);
+    while (endDate > earliest) endDate.setDate(endDate.getDate() - 14);
+    endDate.setDate(endDate.getDate() + 14);
+
+    const periods = [];
+    while (endDate <= latest) {
+        const startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - 13);
+        periods.push({ start: fmt(startDate), end: fmt(endDate) });
+        endDate.setDate(endDate.getDate() + 14);
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    let defaultIdx = 0;
+    periods.forEach((p, i) => { if (p.end <= todayStr) defaultIdx = i; });
+
+    sel.innerHTML = '';
+    periods.forEach((p, i) => {
+        const opt = document.createElement('option');
+        opt.value = p.start + '|' + p.end;
+        opt.textContent = periodLabel(p.start, p.end);
+        if (i === defaultIdx) opt.selected = true;
+        sel.appendChild(opt);
+    });
+
+    sel.addEventListener('change', () => onPeriodChange(sel.value));
+}
+
+function periodLabel(start, end) {
+    const [sy, sm, sd] = start.split('-').map(Number);
+    const [,   em, ed] = end.split('-').map(Number);
+    return MONTH_NAMES[sm-1] + ' ' + sd + ' – ' + MONTH_NAMES[em-1] + ' ' + ed + ', ' + sy;
+}
+
+// ============================================================
+// STAFF MANAGEMENT
+// ============================================================
+async function loadStaff() {
+    const { data, error } = await sb.from('church_staff')
+        .select('*')
+        .eq('active', true)
+        .order('name');
+
+    if (error) { console.error(error); return; }
+    churchStaff = data || [];
+    renderStaffTable();
+}
+
+function renderStaffTable() {
+    const tbody = document.getElementById('staffTableBody');
+    if (!churchStaff.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">No staff added yet. Click "+ Add Staff" to begin.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = churchStaff.map(s => {
+        const rate = s.pay_type === 'hourly'
+            ? '$' + Number(s.hourly_rate).toFixed(2) + '/hr'
+            : '$' + fmtMoney(s.base_salary_biweekly) + '/period';
+        return `<tr>
+            <td><strong>${esc(s.name)}</strong></td>
+            <td style="color:var(--text-muted)">${esc(s.role || '—')}</td>
+            <td><span class="badge badge-${s.pay_type}">${s.pay_type}</span></td>
+            <td>${rate}</td>
+            <td>${s.housing_allowance_biweekly > 0 ? '$' + fmtMoney(s.housing_allowance_biweekly) : '—'}</td>
+            <td>${s.mileage_biweekly > 0 ? '$' + fmtMoney(s.mileage_biweekly) : '—'}</td>
+            <td style="text-align:right;white-space:nowrap;">
+                <button class="btn-secondary btn-sm" onclick="openEditStaff('${s.id}')">Edit</button>
+                &nbsp;
+                <button class="btn-danger" onclick="deactivateStaff('${s.id}', '${esc(s.name)}')">Remove</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// Staff panel toggle
+document.getElementById('staffToggleBtn').addEventListener('click', () => {
+    const body = document.getElementById('staffPanelBody');
+    const btn  = document.getElementById('staffToggleBtn');
+    const hidden = body.style.display === 'none';
+    body.style.display = hidden ? '' : 'none';
+    btn.textContent = hidden ? 'Hide ▲' : 'Show ▼';
+});
+
+document.getElementById('addStaffBtn').addEventListener('click', openAddStaff);
+
+function openAddStaff() {
+    editingStaffId = null;
+    document.getElementById('modalTitle').textContent = 'Add Staff Member';
+    clearModalForm();
+    document.getElementById('staffModal').classList.remove('hidden');
+}
+
+function openEditStaff(id) {
+    editingStaffId = id;
+    const s = churchStaff.find(x => x.id === id);
+    if (!s) return;
+    document.getElementById('modalTitle').textContent = 'Edit Staff Member';
+    document.getElementById('fName').value       = s.name;
+    document.getElementById('fRole').value       = s.role || '';
+    document.getElementById('fPayType').value    = s.pay_type;
+    document.getElementById('fBaseSalary').value = s.base_salary_biweekly || '';
+    document.getElementById('fHourlyRate').value = s.hourly_rate || '';
+    document.getElementById('fHousing').value    = s.housing_allowance_biweekly || '';
+    document.getElementById('fOptOut').value     = s.insurance_opt_out_biweekly || '';
+    document.getElementById('fHSA').value        = s.hsa_contribution_biweekly || '';
+    document.getElementById('fMileage').value    = s.mileage_biweekly || '';
+    document.getElementById('f403bType').value   = s.retirement_403b_type || 'fixed';
+    document.getElementById('f403bAmount').value = s.retirement_403b_amount || '';
+    togglePayTypeFields();
+    toggle403bFields();
+    document.getElementById('staffModal').classList.remove('hidden');
+}
+
+function clearModalForm() {
+    ['fName','fRole','fBaseSalary','fHourlyRate','fHousing','fOptOut','fHSA','fMileage','f403bAmount'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('fPayType').value  = 'salary';
+    document.getElementById('f403bType').value = 'fixed';
+    togglePayTypeFields();
+    toggle403bFields();
+    document.getElementById('modalError').classList.add('hidden');
+}
+
+document.getElementById('fPayType').addEventListener('change', togglePayTypeFields);
+document.getElementById('f403bType').addEventListener('change', toggle403bFields);
+
+function togglePayTypeFields() {
+    const isSalary = document.getElementById('fPayType').value === 'salary';
+    document.getElementById('salaryFields').classList.toggle('hidden', !isSalary);
+    document.getElementById('hourlyFields').classList.toggle('hidden', isSalary);
+}
+
+function toggle403bFields() {
+    const isPercent = document.getElementById('f403bType').value === 'percent';
+    document.getElementById('f403bAmountLabel').textContent = isPercent ? '403(b) Percentage (e.g. 0.05 = 5%)' : '403(b) Amount ($)';
+    document.getElementById('f403bHint').textContent = isPercent
+        ? 'Enter as decimal: 0.05 = 5% of base earnings.'
+        : 'Enter dollar amount deducted each period.';
+}
+
+document.getElementById('modalCancelBtn').addEventListener('click', closeModal);
+document.getElementById('staffModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('staffModal')) closeModal();
+});
+
+function closeModal() {
+    document.getElementById('staffModal').classList.add('hidden');
+    editingStaffId = null;
+}
+
+document.getElementById('modalSaveBtn').addEventListener('click', saveStaff);
+
+async function saveStaff() {
+    const name = document.getElementById('fName').value.trim();
+    if (!name) {
+        document.getElementById('modalError').classList.remove('hidden');
+        return;
+    }
+
+    const payType  = document.getElementById('fPayType').value;
+    const b403type = document.getElementById('f403bType').value;
+
+    const record = {
+        name,
+        role:                        document.getElementById('fRole').value.trim() || null,
+        pay_type:                    payType,
+        hourly_rate:                 payType === 'hourly' ? (parseFloat(document.getElementById('fHourlyRate').value) || 0) : 0,
+        base_salary_biweekly:        payType === 'salary' ? (parseFloat(document.getElementById('fBaseSalary').value) || 0) : 0,
+        housing_allowance_biweekly:  parseFloat(document.getElementById('fHousing').value)  || 0,
+        insurance_opt_out_biweekly:  parseFloat(document.getElementById('fOptOut').value)   || 0,
+        hsa_contribution_biweekly:   parseFloat(document.getElementById('fHSA').value)      || 0,
+        mileage_biweekly:            parseFloat(document.getElementById('fMileage').value)  || 0,
+        retirement_403b_type:        b403type,
+        retirement_403b_amount:      parseFloat(document.getElementById('f403bAmount').value) || 0,
+        active:                      true,
+    };
+
+    const btn = document.getElementById('modalSaveBtn');
+    btn.disabled    = true;
+    btn.textContent = 'Saving…';
+
+    let error;
+    if (editingStaffId) {
+        ({ error } = await sb.from('church_staff').update(record).eq('id', editingStaffId));
+    } else {
+        ({ error } = await sb.from('church_staff').insert(record));
+    }
+
+    btn.disabled    = false;
+    btn.textContent = 'Save';
+
+    if (error) { alert('Error saving: ' + error.message); return; }
+
+    closeModal();
+    await loadStaff();
+    const sel = document.getElementById('periodSelect');
+    if (sel.value) await onPeriodChange(sel.value);
+}
+
+async function deactivateStaff(id, name) {
+    if (!confirm('Remove ' + name + ' from the church staff list?')) return;
+    const { error } = await sb.from('church_staff').update({ active: false }).eq('id', id);
+    if (error) { alert('Error: ' + error.message); return; }
+    await loadStaff();
+    const sel = document.getElementById('periodSelect');
+    if (sel.value) await onPeriodChange(sel.value);
+}
+
+// ============================================================
+// PERIOD CHANGE — load entries, render hours section + report
+// ============================================================
+async function onPeriodChange(value) {
+    if (!value) return;
+    const [periodStart, periodEnd] = value.split('|');
+
+    // Fetch period entries for this period
+    const { data: entries } = await sb.from('church_staff_period_entries')
+        .select('*')
+        .eq('period_start', periodStart);
+
+    periodEntries = {};
+    (entries || []).forEach(e => { periodEntries[e.staff_id] = e; });
+
+    // Fetch all entries BEFORE this period for PTO running balance
+    const { data: priorEntries } = await sb.from('church_staff_period_entries')
+        .select('staff_id, pto_hours_earned, pto_hours_used')
+        .lt('period_start', periodStart);
+
+    ptoCumulative = {};
+    (priorEntries || []).forEach(e => {
+        if (!ptoCumulative[e.staff_id]) ptoCumulative[e.staff_id] = { earned: 0, used: 0 };
+        ptoCumulative[e.staff_id].earned += Number(e.pto_hours_earned);
+        ptoCumulative[e.staff_id].used   += Number(e.pto_hours_used);
+    });
+
+    renderHoursSection(periodStart);
+    renderReport(periodStart, periodEnd);
+}
+
+// ============================================================
+// HOURS ENTRY SECTION
+// ============================================================
+function renderHoursSection(periodStart) {
+    const hourlyStaff = churchStaff.filter(s => s.pay_type === 'hourly');
+    const card = document.getElementById('hoursCard');
+
+    if (!hourlyStaff.length) { card.classList.add('hidden'); return; }
+    card.classList.remove('hidden');
+
+    const grid = document.getElementById('hoursGrid');
+    grid.innerHTML = hourlyStaff.map(s => {
+        const entry = periodEntries[s.id] || {};
+        const hw  = entry.hours_worked    ?? '';
+        const pu  = entry.pto_hours_used  ?? '';
+        const pe  = entry.pto_hours_earned ?? '';
+        return `<div class="hours-row">
+            <div>
+                <div class="staff-name">${esc(s.name)}</div>
+                <div class="staff-role">${esc(s.role || '')}</div>
+            </div>
+            <input type="number" min="0" step="0.25" value="${hw}" placeholder="0"
+                data-staff="${s.id}" data-field="hours_worked"
+                onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
+                oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
+            <input type="number" min="0" step="0.25" value="${pu}" placeholder="0"
+                data-staff="${s.id}" data-field="pto_hours_used"
+                onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
+                oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
+            <input type="number" min="0" step="0.25" value="${pe}" placeholder="0"
+                data-staff="${s.id}" data-field="pto_hours_earned"
+                onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
+                oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
+        </div>`;
+    }).join('');
+}
+
+function scheduleHoursSave(staffId, periodStart) {
+    clearTimeout(savePending[staffId]);
+    savePending[staffId] = setTimeout(() => doHoursSave(staffId, periodStart), 600);
+}
+
+async function doHoursSave(staffId, periodStart) {
+    const inputs = document.querySelectorAll(`input[data-staff="${staffId}"]`);
+    let hw = 0, pu = 0, pe = 0;
+    inputs.forEach(inp => {
+        const v = parseFloat(inp.value) || 0;
+        if (inp.dataset.field === 'hours_worked')    hw = v;
+        if (inp.dataset.field === 'pto_hours_used')  pu = v;
+        if (inp.dataset.field === 'pto_hours_earned') pe = v;
+    });
+
+    const { error } = await sb.from('church_staff_period_entries')
+        .upsert({ staff_id: staffId, period_start: periodStart, hours_worked: hw, pto_hours_used: pu, pto_hours_earned: pe },
+                { onConflict: 'staff_id,period_start' });
+
+    if (!error) {
+        // Update local state and re-render report
+        periodEntries[staffId] = { staff_id: staffId, period_start: periodStart, hours_worked: hw, pto_hours_used: pu, pto_hours_earned: pe };
+        const sel = document.getElementById('periodSelect');
+        const [ps, pe2] = sel.value.split('|');
+        renderReport(ps, pe2);
+        flashSaved();
+    }
+}
+
+function flashSaved() {
+    const el = document.getElementById('savingIndicator');
+    el.classList.remove('hidden');
+    clearTimeout(flashSaved._t);
+    flashSaved._t = setTimeout(() => el.classList.add('hidden'), 1800);
+}
+
+// ============================================================
+// REPORT RENDERING
+// ============================================================
+function renderReport(periodStart, periodEnd) {
+    const section = document.getElementById('reportSection');
+    if (!churchStaff.length) {
+        section.innerHTML = '<p style="color:var(--text-muted);font-size:0.9rem;">Add staff members to generate a report.</p>';
+        return;
+    }
+
+    const label = periodLabel(periodStart, periodEnd);
+    let grandTotal = 0;
+    const blocks = churchStaff.map(s => {
+        const gross = calcGross(s);
+        grandTotal += gross;
+        return renderStaffBlock(s, periodStart, gross);
+    }).join('');
+
+    section.innerHTML = `
+        <div class="report-header">
+            <h2>Timothy Lutheran Church — Payroll</h2>
+            <div class="report-period">Pay Period: ${label}</div>
+        </div>
+        ${blocks}
+        <div class="report-grand-total">
+            <span>Total Gross Pay</span>
+            <span>$${fmtMoney(grandTotal)}</span>
+        </div>`;
+}
+
+function renderStaffBlock(s, periodStart, gross) {
+    const isSalary  = s.pay_type === 'salary';
+    const entry     = periodEntries[s.id] || {};
+    const hours     = Number(entry.hours_worked   || 0);
+    const ptoUsed   = Number(entry.pto_hours_used  || 0);
+    const ptoEarned = Number(entry.pto_hours_earned || 0);
+
+    const prior      = ptoCumulative[s.id] || { earned: 0, used: 0 };
+    const ptoBalance = (prior.earned + ptoEarned) - (prior.used + ptoUsed);
+
+    const b403 = calc403b(s, isSalary ? s.base_salary_biweekly : hours * s.hourly_rate);
+
+    const rateChip = isSalary
+        ? `$${fmtMoney(s.base_salary_biweekly)}/period`
+        : `$${Number(s.hourly_rate).toFixed(2)}/hr`;
+
+    let earningsLine = '';
+    if (isSalary) {
+        earningsLine = lineItem('Base Salary', s.base_salary_biweekly);
+    } else {
+        const earning = hours * s.hourly_rate;
+        earningsLine = lineItem(`Regular Hours (${hours} hrs × $${Number(s.hourly_rate).toFixed(2)})`, earning);
+    }
+
+    const housingLine   = s.housing_allowance_biweekly  > 0 ? lineItem('Housing Allowance', s.housing_allowance_biweekly)  : '';
+    const optOutLine    = s.insurance_opt_out_biweekly   > 0 ? lineItem('Insurance Opt-Out', s.insurance_opt_out_biweekly)   : '';
+    const hsaLine       = s.hsa_contribution_biweekly    > 0 ? lineItem('HSA Contribution',  s.hsa_contribution_biweekly)    : '';
+    const mileageLine   = s.mileage_biweekly             > 0 ? lineItem('Mileage',           s.mileage_biweekly)             : '';
+    const b403Label     = s.retirement_403b_type === 'percent'
+        ? `403(b) Deduction (${(s.retirement_403b_amount * 100).toFixed(2).replace(/\.?0+$/, '')}%)`
+        : '403(b) Deduction';
+    const b403Line      = b403 > 0 ? lineItemNeg(b403Label, b403) : '';
+
+    let ptoLines = '';
+    if (!isSalary) {
+        ptoLines = `
+            <div class="line-item pto-row">
+                <span class="li-label">PTO Hours Used</span>
+                <span class="li-val">${ptoUsed.toFixed(2)} hrs</span>
+            </div>
+            <div class="line-item pto-row">
+                <span class="li-label">PTO Hours Earned</span>
+                <span class="li-val">+${ptoEarned.toFixed(2)} hrs</span>
+            </div>
+            <div class="line-item pto-row">
+                <span class="li-label">PTO Balance</span>
+                <span class="li-val" style="color:${ptoBalance < 0 ? 'var(--red)' : 'var(--green)'};">${ptoBalance.toFixed(2)} hrs</span>
+            </div>`;
+    }
+
+    return `<div class="staff-block">
+        <div class="staff-block-header">
+            <span class="sname">${esc(s.name)}</span>
+            <span class="srole">${esc(s.role || '')}</span>
+            <span class="spay">${rateChip}</span>
+        </div>
+        <div class="line-items">
+            ${earningsLine}
+            ${housingLine}
+            ${optOutLine}
+            ${hsaLine}
+            ${mileageLine}
+            ${b403Line}
+            ${ptoLines}
+            <div class="line-item divider total">
+                <span>Gross Pay</span>
+                <span>$${fmtMoney(gross)}</span>
+            </div>
+        </div>
+    </div>`;
+}
+
+function lineItem(label, amount) {
+    return `<div class="line-item">
+        <span class="li-label">${esc(label)}</span>
+        <span class="li-val">$${fmtMoney(amount)}</span>
+    </div>`;
+}
+
+function lineItemNeg(label, amount) {
+    return `<div class="line-item">
+        <span class="li-label">${esc(label)}</span>
+        <span class="li-val li-neg">−$${fmtMoney(amount)}</span>
+    </div>`;
+}
+
+// ============================================================
+// PAY CALCULATIONS
+// ============================================================
+function calc403b(s, baseEarnings) {
+    if (!s.retirement_403b_amount) return 0;
+    if (s.retirement_403b_type === 'percent') {
+        return baseEarnings * Number(s.retirement_403b_amount);
+    }
+    return Number(s.retirement_403b_amount);
+}
+
+function calcGross(s) {
+    const entry    = periodEntries[s.id] || {};
+    const hours    = Number(entry.hours_worked || 0);
+    const base     = s.pay_type === 'salary' ? Number(s.base_salary_biweekly) : hours * Number(s.hourly_rate);
+    const b403     = calc403b(s, base);
+    return base
+        + Number(s.housing_allowance_biweekly)
+        + Number(s.insurance_opt_out_biweekly)
+        + Number(s.hsa_contribution_biweekly)
+        + Number(s.mileage_biweekly)
+        - b403;
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function fmtMoney(n) {
+    return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function esc(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>
