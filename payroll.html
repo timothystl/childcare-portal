@@ -746,6 +746,7 @@ let editingStaffId  = null;
 let savePending     = {};    // staffId -> setTimeout handle
 let mdoStaff        = [];
 let mdoPeriodMap    = new Map();
+let mdoPtoMap       = new Map(); // staffId -> pto_hours_used
 
 const MDO_ROOMS = {
     bear: '🐻 Bear Room', bee: '🐝 Bee Room', turtle: '🐢 Turtle Room',
@@ -1062,7 +1063,7 @@ async function onPeriodChange(value) {
 // MDO STAFF DATA
 // ============================================================
 async function loadMdoData(periodStart, periodEnd) {
-    const [staffRes, hoursRes, clockRes] = await Promise.all([
+    const [staffRes, hoursRes, clockRes, ptoRes] = await Promise.all([
         sb.from('staff')
             .select('id, name, role, pay_type, hourly_rate, salary_biweekly, room_id, active')
             .eq('active', true)
@@ -1075,9 +1076,14 @@ async function loadMdoData(periodStart, periodEnd) {
             .select('staff_id, clock_in, clock_out, work_date')
             .gte('work_date', periodStart)
             .lte('work_date', periodEnd),
+        sb.from('staff_pto_entries')
+            .select('staff_id, pto_hours_used')
+            .eq('period_start', periodStart),
     ]);
 
     mdoStaff = staffRes.data || [];
+    mdoPtoMap = new Map();
+    (ptoRes.data || []).forEach(p => { if (p.pto_hours_used > 0) mdoPtoMap.set(p.staff_id, parseFloat(p.pto_hours_used)); });
 
     const manualKeys = new Set((hoursRes.data || []).map(h => h.staff_id + '|' + h.work_date));
 
@@ -1224,12 +1230,14 @@ function renderMdoStaffBlock(s, gross) {
     const hours    = mdoPeriodMap.get(s.id) || 0;
     const room     = MDO_ROOMS[s.room_id] || 'Float';
 
+    const pto = mdoPtoMap.get(s.id) || 0;
     let earningsLines = '';
     if (isSalary) {
         earningsLines = lineItem('Salary', s.salary_biweekly);
     } else {
         earningsLines = lineItem('Pay Rate', '$' + Number(s.hourly_rate).toFixed(2) + '/hr', true)
-                      + lineItem('Hours Worked', hours.toFixed(2) + ' hrs', true);
+                      + lineItem('Hours Worked', hours.toFixed(2) + ' hrs', true)
+                      + (pto > 0 ? lineItem('PTO Used', pto.toFixed(2) + ' hrs', true) : '');
     }
 
     return `<div class="staff-block">
@@ -1249,8 +1257,9 @@ function renderMdoStaffBlock(s, gross) {
 
 function calcMdoGross(s) {
     if (s.pay_type === 'salary') return Number(s.salary_biweekly);
-    const hours = mdoPeriodMap.get(s.id) || 0;
-    return hours * Number(s.hourly_rate);
+    const hours  = mdoPeriodMap.get(s.id) || 0;
+    const pto    = mdoPtoMap.get(s.id)    || 0;
+    return (hours + pto) * Number(s.hourly_rate);
 }
 
 function renderStaffBlock(s, periodStart, gross) {
