@@ -789,7 +789,7 @@ async function familyLogin(email, pin) {
 async function requestPinReset(email) {
     if (!sbClient || !email) return false;
     try {
-        await fetch(`${SUPABASE_URL}/functions/v1/request-pin-reset`, {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/request-pin-reset`, {
             method:  'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -798,7 +798,10 @@ async function requestPinReset(email) {
             },
             body: JSON.stringify({ email }),
         });
-        return true;
+        // A non-OK status means the request was not accepted (e.g. server/email
+        // failure). The edge function returns 200 even for unknown emails to avoid
+        // account enumeration, so res.ok still preserves that privacy behaviour.
+        return res.ok;
     } catch (_) {
         return false;
     }

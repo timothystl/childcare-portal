@@ -111,7 +111,17 @@ async function applySessionRole() {
         window._adminSession = session;
         const email    = (session?.user?.email || '').toLowerCase().trim();
         const hasRules = Object.keys(roles).length > 0;
-        currentAdminRole = roles[email] || (hasRules ? 'staff' : 'full');
+        // Validate the configured role against the known set so a typo in the
+        // admin_roles settings (e.g. "restriced") can't silently grant access.
+        // Unknown/missing roles fall back to least privilege when rules exist.
+        const validRoles = Object.keys(ROLE_LABELS); // ['full','restricted','staff']
+        const assigned   = roles[email];
+        if (assigned && !validRoles.includes(assigned)) {
+            console.warn('Unknown admin role for', email, '->', assigned, '— defaulting to staff');
+        }
+        currentAdminRole = validRoles.includes(assigned)
+            ? assigned
+            : (hasRules ? 'staff' : 'full');
         // Show logged-in email + role in header
         const displayEl = document.getElementById('currentUserDisplay');
         if (displayEl) {

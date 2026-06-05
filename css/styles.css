@@ -201,6 +201,23 @@ main { padding: 32px 36px; }
     box-shadow: 0 0 0 3px rgba(245,183,49,0.15);
 }
 
+/* Visible focus indicators for keyboard navigation (WCAG 2.4.7).
+   :focus-visible keeps the ring for keyboard users without showing it on
+   mouse clicks. Covers buttons, tabs, links and interactive calendar cells. */
+a:focus-visible,
+button:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-ghost:focus-visible,
+.room-card:focus-visible,
+.cal-day:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--navy);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
 /* ============================================================
    ROOM GRID
    ============================================================ */

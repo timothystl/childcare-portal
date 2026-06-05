@@ -316,17 +316,52 @@ lower-case and trim before lookups.
 
 ---
 
-## Suggested remediation order
+## Remediation order (execution checklist)
 
-1. **Confirm RLS** on the four core PII tables (S1) — highest risk, quick to check.
-2. **Server-side role enforcement** for admin mutations (S2), plus the role-enum fix
-   (S3) and edge-fn fail-closed check (S4).
-3. **XSS escaping audit** of `js/admin/*` `.innerHTML` sites (S5).
-4. **Quick UX wins:** focus rings (U1), disabled/loading states (U3), silent PIN-reset
-   feedback (U6), mobile day-picker (U5).
-5. **Design tokens & inline-style cleanup** (V1, V2) — large but mechanical; unblocks
-   theming.
-6. **Quality/perf refactors** (P1–P2, Q1–Q3) and the `supabase.js` split (M1) as
-   ongoing hygiene.
+Items keep their finding labels for reference. Check off as completed.
 
-_All findings are recommendations; nothing here was applied to the codebase._
+### Wave 1 — Security must-dos
+- [ ] **S1** — Verify RLS on `families`, `students`, `registrations`, `staff` — _requires Supabase dashboard; cannot be done from the repo_
+- [ ] **S2** — Enforce admin role server-side (RLS/edge fn), not just CSS hiding — _deferred: architectural, needs live Supabase to test_
+- [x] **S3** — Validate role against `['full','restricted','staff']` enum, least-privilege default — `admin-core.js`
+- [ ] **S4** — `admin-users` edge fn: fail closed; confirm `settings` writes are service-role only — _deferred: fail-closed risks locking out admins when `admin_roles` is unset; needs a bootstrap decision_
+- [x] **S5** — Audit `js/admin/*` `.innerHTML` sites — escaping was consistent except one gap (roster child name), now `escHtml()`-wrapped in `admin-classrooms.js`
+
+### Wave 2 — Quick UX wins
+- [x] **U1** — Visible `:focus-visible` rings on buttons/tabs/links/cells — `css/styles.css`
+- [~] **U3** — Disabled-button states already exist (`styles.css:456,872`); disable-on-submit JS wiring still TODO
+- [x] **U6** — Surface PIN-reset send failures (`requestPinReset` now returns `res.ok`) — `js/supabase.js`
+- [ ] **U5** — Fix off-screen mobile day-picker positioning
+- [ ] **U2** — `aria-label`/alt on icon & emoji controls
+
+### Wave 3 — Remaining security/UX polish
+- [ ] **S6** — Per-IP / CAPTCHA throttling on PIN reset
+- [ ] **S7** — Trim `family_login()` RPC projection
+- [ ] **S8** — Confirm anon-key expiry + rotation cadence
+- [ ] **U4** — Standardize breakpoints; fix admin grid mobile overflow
+- [ ] **U7** — Note hidden months in lookup
+
+### Wave 4 — Design system
+- [ ] **V1** — Hardcoded hex → `:root` design tokens
+- [ ] **V4** — Extract shared `css/variables.css`, dedupe `:root`/fonts
+- [ ] **V5** — Consolidate duplicate `.btn-*` rules
+- [ ] **V2** — Migrate ~300 inline `style=` to CSS classes
+- [ ] **V3** — Collapse ad-hoc shades to canonical palette
+- [ ] **V6** — Typography scale variables
+
+### Wave 5 — Quality, perf & maintainability
+- [ ] **Q3** — Parallelize init with `Promise.allSettled` + error handling
+- [ ] **Q1** — Extract single `calculateChildAmounts()` (dedupe billing)
+- [ ] **C1** — Document pricing/discount logic (JSDoc)
+- [ ] **C2** — Document registration-window/timezone logic
+- [ ] **P2** — Memoize redundant billing recomputation
+- [ ] **P1** — Build calendar via fragment/string, render once
+- [ ] **P3** — Cache per-cell capacity lookups
+- [ ] **Q2** — Standardize on `parseJsonSafe()` helper
+- [ ] **M2** — Normalize email/PIN input before lookup
+- [ ] **C3** — Log raw error inside `friendlyError`
+- [ ] **P4** — Single-regex `escHtml`
+- [ ] **Q4** — Share `MONTH_NAMES`
+- [ ] **Q5** — Drop `escStr` aliases
+- [ ] **M1** — Split `js/supabase.js` god-file into modules
+- [ ] **N1** — File naming — no action (note only)

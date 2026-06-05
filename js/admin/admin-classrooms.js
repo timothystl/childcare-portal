@@ -385,7 +385,7 @@ function generateMonthlyRoster() {
             const fullFlag = count >= cap ? ' roster-day-full' : count >= cap * .8 ? ' roster-day-near' : '';
             const childList = children.length
                 ? children.map(c =>
-                    `<span class="roster-child${c.dayType === 'half' ? ' roster-half' : ''}">${c.name}${c.dayType === 'half' ? ' ½' : ''}</span>`
+                    `<span class="roster-child${c.dayType === 'half' ? ' roster-half' : ''}">${escHtml(c.name)}${c.dayType === 'half' ? ' ½' : ''}</span>`
                   ).join('')
                 : '<span class="roster-empty-day">—</span>';
             return `
