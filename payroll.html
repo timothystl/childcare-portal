@@ -563,6 +563,8 @@
       border-radius: 6px; font-weight: 800; font-size: 0.9rem;
     }
 
+    @page { size: landscape; margin: 0.5in; }
+
     /* ── Print styles ── */
     @media print {
       #loginScreen, .page-header, #staffPanelCard, .period-row,
@@ -1321,12 +1323,14 @@ function renderPrintTable(activeMdo, activeChurch, mdoTotal, churchTotal, grandT
         const earnings = isSalary ? Number(s.base_salary_biweekly) : (hours + ptoUsed) * Number(s.hourly_rate);
         const b403     = calc403b(s, earnings);
         const gross    = calcGross(s);
-        const allowances = Number(s.housing_allowance_biweekly) + Number(s.insurance_opt_out_biweekly)
-                         + Number(s.hsa_contribution_biweekly)  + Number(s.mileage_biweekly);
+        const fmt = v => v > 0 ? '$' + fmtMoney(v) : '—';
         return `<tr>
             <td class="pt-name">${esc(s.name)}</td>
             <td class="pt-num">${isSalary ? '$' + fmtMoney(s.base_salary_biweekly) : hours.toFixed(2) + ' hrs @ $' + Number(s.hourly_rate).toFixed(2)}</td>
-            <td class="pt-num">${allowances > 0 ? '$' + fmtMoney(allowances) : '—'}</td>
+            <td class="pt-num">${fmt(s.housing_allowance_biweekly)}</td>
+            <td class="pt-num">${fmt(s.insurance_opt_out_biweekly)}</td>
+            <td class="pt-num">${fmt(s.hsa_contribution_biweekly)}</td>
+            <td class="pt-num">${fmt(s.mileage_biweekly)}</td>
             <td class="pt-num">${b403 > 0 ? '−$' + fmtMoney(b403) : '—'}</td>
             <td class="pt-num">$${fmtMoney(gross)}</td>
         </tr>`;
@@ -1338,13 +1342,14 @@ function renderPrintTable(activeMdo, activeChurch, mdoTotal, churchTotal, grandT
             <table class="pt-table">
                 <thead><tr>
                     <th>Name</th><th class="pt-num">Base / Earnings</th>
-                    <th class="pt-num">Allowances</th><th class="pt-num">403(b)</th>
-                    <th class="pt-num">Gross Pay</th>
+                    <th class="pt-num">Housing</th><th class="pt-num">Ins Opt-Out</th>
+                    <th class="pt-num">HSA</th><th class="pt-num">Mileage</th>
+                    <th class="pt-num">403(b)</th><th class="pt-num">Gross Pay</th>
                 </tr></thead>
                 <tbody>
                     ${churchRows}
                     <tr class="pt-sub">
-                        <td colspan="4">Church Subtotal</td>
+                        <td colspan="7">Church Subtotal</td>
                         <td class="pt-num">$${fmtMoney(churchTotal)}</td>
                     </tr>
                 </tbody>
