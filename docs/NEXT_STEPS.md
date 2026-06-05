@@ -15,10 +15,12 @@ Already committed; just deploy:
    Supabase SQL Editor — safe, non-invasive (`ALTER FUNCTION` only).
 
 ## Step 1 — Verify RLS (5 min) — reshapes the security priority
-Run STEP 1 of `supabase/migrations/VERIFY_rls_core_tables.sql` in the SQL Editor.
-- All `rls_enabled = true` → S1 OK; deprioritize S2.
-- Any `false` → TOP priority (anon key can read PII). Do NOT run STEP 2 blindly —
-  share the output; we'll write policies that don't break registration/capacity.
+✅ DONE 2026-06-05: RLS is **enabled** on all five core tables
+(`families`, `students`, `registrations`, `registration_dates`, `staff`) — the
+"anon key reads all PII" risk is averted, so **S1 is essentially closed** and
+**S2 (server-side roles) is downgraded**. Residual (optional): run the
+`pg_policies` query in `VERIFY_rls_core_tables.sql` to confirm no policy is
+over-permissive (`USING (true)` to anon).
 
 ## Step 2 — Quick high-value fixes
 1. **SS2** — leading-zero PIN lockout. Make PINs text end-to-end

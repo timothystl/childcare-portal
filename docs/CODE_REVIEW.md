@@ -326,7 +326,7 @@ lower-case and trim before lookups.
 Items keep their finding labels for reference. Check off as completed.
 
 ### Wave 1 — Security must-dos
-- [~] **S1** — Verify RLS on `families`, `students`, `registrations`, `staff` — _requires Supabase dashboard._ Verification SQL + annotated draft policies provided in `supabase/migrations/VERIFY_rls_core_tables.sql` (run STEP 1 to check; STEP 2 policies need review — naive lockdown breaks public registration/capacity)
+- [x] **S1** — ✅ Verified 2026-06-05: RLS is **enabled** on `families`, `students`, `registrations`, `registration_dates`, `staff` (the "anon reads all PII" risk is averted). Residual: confirm policies aren't over-permissive via the `pg_policies` query in `supabase/migrations/VERIFY_rls_core_tables.sql`. S2 (server-side roles) downgraded accordingly
 - [ ] **S2** — Enforce admin role server-side (RLS/edge fn), not just CSS hiding — _deferred: architectural, needs live Supabase to test_
 - [x] **S3** — Validate role against `['full','restricted','staff']` enum, least-privilege default — `admin-core.js`
 - [ ] **S4** — `admin-users` edge fn: fail closed; confirm `settings` writes are service-role only — _deferred: fail-closed risks locking out admins when `admin_roles` is unset; needs a bootstrap decision_
