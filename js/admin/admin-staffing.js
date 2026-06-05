@@ -234,7 +234,7 @@ function openStaffForm(staff = null) {
     document.getElementById('sfHireDate').value  = staff?.hire_date || '';
     const pinEl = document.getElementById('sfPin');
     pinEl.value       = '';
-    pinEl.placeholder = staff?.has_staff_pin ? 'Leave blank to keep current PIN' : 'Set 4-digit PIN';
+    pinEl.placeholder = 'Set 4-digit PIN';
 
     const payType = staff?.pay_type || 'hourly';
     document.getElementById('sfPayType').value   = payType;
