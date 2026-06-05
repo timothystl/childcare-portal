@@ -726,12 +726,14 @@ function formatChildRate(child, dayType) {
  *      after the first gets $10 off (capped at their own rate so it never goes negative).
  *
  * @param {'full'|'half'} dayType
+ * @param {Array} [children=selectedChildren] child set to bill — defaults to the
+ *   current selection; the submit flow passes the successfully-registered subset.
  * @returns {Array<{child: object, preMulti: number, multiDiscount: number, finalAmount: number}>}
  *   preMulti = rate after the individual discount; multiDiscount = sibling $ taken off;
  *   finalAmount = what this child is actually billed for the day.
  */
-function getChildDayAmounts(dayType) {
-    const entries = selectedChildren.map(c => {
+function getChildDayAmounts(dayType, children = selectedChildren) {
+    const entries = children.map(c => {
         const base = dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
         return { child: c, eff: effectiveRate(base, c.discountType, c.discountValue) };
     }).sort((a, b) => b.eff - a.eff);   // highest payer first
@@ -1170,16 +1172,9 @@ async function handleSubmit(e) {
             // Build per-day amounts using same logic as renderSelectedDates
             // results[].child mirrors selectedChildren at submit time
             const submitChildren = results.map(r => r.child);
-            const calcSubmitDayAmounts = (dayType) => {
-                const entries = submitChildren.map(c => {
-                    const base = dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
-                    return { child: c, eff: effectiveRate(base, c.discountType, c.discountValue) };
-                }).sort((a, b) => b.eff - a.eff);
-                return entries.map((entry, i) => ({
-                    child:       entry.child,
-                    finalAmount: Math.max(0, entry.eff - (i > 0 ? 10 : 0)),
-                }));
-            };
+            // Reuse the canonical billing calc on the registered subset (same
+            // sort + sibling-discount logic as the live receipt preview).
+            const calcSubmitDayAmounts = (dayType) => getChildDayAmounts(dayType, submitChildren);
 
             const receiptRows = sortedDates.map(({ date, dayType }) => {
                 const typeLabel  = dayType === 'half' ? 'Half Day' : 'Full Day';

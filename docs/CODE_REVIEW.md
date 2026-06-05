@@ -352,6 +352,7 @@ Items keep their finding labels for reference. Check off as completed.
 ### Wave 5 — Quality, perf & maintainability
 - [ ] **Q3** — Parallelize init with `Promise.allSettled` + error handling
 - [ ] **Q1** — Extract single `calculateChildAmounts()` (dedupe billing)
+- [x] **Q1** — Parameterized `getChildDayAmounts(dayType, children=selectedChildren)` and replaced the duplicated `calcSubmitDayAmounts` in the submit flow with a call to it — billing math now lives in one place (`app.js`)
 - [x] **C1** — JSDoc on `getChildDayAmounts` documenting the two discount layers + return shape (`app.js`); the other pricing fns already had inline comments
 - [~] **C2** — Already partly covered: `app.js` has a window/timezone comment block (lines 24-29) and inline notes; no new code needed
 - [ ] **P2** — Memoize redundant billing recomputation
