@@ -527,54 +527,57 @@
       margin-top: 4px;
     }
 
+    /* ── Print table (screen: hidden; print: shown) ── */
+    #printTable { display: none; }
+
+    .pt-header { margin-bottom: 10px; }
+    .pt-header h2 { font-size: 1rem; font-family: var(--font-head); color: var(--navy); }
+    .pt-header .pt-period { font-size: 0.8rem; color: var(--text-muted); }
+
+    .pt-section { margin-bottom: 14px; }
+    .pt-section-label {
+      font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--text-muted);
+      border-bottom: 1.5px solid var(--border); padding-bottom: 2px; margin-bottom: 4px;
+    }
+
+    .pt-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .pt-table th {
+      text-align: left; padding: 3px 8px;
+      background: var(--warm-gray); font-size: 0.72rem; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.04em;
+      border-bottom: 1.5px solid var(--border);
+    }
+    .pt-table td { padding: 3px 8px; border-bottom: 1px solid var(--warm-gray); }
+    .pt-table tr:last-child td { border-bottom: none; }
+    .pt-table .pt-name { font-weight: 700; }
+    .pt-table .pt-num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pt-table .pt-sub td {
+      font-weight: 800; background: var(--warm-gray);
+      border-top: 1.5px solid var(--border); padding: 4px 8px;
+    }
+    .pt-total {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 7px 10px; margin-top: 8px;
+      background: var(--navy); color: var(--white);
+      border-radius: 6px; font-weight: 800; font-size: 0.9rem;
+    }
+
     /* ── Print styles ── */
     @media print {
-      #loginScreen,
-      .page-header button,
-      #staffPanelCard,
-      .period-row,
-      #hoursCard,
-      .print-bar,
-      .toggle-btn { display: none !important; }
+      #loginScreen, .page-header, #staffPanelCard, .period-row,
+      #hoursCard, .print-bar, .toggle-btn, #reportSection { display: none !important; }
 
-      body { background: white; font-size: 11px; }
+      #printTable { display: block !important; }
+
+      body { background: white; font-size: 9pt; }
       #dashboard { padding: 0; max-width: 100%; }
-      .page-header { border-bottom: 1.5px solid #999; margin-bottom: 10px; padding-bottom: 6px; }
-      .page-header h1 { font-size: 1rem; }
       .card { border: none; padding: 0; margin: 0; box-shadow: none; }
 
-      /* Two-column grid so more staff fit per page */
-      #reportSection { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: start; }
-      .report-header,
-      .report-section-label,
-      .report-subtotal,
-      .report-grand-total { grid-column: 1 / -1; }
-
-      .staff-block {
-        border: 1px solid #ccc;
-        break-inside: avoid;
-        margin-bottom: 0;
-      }
-
-      .staff-block-header {
-        padding: 5px 10px;
-        background: #01294A !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-
-      .staff-block-header .sname { font-size: 0.82rem; }
-
-      .line-items { padding: 4px 10px 6px; }
-      .line-item { padding: 2px 0; font-size: 0.8rem; }
-
-      .report-subtotal { padding: 5px 12px; margin: 4px 0; font-size: 0.82rem; }
-      .report-grand-total { padding: 8px 14px; font-size: 0.92rem; margin-top: 4px;
-        background: #01294A !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-
-      .report-header h2 { font-size: 1rem; }
-      .report-header { margin-bottom: 8px; }
-      .report-section-label { margin: 6px 0 4px; font-size: 0.72rem; }
+      .pt-table { font-size: 8.5pt; }
+      .pt-table th { font-size: 7.5pt; }
+      .pt-total { background: #01294A !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 9pt; }
+      .pt-table .pt-sub td { background: #f0ece0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
 </head>
@@ -671,6 +674,8 @@
     <div id="reportSection">
       <p style="color:var(--text-muted);font-size:0.9rem;">Select a pay period above to generate the report.</p>
     </div>
+    <!-- Compact table rendered for print only -->
+    <div id="printTable"></div>
   </div>
 </div>
 
@@ -1221,10 +1226,14 @@ function renderReport(periodStart, periodEnd) {
     const label   = periodLabel(periodStart, periodEnd);
     let grandTotal = 0;
 
+    // Filter zero-pay staff
+    const activeMdo    = mdoStaff.filter(s => calcMdoGross(s) > 0);
+    const activeChurch = churchStaff.filter(s => calcGross(s) > 0);
+
     // ── MDO section ──
     let mdoHtml = '', mdoTotal = 0;
-    if (mdoStaff.length) {
-        mdoStaff.forEach(s => {
+    if (activeMdo.length) {
+        activeMdo.forEach(s => {
             const gross = calcMdoGross(s);
             mdoTotal   += gross;
             grandTotal += gross;
@@ -1235,9 +1244,9 @@ function renderReport(periodStart, periodEnd) {
 
     // ── Church section ──
     let churchHtml = '', churchTotal = 0;
-    if (churchStaff.length) {
+    if (activeChurch.length) {
         churchHtml = '<div class="report-section-label">Church Staff</div>';
-        churchStaff.forEach(s => {
+        activeChurch.forEach(s => {
             const gross  = calcGross(s);
             churchTotal += gross;
             grandTotal  += gross;
@@ -1246,7 +1255,7 @@ function renderReport(periodStart, periodEnd) {
         churchHtml += `<div class="report-subtotal"><span>Church Subtotal</span><span>$${fmtMoney(churchTotal)}</span></div>`;
     }
 
-    if (!mdoStaff.length && !churchStaff.length) {
+    if (!activeMdo.length && !activeChurch.length) {
         section.innerHTML = '<p style="color:var(--text-muted);font-size:0.9rem;">No staff found for this period.</p>';
         return;
     }
@@ -1259,6 +1268,97 @@ function renderReport(periodStart, periodEnd) {
         ${mdoHtml}
         ${churchHtml}
         <div class="report-grand-total">
+            <span>Total Gross Pay</span>
+            <span>$${fmtMoney(grandTotal)}</span>
+        </div>`;
+
+    renderPrintTable(activeMdo, activeChurch, mdoTotal, churchTotal, grandTotal, label);
+}
+
+function renderPrintTable(activeMdo, activeChurch, mdoTotal, churchTotal, grandTotal, label) {
+    const el = document.getElementById('printTable');
+
+    // MDO table rows
+    const mdoRows = activeMdo.map(s => {
+        const isSalary = s.pay_type === 'salary';
+        const hours    = mdoPeriodMap.get(s.id) || 0;
+        const pto      = mdoPtoMap.get(s.id)    || 0;
+        const gross    = calcMdoGross(s);
+        return `<tr>
+            <td class="pt-name">${esc(s.name)}</td>
+            <td>${isSalary ? 'Salary' : '$' + Number(s.hourly_rate).toFixed(2) + '/hr'}</td>
+            <td class="pt-num">${isSalary ? '—' : hours.toFixed(2)}</td>
+            <td class="pt-num">${pto > 0 ? pto.toFixed(2) : '—'}</td>
+            <td class="pt-num">$${fmtMoney(gross)}</td>
+        </tr>`;
+    }).join('');
+
+    const mdoSection = activeMdo.length ? `
+        <div class="pt-section">
+            <div class="pt-section-label">MDO Staff</div>
+            <table class="pt-table">
+                <thead><tr>
+                    <th>Name</th><th>Rate</th>
+                    <th class="pt-num">Hours</th><th class="pt-num">PTO</th>
+                    <th class="pt-num">Gross Pay</th>
+                </tr></thead>
+                <tbody>
+                    ${mdoRows}
+                    <tr class="pt-sub">
+                        <td colspan="4">MDO Subtotal</td>
+                        <td class="pt-num">$${fmtMoney(mdoTotal)}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>` : '';
+
+    // Church table rows
+    const churchRows = activeChurch.map(s => {
+        const isSalary = s.pay_type === 'salary';
+        const entry    = periodEntries[s.id] || {};
+        const hours    = Number(entry.hours_worked || 0);
+        const ptoUsed  = Number(entry.pto_hours_used || 0);
+        const earnings = isSalary ? Number(s.base_salary_biweekly) : (hours + ptoUsed) * Number(s.hourly_rate);
+        const b403     = calc403b(s, earnings);
+        const gross    = calcGross(s);
+        const allowances = Number(s.housing_allowance_biweekly) + Number(s.insurance_opt_out_biweekly)
+                         + Number(s.hsa_contribution_biweekly)  + Number(s.mileage_biweekly);
+        return `<tr>
+            <td class="pt-name">${esc(s.name)}</td>
+            <td class="pt-num">${isSalary ? '$' + fmtMoney(s.base_salary_biweekly) : hours.toFixed(2) + ' hrs @ $' + Number(s.hourly_rate).toFixed(2)}</td>
+            <td class="pt-num">${allowances > 0 ? '$' + fmtMoney(allowances) : '—'}</td>
+            <td class="pt-num">${b403 > 0 ? '−$' + fmtMoney(b403) : '—'}</td>
+            <td class="pt-num">$${fmtMoney(gross)}</td>
+        </tr>`;
+    }).join('');
+
+    const churchSection = activeChurch.length ? `
+        <div class="pt-section">
+            <div class="pt-section-label">Church Staff</div>
+            <table class="pt-table">
+                <thead><tr>
+                    <th>Name</th><th class="pt-num">Base / Earnings</th>
+                    <th class="pt-num">Allowances</th><th class="pt-num">403(b)</th>
+                    <th class="pt-num">Gross Pay</th>
+                </tr></thead>
+                <tbody>
+                    ${churchRows}
+                    <tr class="pt-sub">
+                        <td colspan="4">Church Subtotal</td>
+                        <td class="pt-num">$${fmtMoney(churchTotal)}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>` : '';
+
+    el.innerHTML = `
+        <div class="pt-header">
+            <h2>Timothy Lutheran — Combined Payroll</h2>
+            <div class="pt-period">Pay Period: ${label}</div>
+        </div>
+        ${mdoSection}
+        ${churchSection}
+        <div class="pt-total">
             <span>Total Gross Pay</span>
             <span>$${fmtMoney(grandTotal)}</span>
         </div>`;
