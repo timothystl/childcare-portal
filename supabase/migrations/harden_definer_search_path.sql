@@ -1,32 +1,34 @@
 -- ============================================================
 -- SS10 — Pin search_path on the remaining SECURITY DEFINER functions
 -- ============================================================
--- Every other SECURITY DEFINER function in this project already sets
--- `search_path = public` (e.g. family_login, consume_pin_reset,
--- lookup_staff_by_pin, log_admin_action). These four were missing it:
---   - the three billing-by-email RPCs (add_billing_rpc.sql)
---   - the registration-window trigger function (enforce_registration_window.sql)
+-- Sets `search_path = public` on the billing-by-email RPCs and the
+-- registration-window trigger function (the only SECURITY DEFINER functions
+-- that were missing it). Without a pinned search_path, a definer function that
+-- references unqualified objects can be tricked via search_path manipulation.
 --
--- Without a pinned search_path, a definer function that references unqualified
--- objects (settings, families, billing_invoices, NOW(), …) can be tricked via
--- search_path manipulation into resolving a shadowed relation/function — a
--- privilege-escalation hardening gap. This is especially relevant for the
--- billing RPCs, which are (currently) granted to anon (see SS5).
---
--- ALTER FUNCTION only changes the configuration parameter; it does NOT rewrite
--- the function body, so this migration is non-invasive and safe to apply as-is.
--- (Argument-type modifiers like CHAR(7)/NUMERIC(10,2) are not needed to identify
--- the function — the base type names suffice.)
+-- ROBUST VERSION: looks up each function by name (whatever its exact argument
+-- signature) and ALTERs only the ones that actually exist — so it won't fail if,
+-- e.g., the billing RPCs (add_billing_rpc.sql) were never applied to this DB.
+-- ALTER FUNCTION only changes the config param; it does not rewrite the body.
 -- ============================================================
 
-ALTER FUNCTION create_billing_invoice_by_email(text, char, numeric)
-    SET search_path = public;
-
-ALTER FUNCTION add_day_to_invoice_by_email(text, char, numeric, numeric)
-    SET search_path = public;
-
-ALTER FUNCTION get_outstanding_balance_by_email(text)
-    SET search_path = public;
-
-ALTER FUNCTION check_registration_window()
-    SET search_path = public;
+DO $$
+DECLARE
+    fn record;
+BEGIN
+    FOR fn IN
+        SELECT p.oid::regprocedure AS sig
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+          AND p.proname IN (
+              'create_billing_invoice_by_email',
+              'add_day_to_invoice_by_email',
+              'get_outstanding_balance_by_email',
+              'check_registration_window'
+          )
+    LOOP
+        EXECUTE format('ALTER FUNCTION %s SET search_path = public', fn.sig);
+        RAISE NOTICE 'search_path pinned on %', fn.sig;
+    END LOOP;
+END $$;
