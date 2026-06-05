@@ -153,7 +153,7 @@ function renderStaffList(staff) {
             <tbody>
                 ${staff.map(s => {
                     const roomLabel  = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
-                    const pinDisplay = !!s.staff_pin_hash ? '●●●●' : '—';
+                    const pinDisplay = s.has_staff_pin ? '●●●●' : '—';
                     const isSalary   = s.pay_type === 'salary';
                     const payDisplay = isSalary
                         ? `<span class="pay-type-chip pay-salary">Salary</span> $${(s.salary_biweekly || 0).toFixed(2)}/period`

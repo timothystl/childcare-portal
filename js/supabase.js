@@ -1432,7 +1432,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('staff')
-        .select('id, name, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, created_at')
+        .select('id, name, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at')
         .order('name');
     if (!includeInactive) query = query.eq('active', true);
     const { data, error } = await query;
