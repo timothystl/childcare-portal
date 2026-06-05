@@ -36,6 +36,51 @@ Timothy Lutheran MDO (Mother's Day Out) registration portal. Parents register ch
 
 ---
 
+## Project status & outstanding work (updated 2026-06-05)
+
+A full code review + a deeper "second sweep" were done. Detailed records live in:
+- **`docs/CODE_REVIEW.md`** — all findings, labeled (S/U/V/N/P/Q/C/M for the first
+  review; SS1–SS19 for the correctness/integrity sweep), with `[x]`/`[~]`/`[ ]` status.
+- **`docs/NEXT_STEPS.md`** — the prioritized action plan + an incident log.
+- **`CONTRIBUTING.md`** — branch/deploy rules (read before merging).
+
+### Done & shipped
+- First-review fixes (escaping, focus states, ARIA, design tokens, init/`MONTH_NAMES`/
+  `parseJsonOr` dedup, billing dedup, etc.) and several SS items (SS6 month_key query,
+  SS7 staff-save button, SS14 recurring-days, SS15 multi-room selector). All on `main`.
+- **DB applied in prod:** `hash_staff_pins.sql` (staff PINs now bcrypt-hashed — they had
+  never been applied; the deployed kiosk depended on them), SS10
+  `harden_definer_search_path.sql`, SS12 `ss12_one_open_clock_event.sql`.
+- **Edge/worker:** SS4 (`send-waitlist-offer` now requires admin auth) deployed; SS13
+  worker email-filter validation auto-deployed via the workflow.
+- **CI:** `.github/workflows/auto-merge-claude.yml` now auto-resolves version-file
+  (`package.json` + `js/build-version.js`) merge conflicts — those were silently failing
+  every auto-merge/deploy when two `claude/**` branches ran at once.
+
+### Still to do (see NEXT_STEPS.md for the exact steps/sequencing)
+- **SS2** — family leading-zero PIN lockout: apply `ss2_family_login_text_pin.sql`, then
+  deploy the `family-lookup` edge fn + the `familyLogin` JS change **in that order**.
+- **SS1** — anon-read PII exposure: the public anon key can still read/modify
+  families/students/staff (policies were over-permissive; a blanket tighten broke login
+  and was rolled back). Groundwork RPCs are in `ss1_public_read_rpcs.sql`; the staged
+  switch + policy drops still need a staging session.
+- **SS5** likely moot (the billing-by-email RPCs aren't deployed in prod — verify).
+- Remaining: SS3/SS9 (atomic registration RPC + capacity), SS11/SS16/SS17/SS18, SS19,
+  S2/S4/S6/S7, and the browser-verified UX/perf items (U3/U4, V2–V6, P1–P3, M1).
+- **`send-schedule-confirmation`** edge fn (SS13) still needs deploying.
+
+### Hard-won operational notes (don't repeat these)
+- **`supabase/migrations/` is NOT auto-applied** — run migrations by hand in the SQL
+  Editor. A committed migration ≠ a deployed one. Confirm a new RPC/column exists
+  (`pg_proc` / `information_schema.columns`) before deploying code that needs it.
+- **Auth/billing/RLS changes:** stage + smoke-test (parent login, kiosk, a test
+  registration, admin tabs) before prod.
+- **Don't run two `claude/**` branches editing shared files at once** — that caused a
+  silent revert of a `supabase.js` line and the version-conflict merge failures. Sync
+  with `main` before pushing.
+
+---
+
 ## Development workflow
 
 ### Local dev (no build needed)
