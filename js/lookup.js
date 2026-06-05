@@ -120,6 +120,7 @@ function showResults(registrations, parentEmail) {
     const visibleMonths = new Set([thisMonth, nextMonth]);
 
     // Group all registrations by child_name
+    let hiddenMonthDays = 0;   // confirmed days that fall outside the visible window
     const byChild = {};
     registrations.forEach(reg => {
         const key = reg.child_name || 'Unknown Child';
@@ -131,14 +132,24 @@ function showResults(registrations, parentEmail) {
             };
         }
         (reg.registration_dates || []).forEach(d => {
-            if (!d.waitlisted && visibleMonths.has((d.care_date || '').substring(0, 7))) {
+            if (d.waitlisted) return;
+            if (visibleMonths.has((d.care_date || '').substring(0, 7))) {
                 byChild[key].dates.push(d);
+            } else {
+                hiddenMonthDays++;
             }
         });
     });
 
-    const html = Object.values(byChild).map(child => renderChildCard(child)).join('');
-    document.getElementById('lookupContent').innerHTML = html || '<p class="lookup-empty-state">No confirmed care days found.</p>';
+    // Only show children that actually have visible days; note any hidden months so
+    // parents don't think past/future registrations vanished.
+    const cards = Object.values(byChild).filter(c => c.dates.length);
+    const hiddenNote = hiddenMonthDays > 0
+        ? `<p class="lookup-hidden-note">Showing this month and next. ${hiddenMonthDays} confirmed day${hiddenMonthDays !== 1 ? 's' : ''} in other months ${hiddenMonthDays !== 1 ? 'are' : 'is'} not shown here — contact the office for the full history.</p>`
+        : '';
+    const html = cards.map(child => renderChildCard(child)).join('');
+    document.getElementById('lookupContent').innerHTML =
+        (html ? html + hiddenNote : '<p class="lookup-empty-state">No confirmed care days found for this month or next.</p>' + hiddenNote);
 }
 
 function renderChildCard({ childName, roomId, dates }) {

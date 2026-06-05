@@ -39,6 +39,17 @@ serve(async (req) => {
             );
         }
 
+        // Strict email validation BEFORE the value is used in the PostgREST .or()
+        // filter below — a string containing , ( ) or * would otherwise change the
+        // filter semantics (e.g. ilike.* matching every family) and defeat the
+        // "recipient is a registered family" anti-relay guard.
+        if (typeof parentEmail !== "string" || !/^[^\s,()*@]+@[^\s,()*@]+\.[^\s,()*@]+$/.test(parentEmail)) {
+            return new Response(
+                JSON.stringify({ error: "Invalid email" }),
+                { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
+            );
+        }
+
         // Verify the recipient email belongs to a registered family — prevents
         // using this unauthenticated endpoint as a spam relay.
         const serviceClient = createClient(

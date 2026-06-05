@@ -326,7 +326,7 @@ lower-case and trim before lookups.
 Items keep their finding labels for reference. Check off as completed.
 
 ### Wave 1 — Security must-dos
-- [ ] **S1** — Verify RLS on `families`, `students`, `registrations`, `staff` — _requires Supabase dashboard; cannot be done from the repo_
+- [~] **S1** — Verify RLS on `families`, `students`, `registrations`, `staff` — _requires Supabase dashboard._ Verification SQL + annotated draft policies provided in `supabase/migrations/VERIFY_rls_core_tables.sql` (run STEP 1 to check; STEP 2 policies need review — naive lockdown breaks public registration/capacity)
 - [ ] **S2** — Enforce admin role server-side (RLS/edge fn), not just CSS hiding — _deferred: architectural, needs live Supabase to test_
 - [x] **S3** — Validate role against `['full','restricted','staff']` enum, least-privilege default — `admin-core.js`
 - [ ] **S4** — `admin-users` edge fn: fail closed; confirm `settings` writes are service-role only — _deferred: fail-closed risks locking out admins when `admin_roles` is unset; needs a bootstrap decision_
@@ -344,7 +344,7 @@ Items keep their finding labels for reference. Check off as completed.
 - [ ] **S7** — Trim `family_login()` RPC projection
 - [ ] **S8** — Confirm anon-key expiry + rotation cadence
 - [ ] **U4** — Standardize breakpoints; fix admin grid mobile overflow
-- [ ] **U7** — Note hidden months in lookup
+- [x] **U7** — ✅ Lookup now notes confirmed days in other (hidden) months and only shows children with visible days (`js/lookup.js`, `css/lookup.css`)
 
 ### Wave 4 — Design system
 - [~] **V1** — Tokenized the brand-derived dark/badge colors (`--navy-table`, `--green-dark`, `--mustard-dark`, `--tang-dark`, `--amber-dark`, `--sun-badge`, `--sun-edit`, `--tang-soft`) — ~90 literals replaced, value-preserving. Generic grays / semantic Tailwind-ish colors deferred to V3 (naming is a design decision)
@@ -399,10 +399,10 @@ repo without touching the live Supabase project.
   (`js/supabase.js:386`) inserts with no count re-check and no DB trigger/constraint exists.
   Two parents (or a direct REST call) can both book the last spot. _Fix:_ enforce in a DB
   trigger or atomic RPC.
-- **SS4 — [High] `send-waitlist-offer` is unauthenticated — open email relay.** No auth and
-  no recipient check (unlike `send-schedule-change`); sends branded MDO emails with
-  caller-supplied links to any address → phishing + Resend abuse. _Fix:_ require admin
-  session; allow-list links. (Re-audit all `send-*`.)
+- **SS4 — [High] ✅ FIXED (deploy edge fn).** `send-waitlist-offer` now requires a valid
+  admin session (mirrors `send-schedule-change`); anonymous callers get 401
+  (`supabase/functions/send-waitlist-offer/index.ts`). _Redeploy via `supabase functions
+  deploy send-waitlist-offer`._ (Link allow-listing still recommended; other `send-*` audited.)
 - **SS5 — [High] Billing RPCs granted to `anon` with caller-supplied email + amount.**
   `create_billing_invoice_by_email`/`add_day_to_invoice_by_email` (`add_billing_rpc.sql`)
   trust a client email and dollar amount — any visitor can zero out or inflate any family's
@@ -415,15 +415,19 @@ repo without touching the live Supabase project.
 
 ## Medium
 
-- **SS8 — [Med] Cross-family child-name uniqueness blocks legitimate families.** Index is
-  `(lower(child_name), month_key)` with no family scope (`add_registration_month_key.sql:27`);
-  two families with a child named "Emma" collide. _Fix:_ add family/email to the index.
+- **SS8 — [Med] ⚠️ WON'T FIX without a product decision.** The
+  `(lower(child_name), month_key)` index is intentional per the documented rule
+  (`checkExistingRegistrationByChild` blocks *any* parent from re-registering a child
+  already scheduled that month). Scoping by family would re-allow that double-registration.
+  Real tension: it also false-positives on two genuinely different children sharing a name.
+  _Decide:_ keep the strict name rule, or accept duplicate-child risk for fewer false
+  positives. Not changed.
 - **SS9 — [Med] Non-atomic registration insert → orphaned `registrations`.** [Public] If the
   dates insert fails and the compensating delete also fails (`js/supabase.js:432`), a
   confirmed registration with zero dates blocks re-registration. _Fix:_ one transactional RPC.
-- **SS10 — [Med] Missing `SET search_path` on billing RPCs + window trigger.** The only
-  definer functions lacking it (`add_billing_rpc.sql`, `enforce_registration_window.sql`) —
-  hardening gap, esp. with SS5. _Fix:_ add `SET search_path = public`.
+- **SS10 — [Med] ✅ FIXED (apply migration).** `ALTER FUNCTION … SET search_path = public`
+  for the three billing RPCs + `check_registration_window` —
+  `supabase/migrations/harden_definer_search_path.sql` (non-invasive; no body rewrite).
 - **SS11 — [Med] Staff PIN brute-forceable; kiosk lockout client-side only.**
   `lookup_staff_by_pin` has no server-side throttle; the lockout is `sessionStorage`
   (`clockin.html`), bypassable via direct RPC → 10⁴ brute force → payroll fraud + PII leak.
@@ -431,10 +435,10 @@ repo without touching the live Supabase project.
 - **SS12 — [Med] No DB guard against overlapping open clock-ins.** Two tabs/taps insert two
   `clock_out IS NULL` rows for the same staff+date; hours double-count. _Fix:_ partial unique
   index `(staff_id, work_date) WHERE clock_out IS NULL` or clock via RPC.
-- **SS13 — [Med] PostgREST `.or()` filter injection via unescaped email.**
-  `send-schedule-confirmation/index.ts:52` (and `worker.js:252`) interpolate raw email into
-  `.or(...ilike...)`; a `*`/`,` payload changes filter semantics. _Fix:_ strict email regex;
-  structured/escaped filters.
+- **SS13 — [Med] ✅ FIXED (deploy edge fn + worker).** Strict email-format validation now
+  runs before the `.or(...ilike...)` filter in `send-schedule-confirmation/index.ts` and
+  `worker.js` (the regex rejects `, ( ) *` — note `encodeURIComponent` did NOT escape `*`).
+  _Redeploy the function and the worker._
 - **SS14 — [Med] ✅ FIXED.** Infant recurring-days note showed "none" from the Calendar tab;
   now falls back to `fetchStudentRecurringDays` when the family isn't cached
   (`admin-calendar.js`).
