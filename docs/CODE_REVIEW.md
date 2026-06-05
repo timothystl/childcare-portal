@@ -361,7 +361,9 @@ Items keep their finding labels for reference. Check off as completed.
 - [x] **M2** — _Already handled:_ the `family_login` RPC matches with `lower(parent_email) = lower(p_email)`, so email is case-insensitive server-side; input is already trimmed. No change needed
 - [x] **C3** — `friendlyError` now logs the raw cause before returning the friendly message (`supabase.js`)
 - [x] **P4** — `escHtml` rewritten as a single `/[&<>"']/g` replace with a char map (`supabase.js`)
-- [ ] **Q4** — Share `MONTH_NAMES`
+- [x] **Q2** — Added `parseJsonOr(str, fallback)` and replaced 6 identical inline `try/JSON.parse/catch` idioms (`supabase.js`), value-preserving
+- [x] **Q3** — Init fetches now run via `Promise.allSettled` with per-fetch error logging and graceful degradation (`app.js`)
+- [x] **Q4** — One shared `MONTH_NAMES` in `supabase.js`; removed duplicates from `app.js`, `lookup.js`, `admin-core.js`, `admin-finance.js`, `admin-billing.js` (and all `MONTH_NAMES_ADMIN`/`_FIN`/`BL_` references)
 - [x] **Q5** — Removed `escStr`/`escLookup` aliases; call sites use `escHtml` directly (`app.js`, `lookup.js`)
 - [ ] **M1** — Split `js/supabase.js` god-file into modules
 - [ ] **N1** — File naming — no action (note only)

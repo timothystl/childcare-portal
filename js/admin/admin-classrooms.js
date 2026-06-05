@@ -336,7 +336,7 @@ function generateMonthlyRoster() {
     if (!monthVal) { alert('Please select a month.'); return; }
 
     const [y, m] = monthVal.split('-').map(Number);
-    const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+    const monthLabel = MONTH_NAMES[m - 1] + ' ' + y;
     const daysInMonth = new Date(y, m, 0).getDate();
 
     // Build list of working days in the month (Mon–Fri, excluding closures)

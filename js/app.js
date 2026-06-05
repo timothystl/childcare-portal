@@ -1,8 +1,7 @@
 // ============================================================
 // CONSTANTS
 // ============================================================
-const MONTH_NAMES    = ['January','February','March','April','May','June',
-                        'July','August','September','October','November','December'];
+// MONTH_NAMES is defined in supabase.js (loaded first) and shared globally.
 const DAY_HEADERS_MF = ['Mon','Tue','Wed','Thu','Fri'];
 
 // ============================================================
@@ -73,11 +72,23 @@ function getTargetMonthKey() {
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
-    // Load room rates and summer camp visibility from admin settings
-    await loadRateSettings();
-    await loadSummerCampSetting();
+    // Fetch the independent admin settings in parallel. Using allSettled so a
+    // single failed request degrades gracefully instead of aborting the whole
+    // init (e.g. a missing room_rates row shouldn't stop the form rendering).
+    const [rateRes, campRes, overrideRes, closuresRes] = await Promise.allSettled([
+        loadRateSettings(),
+        loadSummerCampSetting(),
+        fetchSetting('reg_window_override'),
+        fetchClosures(),
+    ]);
+    if (rateRes.status     === 'rejected') console.error('loadRateSettings failed:', rateRes.reason);
+    if (campRes.status     === 'rejected') console.error('loadSummerCampSetting failed:', campRes.reason);
+    if (closuresRes.status === 'rejected') console.error('fetchClosures failed:', closuresRes.reason);
 
-    regWindowOverride = (await fetchSetting('reg_window_override')) || 'auto';
+    regWindowOverride = (overrideRes.status === 'fulfilled' ? overrideRes.value : null) || 'auto';
+
+    const closures = closuresRes.status === 'fulfilled' ? (closuresRes.value || []) : [];
+    closureMap = new Map(closures.map(c => [c.close_date, c.reason || '']));
 
     const win            = getRegistrationWindow();
     const targetMonthKey = getTargetMonthKey();
@@ -121,9 +132,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupFormListeners();
     setupContactModal();
     setupForgotPinModal();
-
-    const closures = await fetchClosures();
-    closureMap = new Map(closures.map(c => [c.close_date, c.reason || '']));
 });
 
 // ============================================================

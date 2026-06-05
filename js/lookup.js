@@ -6,10 +6,7 @@
 let _currentFamily        = null;
 let _currentRegistrations = [];
 
-const MONTH_NAMES_LOOKUP = [
-    'January','February','March','April','May','June',
-    'July','August','September','October','November','December'
-];
+// MONTH_NAMES is defined in supabase.js (loaded first) and shared globally.
 
 // ============================================================
 // INIT
@@ -168,7 +165,7 @@ function renderChildCard({ childName, roomId, dates }) {
 
     const monthBlocks = Object.entries(byMonth).sort().map(([monthKey, monthDates]) => {
         const [y, m]    = monthKey.split('-').map(Number);
-        const monthLabel = MONTH_NAMES_LOOKUP[m - 1] + ' ' + y;
+        const monthLabel = MONTH_NAMES[m - 1] + ' ' + y;
 
         const monthFull = monthDates.filter(d => d.day_type !== 'half').length;
         const monthHalf = monthDates.filter(d => d.day_type === 'half').length;

@@ -55,7 +55,7 @@ function populateCareMonthFilter() {
 
     [...months].sort().forEach(m => {
         const [y, mo] = m.split('-').map(Number);
-        const label = MONTH_NAMES_ADMIN[mo - 1] + ' ' + y;
+        const label = MONTH_NAMES[mo - 1] + ' ' + y;
         const opt = document.createElement('option');
         opt.value       = m;
         opt.textContent = label;
@@ -471,7 +471,7 @@ async function openEditBillModal(reg) {
 
     const calculated = calcRegistrationBill(reg);
     const [y, m]     = _editBillMonth.split('-').map(Number);
-    const monthLabel = `${MONTH_NAMES_ADMIN[m - 1]} ${y}`;
+    const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
 
     document.getElementById('editBillDesc').textContent       = `${monthLabel} — ${reg.child_name}`;
     document.getElementById('editBillCalculated').textContent = `$${calculated.toFixed(2)}`;
@@ -558,7 +558,7 @@ function initCapacityMonthNav() {
             const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             const opt = document.createElement('option');
             opt.value = key;
-            opt.textContent = MONTH_NAMES_ADMIN[d.getMonth()] + ' ' + d.getFullYear();
+            opt.textContent = MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear();
             if (offset === 0) opt.selected = true;
             sel.appendChild(opt);
         }
@@ -590,7 +590,7 @@ function _syncCapSelect() {
     if (!opt) {
         opt = document.createElement('option');
         opt.value = key;
-        opt.textContent = MONTH_NAMES_ADMIN[capOverviewDate.getMonth()] + ' ' + capOverviewDate.getFullYear();
+        opt.textContent = MONTH_NAMES[capOverviewDate.getMonth()] + ' ' + capOverviewDate.getFullYear();
         sel.appendChild(opt);
     }
     sel.value = key;
@@ -1026,7 +1026,7 @@ async function _aadConfirm() {
             const room = ROOMS.find(r => r.id === (updatedReg.room_id || _aadRoomId));
             const rate = dayType === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
             const [y, m] = _aadDateStr.substring(0, 7).split('-').map(Number);
-            const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            const monthLabel = MONTH_NAMES[m - 1] + ' ' + y;
             const existingDates = (updatedReg.registration_dates || [])
                 .filter(d => !d.waitlisted && d.care_date !== _aadDateStr && d.care_date.startsWith(_aadDateStr.substring(0, 7)))
                 .map(d => {
@@ -1118,7 +1118,7 @@ function drawRoomCalendar() {
     const monthKey = `${y}-${String(m + 1).padStart(2, '0')}`;
 
     document.getElementById('rcalRoomName').textContent  = room?.label || rcalRoomId;
-    document.getElementById('rcalMonthLabel').textContent = MONTH_NAMES_ADMIN[m] + ' ' + y;
+    document.getElementById('rcalMonthLabel').textContent = MONTH_NAMES[m] + ' ' + y;
 
     // Build dayMap: 'YYYY-MM-DD' → [{ childName, dayType, dateId }]
     // Filter by the date's own room_id (not the registration's) so per-day moves are reflected.

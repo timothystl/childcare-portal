@@ -73,7 +73,7 @@ function printFamilyBillingReport() {
     if (!table) { alert('Please generate the billing report first.'); return; }
 
     const [y, m]     = (monthVal || '--').split('-').map(Number);
-    const monthLabel = m ? (MONTH_NAMES_ADMIN[m - 1] + ' ' + y) : '';
+    const monthLabel = m ? (MONTH_NAMES[m - 1] + ' ' + y) : '';
 
     // Clone table and strip interactive override elements
     const tableClone = table.cloneNode(true);
@@ -239,7 +239,7 @@ async function generateFamilyBillingReport() {
     if (!monthVal) { alert('Please select a month.'); return; }
 
     const [y, m]     = monthVal.split('-').map(Number);
-    const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+    const monthLabel = MONTH_NAMES[m - 1] + ' ' + y;
     const container  = document.getElementById('familyBillingContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
 
@@ -400,7 +400,7 @@ async function exportFamilyBillingReport() {
     });
 
     const [y, m] = monthVal.split('-').map(Number);
-    const label  = MONTH_NAMES_ADMIN[m - 1] + '-' + y;
+    const label  = MONTH_NAMES[m - 1] + '-' + y;
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, label);
@@ -1033,7 +1033,7 @@ function _buildPayrollPeriodList() {
 function _payrollPeriodLabel(start, end) {
     const [sy, sm, sd] = start.split('-').map(Number);
     const [,   em, ed] = end.split('-').map(Number);
-    return `${MONTH_NAMES_ADMIN[sm-1]} ${sd} – ${MONTH_NAMES_ADMIN[em-1]} ${ed}, ${sy}`;
+    return `${MONTH_NAMES[sm-1]} ${sd} – ${MONTH_NAMES[em-1]} ${ed}, ${sy}`;
 }
 
 function setupPayrollReport() {
@@ -1214,7 +1214,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         const hasDetail = !isSalary && (periodDetailMap.get(s.id) || []).length > 0;
         const detailRows = (periodDetailMap.get(s.id) || []).map(d => {
             const [dy, dm, dd] = d.work_date.split('-').map(Number);
-            const dateLabel = `${MONTH_NAMES_ADMIN[dm - 1]} ${dd}`;
+            const dateLabel = `${MONTH_NAMES[dm - 1]} ${dd}`;
             const sourceChip = d.source === 'clock-sync'
                 ? '<span style="font-size:.75em;color:#6b7280">clock sync</span>'
                 : d.source === 'clock'
@@ -1250,7 +1250,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
 
     const [sy, sm, sd] = startVal.split('-').map(Number);
     const [ey, em, ed] = endVal.split('-').map(Number);
-    const periodLabel  = `${MONTH_NAMES_ADMIN[sm-1]} ${sd} – ${MONTH_NAMES_ADMIN[em-1]} ${ed}, ${ey}`;
+    const periodLabel  = `${MONTH_NAMES[sm-1]} ${sd} – ${MONTH_NAMES[em-1]} ${ed}, ${ey}`;
 
     container.innerHTML = `
         <h3 class="report-month-title">Pay Period: ${periodLabel}</h3>
@@ -1574,7 +1574,7 @@ async function generateAttendanceRevenue() {
 
         const rowsHtml = months.map(mo => {
             const [y, m] = mo.split('-').map(Number);
-            const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            const label  = MONTH_NAMES[m - 1] + ' ' + y;
             let moAttendees = 0, moRevenue = 0;
 
             const cells = rooms.map(r => {
@@ -1744,7 +1744,7 @@ function _arStartEdit(row, arMap, rooms, showTotalCol) {
     // Replace month label cell with save/cancel/clear buttons
     const labelTd = cells[0];
     const [y, m] = mo.split('-').map(Number);
-    const label   = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+    const label   = MONTH_NAMES[m - 1] + ' ' + y;
     labelTd.innerHTML = `
         <span class="ar-edit-label">${escHtml(label)}</span>
         <div class="ar-edit-actions">
@@ -1926,7 +1926,7 @@ async function exportAttendanceRevenue() {
 
     const rows = months.map(mo => {
         const [y, m] = mo.split('-').map(Number);
-        const row    = { Month: MONTH_NAMES_ADMIN[m - 1] + ' ' + y };
+        const row    = { Month: MONTH_NAMES[m - 1] + ' ' + y };
         rooms.forEach(r => {
             const e = arMap[mo]?.[r.id];
             row[`${r.label} – Attendees`]  = e?.attendees  || 0;
@@ -2324,7 +2324,7 @@ async function generateRoomPnl() {
 
         const rowsHtml = months.map(mo => {
             const [y, m] = mo.split('-').map(Number);
-            const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            const label  = MONTH_NAMES[m - 1] + ' ' + y;
             let moRev = 0, moLab = 0;
 
             const cells = rooms.map(r => {
@@ -2480,7 +2480,7 @@ async function exportRoomPnl() {
 
     const rows = months.map(mo => {
         const [y, m] = mo.split('-').map(Number);
-        const row    = { Month: MONTH_NAMES_ADMIN[m - 1] + ' ' + y };
+        const row    = { Month: MONTH_NAMES[m - 1] + ' ' + y };
         rooms.forEach(r => {
             const d   = data[mo]?.[r.id] || { revenue: 0, labor: 0, margin: 0 };
             const pct = d.revenue > 0 ? (d.margin / d.revenue) * 100 : 0;
@@ -2631,7 +2631,7 @@ function _renderTrendsTable(trendMap) {
 
         const rows = months.map(mo => {
             const [y, m] = mo.split('-').map(Number);
-            const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            const label  = MONTH_NAMES[m - 1] + ' ' + y;
             const isHist = trendMap[mo]._historical;
             const src    = isHist ? ' <span style="font-size:.7em;color:#888">(hist)</span>' : '';
             let moHalfTotal = 0, moFullTotal = 0;
@@ -2811,7 +2811,7 @@ async function exportEnrollmentTrends() {
     const rows = [];
     months.forEach(mo => {
         const [y, m] = mo.split('-').map(Number);
-        const moLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+        const moLabel = MONTH_NAMES[m - 1] + ' ' + y;
         const isHist  = trendMap[mo]._historical;
         ROOMS.forEach(room => {
             const row = { Month: moLabel, Room: room.label, Source: isHist ? 'historical' : 'live' };
@@ -2876,7 +2876,7 @@ async function generateWaitlistReport() {
         const roomHeaders = allRooms.map(r => `<th>${r.label}</th>`).join('');
         const rows = months.map(mo => {
             const [y, m] = mo.split('-').map(Number);
-            const label  = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+            const label  = MONTH_NAMES[m - 1] + ' ' + y;
             const cells  = allRooms.map(room => {
                 const count = demandMap[mo][room.id] || 0;
                 const cls   = count >= 5 ? 'staff-high' : count >= 2 ? 'staff-mid' : '';
@@ -2920,7 +2920,7 @@ function initEnrollmentPlannerSelectors() {
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         const opt = document.createElement('option');
         opt.value = key;
-        opt.textContent = MONTH_NAMES_ADMIN[d.getMonth()] + ' ' + d.getFullYear();
+        opt.textContent = MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear();
         if (i === 1) opt.selected = true;
         monthSel.appendChild(opt);
     }
@@ -3041,7 +3041,7 @@ async function generateEnrollmentPlanner() {
 
 function _renderPlannerContent(room, monthKey, days, sourceType, candidates, fullDayRate, halfDayRate) {
     const [y, m] = monthKey.split('-').map(Number);
-    const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+    const monthLabel = MONTH_NAMES[m - 1] + ' ' + y;
     const srcBadge = sourceType === 'projected'
         ? `<span style="font-size:.75em;padding:2px 7px;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;color:#856404">projected from prior month</span>`
         : `<span style="font-size:.75em;padding:2px 7px;background:#d4edda;border:1px solid #28a745;border-radius:4px;color:#155724">live registration data</span>`;
@@ -3193,7 +3193,7 @@ async function generateMissingCalendarReport() {
         if (allRegistrations.length === 0) allRegistrations = await fetchAllRegistrations();
 
         const [y, m] = monthVal.split('-').map(Number);
-        const monthLabel = `${MONTH_NAMES_ADMIN[m - 1]} ${y}`;
+        const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
 
         // Build set of child names that have at least one confirmed (non-waitlisted) date in this month
         const registeredChildren = new Set();

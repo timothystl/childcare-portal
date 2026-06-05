@@ -157,8 +157,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ============================================================
 // SHARED CONSTANTS
 // ============================================================
-const MONTH_NAMES_ADMIN = ['January','February','March','April','May','June',
-                           'July','August','September','October','November','December'];
+// MONTH_NAMES is defined in supabase.js (loaded first) and shared globally.
 
 // ============================================================
 // HELPERS

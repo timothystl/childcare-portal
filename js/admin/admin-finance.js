@@ -525,8 +525,7 @@ async function generateYoyComparison() {
 // ============================================================
 // EXPENSE LINES
 // ============================================================
-const MONTH_NAMES_FIN = ['January','February','March','April','May','June',
-                         'July','August','September','October','November','December'];
+// MONTH_NAMES is defined in supabase.js (loaded first) and shared globally.
 let _expenseConfig = null; // cached { items: [...] }
 let _editingExpenseId = null;
 
@@ -578,7 +577,7 @@ function renderExpenseLines() {
         <tr>
             <td>${escHtml(item.label)}</td>
             <td>${item.type === 'annual'
-                ? `Annual — ${MONTH_NAMES_FIN[(item.month || 1) - 1]}`
+                ? `Annual — ${MONTH_NAMES[(item.month || 1) - 1]}`
                 : item.type === 'payroll_pct'
                 ? '% of wages (auto)'
                 : item.type === 'revenue_pct'

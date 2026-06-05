@@ -581,7 +581,7 @@ function renderWaitlistPlanning() {
     const today = new Date();
     const months = Array.from({ length: 4 }, (_, i) => {
         const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-        return { year: d.getFullYear(), month: d.getMonth(), key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: MONTH_NAMES_ADMIN[d.getMonth()] + ' ' + d.getFullYear() };
+        return { year: d.getFullYear(), month: d.getMonth(), key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear() };
     });
 
     // Count confirmed bookings per room per day from allRegistrations
