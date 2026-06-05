@@ -1,4 +1,22 @@
 -- ============================================================
+-- ⛔ DO NOT APPLY — THIS MIGRATION CAUSED A PRODUCTION REGRESSION (2026-06-05)
+-- ============================================================
+-- Dropping the anon SELECT on `families` broke PARENT LOGIN: the family_login
+-- RPC is evidently SECURITY INVOKER (runs as the anon caller), so without an
+-- anon SELECT policy on families its internal lookup returns 0 rows →
+-- "No family found matching that email and PIN." The earlier claim that the
+-- parent/kiosk RPCs are SECURITY DEFINER (and bypass RLS) was NOT verified —
+-- those functions live in the dashboard, not in this repo.
+--
+-- ROLLBACK: run ROLLBACK_tighten_anon_rls_policies.sql.
+--
+-- CORRECT FIX (instead of this file): make family_login (and lookup_staff_by_pin)
+-- SECURITY DEFINER so they bypass RLS, THEN these anon policies can be dropped
+-- safely. That requires the real function definitions — see docs/NEXT_STEPS.md.
+-- The original (no-longer-recommended) statements are kept below for reference.
+-- ============================================================
+
+-- ============================================================
 -- S1 (Tier 1) — Remove vestigial, over-permissive anon/public RLS policies
 -- ============================================================
 -- VERIFIED 2026-06-05 against the codebase: no non-admin JS file and no public
