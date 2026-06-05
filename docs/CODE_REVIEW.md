@@ -2,6 +2,11 @@
 
 _Reviewed: 2026-06-04 · App version 1.15.8 · Branch `claude/kind-mendel-I79x6`_
 
+> **Second sweep (2026-06-05):** a deeper Opus pass focused on correctness/logic bugs,
+> data integrity, races, and edge-function/SQL security. New findings are in the
+> **"Second Sweep — correctness & integrity"** section near the end (labels **SS1–SS19**),
+> independent of the original S/U/V/N/P/Q/C/M items.
+
 This is a read-only review. **No application code was changed** — findings are
 prioritized recommendations for the team to triage. Each finding is tagged by surface:
 **[Admin]** (admin portal), **[Public]** (parent-facing site), or **[Both]**.
@@ -350,15 +355,12 @@ Items keep their finding labels for reference. Check off as completed.
 - [ ] **V6** — Typography scale variables
 
 ### Wave 5 — Quality, perf & maintainability
-- [ ] **Q3** — Parallelize init with `Promise.allSettled` + error handling
-- [ ] **Q1** — Extract single `calculateChildAmounts()` (dedupe billing)
 - [x] **Q1** — Parameterized `getChildDayAmounts(dayType, children=selectedChildren)` and replaced the duplicated `calcSubmitDayAmounts` in the submit flow with a call to it — billing math now lives in one place (`app.js`)
 - [x] **C1** — JSDoc on `getChildDayAmounts` documenting the two discount layers + return shape (`app.js`); the other pricing fns already had inline comments
 - [~] **C2** — Already partly covered: `app.js` has a window/timezone comment block (lines 24-29) and inline notes; no new code needed
 - [ ] **P2** — Memoize redundant billing recomputation
 - [ ] **P1** — Build calendar via fragment/string, render once
 - [ ] **P3** — Cache per-cell capacity lookups
-- [ ] **Q2** — Standardize on `parseJsonSafe()` helper
 - [x] **M2** — _Already handled:_ the `family_login` RPC matches with `lower(parent_email) = lower(p_email)`, so email is case-insensitive server-side; input is already trimmed. No change needed
 - [x] **C3** — `friendlyError` now logs the raw cause before returning the friendly message (`supabase.js`)
 - [x] **P4** — `escHtml` rewritten as a single `/[&<>"']/g` replace with a char map (`supabase.js`)
@@ -368,3 +370,98 @@ Items keep their finding labels for reference. Check off as completed.
 - [x] **Q5** — Removed `escStr`/`escLookup` aliases; call sites use `escHtml` directly (`app.js`, `lookup.js`)
 - [ ] **M1** — Split `js/supabase.js` god-file into modules
 - [ ] **N1** — File naming — no action (note only)
+
+---
+
+# Second Sweep — correctness & integrity (SS)
+
+A deeper pass (three parallel Opus reviewers, cross-verified) focused on real defects
+rather than style. None duplicate the S/U/V/N/P/Q/C/M items above. Items marked
+**[verify in Supabase]** depend on the live DB schema. "In-repo fix" = fixable in this
+repo without touching the live Supabase project.
+
+## High
+
+- **SS1 — [High] Weekly-rate quote vs charge divergence (overcharge).** [Public] The
+  preview (`calcTotal`, `js/app.js:763`) applies a room's full-week weekly rate, but the
+  submit/receipt/email/invoice path (`js/app.js:~1173`) sums per-day via
+  `getChildDayAmounts` and never applies the weekly rate. When an admin has set
+  `weeklyFullRate`/`weeklyHalfRate` (default `null`, so currently dormant), a family is
+  quoted e.g. $300 but charged/invoiced 5×$75=$375. _In-repo fix:_ share the
+  week-grouping/weekly-rate logic between both paths.
+- **SS2 — [High] Leading-zero PIN locks the account out.** [Both] PINs are set/stored as
+  text (bcrypt of the literal), but login coerces via `parseInt` (`js/supabase.js:778`,
+  `family-lookup/index.ts:48`) and `family_login(p_pin int)`
+  (`finalize_pin_hashing.sql:27`). `"0123"`→`123`→never matches→5 failures→lockout. Same
+  for staff PINs. _Fix:_ treat PINs as text end-to-end (RPC `p_pin text`, drop `parseInt`).
+- **SS3 — [High] No server-side capacity enforcement (oversubscription race).** [Public]
+  Capacity is checked only client-side against a cache; `submitRegistration`
+  (`js/supabase.js:386`) inserts with no count re-check and no DB trigger/constraint exists.
+  Two parents (or a direct REST call) can both book the last spot. _Fix:_ enforce in a DB
+  trigger or atomic RPC.
+- **SS4 — [High] `send-waitlist-offer` is unauthenticated — open email relay.** No auth and
+  no recipient check (unlike `send-schedule-change`); sends branded MDO emails with
+  caller-supplied links to any address → phishing + Resend abuse. _Fix:_ require admin
+  session; allow-list links. (Re-audit all `send-*`.)
+- **SS5 — [High] Billing RPCs granted to `anon` with caller-supplied email + amount.**
+  `create_billing_invoice_by_email`/`add_day_to_invoice_by_email` (`add_billing_rpc.sql`)
+  trust a client email and dollar amount — any visitor can zero out or inflate any family's
+  draft invoice. _Fix:_ revoke `anon`; compute amounts server-side.
+- **SS6 — [High, verify in Supabase] Finance modeling queries a non-existent `month`
+  column.** [Admin] `fetchEnrollmentByRoomForMonths` (`js/supabase.js:2125`) selects/filters
+  `month`, but registrations has `month_key`. The query errors and breaks Finance rate/wage
+  modeling "Avg Enrolled." _In-repo fix:_ `month` → `month_key` (3 spots).
+- **SS7 — [High] Staff "Save" button stuck disabled after first save.** [Admin]
+  (Pre-existing.) Success path calls `closeStaffForm()` which never resets the button
+  (`js/admin/admin-staffing.js:296,333`); later Add/Edit Staff is un-savable until reload.
+  _In-repo fix:_ reset the button in `closeStaffForm()`/`openStaffForm()`.
+
+## Medium
+
+- **SS8 — [Med] Cross-family child-name uniqueness blocks legitimate families.** Index is
+  `(lower(child_name), month_key)` with no family scope (`add_registration_month_key.sql:27`);
+  two families with a child named "Emma" collide. _Fix:_ add family/email to the index.
+- **SS9 — [Med] Non-atomic registration insert → orphaned `registrations`.** [Public] If the
+  dates insert fails and the compensating delete also fails (`js/supabase.js:432`), a
+  confirmed registration with zero dates blocks re-registration. _Fix:_ one transactional RPC.
+- **SS10 — [Med] Missing `SET search_path` on billing RPCs + window trigger.** The only
+  definer functions lacking it (`add_billing_rpc.sql`, `enforce_registration_window.sql`) —
+  hardening gap, esp. with SS5. _Fix:_ add `SET search_path = public`.
+- **SS11 — [Med] Staff PIN brute-forceable; kiosk lockout client-side only.**
+  `lookup_staff_by_pin` has no server-side throttle; the lockout is `sessionStorage`
+  (`clockin.html`), bypassable via direct RPC → 10⁴ brute force → payroll fraud + PII leak.
+  _Fix:_ server-side throttling; longer PINs.
+- **SS12 — [Med] No DB guard against overlapping open clock-ins.** Two tabs/taps insert two
+  `clock_out IS NULL` rows for the same staff+date; hours double-count. _Fix:_ partial unique
+  index `(staff_id, work_date) WHERE clock_out IS NULL` or clock via RPC.
+- **SS13 — [Med] PostgREST `.or()` filter injection via unescaped email.**
+  `send-schedule-confirmation/index.ts:52` (and `worker.js:252`) interpolate raw email into
+  `.or(...ilike...)`; a `*`/`,` payload changes filter semantics. _Fix:_ strict email regex;
+  structured/escaped filters.
+- **SS14 — [Med] Infant recurring-days note wrongly shows "none" from Calendar tab.** [Admin]
+  Edit-Days reads `allFamiliesData`, which the Calendar tab never loads
+  (`admin-calendar.js:207`). _In-repo fix:_ fall back to `fetchStudentRecurringDays`.
+- **SS15 — [Med] "Room Today" selector collapses/overwrites multi-room days.** [Admin]
+  `renderRoomSelect` (`admin-staffing.js:415`) uses only the first event's room; changing it
+  overwrites the second-room events; passed `roomMap` is dead code. _In-repo fix:_
+  flag/disable on multi-room days; remove unused param.
+
+## Low
+
+- **SS16 — [Low] `login_attempts` never decays** (`finalize_pin_hashing.sql:71`) — 5 fumbles
+  = permanent lockout pending email reset. _Fix:_ cooldown decay.
+- **SS17 — [Low] Clock-out RLS keyed on `work_date = CURRENT_DATE` vs browser-derived date** —
+  cross-midnight clock-outs rejected, shifts left open. _Fix:_ server-side America/Chicago
+  date; key RLS on row id + staff.
+- **SS18 — [Low] `pin_reset_tokens` cleanup never scheduled; consume leaks lifecycle.** _Fix:_
+  schedule `cleanup_pin_reset_tokens()`; collapse consume errors to one generic message.
+- **SS19 — [Low] Weekly discount lost on partial/closure weeks (policy).** [Public]
+  `isFullWeek = days.length === 5` (`js/app.js:776`). _Decide policy_ and apply it identically
+  in preview and submit (ties into SS1).
+
+_Checked and cleared (no bug):_ the family-session HMAC token **is** verified server-side in
+`worker.js` before push-subscribe; `consume_pin_reset` is atomic (`FOR UPDATE`);
+`push_subscriptions` RLS is service-role only; `send-schedule-change` enforces admin auth;
+`getWeekMonday`'s UTC `toISOString` is safe for US-Central; `getRegistrationWindow`/
+`getTargetMonthKey` rollovers are correct; the sibling-discount math is correct; and this
+branch's refactors introduced no regressions or namespace collisions.
