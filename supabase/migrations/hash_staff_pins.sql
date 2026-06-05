@@ -19,10 +19,12 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- 1. New columns
-ALTER TABLE staff
-    ADD COLUMN IF NOT EXISTS staff_pin_hash TEXT,
-    ADD COLUMN IF NOT EXISTS has_staff_pin
-        boolean GENERATED ALWAYS AS (staff_pin_hash IS NOT NULL) STORED;
+--    Split into two statements: a STORED generated column cannot reliably
+--    reference a sibling column added in the SAME ALTER TABLE — adding
+--    staff_pin_hash first guarantees it exists before has_staff_pin references it.
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS staff_pin_hash TEXT;
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS has_staff_pin
+    boolean GENERATED ALWAYS AS (staff_pin_hash IS NOT NULL) STORED;
 
 -- 2. Hash existing PINs
 UPDATE staff
