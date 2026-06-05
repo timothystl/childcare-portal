@@ -272,7 +272,7 @@
     .staff-section-label { font-family: var(--font-head); font-size: 13px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: .1em; margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border); }
 
     /* FOOTER */
-    .site-footer { background: var(--navy-dk); padding: 52px 28px 32px; }
+    .site-footer { background: var(--navy); padding: 52px 28px 32px; }
     .footer-inner { max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 40px; margin-bottom: 40px; }
     .footer-brand { margin-bottom: 14px; }
     .footer-brand p { font-size: 14px; color: rgba(255,255,255,.55); line-height: 1.75; max-width: 280px; margin-top: 14px; }
@@ -605,7 +605,7 @@
     </div>
   </div>
   <div class="footer-base">
-    <p>© 2026 Timothy Lutheran Church · Mother's Day Out</p>
+    <p>© 2026 Timothy Lutheran Church · Mother's Day Out · <span id="footer-version"></span></p>
     <p>
       <a href="https://www.timothystl.org">timothystl.org</a>
       &nbsp;·&nbsp;
@@ -615,6 +615,8 @@
 </footer>
 
 <script>
+  const fv = document.getElementById('footer-version');
+  if (fv) fv.textContent = window.__BUILD_VERSION__ || 'v1.15.25';
   const navMenuBtn = document.getElementById('navMenuBtn');
   const navDropdown = document.getElementById('navDropdown');
   navMenuBtn.addEventListener('click', function(e) {
