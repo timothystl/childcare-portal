@@ -42,7 +42,7 @@
 }
 
 .admin-header {
-    background: #fcf8f0;
+    background: var(--green-lt);
     padding: 20px 32px;
     display: flex;
     justify-content: space-between;
@@ -2188,6 +2188,9 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 /* ============================================================
    TAB NAVIGATION
    ============================================================ */
+/* Hidden by default; shown as flex row on desktop or as dropdown when .mobile-open */
+.tab-btn-container { display: none; }
+
 .admin-tabs {
     display: flex;
     gap: 0;
