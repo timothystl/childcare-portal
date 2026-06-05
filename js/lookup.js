@@ -215,7 +215,7 @@ function renderChildCard({ childName, roomId, dates }) {
         <div class="lookup-child-card">
             <div class="lookup-child-header">
                 <div class="lookup-child-info">
-                    <span class="lookup-child-name">${escLookup(childName.split(' ')[0])}</span>
+                    <span class="lookup-child-name">${escHtml(childName.split(' ')[0])}</span>
                     <span class="lookup-child-room">${room?.label || roomId}</span>
                 </div>
                 <span class="lookup-child-total">$${grandTotal.toFixed(2)}</span>
@@ -326,5 +326,3 @@ async function submitDeletionRequest() {
 // ============================================================
 // HELPER
 // ============================================================
-// escLookup: alias for the shared escHtml() defined in supabase.js
-const escLookup = escHtml;

@@ -352,16 +352,16 @@ Items keep their finding labels for reference. Check off as completed.
 ### Wave 5 — Quality, perf & maintainability
 - [ ] **Q3** — Parallelize init with `Promise.allSettled` + error handling
 - [ ] **Q1** — Extract single `calculateChildAmounts()` (dedupe billing)
-- [ ] **C1** — Document pricing/discount logic (JSDoc)
-- [ ] **C2** — Document registration-window/timezone logic
+- [x] **C1** — JSDoc on `getChildDayAmounts` documenting the two discount layers + return shape (`app.js`); the other pricing fns already had inline comments
+- [~] **C2** — Already partly covered: `app.js` has a window/timezone comment block (lines 24-29) and inline notes; no new code needed
 - [ ] **P2** — Memoize redundant billing recomputation
 - [ ] **P1** — Build calendar via fragment/string, render once
 - [ ] **P3** — Cache per-cell capacity lookups
 - [ ] **Q2** — Standardize on `parseJsonSafe()` helper
-- [ ] **M2** — Normalize email/PIN input before lookup
-- [ ] **C3** — Log raw error inside `friendlyError`
-- [ ] **P4** — Single-regex `escHtml`
+- [x] **M2** — _Already handled:_ the `family_login` RPC matches with `lower(parent_email) = lower(p_email)`, so email is case-insensitive server-side; input is already trimmed. No change needed
+- [x] **C3** — `friendlyError` now logs the raw cause before returning the friendly message (`supabase.js`)
+- [x] **P4** — `escHtml` rewritten as a single `/[&<>"']/g` replace with a char map (`supabase.js`)
 - [ ] **Q4** — Share `MONTH_NAMES`
-- [ ] **Q5** — Drop `escStr` aliases
+- [x] **Q5** — Removed `escStr`/`escLookup` aliases; call sites use `escHtml` directly (`app.js`, `lookup.js`)
 - [ ] **M1** — Split `js/supabase.js` god-file into modules
 - [ ] **N1** — File naming — no action (note only)

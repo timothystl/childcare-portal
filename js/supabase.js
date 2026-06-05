@@ -280,6 +280,9 @@ try {
 function friendlyError(err) {
     const msg = err?.message || String(err);
     if (msg.includes('<!DOCTYPE') || msg.includes('522') || msg.toLowerCase().includes('timed out') || msg.toLowerCase().includes('connection timed')) {
+        // Preserve the original error for diagnosis — the UI shows the friendly
+        // message but the real cause (HTML error page, 522, timeout) is logged.
+        console.warn('friendlyError: database unreachable —', msg);
         return new Error('Cannot reach the database (Supabase may be paused — visit supabase.com/dashboard to restore your project).');
     }
     return err instanceof Error ? err : new Error(msg);
@@ -2241,13 +2244,9 @@ async function deleteBillingOverride(month, parentEmail, childName) {
 // supabase.js (loaded first on every page) means both pages
 // get the same function automatically.
 // ============================================================
+const _ESC_HTML_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function escHtml(str) {
-    return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+    return String(str ?? '').replace(/[&<>"']/g, c => _ESC_HTML_MAP[c]);
 }
 
 // ============================================================

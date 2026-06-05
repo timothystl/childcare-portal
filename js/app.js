@@ -328,11 +328,11 @@ function renderChildSection() {
                 return `<label class="child-card-label${isSelected ? ' selected' : ''}" data-student-id="${s.id}">
                     <input type="checkbox" class="child-card-checkbox"
                            data-student-id="${s.id}"
-                           data-name="${escStr(s.child_name)}"
-                           data-recurring-days="${escStr(recurDays)}"
+                           data-name="${escHtml(s.child_name)}"
+                           data-recurring-days="${escHtml(recurDays)}"
                            ${isSelected ? 'checked' : ''}>
-                    <span class="child-card-name">${escStr(s.child_name.split(' ')[0])}</span>
-                    ${recurDays ? `<span class="child-card-recurring" title="Recurring days: ${escStr(recurDays.replace(/,/g,', '))}">🔁 ${escStr(recurDays.replace(/,/g,', '))}</span>` : ''}
+                    <span class="child-card-name">${escHtml(s.child_name.split(' ')[0])}</span>
+                    ${recurDays ? `<span class="child-card-recurring" title="Recurring days: ${escHtml(recurDays.replace(/,/g,', '))}">🔁 ${escHtml(recurDays.replace(/,/g,', '))}</span>` : ''}
                 </label>`;
             }).join('')}
         </div>`;
@@ -548,7 +548,7 @@ function renderCalendar() {
                     : '<span class="selected-type-badge">Full</span>');
         } else if (isClosed) {
             const reason = closureMap.get(dateStr);
-            badge = `<span class="spot-badge closed-badge">Closed</span>${reason ? `<span class="closed-reason">${escStr(reason)}</span>` : ''}`;
+            badge = `<span class="spot-badge closed-badge">Closed</span>${reason ? `<span class="closed-reason">${escHtml(reason)}</span>` : ''}`;
         } else if (!isPast && status === 'full') {
             badge = '<span class="spot-badge full-badge">Full</span>';
         } else if (!isPast && (status === 'limited' || status === 'available')) {
@@ -711,9 +711,17 @@ function formatChildRate(child, dayType) {
 // SELECTED DATES + BILLING TOTAL (multi-child aware)
 // ============================================================
 
-// Returns per-child amounts for a given day type, applying:
-//   1. Per-child individual discount (staff / custom %)
-//   2. Multi-child discount: 2nd+ children get $10 off (sorted highest-rate first)
+/**
+ * Per-child billing breakdown for a single day, applying both discount layers:
+ *   1. Each child's individual discount (staff = free, custom = % off).
+ *   2. Sibling discount — children are sorted highest-rate first and every child
+ *      after the first gets $10 off (capped at their own rate so it never goes negative).
+ *
+ * @param {'full'|'half'} dayType
+ * @returns {Array<{child: object, preMulti: number, multiDiscount: number, finalAmount: number}>}
+ *   preMulti = rate after the individual discount; multiDiscount = sibling $ taken off;
+ *   finalAmount = what this child is actually billed for the day.
+ */
 function getChildDayAmounts(dayType) {
     const entries = selectedChildren.map(c => {
         const base = dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
@@ -811,7 +819,7 @@ function renderSelectedDates() {
                 const breakdown = dayAmounts.map(amt => {
                     const multiNote = amt.multiDiscount > 0
                         ? `<span class="disc-note"> (−$${amt.multiDiscount} sibling)</span>` : '';
-                    return `${escStr(amt.child.name)}: $${amt.finalAmount.toFixed(2)}${multiNote}`;
+                    return `${escHtml(amt.child.name)}: $${amt.finalAmount.toFixed(2)}${multiNote}`;
                 }).join(' · ');
                 dayTypeLabel = `<span class="day-type-label">${typeText} — $${lineTotal.toFixed(2)}</span><span class="rate-breakdown">${breakdown}</span>`;
             }
@@ -1215,13 +1223,13 @@ async function handleSubmit(e) {
         }
 
         const childList = results
-            .map(({ child }) => `<strong>${escStr(child.name)}</strong> (${child.room.label})`)
+            .map(({ child }) => `<strong>${escHtml(child.name)}</strong> (${child.room.label})`)
             .join(', ');
 
         let details = `<p>Registration for ${childList}.</p>`;
         details += receiptHtml;
         if (errors.length) {
-            details += `<p class="receipt-error-note">⚠️ Note: ${escStr(errors.join('; '))}</p>`;
+            details += `<p class="receipt-error-note">⚠️ Note: ${escHtml(errors.join('; '))}</p>`;
         }
 
         // Action buttons: Print, iCal, and Email
@@ -1300,8 +1308,6 @@ function showToast(msg) {
     t.classList.remove('hidden');
     setTimeout(() => t.classList.add('hidden'), 5000);
 }
-// escStr: alias for escHtml() defined in supabase.js (loaded before this file).
-const escStr = escHtml;
 function setupListeners() {}   // kept for compatibility
 
 // ============================================================
