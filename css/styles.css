@@ -616,7 +616,11 @@ button:focus-visible,
 }
 
 .day-picker-popup {
+    /* Viewport-centered modal — fixed + translate keeps it on-screen at any size. */
     position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     z-index: 500;   /* sits above backdrop (499) */
     background: var(--white);
     border: 2px solid var(--navy);

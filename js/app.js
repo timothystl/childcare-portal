@@ -644,11 +644,7 @@ function showDayPicker(dateStr, cellEl) {
     `;
 
     document.body.appendChild(popup);
-
-    popup.style.position  = 'fixed';
-    popup.style.top       = '50%';
-    popup.style.left      = '50%';
-    popup.style.transform = 'translate(-50%, -50%)';
+    // Positioning (fixed, viewport-centered) lives in .day-picker-popup CSS.
 
     popup.querySelectorAll('.picker-btn').forEach(btn => {
         btn.addEventListener('click', e => {
