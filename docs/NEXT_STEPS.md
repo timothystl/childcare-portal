@@ -14,13 +14,24 @@ Already committed; just deploy:
 4. Apply migration `supabase/migrations/harden_definer_search_path.sql` (SS10) in the
    Supabase SQL Editor — safe, non-invasive (`ALTER FUNCTION` only).
 
-## Step 1 — Verify RLS (5 min) — reshapes the security priority
-✅ DONE 2026-06-05: RLS is **enabled** on all five core tables
-(`families`, `students`, `registrations`, `registration_dates`, `staff`) — the
-"anon key reads all PII" risk is averted, so **S1 is essentially closed** and
-**S2 (server-side roles) is downgraded**. Residual (optional): run the
-`pg_policies` query in `VERIFY_rls_core_tables.sql` to confirm no policy is
-over-permissive (`USING (true)` to anon).
+## Step 1 — RLS policy review — ⚠️ HIGH ISSUE FOUND (now top priority)
+RLS is enabled, BUT the policy conditions (checked 2026-06-05) are wide open:
+anon `USING (true)` SELECT/UPDATE on families, SELECT/UPDATE/DELETE on students,
+public SELECT on staff (exposes salaries), and anon SELECT on registrations/
+registration_dates. The anon key is public (in the browser bundle), so anyone can
+dump parent/child PII + staff pay and tamper with/delete records.
+
+Code-verified that families/students/staff anon policies are vestigial (no public
+page uses those tables directly — parent flows use service-role edge fns + definer
+RPCs). FIX:
+- **NOW (safe):** apply `supabase/migrations/tighten_anon_rls_policies.sql`
+  (drops the vestigial families/students/staff anon policies). Then test in staging:
+  parent registration + calendar spots-left, clock-in kiosk, admin Families/Staff tabs.
+- **Tier 2:** registrations/registration_dates anon SELECT is load-bearing (dup-check +
+  capacity) — fold those reads into SECURITY DEFINER RPCs, then drop the anon SELECT.
+  Do this with the registration RPC (SS3/SS5/SS9).
+
+S2 (server-side admin roles) remains relevant but lower than this.
 
 ## Step 2 — Quick high-value fixes
 1. **SS2** — leading-zero PIN lockout. Make PINs text end-to-end

@@ -326,7 +326,19 @@ lower-case and trim before lookups.
 Items keep their finding labels for reference. Check off as completed.
 
 ### Wave 1 — Security must-dos
-- [~] **S1** — RLS **enabled** on all core tables (verified 2026-06-05) — the "RLS-off" risk is averted. BUT policy review (2026-06-05) found anon/public policies that need their `USING`/`WITH CHECK` conditions confirmed: `staff` "Anon PIN lookup" (SELECT, public) + "Auth staff" (ALL, public), and `families`/`registrations` "anon select" + `families` "anon update". If any are `USING (true)` the anon key can read staff pay / enumerate parent PII. **Pending the `qual`/`with_check` output.**
+- [~] **S1 — [HIGH, confirmed exposure].** RLS is enabled, but policy review (2026-06-05)
+  found **over-permissive `USING (true)` anon/public policies**: anon SELECT+UPDATE on
+  `families`, anon SELECT+UPDATE+DELETE on `students`, public/anon SELECT on `staff`
+  (exposes `salary_biweekly`/`hourly_rate`), and anon SELECT on `registrations`/
+  `registration_dates`. The anon key ships in the browser → anyone can dump parent/child
+  PII + staff pay, and tamper with/delete family & student records.
+  **Code-verified:** no non-admin JS/HTML uses families/students/staff directly (parent
+  flows use service-role edge fns + definer RPCs), so those policies are vestigial.
+  - **Tier 1 (safe drops): migration written** → `supabase/migrations/tighten_anon_rls_policies.sql`
+    (drops the families/students/staff anon-SELECT/UPDATE/DELETE policies). Test in staging.
+  - **Tier 2:** `registrations`/`registration_dates` anon SELECT are load-bearing
+    (dup-check + capacity) — move those into `SECURITY DEFINER` RPCs, then drop. Ties into
+    the registration-RPC work (SS3/SS5/SS9).
 - [ ] **S2** — Enforce admin role server-side (RLS/edge fn), not just CSS hiding — _deferred: architectural, needs live Supabase to test_
 - [x] **S3** — Validate role against `['full','restricted','staff']` enum, least-privilege default — `admin-core.js`
 - [ ] **S4** — `admin-users` edge fn: fail closed; confirm `settings` writes are service-role only — _deferred: fail-closed risks locking out admins when `admin_roles` is unset; needs a bootstrap decision_
