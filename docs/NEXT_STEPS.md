@@ -3,6 +3,19 @@
 Branch: `claude/kind-mendel-I79x6`. Full findings: `docs/CODE_REVIEW.md`
 (original S/U/V/N/P/Q/C/M items + second-sweep SS1–SS19).
 
+## Incident log — 2026-06-05
+- The S1 "tighten anon RLS policies" migration was REVERTED — it broke the parent
+  flow and the real exposure needs the RPCs made SECURITY DEFINER first (see below).
+  `family_login` IS already SECURITY DEFINER; the registration/dup-check/capacity
+  reads are the part that depends on anon SELECT.
+- Staff clock-in broke because `hash_staff_pins.sql` had been committed to the repo
+  but **never applied to the database**, while the deployed frontend already used
+  the hashed-PIN RPC. Resolved by applying the migration (columns added split, PINs
+  hashed from the old plaintext `staff_pin`, RPCs created, schema cache reloaded).
+- LESSON: before deploying the branch, confirm every migration the frontend depends
+  on is actually applied in Supabase (the dashboard is the source of truth, not the
+  repo's `migrations/` folder). Check `pg_proc` / `information_schema.columns` first.
+
 ## Step 0 — Ship what's already fixed (~15 min)
 Already committed; just deploy:
 1. Merge/deploy the branch → Cloudflare Pages auto-builds the frontend
