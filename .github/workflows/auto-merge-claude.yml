@@ -21,7 +21,39 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git merge origin/${{ github.ref_name }} --no-ff -m "Auto-merge ${{ github.ref_name }}"
+
+          if git merge "origin/${{ github.ref_name }}" --no-ff -m "Auto-merge ${{ github.ref_name }}"; then
+            echo "Clean merge."
+          else
+            # Two Claude branches both bump the version, which collides in
+            # package.json + js/build-version.js. Auto-resolve ONLY those two
+            # files (keep the higher version); any other conflict is a real one
+            # and must stop for a human.
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            echo "Conflicted files:"; echo "$conflicts"
+            other="$(echo "$conflicts" | grep -vE '^(package\.json|js/build-version\.js)$' || true)"
+            if [ -n "$other" ]; then
+              echo "::error::Conflict in non-version files — manual merge required:"
+              echo "$other"
+              git merge --abort
+              exit 1
+            fi
+
+            ours="$(git show :2:package.json   | sed -nE 's/.*"version": *"([^"]+)".*/\1/p' | head -1)"
+            theirs="$(git show :3:package.json | sed -nE 's/.*"version": *"([^"]+)".*/\1/p' | head -1)"
+            high="$(printf '%s\n%s\n' "$ours" "$theirs" | sort -V | tail -1)"
+            echo "Resolving version conflict: ours=$ours theirs=$theirs -> $high"
+
+            # Take the incoming branch's package.json, then force the version field
+            # to the higher value; regenerate build-version.js to match.
+            git checkout --theirs package.json
+            sed -i -E "s/(\"version\": *\")[^\"]+/\1${high}/" package.json
+            printf 'window.__BUILD_VERSION__ = "v%s";\n' "$high" > js/build-version.js
+
+            git add package.json js/build-version.js
+            git commit --no-edit
+          fi
+
           git push origin main
 
       - name: Install Node
