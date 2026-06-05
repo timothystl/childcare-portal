@@ -207,18 +207,27 @@ function openEditDaysModal(reg) {
     const bearRoom = ROOMS.find(r => r.ageMaxMonths != null && r.ageMaxMonths <= 12);
     const isInfant = bearRoom && reg.room_id === bearRoom.id;
     if (isInfant) {
-        const family = (allFamiliesData || []).find(f =>
-            (f.parent_email || '').toLowerCase() === (reg.parent_email || '').toLowerCase() ||
-            (f.parent2_email || '').toLowerCase() === (reg.parent_email || '').toLowerCase());
-        const student = (family?.students || []).find(s =>
-            (s.child_name || '').toLowerCase() === (reg.child_name || '').toLowerCase());
-        const recurDays = student?.recurring_days || null;
-        if (recurDays) {
-            noteEl.textContent = `🔁 Recurring schedule: ${recurDays.replace(/,/g, ', ')}`;
-        } else {
-            noteEl.textContent = 'ℹ️ No recurring days set for this infant — set them in Families';
-        }
-        noteEl.style.display = 'block';
+        // The Calendar tab doesn't load allFamiliesData, so fall back to a direct
+        // fetch when the family isn't cached — otherwise this always shows "none".
+        (async () => {
+            const family = (allFamiliesData || []).find(f =>
+                (f.parent_email || '').toLowerCase() === (reg.parent_email || '').toLowerCase() ||
+                (f.parent2_email || '').toLowerCase() === (reg.parent_email || '').toLowerCase());
+            let recurDays;
+            if (family) {
+                const student = (family.students || []).find(s =>
+                    (s.child_name || '').toLowerCase() === (reg.child_name || '').toLowerCase());
+                recurDays = student?.recurring_days || null;
+            } else {
+                recurDays = await fetchStudentRecurringDays(reg.parent_email, reg.child_name);
+            }
+            if (recurDays) {
+                noteEl.textContent = `🔁 Recurring schedule: ${recurDays.replace(/,/g, ', ')}`;
+            } else {
+                noteEl.textContent = 'ℹ️ No recurring days set for this infant — set them in Families';
+            }
+            noteEl.style.display = 'block';
+        })();
     }
 
     renderEditCalGrid();

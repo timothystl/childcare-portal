@@ -407,14 +407,11 @@ repo without touching the live Supabase project.
   `create_billing_invoice_by_email`/`add_day_to_invoice_by_email` (`add_billing_rpc.sql`)
   trust a client email and dollar amount — any visitor can zero out or inflate any family's
   draft invoice. _Fix:_ revoke `anon`; compute amounts server-side.
-- **SS6 — [High, verify in Supabase] Finance modeling queries a non-existent `month`
-  column.** [Admin] `fetchEnrollmentByRoomForMonths` (`js/supabase.js:2125`) selects/filters
-  `month`, but registrations has `month_key`. The query errors and breaks Finance rate/wage
-  modeling "Avg Enrolled." _In-repo fix:_ `month` → `month_key` (3 spots).
-- **SS7 — [High] Staff "Save" button stuck disabled after first save.** [Admin]
-  (Pre-existing.) Success path calls `closeStaffForm()` which never resets the button
-  (`js/admin/admin-staffing.js:296,333`); later Add/Edit Staff is un-savable until reload.
-  _In-repo fix:_ reset the button in `closeStaffForm()`/`openStaffForm()`.
+- **SS6 — [High, verify in Supabase] ✅ FIXED.** Finance modeling queried a non-existent
+  `month` column; `fetchEnrollmentByRoomForMonths` now uses `month_key`
+  (`js/supabase.js:2125`). _Still verify the live `registrations` schema has `month_key`._
+- **SS7 — [High] ✅ FIXED.** Staff "Save" button stayed disabled after the first save;
+  `closeStaffForm()` now resets it (`js/admin/admin-staffing.js`).
 
 ## Medium
 
@@ -438,13 +435,12 @@ repo without touching the live Supabase project.
   `send-schedule-confirmation/index.ts:52` (and `worker.js:252`) interpolate raw email into
   `.or(...ilike...)`; a `*`/`,` payload changes filter semantics. _Fix:_ strict email regex;
   structured/escaped filters.
-- **SS14 — [Med] Infant recurring-days note wrongly shows "none" from Calendar tab.** [Admin]
-  Edit-Days reads `allFamiliesData`, which the Calendar tab never loads
-  (`admin-calendar.js:207`). _In-repo fix:_ fall back to `fetchStudentRecurringDays`.
-- **SS15 — [Med] "Room Today" selector collapses/overwrites multi-room days.** [Admin]
-  `renderRoomSelect` (`admin-staffing.js:415`) uses only the first event's room; changing it
-  overwrites the second-room events; passed `roomMap` is dead code. _In-repo fix:_
-  flag/disable on multi-room days; remove unused param.
+- **SS14 — [Med] ✅ FIXED.** Infant recurring-days note showed "none" from the Calendar tab;
+  now falls back to `fetchStudentRecurringDays` when the family isn't cached
+  (`admin-calendar.js`).
+- **SS15 — [Med] ✅ FIXED.** "Room Today" selector now shows a read-only multi-room label
+  (using the previously-dead `roomMap`) instead of letting a single-room edit overwrite a
+  staffer's other-room events (`admin-staffing.js`).
 
 ## Low
 

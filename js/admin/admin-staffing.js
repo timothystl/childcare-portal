@@ -284,6 +284,10 @@ function _togglePayFields(payType) {
 function closeStaffForm() {
     document.getElementById('staffEditForm').classList.add('hidden');
     editingStaffId = null;
+    // Reset the Save button — the success path closes the form without re-enabling
+    // it, so without this it would stay disabled ("Saving…") on the next open.
+    const saveBtn = document.getElementById('saveStaffBtn');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
 }
 
 async function onSaveStaffMember() {
@@ -413,10 +417,15 @@ function _localTimeToISO(workDate, timeStr) {
 }
 
 function renderRoomSelect(staffId, roomMap, eventsMap) {
-    const hasEvents = (eventsMap.get(staffId) || []).length > 0;
-    // Determine current room_id from the first event (all events are updated together)
-    const firstEvent = (eventsMap.get(staffId) || [])[0];
-    const currentRoomId = firstEvent?.room_id || '';
+    const evs = eventsMap.get(staffId) || [];
+    const hasEvents = evs.length > 0;
+    const distinctRooms = [...new Set(evs.map(e => e.room_id).filter(Boolean))];
+    // If the staff member clocked into more than one room today, editing a single
+    // room here would silently overwrite the others. Show a read-only label instead.
+    if (distinctRooms.length > 1) {
+        return `<span class="room-today-multi" title="Multiple rooms today — edit individual clock events to change">${escHtml(roomMap.get(staffId) || '—')}</span>`;
+    }
+    const currentRoomId = distinctRooms[0] || '';
     const options = ROOMS.map(r =>
         `<option value="${r.id}"${currentRoomId === r.id ? ' selected' : ''}>${r.label}</option>`
     ).join('');

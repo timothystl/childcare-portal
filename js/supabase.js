@@ -2126,15 +2126,15 @@ async function fetchEnrollmentByRoomForMonths(monthKeys) {
     if (!sbClient || !monthKeys.length) return {};
     const { data, error } = await sbClient
         .from('registrations')
-        .select('id, room_id, month')
+        .select('id, room_id, month_key')
         .eq('status', 'confirmed')
-        .in('month', monthKeys);
+        .in('month_key', monthKeys);
     if (error) throw error;
     const countsByRoomMonth = {};
     for (const reg of (data || [])) {
         if (!countsByRoomMonth[reg.room_id]) countsByRoomMonth[reg.room_id] = {};
-        countsByRoomMonth[reg.room_id][reg.month] =
-            (countsByRoomMonth[reg.room_id][reg.month] || 0) + 1;
+        countsByRoomMonth[reg.room_id][reg.month_key] =
+            (countsByRoomMonth[reg.room_id][reg.month_key] || 0) + 1;
     }
     const avg = {};
     for (const [roomId, monthCounts] of Object.entries(countsByRoomMonth)) {
