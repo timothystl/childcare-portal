@@ -16,6 +16,41 @@ Branch: `claude/kind-mendel-I79x6`. Full findings: `docs/CODE_REVIEW.md`
   on is actually applied in Supabase (the dashboard is the source of truth, not the
   repo's `migrations/` folder). Check `pg_proc` / `information_schema.columns` first.
 
+## Ready-to-apply work (written 2026-06-05 pm)
+
+### A. Finish deploying what's fixed — YOU run these (I have no CLI/creds)
+- `supabase functions deploy send-waitlist-offer`     # SS4 (auth)
+- `supabase functions deploy send-schedule-confirmation`  # SS13 (email validation)
+- Deploy the Cloudflare Worker (SS13 fix in `worker.js`)
+- Apply migration `supabase/migrations/harden_definer_search_path.sql` (SS10)
+
+### B. SS12 — one open clock-in per staff/day  (low risk)
+- Apply `supabase/migrations/ss12_one_open_clock_event.sql` (check for existing
+  duplicate open shifts first — query is in the file header).
+
+### C. SS2 — family leading-zero PIN fix  (SEQUENCED — order matters)
+1. Apply `supabase/migrations/ss2_family_login_text_pin.sql` (staging → prod).
+2. `supabase functions deploy family-lookup` after editing it to NOT `parseInt`
+   the PIN (send the string). Edit `supabase/functions/family-lookup/index.ts:48`:
+   replace `const parsedPin = parseInt(pin, 10)` + the int send with a digit check
+   and pass the string to `family_login`.
+3. Frontend: `js/supabase.js` `familyLogin()` — replace `parseInt(pin,10)` /
+   `p_pin: parsedPin` with a `/^\d{4,8}$/` check and `p_pin: String(pin).trim()`.
+   (Ping the assistant to push this once steps 1–2 are live — pushing it before
+   the migration can break login, since a string to the old INT function is
+   rejected.)
+
+### D. SS1 — close the anon-read PII exposure  (groundwork done; staged)
+1. Apply `supabase/migrations/ss1_public_read_rpcs.sql` (creates capacity_counts
+   + registration_conflict definer RPCs; safe, no behavior change).
+2. Switch the frontend reads to those RPCs, deploy, test registration + calendar.
+3. THEN drop the wide-open anon policies (DROP statements are listed in the
+   migration's footer). Test login + kiosk + registration in staging first.
+
+### E. Branch/deploy hygiene
+- See `CONTRIBUTING.md` (rebase on main before merge; apply migrations before
+  deploying dependent code). This is what caused today's two incidents.
+
 ## Step 0 — Ship what's already fixed (~15 min)
 Already committed; just deploy:
 1. Merge/deploy the branch → Cloudflare Pages auto-builds the frontend
