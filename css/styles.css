@@ -24,6 +24,16 @@
   --text-muted: #7A6E5A;   /* secondary/muted text, captions */
   --white:      #FFFFFF;   /* card backgrounds, panels */
 
+  /* ── Admin dark/badge accents (brand-derived) ───────────── */
+  --navy-table:   #1F5278;  /* admin table header blue */
+  --green-dark:   #1a5c3e;  /* dark green text on pale fills (admin) */
+  --mustard-dark: #7a5a00;  /* dark gold text on sun badges (admin) */
+  --tang-dark:    #7a2a18;  /* dark tangerine text/borders (admin) */
+  --amber-dark:   #92400e;  /* "coming soon"/warning badge text */
+  --sun-badge:    #fef3c7;  /* warning/coming-soon badge background */
+  --sun-edit:     #fffbe6;  /* edit-mode row highlight background */
+  --tang-soft:    #f2b89a;  /* soft tangerine border/fill (admin) */
+
   /* ── Typography ─────────────────────────────────────────── */
   --font-head: 'Lora', Georgia, serif;
   --font-body: 'Nunito', system-ui, sans-serif;
@@ -201,6 +211,23 @@ main { padding: 32px 36px; }
     box-shadow: 0 0 0 3px rgba(245,183,49,0.15);
 }
 
+/* Visible focus indicators for keyboard navigation (WCAG 2.4.7).
+   :focus-visible keeps the ring for keyboard users without showing it on
+   mouse clicks. Covers buttons, tabs, links and interactive calendar cells. */
+a:focus-visible,
+button:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-ghost:focus-visible,
+.room-card:focus-visible,
+.cal-day:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--navy);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
 /* ============================================================
    ROOM GRID
    ============================================================ */
@@ -331,8 +358,8 @@ main { padding: 32px 36px; }
     margin-top: 2px;
 }
 .full-badge      { color: var(--tang); }
-.limited-badge   { color: #7a5a00; }
-.available-badge { color: #1a5c3e; }
+.limited-badge   { color: var(--mustard-dark); }
+.available-badge { color: var(--green-dark); }
 
 /* Legend — update dot.full to match grey/unavailable look */
 .dot.full      { background: var(--warm-gray); border-color: var(--border); }
@@ -377,7 +404,7 @@ main { padding: 32px 36px; }
 .confirmed-badge {
     display: inline-block;
     background: var(--green-pale);
-    color: #1a5c3e;
+    color: var(--green-dark);
     border: 1px solid var(--green-lt);
     padding: 3px 10px;
     border-radius: 999px;
@@ -389,8 +416,8 @@ main { padding: 32px 36px; }
 .waitlist-badge {
     display: inline-block;
     background: var(--tang-pale);
-    color: #7a2a18;
-    border: 1px solid #f2b89a;
+    color: var(--tang-dark);
+    border: 1px solid var(--tang-soft);
     padding: 3px 10px;
     border-radius: 999px;
     font-size: .78em;
@@ -599,7 +626,11 @@ main { padding: 32px 36px; }
 }
 
 .day-picker-popup {
+    /* Viewport-centered modal — fixed + translate keeps it on-screen at any size. */
     position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     z-index: 500;   /* sits above backdrop (499) */
     background: var(--white);
     border: 2px solid var(--navy);
@@ -723,22 +754,22 @@ main { padding: 32px 36px; }
 .reg-window-banner.open {
     background: var(--green-pale);
     border: 1.5px solid var(--green-lt);
-    color: #1a5c3e;
+    color: var(--green-dark);
 }
 .reg-window-banner.locked {
     background: var(--tang-pale);
-    border: 1.5px solid #f2b89a;
-    color: #7a2a18;
+    border: 1.5px solid var(--tang-soft);
+    color: var(--tang-dark);
 }
 .reg-window-banner.waitlist {
     background: var(--sun-pale);
     border: 1.5px solid var(--sun-lt);
-    color: #7a5a00;
+    color: var(--mustard-dark);
 }
 .reg-window-banner.submitted {
     background: var(--green-pale);
     border: 1.5px solid var(--green-lt);
-    color: #1a5c3e;
+    color: var(--green-dark);
 }
 
 /* ============================================================
@@ -970,8 +1001,8 @@ main { padding: 32px 36px; }
     margin-top: 4px;
 }
 .lookup-searching  { color: var(--navy); background: var(--linen); }
-.lookup-error      { color: #7a2a18; background: var(--tang-pale); }
-.lookup-no-results { color: #7a5a00; background: var(--sun-pale); }
+.lookup-error      { color: var(--tang-dark); background: var(--tang-pale); }
+.lookup-no-results { color: var(--mustard-dark); background: var(--sun-pale); }
 
 /* Selected family banner */
 .family-selected-bar {
@@ -986,7 +1017,7 @@ main { padding: 32px 36px; }
     flex-wrap: wrap;
 }
 .family-selected-icon { color: var(--green); font-size: 1.1em; }
-.family-selected-name { font-weight: 600; color: #1a5c3e; flex: 1; }
+.family-selected-name { font-weight: 600; color: var(--green-dark); flex: 1; }
 .fam-pin-badge {
     background: var(--green);
     color: var(--white);
@@ -1001,7 +1032,7 @@ main { padding: 32px 36px; }
 input.prefilled {
     background: var(--green-pale);
     border-color: var(--green-lt) !important;
-    color: #1a5c3e;
+    color: var(--green-dark);
     font-weight: 500;
 }
 
@@ -1023,7 +1054,7 @@ input.prefilled {
     background: var(--sun-pale);
     border: 1.5px solid var(--sun-lt);
     border-radius: var(--radius-sm);
-    color: #7a5a00;
+    color: var(--mustard-dark);
     font-size: .9em;
 }
 
@@ -1141,7 +1172,7 @@ input.prefilled {
     border-radius: 6px;
     display: inline-block;
 }
-.child-room-assign.error { color: #7a2a18; background: var(--tang-pale); }
+.child-room-assign.error { color: var(--tang-dark); background: var(--tang-pale); }
 
 /* Add-child inline form */
 .add-child-form {
@@ -1208,7 +1239,7 @@ input.prefilled {
     display: inline-block;
     margin-top: 3px;
     background: var(--sun-pale);
-    color: #7a5a00;
+    color: var(--mustard-dark);
     font-size: .72em;
     font-weight: 600;
     padding: 1px 7px;

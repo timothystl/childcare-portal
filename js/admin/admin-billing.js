@@ -1729,13 +1729,12 @@ function renderDiscountSummaryTable(invoices, container) {
 }
 
 function renderManualRevenueTable(year, monthData, manualRevenue, container) {
-    const BL_MONTH_NAMES = ['January','February','March','April','May','June',
-                            'July','August','September','October','November','December'];
+    // MONTH_NAMES is defined in supabase.js (loaded first) and shared globally.
     const rows = Object.entries(monthData).map(([moKey, mo], i) => {
         const hasInvoices = mo.invoiceTotal > 0;
         const manual = mo.manualAmt || '';
         return `<tr>
-            <td style="padding:6px 12px">${BL_MONTH_NAMES[i]}</td>
+            <td style="padding:6px 12px">${MONTH_NAMES[i]}</td>
             <td style="padding:6px 12px;color:${hasInvoices ? 'var(--navy)' : 'var(--text-muted)'}">
                 ${hasInvoices ? `$${mo.invoiceTotal.toFixed(2)} (${hasInvoices ? 'from registrations' : ''})` : '—'}
             </td>

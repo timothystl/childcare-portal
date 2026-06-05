@@ -1,4 +1,13 @@
 // ============================================================
+// SHARED CONSTANTS
+// ============================================================
+// Loaded before app.js / lookup.js on every page, so these globals are
+// available to all page scripts (build runs with bundle:false — top-level
+// declarations stay global across the separate <script> tags).
+const MONTH_NAMES = ['January','February','March','April','May','June',
+                     'July','August','September','October','November','December'];
+
+// ============================================================
 // ROOM CONFIG
 // ============================================================
 // ROOMS — base config. Rates can be overridden by admin via the Settings section
@@ -280,6 +289,9 @@ try {
 function friendlyError(err) {
     const msg = err?.message || String(err);
     if (msg.includes('<!DOCTYPE') || msg.includes('522') || msg.toLowerCase().includes('timed out') || msg.toLowerCase().includes('connection timed')) {
+        // Preserve the original error for diagnosis — the UI shows the friendly
+        // message but the real cause (HTML error page, 522, timeout) is logged.
+        console.warn('friendlyError: database unreachable —', msg);
         return new Error('Cannot reach the database (Supabase may be paused — visit supabase.com/dashboard to restore your project).');
     }
     return err instanceof Error ? err : new Error(msg);
@@ -789,7 +801,7 @@ async function familyLogin(email, pin) {
 async function requestPinReset(email) {
     if (!sbClient || !email) return false;
     try {
-        await fetch(`${SUPABASE_URL}/functions/v1/request-pin-reset`, {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/request-pin-reset`, {
             method:  'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -798,7 +810,10 @@ async function requestPinReset(email) {
             },
             body: JSON.stringify({ email }),
         });
-        return true;
+        // A non-OK status means the request was not accepted (e.g. server/email
+        // failure). The edge function returns 200 even for unknown emails to avoid
+        // account enumeration, so res.ok still preserves that privacy behaviour.
+        return res.ok;
     } catch (_) {
         return false;
     }
@@ -1257,9 +1272,7 @@ async function loadRateSettings() {
             .maybeSingle();
         if (error || !data) return false;
         const raw   = data.value;
-        const rates = typeof raw === 'string'
-            ? (() => { try { return JSON.parse(raw); } catch { return null; } })()
-            : raw;
+        const rates = typeof raw === 'string' ? parseJsonOr(raw, null) : raw;
         if (!rates || typeof rates !== 'object' || Array.isArray(rates)) return false;
         // Merge fetched rates into ROOMS array
         ROOMS.forEach(room => {
@@ -1384,9 +1397,7 @@ async function loadOfferLinks() {
         if (error || !data) return { procareLink: null, paperworkLinks: [] };
         // Guard: value column may be text instead of jsonb — parse if so.
         const raw = data.value;
-        if (typeof raw === 'string') {
-            try { return JSON.parse(raw); } catch { return { procareLink: null, paperworkLinks: [] }; }
-        }
+        if (typeof raw === 'string') return parseJsonOr(raw, { procareLink: null, paperworkLinks: [] });
         return (raw && typeof raw === 'object' && !Array.isArray(raw))
             ? raw
             : { procareLink: null, paperworkLinks: [] };
@@ -1847,9 +1858,7 @@ async function fetchStaffAvailability() {
     // is a JSON string. Parse it so callers always receive a plain object.
     const raw = data?.value;
     if (!raw) return {};
-    if (typeof raw === 'string') {
-        try { return JSON.parse(raw); } catch { return {}; }
-    }
+    if (typeof raw === 'string') return parseJsonOr(raw, {});
     return (typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
 }
 
@@ -1878,9 +1887,7 @@ async function loadAdminRoles() {
             .maybeSingle();
         if (error || !data) return {};
         const raw = data.value;
-        if (typeof raw === 'string') {
-            try { return JSON.parse(raw); } catch (_) { return {}; }
-        }
+        if (typeof raw === 'string') return parseJsonOr(raw, {});
         return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
     } catch (_) {
         return {};
@@ -1913,9 +1920,7 @@ async function fetchHistoricalPayroll() {
         .maybeSingle();
     const raw = data?.value;
     if (!raw) return [];
-    if (typeof raw === 'string') {
-        try { return JSON.parse(raw); } catch { return []; }
-    }
+    if (typeof raw === 'string') return parseJsonOr(raw, []);
     return Array.isArray(raw) ? raw : [];
 }
 
@@ -1935,7 +1940,7 @@ async function fetchExpenseConfig() {
         .eq('key', 'expense_config').maybeSingle();
     const raw = data?.value;
     if (!raw) return { items: [] };
-    if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return { items: [] }; } }
+    if (typeof raw === 'string') return parseJsonOr(raw, { items: [] });
     return (raw && typeof raw === 'object') ? raw : { items: [] };
 }
 
@@ -2140,15 +2145,15 @@ async function fetchEnrollmentByRoomForMonths(monthKeys) {
     if (!sbClient || !monthKeys.length) return {};
     const { data, error } = await sbClient
         .from('registrations')
-        .select('id, room_id, month')
+        .select('id, room_id, month_key')
         .eq('status', 'confirmed')
-        .in('month', monthKeys);
+        .in('month_key', monthKeys);
     if (error) throw error;
     const countsByRoomMonth = {};
     for (const reg of (data || [])) {
         if (!countsByRoomMonth[reg.room_id]) countsByRoomMonth[reg.room_id] = {};
-        countsByRoomMonth[reg.room_id][reg.month] =
-            (countsByRoomMonth[reg.room_id][reg.month] || 0) + 1;
+        countsByRoomMonth[reg.room_id][reg.month_key] =
+            (countsByRoomMonth[reg.room_id][reg.month_key] || 0) + 1;
     }
     const avg = {};
     for (const [roomId, monthCounts] of Object.entries(countsByRoomMonth)) {
@@ -2249,21 +2254,22 @@ async function deleteBillingOverride(month, parentEmail, childName) {
 
 // ============================================================
 // HTML SANITIZATION UTILITY
-// Shared by admin.js, app.js, and any future pages.
+// Shared by admin, app, and lookup pages (and any future ones).
 // Escapes characters that could be used for XSS when injecting
-// user-supplied data into innerHTML template literals.
-// app.js uses the local alias escStr(); admin.js previously
-// defined its own escHtml(). This canonical version in
-// supabase.js (loaded first on every page) means both pages
-// get the same function automatically.
+// user-supplied data into innerHTML template literals. This canonical
+// version lives in supabase.js (loaded first on every page) so all
+// page scripts call the same escHtml() automatically.
 // ============================================================
+const _ESC_HTML_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function escHtml(str) {
-    return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+    return String(str ?? '').replace(/[&<>"']/g, c => _ESC_HTML_MAP[c]);
+}
+
+// Parse a JSON string, returning `fallback` if parsing throws. Used for the
+// settings `value` column, which may arrive as a JSON string or already-parsed
+// jsonb depending on the column type.
+function parseJsonOr(str, fallback) {
+    try { return JSON.parse(str); } catch { return fallback; }
 }
 
 // ============================================================

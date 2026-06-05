@@ -6,10 +6,7 @@
 let _currentFamily        = null;
 let _currentRegistrations = [];
 
-const MONTH_NAMES_LOOKUP = [
-    'January','February','March','April','May','June',
-    'July','August','September','October','November','December'
-];
+// MONTH_NAMES is defined in supabase.js (loaded first) and shared globally.
 
 // ============================================================
 // INIT
@@ -123,6 +120,7 @@ function showResults(registrations, parentEmail) {
     const visibleMonths = new Set([thisMonth, nextMonth]);
 
     // Group all registrations by child_name
+    let hiddenMonthDays = 0;   // confirmed days that fall outside the visible window
     const byChild = {};
     registrations.forEach(reg => {
         const key = reg.child_name || 'Unknown Child';
@@ -134,14 +132,24 @@ function showResults(registrations, parentEmail) {
             };
         }
         (reg.registration_dates || []).forEach(d => {
-            if (!d.waitlisted && visibleMonths.has((d.care_date || '').substring(0, 7))) {
+            if (d.waitlisted) return;
+            if (visibleMonths.has((d.care_date || '').substring(0, 7))) {
                 byChild[key].dates.push(d);
+            } else {
+                hiddenMonthDays++;
             }
         });
     });
 
-    const html = Object.values(byChild).map(child => renderChildCard(child)).join('');
-    document.getElementById('lookupContent').innerHTML = html || '<p class="lookup-empty-state">No confirmed care days found.</p>';
+    // Only show children that actually have visible days; note any hidden months so
+    // parents don't think past/future registrations vanished.
+    const cards = Object.values(byChild).filter(c => c.dates.length);
+    const hiddenNote = hiddenMonthDays > 0
+        ? `<p class="lookup-hidden-note">Showing this month and next. ${hiddenMonthDays} confirmed day${hiddenMonthDays !== 1 ? 's' : ''} in other months ${hiddenMonthDays !== 1 ? 'are' : 'is'} not shown here — contact the office for the full history.</p>`
+        : '';
+    const html = cards.map(child => renderChildCard(child)).join('');
+    document.getElementById('lookupContent').innerHTML =
+        (html ? html + hiddenNote : '<p class="lookup-empty-state">No confirmed care days found for this month or next.</p>' + hiddenNote);
 }
 
 function renderChildCard({ childName, roomId, dates }) {
@@ -168,7 +176,7 @@ function renderChildCard({ childName, roomId, dates }) {
 
     const monthBlocks = Object.entries(byMonth).sort().map(([monthKey, monthDates]) => {
         const [y, m]    = monthKey.split('-').map(Number);
-        const monthLabel = MONTH_NAMES_LOOKUP[m - 1] + ' ' + y;
+        const monthLabel = MONTH_NAMES[m - 1] + ' ' + y;
 
         const monthFull = monthDates.filter(d => d.day_type !== 'half').length;
         const monthHalf = monthDates.filter(d => d.day_type === 'half').length;
@@ -215,7 +223,7 @@ function renderChildCard({ childName, roomId, dates }) {
         <div class="lookup-child-card">
             <div class="lookup-child-header">
                 <div class="lookup-child-info">
-                    <span class="lookup-child-name">${escLookup(childName.split(' ')[0])}</span>
+                    <span class="lookup-child-name">${escHtml(childName.split(' ')[0])}</span>
                     <span class="lookup-child-room">${room?.label || roomId}</span>
                 </div>
                 <span class="lookup-child-total">$${grandTotal.toFixed(2)}</span>
@@ -326,5 +334,3 @@ async function submitDeletionRequest() {
 // ============================================================
 // HELPER
 // ============================================================
-// escLookup: alias for the shared escHtml() defined in supabase.js
-const escLookup = escHtml;

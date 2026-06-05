@@ -313,6 +313,13 @@
     padding: 32px;
 }
 
+.lookup-hidden-note {
+    color: rgba(255,255,255,.7);
+    text-align: center;
+    font-size: .82em;
+    margin-top: 14px;
+}
+
 .lookup-disclaimer {
     text-align: center;
     font-size: .82em;

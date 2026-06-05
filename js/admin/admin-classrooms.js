@@ -336,7 +336,7 @@ function generateMonthlyRoster() {
     if (!monthVal) { alert('Please select a month.'); return; }
 
     const [y, m] = monthVal.split('-').map(Number);
-    const monthLabel = MONTH_NAMES_ADMIN[m - 1] + ' ' + y;
+    const monthLabel = MONTH_NAMES[m - 1] + ' ' + y;
     const daysInMonth = new Date(y, m, 0).getDate();
 
     // Build list of working days in the month (Mon–Fri, excluding closures)
@@ -385,7 +385,7 @@ function generateMonthlyRoster() {
             const fullFlag = count >= cap ? ' roster-day-full' : count >= cap * .8 ? ' roster-day-near' : '';
             const childList = children.length
                 ? children.map(c =>
-                    `<span class="roster-child${c.dayType === 'half' ? ' roster-half' : ''}">${c.name}${c.dayType === 'half' ? ' ½' : ''}</span>`
+                    `<span class="roster-child${c.dayType === 'half' ? ' roster-half' : ''}">${escHtml(c.name)}${c.dayType === 'half' ? ' ½' : ''}</span>`
                   ).join('')
                 : '<span class="roster-empty-day">—</span>';
             return `

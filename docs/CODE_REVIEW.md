@@ -2,6 +2,11 @@
 
 _Reviewed: 2026-06-04 · App version 1.15.8 · Branch `claude/kind-mendel-I79x6`_
 
+> **Second sweep (2026-06-05):** a deeper Opus pass focused on correctness/logic bugs,
+> data integrity, races, and edge-function/SQL security. New findings are in the
+> **"Second Sweep — correctness & integrity"** section near the end (labels **SS1–SS19**),
+> independent of the original S/U/V/N/P/Q/C/M items.
+
 This is a read-only review. **No application code was changed** — findings are
 prioritized recommendations for the team to triage. Each finding is tagged by surface:
 **[Admin]** (admin portal), **[Public]** (parent-facing site), or **[Both]**.
@@ -316,17 +321,147 @@ lower-case and trim before lookups.
 
 ---
 
-## Suggested remediation order
+## Remediation order (execution checklist)
 
-1. **Confirm RLS** on the four core PII tables (S1) — highest risk, quick to check.
-2. **Server-side role enforcement** for admin mutations (S2), plus the role-enum fix
-   (S3) and edge-fn fail-closed check (S4).
-3. **XSS escaping audit** of `js/admin/*` `.innerHTML` sites (S5).
-4. **Quick UX wins:** focus rings (U1), disabled/loading states (U3), silent PIN-reset
-   feedback (U6), mobile day-picker (U5).
-5. **Design tokens & inline-style cleanup** (V1, V2) — large but mechanical; unblocks
-   theming.
-6. **Quality/perf refactors** (P1–P2, Q1–Q3) and the `supabase.js` split (M1) as
-   ongoing hygiene.
+Items keep their finding labels for reference. Check off as completed.
 
-_All findings are recommendations; nothing here was applied to the codebase._
+### Wave 1 — Security must-dos
+- [~] **S1** — Verify RLS on `families`, `students`, `registrations`, `staff` — _requires Supabase dashboard._ Verification SQL + annotated draft policies provided in `supabase/migrations/VERIFY_rls_core_tables.sql` (run STEP 1 to check; STEP 2 policies need review — naive lockdown breaks public registration/capacity)
+- [ ] **S2** — Enforce admin role server-side (RLS/edge fn), not just CSS hiding — _deferred: architectural, needs live Supabase to test_
+- [x] **S3** — Validate role against `['full','restricted','staff']` enum, least-privilege default — `admin-core.js`
+- [ ] **S4** — `admin-users` edge fn: fail closed; confirm `settings` writes are service-role only — _deferred: fail-closed risks locking out admins when `admin_roles` is unset; needs a bootstrap decision_
+- [x] **S5** — Audit `js/admin/*` `.innerHTML` sites — escaping was consistent except one gap (roster child name), now `escHtml()`-wrapped in `admin-classrooms.js`
+
+### Wave 2 — Quick UX wins
+- [x] **U1** — Visible `:focus-visible` rings on buttons/tabs/links/cells — `css/styles.css`
+- [~] **U3** — Disabled-button states already exist (`styles.css:456,872`); disable-on-submit JS wiring still TODO
+- [x] **U6** — Surface PIN-reset send failures (`requestPinReset` now returns `res.ok`) — `js/supabase.js`
+- [x] **U5** — _False positive:_ day-picker is already viewport-centered (240px, fixed + translate). Moved redundant inline positioning into CSS (`styles.css` / `app.js`)
+- [x] **U2** — Added `aria-label="Close"` to icon-only modal close buttons (`admin.html`) and `aria-hidden` to decorative gallery emoji (`index.html`)
+
+### Wave 3 — Remaining security/UX polish
+- [ ] **S6** — Per-IP / CAPTCHA throttling on PIN reset
+- [ ] **S7** — Trim `family_login()` RPC projection
+- [ ] **S8** — Confirm anon-key expiry + rotation cadence
+- [ ] **U4** — Standardize breakpoints; fix admin grid mobile overflow
+- [x] **U7** — ✅ Lookup now notes confirmed days in other (hidden) months and only shows children with visible days (`js/lookup.js`, `css/lookup.css`)
+
+### Wave 4 — Design system
+- [~] **V1** — Tokenized the brand-derived dark/badge colors (`--navy-table`, `--green-dark`, `--mustard-dark`, `--tang-dark`, `--amber-dark`, `--sun-badge`, `--sun-edit`, `--tang-soft`) — ~90 literals replaced, value-preserving. Generic grays / semantic Tailwind-ish colors deferred to V3 (naming is a design decision)
+- [ ] **V4** — Extract shared `css/variables.css`, dedupe `:root`/fonts
+- [ ] **V5** — Consolidate duplicate `.btn-*` rules
+- [ ] **V2** — Migrate ~300 inline `style=` to CSS classes
+- [ ] **V3** — Collapse ad-hoc shades to canonical palette
+- [ ] **V6** — Typography scale variables
+
+### Wave 5 — Quality, perf & maintainability
+- [x] **Q1** — Parameterized `getChildDayAmounts(dayType, children=selectedChildren)` and replaced the duplicated `calcSubmitDayAmounts` in the submit flow with a call to it — billing math now lives in one place (`app.js`)
+- [x] **C1** — JSDoc on `getChildDayAmounts` documenting the two discount layers + return shape (`app.js`); the other pricing fns already had inline comments
+- [~] **C2** — Already partly covered: `app.js` has a window/timezone comment block (lines 24-29) and inline notes; no new code needed
+- [ ] **P2** — Memoize redundant billing recomputation
+- [ ] **P1** — Build calendar via fragment/string, render once
+- [ ] **P3** — Cache per-cell capacity lookups
+- [x] **M2** — _Already handled:_ the `family_login` RPC matches with `lower(parent_email) = lower(p_email)`, so email is case-insensitive server-side; input is already trimmed. No change needed
+- [x] **C3** — `friendlyError` now logs the raw cause before returning the friendly message (`supabase.js`)
+- [x] **P4** — `escHtml` rewritten as a single `/[&<>"']/g` replace with a char map (`supabase.js`)
+- [x] **Q2** — Added `parseJsonOr(str, fallback)` and replaced 6 identical inline `try/JSON.parse/catch` idioms (`supabase.js`), value-preserving
+- [x] **Q3** — Init fetches now run via `Promise.allSettled` with per-fetch error logging and graceful degradation (`app.js`)
+- [x] **Q4** — One shared `MONTH_NAMES` in `supabase.js`; removed duplicates from `app.js`, `lookup.js`, `admin-core.js`, `admin-finance.js`, `admin-billing.js` (and all `MONTH_NAMES_ADMIN`/`_FIN`/`BL_` references)
+- [x] **Q5** — Removed `escStr`/`escLookup` aliases; call sites use `escHtml` directly (`app.js`, `lookup.js`)
+- [ ] **M1** — Split `js/supabase.js` god-file into modules
+- [ ] **N1** — File naming — no action (note only)
+
+---
+
+# Second Sweep — correctness & integrity (SS)
+
+A deeper pass (three parallel Opus reviewers, cross-verified) focused on real defects
+rather than style. None duplicate the S/U/V/N/P/Q/C/M items above. Items marked
+**[verify in Supabase]** depend on the live DB schema. "In-repo fix" = fixable in this
+repo without touching the live Supabase project.
+
+## High
+
+- **SS1 — [High] Weekly-rate quote vs charge divergence (overcharge).** [Public] The
+  preview (`calcTotal`, `js/app.js:763`) applies a room's full-week weekly rate, but the
+  submit/receipt/email/invoice path (`js/app.js:~1173`) sums per-day via
+  `getChildDayAmounts` and never applies the weekly rate. When an admin has set
+  `weeklyFullRate`/`weeklyHalfRate` (default `null`, so currently dormant), a family is
+  quoted e.g. $300 but charged/invoiced 5×$75=$375. _In-repo fix:_ share the
+  week-grouping/weekly-rate logic between both paths.
+- **SS2 — [High] Leading-zero PIN locks the account out.** [Both] PINs are set/stored as
+  text (bcrypt of the literal), but login coerces via `parseInt` (`js/supabase.js:778`,
+  `family-lookup/index.ts:48`) and `family_login(p_pin int)`
+  (`finalize_pin_hashing.sql:27`). `"0123"`→`123`→never matches→5 failures→lockout. Same
+  for staff PINs. _Fix:_ treat PINs as text end-to-end (RPC `p_pin text`, drop `parseInt`).
+- **SS3 — [High] No server-side capacity enforcement (oversubscription race).** [Public]
+  Capacity is checked only client-side against a cache; `submitRegistration`
+  (`js/supabase.js:386`) inserts with no count re-check and no DB trigger/constraint exists.
+  Two parents (or a direct REST call) can both book the last spot. _Fix:_ enforce in a DB
+  trigger or atomic RPC.
+- **SS4 — [High] ✅ FIXED (deploy edge fn).** `send-waitlist-offer` now requires a valid
+  admin session (mirrors `send-schedule-change`); anonymous callers get 401
+  (`supabase/functions/send-waitlist-offer/index.ts`). _Redeploy via `supabase functions
+  deploy send-waitlist-offer`._ (Link allow-listing still recommended; other `send-*` audited.)
+- **SS5 — [High] Billing RPCs granted to `anon` with caller-supplied email + amount.**
+  `create_billing_invoice_by_email`/`add_day_to_invoice_by_email` (`add_billing_rpc.sql`)
+  trust a client email and dollar amount — any visitor can zero out or inflate any family's
+  draft invoice. _Fix:_ revoke `anon`; compute amounts server-side.
+- **SS6 — [High, verify in Supabase] ✅ FIXED.** Finance modeling queried a non-existent
+  `month` column; `fetchEnrollmentByRoomForMonths` now uses `month_key`
+  (`js/supabase.js:2125`). _Still verify the live `registrations` schema has `month_key`._
+- **SS7 — [High] ✅ FIXED.** Staff "Save" button stayed disabled after the first save;
+  `closeStaffForm()` now resets it (`js/admin/admin-staffing.js`).
+
+## Medium
+
+- **SS8 — [Med] ⚠️ WON'T FIX without a product decision.** The
+  `(lower(child_name), month_key)` index is intentional per the documented rule
+  (`checkExistingRegistrationByChild` blocks *any* parent from re-registering a child
+  already scheduled that month). Scoping by family would re-allow that double-registration.
+  Real tension: it also false-positives on two genuinely different children sharing a name.
+  _Decide:_ keep the strict name rule, or accept duplicate-child risk for fewer false
+  positives. Not changed.
+- **SS9 — [Med] Non-atomic registration insert → orphaned `registrations`.** [Public] If the
+  dates insert fails and the compensating delete also fails (`js/supabase.js:432`), a
+  confirmed registration with zero dates blocks re-registration. _Fix:_ one transactional RPC.
+- **SS10 — [Med] ✅ FIXED (apply migration).** `ALTER FUNCTION … SET search_path = public`
+  for the three billing RPCs + `check_registration_window` —
+  `supabase/migrations/harden_definer_search_path.sql` (non-invasive; no body rewrite).
+- **SS11 — [Med] Staff PIN brute-forceable; kiosk lockout client-side only.**
+  `lookup_staff_by_pin` has no server-side throttle; the lockout is `sessionStorage`
+  (`clockin.html`), bypassable via direct RPC → 10⁴ brute force → payroll fraud + PII leak.
+  _Fix:_ server-side throttling; longer PINs.
+- **SS12 — [Med] No DB guard against overlapping open clock-ins.** Two tabs/taps insert two
+  `clock_out IS NULL` rows for the same staff+date; hours double-count. _Fix:_ partial unique
+  index `(staff_id, work_date) WHERE clock_out IS NULL` or clock via RPC.
+- **SS13 — [Med] ✅ FIXED (deploy edge fn + worker).** Strict email-format validation now
+  runs before the `.or(...ilike...)` filter in `send-schedule-confirmation/index.ts` and
+  `worker.js` (the regex rejects `, ( ) *` — note `encodeURIComponent` did NOT escape `*`).
+  _Redeploy the function and the worker._
+- **SS14 — [Med] ✅ FIXED.** Infant recurring-days note showed "none" from the Calendar tab;
+  now falls back to `fetchStudentRecurringDays` when the family isn't cached
+  (`admin-calendar.js`).
+- **SS15 — [Med] ✅ FIXED.** "Room Today" selector now shows a read-only multi-room label
+  (using the previously-dead `roomMap`) instead of letting a single-room edit overwrite a
+  staffer's other-room events (`admin-staffing.js`).
+
+## Low
+
+- **SS16 — [Low] `login_attempts` never decays** (`finalize_pin_hashing.sql:71`) — 5 fumbles
+  = permanent lockout pending email reset. _Fix:_ cooldown decay.
+- **SS17 — [Low] Clock-out RLS keyed on `work_date = CURRENT_DATE` vs browser-derived date** —
+  cross-midnight clock-outs rejected, shifts left open. _Fix:_ server-side America/Chicago
+  date; key RLS on row id + staff.
+- **SS18 — [Low] `pin_reset_tokens` cleanup never scheduled; consume leaks lifecycle.** _Fix:_
+  schedule `cleanup_pin_reset_tokens()`; collapse consume errors to one generic message.
+- **SS19 — [Low] Weekly discount lost on partial/closure weeks (policy).** [Public]
+  `isFullWeek = days.length === 5` (`js/app.js:776`). _Decide policy_ and apply it identically
+  in preview and submit (ties into SS1).
+
+_Checked and cleared (no bug):_ the family-session HMAC token **is** verified server-side in
+`worker.js` before push-subscribe; `consume_pin_reset` is atomic (`FOR UPDATE`);
+`push_subscriptions` RLS is service-role only; `send-schedule-change` enforces admin auth;
+`getWeekMonday`'s UTC `toISOString` is safe for US-Central; `getRegistrationWindow`/
+`getTargetMonthKey` rollovers are correct; the sibling-discount math is correct; and this
+branch's refactors introduced no regressions or namespace collisions.

@@ -248,6 +248,12 @@ export default {
       // Resolve family_id from parent_email if needed
       let resolvedFamilyId = family_id;
       if (!broadcast && !resolvedFamilyId && parent_email) {
+        // Validate the email before it goes into the PostgREST .or() filter.
+        // encodeURIComponent does NOT escape * ( ) ! ~ ' so a value like "*"
+        // would become ilike.* and match every family — reject those here.
+        if (typeof parent_email !== 'string' || !/^[^\s,()*@]+@[^\s,()*@]+\.[^\s,()*@]+$/.test(parent_email)) {
+          return new Response('Invalid parent_email', { status: 400 });
+        }
         const famRes = await fetch(
           `${SUPABASE_URL}/rest/v1/families?or=(parent_email.ilike.${encodeURIComponent(parent_email)},parent2_email.ilike.${encodeURIComponent(parent_email)})&select=id&limit=1`,
           { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
