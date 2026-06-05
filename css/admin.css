@@ -245,7 +245,7 @@
 }
 
 #regTable thead th {
-    background: #1F5278;
+    background: var(--navy-table);
     color: var(--white);
     padding: 12px 14px;
     text-align: left;
@@ -282,8 +282,8 @@
     margin: 2px;
     white-space: nowrap;
 }
-.badge-confirmed { background: var(--green-lt); color: #1a5c3e; }
-.badge-waitlist  { background: var(--tang-pale); color: #7a2a18; }
+.badge-confirmed { background: var(--green-lt); color: var(--green-dark); }
+.badge-waitlist  { background: var(--tang-pale); color: var(--tang-dark); }
 .date-chip em    { font-style: normal; font-weight: 700; }
 
 .btn-edit-days {
@@ -312,7 +312,7 @@
 
 .btn-approve {
     background: var(--white);
-    color: #1a5c3e;
+    color: var(--green-dark);
     border: 2px solid var(--green);
     padding: 5px 12px;
     border-radius: 7px;
@@ -342,7 +342,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .reg-status-badge.pending {
     background: var(--sun-pale);
-    color: #7a5a00;
+    color: var(--mustard-dark);
     border: 1px solid var(--sun-lt);
 }
 
@@ -428,7 +428,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .9em;
 }
 .roster-table thead th {
-    background: #1F5278;
+    background: var(--navy-table);
     color: var(--white);
     padding: 10px 14px;
     text-align: left;
@@ -559,7 +559,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .9em;
 }
 .report-table thead th {
-    background: #1F5278;
+    background: var(--navy-table);
     color: var(--white);
     padding: 11px 14px;
     text-align: left;
@@ -577,7 +577,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     border-top: 2px solid var(--border);
 }
 .report-num { text-align: right; }
-.report-revenue { color: #1a5c3e; font-weight: 600; }
+.report-revenue { color: var(--green-dark); font-weight: 600; }
 .report-total-row td { color: var(--text); }
 
 /* ── Attendance & Revenue unified report ── */
@@ -595,7 +595,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .ar-total-badge {
     font-weight: 700;
     font-size: 1.05em;
-    color: #1a5c3e;
+    color: var(--green-dark);
 }
 .ar-hint {
     font-size: 0.82em;
@@ -604,25 +604,25 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .ar-room-header {
     text-align: center;
-    background: #1F5278;
+    background: var(--navy-table);
     color: var(--white);
     border-left: 2px solid rgba(255,255,255,.2);
     font-size: 0.85em;
     white-space: nowrap;
 }
 .ar-room-header.ar-total-col {
-    background: #1F5278;
+    background: var(--navy-table);
 }
 .ar-sub-header {
     font-size: 0.78em;
     font-weight: 600;
-    background: #1F5278;
+    background: var(--navy-table);
     color: rgba(255,255,255,.85);
     white-space: nowrap;
     border-left: 1px solid rgba(255,255,255,.15);
 }
 .ar-sub-header.ar-total-col {
-    background: #1F5278;
+    background: var(--navy-table);
     border-left: 2px solid rgba(255,255,255,.2);
 }
 .ar-total-col {
@@ -636,8 +636,8 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
 /* Editable row hover */
 .ar-editable-row:hover { background: var(--sage-light, #e8f0e8); }
-.ar-editable-row.ar-editing { background: #fffbe6; }
-.ar-editable-row.ar-editing:hover { background: #fffbe6; }
+.ar-editable-row.ar-editing { background: var(--sun-edit); }
+.ar-editable-row.ar-editing:hover { background: var(--sun-edit); }
 
 /* Inline edit inputs */
 .ar-edit-input {
@@ -677,7 +677,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
 /* Add Month form */
 .ar-add-month-form {
-    background: #fffbe6;
+    background: var(--sun-edit);
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 16px 20px;
@@ -748,14 +748,14 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     color: var(--text-muted);
     max-width: 540px;
 }
-.override-status.override-open   { background: var(--green-pale); color: #1a5c3e; }
-.override-status.override-closed { background: var(--tang-pale); color: #7a2a18; }
+.override-status.override-open   { background: var(--green-pale); color: var(--green-dark); }
+.override-status.override-closed { background: var(--tang-pale); color: var(--tang-dark); }
 .override-status.override-auto   { background: var(--linen); color: var(--text); }
 
 /* Bill column in All Registrations table */
 .bill-cell {
     font-weight: 700;
-    color: #1a5c3e;
+    color: var(--green-dark);
     white-space: nowrap;
 }
 
@@ -839,15 +839,15 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     background: var(--green-pale);
     border: 1.5px solid var(--green-lt);
     border-radius: 7px;
-    color: #1a5c3e;
+    color: var(--green-dark);
     font-size: .9em;
 }
 .import-error {
     padding: 10px 14px;
     background: var(--tang-pale);
-    border: 1.5px solid #f2b89a;
+    border: 1.5px solid var(--tang-soft);
     border-radius: 7px;
-    color: #7a2a18;
+    color: var(--tang-dark);
     font-size: .88em;
 }
 
@@ -1170,7 +1170,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .btn-delete-msg {
     background: var(--white);
     color: var(--tang);
-    border: 1.5px solid #f2b89a;
+    border: 1.5px solid var(--tang-soft);
     padding: 4px 12px;
     border-radius: 6px;
     cursor: pointer;
@@ -1200,8 +1200,8 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
 /* Full / Half tally column */
 .tally-cell { white-space: nowrap; font-size: .88em; }
-.tally-full  { color: #1a5c3e; font-weight: 600; display: block; }
-.tally-half  { color: #7a5a00; font-weight: 600; display: block; }
+.tally-full  { color: var(--green-dark); font-weight: 600; display: block; }
+.tally-half  { color: var(--mustard-dark); font-weight: 600; display: block; }
 
 /* ============================================================
    ROOM CAPACITY CALENDAR MODAL
@@ -1349,7 +1349,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .rcal-cell-empty { background: transparent; border-color: transparent; min-height: 80px; }
 .rcal-cell-open   { background: var(--green-pale); border-color: var(--green-lt); }
 .rcal-cell-near   { background: var(--white)af0; border-color: var(--sun-lt); }
-.rcal-cell-full   { background: var(--tang-pale); border-color: #f2b89a; }
+.rcal-cell-full   { background: var(--tang-pale); border-color: var(--tang-soft); }
 .rcal-cell-closed { background: var(--cream); border-color: var(--border); }
 
 .rcal-day-num {
@@ -1361,8 +1361,8 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .82em;
     font-weight: 700;
 }
-.rcal-cell-open .rcal-count   { color: #1a5c3e; }
-.rcal-cell-near .rcal-count   { color: #7a5a00; }
+.rcal-cell-open .rcal-count   { color: var(--green-dark); }
+.rcal-cell-near .rcal-count   { color: var(--mustard-dark); }
 .rcal-cell-full .rcal-count   { color: var(--tang); }
 .rcal-cell-closed .rcal-count { color: var(--text-muted); }
 
@@ -1443,7 +1443,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
 .fm-restore-btn {
     background: var(--white);
-    color: #1a5c3e;
+    color: var(--green-dark);
     border: 1.5px solid var(--green);
 }
 .fm-restore-btn:hover { background: var(--green); color: var(--white); }
@@ -1465,7 +1465,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .fm-delete-btn {
     background: var(--white);
     color: var(--tang);
-    border: 1.5px solid #f2b89a;
+    border: 1.5px solid var(--tang-soft);
     padding: 3px 10px;
     border-radius: 6px;
     font-size: .78em;
@@ -1478,7 +1478,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
 .fm-lock-btn {
     background: var(--white);
-    color: #7a5a00;
+    color: var(--mustard-dark);
     border: 1.5px solid var(--sun-lt);
     padding: 3px 10px;
     border-radius: 6px;
@@ -1488,11 +1488,11 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     transition: all .2s;
     white-space: nowrap;
 }
-.fm-lock-btn:hover { background: #7a5a00; color: var(--white); border-color: #7a5a00; }
+.fm-lock-btn:hover { background: var(--mustard-dark); color: var(--white); border-color: var(--mustard-dark); }
 
 .fm-unlock-btn {
     background: var(--white);
-    color: #1a5c3e;
+    color: var(--green-dark);
     border: 1.5px solid var(--green-lt);
     padding: 3px 10px;
     border-radius: 6px;
@@ -1502,12 +1502,12 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     transition: all .2s;
     white-space: nowrap;
 }
-.fm-unlock-btn:hover { background: #1a5c3e; color: var(--white); border-color: #1a5c3e; }
+.fm-unlock-btn:hover { background: var(--green-dark); color: var(--white); border-color: var(--green-dark); }
 
 .family-badge-locked {
     display: inline-block;
     background: var(--tang-pale);
-    color: #7a5a00;
+    color: var(--mustard-dark);
     padding: 2px 8px;
     border-radius: 10px;
     font-size: .72em;
@@ -1518,7 +1518,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .btn-danger {
     background: var(--tang-pale);
     color: var(--tang);
-    border: 1.5px solid #f2b89a;
+    border: 1.5px solid var(--tang-soft);
     padding: 5px 10px;
     border-radius: 6px;
     font-size: .78em;
@@ -1623,7 +1623,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .family-badge-summer {
     display: inline-block;
     background: var(--tang-pale);
-    color: #7a5a00;
+    color: var(--mustard-dark);
     border: 1px solid var(--sun-lt);
     padding: 2px 8px;
     border-radius: 10px;
@@ -1705,7 +1705,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     border-radius: 6px;
     border: 1px solid #d97706;
     background: #fff;
-    color: #92400e;
+    color: var(--amber-dark);
     font-size: .82em;
     font-weight: 600;
     cursor: pointer;
@@ -1713,7 +1713,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     transition: background .15s;
 }
 .dh-filter-btn:hover, .dh-filter-btn.active {
-    background: #92400e;
+    background: var(--amber-dark);
     color: #fff;
 }
 .dh-dismiss-btn {
@@ -2162,7 +2162,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .day-detail-full-badge {
     display: inline-block;
     background: var(--tang-pale);
-    color: #7a2a18;
+    color: var(--tang-dark);
     font-size: .78em;
     font-weight: 700;
     padding: 2px 8px;
@@ -2301,7 +2301,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .rates-room-label { min-width: 140px; }
 .rates-room-label strong { display: block; color: var(--text); }
 .rates-ages { display: block; font-size: .8em; color: var(--text-muted); margin-top: 2px; }
-.rates-badge-soon { display: inline-block; font-size: .7em; font-weight: 700; color: #92400e; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; text-transform: uppercase; letter-spacing: .03em; }
+.rates-badge-soon { display: inline-block; font-size: .7em; font-weight: 700; color: var(--amber-dark); background: var(--sun-badge); border: 1px solid #fcd34d; border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; text-transform: uppercase; letter-spacing: .03em; }
 
 .rate-input {
     width: 100px;
@@ -2456,7 +2456,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .staff-table { width: 100%; }
 
 .staff-room-header {
-    background: #1F5278;
+    background: var(--navy-table);
     color: var(--white);
     text-align: center;
     border-left: 2px solid rgba(255,255,255,.2);
@@ -2464,7 +2464,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .staff-sub-head {
     font-size: .8em;
     font-weight: 600;
-    background: #1F5278;
+    background: var(--navy-table);
     color: rgba(255,255,255,.85);
     text-align: center;
     border-left: 1px solid rgba(255,255,255,.15);
@@ -2538,7 +2538,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     padding: 5px 8px;
 }
 .staff-shift-am { background: var(--linen); color: var(--navy); border-left: 2px solid var(--green-lt); }
-.staff-shift-pm { background: var(--sun-pale); color: #7a5a00; border-left: 2px solid var(--sun-lt); }
+.staff-shift-pm { background: var(--sun-pale); color: var(--mustard-dark); border-left: 2px solid var(--sun-lt); }
 .shift-am { background: rgba(174,214,241,.15); border-left: 1px solid var(--border); }
 .shift-pm { background: rgba(249,231,159,.15); border-left: 1px solid var(--border); }
 .shift-am-chip {
@@ -2547,7 +2547,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .shift-pm-chip {
     display: inline-block; padding: 1px 6px; border-radius: 4px;
-    background: var(--sun-pale); color: #7a5a00; font-size: .8em; font-weight: 700;
+    background: var(--sun-pale); color: var(--mustard-dark); font-size: .8em; font-weight: 700;
 }
 
 /* Pay type chips */
@@ -2568,7 +2568,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
 .clock-events-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 200px; }
 .clock-event-item  { font-size: 0.85rem; color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.clock-event-open .clock-event-label { color: #7a5a00; font-weight: 600; }
+.clock-event-open .clock-event-label { color: var(--mustard-dark); font-weight: 600; }
 .clock-event-open input[type="time"] { font-size: 0.82rem; padding: 2px 4px; }
 .clock-add-form    { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.85rem; margin-top: 2px; }
 .clock-add-form input[type="time"] { font-size: 0.82rem; padding: 2px 4px; }
@@ -2576,7 +2576,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .show-add-clock-btn { font-size: 0.8rem; align-self: flex-start; }
 .clock-in-now-btn   { font-size: 0.8rem; align-self: flex-start; }
 .clock-edit-btn, .clock-delete-btn { font-size: 0.75rem; padding: 1px 6px; }
-.clock-delete-btn   { color: #7a2a18; }
+.clock-delete-btn   { color: var(--tang-dark); }
 .clock-edit-form    { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.85rem; margin-top: 2px; }
 .clock-edit-form input[type="time"] { font-size: 0.82rem; padding: 2px 4px; }
 
@@ -2678,7 +2678,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-weight: 600;
 }
 .shift-am-th { background: var(--green-pale) !important; color: var(--navy) !important; }
-.shift-pm-th { background: var(--sun-pale) !important; color: #7a5a00 !important; }
+.shift-pm-th { background: var(--sun-pale) !important; color: var(--mustard-dark) !important; }
 
 /* ============================================================
    STATUS CHIPS  (reused across features)
@@ -2691,8 +2691,8 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-weight: 600;
     line-height: 1.6;
 }
-.chip-confirmed { background: var(--green-pale); color: #1a5c3e; }
-.chip-waitlist  { background: var(--sun-pale); color: #7a5a00; }
+.chip-confirmed { background: var(--green-pale); color: var(--green-dark); }
+.chip-waitlist  { background: var(--sun-pale); color: var(--mustard-dark); }
 
 /* ============================================================
    WAITLIST ADMIN — Cards
@@ -2729,17 +2729,17 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
 /* Priority badges */
 .wl-pri-badge { border-radius: 6px; padding: 1px 8px; font-size: .78em; font-weight: 700; }
-.wl-sib       { background: var(--sun-pale); color: #7a5a00; }
+.wl-sib       { background: var(--sun-pale); color: var(--mustard-dark); }
 .wl-prenatal  { background: var(--sun-pale); color: var(--navy); }
-.wl-expired-warn { background: var(--tang-pale); color: #7a2a18; }
+.wl-expired-warn { background: var(--tang-pale); color: var(--tang-dark); }
 
 /* Status badges */
 .wl-badge         { border-radius: 12px; padding: 2px 9px; font-size: .78em; font-weight: 700; white-space: nowrap; }
 .wl-badge-pending  { background: var(--linen); color: var(--navy); }
-.wl-badge-offered  { background: var(--sun-pale); color: #7a5a00; }
-.wl-badge-accepted { background: var(--green-pale); color: #1a5c3e; }
-.wl-badge-enrolled { background: var(--green-pale); color: #1a5c3e; border: 1px solid var(--green-lt); }
-.wl-badge-expired  { background: var(--tang-pale); color: #7a2a18; }
+.wl-badge-offered  { background: var(--sun-pale); color: var(--mustard-dark); }
+.wl-badge-accepted { background: var(--green-pale); color: var(--green-dark); }
+.wl-badge-enrolled { background: var(--green-pale); color: var(--green-dark); border: 1px solid var(--green-lt); }
+.wl-badge-expired  { background: var(--tang-pale); color: var(--tang-dark); }
 .wl-badge-archived { background: var(--linen); color: var(--text-muted); }
 
 /* Detail rows */
@@ -2755,7 +2755,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     border-radius: 7px;
     padding: 6px 12px;
     font-size: .85em;
-    color: #7a5a00;
+    color: var(--mustard-dark);
     margin-top: 8px;
 }
 
@@ -2903,15 +2903,15 @@ tr.pending-approval:hover { background: var(--sun-pale); }
    ROOM SCHEDULE PLANNER
    ============================================================ */
 .sched-cell        { text-align: center; font-size: .9rem; padding: 6px 10px; }
-.sched-near        { background: var(--sun-pale); color: #7a5a00; font-weight: 600; }
-.sched-full        { background: var(--tang-pale); color: #7a2a18; font-weight: 700; }
+.sched-near        { background: var(--sun-pale); color: var(--mustard-dark); font-weight: 600; }
+.sched-full        { background: var(--tang-pale); color: var(--tang-dark); font-weight: 700; }
 .sched-legend      { font-size: .78em; color: var(--text-muted); margin-top: 8px; }
-.sched-near-swatch { display: inline-block; width: 10px; height: 10px; background: var(--sun-pale); border: 1px solid #7a5a00; border-radius: 2px; vertical-align: middle; }
+.sched-near-swatch { display: inline-block; width: 10px; height: 10px; background: var(--sun-pale); border: 1px solid var(--mustard-dark); border-radius: 2px; vertical-align: middle; }
 .sched-full-swatch { display: inline-block; width: 10px; height: 10px; background: var(--tang-pale); border: 1px solid var(--tang); border-radius: 2px; vertical-align: middle; }
 
 /* YTD discount column */
-.ytd-discount-cell  { color: #7a5a00; }
-.ytd-discount-total { color: #7a5a00; font-weight: 600; font-size: .95em; }
+.ytd-discount-cell  { color: var(--mustard-dark); }
+.ytd-discount-total { color: var(--mustard-dark); font-weight: 600; font-size: .95em; }
 
 
 /* ============================================================
@@ -2978,7 +2978,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .roster-day-full   { background: var(--tang-pale); }
 .roster-day-full .roster-count-cell { color: var(--tang); font-weight: 700; }
 .roster-day-near   { background: var(--sun-pale); }
-.roster-day-near .roster-count-cell { color: #7a5a00; font-weight: 600; }
+.roster-day-near .roster-count-cell { color: var(--mustard-dark); font-weight: 600; }
 
 .roster-child {
     display: inline-block;
@@ -2992,7 +2992,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .roster-child.roster-half {
     background: var(--sun-pale);
-    color: #7a5a00;
+    color: var(--mustard-dark);
 }
 .roster-empty-day {
     color: var(--border);
@@ -3221,7 +3221,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .ar-cap-badge { display:block; font-size:.68em; font-weight:600; margin-top:3px; border-radius:3px; padding:1px 3px; text-align:center; }
 .ar-cap-open  { color:#15803d; background:#dcfce7; }
-.ar-cap-near  { color:#b45309; background:#fef3c7; }
+.ar-cap-near  { color:#b45309; background:var(--sun-badge); }
 .ar-cap-full  { color:#b91c1c; background:#fee2e2; }
 
 /* ── BILLING MODULE ─────────────────────────────────────────── */
@@ -3271,7 +3271,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .78em;
     font-weight: 700;
     background: var(--green-lt);
-    color: #1a5c3e;
+    color: var(--green-dark);
 }
 .bl-badge-partial {
     display: inline-block;
@@ -3279,8 +3279,8 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     border-radius: 20px;
     font-size: .78em;
     font-weight: 700;
-    background: #fef3c7;
-    color: #92400e;
+    background: var(--sun-badge);
+    color: var(--amber-dark);
 }
 .bl-badge-overdue {
     display: inline-block;
@@ -3289,7 +3289,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .78em;
     font-weight: 700;
     background: var(--tang-pale);
-    color: #7a2a18;
+    color: var(--tang-dark);
 }
 .bl-badge-none {
     display: inline-block;
@@ -3326,8 +3326,8 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     border-radius: 20px;
     font-size: .78em;
     font-weight: 700;
-    background: #fef3c7;
-    color: #92400e;
+    background: var(--sun-badge);
+    color: var(--amber-dark);
     margin-left: 6px;
 }
 
@@ -3402,7 +3402,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 /* Import summary */
 .bl-import-summary {
     background: var(--green-lt);
-    color: #1a5c3e;
+    color: var(--green-dark);
     border-radius: 8px;
     padding: 14px 18px;
     font-weight: 600;
@@ -3464,7 +3464,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     white-space: nowrap;
 }
 .hist-payroll-badge.detail { background: #d1fae5; color: #065f46; }
-.hist-payroll-badge.center-wide { background: #fef3c7; color: #92400e; }
+.hist-payroll-badge.center-wide { background: var(--sun-badge); color: var(--amber-dark); }
 .hist-payroll-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .hist-staff-detail { padding: 10px 14px 14px; border-top: 1px solid var(--border); background: #f9fafb; display: none; }
 .hist-staff-detail.open { display: block; }
@@ -3497,7 +3497,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .hist-payroll-preview td { padding: 4px 8px; border-bottom: 1px solid #f0f0f0; }
 .hist-payroll-preview tr.match-yes td:first-child { color: #065f46; font-weight: 600; }
-.hist-payroll-preview tr.match-float td:first-child { color: #92400e; font-weight: 600; }
+.hist-payroll-preview tr.match-float td:first-child { color: var(--amber-dark); font-weight: 600; }
 .hist-payroll-preview tr.match-skip td { color: #9ca3af; font-style: italic; }
 .hist-import-actions { margin-top: 10px; display: flex; gap: 8px; align-items: center; }
 .hist-import-status { font-size: .82em; color: var(--text-muted); }

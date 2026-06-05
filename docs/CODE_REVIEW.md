@@ -342,7 +342,7 @@ Items keep their finding labels for reference. Check off as completed.
 - [ ] **U7** — Note hidden months in lookup
 
 ### Wave 4 — Design system
-- [ ] **V1** — Hardcoded hex → `:root` design tokens
+- [~] **V1** — Tokenized the brand-derived dark/badge colors (`--navy-table`, `--green-dark`, `--mustard-dark`, `--tang-dark`, `--amber-dark`, `--sun-badge`, `--sun-edit`, `--tang-soft`) — ~90 literals replaced, value-preserving. Generic grays / semantic Tailwind-ish colors deferred to V3 (naming is a design decision)
 - [ ] **V4** — Extract shared `css/variables.css`, dedupe `:root`/fonts
 - [ ] **V5** — Consolidate duplicate `.btn-*` rules
 - [ ] **V2** — Migrate ~300 inline `style=` to CSS classes
