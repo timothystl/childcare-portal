@@ -419,6 +419,19 @@
 
     .report-section-label:first-child { margin-top: 0; }
 
+    .report-subtotal {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      background: var(--warm-gray);
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--navy);
+      margin: 4px 0 12px;
+    }
+
     .report-grand-total {
       background: var(--navy);
       color: var(--white);
@@ -524,21 +537,44 @@
       .print-bar,
       .toggle-btn { display: none !important; }
 
-      body { background: white; }
+      body { background: white; font-size: 11px; }
       #dashboard { padding: 0; max-width: 100%; }
-      .page-header { border-bottom: 2px solid #999; margin-bottom: 16px; }
-      .page-header h1 { font-size: 1.1rem; }
+      .page-header { border-bottom: 1.5px solid #999; margin-bottom: 10px; padding-bottom: 6px; }
+      .page-header h1 { font-size: 1rem; }
       .card { border: none; padding: 0; margin: 0; box-shadow: none; }
+
+      /* Two-column grid so more staff fit per page */
+      #reportSection { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: start; }
+      .report-header,
+      .report-section-label,
+      .report-subtotal,
+      .report-grand-total { grid-column: 1 / -1; }
 
       .staff-block {
         border: 1px solid #ccc;
         break-inside: avoid;
-        margin-bottom: 12px;
+        margin-bottom: 0;
       }
 
-      .staff-block-header { background: #01294A !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .staff-block-header {
+        padding: 5px 10px;
+        background: #01294A !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
 
-      .report-grand-total { background: #01294A !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .staff-block-header .sname { font-size: 0.82rem; }
+
+      .line-items { padding: 4px 10px 6px; }
+      .line-item { padding: 2px 0; font-size: 0.8rem; }
+
+      .report-subtotal { padding: 5px 12px; margin: 4px 0; font-size: 0.82rem; }
+      .report-grand-total { padding: 8px 14px; font-size: 0.92rem; margin-top: 4px;
+        background: #01294A !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+      .report-header h2 { font-size: 1rem; }
+      .report-header { margin-bottom: 8px; }
+      .report-section-label { margin: 6px 0 4px; font-size: 0.72rem; }
     }
   </style>
 </head>
@@ -1186,25 +1222,28 @@ function renderReport(periodStart, periodEnd) {
     let grandTotal = 0;
 
     // ── MDO section ──
-    let mdoHtml = '';
+    let mdoHtml = '', mdoTotal = 0;
     if (mdoStaff.length) {
-        mdoHtml = '<div class="report-section-label">MDO Staff</div>';
         mdoStaff.forEach(s => {
             const gross = calcMdoGross(s);
+            mdoTotal   += gross;
             grandTotal += gross;
-            mdoHtml += renderMdoStaffBlock(s, gross);
+            mdoHtml    += renderMdoStaffBlock(s, gross);
         });
+        mdoHtml += `<div class="report-subtotal"><span>MDO Subtotal</span><span>$${fmtMoney(mdoTotal)}</span></div>`;
     }
 
     // ── Church section ──
-    let churchHtml = '';
+    let churchHtml = '', churchTotal = 0;
     if (churchStaff.length) {
         churchHtml = '<div class="report-section-label">Church Staff</div>';
         churchStaff.forEach(s => {
-            const gross = calcGross(s);
-            grandTotal += gross;
-            churchHtml += renderStaffBlock(s, periodStart, gross);
+            const gross  = calcGross(s);
+            churchTotal += gross;
+            grandTotal  += gross;
+            churchHtml  += renderStaffBlock(s, periodStart, gross);
         });
+        churchHtml += `<div class="report-subtotal"><span>Church Subtotal</span><span>$${fmtMoney(churchTotal)}</span></div>`;
     }
 
     if (!mdoStaff.length && !churchStaff.length) {
@@ -1243,7 +1282,6 @@ function renderMdoStaffBlock(s, gross) {
     return `<div class="staff-block">
         <div class="staff-block-header">
             <span class="sname">${esc(s.name)}</span>
-            <span class="srole">${esc(room)}</span>
         </div>
         <div class="line-items">
             ${earningsLines}
