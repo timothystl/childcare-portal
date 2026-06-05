@@ -118,7 +118,7 @@
       position: sticky;
       top: 0;
       z-index: 100;
-      background: var(--navy);
+      background: var(--cream);
       padding: 0 28px;
       border-bottom: 3px solid var(--gold);
     }
@@ -146,14 +146,14 @@
     .nav-brand-text {
       font-size: 14px;
       font-weight: 800;
-      color: var(--white);
+      color: var(--navy);
       line-height: 1.2;
     }
     .nav-brand-text span {
       display: block;
       font-size: 11px;
       font-weight: 600;
-      color: rgba(255,255,255,.6);
+      color: rgba(28,49,96,.6);
       letter-spacing: .04em;
     }
     .nav-links {
@@ -165,13 +165,13 @@
     .nav-links a {
       font-size: 13px;
       font-weight: 700;
-      color: rgba(255,255,255,.8);
+      color: var(--navy);
       text-decoration: none;
       padding: 6px 12px;
       border-radius: var(--radius-sm);
       transition: background .15s, color .15s;
     }
-    .nav-links a:hover { background: rgba(255,255,255,.1); color: var(--white); }
+    .nav-links a:hover { background: rgba(28,49,96,.08); color: var(--navy); }
     .nav-links .nav-cta {
       background: var(--gold);
       color: var(--navy);
@@ -390,7 +390,7 @@
     ════════════════════════════════════════════════════ */
     .rooms-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 20px;
       margin-top: 48px;
     }
@@ -679,7 +679,7 @@
        FOOTER
     ════════════════════════════════════════════════════ */
     .site-footer {
-      background: #111e3a;
+      background: var(--navy);
       padding: 52px 28px 32px;
     }
     .footer-inner {
@@ -743,7 +743,7 @@
        RESPONSIVE
     ════════════════════════════════════════════════════ */
     @media (max-width: 900px) {
-      .rooms-grid { grid-template-columns: 1fr 1fr; }
+      .rooms-grid { grid-template-columns: repeat(3, 1fr); }
       .pillars-grid { grid-template-columns: 1fr 1fr; }
       .how-grid { grid-template-columns: 1fr; gap: 40px; }
       .hero-inner { grid-template-columns: 1fr; }
@@ -946,6 +946,25 @@
             <strong>$45</strong>
           </div>
           <div class="room-capacity">Max 11 children · 1:8 ratio</div>
+        </div>
+      </div>
+
+      <div class="room-card">
+        <div class="room-header">
+          <span class="room-emoji">🪿</span>
+          <div class="room-name">Goose Room</div>
+          <div class="room-ages">2½ – 3 years</div>
+        </div>
+        <div class="room-body">
+          <div class="room-rate-row">
+            <span>Full Day</span>
+            <strong>$75</strong>
+          </div>
+          <div class="room-rate-row">
+            <span>Half Day</span>
+            <strong>$45</strong>
+          </div>
+          <div class="room-capacity">Max 12 children · 1:8 ratio</div>
         </div>
       </div>
 
@@ -1289,7 +1308,7 @@
     </div>
   </div>
   <div class="footer-base">
-    <p>© 2026 Timothy Lutheran Church · Mother's Day Out</p>
+    <p>© 2026 Timothy Lutheran Church · Mother's Day Out · v1.15.24</p>
     <p>
       <a href="https://www.timothystl.org/ministries/mothers-day-out">timothystl.org</a>
     </p>
