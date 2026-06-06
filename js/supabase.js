@@ -386,8 +386,6 @@ async function deleteClosure(closeDate) {
 async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates = [], status = 'confirmed', submittedBy = 'parent1' }) {
     if (!sbClient) throw new Error('Supabase is not configured yet.');
 
-    const monthKey = confirmedDates[0]?.date?.slice(0, 7) || null;
-
     const { data: reg, error: regError } = await sbClient
         .from('registrations')
         .insert({
@@ -400,7 +398,6 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
             room_id:      roomId,
             status:       status,
             submitted_by: submittedBy,
-            month_key:    monthKey,
         })
         .select()
         .single();
@@ -2143,18 +2140,48 @@ async function fetchConfirmedEnrollmentByRoom() {
 
 async function fetchEnrollmentByRoomForMonths(monthKeys) {
     if (!sbClient || !monthKeys.length) return {};
-    const { data, error } = await sbClient
+
+    // Fetch confirmed registration IDs and their rooms
+    const { data: regs, error: regErr } = await sbClient
         .from('registrations')
-        .select('id, room_id, month_key')
-        .eq('status', 'confirmed')
-        .in('month_key', monthKeys);
-    if (error) throw error;
+        .select('id, room_id')
+        .eq('status', 'confirmed');
+    if (regErr) throw regErr;
+    if (!regs || !regs.length) return {};
+
+    const regRoomMap = Object.fromEntries(regs.map(r => [r.id, r.room_id]));
+
+    // Build date range spanning all requested months
+    const sorted = [...monthKeys].sort();
+    const [lastYr, lastMo] = sorted[sorted.length - 1].split('-');
+    const afterLast = lastMo === '12'
+        ? `${parseInt(lastYr) + 1}-01-01`
+        : `${lastYr}-${String(parseInt(lastMo) + 1).padStart(2, '0')}-01`;
+
+    const { data: dates, error: datesErr } = await sbClient
+        .from('registration_dates')
+        .select('registration_id, care_date')
+        .in('registration_id', regs.map(r => r.id))
+        .gte('care_date', sorted[0] + '-01')
+        .lt('care_date', afterLast)
+        .eq('waitlisted', false);
+    if (datesErr) throw datesErr;
+
+    // Count unique registrations per room per month (one registration = one child for that month)
+    const seen = new Set();
     const countsByRoomMonth = {};
-    for (const reg of (data || [])) {
-        if (!countsByRoomMonth[reg.room_id]) countsByRoomMonth[reg.room_id] = {};
-        countsByRoomMonth[reg.room_id][reg.month_key] =
-            (countsByRoomMonth[reg.room_id][reg.month_key] || 0) + 1;
+    for (const d of (dates || [])) {
+        const mk = d.care_date.slice(0, 7);
+        if (!monthKeys.includes(mk)) continue;
+        const dedupeKey = `${d.registration_id}-${mk}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        const roomId = regRoomMap[d.registration_id];
+        if (!roomId) continue;
+        if (!countsByRoomMonth[roomId]) countsByRoomMonth[roomId] = {};
+        countsByRoomMonth[roomId][mk] = (countsByRoomMonth[roomId][mk] || 0) + 1;
     }
+
     const avg = {};
     for (const [roomId, monthCounts] of Object.entries(countsByRoomMonth)) {
         const counts = Object.values(monthCounts);
