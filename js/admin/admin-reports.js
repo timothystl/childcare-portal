@@ -757,9 +757,9 @@ function renderScheduleTables(weekDates, counts, assignments) {
 
     // Lock out already-chosen names within the same date/room/shift group
     function _syncGroup(sel) {
-        const { date, room, shift } = sel.dataset;
+        const { date, shift } = sel.dataset;
         const group = [...container.querySelectorAll(
-            `select.sched-staff-select[data-date="${date}"][data-room="${CSS.escape(room)}"][data-shift="${shift}"]`
+            `select.sched-staff-select[data-date="${date}"][data-shift="${shift}"]`
         )];
         group.forEach(s => {
             const othersChosen = new Set(group.filter(g => g !== s && g.value).map(g => g.value));
@@ -779,7 +779,7 @@ function renderScheduleTables(weekDates, counts, assignments) {
     const seenGroups = new Set();
     container.querySelectorAll('select.sched-staff-select').forEach(sel => {
         if (!sel.value) return;
-        const key = `${sel.dataset.date}|${sel.dataset.room}|${sel.dataset.shift}`;
+        const key = `${sel.dataset.date}|${sel.dataset.shift}`;
         if (!seenGroups.has(key)) { seenGroups.add(key); _syncGroup(sel); }
     });
 }

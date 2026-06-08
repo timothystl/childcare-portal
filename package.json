@@ -1,6 +1,6 @@
 {
   "name": "childcare-portal",
-  "version": "1.15.33",
+  "version": "1.15.34",
   "private": true,
   "description": "Timothy Lutheran MDO Registration Portal — build tooling",
   "scripts": {
