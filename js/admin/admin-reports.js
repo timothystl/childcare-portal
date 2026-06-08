@@ -456,6 +456,8 @@ async function _loadScheduleForWeek() {
             '<p class="empty-hint">No school days in this week (all days are weekends or closures).</p>';
         return;
     }
+    // Ensure staff list is loaded so dropdowns are populated immediately
+    if (!allStaffData.length) await loadStaffList();
     const counts = _buildShiftCounts(weekDates);
     try {
         const rows = await fetchStaffScheduleWeek(weekDates[0], weekDates[weekDates.length - 1]);
@@ -751,6 +753,34 @@ function renderScheduleTables(weekDates, counts, assignments) {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Staff Schedule');
         XLSX.writeFile(wb, `staff-schedule-${weekOf}.xlsx`);
+    });
+
+    // Lock out already-chosen names within the same date/room/shift group
+    function _syncGroup(sel) {
+        const { date, room, shift } = sel.dataset;
+        const group = [...container.querySelectorAll(
+            `select.sched-staff-select[data-date="${date}"][data-room="${CSS.escape(room)}"][data-shift="${shift}"]`
+        )];
+        group.forEach(s => {
+            const othersChosen = new Set(group.filter(g => g !== s && g.value).map(g => g.value));
+            for (const opt of s.options) {
+                if (!opt.value) continue;
+                opt.disabled = othersChosen.has(opt.value);
+            }
+        });
+    }
+
+    container.addEventListener('change', e => {
+        const sel = e.target.closest('select.sched-staff-select');
+        if (sel) _syncGroup(sel);
+    });
+
+    // Apply locking to any pre-filled selects (from auto-fill or saved schedule)
+    const seenGroups = new Set();
+    container.querySelectorAll('select.sched-staff-select').forEach(sel => {
+        if (!sel.value) return;
+        const key = `${sel.dataset.date}|${sel.dataset.room}|${sel.dataset.shift}`;
+        if (!seenGroups.has(key)) { seenGroups.add(key); _syncGroup(sel); }
     });
 }
 
