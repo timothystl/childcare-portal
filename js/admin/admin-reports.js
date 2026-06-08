@@ -460,16 +460,13 @@ async function _loadScheduleForWeek() {
     try {
         const rows = await fetchStaffScheduleWeek(weekDates[0], weekDates[weekDates.length - 1]);
         if (rows.length) {
-            const assignments    = _dbRowsToAssignments(rows, weekDates);
-            _autoFillAssignments = assignments;
-            _autoFillWeekDates   = weekDates;
-            _autoFillCounts      = counts;
-            renderAutoFillSchedule(weekDates, assignments, counts);
+            const assignments = _dbRowsToAssignments(rows, weekDates);
+            renderScheduleTables(weekDates, counts, assignments);
             return;
         }
     } catch (_) { /* fall through */ }
-    // No saved schedule — show staffing requirements only
-    renderStaffSchedule(weekDates, counts);
+    // No saved schedule — show empty schedule tables
+    renderScheduleTables(weekDates, counts, null);
 }
 
 function _buildWeekDates(weekOf) {
@@ -532,115 +529,291 @@ function generateStaffSchedule() {
         return;
     }
     const counts = _buildShiftCounts(weekDates);
-    renderStaffSchedule(weekDates, counts);
+    renderScheduleTables(weekDates, counts, null);
 }
 
-function renderStaffSchedule(weekDates, counts) {
+// ============================================================
+// PER-ROOM SCHEDULE TABLE RENDERER
+// ============================================================
+// Renders one table per room: days across the top, kids counts + staff dropdowns down the side.
+// assignments: { date: { roomId: { am: [name,...], pm: [name,...] } } } or null for empty dropdowns.
+
+function renderScheduleTables(weekDates, counts, assignments) {
+    _autoFillWeekDates = weekDates;
+    _autoFillCounts    = counts;
+
     const container  = document.getElementById('staffContent');
-    const dayNames   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    // Each room gets 4 columns: AM Kids, AM Staff, PM Kids, PM Staff
-    const roomHeaders = ROOMS.map(r =>
-        `<th colspan="4" class="staff-room-header">${r.label}</th>`).join('');
-    const shiftHeaders = ROOMS.map(() =>
-        `<th colspan="2" class="staff-shift-head staff-shift-am">AM 8:15–1:15</th>` +
-        `<th colspan="2" class="staff-shift-head staff-shift-pm">PM 1:00–5:00</th>`).join('');
-    const subHeaders = ROOMS.map(() =>
-        `<th class="staff-sub-head">Kids</th><th class="staff-sub-head">Staff</th>` +
-        `<th class="staff-sub-head">Kids</th><th class="staff-sub-head">Staff</th>`).join('');
+    const activeStaff = (allStaffData || []).filter(s => s.active);
 
-    const dataRows = weekDates.map(d => {
-        const dt    = new Date(d + 'T00:00:00');
-        const label = `${dayNames[dt.getDay()]} ${friendlyShort(d)}`;
-        const cells = ROOMS.map(room => {
-            const c       = counts[d][room.id] || { total: 0, halfDay: 0, fullDay: 0 };
-            const ratio   = room.staffRatio || 10;
-            // AM shift: all kids present (half-day + full-day)
-            const amKids  = c.total;
-            const amStaff = amKids > 0 ? Math.ceil(amKids / ratio) : 0;
-            // PM shift: full-day kids only
-            const pmKids  = c.fullDay;
-            const pmStaff = pmKids > 0 ? Math.ceil(pmKids / ratio) : 0;
-            const amCls   = amStaff >= 3 ? 'staff-high' : amStaff === 2 ? 'staff-mid' : '';
-            const pmCls   = pmStaff >= 3 ? 'staff-high' : pmStaff === 2 ? 'staff-mid' : '';
-            return `<td class="report-num shift-am">${amKids || '—'}</td>` +
-                   `<td class="report-num shift-am ${amCls}">${amStaff > 0 ? amStaff : '—'}</td>` +
-                   `<td class="report-num shift-pm">${pmKids || '—'}</td>` +
-                   `<td class="report-num shift-pm ${pmCls}">${pmStaff > 0 ? pmStaff : '—'}</td>`;
+    function buildOpts(preSelected) {
+        let html = '<option value="">—</option>';
+        let found = false;
+        for (const s of activeStaff) {
+            const sel = s.name === preSelected ? ' selected' : '';
+            if (sel) found = true;
+            html += `<option value="${escHtml(s.name)}"${sel}>${escHtml(s.name)}</option>`;
+        }
+        if (preSelected && !found) {
+            html += `<option value="${escHtml(preSelected)}" selected>${escHtml(preSelected)}</option>`;
+        }
+        return html;
+    }
+
+    const roomBlocks = ROOMS.map(room => {
+        const ratio = room.staffRatio || 10;
+        const hasEnrollment = weekDates.some(d => (counts[d]?.[room.id]?.total || 0) > 0);
+
+        const maxAmNeed = weekDates.reduce((mx, d) => {
+            const total = counts[d]?.[room.id]?.total || 0;
+            return Math.max(mx, total > 0 ? Math.ceil(total / ratio) : 0);
+        }, 0);
+        const maxPmNeed = weekDates.reduce((mx, d) => {
+            const fd = counts[d]?.[room.id]?.fullDay || 0;
+            return Math.max(mx, fd > 0 ? Math.ceil(fd / ratio) : 0);
+        }, 0);
+
+        const numCols = weekDates.length + 1;
+
+        const dayHeaders = weekDates.map(d => {
+            const dt = new Date(d + 'T00:00:00');
+            return `<th class="sched-day-head">${DAY_ABBR[dt.getDay()]}<br><span class="sched-day-date">${friendlyShort(d)}</span></th>`;
         }).join('');
-        return `<tr><td class="staff-date-cell">${label}</td>${cells}</tr>`;
-    }).join('');
 
-    const totalCells = ROOMS.map(room => {
-        const ratio   = room.staffRatio || 10;
-        const avgAm   = weekDates.length
-            ? (weekDates.reduce((s, d) => s + ((counts[d][room.id] || {}).total || 0), 0) / weekDates.length).toFixed(1)
-            : 0;
-        const avgPm   = weekDates.length
-            ? (weekDates.reduce((s, d) => s + ((counts[d][room.id] || {}).fullDay || 0), 0) / weekDates.length).toFixed(1)
-            : 0;
-        return `<td class="report-num shift-am"><em>avg ${avgAm}</em></td>` +
-               `<td class="report-num shift-am"><em>1:${ratio}</em></td>` +
-               `<td class="report-num shift-pm"><em>avg ${avgPm}</em></td>` +
-               `<td class="report-num shift-pm"><em>1:${ratio}</em></td>`;
+        if (!hasEnrollment) {
+            return `
+            <div class="room-schedule-block">
+                <div class="room-schedule-title">
+                    <span class="room-sched-label">${escHtml(room.label)}</span>
+                    <span class="room-sched-ratio">Ratio 1:${ratio}</span>
+                </div>
+                <div class="table-wrapper">
+                    <table class="report-table room-sched-table">
+                        <thead><tr><th class="sched-row-label-head"></th>${dayHeaders}</tr></thead>
+                        <tbody>
+                            <tr><td colspan="${numCols}" class="sched-no-enrollment">No enrollment this week</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        }
+
+        const halfDayCells = weekDates.map(d => {
+            const v = counts[d]?.[room.id]?.halfDay || 0;
+            return `<td class="sched-kids-cell">${v || '—'}</td>`;
+        }).join('');
+        const fullDayCells = weekDates.map(d => {
+            const v = counts[d]?.[room.id]?.fullDay || 0;
+            return `<td class="sched-kids-cell">${v || '—'}</td>`;
+        }).join('');
+        const amKidsCells = weekDates.map(d => {
+            const v = counts[d]?.[room.id]?.total || 0;
+            return `<td class="sched-kids-cell sched-am-cell">${v || '—'}</td>`;
+        }).join('');
+        const amNeededCells = weekDates.map(d => {
+            const total = counts[d]?.[room.id]?.total || 0;
+            const need  = total > 0 ? Math.ceil(total / ratio) : 0;
+            return `<td class="sched-need-cell sched-am-cell">${need || '—'}</td>`;
+        }).join('');
+        const pmKidsCells = weekDates.map(d => {
+            const v = counts[d]?.[room.id]?.fullDay || 0;
+            return `<td class="sched-kids-cell sched-pm-cell">${v || '—'}</td>`;
+        }).join('');
+        const pmNeededCells = weekDates.map(d => {
+            const fd   = counts[d]?.[room.id]?.fullDay || 0;
+            const need = fd > 0 ? Math.ceil(fd / ratio) : 0;
+            return `<td class="sched-need-cell sched-pm-cell">${need || '—'}</td>`;
+        }).join('');
+
+        function buildStaffRows(shift, maxNeed, shiftClass) {
+            const rows = [];
+            for (let slot = 0; slot < maxNeed + 1; slot++) {
+                const isOptRow = slot >= maxNeed;
+                const label = isOptRow
+                    ? `<td class="sched-row-label sched-row-optional-label">+ optional</td>`
+                    : `<td class="sched-row-label sched-${shiftClass}-label">${shift.toUpperCase()} Staff ${slot + 1}</td>`;
+                const cells = weekDates.map(d => {
+                    const countKey = shift === 'am' ? 'total' : 'fullDay';
+                    const dayCount = counts[d]?.[room.id]?.[countKey] || 0;
+                    const needed   = dayCount > 0 ? Math.ceil(dayCount / ratio) : 0;
+                    const isOpt    = slot >= needed;
+                    const preVal   = assignments?.[d]?.[room.id]?.[shift]?.[slot] || '';
+                    const cls      = isOpt ? 'sched-cell-optional' : `sched-${shiftClass}-cell`;
+                    return `<td class="sched-staff-cell ${cls}"><select class="sched-staff-select" data-date="${d}" data-room="${escHtml(room.id)}" data-shift="${shift}" data-slot="${slot}">${buildOpts(preVal)}</select></td>`;
+                }).join('');
+                rows.push(`<tr class="sched-row-staff${isOptRow ? ' sched-row-optional' : ''}">${label}${cells}</tr>`);
+            }
+            return rows.join('');
+        }
+
+        return `
+        <div class="room-schedule-block">
+            <div class="room-schedule-title">
+                <span class="room-sched-label">${escHtml(room.label)}</span>
+                <span class="room-sched-ratio">Ratio 1:${ratio}</span>
+            </div>
+            <div class="table-wrapper">
+                <table class="report-table room-sched-table">
+                    <thead>
+                        <tr><th class="sched-row-label-head"></th>${dayHeaders}</tr>
+                    </thead>
+                    <tbody>
+                        <tr class="sched-row-kids">
+                            <td class="sched-row-label sched-kids-label">Half-Day Kids</td>${halfDayCells}
+                        </tr>
+                        <tr class="sched-row-kids">
+                            <td class="sched-row-label sched-kids-label">Full-Day Kids</td>${fullDayCells}
+                        </tr>
+                        <tr class="sched-row-shift-header">
+                            <td colspan="${numCols}" class="sched-shift-header-cell sched-am-header">AM Shift · 8:15 am – 1:15 pm</td>
+                        </tr>
+                        <tr class="sched-row-kids">
+                            <td class="sched-row-label sched-kids-label">AM Kids (total)</td>${amKidsCells}
+                        </tr>
+                        <tr class="sched-row-needed">
+                            <td class="sched-row-label">AM Staff Needed</td>${amNeededCells}
+                        </tr>
+                        ${buildStaffRows('am', maxAmNeed, 'am')}
+                        <tr class="sched-row-shift-header">
+                            <td colspan="${numCols}" class="sched-shift-header-cell sched-pm-header">PM Shift · 1:00 pm – 5:00 pm</td>
+                        </tr>
+                        <tr class="sched-row-kids">
+                            <td class="sched-row-label sched-kids-label">PM Kids (full-day)</td>${pmKidsCells}
+                        </tr>
+                        <tr class="sched-row-needed">
+                            <td class="sched-row-label">PM Staff Needed</td>${pmNeededCells}
+                        </tr>
+                        ${buildStaffRows('pm', maxPmNeed, 'pm')}
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
     }).join('');
 
     container.innerHTML = `
-        <div class="staff-legend">
-            <span class="staff-legend-dot staff-high">●</span> 3+ staff &nbsp;
-            <span class="staff-legend-dot staff-mid">●</span> 2 staff &nbsp;
-            <span class="staff-legend-dot">●</span> 0–1 staff &nbsp;
-            <span class="shift-am-chip">AM</span> 8:15am–1:15pm (all kids) &nbsp;
-            <span class="shift-pm-chip">PM</span> 1:00pm–5:00pm (full-day only)
-            <span class="staff-ratio-note">Ratios: ⚙️ Settings → Staff-to-Child Ratios</span>
+        <div class="sched-actions-bar">
+            <button id="printStaffAssignBtn" class="btn-secondary">🖨 Print</button>
+            <button id="exportStaffAssignBtn" class="btn-secondary">⬇ Export XLSX</button>
         </div>
-        <div class="table-wrapper staff-table-wrap">
-            <table class="report-table staff-table">
-                <thead>
-                    <tr>
-                        <th rowspan="3" class="staff-date-header">Date</th>
-                        ${roomHeaders}
-                    </tr>
-                    <tr>${shiftHeaders}</tr>
-                    <tr>${subHeaders}</tr>
-                </thead>
-                <tbody>${dataRows}</tbody>
-                <tfoot>
-                    <tr class="report-total-row">
-                        <td><strong>Week Avg</strong></td>
-                        ${totalCells}
-                    </tr>
-                </tfoot>
-            </table>
-        </div>`;
+        <div id="scheduleTablesWrap">${roomBlocks}</div>`;
+
+    document.getElementById('printStaffAssignBtn')?.addEventListener('click', () => {
+        const weekOf = document.getElementById('staffWeekOf')?.value || '';
+        const wrap   = document.getElementById('scheduleTablesWrap');
+        if (!wrap) return;
+        const clone = wrap.cloneNode(true);
+        clone.querySelectorAll('select.sched-staff-select').forEach(sel => {
+            const span = document.createElement('span');
+            span.textContent = sel.value || '—';
+            sel.replaceWith(span);
+        });
+        const win = window.open('', '_blank');
+        win.document.write(`<!DOCTYPE html><html><head><title>Staff Schedule – ${escHtml(weekOf)}</title>
+            <style>
+            body{font-family:Arial,sans-serif;font-size:11px}
+            .room-schedule-block{margin-bottom:18px}
+            .room-schedule-title{font-weight:bold;font-size:13px;margin-bottom:4px;display:flex;gap:12px}
+            .room-sched-ratio{color:#666;font-weight:normal}
+            table{border-collapse:collapse;width:100%}
+            th,td{border:1px solid #ccc;padding:4px 6px;text-align:center}
+            .sched-row-label{text-align:left;white-space:nowrap;font-size:10px}
+            .sched-shift-header-cell{font-weight:bold;text-align:left}
+            .sched-am-header{background:#dbeafe}
+            .sched-pm-header{background:#fef9c3}
+            .sched-row-optional td{color:#aaa}
+            .sched-no-enrollment{color:#999;font-style:italic}
+            </style></head><body>
+            <h2 style="font-size:14px">Staff Schedule – Week of ${escHtml(weekOf)}</h2>
+            ${clone.innerHTML}
+            </body></html>`);
+        win.document.close();
+        win.print();
+    });
+
+    document.getElementById('exportStaffAssignBtn')?.addEventListener('click', () => {
+        const weekOf = document.getElementById('staffWeekOf')?.value || 'schedule';
+        const wDates = _autoFillWeekDates || weekDates;
+        const asgn   = _readAssignmentsFromDOM(wDates);
+        const headers = ['Room', ...wDates.flatMap(d => {
+            const dt    = new Date(d + 'T00:00:00');
+            const label = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
+            return [`${label} AM`, `${label} PM`];
+        })];
+        const dataRows = ROOMS.map(r => {
+            const row = [r.label];
+            wDates.forEach(d => {
+                row.push((asgn[d]?.[r.id]?.am || []).join(', ') || '—');
+                row.push((asgn[d]?.[r.id]?.pm || []).join(', ') || '—');
+            });
+            return row;
+        });
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+        ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length, 16) }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Staff Schedule');
+        XLSX.writeFile(wb, `staff-schedule-${weekOf}.xlsx`);
+    });
+}
+
+function _readAssignmentsFromDOM(weekDates) {
+    const assignments = {};
+    weekDates.forEach(d => {
+        assignments[d] = {};
+        ROOMS.forEach(r => { assignments[d][r.id] = { am: [], pm: [] }; });
+    });
+    const slotMap = {};
+    document.querySelectorAll('#staffContent select.sched-staff-select').forEach(sel => {
+        const { date, room, shift, slot } = sel.dataset;
+        const val = sel.value;
+        if (!val) return;
+        const key = `${date}|${room}|${shift}`;
+        if (!slotMap[key]) slotMap[key] = {};
+        slotMap[key][parseInt(slot, 10)] = val;
+    });
+    Object.entries(slotMap).forEach(([key, slots]) => {
+        const [date, room, shift] = key.split('|');
+        if (!assignments[date]?.[room]) return;
+        const maxSlot = Math.max(...Object.keys(slots).map(Number));
+        const arr = [];
+        for (let i = 0; i <= maxSlot; i++) {
+            if (slots[i]) arr.push(slots[i]);
+        }
+        assignments[date][room][shift] = arr;
+    });
+    return assignments;
 }
 
 function exportStaffSchedule() {
     const weekOf = document.getElementById('staffWeekOf')?.value;
     if (!weekOf) { alert('Please select a week first.'); return; }
-
-    const weekDates = _buildWeekDates(weekOf);
+    const weekDates = _autoFillWeekDates || _buildWeekDates(weekOf);
     if (!weekDates.length) { alert('No school days in this week.'); return; }
-
-    const counts = _buildShiftCounts(weekDates);
-    const rows   = weekDates.map(d => {
-        const row = { Date: friendlyShort(d) };
-        ROOMS.forEach(room => {
-            const c     = counts[d][room.id] || { total: 0, halfDay: 0, fullDay: 0 };
-            const ratio = room.staffRatio || 10;
-            row[`${room.label} – AM Kids`]   = c.total;
-            row[`${room.label} – AM Staff`]  = c.total > 0 ? Math.ceil(c.total / ratio) : 0;
-            row[`${room.label} – PM Kids`]   = c.fullDay;
-            row[`${room.label} – PM Staff`]  = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
+    const asgn    = _readAssignmentsFromDOM(weekDates);
+    const counts  = _autoFillCounts || _buildShiftCounts(weekDates);
+    const headers = ['Room', ...weekDates.flatMap(d => {
+        const dt    = new Date(d + 'T00:00:00');
+        const label = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
+        return [`${label} AM Kids`, `${label} AM Staff`, `${label} PM Kids`, `${label} PM Staff`];
+    })];
+    const dataRows = ROOMS.map(r => {
+        const ratio = r.staffRatio || 10;
+        const row   = [r.label];
+        weekDates.forEach(d => {
+            const c      = counts[d]?.[r.id] || { total: 0, fullDay: 0 };
+            const amNeed = c.total   > 0 ? Math.ceil(c.total   / ratio) : 0;
+            const pmNeed = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
+            row.push(c.total, amNeed, c.fullDay, pmNeed);
+            // Overwrite staff counts with actual names if assigned
+            const amNames = (asgn[d]?.[r.id]?.am || []).join(', ');
+            const pmNames = (asgn[d]?.[r.id]?.pm || []).join(', ');
+            if (amNames) row[row.length - 3] = amNames;
+            if (pmNames) row[row.length - 1] = pmNames;
         });
         return row;
     });
-
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+    ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length, 14) }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Staff Schedule');
-    ws['!cols'] = Object.keys(rows[0]).map(k => ({
-        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
-    }));
     XLSX.writeFile(wb, `staff-schedule-${weekOf}.xlsx`);
 }
 
@@ -651,10 +824,8 @@ function exportStaffSchedule() {
 const SHIFT_HRS = { am: 5, pm: 4 };
 const DAY_ABBR  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-// Module-level storage for current auto-fill assignments (enables manual editing)
-let _autoFillAssignments = null;
-let _autoFillWeekDates   = null;
-let _autoFillCounts      = null;
+let _autoFillWeekDates = null;
+let _autoFillCounts    = null;
 
 async function autoFillStaffSchedule() {
     const weekOf = document.getElementById('staffWeekOf')?.value;
@@ -710,7 +881,7 @@ async function autoFillStaffSchedule() {
                         : (avail?.days ?? ['Mon','Tue','Wed','Thu','Fri']);
                     const excluded = avail?.excluded_rooms || [];
                     return availDays.includes(dayName) &&
-                        (s.room_id === room.id || (!s.room_id && !excluded.includes(room.id))); // room match or float (not excluded)
+                        (s.room_id === room.id || (!s.room_id && !excluded.includes(room.id)));
                 });
 
                 // Sort by hours used ascending so we spread load evenly
@@ -726,9 +897,9 @@ async function autoFillStaffSchedule() {
                 let amFilled = 0;
                 for (const s of amCandidates) {
                     if (amFilled >= amNeed) break;
-                    const maxHrs  = staffAvailability[s.id]?.maxHours ?? 40;
-                    const maxDays = staffAvailability[s.id]?.maxDays  ?? 5;
-                    const used    = weeklyHours.get(s.id) || 0;
+                    const maxHrs   = staffAvailability[s.id]?.maxHours ?? 40;
+                    const maxDays  = staffAvailability[s.id]?.maxDays  ?? 5;
+                    const used     = weeklyHours.get(s.id) || 0;
                     const daysUsed = weeklyDays.get(s.id) || 0;
                     if (used + SHIFT_HRS.am > maxHrs) continue;
                     if (daysUsed >= maxDays) continue;
@@ -739,7 +910,6 @@ async function autoFillStaffSchedule() {
                 }
 
                 // Assign PM (prefer staff already on AM shift first, then others)
-                // Respect per-day PM availability
                 const pmAvail = candidates.filter(s => {
                     const avail = staffAvailability[s.id];
                     if (avail?.dayPeriods) return avail.dayPeriods[dayName]?.includes('pm') ?? false;
@@ -758,7 +928,6 @@ async function autoFillStaffSchedule() {
                     const maxDays  = staffAvailability[s.id]?.maxDays  ?? 5;
                     const used     = weeklyHours.get(s.id) || 0;
                     const daysUsed = weeklyDays.get(s.id) || 0;
-                    // AM staff already had their hours and day counted; PM-only is additional
                     const alreadyOnAm = assignments[d][room.id].am.includes(s.name);
                     const addHrs  = alreadyOnAm ? 0 : SHIFT_HRS.pm;
                     const addDays = alreadyOnAm ? 0 : 1;
@@ -774,188 +943,12 @@ async function autoFillStaffSchedule() {
             });
         });
 
-        _autoFillAssignments = assignments;
-        _autoFillWeekDates   = weekDates;
-        _autoFillCounts      = counts;
-        renderAutoFillSchedule(weekDates, assignments, counts);
+        renderScheduleTables(weekDates, counts, assignments);
     } catch (err) {
         alert('Auto-fill failed: ' + err.message);
     } finally {
-        btn.disabled = false; btn.textContent = '🪄 Auto-Fill Names';
+        btn.disabled = false; btn.textContent = '🪄 Auto-Schedule';
     }
-}
-
-function renderAutoFillSchedule(weekDates, assignments, counts) {
-    const container = document.getElementById('staffContent');
-
-    const roomHeaders = ROOMS.map(r => `<th colspan="2" class="staff-room-header">${r.label}</th>`).join('');
-    const subHeaders  = ROOMS.map(() =>
-        `<th class="staff-sub-head shift-am-th">AM Staff</th><th class="staff-sub-head shift-pm-th">PM Staff</th>`
-    ).join('');
-
-    const rows = weekDates.map(d => {
-        const dt    = new Date(d + 'T00:00:00');
-        const label = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
-        const cells = ROOMS.map(room => {
-            const slot   = assignments[d][room.id];
-            const c      = counts[d][room.id] || { total: 0, fullDay: 0 };
-            const ratio  = room.staffRatio || 10;
-            const amNeed = c.total  > 0 ? Math.ceil(c.total  / ratio) : 0;
-            const pmNeed = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
-
-            const amChips = slot.am.map(n =>
-                `<span class="staff-name-chip">${escHtml(n)}<button class="chip-remove" data-date="${d}" data-room="${room.id}" data-shift="am" data-name="${escHtml(n)}" title="Remove">×</button></span>`
-            ).join(' ');
-            const pmChips = slot.pm.map(n =>
-                `<span class="staff-name-chip">${escHtml(n)}<button class="chip-remove" data-date="${d}" data-room="${room.id}" data-shift="pm" data-name="${escHtml(n)}" title="Remove">×</button></span>`
-            ).join(' ');
-
-            const amContent = slot.am.length
-                ? amChips
-                : (amNeed > 0 ? `<span class="staff-unfilled">⚠ ${amNeed} needed</span>` : '—');
-            const pmContent = slot.pm.length
-                ? pmChips
-                : (pmNeed > 0 ? `<span class="staff-unfilled">⚠ ${pmNeed} needed</span>` : '—');
-
-            return `<td class="autofill-cell">${amContent}<button class="chip-add-staff" data-date="${d}" data-room="${room.id}" data-shift="am" title="Add staff to AM slot">+</button></td>` +
-                   `<td class="autofill-cell">${pmContent}<button class="chip-add-staff" data-date="${d}" data-room="${room.id}" data-shift="pm" title="Add staff to PM slot">+</button></td>`;
-        }).join('');
-        return `<tr><td class="staff-date-cell"><strong>${label}</strong></td>${cells}</tr>`;
-    }).join('');
-
-    const fillHtml = `
-        <div style="display:flex;align-items:center;gap:10px;margin:24px 0 8px;">
-            <h4 style="margin:0;color:#333">Staff Name Assignment</h4>
-            <button id="printStaffAssignBtn" class="btn-secondary" style="margin-left:auto;">🖨 Print</button>
-            <button id="exportStaffAssignBtn" class="btn-secondary">⬇ Export XLSX</button>
-        </div>
-        <p style="font-size:.85em;color:#888;margin-bottom:10px">
-            Based on room assignment, availability days, and max hrs/week. Click <strong>+</strong> to manually add staff to a slot. Click <strong>×</strong> to remove.
-        </p>
-        <div class="table-wrapper staff-table-wrap" id="autoFillTableWrap">
-            <table class="report-table autofill-table" id="autoFillTable">
-                <thead>
-                    <tr>
-                        <th rowspan="2" class="staff-date-header">Date</th>
-                        ${roomHeaders}
-                    </tr>
-                    <tr>${subHeaders}</tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </div>`;
-
-    // Replace the existing section in-place, or append it — prevents stacking duplicate copies
-    const existing = document.getElementById('autoFillSection');
-    if (existing) {
-        existing.innerHTML = fillHtml;
-    } else {
-        const section = document.createElement('div');
-        section.id = 'autoFillSection';
-        section.innerHTML = fillHtml;
-        container.appendChild(section);
-    }
-
-    const section = document.getElementById('autoFillSection');
-
-    // Wire up print
-    section.querySelector('#printStaffAssignBtn')?.addEventListener('click', () => {
-        const weekOf = document.getElementById('staffWeekOf')?.value || '';
-        const tbl = document.getElementById('autoFillTable');
-        if (!tbl) return;
-        const cleanHtml = tbl.outerHTML
-            .replace(/<button class="chip-remove"[^>]*>×<\/button>/g, '')
-            .replace(/<button class="chip-add-staff"[^>]*>\+<\/button>/g, '');
-        const win = window.open('', '_blank');
-        win.document.write(`<!DOCTYPE html><html><head><title>Staff Schedule – ${weekOf}</title>
-            <style>body{font-family:Arial,sans-serif;font-size:12px}table{border-collapse:collapse;width:100%}
-            th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}
-            th{background:#f0f0f0}.staff-name-chip{display:inline-block;background:#e0e7ff;padding:2px 6px;border-radius:4px;margin:2px}
-            .staff-unfilled{color:#c00}</style></head><body>
-            <h2>Staff Name Assignment – Week of ${weekOf}</h2>${cleanHtml}</body></html>`);
-        win.document.close();
-        win.print();
-    });
-
-    // Wire up XLSX export
-    section.querySelector('#exportStaffAssignBtn')?.addEventListener('click', () => {
-        const weekOf = document.getElementById('staffWeekOf')?.value || 'schedule';
-        if (!_autoFillAssignments || !_autoFillWeekDates) return;
-        const headers = ['Date', ...ROOMS.flatMap(r => [`${r.label} AM`, `${r.label} PM`])];
-        const dataRows = _autoFillWeekDates.map(d => {
-            const dt    = new Date(d + 'T00:00:00');
-            const label = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
-            return [label, ...ROOMS.flatMap(r => [
-                (_autoFillAssignments[d][r.id].am || []).join(', ') || '—',
-                (_autoFillAssignments[d][r.id].pm || []).join(', ') || '—',
-            ])];
-        });
-        const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-        ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length, 16) }));
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Staff Assignment');
-        XLSX.writeFile(wb, `staff-assignment-${weekOf}.xlsx`);
-    });
-
-    // Event delegation for + and × — one listener on the section, no re-attachment on re-render
-    section.addEventListener('click', e => {
-        const addBtn = e.target.closest('.chip-add-staff');
-        if (addBtn) {
-            e.stopPropagation();
-            _showStaffPicker(addBtn, addBtn.dataset.date, addBtn.dataset.room, addBtn.dataset.shift);
-            return;
-        }
-        const removeBtn = e.target.closest('.chip-remove');
-        if (removeBtn) {
-            const { date, room, shift, name } = removeBtn.dataset;
-            const arr = _autoFillAssignments[date][room][shift];
-            const idx = arr.indexOf(name);
-            if (idx !== -1) arr.splice(idx, 1);
-            renderAutoFillSchedule(_autoFillWeekDates, _autoFillAssignments, _autoFillCounts);
-        }
-    });
-}
-
-function _showStaffPicker(anchorBtn, date, room, shift) {
-    document.getElementById('_staffPickerPopup')?.remove();
-
-    const already = _autoFillAssignments[date][room][shift] || [];
-    const staff   = allStaffData.filter(s => s.active);
-    if (!staff.length) { alert('No active staff found.'); return; }
-
-    const popup = document.createElement('div');
-    popup.id = '_staffPickerPopup';
-    popup.className = 'staff-picker-popup';
-    popup.innerHTML = staff.map(s => {
-        const assigned = already.includes(s.name);
-        return `<button class="staff-picker-item${assigned ? ' staff-picker-assigned' : ''}" data-name="${escHtml(s.name)}">${escHtml(s.name)}${assigned ? ' ✓' : ''}</button>`;
-    }).join('');
-
-    const rect = anchorBtn.getBoundingClientRect();
-    popup.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
-    popup.style.left = (rect.left  + window.scrollX) + 'px';
-    document.body.appendChild(popup);
-
-    popup.addEventListener('click', e => {
-        const item = e.target.closest('.staff-picker-item');
-        if (!item || item.classList.contains('staff-picker-assigned')) return;
-        const name = item.dataset.name;
-        if (!_autoFillAssignments[date][room][shift].includes(name)) {
-            _autoFillAssignments[date][room][shift].push(name);
-        }
-        popup.remove();
-        renderAutoFillSchedule(_autoFillWeekDates, _autoFillAssignments, _autoFillCounts);
-    });
-
-    // Close when clicking outside
-    setTimeout(() => {
-        document.addEventListener('click', function close(e) {
-            if (!popup.contains(e.target)) {
-                popup.remove();
-                document.removeEventListener('click', close);
-            }
-        });
-    }, 0);
 }
 
 // ============================================================
@@ -963,8 +956,8 @@ function _showStaffPicker(anchorBtn, date, room, shift) {
 // ============================================================
 
 async function saveStaffSchedule() {
-    if (!_autoFillAssignments || !_autoFillWeekDates) {
-        alert('Please generate and auto-fill a schedule first.');
+    if (!_autoFillWeekDates) {
+        alert('Please generate a schedule first.');
         return;
     }
 
@@ -975,9 +968,10 @@ async function saveStaffSchedule() {
     try {
         if (!allStaffData.length) await loadStaffList();
 
+        const assignments = _readAssignmentsFromDOM(_autoFillWeekDates);
         const count = await saveStaffScheduleWeek(
             _autoFillWeekDates,
-            _autoFillAssignments,
+            assignments,
             allStaffData
         );
 

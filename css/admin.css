@@ -3505,3 +3505,115 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .hist-import-actions { margin-top: 10px; display: flex; gap: 8px; align-items: center; }
 .hist-import-status { font-size: .82em; color: var(--text-muted); }
 
+/* ============================================================
+   PER-ROOM SCHEDULE TABLES
+   ============================================================ */
+.sched-actions-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.room-schedule-block {
+    margin-bottom: 24px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.room-schedule-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--light-bg);
+    border-bottom: 1px solid var(--border);
+}
+.room-sched-label { font-weight: 700; font-size: .95em; color: var(--navy); }
+.room-sched-ratio {
+    font-size: .8em;
+    color: var(--text-muted);
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1px 8px;
+}
+.room-sched-table { width: 100%; margin: 0; }
+.room-sched-table thead th { white-space: nowrap; }
+.sched-row-label-head { width: 130px; min-width: 110px; }
+.sched-day-head {
+    text-align: center;
+    font-size: .82em;
+    font-weight: 700;
+    padding: 6px 10px;
+    min-width: 90px;
+}
+.sched-day-date {
+    display: block;
+    font-size: .85em;
+    font-weight: 400;
+    color: var(--text-muted);
+}
+.sched-row-label {
+    text-align: left;
+    font-size: .8em;
+    color: var(--text-muted);
+    white-space: nowrap;
+    padding: 5px 10px;
+    background: var(--linen);
+    font-weight: 500;
+}
+.sched-kids-label { color: var(--navy); }
+.sched-am-label   { color: #1d4ed8; }
+.sched-pm-label   { color: #92400e; }
+.sched-row-optional-label { color: #b0b0b0; font-style: italic; }
+.sched-kids-cell {
+    text-align: center;
+    font-size: .88em;
+    font-weight: 600;
+    padding: 5px 10px;
+    color: var(--navy);
+}
+.sched-need-cell {
+    text-align: center;
+    font-size: .85em;
+    font-weight: 700;
+    padding: 5px 10px;
+    color: var(--navy);
+}
+.sched-am-cell { background: #eff6ff; }
+.sched-pm-cell { background: #fffbeb; }
+.sched-row-shift-header td { padding: 0; }
+.sched-shift-header-cell {
+    font-size: .78em;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+}
+.sched-am-header { background: #dbeafe; color: #1e40af; }
+.sched-pm-header { background: #fef3c7; color: #92400e; }
+.sched-staff-cell { padding: 3px 6px; }
+.sched-staff-select {
+    width: 100%;
+    font-size: .8em;
+    padding: 3px 4px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fff;
+    color: var(--navy);
+    min-width: 80px;
+}
+.sched-cell-optional .sched-staff-select {
+    border-color: #e0e0e0;
+    color: #aaa;
+    background: #fafafa;
+}
+.sched-row-optional .sched-row-label { color: #ccc; font-style: italic; }
+.sched-row-optional td { background: #fafafa; }
+.sched-no-enrollment {
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: .85em;
+    padding: 12px;
+}
+
