@@ -726,9 +726,9 @@
                         <input type="date" id="staffWeekOf">
                     </div>
                     <div class="roster-btns">
-                        <button id="autoFillStaffBtn" class="btn-secondary">🪄 Auto-Schedule</button>
-                        <button id="saveScheduleBtn"  class="btn-primary">💾 Save Schedule</button>
-                        <button id="exportStaffBtn"   class="btn-secondary">&#8595; Export Excel</button>
+                        <button id="saveScheduleBtn"   class="btn-primary">💾 Save Schedule</button>
+                        <button id="exportStaffBtn"    class="btn-secondary">&#8595; Export Excel</button>
+                        <button id="emailStaffScheduleBtn" class="btn-secondary">✉️ Email Schedules</button>
                     </div>
                 </div>
                 <div id="staffContent">
@@ -802,6 +802,10 @@
                         <div class="fm-field fm-field-grow">
                             <label>Name *</label>
                             <input type="text" id="sfName" placeholder="Full name" autocomplete="off">
+                        </div>
+                        <div class="fm-field fm-field-grow">
+                            <label>Email</label>
+                            <input type="email" id="sfEmail" placeholder="staff@example.com" autocomplete="off">
                         </div>
                         <div class="fm-field fm-field-grow">
                             <label>Role</label>

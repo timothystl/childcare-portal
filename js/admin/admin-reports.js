@@ -414,9 +414,9 @@ async function exportFamilyBillingReport() {
 // STAFF SCHEDULING
 // ============================================================
 function setupStaffScheduling() {
-    document.getElementById('autoFillStaffBtn')?.addEventListener('click', autoFillStaffSchedule);
     document.getElementById('saveScheduleBtn')?.addEventListener('click', saveStaffSchedule);
     document.getElementById('exportStaffBtn')?.addEventListener('click', exportStaffSchedule);
+    document.getElementById('emailStaffScheduleBtn')?.addEventListener('click', emailStaffSchedule);
 
     // Default to the Monday of the current week, then auto-load
     const el = document.getElementById('staffWeekOf');
@@ -578,7 +578,7 @@ function renderScheduleTables(weekDates, counts, assignments) {
 
         const dayHeaders = weekDates.map(d => {
             const dt = new Date(d + 'T00:00:00');
-            return `<th class="sched-day-head">${DAY_ABBR[dt.getDay()]}<br><span class="sched-day-date">${friendlyShort(d)}</span></th>`;
+            return `<th class="sched-day-head">${DAY_ABBR[dt.getDay()]}<br><span class="sched-day-date">${friendlyShort(d)}</span><br><button class="sched-day-print-btn" data-date="${d}" title="Print this day">🖨</button></th>`;
         }).join('');
 
         if (!hasEnrollment) {
@@ -676,7 +676,7 @@ function renderScheduleTables(weekDates, counts, assignments) {
                         </tr>
                         ${buildStaffRows('am', maxAmNeed, 'am')}
                         <tr class="sched-row-shift-header">
-                            <td colspan="${numCols}" class="sched-shift-header-cell sched-pm-header">PM Shift · 1:00 pm – 5:00 pm</td>
+                            <td colspan="${numCols}" class="sched-shift-header-cell sched-pm-header">PM Shift · 12:00 pm – 5:00 pm</td>
                         </tr>
                         <tr class="sched-row-kids">
                             <td class="sched-row-label sched-kids-label">PM Kids (full-day)</td>${pmKidsCells}
@@ -775,6 +775,11 @@ function renderScheduleTables(weekDates, counts, assignments) {
         if (sel) _syncGroup(sel);
     });
 
+    container.addEventListener('click', e => {
+        const printBtn = e.target.closest('.sched-day-print-btn');
+        if (printBtn) _printDay(printBtn.dataset.date, weekDates, counts, assignments);
+    });
+
     // Apply locking to any pre-filled selects (from auto-fill or saved schedule)
     const seenGroups = new Set();
     container.querySelectorAll('select.sched-staff-select').forEach(sel => {
@@ -782,6 +787,53 @@ function renderScheduleTables(weekDates, counts, assignments) {
         const key = `${sel.dataset.date}|${sel.dataset.shift}`;
         if (!seenGroups.has(key)) { seenGroups.add(key); _syncGroup(sel); }
     });
+}
+
+function _printDay(date, weekDates, counts, assignments) {
+    const currentAsgn = _readAssignmentsFromDOM(weekDates || _autoFillWeekDates || [date]);
+    const currentCounts = counts || _autoFillCounts || {};
+    const dt       = new Date(date + 'T00:00:00');
+    const dayLabel = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(date)}`;
+
+    const roomSections = ROOMS.map(room => {
+        const ratio  = room.staffRatio || 10;
+        const c      = currentCounts[date]?.[room.id] || { total: 0, fullDay: 0, halfDay: 0 };
+        if (!c.total && !c.fullDay) return '';
+        const amStaff = (currentAsgn[date]?.[room.id]?.am || []).filter(Boolean);
+        const pmStaff = (currentAsgn[date]?.[room.id]?.pm || []).filter(Boolean);
+        const amNeed  = c.total   > 0 ? Math.ceil(c.total   / ratio) : 0;
+        const pmNeed  = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
+        const amStatus = amStaff.length >= amNeed ? '' : ` <span style="color:#c00">(need ${amNeed})</span>`;
+        const pmStatus = pmStaff.length >= pmNeed ? '' : ` <span style="color:#c00">(need ${pmNeed})</span>`;
+        return `
+        <div style="margin-bottom:16px;border:1px solid #ddd;border-radius:6px;overflow:hidden">
+            <div style="background:#f0f4ff;padding:7px 12px;font-weight:700;font-size:13px">${escHtml(room.label)} <span style="font-weight:400;color:#666;font-size:11px">· ratio 1:${ratio}</span></div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+                <tr style="background:#fafafa">
+                    <td style="padding:5px 12px;border-bottom:1px solid #eee;font-weight:600;color:#1d4ed8">AM 8:15–1:15</td>
+                    <td style="padding:5px 12px;border-bottom:1px solid #eee">${c.total} kids${amStatus}</td>
+                    <td style="padding:5px 12px;border-bottom:1px solid #eee">${amStaff.length ? escHtml(amStaff.join(', ')) : '<em style="color:#999">unassigned</em>'}</td>
+                </tr>
+                <tr>
+                    <td style="padding:5px 12px;font-weight:600;color:#92400e">PM 12:00–5:00</td>
+                    <td style="padding:5px 12px">${c.fullDay} kids (full-day)${pmStatus}</td>
+                    <td style="padding:5px 12px">${pmStaff.length ? escHtml(pmStaff.join(', ')) : '<em style="color:#999">unassigned</em>'}</td>
+                </tr>
+            </table>
+        </div>`;
+    }).filter(Boolean).join('');
+
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html><html><head><title>Daily Staff – ${escHtml(dayLabel)}</title>
+        <style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px;max-width:700px;margin:0 auto}
+        h2{font-size:15px;margin-bottom:4px}p{margin:0 0 14px;color:#666;font-size:11px}
+        @media print{body{padding:0}}</style></head>
+        <body><h2>Daily Staff Schedule — ${escHtml(dayLabel)}</h2>
+        <p>Timothy Lutheran MDO · Printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</p>
+        ${roomSections || '<p>No enrollment on this day.</p>'}
+        </body></html>`);
+    win.document.close();
+    win.print();
 }
 
 function _readAssignmentsFromDOM(weekDates) {
@@ -850,8 +902,8 @@ function exportStaffSchedule() {
 // ============================================================
 // AUTO-FILL STAFF SCHEDULE
 // ============================================================
-// AM shift ≈ 5 hrs (8:15–1:15), PM shift ≈ 4 hrs (1:00–5:00)
-const SHIFT_HRS = { am: 5, pm: 4 };
+// AM shift ≈ 5 hrs (8:15–1:15), PM shift ≈ 5 hrs (12:00–5:00)
+const SHIFT_HRS = { am: 5, pm: 5 };
 const DAY_ABBR  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 let _autoFillWeekDates = null;
@@ -1021,6 +1073,72 @@ async function saveStaffSchedule() {
 }
 
 // ============================================================
+// EMAIL STAFF SCHEDULE
+// ============================================================
+
+async function emailStaffSchedule() {
+    if (!_autoFillWeekDates) {
+        alert('Please generate a schedule first.');
+        return;
+    }
+
+    const btn = document.getElementById('emailStaffScheduleBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    try {
+        if (!allStaffData.length) await loadStaffList();
+
+        const weekDates   = _autoFillWeekDates;
+        const weekStart   = weekDates[0];
+        const assignments = _readAssignmentsFromDOM(weekDates);
+
+        // Build per-staff shift lists: { staffName -> [{date, dayLabel, roomLabel, shift}] }
+        const staffShifts = {};
+        weekDates.forEach(d => {
+            const dt       = new Date(d + 'T00:00:00');
+            const dayLabel = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
+            ROOMS.forEach(room => {
+                ['am', 'pm'].forEach(shift => {
+                    (assignments[d]?.[room.id]?.[shift] || []).forEach(name => {
+                        if (!staffShifts[name]) staffShifts[name] = [];
+                        staffShifts[name].push({ date: d, dayLabel, roomLabel: room.label, shift });
+                    });
+                });
+            });
+        });
+
+        const staffByName = new Map(allStaffData.map(s => [s.name, s]));
+        let sent = 0, skipped = 0;
+        const errors = [];
+
+        for (const [name, shifts] of Object.entries(staffShifts)) {
+            const staffMember = staffByName.get(name);
+            if (!staffMember?.email) { skipped++; continue; }
+            try {
+                await sendStaffScheduleEmail({
+                    staffName:  name,
+                    staffEmail: staffMember.email,
+                    weekStart,
+                    shifts,
+                });
+                sent++;
+            } catch (err) {
+                errors.push(`${name}: ${err.message}`);
+            }
+        }
+
+        let msg = `✓ Sent ${sent} schedule email${sent !== 1 ? 's' : ''}.`;
+        if (skipped) msg += ` Skipped ${skipped} (no email on file).`;
+        if (errors.length) msg += `\n\nErrors:\n${errors.join('\n')}`;
+        alert(msg);
+    } catch (err) {
+        alert('Email failed: ' + err.message);
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = '✉️ Email Schedules';
+    }
+}
 
 // ============================================================
 // PAYROLL REPORT

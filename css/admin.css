@@ -3541,20 +3541,33 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .sched-row-label-head { width: 130px; min-width: 110px; }
 .sched-day-head {
     text-align: center;
-    font-size: .82em;
+    font-size: .9em;
     font-weight: 700;
     padding: 6px 10px;
     min-width: 90px;
 }
 .sched-day-date {
     display: block;
-    font-size: .85em;
+    font-size: .88em;
     font-weight: 400;
-    color: rgba(255,255,255,0.7);
+    color: rgba(255,255,255,0.75);
 }
+.sched-day-print-btn {
+    display: inline-block;
+    margin-top: 4px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .9em;
+    padding: 1px 4px;
+    border-radius: 4px;
+    opacity: .7;
+    line-height: 1;
+}
+.sched-day-print-btn:hover { opacity: 1; background: rgba(255,255,255,.15); }
 .sched-row-label {
     text-align: left;
-    font-size: .8em;
+    font-size: .85em;
     color: var(--text-muted);
     white-space: nowrap;
     padding: 5px 10px;
@@ -3567,14 +3580,14 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .sched-row-optional-label { color: #b0b0b0; font-style: italic; }
 .sched-kids-cell {
     text-align: center;
-    font-size: .88em;
+    font-size: .92em;
     font-weight: 600;
     padding: 5px 10px;
     color: var(--navy);
 }
 .sched-need-cell {
     text-align: center;
-    font-size: .85em;
+    font-size: .9em;
     font-weight: 700;
     padding: 5px 10px;
     color: var(--navy);
@@ -3583,7 +3596,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .sched-pm-cell { background: #fffbeb; }
 .sched-row-shift-header td { padding: 0; }
 .sched-shift-header-cell {
-    font-size: .78em;
+    font-size: .82em;
     font-weight: 700;
     letter-spacing: .04em;
     text-transform: uppercase;
@@ -3594,7 +3607,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .sched-staff-cell { padding: 3px 6px; }
 .sched-staff-select {
     width: 100%;
-    font-size: .8em;
+    font-size: .85em;
     padding: 3px 4px;
     border: 1px solid var(--border);
     border-radius: 4px;
