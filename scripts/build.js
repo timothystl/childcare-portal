@@ -171,7 +171,7 @@ function patchHtml() {
 const BASE_OPTS = {
     bundle:    false,   // files are already written as plain globals, not modules
     minify:    true,
-    sourcemap: true,    // source maps for debugging minified output
+    sourcemap: false,
     target:    ['es2017'],
     logLevel:  'info',
 };
