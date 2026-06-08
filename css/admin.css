@@ -3550,7 +3550,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     display: block;
     font-size: .85em;
     font-weight: 400;
-    color: var(--text-muted);
+    color: rgba(255,255,255,0.7);
 }
 .sched-row-label {
     text-align: left;
