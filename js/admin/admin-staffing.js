@@ -229,6 +229,7 @@ function openStaffForm(staff = null) {
     editingStaffId = staff?.id || null;
     document.getElementById('staffFormTitle').textContent = staff ? 'Edit Staff Member' : 'Add Staff Member';
     document.getElementById('sfName').value      = staff?.name || '';
+    document.getElementById('sfEmail').value     = staff?.email || '';
     document.getElementById('sfRole').value      = staff?.role || '';
     document.getElementById('sfRoom').value      = staff?.room_id || '';
     document.getElementById('sfHireDate').value  = staff?.hire_date || '';
@@ -324,6 +325,7 @@ async function onSaveStaffMember() {
         const returnedId = await upsertStaffMember({
             id:              savingId,
             name,
+            email:           document.getElementById('sfEmail').value.trim() || null,
             role:            document.getElementById('sfRole').value.trim(),
             payType,
             hourlyRate:      parseFloat(document.getElementById('sfRate').value) || 0,

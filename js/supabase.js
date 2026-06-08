@@ -1429,7 +1429,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('staff')
-        .select('id, name, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at')
+        .select('id, name, email, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at')
         .order('name');
     if (!includeInactive) query = query.eq('active', true);
     const { data, error } = await query;
@@ -1437,10 +1437,11 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     return data || [];
 }
 
-async function upsertStaffMember({ id = null, name, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin }) {
+async function upsertStaffMember({ id = null, name, email, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const record = {
         name,
+        email:            email || null,
         role:             role || null,
         pay_type:         payType || 'hourly',
         hourly_rate:      payType === 'salary' ? 0 : (hourlyRate || 0),
@@ -2081,6 +2082,18 @@ async function sendScheduleChangeEmail({ parentName, parentEmail, childName, mon
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.functions.invoke('send-schedule-change', {
         body: { parentName, parentEmail, childName, monthLabel, existingDates, addedDate, changeFee },
+    });
+    if (error) throw error;
+    return data;
+}
+
+async function sendStaffScheduleEmail({ staffName, staffEmail, weekStart, shifts }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token || SUPABASE_ANON_KEY;
+    const { data, error } = await sbClient.functions.invoke('send-staff-schedule', {
+        body: { staffName, staffEmail, weekStart, shifts },
+        headers: { Authorization: `Bearer ${token}` },
     });
     if (error) throw error;
     return data;
