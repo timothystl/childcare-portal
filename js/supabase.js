@@ -564,7 +564,12 @@ async function fetchSetting(key) {
         .eq('key', key)
         .limit(1);
     if (error) { console.error('fetchSetting:', error); return null; }
-    return data?.[0]?.value ?? null;
+    const raw = data?.[0]?.value ?? null;
+    // The settings.value column can come back as a JSON *string* (not a parsed
+    // object) depending on how the row was written — loadRateSettings() does the
+    // same defensive parse. Without this, callers like fetchGeofenceSettings()
+    // get a string and every field read (s.lat, s.enabled, …) is undefined.
+    return typeof raw === 'string' ? parseJsonOr(raw, raw) : raw;
 }
 
 /**
