@@ -768,13 +768,38 @@ async function setupGeofence() {
     }
 
     // "Use My Location" button
-    document.getElementById('geofenceUseMyLocation')?.addEventListener('click', () => {
-        if (!navigator.geolocation) { alert('Geolocation is not supported by this browser.'); return; }
-        navigator.geolocation.getCurrentPosition(pos => {
-            document.getElementById('geofenceLat').value = pos.coords.latitude.toFixed(6);
-            document.getElementById('geofenceLng').value = pos.coords.longitude.toFixed(6);
-        }, () => alert('Could not get location. Please allow location access and try again.'));
-    });
+    const locBtn = document.getElementById('geofenceUseMyLocation');
+    if (locBtn) {
+        locBtn.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by this browser.');
+                return;
+            }
+            const orig = locBtn.textContent;
+            locBtn.textContent = 'Getting location…';
+            locBtn.disabled    = true;
+            navigator.geolocation.getCurrentPosition(
+                pos => {
+                    document.getElementById('geofenceLat').value = pos.coords.latitude.toFixed(6);
+                    document.getElementById('geofenceLng').value = pos.coords.longitude.toFixed(6);
+                    locBtn.textContent = '✓ Got location';
+                    locBtn.disabled    = false;
+                    setTimeout(() => { locBtn.textContent = orig; }, 3000);
+                },
+                err => {
+                    locBtn.textContent = orig;
+                    locBtn.disabled    = false;
+                    const msg = err.code === 1
+                        ? 'Location permission denied. Allow location access in your browser and try again.'
+                        : err.code === 2
+                        ? 'Location unavailable. Check your device\'s location services.'
+                        : 'Location request timed out. Please try again.';
+                    alert(msg);
+                },
+                { timeout: 10000, enableHighAccuracy: true }
+            );
+        });
+    }
 
     btn.addEventListener('click', async () => {
         btn.disabled    = true;
