@@ -811,10 +811,11 @@ function setupGeofence() {
         btn.textContent = 'Saving…';
         if (statusEl) statusEl.textContent = '';
         try {
-            const lat   = parseFloat(document.getElementById('geofenceLat').value)    || null;
-            const lng   = parseFloat(document.getElementById('geofenceLng').value)    || null;
-            const rad   = parseInt(document.getElementById('geofenceRadius').value, 10) || null;
-            const grace = parseInt(document.getElementById('geofenceGrace').value, 10)  || null;
+            const normDec = s => s.trim().replace(',', '.');
+            const lat   = parseFloat(normDec(document.getElementById('geofenceLat').value))   || null;
+            const lng   = parseFloat(normDec(document.getElementById('geofenceLng').value))   || null;
+            const rad   = parseInt(document.getElementById('geofenceRadius').value, 10)       || null;
+            const grace = parseInt(document.getElementById('geofenceGrace').value, 10)        || null;
             const email = document.getElementById('geofenceNotifyEmail').value.trim()  || null;
 
             await saveGeofenceSettings({
