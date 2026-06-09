@@ -754,18 +754,12 @@ async function loadGeofenceSettings() {
     const statusEl = document.getElementById('geofenceStatus');
     try {
         const s = await fetchGeofenceSettings();
-        const hasData = s && Object.keys(s).length > 0;
         if (s.enabled       != null) { const el = document.getElementById('geofenceEnabled');    if (el) el.checked    = !!s.enabled; }
         if (s.lat           != null) { const el = document.getElementById('geofenceLat');        if (el) el.value      = String(s.lat); }
         if (s.lng           != null) { const el = document.getElementById('geofenceLng');        if (el) el.value      = String(s.lng); }
         if (s.radius_ft     != null) { const el = document.getElementById('geofenceRadius');     if (el) el.value      = String(s.radius_ft); }
         if (s.grace_minutes != null) { const el = document.getElementById('geofenceGrace');      if (el) el.value      = String(s.grace_minutes); }
         if (s.notify_email)          { const el = document.getElementById('geofenceNotifyEmail'); if (el) el.value     = s.notify_email; }
-        if (statusEl && !statusEl.textContent) {
-            statusEl.textContent = hasData ? `DB: lat=${s.lat ?? '—'}, lng=${s.lng ?? '—'}` : 'DB: nothing saved yet';
-            statusEl.style.color = '#888';
-            setTimeout(() => { if (statusEl.textContent.startsWith('DB:')) statusEl.textContent = ''; }, 5000);
-        }
     } catch (err) {
         if (statusEl) { statusEl.textContent = '⚠️ Load error: ' + err.message; statusEl.style.color = '#c62828'; }
         console.error('loadGeofenceSettings error:', err);
