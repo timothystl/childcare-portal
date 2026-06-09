@@ -17,12 +17,7 @@ const FAMILIES_PAGE_SIZE = 20;
 // LOGIN  (Supabase Auth — server-validated)
 // ============================================================
 document.getElementById('loginBtn').addEventListener('click', attemptLogin);
-document.getElementById('adminPassword').addEventListener('keydown', e => {
-    if (e.key === 'Enter') attemptLogin();
-});
-document.getElementById('adminEmail').addEventListener('keydown', e => {
-    if (e.key === 'Enter') attemptLogin();
-});
+document.getElementById('loginForm').addEventListener('submit', e => { e.preventDefault(); attemptLogin(); });
 
 async function attemptLogin() {
     const email = document.getElementById('adminEmail').value.trim();
