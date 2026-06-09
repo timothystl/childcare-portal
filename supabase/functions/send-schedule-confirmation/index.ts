@@ -1,9 +1,24 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 
 const ALLOWED_ORIGIN = "https://mdo.timothystl.org";
 
 interface DateEntry { date: string; dayType: string; amount: number; }
+
+// US Letter: 612 × 792 pt
+const PAGE_W = 612;
+const PAGE_H = 792;
+const MARGIN  = 50;
+const COL_W   = PAGE_W - MARGIN * 2;
+
+const NAVY = rgb(1 / 255, 41 / 255, 74 / 255);   // #01294A
+const SUN  = rgb(245 / 255, 183 / 255, 49 / 255); // #F5B731
+const WHITE = rgb(1, 1, 1);
+const DARK  = rgb(0.13, 0.13, 0.13);
+const MID   = rgb(0.4, 0.4, 0.4);
+const LITE  = rgb(0.88, 0.88, 0.88);
+const SUN_PALE = rgb(1, 0.97, 0.88); // #FFF8E1
 
 function escHtml(s: string): string {
     return String(s ?? '')
@@ -26,6 +41,18 @@ function friendlyDate(dateStr: string): string {
     return new Date(dateStr + "T00:00:00").toLocaleDateString(
         "en-US", { weekday: "short", month: "short", day: "numeric" }
     );
+}
+
+function friendlyDateLong(dateStr: string): string {
+    return new Date(dateStr + "T00:00:00").toLocaleDateString(
+        "en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric" }
+    );
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+    let bin = "";
+    for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
 }
 
 function buildIcal(childList: string, dates: DateEntry[], monthLabel: string): string {
@@ -58,85 +85,153 @@ function buildIcal(childList: string, dates: DateEntry[], monthLabel: string): s
     ].join("\r\n");
 }
 
-function buildInvoiceHtml(
+async function buildInvoicePdf(
     parentName: string,
     parentEmail: string,
     childList: string,
     monthLabel: string,
     dates: DateEntry[],
     grandTotal: number,
-): string {
-    const dateIssued = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-    const rows = dates.map(d => {
-        const friendly = new Date(d.date + "T00:00:00").toLocaleDateString(
-            "en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric" }
-        );
-        const typeLabel = d.dayType === "half" ? "Half Day" : "Full Day";
-        return `<tr><td>${friendly}</td><td>${typeLabel}</td><td class="amount">$${d.amount.toFixed(2)}</td></tr>`;
-    }).join("\n");
+): Promise<Uint8Array> {
+    const pdfDoc = await PDFDocument.create();
+    const page   = pdfDoc.addPage([PAGE_W, PAGE_H]);
 
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>MDO Invoice &mdash; ${monthLabel}</title>
-<style>
-  body{font-family:Arial,Helvetica,sans-serif;max-width:620px;margin:40px auto;color:#222;padding:0 16px}
-  .header{border-bottom:4px solid #01294A;padding-bottom:20px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:flex-end}
-  .brand{color:#01294A;font-size:30px;font-weight:800;margin:0;letter-spacing:-1px}
-  .brand span{color:#F5B731}
-  .sub{margin:4px 0 0;color:#555;font-size:13px}
-  .meta{display:flex;justify-content:space-between;margin-bottom:24px;gap:16px}
-  .meta-block p{margin:3px 0;font-size:14px}
-  table{width:100%;border-collapse:collapse;margin-top:8px}
-  th{background:#01294A;color:#fff;padding:9px 14px;text-align:left;font-size:13px}
-  th:last-child{text-align:right}
-  td{padding:9px 14px;border-bottom:1px solid #eee;font-size:14px}
-  td.amount{text-align:right}
-  .total-row td{font-weight:700;border-top:3px solid #01294A;border-bottom:none;font-size:15px}
-  .total-row .amount{color:#01294A}
-  .footer{margin-top:36px;color:#999;font-size:11px;border-top:1px solid #ddd;padding-top:16px}
-  @media print{body{margin:0}button{display:none}}
-</style>
-</head>
-<body>
-  <div class="header">
-    <div>
-      <p class="brand"><span>my</span> MDO</p>
-      <p class="sub">Timothy Lutheran Church &ndash; Mother&rsquo;s Day Out</p>
-    </div>
-    <div style="text-align:right;font-size:13px;color:#555">
-      <p style="margin:0;font-weight:700;font-size:16px">Invoice / Receipt</p>
-      <p style="margin:4px 0 0">Issued: ${dateIssued}</p>
-    </div>
-  </div>
-  <div class="meta">
-    <div class="meta-block">
-      <p><strong>Bill To:</strong></p>
-      <p>${parentName}</p>
-      <p>${parentEmail}</p>
-    </div>
-    <div class="meta-block" style="text-align:right">
-      <p><strong>Period:</strong> ${monthLabel}</p>
-      <p><strong>Student(s):</strong> ${childList}</p>
-    </div>
-  </div>
-  <table>
-    <thead><tr><th>Date</th><th>Type</th><th style="text-align:right">Amount</th></tr></thead>
-    <tbody>${rows}</tbody>
-    <tfoot>
-      <tr class="total-row">
-        <td colspan="2">Total Due</td>
-        <td class="amount">$${grandTotal.toFixed(2)}</td>
-      </tr>
-    </tfoot>
-  </table>
-  <div class="footer">
-    <p>Please retain this invoice for your records (FSA / dependent care). For billing questions contact mdo@timothystl.org.</p>
-    <p>Timothy Lutheran Church Mother&rsquo;s Day Out &middot; St. Louis, MO</p>
-  </div>
-</body>
-</html>`;
+    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const reg  = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    // ── Header band ──────────────────────────────────────
+    page.drawRectangle({ x: 0, y: PAGE_H - 80, width: PAGE_W, height: 80, color: NAVY });
+
+    // "my MDO" wordmark
+    page.drawText("my", {
+        x: MARGIN, y: PAGE_H - 46,
+        size: 26, font: bold, color: SUN,
+    });
+    page.drawText(" MDO", {
+        x: MARGIN + bold.widthOfTextAtSize("my", 26), y: PAGE_H - 46,
+        size: 26, font: bold, color: WHITE,
+    });
+    page.drawText("Timothy Lutheran Church – Mother’s Day Out", {
+        x: MARGIN, y: PAGE_H - 65,
+        size: 9, font: reg, color: rgb(0.65, 0.75, 0.82),
+    });
+
+    // "Invoice / Receipt" right-aligned in header
+    const invLabel = "Invoice / Receipt";
+    page.drawText(invLabel, {
+        x: PAGE_W - MARGIN - bold.widthOfTextAtSize(invLabel, 13),
+        y: PAGE_H - 44,
+        size: 13, font: bold, color: WHITE,
+    });
+    const dateIssued = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    const issuedLabel = `Issued: ${dateIssued}`;
+    page.drawText(issuedLabel, {
+        x: PAGE_W - MARGIN - reg.widthOfTextAtSize(issuedLabel, 9),
+        y: PAGE_H - 62,
+        size: 9, font: reg, color: rgb(0.65, 0.75, 0.82),
+    });
+
+    // ── Sun accent bar ────────────────────────────────────
+    page.drawRectangle({ x: 0, y: PAGE_H - 84, width: PAGE_W, height: 4, color: SUN });
+
+    // ── Bill-to / meta block ──────────────────────────────
+    let y = PAGE_H - 112;
+
+    page.drawText("Bill To", { x: MARGIN, y, size: 9, font: bold, color: MID });
+    y -= 15;
+    page.drawText(parentName,  { x: MARGIN, y, size: 11, font: bold, color: DARK });
+    y -= 14;
+    page.drawText(parentEmail, { x: MARGIN, y, size: 9,  font: reg,  color: MID  });
+
+    // Period + student right-aligned
+    const metaTopY = PAGE_H - 127;
+    const periodLabel  = "Period:";
+    const studentLabel = "Student(s):";
+    page.drawText(periodLabel, {
+        x: PAGE_W - MARGIN - 240, y: metaTopY,
+        size: 9, font: bold, color: MID,
+    });
+    page.drawText(monthLabel, {
+        x: PAGE_W - MARGIN - 240 + bold.widthOfTextAtSize(periodLabel, 9) + 6,
+        y: metaTopY, size: 9, font: reg, color: DARK,
+    });
+    page.drawText(studentLabel, {
+        x: PAGE_W - MARGIN - 240, y: metaTopY - 15,
+        size: 9, font: bold, color: MID,
+    });
+    page.drawText(childList, {
+        x: PAGE_W - MARGIN - 240 + bold.widthOfTextAtSize(studentLabel, 9) + 6,
+        y: metaTopY - 15, size: 9, font: reg, color: DARK,
+    });
+
+    y -= 28;
+
+    // ── Table ─────────────────────────────────────────────
+    const COL_TYPE_X = MARGIN + 230;
+    const RIGHT_EDGE = MARGIN + COL_W;
+    const ROW_H = 20;
+
+    // Table header row
+    page.drawRectangle({ x: MARGIN, y: y - 6, width: COL_W, height: ROW_H + 4, color: NAVY });
+    page.drawText("Date",   { x: MARGIN + 6,     y: y + 2, size: 9, font: bold, color: WHITE });
+    page.drawText("Type",   { x: COL_TYPE_X + 6, y: y + 2, size: 9, font: bold, color: WHITE });
+    const amtHead = "Amount";
+    page.drawText(amtHead, {
+        x: RIGHT_EDGE - bold.widthOfTextAtSize(amtHead, 9) - 8,
+        y: y + 2, size: 9, font: bold, color: WHITE,
+    });
+    y -= ROW_H;
+
+    // Data rows (alternating subtle background)
+    for (let i = 0; i < dates.length; i++) {
+        const d = dates[i];
+        if (i % 2 === 1) {
+            page.drawRectangle({ x: MARGIN, y: y - 4, width: COL_W, height: ROW_H, color: rgb(0.97, 0.97, 0.97) });
+        }
+        const friendly  = friendlyDateLong(d.date);
+        const typeLabel = d.dayType === "half" ? "Half Day" : "Full Day";
+        const amtStr    = `$${d.amount.toFixed(2)}`;
+
+        page.drawText(friendly,  { x: MARGIN + 6,     y: y + 2, size: 9, font: reg,  color: DARK });
+        page.drawText(typeLabel, { x: COL_TYPE_X + 6, y: y + 2, size: 9, font: reg,  color: MID  });
+        page.drawText(amtStr, {
+            x: RIGHT_EDGE - reg.widthOfTextAtSize(amtStr, 9) - 8,
+            y: y + 2, size: 9, font: reg, color: DARK,
+        });
+
+        // Row divider
+        page.drawLine({
+            start: { x: MARGIN, y: y - 4 },
+            end:   { x: RIGHT_EDGE, y: y - 4 },
+            thickness: 0.4, color: LITE,
+        });
+        y -= ROW_H;
+    }
+
+    // Total row
+    y -= 2;
+    page.drawLine({ start: { x: MARGIN, y: y + ROW_H }, end: { x: RIGHT_EDGE, y: y + ROW_H }, thickness: 2, color: SUN });
+    page.drawRectangle({ x: MARGIN, y: y - 4, width: COL_W, height: ROW_H + 2, color: SUN_PALE });
+    page.drawText("Total Due", { x: MARGIN + 6, y: y + 2, size: 10, font: bold, color: DARK });
+    const totalStr = `$${grandTotal.toFixed(2)}`;
+    page.drawText(totalStr, {
+        x: RIGHT_EDGE - bold.widthOfTextAtSize(totalStr, 12) - 8,
+        y: y + 1, size: 12, font: bold, color: NAVY,
+    });
+
+    // ── Footer ────────────────────────────────────────────
+    y -= 36;
+    page.drawLine({ start: { x: MARGIN, y }, end: { x: RIGHT_EDGE, y }, thickness: 0.5, color: LITE });
+    y -= 13;
+    page.drawText("Please retain this invoice for your records (FSA / dependent care).", {
+        x: MARGIN, y, size: 8, font: reg, color: MID,
+    });
+    y -= 12;
+    page.drawText("Billing questions: mdo@timothystl.org  ·  Timothy Lutheran Church MDO  ·  St. Louis, MO", {
+        x: MARGIN, y, size: 8, font: reg, color: MID,
+    });
+
+    return pdfDoc.save();
 }
 
 serve(async (req) => {
@@ -150,7 +245,6 @@ serve(async (req) => {
         const { parentName, parentEmail, monthLabel, childNames, dates, grandTotal } =
             await req.json();
 
-        // dates: [{ date: 'YYYY-MM-DD', dayType: 'full'|'half', amount: number }]
         if (!parentEmail || !dates?.length) {
             return new Response(
                 JSON.stringify({ error: "Missing required fields" }),
@@ -158,9 +252,6 @@ serve(async (req) => {
             );
         }
 
-        // Strict email validation BEFORE the value is used in the PostgREST .or()
-        // filter below — a string containing , ( ) or * would otherwise change the
-        // filter semantics and defeat the anti-relay guard.
         if (typeof parentEmail !== "string" || !/^[^\s,()*@]+@[^\s,()*@]+\.[^\s,()*@]+$/.test(parentEmail)) {
             return new Response(
                 JSON.stringify({ error: "Invalid email" }),
@@ -168,8 +259,6 @@ serve(async (req) => {
             );
         }
 
-        // Verify the recipient email belongs to a registered family — prevents
-        // using this unauthenticated endpoint as a spam relay.
         const serviceClient = createClient(
             Deno.env.get("SUPABASE_URL")!,
             Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -262,7 +351,7 @@ serve(async (req) => {
             </table>
 
             <p style="color:#555;font-size:14px;line-height:1.65;">
-              A calendar file (.ics) and a printable invoice are attached. If you have any questions or need to make changes, please reply to this email.
+              A calendar file (.ics) and a PDF invoice are attached. If you have any questions or need to make changes, please reply to this email.
             </p>
 
             <p style="color:#333;font-size:15px;margin-top:24px;">Warm regards,<br>
@@ -287,11 +376,12 @@ serve(async (req) => {
         const icalContent = buildIcal(childList, dates as DateEntry[], monthLabel);
         const icalBase64  = btoa(icalContent);
 
-        // Invoice: clean printable HTML
-        const invoiceHtml   = buildInvoiceHtml(
-            parentName, parentEmail, childList, monthLabel, dates as DateEntry[], grandTotal as number
+        // PDF invoice
+        const pdfBytes   = await buildInvoicePdf(
+            parentName, parentEmail, childList, monthLabel,
+            dates as DateEntry[], grandTotal as number,
         );
-        const invoiceBase64 = btoa(unescape(encodeURIComponent(invoiceHtml)));
+        const pdfBase64 = uint8ToBase64(pdfBytes);
 
         const res = await fetch("https://api.resend.com/emails", {
             method:  "POST",
@@ -309,9 +399,9 @@ serve(async (req) => {
                         content_type: "text/calendar",
                     },
                     {
-                        filename:     "mdo-invoice.html",
-                        content:      invoiceBase64,
-                        content_type: "text/html",
+                        filename:     "mdo-invoice.pdf",
+                        content:      pdfBase64,
+                        content_type: "application/pdf",
                     },
                 ],
             }),
