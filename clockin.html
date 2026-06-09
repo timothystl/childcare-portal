@@ -464,7 +464,9 @@ function _notifyGeofence(eventType, distanceFt) {
     const SUPABASE_DIRECT = 'https://dahdstopsumxnqvdclmy.supabase.co';
     fetch(SUPABASE_DIRECT + '/functions/v1/notify-geofence', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+        // Authorization (anon JWT) is required by the Edge Functions gateway
+        // (verify_jwt defaults to true); apikey alone returns 401.
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY },
         body: JSON.stringify({
             staffName:   _staffName,
             eventType,

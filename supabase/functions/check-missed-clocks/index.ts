@@ -195,12 +195,16 @@ serve(async (req) => {
                 }).catch(() => {});
             }
 
-            // 3. Record notification to prevent duplicates
-            await sb.from("staff_clock_notifications").insert({
+            // 3. Record notification to prevent duplicates. Use upsert with
+            // ignoreDuplicates so a concurrent/retried run is a no-op instead of
+            // a unique-violation — and so the dedupe row is always written.
+            // (A plain insert with the non-existent .onConflict().ignore() chain
+            // rejects and leaves no record, re-alerting every 15 minutes.)
+            await sb.from("staff_clock_notifications").upsert({
                 staff_id:          alert.staffId,
                 work_date:         workDate,
                 notification_type: alert.type,
-            }).onConflict("staff_id, work_date, notification_type").ignore();
+            }, { onConflict: "staff_id,work_date,notification_type", ignoreDuplicates: true });
         }));
 
         const sent = results.filter(r => r.status === "fulfilled").length;
