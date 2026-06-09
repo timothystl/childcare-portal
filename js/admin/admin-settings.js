@@ -3,7 +3,6 @@
 // Sections: Summer Camp Visibility, Offer Links, Closures,
 //           Tabs, Collapsibles, Rates & Settings, Admin Roles
 // ============================================================
-console.log('[admin-settings] script parsed v1.16.12');
 
 // SUMMER CAMP VISIBILITY SETTING
 // ============================================================
@@ -753,21 +752,12 @@ function _showAdminRolesStatus(msg, color) {
 async function loadGeofenceSettings() {
     try {
         const s = await fetchGeofenceSettings();
-        console.log('[geofence] fetched settings:', JSON.stringify(s));
-        const elEnabled = document.getElementById('geofenceEnabled');
-        const elLat     = document.getElementById('geofenceLat');
-        console.log('[geofence] geofenceEnabled el:', elEnabled, '  geofenceLat el:', elLat);
-        if (s.enabled       != null) elEnabled && (elEnabled.checked = !!s.enabled);
-        if (s.lat           != null) elLat     && (elLat.value = s.lat);
-        const elLng = document.getElementById('geofenceLng');
-        if (s.lng           != null) elLng     && (elLng.value = s.lng);
-        const elRad = document.getElementById('geofenceRadius');
-        if (s.radius_ft     != null) elRad     && (elRad.value = s.radius_ft);
-        const elGrace = document.getElementById('geofenceGrace');
-        if (s.grace_minutes != null) elGrace   && (elGrace.value = s.grace_minutes);
-        const elEmail = document.getElementById('geofenceNotifyEmail');
-        if (s.notify_email)          elEmail   && (elEmail.value = s.notify_email);
-        console.log('[geofence] after load — lat field value:', elLat?.value);
+        if (s.enabled       != null) { const el = document.getElementById('geofenceEnabled');    if (el) el.checked = !!s.enabled; }
+        if (s.lat           != null) { const el = document.getElementById('geofenceLat');        if (el) el.value = s.lat; }
+        if (s.lng           != null) { const el = document.getElementById('geofenceLng');        if (el) el.value = s.lng; }
+        if (s.radius_ft     != null) { const el = document.getElementById('geofenceRadius');     if (el) el.value = s.radius_ft; }
+        if (s.grace_minutes != null) { const el = document.getElementById('geofenceGrace');      if (el) el.value = s.grace_minutes; }
+        if (s.notify_email)          { const el = document.getElementById('geofenceNotifyEmail'); if (el) el.value = s.notify_email; }
     } catch (err) {
         console.error('loadGeofenceSettings error:', err);
     }
