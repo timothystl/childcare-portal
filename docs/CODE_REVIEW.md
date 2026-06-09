@@ -350,7 +350,10 @@ Items keep their finding labels for reference. Check off as completed.
 
 ### Wave 2 — Quick UX wins
 - [x] **U1** — Visible `:focus-visible` rings on buttons/tabs/links/cells — `css/styles.css`
-- [~] **U3** — Disabled-button states already exist (`styles.css:456,872`); disable-on-submit JS wiring still TODO
+- [x] **U3** — ✅ Already implemented (verified 2026-06-05): every parent-facing async button
+  (registration submit, email+PIN lookup, contact form, forgot-PIN, portal login, reset-PIN)
+  disables during its request and re-enables via `finally`/error paths. Original item was a
+  false positive — no change needed.
 - [x] **U6** — Surface PIN-reset send failures (`requestPinReset` now returns `res.ok`) — `js/supabase.js`
 - [x] **U5** — _False positive:_ day-picker is already viewport-centered (240px, fixed + translate). Moved redundant inline positioning into CSS (`styles.css` / `app.js`)
 - [x] **U2** — Added `aria-label="Close"` to icon-only modal close buttons (`admin.html`) and `aria-hidden` to decorative gallery emoji (`index.html`)
