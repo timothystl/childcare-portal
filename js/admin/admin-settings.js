@@ -747,3 +747,69 @@ function _showAdminRolesStatus(msg, color) {
 }
 
 // ============================================================
+// GEOFENCE & CLOCK REMINDERS
+// ============================================================
+async function setupGeofence() {
+    const btn      = document.getElementById('saveGeofenceBtn');
+    const statusEl = document.getElementById('geofenceStatus');
+    if (!btn) return;
+
+    // Load saved settings
+    try {
+        const s = await fetchGeofenceSettings();
+        if (s.enabled    != null) document.getElementById('geofenceEnabled').checked = !!s.enabled;
+        if (s.lat        != null) document.getElementById('geofenceLat').value        = s.lat;
+        if (s.lng        != null) document.getElementById('geofenceLng').value        = s.lng;
+        if (s.radius_ft  != null) document.getElementById('geofenceRadius').value     = s.radius_ft;
+        if (s.grace_minutes != null) document.getElementById('geofenceGrace').value   = s.grace_minutes;
+        if (s.notify_email)       document.getElementById('geofenceNotifyEmail').value = s.notify_email;
+    } catch (err) {
+        console.error('setupGeofence load:', err);
+    }
+
+    // "Use My Location" button
+    document.getElementById('geofenceUseMyLocation')?.addEventListener('click', () => {
+        if (!navigator.geolocation) { alert('Geolocation is not supported by this browser.'); return; }
+        navigator.geolocation.getCurrentPosition(pos => {
+            document.getElementById('geofenceLat').value = pos.coords.latitude.toFixed(6);
+            document.getElementById('geofenceLng').value = pos.coords.longitude.toFixed(6);
+        }, () => alert('Could not get location. Please allow location access and try again.'));
+    });
+
+    btn.addEventListener('click', async () => {
+        btn.disabled    = true;
+        btn.textContent = 'Saving…';
+        if (statusEl) statusEl.textContent = '';
+        try {
+            const lat   = parseFloat(document.getElementById('geofenceLat').value)    || null;
+            const lng   = parseFloat(document.getElementById('geofenceLng').value)    || null;
+            const rad   = parseInt(document.getElementById('geofenceRadius').value, 10) || null;
+            const grace = parseInt(document.getElementById('geofenceGrace').value, 10)  || null;
+            const email = document.getElementById('geofenceNotifyEmail').value.trim()  || null;
+
+            await saveGeofenceSettings({
+                enabled:       document.getElementById('geofenceEnabled').checked,
+                lat,
+                lng,
+                radius_ft:     rad,
+                grace_minutes: grace,
+                notify_email:  email,
+            });
+
+            if (statusEl) {
+                statusEl.textContent = '✓ Saved!';
+                statusEl.style.color = '#2e7d32';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+        } catch (err) {
+            if (statusEl) {
+                statusEl.textContent = '⚠️ ' + err.message;
+                statusEl.style.color = '#c62828';
+            }
+            console.error('saveGeofenceSettings:', err);
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = '💾 Save';
+        }
+    });
+}

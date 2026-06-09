@@ -54,6 +54,7 @@ async function initDashboard() {
     setupExtraReports();
     setupWaitlistAdmin();
     setupAdminRoles();
+    setupGeofence();
     setupFinanceDashboard();
     setupBilling();
     setupTabs();
