@@ -636,6 +636,44 @@
                 <span id="adminRolesStatus" class="rates-status" style="display:block;margin-top:6px"></span>
             </section>
 
+            <!-- Geofence & Clock Reminders -->
+            <section class="admin-section collapsible-section" id="geofenceSection">
+                <h2>📍 Geofence &amp; Clock Reminders</h2>
+                <p class="section-desc">Warn staff and notify the director when a clock-in or clock-out happens outside the school perimeter. Also sends reminders if scheduled staff haven't clocked in or out within the grace period.</p>
+                <div class="geofence-fields">
+                    <label class="geofence-toggle-row">
+                        <input type="checkbox" id="geofenceEnabled">
+                        <span>Enable geofence warnings</span>
+                    </label>
+                    <div class="geofence-grid">
+                        <label>School Latitude
+                            <div class="geofence-loc-row">
+                                <input type="number" id="geofenceLat" placeholder="e.g. 30.2672" step="any">
+                                <button type="button" id="geofenceUseMyLocation" class="btn-secondary" style="white-space:nowrap">📍 Use My Location</button>
+                            </div>
+                        </label>
+                        <label>School Longitude
+                            <input type="number" id="geofenceLng" placeholder="e.g. -97.7431" step="any">
+                        </label>
+                        <label>Radius (feet)
+                            <input type="number" id="geofenceRadius" placeholder="e.g. 300" min="50" step="10">
+                        </label>
+                        <label>Grace Period (minutes)
+                            <input type="number" id="geofenceGrace" placeholder="e.g. 15" min="1" step="1">
+                            <small style="color:var(--text-muted,#888);font-size:.82em;">How long after shift start/end before a missed-clock alert fires.</small>
+                        </label>
+                        <label>Director Notify Email
+                            <input type="email" id="geofenceNotifyEmail" placeholder="director@example.com">
+                            <small style="color:var(--text-muted,#888);font-size:.82em;">Receives geofence alerts and missed-clock summaries.</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="rates-actions">
+                    <button id="saveGeofenceBtn" class="btn-primary">💾 Save</button>
+                    <span id="geofenceStatus" class="rates-status"></span>
+                </div>
+            </section>
+
         </div><!-- /#tab-settings -->
 
         <!-- ── Tab: Reports ───────────────────────────────────── -->

@@ -225,6 +225,68 @@ export default {
       return new Response(null, { status: res.ok ? 201 : 500 });
     }
 
+    // ── POST /staff-push-subscribe — save a push subscription for a staff member ──
+    if (url.pathname === '/staff-push-subscribe' && request.method === 'POST') {
+      const { staff_id, endpoint, p256dh, auth } = await request.json().catch(() => ({}));
+      if (!staff_id || !endpoint || !p256dh || !auth) {
+        return new Response('Missing fields', { status: 400 });
+      }
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/staff_push_subscriptions`, {
+        method:  'POST',
+        headers: {
+          'apikey':        env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type':  'application/json',
+          'Prefer':        'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({ staff_id, endpoint, p256dh, auth }),
+      });
+      return new Response(null, { status: res.ok ? 201 : 500 });
+    }
+
+    // ── POST /send-staff-push — send a notification to a staff member ────────
+    if (url.pathname === '/send-staff-push' && request.method === 'POST') {
+      // Require service role key or internal key to prevent abuse
+      const bearer = (request.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+      if (bearer !== env.SUPABASE_SERVICE_ROLE_KEY) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+
+      const { staff_id, title, body: msgBody } = await request.json().catch(() => ({}));
+      if (!staff_id || !title) return new Response('Missing fields', { status: 400 });
+
+      const subsRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/staff_push_subscriptions?staff_id=eq.${encodeURIComponent(staff_id)}&select=*`,
+        { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      );
+      if (!subsRes.ok) return new Response('Failed to fetch subscriptions', { status: 500 });
+
+      const subs = await subsRes.json();
+      if (!subs.length) return new Response(JSON.stringify({ sent: 0 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+
+      const results = await Promise.allSettled(
+        subs.map(sub => sendWebPush(sub, { title, body: msgBody }, env))
+      );
+
+      // Remove expired (410 Gone) subscriptions
+      const expired = subs
+        .filter((_, i) => results[i].status === 'fulfilled' && results[i].value.status === 410)
+        .map(s => s.id);
+      if (expired.length) {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/staff_push_subscriptions?id=in.(${expired.join(',')})`,
+          { method: 'DELETE', headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+        );
+      }
+
+      const sent = subs.length - expired.length;
+      return new Response(JSON.stringify({ sent }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // ── POST /send-push — send a notification (admin only) ──────────────────
     if (url.pathname === '/send-push' && request.method === 'POST') {
       // Reject cross-origin requests to prevent a logged-in admin's browser

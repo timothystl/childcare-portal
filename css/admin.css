@@ -3630,3 +3630,21 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     padding: 12px;
 }
 
+/* ============================================================
+   GEOFENCE SETTINGS SECTION
+   ============================================================ */
+.geofence-fields { display: flex; flex-direction: column; gap: 14px; }
+.geofence-toggle-row { display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
+.geofence-toggle-row input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+.geofence-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 18px;
+}
+.geofence-grid label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: .9em; color: var(--text); }
+.geofence-grid input { width: 100%; }
+.geofence-loc-row { display: flex; gap: 8px; }
+.geofence-loc-row input { flex: 1; min-width: 0; }
+@media (max-width: 600px) {
+    .geofence-grid { grid-template-columns: 1fr; }
+}

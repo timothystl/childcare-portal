@@ -579,6 +579,9 @@ async function upsertSetting(key, value) {
     if (error) throw error;
 }
 
+async function fetchGeofenceSettings() { return (await fetchSetting('geofence')) || {}; }
+async function saveGeofenceSettings(v) { await upsertSetting('geofence', v); }
+
 // ============================================================
 // DUPLICATE / CONFLICT CHECK
 // Returns an array of care_date strings that already have a confirmed
@@ -1723,12 +1726,13 @@ async function getClockStatus(staffId, workDate) {
  * @param {string} workDate - ISO 8601 date (YYYY-MM-DD)
  * @returns {Promise<void>}
  */
-async function clockIn(staffId, workDate, roomId = null) {
+async function clockIn(staffId, workDate, roomId = null, { lat = null, lon = null, outsideFence = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const now = new Date().toISOString();
-    const { error } = await sbClient
-        .from('staff_clock_events')
-        .insert({ staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null, room_id: roomId || null });
+    const row = { staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null, room_id: roomId || null };
+    if (lat != null) { row.clock_in_lat = lat; row.clock_in_lon = lon; }
+    row.clock_in_outside_fence = outsideFence || false;
+    const { error } = await sbClient.from('staff_clock_events').insert(row);
     if (error) throw error;
 }
 
@@ -1738,7 +1742,7 @@ async function clockIn(staffId, workDate, roomId = null) {
  * @param {string} workDate - ISO 8601 date (YYYY-MM-DD)
  * @returns {Promise<void>}
  */
-async function clockOut(staffId, workDate) {
+async function clockOut(staffId, workDate, { lat = null, lon = null, outsideFence = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const now = new Date().toISOString();
     const { data: open } = await sbClient
@@ -1751,10 +1755,10 @@ async function clockOut(staffId, workDate) {
         .limit(1)
         .maybeSingle();
     if (!open) throw new Error('No clock-in record found. Please clock in first.');
-    const { error } = await sbClient
-        .from('staff_clock_events')
-        .update({ clock_out: now })
-        .eq('id', open.id);
+    const update = { clock_out: now };
+    if (lat != null) { update.clock_out_lat = lat; update.clock_out_lon = lon; }
+    update.clock_out_outside_fence = outsideFence || false;
+    const { error } = await sbClient.from('staff_clock_events').update(update).eq('id', open.id);
     if (error) throw error;
 }
 
