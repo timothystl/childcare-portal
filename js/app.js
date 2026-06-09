@@ -1235,12 +1235,13 @@ async function handleSubmit(e) {
             details += `<p class="receipt-error-note">⚠️ Note: ${escHtml(errors.join('; '))}</p>`;
         }
 
-        // Action buttons: Print, iCal, and Email
+        // The confirmation email is sent AUTOMATICALLY (see below). Print and iCal
+        // remain optional buttons. A status line reflects the auto-send result.
         details += `<div style="margin-top:18px;text-align:center;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
             <button type="button" id="printScheduleBtn" class="btn-print-schedule">🖨️ Print / Save Schedule</button>
             <button type="button" id="icalDownloadBtn" class="btn-print-schedule" style="background:#f0f4ff;color:#667eea;border:1px solid #c7d2fe;">📅 Download iCal (.ics)</button>
-            <button type="button" id="emailScheduleBtn" class="btn-print-schedule" style="background:#f0fdf4;color:#166534;border:1px solid #86efac;">📧 Email Schedule</button>
-        </div>`;
+        </div>
+        <p id="emailScheduleStatus" style="margin-top:12px;text-align:center;font-size:.9em;color:#166534;">📧 Sending a confirmation email to ${escHtml(parentEmail)}…</p>`;
 
         document.getElementById('successDetails').innerHTML = details;
 
@@ -1259,11 +1260,10 @@ async function handleSubmit(e) {
             downloadIcal(sortedDates, results.map(r => r.child.name), parentName, win.targetLabel);
         });
 
-        // Wire up the email schedule button
-        document.getElementById('emailScheduleBtn')?.addEventListener('click', async () => {
-            const btn = document.getElementById('emailScheduleBtn');
-            btn.disabled = true;
-            btn.textContent = 'Sending…';
+        // Send the confirmation email automatically. Non-blocking: the success
+        // modal is already shown; we just update the status line with the result.
+        (async () => {
+            const statusEl = document.getElementById('emailScheduleStatus');
             try {
                 await sendScheduleEmail({
                     parentName,
@@ -1273,13 +1273,14 @@ async function handleSubmit(e) {
                     dates: emailDatesWithAmounts,
                     grandTotal: emailGrandTotal,
                 });
-                btn.textContent = '✓ Email Sent!';
+                if (statusEl) statusEl.textContent = `✓ A confirmation email was sent to ${parentEmail}.`;
             } catch (err) {
-                btn.disabled = false;
-                btn.textContent = '📧 Email Schedule';
-                showToast('Email failed: ' + err.message);
+                if (statusEl) {
+                    statusEl.style.color = '#b91c1c';
+                    statusEl.textContent = '⚠️ We couldn’t send the confirmation email automatically. You can still print or download your schedule above.';
+                }
             }
-        });
+        })();
 
         document.getElementById('successModal').style.display = 'flex';
 
