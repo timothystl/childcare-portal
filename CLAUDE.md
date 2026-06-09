@@ -67,7 +67,9 @@ A full code review + a deeper "second sweep" were done. Detailed records live in
   switch + policy drops still need a staging session.
 - **SS5** likely moot (the billing-by-email RPCs aren't deployed in prod — verify).
 - Remaining: SS3/SS9 (atomic registration RPC + capacity), SS11/SS16/SS17/SS18, SS19,
-  S2/S4/S6/S7, and the browser-verified UX/perf items (U3/U4, V2–V6, P1–P3, M1).
+  S6 (PIN-reset per-IP throttle), S8 (anon-key rotation), and the browser-verified UX/perf
+  items (U3/U4, V2–V6, P1–P3, M1). (S2 ✅, S4 ✅ closed by disabling Supabase signups,
+  S7 reviewed-as-moot.)
 - **`send-schedule-confirmation`** edge fn (SS13) still needs deploying.
 
 ### Hard-won operational notes (don't repeat these)
