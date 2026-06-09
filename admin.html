@@ -25,6 +25,7 @@
     <div id="loginScreen" class="login-screen">
         <div class="login-card">
             <img src="/images/logo/myMDO_admin_variant_light.png" alt="myMDO Admin" style="height:80px;display:block;margin:0 auto 28px;">
+            <form id="loginForm" autocomplete="on">
             <div class="form-group">
                 <label for="adminEmail">Email</label>
                 <input type="email" id="adminEmail" placeholder="admin@example.com" autocomplete="email">
@@ -33,8 +34,9 @@
                 <label for="adminPassword">Password</label>
                 <input type="password" id="adminPassword" placeholder="Password" autocomplete="current-password">
             </div>
-            <button id="loginBtn" class="btn-primary">Login</button>
+            <button id="loginBtn" type="button" class="btn-primary">Login</button>
             <p id="loginError" class="login-error hidden"></p>
+            </form>
         </div>
     </div>
 
