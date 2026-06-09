@@ -22,6 +22,7 @@ async function initDashboard() {
             loadRatioSettings(),
             loadSummerCampSetting(),
             loadOfferLinks().then(v => { window._globalOfferLinks = v; }),
+            loadGeofenceSettings(),
         ]);
     } catch (err) {
         console.error('initDashboard: initial data load failed —', err);

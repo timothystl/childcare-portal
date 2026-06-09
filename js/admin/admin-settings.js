@@ -749,23 +749,24 @@ function _showAdminRolesStatus(msg, color) {
 // ============================================================
 // GEOFENCE & CLOCK REMINDERS
 // ============================================================
-async function setupGeofence() {
+async function loadGeofenceSettings() {
+    try {
+        const s = await fetchGeofenceSettings();
+        if (s.enabled       != null) document.getElementById('geofenceEnabled').checked    = !!s.enabled;
+        if (s.lat           != null) document.getElementById('geofenceLat').value           = s.lat;
+        if (s.lng           != null) document.getElementById('geofenceLng').value           = s.lng;
+        if (s.radius_ft     != null) document.getElementById('geofenceRadius').value        = s.radius_ft;
+        if (s.grace_minutes != null) document.getElementById('geofenceGrace').value         = s.grace_minutes;
+        if (s.notify_email)          document.getElementById('geofenceNotifyEmail').value   = s.notify_email;
+    } catch (err) {
+        console.error('loadGeofenceSettings:', err);
+    }
+}
+
+function setupGeofence() {
     const btn      = document.getElementById('saveGeofenceBtn');
     const statusEl = document.getElementById('geofenceStatus');
     if (!btn) return;
-
-    // Load saved settings
-    try {
-        const s = await fetchGeofenceSettings();
-        if (s.enabled    != null) document.getElementById('geofenceEnabled').checked = !!s.enabled;
-        if (s.lat        != null) document.getElementById('geofenceLat').value        = s.lat;
-        if (s.lng        != null) document.getElementById('geofenceLng').value        = s.lng;
-        if (s.radius_ft  != null) document.getElementById('geofenceRadius').value     = s.radius_ft;
-        if (s.grace_minutes != null) document.getElementById('geofenceGrace').value   = s.grace_minutes;
-        if (s.notify_email)       document.getElementById('geofenceNotifyEmail').value = s.notify_email;
-    } catch (err) {
-        console.error('setupGeofence load:', err);
-    }
 
     // "Use My Location" button
     const locBtn = document.getElementById('geofenceUseMyLocation');
