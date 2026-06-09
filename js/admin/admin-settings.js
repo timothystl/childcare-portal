@@ -752,14 +752,23 @@ function _showAdminRolesStatus(msg, color) {
 async function loadGeofenceSettings() {
     try {
         const s = await fetchGeofenceSettings();
-        if (s.enabled       != null) document.getElementById('geofenceEnabled').checked    = !!s.enabled;
-        if (s.lat           != null) document.getElementById('geofenceLat').value           = s.lat;
-        if (s.lng           != null) document.getElementById('geofenceLng').value           = s.lng;
-        if (s.radius_ft     != null) document.getElementById('geofenceRadius').value        = s.radius_ft;
-        if (s.grace_minutes != null) document.getElementById('geofenceGrace').value         = s.grace_minutes;
-        if (s.notify_email)          document.getElementById('geofenceNotifyEmail').value   = s.notify_email;
+        console.log('[geofence] fetched settings:', JSON.stringify(s));
+        const elEnabled = document.getElementById('geofenceEnabled');
+        const elLat     = document.getElementById('geofenceLat');
+        console.log('[geofence] geofenceEnabled el:', elEnabled, '  geofenceLat el:', elLat);
+        if (s.enabled       != null) elEnabled && (elEnabled.checked = !!s.enabled);
+        if (s.lat           != null) elLat     && (elLat.value = s.lat);
+        const elLng = document.getElementById('geofenceLng');
+        if (s.lng           != null) elLng     && (elLng.value = s.lng);
+        const elRad = document.getElementById('geofenceRadius');
+        if (s.radius_ft     != null) elRad     && (elRad.value = s.radius_ft);
+        const elGrace = document.getElementById('geofenceGrace');
+        if (s.grace_minutes != null) elGrace   && (elGrace.value = s.grace_minutes);
+        const elEmail = document.getElementById('geofenceNotifyEmail');
+        if (s.notify_email)          elEmail   && (elEmail.value = s.notify_email);
+        console.log('[geofence] after load — lat field value:', elLat?.value);
     } catch (err) {
-        console.error('loadGeofenceSettings:', err);
+        console.error('loadGeofenceSettings error:', err);
     }
 }
 
