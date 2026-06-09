@@ -625,16 +625,18 @@
                     <p class="empty-hint">Loading…</p>
                 </div>
                 <p class="section-desc" style="margin-top:16px;font-weight:600;color:#444">Add Admin User</p>
+                <form id="addAdminRoleForm" autocomplete="off">
                 <div class="add-role-row">
-                    <input type="email" id="newRoleEmail" placeholder="email@example.com" class="family-search-input" style="flex:1;min-width:160px">
-                    <input type="password" id="newRolePassword" placeholder="Password (min 6 chars)" class="family-search-input" style="width:190px">
+                    <input type="email" id="newRoleEmail" placeholder="email@example.com" class="family-search-input" style="flex:1;min-width:160px" autocomplete="off">
+                    <input type="password" id="newRolePassword" placeholder="Password (min 6 chars)" class="family-search-input" style="width:190px" autocomplete="new-password">
                     <select id="newRoleLevel" class="family-search-input">
                         <option value="full">Full Access</option>
                         <option value="restricted">Restricted — Schedule Planner only</option>
                         <option value="staff">Staff — Classroom Roster (read-only)</option>
                     </select>
-                    <button id="addAdminRoleBtn" class="btn-primary">Add User</button>
+                    <button id="addAdminRoleBtn" type="button" class="btn-primary">Add User</button>
                 </div>
+                </form>
                 <span id="adminRolesStatus" class="rates-status" style="display:block;margin-top:6px"></span>
             </section>
 
