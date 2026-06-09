@@ -53,13 +53,14 @@ A full code review + a deeper "second sweep" were done. Detailed records live in
   `harden_definer_search_path.sql`, SS12 `ss12_one_open_clock_event.sql`.
 - **Edge/worker:** SS4 (`send-waitlist-offer` now requires admin auth) deployed; SS13
   worker email-filter validation auto-deployed via the workflow.
+- **SS2 DONE** — family PINs are text end-to-end: `ss2_family_login_text_pin.sql` applied,
+  `family-lookup` edge fn redeployed, `familyLogin` JS shipped. Leading-zero PINs (e.g.
+  `0123`) now log in (verified). Staff PINs are a separate int-based system, untouched.
 - **CI:** `.github/workflows/auto-merge-claude.yml` now auto-resolves version-file
   (`package.json` + `js/build-version.js`) merge conflicts — those were silently failing
   every auto-merge/deploy when two `claude/**` branches ran at once.
 
 ### Still to do (see NEXT_STEPS.md for the exact steps/sequencing)
-- **SS2** — family leading-zero PIN lockout: apply `ss2_family_login_text_pin.sql`, then
-  deploy the `family-lookup` edge fn + the `familyLogin` JS change **in that order**.
 - **SS1** — anon-read PII exposure: the public anon key can still read/modify
   families/students/staff (policies were over-permissive; a blanket tighten broke login
   and was rolled back). Groundwork RPCs are in `ss1_public_read_rpcs.sql`; the staged
