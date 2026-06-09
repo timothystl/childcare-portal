@@ -648,18 +648,18 @@
                     <div class="geofence-grid">
                         <label>School Latitude
                             <div class="geofence-loc-row">
-                                <input type="number" id="geofenceLat" placeholder="e.g. 30.2672" step="any">
+                                <input type="text" id="geofenceLat" placeholder="e.g. 30.2672" inputmode="decimal">
                                 <button type="button" id="geofenceUseMyLocation" class="btn-secondary" style="white-space:nowrap">📍 Use My Location</button>
                             </div>
                         </label>
                         <label>School Longitude
-                            <input type="number" id="geofenceLng" placeholder="e.g. -97.7431" step="any">
+                            <input type="text" id="geofenceLng" placeholder="e.g. -97.7431" inputmode="decimal">
                         </label>
                         <label>Radius (feet)
-                            <input type="number" id="geofenceRadius" placeholder="e.g. 300" min="50" step="10">
+                            <input type="text" id="geofenceRadius" placeholder="e.g. 300" inputmode="numeric">
                         </label>
                         <label>Grace Period (minutes)
-                            <input type="number" id="geofenceGrace" placeholder="e.g. 15" min="1" step="1">
+                            <input type="text" id="geofenceGrace" placeholder="e.g. 15" inputmode="numeric">
                             <small style="color:var(--text-muted,#888);font-size:.82em;">How long after shift start/end before a missed-clock alert fires.</small>
                         </label>
                         <label>Director Notify Email
