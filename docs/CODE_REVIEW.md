@@ -401,11 +401,10 @@ repo without touching the live Supabase project.
   `weeklyFullRate`/`weeklyHalfRate` (default `null`, so currently dormant), a family is
   quoted e.g. $300 but charged/invoiced 5×$75=$375. _In-repo fix:_ share the
   week-grouping/weekly-rate logic between both paths.
-- **SS2 — [High] Leading-zero PIN locks the account out.** [Both] PINs are set/stored as
-  text (bcrypt of the literal), but login coerces via `parseInt` (`js/supabase.js:778`,
-  `family-lookup/index.ts:48`) and `family_login(p_pin int)`
-  (`finalize_pin_hashing.sql:27`). `"0123"`→`123`→never matches→5 failures→lockout. Same
-  for staff PINs. _Fix:_ treat PINs as text end-to-end (RPC `p_pin text`, drop `parseInt`).
+- **SS2 — [High] ✅ FIXED (2026-06-05).** Leading-zero PIN lockout. `family_login` now
+  takes a TEXT PIN (`ss2_family_login_text_pin.sql`, applied); `parseInt` dropped in
+  `js/supabase.js` `familyLogin` and the `family-lookup` edge fn (both deployed). Verified
+  a `0`-leading PIN logs in. (Staff PINs are a separate int system — still SS11 territory.)
 - **SS3 — [High] No server-side capacity enforcement (oversubscription race).** [Public]
   Capacity is checked only client-side against a cache; `submitRegistration`
   (`js/supabase.js:386`) inserts with no count re-check and no DB trigger/constraint exists.

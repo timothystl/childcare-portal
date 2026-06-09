@@ -28,17 +28,10 @@ Branch: `claude/kind-mendel-I79x6`. Full findings: `docs/CODE_REVIEW.md`
 - Apply `supabase/migrations/ss12_one_open_clock_event.sql` (check for existing
   duplicate open shifts first — query is in the file header).
 
-### C. SS2 — family leading-zero PIN fix  (SEQUENCED — order matters)
-1. Apply `supabase/migrations/ss2_family_login_text_pin.sql` (staging → prod).
-2. `supabase functions deploy family-lookup` after editing it to NOT `parseInt`
-   the PIN (send the string). Edit `supabase/functions/family-lookup/index.ts:48`:
-   replace `const parsedPin = parseInt(pin, 10)` + the int send with a digit check
-   and pass the string to `family_login`.
-3. Frontend: `js/supabase.js` `familyLogin()` — replace `parseInt(pin,10)` /
-   `p_pin: parsedPin` with a `/^\d{4,8}$/` check and `p_pin: String(pin).trim()`.
-   (Ping the assistant to push this once steps 1–2 are live — pushing it before
-   the migration can break login, since a string to the old INT function is
-   rejected.)
+### C. SS2 — family leading-zero PIN fix  ✅ DONE (2026-06-05)
+Migration `ss2_family_login_text_pin.sql` applied; `family-lookup` edge fn
+redeployed; `js/supabase.js` `familyLogin` shipped. Leading-zero PINs verified
+working on both the parent portal and the registration-page lookup.
 
 ### D. SS1 — close the anon-read PII exposure  (groundwork done; staged)
 1. Apply `supabase/migrations/ss1_public_read_rpcs.sql` (creates capacity_counts
