@@ -3,6 +3,7 @@
 // Sections: Summer Camp Visibility, Offer Links, Closures,
 //           Tabs, Collapsibles, Rates & Settings, Admin Roles
 // ============================================================
+console.log('[admin-settings] script parsed v1.16.12');
 
 // SUMMER CAMP VISIBILITY SETTING
 // ============================================================
