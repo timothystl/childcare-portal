@@ -1,5 +1,9 @@
 node_modules/
-dist/
+# NOTE: dist/*.min.js is intentionally COMMITTED. The Cloudflare Workers
+# deploy (wrangler.jsonc → assets.directory ".") serves the repo as static
+# files with no build step, so the bundles referenced by the HTML must exist
+# in git. Run `npm run build` and commit dist/ whenever js/ source changes.
+dist/*.map
 
 # wrangler files
 .wrangler
