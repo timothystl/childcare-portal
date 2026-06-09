@@ -97,11 +97,23 @@ python3 serve.py   # simple local server on :8000
 npm run build        # one-shot — outputs to dist/
 npm run build:watch  # watch mode
 ```
-`scripts/build.js` bundles all JS into minified `dist/` files and patches the HTML to reference them. Cloudflare Pages CI runs `npm run build` automatically on push to `main`.
+`scripts/build.js` bundles all JS into minified `dist/` files and patches the HTML to reference them (the HTML loads `dist/*.min.js`, not the `js/` source).
+
+> ⚠️ **The deploy has NO build step.** Cloudflare Workers (`wrangler.jsonc` →
+> `assets.directory "."`) serves the repo's files directly as static assets.
+> Nothing runs `npm run build` on the server. Therefore **`dist/*.min.js` is
+> committed to git**, and **you MUST run `npm run build` and commit the updated
+> `dist/` whenever you change anything in `js/`** — otherwise the live site keeps
+> serving the old bundle (or, if a referenced bundle is missing, 404s and the
+> page's JS silently doesn't run at all). The idempotent `patchHtml` step keeps
+> the HTML `<script>` tags from duplicating across rebuilds. Sourcemaps
+> (`dist/*.map`) stay gitignored.
 
 ### Deployment
-Push to `main` → Cloudflare Pages builds and deploys automatically.
-Edge functions in `supabase/functions/` are deployed separately via the Supabase CLI.
+Push to `main` → Cloudflare Workers serves the committed files (including the
+committed `dist/` bundles). **Rebuild + commit `dist/` before pushing JS changes.**
+Edge functions in `supabase/functions/` are deployed separately (paste into the
+Supabase dashboard editor, or `supabase functions deploy <name>`).
 
 ---
 
