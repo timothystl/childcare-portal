@@ -356,9 +356,11 @@ serve(async (req) => {
 </body>
 </html>`;
 
-        // ICS attachment — one event per care date
+        // ICS attachment — one event per care date.
+        // Encode UTF-8 → base64; plain btoa() throws on non-Latin1 chars (the en-dash
+        // in the SUMMARY line), which would 500 the whole request.
         const icalContent = buildIcal(childList, dates as DateEntry[], monthLabel);
-        const icalBase64  = btoa(icalContent);
+        const icalBase64  = uint8ToBase64(new TextEncoder().encode(icalContent));
 
         // PDF invoice — optional; null means generation failed, skip the attachment
         const pdfBytes  = await buildInvoicePdf(
