@@ -2,9 +2,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Shift windows in 24-hr minutes
-const SHIFT_AM_START  = 8 * 60 + 15;  // 08:15
-const SHIFT_PM_START  = 12 * 60;       // 12:00
-const SHIFT_OUT_DEADLINE = 17 * 60;    // 17:00 (expected end of last PM shift)
+const SHIFT_AM_START = 8 * 60 + 15;   // 08:15
+const SHIFT_AM_END   = 13 * 60 + 15;  // 13:15
+const SHIFT_PM_START = 12 * 60;        // 12:00
+const SHIFT_PM_END   = 17 * 60;        // 17:00
 
 function minutesNow(tz: string): number {
     const str = new Date().toLocaleString("en-US", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false });
@@ -50,11 +51,12 @@ serve(async (req) => {
         }
 
         // Determine which alert types to check based on current time
-        const checkAmIn   = nowMins >= SHIFT_AM_START  + graceMins;
-        const checkPmIn   = nowMins >= SHIFT_PM_START  + graceMins;
-        const checkOut    = nowMins >= SHIFT_OUT_DEADLINE + graceMins;
+        const checkAmIn    = nowMins >= SHIFT_AM_START + graceMins;
+        const checkPmIn    = nowMins >= SHIFT_PM_START + graceMins;
+        const checkAmOut   = nowMins >= SHIFT_AM_END   + graceMins;
+        const checkPmOut   = nowMins >= SHIFT_PM_END   + graceMins;
 
-        if (!checkAmIn && !checkPmIn && !checkOut) {
+        if (!checkAmIn && !checkPmIn && !checkAmOut && !checkPmOut) {
             return new Response(JSON.stringify({ skipped: "too early" }), { status: 200 });
         }
 
@@ -81,40 +83,47 @@ serve(async (req) => {
         const sentList    = sentNotifs  || [];
 
         // Build lookup sets
-        const clockedInIds  = new Set(clockList.filter(e => e.clock_in).map(e => e.staff_id));
-        const clockedOutIds = new Set(clockList.filter(e => e.clock_out).map(e => e.staff_id));
-        const openClockIds  = new Set(
+        const clockedInIds = new Set(clockList.filter(e => e.clock_in).map(e => e.staff_id));
+        const openClockIds = new Set(
             clockList.filter(e => e.clock_in && !e.clock_out).map(e => e.staff_id)
         );
         const sentSet = new Set(sentList.map(n => `${n.staff_id}:${n.notification_type}`));
 
+        // Build a map of staffId → set of shifts scheduled today
+        const staffShifts = new Map<string, Set<string>>();
+        const staffNames  = new Map<string, string>();
+        for (const sched of schedList) {
+            const id   = sched.staff_id;
+            const name = (sched.staff as { name?: string })?.name ?? "Staff";
+            if (!staffShifts.has(id)) staffShifts.set(id, new Set());
+            staffShifts.get(id)!.add(sched.shift as string);
+            staffNames.set(id, name);
+        }
+
         const alerts: Array<{ staffId: string; staffName: string; type: string }> = [];
 
-        for (const sched of schedList) {
-            const staffId   = sched.staff_id;
-            const staffName = (sched.staff as { name?: string })?.name ?? "Staff";
-            const shift     = sched.shift as "am" | "pm";
-
-            if (shift === "am" && checkAmIn && !clockedInIds.has(staffId)) {
+        // Missed clock-in checks
+        for (const [staffId, shifts] of staffShifts) {
+            const staffName = staffNames.get(staffId) ?? "Staff";
+            if (shifts.has("am") && checkAmIn && !clockedInIds.has(staffId)) {
                 const type = "missed_clock_in_am";
                 if (!sentSet.has(`${staffId}:${type}`)) alerts.push({ staffId, staffName, type });
             }
-            if (shift === "pm" && checkPmIn && !clockedInIds.has(staffId)) {
+            if (shifts.has("pm") && checkPmIn && !clockedInIds.has(staffId)) {
                 const type = "missed_clock_in_pm";
                 if (!sentSet.has(`${staffId}:${type}`)) alerts.push({ staffId, staffName, type });
             }
         }
 
-        // Check for anyone clocked in but not out past the deadline
-        if (checkOut) {
-            for (const staffId of openClockIds) {
-                const type = "missed_clock_out";
-                if (!sentSet.has(`${staffId}:${type}`)) {
-                    const name = schedList.find(s => s.staff_id === staffId);
-                    const staffName = (name?.staff as { name?: string })?.name ?? "Staff";
-                    alerts.push({ staffId, staffName, type });
-                }
-            }
+        // Missed clock-out: fire only after that staff member's last scheduled shift ends
+        for (const staffId of openClockIds) {
+            const shifts    = staffShifts.get(staffId);
+            const staffName = staffNames.get(staffId) ?? "Staff";
+            // Use the latest shift deadline this person is scheduled for
+            const deadline  = shifts?.has("pm") ? checkPmOut : checkAmOut;
+            if (!deadline) continue;
+            const type = "missed_clock_out";
+            if (!sentSet.has(`${staffId}:${type}`)) alerts.push({ staffId, staffName, type });
         }
 
         if (!alerts.length) {
