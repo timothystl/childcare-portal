@@ -45,14 +45,15 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
-    const parsedPin = parseInt(pin, 10)
-    if (isNaN(parsedPin)) return json({ error: 'invalid_credentials' })
+    const pinStr = String(pin).trim()
+    if (!/^\d{4,8}$/.test(pinStr)) return json({ error: 'invalid_credentials' })
 
     // Delegate to the Postgres RPC which uses bcrypt (pgcrypto) and handles
     // attempt tracking + lockout atomically in a single DB transaction.
+    // PIN passed as TEXT so leading zeros (e.g. "0123") are preserved.
     const { data, error } = await supabase.rpc('family_login', {
       p_email: email,
-      p_pin:   parsedPin,
+      p_pin:   pinStr,
     })
 
     if (error) return json({ error: 'server_error', message: error.message }, 500)
