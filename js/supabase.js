@@ -572,11 +572,12 @@ async function fetchSetting(key) {
  */
 async function upsertSetting(key, value) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { error } = await sbClient
+    const { data, error } = await sbClient
         .from('settings')
-        .upsert({ key, value, updated_at: new Date().toISOString() },
-                 { onConflict: 'key' });
+        .upsert({ key, value }, { onConflict: 'key' })
+        .select('key');
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Settings write was blocked — check database RLS policies for the settings table.');
 }
 
 async function fetchGeofenceSettings() { return (await fetchSetting('geofence')) || {}; }
