@@ -555,29 +555,43 @@ async function deleteRegistrationDate(dateId) {
  */
 async function fetchSetting(key) {
     if (!sbClient) return null;
+    // Use limit(1) array-style instead of maybeSingle() so that duplicate rows
+    // (possible if the unique constraint on key is missing) don't cause a silent
+    // PGRST116 error that makes the whole fetch return null.
     const { data, error } = await sbClient
         .from('settings')
         .select('value')
         .eq('key', key)
-        .maybeSingle();
+        .limit(1);
     if (error) { console.error('fetchSetting:', error); return null; }
-    return data?.value ?? null;
+    return data?.[0]?.value ?? null;
 }
 
 /**
  * Creates or updates a setting in the settings key/value table.
+ * UPDATE first; if nothing was updated (row didn't exist), INSERT.
+ * This avoids duplicate rows regardless of whether the key column has
+ * a unique constraint.
  * @param {string} key   - Setting key
  * @param {*}      value - Any JSON-serializable value
  * @returns {Promise<void>}
  */
 async function upsertSetting(key, value) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
+    const { data: upd, error: updErr } = await sbClient
         .from('settings')
-        .upsert({ key, value }, { onConflict: 'key' })
+        .update({ value })
+        .eq('key', key)
         .select('key');
-    if (error) throw error;
-    if (!data || data.length === 0) throw new Error('Settings write was blocked — check database RLS policies for the settings table.');
+    if (updErr) throw updErr;
+    if (upd && upd.length > 0) return; // Updated existing row — done
+    // Row doesn't exist yet — insert it
+    const { data: ins, error: insErr } = await sbClient
+        .from('settings')
+        .insert({ key, value })
+        .select('key');
+    if (insErr) throw insErr;
+    if (!ins || ins.length === 0) throw new Error('Settings write was blocked — check database RLS policies for the settings table.');
 }
 
 async function fetchGeofenceSettings() { return (await fetchSetting('geofence')) || {}; }
