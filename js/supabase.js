@@ -772,9 +772,11 @@ async function searchFamiliesFromRegistrations(query) {
  */
 async function familyLogin(email, pin) {
     if (!sbClient) return { data: null, error: 'not_configured' };
-    const parsedPin = parseInt(pin, 10);
-    if (isNaN(parsedPin)) return { data: null, error: 'invalid_pin' };
-    const { data, error } = await sbClient.rpc('family_login', { p_email: email, p_pin: parsedPin });
+    // PIN passed as TEXT so leading zeros (e.g. "0123") survive — family_login
+    // now takes a text PIN (see ss2_family_login_text_pin.sql).
+    const pinStr = String(pin ?? '').trim();
+    if (!/^\d{4,8}$/.test(pinStr)) return { data: null, error: 'invalid_pin' };
+    const { data, error } = await sbClient.rpc('family_login', { p_email: email, p_pin: pinStr });
     if (error) throw error;
     return data; // { error: '...' } or { family: {...}, isParent2: bool }
 }
