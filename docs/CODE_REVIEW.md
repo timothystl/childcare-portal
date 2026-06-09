@@ -114,12 +114,16 @@ currentAdminRole = VALID_ROLES.includes(raw) ? raw : (hasRules ? 'staff' : 'full
 if (raw && !VALID_ROLES.includes(raw)) console.warn('Unknown admin role:', raw);
 ```
 
-### S4 — [Medium] `admin-users` edge function authorization
-`supabase/functions/admin-users/index.ts` only rejects when
-`roles[callerEmail] !== 'full'` and depends on the `admin_roles` settings row existing.
-Confirm: (a) writes to the `settings` table (esp. the `admin_roles` key) are restricted
-to the service role via RLS, and (b) the function fails closed when `admin_roles` is
-missing rather than treating the caller as privileged.
+### S4 — [Medium] `admin-users` edge function authorization — ✅ CLOSED (2026-06-05)
+`admin-users` (service-role create/delete of admin accounts) skips its role check when
+`admin_roles` is empty, so any **authenticated Supabase Auth user** could create a full
+admin. The exploit required public **Supabase Auth sign-ups** to be enabled — and they
+were. The app never uses signup (parents auth via the `family_login` PIN RPC; admins are
+created via the service-role Admin API, which bypasses the signup toggle; zero `signUp`
+calls in code), so **sign-ups were disabled in the dashboard**, closing the takeover path.
+_Residual (optional, defense-in-depth):_ make the function **fail closed** (always require
+`roles[callerEmail] === 'full'`) so it doesn't depend on the toggle — needs `admin_roles`
+populated first (or an env-var bootstrap allowlist) to avoid lockout.
 
 ### S5 — [Medium] Inconsistent HTML escaping (stored XSS surface)
 `escHtml()` (`admin-core.js` / `js/supabase.js:2241`) exists but isn't applied to every
@@ -341,7 +345,7 @@ Items keep their finding labels for reference. Check off as completed.
     the registration-RPC work (SS3/SS5/SS9).
 - [ ] **S2** — Enforce admin role server-side (RLS/edge fn), not just CSS hiding — _deferred: architectural, needs live Supabase to test_
 - [x] **S3** — Validate role against `['full','restricted','staff']` enum, least-privilege default — `admin-core.js`
-- [ ] **S4** — `admin-users` edge fn: fail closed; confirm `settings` writes are service-role only — _deferred: fail-closed risks locking out admins when `admin_roles` is unset; needs a bootstrap decision_
+- [x] **S4** — ✅ Closed by disabling public Supabase Auth sign-ups (app never used signup; admins are created via the service-role Admin API). Optional defense-in-depth: still make the edge fn fail-closed.
 - [x] **S5** — Audit `js/admin/*` `.innerHTML` sites — escaping was consistent except one gap (roster child name), now `escHtml()`-wrapped in `admin-classrooms.js`
 
 ### Wave 2 — Quick UX wins
