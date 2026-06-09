@@ -362,7 +362,9 @@ Items keep their finding labels for reference. Check off as completed.
 - [ ] **S6** — Per-IP / CAPTCHA throttling on PIN reset
 - [ ] **S7** — Trim `family_login()` RPC projection
 - [ ] **S8** — Confirm anon-key expiry + rotation cadence
-- [ ] **U4** — Standardize breakpoints; fix admin grid mobile overflow
+- [~] **U4** — Low priority (per owner, 2026-06-05): admin is used on **desktop only**, so the
+  admin-grid overflow doesn't matter in practice. The only real mobile surface is the parent
+  **calendar/registration** page (well-tested). Handle reactively if a parent reports an issue.
 - [x] **U7** — ✅ Lookup now notes confirmed days in other (hidden) months and only shows children with visible days (`js/lookup.js`, `css/lookup.css`)
 
 ### Wave 4 — Design system
