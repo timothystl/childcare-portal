@@ -342,6 +342,7 @@ function setupTabs() {
         if (tab === 'staffing'  && allStaffData.length === 0)    loadStaffList();
         if (tab === 'messages'  && !_messagesLoaded)             { _messagesLoaded = true; loadMessages(); }
         if (tab === 'billing'   && !_arLoaded)                   { setupBillingDashYear(); }
+        if (tab === 'settings')                                  loadGeofenceSettings();
     }
 
     btns.forEach(btn => btn.addEventListener('click', () => activate(btn.dataset.tab)));
