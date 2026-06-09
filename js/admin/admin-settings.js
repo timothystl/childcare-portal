@@ -768,17 +768,21 @@ function setupGeofence() {
     const statusEl = document.getElementById('geofenceStatus');
     if (!btn) return;
 
+    // Load saved settings now (belt-and-suspenders alongside Promise.all load)
+    loadGeofenceSettings();
+
     // "Use My Location" button
     const locBtn = document.getElementById('geofenceUseMyLocation');
     if (locBtn) {
         locBtn.addEventListener('click', () => {
             if (!navigator.geolocation) {
-                alert('Geolocation is not supported by this browser.');
+                if (statusEl) { statusEl.textContent = '⚠️ Geolocation not supported by this browser.'; statusEl.style.color = '#c62828'; }
                 return;
             }
             const orig = locBtn.textContent;
-            locBtn.textContent = 'Getting location…';
+            locBtn.textContent = '⏳ Getting location…';
             locBtn.disabled    = true;
+            if (statusEl) { statusEl.textContent = ''; }
             navigator.geolocation.getCurrentPosition(
                 pos => {
                     document.getElementById('geofenceLat').value = pos.coords.latitude.toFixed(6);
@@ -791,13 +795,13 @@ function setupGeofence() {
                     locBtn.textContent = orig;
                     locBtn.disabled    = false;
                     const msg = err.code === 1
-                        ? 'Location permission denied. Allow location access in your browser and try again.'
+                        ? '⚠️ Location permission denied — allow location access in your browser settings and try again.'
                         : err.code === 2
-                        ? 'Location unavailable. Check your device\'s location services.'
-                        : 'Location request timed out. Please try again.';
-                    alert(msg);
+                        ? '⚠️ Location unavailable — check your device\'s location services.'
+                        : '⚠️ Location request timed out — please try again.';
+                    if (statusEl) { statusEl.textContent = msg; statusEl.style.color = '#c62828'; }
                 },
-                { timeout: 10000, enableHighAccuracy: true }
+                { timeout: 10000, enableHighAccuracy: false }
             );
         });
     }
