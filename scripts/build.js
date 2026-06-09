@@ -160,7 +160,20 @@ function patchHtml() {
         const filePath = path.join(ROOT, file);
         if (!fs.existsSync(filePath)) return;
         let html = fs.readFileSync(filePath, 'utf8');
+
+        // Remove the source dev <script src="js/..."> tags.
         remove.forEach(re => { html = html.replace(re, ''); });
+
+        // Idempotency guard: also strip ANY existing dist bundle tags we're about
+        // to insert. Without this, re-running the build (e.g. Cloudflare on each
+        // deploy, operating on already-patched committed HTML) appends a *second*
+        // set of <script> tags every time — which is how this file accumulated
+        // duplicate/triplicate bundle loads that broke the pages.
+        insert.forEach(tag => {
+            const src = tag.match(/src="([^"]+)"/)[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            html = html.replace(new RegExp(`[ \\t]*<script src="${src}"></script>\\n`, 'g'), '');
+        });
+
         html = html.replace('</body>', insert.join('\n') + '\n</body>');
         fs.writeFileSync(filePath, html);
         console.log('[build] patched', file);
