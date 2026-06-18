@@ -71,7 +71,10 @@ serve(async (req) => {
 
         const apiKey    = Deno.env.get("RESEND_API_KEY");
         const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
-        const replyTo   = Deno.env.get("RESEND_REPLY_TO")   || fromEmail;
+        // Reply to the admin who sent this schedule so staff replies land in their
+        // inbox, not the generic org address. Fall back to RESEND_REPLY_TO if the
+        // auth session somehow has no email (shouldn't happen in practice).
+        const replyTo   = user.email || Deno.env.get("RESEND_REPLY_TO") || fromEmail;
 
         if (!apiKey) {
             return new Response(JSON.stringify({ error: "RESEND_API_KEY secret is not set" }), {
