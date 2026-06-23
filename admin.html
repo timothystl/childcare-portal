@@ -778,30 +778,10 @@
                 </div>
             </section>
 
-            <!-- Log Hours -->
-            <section class="admin-section collapsible-section" id="logHoursSection">
-                <h2>⏱ Log Hours</h2>
-                <p class="section-desc">Record actual hours worked by each staff member for a given day. Re-open the same date to update entries.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="logHoursDate">Date</label>
-                        <input type="date" id="logHoursDate">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="loadHoursBtn" class="btn-secondary">Load</button>
-                        <button id="saveHoursBtn" class="btn-primary">💾 Save Hours</button>
-                        <button id="syncClockBtn" class="btn-ghost">⟳ Sync from Clock-In</button>
-                    </div>
-                </div>
-                <div id="hoursEntryContent">
-                    <p class="empty-hint">Select a date and click Load to enter hours.</p>
-                </div>
-            </section>
-
-            <!-- Payroll Report -->
+            <!-- Payroll -->
             <section class="admin-section collapsible-section" id="payrollSection">
-                <h2>💵 Payroll Report</h2>
-                <p class="section-desc">Bi-weekly pay period summary with gross pay and year-to-date totals per staff member.</p>
+                <h2>💵 Payroll</h2>
+                <p class="section-desc">Review and edit hours, PTO, and pay for a bi-weekly period. Expand any staff row to see daily clock events and enter or correct hours — changes save automatically.</p>
                 <div class="roster-controls">
                     <div class="roster-field">
                         <label for="payrollPeriod">Pay Period</label>
@@ -810,12 +790,12 @@
                         </select>
                     </div>
                     <div class="roster-btns">
-                        <button id="generatePayrollBtn" class="btn-secondary">Generate Report</button>
+                        <button id="generatePayrollBtn" class="btn-secondary">Load Period</button>
                         <button id="exportPayrollBtn" class="btn-primary">&#8595; Export Excel</button>
                     </div>
                 </div>
                 <div id="payrollContent">
-                    <p class="empty-hint">Select a pay period and click Generate Report.</p>
+                    <p class="empty-hint">Select a pay period and click Load Period.</p>
                 </div>
             </section>
 

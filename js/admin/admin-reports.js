@@ -1248,22 +1248,22 @@ async function _buildPayrollData(startVal, endVal) {
     // events: [{clockIn, clockOut}] — individual clock punches for clock and clock-sync days
 
     // Index all period clock events by staffId|date so we can attach them to detail entries
-    const clockEventsByDay = new Map(); // staffId|date → [{clockIn, clockOut}]
+    const clockEventsByDay = new Map(); // staffId|date → [{clockIn, clockOut, roomId}]
     periodClockEvents.forEach(ev => {
         if (!ev.clock_in || !ev.clock_out) return;
         if (calcClockHrs(ev) <= 0) return;
         const key = manualKey(ev.staff_id, ev.work_date);
         if (!clockEventsByDay.has(key)) clockEventsByDay.set(key, []);
-        clockEventsByDay.get(key).push({ clockIn: ev.clock_in, clockOut: ev.clock_out });
+        clockEventsByDay.get(key).push({ clockIn: ev.clock_in, clockOut: ev.clock_out, roomId: ev.room_id || null });
     });
 
-    const periodDetailMap = new Map(); // staff_id → [{ work_date, hours, source, events }]
+    const periodDetailMap = new Map(); // staff_id → [{ work_date, hours, source, notes, events }]
     periodHrs.forEach(h => {
         const source = (h.notes || '').toLowerCase().includes('clock') ? 'clock-sync' : 'manual';
         if (!periodDetailMap.has(h.staff_id)) periodDetailMap.set(h.staff_id, []);
         const key = manualKey(h.staff_id, h.work_date);
         const events = clockEventsByDay.get(key) || [];
-        periodDetailMap.get(h.staff_id).push({ work_date: h.work_date, hours: parseFloat(h.hours_worked), source, events });
+        periodDetailMap.get(h.staff_id).push({ work_date: h.work_date, hours: parseFloat(h.hours_worked), source, notes: h.notes || '', events });
     });
     // Add clock-only days (not yet synced to staff_hours)
     const clockOnlyDayMap = new Map(); // `staffId|date` → accumulated hours
@@ -1280,7 +1280,7 @@ async function _buildPayrollData(startVal, endVal) {
         const work_date = key.slice(sepIdx + 1);
         if (!periodDetailMap.has(staffId)) periodDetailMap.set(staffId, []);
         const events = clockEventsByDay.get(key) || [];
-        periodDetailMap.get(staffId).push({ work_date, hours: hrs, source: 'clock', events });
+        periodDetailMap.get(staffId).push({ work_date, hours: hrs, source: 'clock', notes: '', events });
     });
     // Sort each staff's detail entries by date
     periodDetailMap.forEach(entries => entries.sort((a, b) => a.work_date.localeCompare(b.work_date)));
@@ -1315,64 +1315,86 @@ async function generatePayrollReport() {
     }
 }
 
-function _renderPtoGrid(container, staff, periodStart, periodPtoMap) {
-    const hourlyStaff = staff.filter(s => s.pay_type === 'hourly' && s.active);
-    if (!hourlyStaff.length) return '';
-
-    const _ptoPending = {};
-
-    const rows = hourlyStaff.map(s => {
-        const pto    = periodPtoMap.get(s.id) || {};
-        const used   = pto.used   ?? '';
-        const earned = pto.earned ?? '';
-        return `<tr>
-            <td style="padding:6px 10px"><strong>${escHtml(s.name)}</strong></td>
-            <td style="padding:6px 8px">
-                <input type="number" min="0" step="0.25" value="${used}" placeholder="0"
-                    style="width:70px;padding:4px 6px;border:1.5px solid var(--admin-border);border-radius:6px;text-align:right"
-                    data-sid="${escHtml(s.id)}" data-field="used"
-                    oninput="_schedulePtoSave(this,'${escHtml(s.id)}','${periodStart}')">
-            </td>
-            <td style="padding:6px 8px">
-                <input type="number" min="0" step="0.25" value="${earned}" placeholder="0"
-                    style="width:70px;padding:4px 6px;border:1.5px solid var(--admin-border);border-radius:6px;text-align:right"
-                    data-sid="${escHtml(s.id)}" data-field="earned"
-                    oninput="_schedulePtoSave(this,'${escHtml(s.id)}','${periodStart}')">
-            </td>
-        </tr>`;
-    }).join('');
-
-    return `<div style="margin-bottom:20px;background:var(--admin-hover);border:1px solid var(--admin-border);border-radius:10px;overflow:hidden">
-        <div style="padding:10px 14px 8px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--admin-border)">
-            <strong style="font-size:.9rem">PTO Hours — This Period</strong>
-            <span style="font-size:.78rem;color:var(--text-muted)">Hourly staff only · auto-saves</span>
-            <span id="ptoSaveIndicator" style="font-size:.78rem;color:#166534;margin-left:auto;display:none">✓ Saved</span>
-        </div>
-        <table style="width:100%;border-collapse:collapse">
-            <thead><tr style="background:var(--admin-section-bg)">
-                <th style="text-align:left;padding:6px 10px;font-size:.75rem;color:var(--text-muted)">Staff Member</th>
-                <th style="text-align:left;padding:6px 8px;font-size:.75rem;color:var(--text-muted)">PTO Used (hrs)</th>
-                <th style="text-align:left;padding:6px 8px;font-size:.75rem;color:var(--text-muted)">PTO Earned (hrs)</th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-        </table>
-    </div>`;
+function _buildAllDaysInPeriod(startISO, endISO) {
+    const days = [];
+    const cur = new Date(startISO + 'T12:00:00');
+    const end = new Date(endISO + 'T12:00:00');
+    while (cur <= end) {
+        days.push(cur.toISOString().split('T')[0]);
+        cur.setDate(cur.getDate() + 1);
+    }
+    return days;
 }
 
 let _ptoPendingTimers = {};
-function _schedulePtoSave(input, staffId, periodStart) {
+function _schedulePtoSaveUnified(container, staffId, periodStart) {
     clearTimeout(_ptoPendingTimers[staffId]);
     _ptoPendingTimers[staffId] = setTimeout(async () => {
-        const usedInput   = document.querySelector(`input[data-sid="${staffId}"][data-field="used"]`);
-        const earnedInput = document.querySelector(`input[data-sid="${staffId}"][data-field="earned"]`);
+        const usedInput   = container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="used"]`);
+        const earnedInput = container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="earned"]`);
         const used   = parseFloat(usedInput?.value)   || 0;
         const earned = parseFloat(earnedInput?.value) || 0;
         try {
             await upsertStaffPtoEntry(staffId, periodStart, used, earned);
-            const ind = document.getElementById('ptoSaveIndicator');
-            if (ind) { ind.style.display = ''; clearTimeout(_ptoPendingTimers['_flash']); _ptoPendingTimers['_flash'] = setTimeout(() => { ind.style.display = 'none'; }, 1800); }
+            const tick = container.querySelector(`.payroll-pto-save-tick[data-sid="${staffId}"]`);
+            if (tick) { tick.style.display = ''; clearTimeout(_ptoPendingTimers[staffId + '_flash']); _ptoPendingTimers[staffId + '_flash'] = setTimeout(() => { tick.style.display = 'none'; }, 1800); }
         } catch(e) { console.error('PTO save error', e); }
     }, 600);
+}
+
+async function _savePayrollHoursInline(hrsInput) {
+    const staffId  = hrsInput.dataset.staffId;
+    const workDate = hrsInput.dataset.workDate;
+    const container = document.getElementById('payrollContent');
+    const notesInput = container?.querySelector(`.payroll-notes-input[data-staff-id="${staffId}"][data-work-date="${workDate}"]`);
+    const hrsVal = hrsInput.value.trim();
+    if (hrsVal === '') return;
+    const hrs = parseFloat(hrsVal);
+    if (isNaN(hrs) || hrs < 0) return;
+    const notes = notesInput?.value.trim() || '';
+    const tick = hrsInput.closest('tr')?.querySelector('.payroll-day-save-tick');
+    try {
+        await upsertStaffHours(staffId, workDate, hrs, notes);
+        if (tick) { tick.style.display = ''; setTimeout(() => { tick.style.display = 'none'; }, 1800); }
+    } catch(e) { console.error('Hours save error', e); }
+}
+
+function _recalcPayrollStaff(container, staffId) {
+    const summaryRow = container.querySelector(`.payroll-staff-row[data-staff-id="${staffId}"]`);
+    if (!summaryRow || summaryRow.dataset.payType === 'salary') return;
+    const rate = parseFloat(summaryRow.dataset.rate) || 0;
+
+    let sumHrs = 0;
+    container.querySelectorAll(`.payroll-hrs-input[data-staff-id="${staffId}"]`).forEach(inp => {
+        const v = parseFloat(inp.value);
+        if (!isNaN(v) && v > 0) sumHrs += v;
+    });
+    const ptoInput = container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="used"]`);
+    sumHrs += parseFloat(ptoInput?.value) || 0;
+
+    const hrsCell = container.querySelector(`.payroll-period-hrs-cell[data-staff-id="${staffId}"]`);
+    const payCell = container.querySelector(`.payroll-period-pay-cell[data-staff-id="${staffId}"]`);
+    if (hrsCell) hrsCell.textContent = sumHrs > 0 ? sumHrs.toFixed(2) : '—';
+    if (payCell) payCell.textContent = sumHrs > 0 ? '$' + (sumHrs * rate).toFixed(2) : '—';
+
+    _recalcPayrollTotal(container);
+}
+
+function _recalcPayrollTotal(container) {
+    let total = 0;
+    container.querySelectorAll('.payroll-staff-row').forEach(row => {
+        const sid = row.dataset.staffId;
+        if (row.dataset.payType === 'salary') {
+            const payCell = container.querySelector(`.payroll-period-pay-cell[data-staff-id="${sid}"]`);
+            total += parseFloat((payCell?.textContent || '').replace('$', '')) || 0;
+        } else {
+            const rate = parseFloat(row.dataset.rate) || 0;
+            const hrsCell = container.querySelector(`.payroll-period-hrs-cell[data-staff-id="${sid}"]`);
+            total += (parseFloat(hrsCell?.textContent) || 0) * rate;
+        }
+    });
+    const totalEl = container.querySelector('#payrollTotalRow .report-revenue strong');
+    if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
 }
 
 function _calcYtdPeriods(startVal, endVal) {
@@ -1390,86 +1412,173 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         container.innerHTML = '<p class="empty-hint">No staff data found.</p>';
         return;
     }
-    const ptoGridHtml = _renderPtoGrid(container, staff, startVal, periodPtoMap);
 
-    let totPeriodPay = 0, totYtdPay = 0;
+    const allDays    = _buildAllDaysInPeriod(startVal, endVal);
     const ytdPeriods = _calcYtdPeriods(startVal, endVal);
-
-    const rows = staff.map(s => {
-        const isSalary   = s.pay_type === 'salary';
-        const roomLabel  = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
-        const inactive   = !s.active ? ' <span class="chip-waitlist status-chip" style="font-size:.75em">Inactive</span>' : '';
-        let periodPayStr, ytdPayStr, rateStr, periodHrsStr, ytdHrsStr;
-
-        if (isSalary) {
-            const sal      = s.salary_biweekly || 0;
-            const ytdSal   = sal * ytdPeriods;
-            totPeriodPay  += sal;
-            totYtdPay     += ytdSal;
-            rateStr        = `<span class="pay-type-chip pay-salary">Salary</span>`;
-            periodHrsStr   = '—';
-            periodPayStr   = sal > 0 ? '$' + sal.toFixed(2) : '—';
-            ytdHrsStr      = '—';
-            ytdPayStr      = ytdSal > 0 ? '$' + ytdSal.toFixed(2) : '—';
-        } else {
-            const pHrs   = periodMap.get(s.id) || 0;   // already includes PTO used
-            const ptoUsed = (periodPtoMap.get(s.id) || {}).used || 0;
-            const yHrs   = ytdMap.get(s.id) || 0;
-            const rate   = s.hourly_rate || 0;
-            totPeriodPay += pHrs * rate;
-            totYtdPay    += yHrs * rate;
-            rateStr       = `$${rate.toFixed(2)}/hr`;
-            const ptoNote = ptoUsed > 0 ? ` <span style="font-size:.75em;color:#7a5800">(incl. ${ptoUsed.toFixed(2)} PTO)</span>` : '';
-            periodHrsStr  = pHrs > 0 ? pHrs.toFixed(2) + ptoNote : '—';
-            periodPayStr  = pHrs > 0 ? '$' + (pHrs * rate).toFixed(2) : '—';
-            ytdHrsStr     = yHrs > 0 ? yHrs.toFixed(2) : '—';
-            ytdPayStr     = yHrs > 0 ? '$' + (yHrs * rate).toFixed(2) : '—';
-        }
-
-        const hasDetail = !isSalary && (periodDetailMap.get(s.id) || []).length > 0;
-        const detailRows = (periodDetailMap.get(s.id) || []).map(d => {
-            const [dy, dm, dd] = d.work_date.split('-').map(Number);
-            const dateLabel = `${MONTH_NAMES[dm - 1]} ${dd}`;
-            const sourceChip = d.source === 'clock-sync'
-                ? '<span style="font-size:.75em;color:#6b7280">clock sync</span>'
-                : d.source === 'clock'
-                ? '<span style="font-size:.75em;color:#9a6700">clock only</span>'
-                : '<span style="font-size:.75em;color:#166534">manual</span>';
-            const timesHtml = (d.events || []).map(ev => {
-                const fmt = ts => new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-                return `<span style="font-size:.75em;color:#374151;white-space:nowrap">${fmt(ev.clockIn)}&nbsp;–&nbsp;${fmt(ev.clockOut)}</span>`;
-            }).join('<span style="color:#9ca3af;margin:0 4px">·</span>');
-            return `<tr class="payroll-detail-row" style="display:none">
-                <td colspan="2" class="billing-indent" style="padding-left:2.5rem">
-                    ${dateLabel} ${sourceChip}
-                    ${timesHtml ? `<div style="margin-top:2px;padding-left:.25rem">${timesHtml}</div>` : ''}
-                </td>
-                <td class="report-num payroll-hrs">${d.hours.toFixed(2)}</td>
-                <td colspan="3"></td>
-            </tr>`;
-        }).join('');
-
-        return `
-            <tr class="payroll-staff-row${hasDetail ? ' payroll-expandable' : ''}" data-staff-id="${escHtml(s.id)}" style="${hasDetail ? 'cursor:pointer' : ''}">
-                <td>
-                    <strong>${escHtml(s.name)}</strong>${inactive}${hasDetail ? ' <span class="payroll-expand-icon" style="font-size:.8em;color:#6b7280">▶</span>' : ''}
-                    <br><small class="rates-ages">${escHtml(s.role || '')} · ${escHtml(roomLabel)}</small>
-                </td>
-                <td>${rateStr}</td>
-                <td class="report-num payroll-hrs">${periodHrsStr}</td>
-                <td class="report-num report-revenue">${periodPayStr}</td>
-                <td class="report-num payroll-hrs">${ytdHrsStr}</td>
-                <td class="report-num report-revenue">${ytdPayStr}</td>
-            </tr>${detailRows}`;
-    }).join('');
+    const DOW        = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
     const [sy, sm, sd] = startVal.split('-').map(Number);
     const [ey, em, ed] = endVal.split('-').map(Number);
     const periodLabel  = `${MONTH_NAMES[sm-1]} ${sd} – ${MONTH_NAMES[em-1]} ${ed}, ${ey}`;
 
+    let totPeriodPay = 0, totYtdPay = 0;
+
+    const rows = staff.map(s => {
+        const isSalary  = s.pay_type === 'salary';
+        const roomLabel = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
+        const inactive  = !s.active ? ' <span class="chip-waitlist status-chip" style="font-size:.75em">Inactive</span>' : '';
+
+        const pHrsTotal = periodMap.get(s.id) || 0;
+        const ptoUsed   = (periodPtoMap.get(s.id) || {}).used   || 0;
+        const ptoEarned = (periodPtoMap.get(s.id) || {}).earned || 0;
+        const yHrs      = ytdMap.get(s.id) || 0;
+
+        let rateStr, periodHrsStr, periodPayStr, ytdHrsStr, ytdPayStr;
+        if (isSalary) {
+            const sal    = s.salary_biweekly || 0;
+            const ytdSal = sal * ytdPeriods;
+            totPeriodPay += sal;
+            totYtdPay    += ytdSal;
+            rateStr       = `<span class="pay-type-chip pay-salary">Salary</span>`;
+            periodHrsStr  = '—';
+            periodPayStr  = sal > 0 ? '$' + sal.toFixed(2) : '—';
+            ytdHrsStr     = '—';
+            ytdPayStr     = ytdSal > 0 ? '$' + ytdSal.toFixed(2) : '—';
+        } else {
+            const rate = s.hourly_rate || 0;
+            totPeriodPay += pHrsTotal * rate;
+            totYtdPay    += yHrs * rate;
+            rateStr       = `$${rate.toFixed(2)}/hr`;
+            const ptoNote = ptoUsed > 0 ? ` <span style="font-size:.75em;color:#7a5800">(incl. ${ptoUsed.toFixed(2)} PTO)</span>` : '';
+            periodHrsStr  = pHrsTotal > 0 ? pHrsTotal.toFixed(2) + ptoNote : '—';
+            periodPayStr  = pHrsTotal > 0 ? '$' + (pHrsTotal * rate).toFixed(2) : '—';
+            ytdHrsStr     = yHrs > 0 ? yHrs.toFixed(2) : '—';
+            ytdPayStr     = yHrs > 0 ? '$' + (yHrs * rate).toFixed(2) : '—';
+        }
+
+        // Build per-date lookup for this staff member
+        const detailByDate = new Map();
+        (periodDetailMap.get(s.id) || []).forEach(d => detailByDate.set(d.work_date, d));
+
+        // One row per day in the period
+        const dailyRows = allDays.map(date => {
+            const d   = detailByDate.get(date);
+            const [, dm, dd] = date.split('-').map(Number);
+            const dow = DOW[new Date(date + 'T12:00:00').getDay()];
+            const dateLabel = `${dow} ${MONTH_NAMES[dm-1]} ${dd}`;
+
+            // Room from clock events on this day
+            const dayEvents = d?.events || [];
+            const dayRooms  = [...new Set(dayEvents.map(ev => ev.roomId).filter(Boolean))];
+            const dayRoomStr = dayRooms.map(id => ROOMS.find(r => r.id === id)?.label || id).join(', ') || (dayEvents.length ? '—' : '');
+
+            // Clock times display
+            const fmt = ts => new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            const timesStr = dayEvents.map(ev => `${fmt(ev.clockIn)} – ${fmt(ev.clockOut)}`).join(' · ');
+
+            // Clocked hours (sum of completed events)
+            const clockedHrs = dayEvents.reduce((sum, ev) => {
+                const ms = new Date(ev.clockOut) - new Date(ev.clockIn);
+                return sum + (ms >= 600000 ? Math.round(ms / 3600000 * 100) / 100 : 0);
+            }, 0);
+
+            // Hours input value: pre-fill for manual/clock-sync; for clock-only use as placeholder
+            const isClockOnly = d?.source === 'clock';
+            const hoursVal    = d && !isClockOnly ? d.hours.toFixed(2) : (isClockOnly ? '' : '');
+            const hrsPh       = isClockOnly ? d.hours.toFixed(2) : '';
+            const notesVal    = d?.notes || '';
+
+            // Source chip
+            let srcChip = '';
+            if (d) {
+                if (d.source === 'clock-sync') srcChip = '<span class="payroll-src-chip src-clocksync">synced</span>';
+                else if (d.source === 'clock')  srcChip = '<span class="payroll-src-chip src-clock">clock</span>';
+                else                            srcChip = '<span class="payroll-src-chip src-manual">manual</span>';
+            }
+
+            return `<tr class="payroll-day-row${!d ? ' payroll-day-empty' : ''}">
+                <td class="payroll-day-date">${dateLabel}</td>
+                <td class="payroll-day-room">${escHtml(dayRoomStr)}</td>
+                <td class="payroll-day-events">${timesStr ? escHtml(timesStr) : '<span class="text-muted">—</span>'}</td>
+                <td class="payroll-day-clocked">${clockedHrs > 0 ? clockedHrs.toFixed(2) : '—'}</td>
+                <td class="payroll-day-input">
+                    <input type="number" class="payroll-hrs-input rate-input"
+                        min="0" max="24" step="0.25"
+                        placeholder="${hrsPh || '—'}"
+                        data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
+                        value="${escHtml(hoursVal)}"
+                        style="width:72px">
+                </td>
+                <td class="payroll-day-notes">
+                    <input type="text" class="payroll-notes-input"
+                        placeholder="Notes"
+                        data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
+                        value="${escHtml(notesVal)}"
+                        style="width:140px;font-size:.82rem">
+                </td>
+                <td class="payroll-day-source">
+                    ${srcChip}
+                    <span class="payroll-day-save-tick" style="display:none;color:#166534;font-size:.78em;margin-left:4px">✓</span>
+                </td>
+            </tr>`;
+        }).join('');
+
+        // PTO row — hourly staff only
+        const ptoSection = !isSalary ? `
+            <tr class="payroll-pto-row">
+                <td colspan="7" style="padding:0">
+                    <div class="payroll-pto-bar">
+                        <span class="payroll-pto-label">PTO Used:</span>
+                        <input type="number" class="payroll-pto-input rate-input" min="0" step="0.25" style="width:72px"
+                            data-sid="${escHtml(s.id)}" data-field="used" value="${ptoUsed || ''}">
+                        <span class="payroll-pto-unit">hrs</span>
+                        <span class="payroll-pto-label" style="margin-left:16px">PTO Earned:</span>
+                        <input type="number" class="payroll-pto-input rate-input" min="0" step="0.25" style="width:72px"
+                            data-sid="${escHtml(s.id)}" data-field="earned" value="${ptoEarned || ''}">
+                        <span class="payroll-pto-unit">hrs</span>
+                        <span class="payroll-pto-save-tick" data-sid="${escHtml(s.id)}" style="display:none;color:#166534;font-size:.78em;margin-left:8px">✓ Saved</span>
+                    </div>
+                </td>
+            </tr>` : '';
+
+        return `
+            <tr class="payroll-staff-row payroll-expandable" data-staff-id="${escHtml(s.id)}"
+                data-rate="${isSalary ? 0 : (s.hourly_rate || 0)}" data-pay-type="${s.pay_type || 'hourly'}">
+                <td>
+                    <span class="payroll-expand-icon" style="font-size:.8em;color:#6b7280;margin-right:4px">▶</span>
+                    <strong>${escHtml(s.name)}</strong>${inactive}
+                    <br><small class="rates-ages">${escHtml(s.role || '')} · ${escHtml(roomLabel)}</small>
+                </td>
+                <td>${rateStr}</td>
+                <td class="report-num payroll-hrs payroll-period-hrs-cell" data-staff-id="${escHtml(s.id)}">${periodHrsStr}</td>
+                <td class="report-num report-revenue payroll-period-pay-cell" data-staff-id="${escHtml(s.id)}">${periodPayStr}</td>
+                <td class="report-num payroll-hrs">${ytdHrsStr}</td>
+                <td class="report-num report-revenue">${ytdPayStr}</td>
+            </tr>
+            <tr class="payroll-detail-panel" data-staff-id="${escHtml(s.id)}" style="display:none">
+                <td colspan="6" class="payroll-panel-cell">
+                    <table class="payroll-day-table">
+                        <thead>
+                            <tr>
+                                <th class="payroll-day-th">Date</th>
+                                <th class="payroll-day-th">Room</th>
+                                <th class="payroll-day-th">Clock Events</th>
+                                <th class="payroll-day-th">Clocked</th>
+                                <th class="payroll-day-th">Hours</th>
+                                <th class="payroll-day-th">Notes</th>
+                                <th class="payroll-day-th"></th>
+                            </tr>
+                        </thead>
+                        <tbody>${dailyRows}</tbody>
+                        ${ptoSection ? `<tfoot>${ptoSection}</tfoot>` : ''}
+                    </table>
+                </td>
+            </tr>`;
+    }).join('');
+
     container.innerHTML = `
-        ${ptoGridHtml}
         <h3 class="report-month-title">Pay Period: ${periodLabel}</h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin:-6px 0 14px">Click a staff row to expand daily hours. Hours auto-save on blur.</p>
         <div class="table-wrapper report-table-wrap">
             <table class="report-table payroll-table">
                 <thead>
@@ -1486,7 +1595,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 </thead>
                 <tbody>${rows}</tbody>
                 <tfoot>
-                    <tr class="report-total-row">
+                    <tr class="report-total-row" id="payrollTotalRow">
                         <td colspan="2"><strong>Total Payroll</strong></td>
                         <td class="report-num">—</td>
                         <td class="report-num report-revenue"><strong>$${totPeriodPay.toFixed(2)}</strong></td>
@@ -1497,19 +1606,41 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             </table>
         </div>`;
 
-    // Wire up click-to-expand detail rows for hourly staff
+    // Expand / collapse staff row on click
     container.querySelectorAll('.payroll-expandable').forEach(row => {
-        row.addEventListener('click', () => {
-            const icon     = row.querySelector('.payroll-expand-icon');
-            let next       = row.nextElementSibling;
-            let expanded   = false;
-            while (next && next.classList.contains('payroll-detail-row')) {
-                const showing = next.style.display !== 'none';
-                next.style.display = showing ? 'none' : '';
-                expanded = !showing;
-                next = next.nextElementSibling;
-            }
-            if (icon) icon.textContent = expanded ? '▼' : '▶';
+        row.addEventListener('click', e => {
+            if (e.target.closest('input, select, button, a')) return;
+            const staffId = row.dataset.staffId;
+            const panel   = container.querySelector(`.payroll-detail-panel[data-staff-id="${staffId}"]`);
+            if (!panel) return;
+            const icon       = row.querySelector('.payroll-expand-icon');
+            const isExpanded = panel.style.display !== 'none';
+            panel.style.display = isExpanded ? 'none' : '';
+            if (icon) icon.textContent = isExpanded ? '▶' : '▼';
+        });
+    });
+
+    // Hours inputs: live recalc on input, save on blur
+    container.querySelectorAll('.payroll-hrs-input').forEach(input => {
+        input.addEventListener('input',  () => _recalcPayrollStaff(container, input.dataset.staffId));
+        input.addEventListener('blur',   () => _savePayrollHoursInline(input));
+    });
+
+    // Notes inputs: save on blur (alongside the row's hours value)
+    container.querySelectorAll('.payroll-notes-input').forEach(input => {
+        input.addEventListener('blur', () => {
+            const { staffId, workDate } = input.dataset;
+            const hrsInput = container.querySelector(`.payroll-hrs-input[data-staff-id="${staffId}"][data-work-date="${workDate}"]`);
+            if (hrsInput && hrsInput.value.trim() !== '') _savePayrollHoursInline(hrsInput);
+        });
+    });
+
+    // PTO inputs: debounced save + live recalc
+    container.querySelectorAll('.payroll-pto-input').forEach(input => {
+        input.addEventListener('input', () => {
+            const sid = input.dataset.sid;
+            _schedulePtoSaveUnified(container, sid, startVal);
+            _recalcPayrollStaff(container, sid);
         });
     });
 }
