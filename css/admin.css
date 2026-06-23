@@ -2588,6 +2588,65 @@ tr.pending-approval:hover { background: var(--sun-pale); }
    ============================================================ */
 .payroll-table { width: 100%; }
 .payroll-hrs { font-weight: 600; color: var(--navy); }
+.payroll-staff-row { cursor: pointer; }
+.payroll-staff-row:hover td { background: var(--admin-hover); }
+
+/* Detail panel (expanded per-staff daily view) */
+.payroll-panel-cell { padding: 0 !important; border-bottom: 2px solid var(--admin-border) !important; }
+.payroll-day-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--admin-hover);
+    font-size: .83rem;
+}
+.payroll-day-th {
+    text-align: left;
+    padding: 5px 8px;
+    font-size: .74rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--admin-section-bg);
+    border-bottom: 1px solid var(--admin-border);
+}
+.payroll-day-row td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--admin-border);
+    vertical-align: middle;
+}
+.payroll-day-empty td { color: var(--text-muted); }
+.payroll-day-date    { white-space: nowrap; font-weight: 500; min-width: 110px; }
+.payroll-day-room    { white-space: nowrap; color: var(--text-muted); font-size: .8rem; min-width: 90px; }
+.payroll-day-events  { color: #374151; font-size: .8rem; }
+.payroll-day-clocked { text-align: right; font-weight: 600; color: var(--navy); min-width: 56px; }
+.payroll-day-input   { min-width: 82px; }
+.payroll-day-notes   { min-width: 160px; }
+.payroll-day-source  { white-space: nowrap; }
+
+/* Source chips */
+.payroll-src-chip {
+    display: inline-block;
+    font-size: .72em;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    vertical-align: middle;
+}
+.src-manual    { background: #d1fae5; color: #065f46; }
+.src-clocksync { background: #f3f4f6; color: #374151; }
+.src-clock     { background: #fef3c7; color: #92400e; }
+
+/* PTO bar at bottom of expanded panel */
+.payroll-pto-row td { padding: 0 !important; border-top: 1px solid var(--admin-border); }
+.payroll-pto-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--admin-section-bg);
+    font-size: .83rem;
+}
+.payroll-pto-label { font-weight: 500; color: var(--text-muted); }
+.payroll-pto-unit  { color: var(--text-muted); }
 
 /* ============================================================
    AVAILABILITY DAYS  (staff form)

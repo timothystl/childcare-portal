@@ -49,7 +49,6 @@ async function initDashboard() {
     setupOfferLinks();
     setupStaffScheduling();
     setupStaffRoster();
-    setupHoursEntry();
     setupPayrollReport();
     setupHistoricalPayroll();
     setupExtraReports();
