@@ -2648,6 +2648,48 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .payroll-pto-label { font-weight: 500; color: var(--text-muted); }
 .payroll-pto-unit  { color: var(--text-muted); }
 
+/* Clock Event Editor modal */
+.cee-modal-box {
+    background: #fff;
+    border-radius: 12px;
+    width: 540px;
+    max-width: 95vw;
+    max-height: 80vh;
+    overflow: auto;
+    box-shadow: 0 8px 40px rgba(0,0,0,.25);
+}
+.cee-modal-header {
+    display: flex;
+    align-items: center;
+    padding: 14px 18px 12px;
+    border-bottom: 1px solid var(--admin-border);
+    gap: 4px;
+}
+.cee-modal-body { padding: 16px 18px; }
+.cee-events-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.cee-event-item {
+    background: var(--admin-hover);
+    border: 1px solid var(--admin-border);
+    border-radius: 7px;
+    padding: 8px 10px;
+}
+.cee-event-item.cee-open { border-color: #fbbf24; background: #fffbeb; }
+.cee-display   { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cee-edit-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.cee-label  { flex: 1; font-size: .88rem; }
+.cee-hrs    { color: var(--text-muted); font-size: .82em; }
+.cee-add-form {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    background: var(--admin-hover);
+    border-radius: 7px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+.cee-actions { display: flex; gap: 8px; margin-top: 4px; }
+
 /* ============================================================
    AVAILABILITY DAYS  (staff form)
    ============================================================ */

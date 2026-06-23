@@ -1499,7 +1499,12 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             return `<tr class="payroll-day-row${!d ? ' payroll-day-empty' : ''}">
                 <td class="payroll-day-date">${dateLabel}</td>
                 <td class="payroll-day-room">${escHtml(dayRoomStr)}</td>
-                <td class="payroll-day-events">${timesStr ? escHtml(timesStr) : '<span class="text-muted">—</span>'}</td>
+                <td class="payroll-day-events">
+                    <span class="payroll-clk-times">${timesStr ? escHtml(timesStr) : '<span class="text-muted">—</span>'}</span>
+                    <button class="btn-ghost payroll-edit-clk-btn"
+                        data-staff-id="${escHtml(s.id)}" data-staff-name="${escHtml(s.name)}" data-work-date="${date}"
+                        title="Edit clock events" style="font-size:.75em;padding:2px 5px;margin-left:4px;opacity:.6">✎</button>
+                </td>
                 <td class="payroll-day-clocked">${clockedHrs > 0 ? clockedHrs.toFixed(2) : '—'}</td>
                 <td class="payroll-day-input">
                     <input type="number" class="payroll-hrs-input rate-input"
@@ -1643,6 +1648,223 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             _recalcPayrollStaff(container, sid);
         });
     });
+
+    // Clock event edit buttons → open modal editor
+    container.querySelectorAll('.payroll-edit-clk-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            _openClockEventEditor(btn.dataset.staffId, btn.dataset.staffName, btn.dataset.workDate);
+        });
+    });
+}
+
+// ── Clock Event Editor modal (opened from payroll daily rows) ────────────────
+function _openClockEventEditor(staffId, staffName, workDate) {
+    document.getElementById('clockEventEditorModal')?.remove();
+    const [, dm, dd] = workDate.split('-').map(Number);
+    const dateLabel = `${MONTH_NAMES[dm-1]} ${dd}`;
+
+    const modal = document.createElement('div');
+    modal.id = 'clockEventEditorModal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center';
+    modal.innerHTML = `
+        <div class="cee-modal-box">
+            <div class="cee-modal-header">
+                <strong>${escHtml(staffName)}</strong>
+                <span class="text-muted" style="margin-left:8px">· Clock Events · ${escHtml(dateLabel)}</span>
+                <button id="closeClockEditorBtn" class="btn-ghost" style="margin-left:auto">✕ Close</button>
+            </div>
+            <div id="clockEditorBody" class="cee-modal-body">
+                <p class="empty-hint">Loading…</p>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', e => { if (e.target === modal) _closeClockEventEditor(staffId, workDate); });
+    document.getElementById('closeClockEditorBtn').addEventListener('click', () => _closeClockEventEditor(staffId, workDate));
+
+    _renderClockEditorBody(staffId, workDate);
+}
+
+async function _renderClockEditorBody(staffId, workDate) {
+    const body = document.getElementById('clockEditorBody');
+    if (!body) return;
+
+    const fmtTime  = iso => iso ? new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '—';
+    const fmtInput = iso => { const d = iso ? new Date(iso) : new Date(); return d.toTimeString().slice(0, 5); };
+    const toISO    = t  => new Date(`${workDate}T${t}:00`).toISOString();
+
+    try {
+        const allEvents  = await fetchClockEventsForDate(workDate);
+        const events     = allEvents.filter(e => e.staff_id === staffId).sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in));
+
+        const eventRows = events.map(ev => {
+            const isOpen = ev.clock_in && !ev.clock_out;
+            const hrs    = (ev.clock_in && ev.clock_out) ? ((new Date(ev.clock_out) - new Date(ev.clock_in)) / 3600000).toFixed(2) : null;
+            return `<div class="cee-event-item${isOpen ? ' cee-open' : ''}" data-event-id="${ev.id}">
+                <div class="cee-display">
+                    <span class="cee-label">${isOpen ? '⚠ ' : ''}${fmtTime(ev.clock_in)} → ${isOpen ? '<em>open</em>' : fmtTime(ev.clock_out)}${hrs ? ` <span class="cee-hrs">(${hrs}h)</span>` : ''}</span>
+                    ${isOpen ? `<input type="time" class="cee-out-time" value="${fmtInput(null)}">
+                        <button class="btn-secondary cee-clock-out-btn" data-event-id="${ev.id}">Clock Out</button>` : `<button class="btn-ghost cee-edit-btn">Edit</button>`}
+                    <button class="btn-ghost cee-delete-btn" data-event-id="${ev.id}" style="color:var(--tang-dark)">✕</button>
+                </div>
+                <div class="cee-edit-form" style="display:none">
+                    <input type="time" class="cee-edit-in" value="${fmtInput(ev.clock_in)}">
+                    <span>→</span>
+                    <input type="time" class="cee-edit-out" value="${fmtInput(ev.clock_out)}">
+                    <button class="btn-secondary cee-save-btn" data-event-id="${ev.id}">Save</button>
+                    <button class="btn-ghost cee-cancel-edit-btn">Cancel</button>
+                </div>
+            </div>`;
+        }).join('');
+
+        body.innerHTML = `
+            <div class="cee-events-list">${events.length ? eventRows : '<p class="empty-hint" style="margin:0 0 12px">No clock events for this day.</p>'}</div>
+            <div class="cee-add-form" style="display:none">
+                <input type="time" class="cee-new-in" value="09:00">
+                <span>→</span>
+                <input type="time" class="cee-new-out">
+                <button class="btn-secondary cee-confirm-add-btn">Add</button>
+                <button class="btn-ghost cee-cancel-add-btn">Cancel</button>
+            </div>
+            <div class="cee-actions">
+                <button class="btn-ghost cee-show-add-btn">+ Add Entry</button>
+                <button class="btn-ghost cee-clock-in-now-btn">Clock In Now</button>
+            </div>`;
+
+        // Edit / cancel edit
+        body.querySelectorAll('.cee-edit-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const item = btn.closest('.cee-event-item');
+                item.querySelector('.cee-display').style.display = 'none';
+                item.querySelector('.cee-edit-form').style.display = 'flex';
+            });
+        });
+        body.querySelectorAll('.cee-cancel-edit-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const item = btn.closest('.cee-event-item');
+                item.querySelector('.cee-edit-form').style.display = 'none';
+                item.querySelector('.cee-display').style.display = '';
+            });
+        });
+
+        // Save edit
+        body.querySelectorAll('.cee-save-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const item = btn.closest('.cee-event-item');
+                const inV  = item.querySelector('.cee-edit-in').value;
+                const outV = item.querySelector('.cee-edit-out').value;
+                if (!inV) { alert('Clock-in time is required.'); return; }
+                btn.disabled = true;
+                try {
+                    await updateClockEvent(btn.dataset.eventId, toISO(inV), outV ? toISO(outV) : null);
+                    await _renderClockEditorBody(staffId, workDate);
+                } catch(e) { alert('Save failed: ' + e.message); btn.disabled = false; }
+            });
+        });
+
+        // Delete
+        body.querySelectorAll('.cee-delete-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (!confirm('Delete this clock entry?')) return;
+                btn.disabled = true;
+                try {
+                    await deleteClockEvent(btn.dataset.eventId);
+                    await _renderClockEditorBody(staffId, workDate);
+                } catch(e) { alert('Delete failed: ' + e.message); btn.disabled = false; }
+            });
+        });
+
+        // Clock out open events
+        body.querySelectorAll('.cee-clock-out-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const item = btn.closest('.cee-event-item');
+                const tInp = item.querySelector('.cee-out-time');
+                if (!tInp?.value) { alert('Enter a clock-out time.'); return; }
+                btn.disabled = true;
+                try {
+                    await updateClockEventOut(btn.dataset.eventId, toISO(tInp.value));
+                    await _renderClockEditorBody(staffId, workDate);
+                } catch(e) { alert('Clock-out failed: ' + e.message); btn.disabled = false; }
+            });
+        });
+
+        // Show/hide Add Entry form
+        body.querySelector('.cee-show-add-btn').addEventListener('click', () => {
+            body.querySelector('.cee-add-form').style.display = 'flex';
+            body.querySelector('.cee-actions').style.display = 'none';
+            body.querySelector('.cee-new-in').value = '09:00';
+            body.querySelector('.cee-new-out').value = '';
+            body.querySelector('.cee-new-in').focus();
+        });
+        body.querySelector('.cee-cancel-add-btn').addEventListener('click', () => {
+            body.querySelector('.cee-add-form').style.display = 'none';
+            body.querySelector('.cee-actions').style.display = '';
+        });
+        body.querySelector('.cee-confirm-add-btn').addEventListener('click', async () => {
+            const inV  = body.querySelector('.cee-new-in').value;
+            const outV = body.querySelector('.cee-new-out').value;
+            if (!inV) { alert('Clock-in time is required.'); return; }
+            const b = body.querySelector('.cee-confirm-add-btn');
+            b.disabled = true;
+            try {
+                await insertManualClockEvent(staffId, workDate, toISO(inV), outV ? toISO(outV) : null);
+                await _renderClockEditorBody(staffId, workDate);
+            } catch(e) { alert('Failed: ' + e.message); b.disabled = false; }
+        });
+
+        // Clock In Now
+        body.querySelector('.cee-clock-in-now-btn').addEventListener('click', async () => {
+            const b = body.querySelector('.cee-clock-in-now-btn');
+            b.disabled = true; b.textContent = 'Clocking in…';
+            try {
+                await insertManualClockEvent(staffId, workDate, new Date().toISOString(), null);
+                await _renderClockEditorBody(staffId, workDate);
+            } catch(e) { alert('Failed: ' + e.message); b.disabled = false; b.textContent = 'Clock In Now'; }
+        });
+
+    } catch(e) {
+        body.innerHTML = `<p class="import-error">Error: ${escHtml(e.message)}</p>`;
+    }
+}
+
+async function _closeClockEventEditor(staffId, workDate) {
+    document.getElementById('clockEventEditorModal')?.remove();
+
+    // Refresh the affected daily row in the payroll view
+    const container = document.getElementById('payrollContent');
+    if (!container) return;
+    try {
+        const allEvents   = await fetchClockEventsForDate(workDate);
+        const staffEvents = allEvents.filter(e => e.staff_id === staffId && e.clock_in && e.clock_out)
+            .sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in));
+        const fmtTime     = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        const timesStr    = staffEvents.map(ev => `${fmtTime(ev.clock_in)} – ${fmtTime(ev.clock_out)}`).join(' · ');
+        const clockedHrs  = staffEvents.reduce((sum, ev) => {
+            const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
+            return sum + (ms >= 600000 ? Math.round(ms / 3600000 * 100) / 100 : 0);
+        }, 0);
+        const dayRooms    = [...new Set(staffEvents.map(ev => ev.room_id).filter(Boolean))];
+        const dayRoomStr  = dayRooms.map(id => ROOMS.find(r => r.id === id)?.label || id).join(', ') || '';
+
+        const hrsInput = container.querySelector(`.payroll-hrs-input[data-staff-id="${staffId}"][data-work-date="${workDate}"]`);
+        if (!hrsInput) return;
+        const row = hrsInput.closest('tr');
+
+        const timesEl = row?.querySelector('.payroll-clk-times');
+        if (timesEl) timesEl.innerHTML = timesStr ? escHtml(timesStr) : '<span class="text-muted">—</span>';
+
+        const clockedEl = row?.querySelector('.payroll-day-clocked');
+        if (clockedEl) clockedEl.textContent = clockedHrs > 0 ? clockedHrs.toFixed(2) : '—';
+
+        const roomEl = row?.querySelector('.payroll-day-room');
+        if (roomEl) roomEl.textContent = dayRoomStr;
+
+        // Update hours placeholder if the input is blank (clock-only day)
+        if (!hrsInput.value) hrsInput.placeholder = clockedHrs > 0 ? clockedHrs.toFixed(2) : '—';
+
+        _recalcPayrollStaff(container, staffId);
+    } catch(e) { console.error('Failed to refresh daily row', e); }
 }
 
 async function exportPayrollReport() {
