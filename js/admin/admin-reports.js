@@ -1689,39 +1689,53 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         });
     });
 
-    // Clock event edit buttons → open modal editor
+    // Clock event edit buttons → open inline editor below the day row
     container.querySelectorAll('.payroll-edit-clk-btn').forEach(btn => {
         btn.addEventListener('click', e => {
             e.stopPropagation();
-            _openClockEventEditor(btn.dataset.staffId, btn.dataset.staffName, btn.dataset.workDate);
+            const dayRow = btn.closest('tr');
+            _openInlineClockEditor(dayRow, btn.dataset.staffId, btn.dataset.staffName, btn.dataset.workDate);
         });
     });
 }
 
-// ── Clock Event Editor modal (opened from payroll daily rows) ────────────────
-function _openClockEventEditor(staffId, staffName, workDate) {
-    document.getElementById('clockEventEditorModal')?.remove();
+// ── Inline Clock Event Editor (expands below the clicked day row) ────────────
+function _openInlineClockEditor(dayRow, staffId, staffName, workDate) {
+    const existing = document.querySelector('.payroll-clk-editor-row');
+    if (existing) {
+        const sameRow = existing.dataset.staffId === staffId && existing.dataset.workDate === workDate;
+        const oldSid  = existing.dataset.staffId;
+        const oldDate = existing.dataset.workDate;
+        existing.remove();
+        _refreshPayrollDayRow(oldSid, oldDate);
+        if (sameRow) return;
+    }
+
     const [, dm, dd] = workDate.split('-').map(Number);
     const dateLabel = `${MONTH_NAMES[dm-1]} ${dd}`;
 
-    const modal = document.createElement('div');
-    modal.id = 'clockEventEditorModal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center';
-    modal.innerHTML = `
-        <div class="cee-modal-box">
-            <div class="cee-modal-header">
+    const editorRow = document.createElement('tr');
+    editorRow.className = 'payroll-clk-editor-row';
+    editorRow.dataset.staffId  = staffId;
+    editorRow.dataset.workDate = workDate;
+    editorRow.innerHTML = `
+        <td colspan="7" class="payroll-clk-editor-cell">
+            <div class="cee-inline-header">
                 <strong>${escHtml(staffName)}</strong>
-                <span class="text-muted" style="margin-left:8px">· Clock Events · ${escHtml(dateLabel)}</span>
-                <button id="closeClockEditorBtn" class="btn-ghost" style="margin-left:auto">✕ Close</button>
+                <span class="text-muted" style="font-size:.85em;margin-left:6px">· Clock Events · ${escHtml(dateLabel)}</span>
+                <button class="btn-ghost cee-done-btn" style="margin-left:auto;font-size:.82em">✕ Done</button>
             </div>
-            <div id="clockEditorBody" class="cee-modal-body">
+            <div id="clockEditorBody" class="cee-inline-body">
                 <p class="empty-hint">Loading…</p>
             </div>
-        </div>`;
-    document.body.appendChild(modal);
+        </td>`;
 
-    modal.addEventListener('click', e => { if (e.target === modal) _closeClockEventEditor(staffId, workDate); });
-    document.getElementById('closeClockEditorBtn').addEventListener('click', () => _closeClockEventEditor(staffId, workDate));
+    dayRow.insertAdjacentElement('afterend', editorRow);
+
+    editorRow.querySelector('.cee-done-btn').addEventListener('click', () => {
+        editorRow.remove();
+        _refreshPayrollDayRow(staffId, workDate);
+    });
 
     _renderClockEditorBody(staffId, workDate);
 }
@@ -1868,23 +1882,20 @@ async function _renderClockEditorBody(staffId, workDate) {
     }
 }
 
-async function _closeClockEventEditor(staffId, workDate) {
-    document.getElementById('clockEventEditorModal')?.remove();
-
-    // Refresh the affected daily row in the payroll view
+async function _refreshPayrollDayRow(staffId, workDate) {
     const container = document.getElementById('payrollContent');
     if (!container) return;
     try {
         const allEvents   = await fetchClockEventsForDate(workDate);
         const staffEvents = allEvents.filter(e => e.staff_id === staffId && e.clock_in && e.clock_out)
             .sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in));
-        const fmtTime     = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        const timesStr    = staffEvents.map(ev => `${fmtTime(ev.clock_in)} – ${fmtTime(ev.clock_out)}`).join(' · ');
-        const clockedHrs  = staffEvents.reduce((sum, ev) => {
+        const fmtTime    = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        const timesStr   = staffEvents.map(ev => `${fmtTime(ev.clock_in)} – ${fmtTime(ev.clock_out)}`).join(' · ');
+        const clockedHrs = staffEvents.reduce((sum, ev) => {
             const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
             return sum + (ms >= 600000 ? Math.round(ms / 3600000 * 100) / 100 : 0);
         }, 0);
-        const dayRooms    = [...new Set(staffEvents.map(ev => ev.room_id).filter(Boolean))];
+        const dayRooms = [...new Set(staffEvents.map(ev => ev.room_id).filter(Boolean))];
 
         const hrsInput = container.querySelector(`.payroll-hrs-input[data-staff-id="${staffId}"][data-work-date="${workDate}"]`);
         if (!hrsInput) return;
@@ -1896,7 +1907,6 @@ async function _closeClockEventEditor(staffId, workDate) {
         const clockedEl = row?.querySelector('.payroll-day-clocked');
         if (clockedEl) clockedEl.textContent = clockedHrs > 0 ? clockedHrs.toFixed(2) : '—';
 
-        // Rebuild the room cell: select for 0–1 rooms, read-only for multi-room, dash if no events
         const roomEl = row?.querySelector('.payroll-day-room');
         if (roomEl) {
             if (staffEvents.length === 0) {
@@ -1904,8 +1914,8 @@ async function _closeClockEventEditor(staffId, workDate) {
             } else if (dayRooms.length > 1) {
                 roomEl.innerHTML = escHtml(dayRooms.map(id => ROOMS.find(r => r.id === id)?.label || id).join(', '));
             } else {
-                const existingSel = roomEl.querySelector('select');
                 const curRoomId = dayRooms[0] || '';
+                const existingSel = roomEl.querySelector('select');
                 if (existingSel) {
                     existingSel.value = curRoomId;
                     existingSel.dataset.prevValue = curRoomId;
@@ -1939,9 +1949,7 @@ async function _closeClockEventEditor(staffId, workDate) {
             }
         }
 
-        // Update hours placeholder if the input is blank (clock-only day)
         if (!hrsInput.value) hrsInput.placeholder = clockedHrs > 0 ? clockedHrs.toFixed(2) : '—';
-
         _recalcPayrollStaff(container, staffId);
     } catch(e) { console.error('Failed to refresh daily row', e); }
 }
