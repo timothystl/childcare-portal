@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Payroll UI Mockup — Timothy Lutheran MDO</title>
+<style>
+/* ── Design tokens ───────────────────────────────────────────── */
+:root {
+  --navy:           #01294A;
+  --navy-lt:        #013d6b;
+  --sun:            #F5B731;
+  --sun-pale:       #FFF8E1;
+  --sun-badge:      #fef3c7;
+  --tang:           #E97D55;
+  --tang-pale:      #FDEEE8;
+  --tang-dark:      #7a2a18;
+  --green-lt:       #C9E6DC;
+  --warm-gray:      #F5F0E4;
+  --border:         #E8E0CC;
+  --text-muted:     #7A6E5A;
+  --amber-dark:     #92400e;
+
+  /* admin-only tokens */
+  --admin-border:      #ddd6cc;
+  --admin-hover:       #f9f6f0;
+  --admin-section-bg:  #f4f0e8;
+
+  --font-body: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+  --radius-md: 12px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  background: var(--warm-gray);
+  color: #222;
+  font-size: 15px;
+  padding: 24px;
+}
+
+h2 { font-size: 1.15rem; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+.section-desc { font-size: .83rem; color: var(--text-muted); margin-bottom: 14px; }
+.text-muted { color: var(--text-muted); }
+
+/* ── Controls bar ───────────────────────────────────────────── */
+.roster-controls {
+  display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; margin-bottom: 18px;
+}
+.roster-field { display: flex; flex-direction: column; gap: 4px; }
+.roster-field label { font-size: .78rem; font-weight: 600; color: var(--text-muted); }
+.roster-btns { display: flex; gap: 8px; align-items: flex-end; }
+
+select, input[type="text"], input[type="number"], input[type="time"] {
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: .88rem;
+  background: #fff;
+}
+select { min-width: 220px; }
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--navy); color: #fff;
+  border: none; border-radius: 7px; padding: 8px 16px;
+  font-family: inherit; font-size: .88rem; font-weight: 600;
+  cursor: pointer;
+}
+.btn-secondary {
+  background: var(--sun); color: var(--navy);
+  border: none; border-radius: 7px; padding: 7px 14px;
+  font-family: inherit; font-size: .85rem; font-weight: 600;
+  cursor: pointer;
+}
+.btn-ghost {
+  background: transparent; color: var(--navy);
+  border: 1.5px solid var(--border); border-radius: 7px; padding: 5px 10px;
+  font-family: inherit; font-size: .82rem; cursor: pointer;
+}
+.btn-ghost:hover { background: var(--admin-hover); }
+
+/* ── Report table wrapper ────────────────────────────────────── */
+.table-wrapper { overflow-x: auto; border-radius: 10px; border: 1px solid var(--admin-border); }
+.report-table {
+  width: 100%; border-collapse: collapse;
+  font-size: .88rem;
+}
+.report-table thead th {
+  background: var(--navy); color: #fff;
+  padding: 9px 12px; text-align: left; font-size: .78rem; font-weight: 600;
+}
+.staff-room-header { text-align: center !important; }
+.staff-sub-head { text-align: right; background: #0d3d6a; font-size: .73rem; }
+.report-table tbody tr { border-bottom: 1px solid var(--admin-border); }
+.report-table tbody tr:last-child { border-bottom: none; }
+.report-table td { padding: 10px 12px; }
+.report-num { text-align: right; }
+.report-revenue { color: #065f46; font-weight: 600; }
+.report-total-row td { background: var(--admin-section-bg); font-size: .9rem; padding: 10px 12px; }
+
+/* ── Pay-type chips ──────────────────────────────────────────── */
+.pay-type-chip {
+  display: inline-block; font-size: .75em; font-weight: 700;
+  padding: 2px 8px; border-radius: 5px; vertical-align: middle;
+}
+.pay-salary { background: #dbeafe; color: #1e40af; }
+
+/* ── Staff summary row ───────────────────────────────────────── */
+.payroll-table { width: 100%; }
+.payroll-hrs { font-weight: 600; color: var(--navy); }
+.payroll-staff-row { cursor: pointer; transition: background .1s; }
+.payroll-staff-row:hover td { background: var(--admin-hover); }
+.payroll-expand-icon { display: inline-block; margin-right: 5px; font-size: .8em; color: #6b7280; }
+.rates-ages { color: var(--text-muted); font-size: .78rem; }
+.status-chip {
+  display: inline-block; font-size: .72em; padding: 1px 6px;
+  border-radius: 4px; background: #f3f4f6; color: #6b7280; vertical-align: middle;
+}
+
+/* ── Expanded panel ──────────────────────────────────────────── */
+.payroll-panel-cell { padding: 0 !important; border-bottom: 2px solid var(--admin-border) !important; }
+.payroll-day-table {
+  width: 100%; border-collapse: collapse;
+  background: var(--admin-hover); font-size: .83rem;
+}
+.payroll-day-th {
+  text-align: left; padding: 5px 8px;
+  font-size: .74rem; font-weight: 600; color: var(--text-muted);
+  background: var(--admin-section-bg);
+  border-bottom: 1px solid var(--admin-border);
+}
+.payroll-day-row td {
+  padding: 5px 8px; border-bottom: 1px solid var(--admin-border); vertical-align: middle;
+}
+.payroll-day-empty td { color: var(--text-muted); }
+.payroll-day-date   { white-space: nowrap; font-weight: 500; min-width: 110px; }
+.payroll-day-room   { white-space: nowrap; color: var(--text-muted); font-size: .8rem; min-width: 90px; }
+.payroll-day-events { color: #374151; font-size: .8rem; }
+.payroll-day-clocked { text-align: right; font-weight: 600; color: var(--navy); min-width: 56px; }
+.payroll-day-input  { min-width: 82px; }
+.payroll-day-notes  { min-width: 160px; }
+.payroll-day-source { white-space: nowrap; }
+.payroll-day-row input[type="number"] { width: 72px; }
+.payroll-day-row input[type="text"]   { width: 140px; font-size: .82rem; }
+
+/* source chips */
+.payroll-src-chip {
+  display: inline-block; font-size: .72em; font-weight: 600;
+  padding: 1px 6px; border-radius: 4px; vertical-align: middle;
+}
+.src-manual    { background: #d1fae5; color: #065f46; }
+.src-clocksync { background: #f3f4f6; color: #374151; }
+.src-clock     { background: #fef3c7; color: #92400e; }
+
+/* ── PTO bar ─────────────────────────────────────────────────── */
+.payroll-pto-row > td { padding: 0 !important; border-top: 1px solid var(--admin-border); }
+.payroll-pto-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; background: var(--admin-section-bg); font-size: .83rem;
+}
+.payroll-pto-label { font-weight: 500; color: var(--text-muted); }
+.payroll-pto-unit  { color: var(--text-muted); }
+.payroll-pto-bar input[type="number"] { width: 72px; }
+
+/* ── Inline clock editor ─────────────────────────────────────── */
+.payroll-clk-editor-row > td { padding: 0 !important; }
+.payroll-clk-editor-cell {
+  border-left: 3px solid #38bdf8;
+  border-bottom: 2px solid var(--admin-border) !important;
+  background: #f0f9ff;
+}
+.cee-inline-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-bottom: 1px solid #bae6fd; font-size: .88rem;
+}
+.cee-inline-body { padding: 12px 14px; }
+.cee-events-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.cee-event-item {
+  background: #fff; border: 1px solid var(--admin-border);
+  border-radius: 7px; padding: 8px 10px;
+}
+.cee-event-item.cee-open { border-color: #fbbf24; background: #fffbeb; }
+.cee-display { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cee-edit-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.cee-label { flex: 1; font-size: .88rem; }
+.cee-hrs   { color: var(--text-muted); font-size: .82em; }
+.cee-add-form {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--admin-hover); border-radius: 7px; padding: 10px; margin-bottom: 10px;
+}
+.cee-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+/* ── Edit pencil button ──────────────────────────────────────── */
+.payroll-edit-clk-btn {
+  font-size: .75em; padding: 2px 5px; margin-left: 4px; opacity: .6;
+  background: transparent; border: 1.5px solid var(--border);
+  border-radius: 5px; cursor: pointer; vertical-align: middle;
+}
+.payroll-edit-clk-btn:hover { opacity: 1; background: var(--admin-hover); }
+
+/* ── Room select ─────────────────────────────────────────────── */
+.payroll-room-select {
+  font-size: .8rem; max-width: 130px;
+  border: 1px solid var(--admin-border); border-radius: 6px; padding: 2px 4px;
+  background: #fff;
+}
+
+/* helper */
+.empty-hint { color: var(--text-muted); font-size: .85rem; font-style: italic; }
+</style>
+</head>
+<body>
+
+<div style="max-width:1100px;margin:0 auto">
+
+  <h2 style="margin-bottom:2px">💵 Payroll</h2>
+  <p class="section-desc">Review and edit hours, PTO, and pay for a bi-weekly period. Expand any staff row to see daily clock events and enter or correct hours — changes save automatically.</p>
+
+  <!-- Controls -->
+  <div class="roster-controls">
+    <div class="roster-field">
+      <label>Pay Period</label>
+      <select><option>June 9 – June 22, 2026</option></select>
+    </div>
+    <div class="roster-btns">
+      <button class="btn-secondary">Load Period</button>
+      <button class="btn-primary">↓ Export Excel</button>
+    </div>
+  </div>
+
+  <!-- Main table -->
+  <div class="table-wrapper">
+    <table class="report-table payroll-table">
+      <thead>
+        <tr>
+          <th rowspan="2">Staff Member</th>
+          <th rowspan="2">Rate</th>
+          <th colspan="2" class="staff-room-header">This Period</th>
+          <th colspan="2" class="staff-room-header">Year to Date (2026)</th>
+        </tr>
+        <tr>
+          <th class="staff-sub-head">Hours</th>
+          <th class="staff-sub-head">Gross Pay</th>
+          <th class="staff-sub-head">Hours</th>
+          <th class="staff-sub-head">Gross Pay</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <!-- ── Collapsed staff row ─────────────────────────────── -->
+        <tr class="payroll-staff-row">
+          <td>
+            <span class="payroll-expand-icon">▶</span>
+            <strong>Alyssa Ramsey</strong>
+            <br><small class="rates-ages">Float / Sub · Float</small>
+          </td>
+          <td>$16.00/hr</td>
+          <td class="report-num payroll-hrs">13.11</td>
+          <td class="report-num report-revenue">$209.76</td>
+          <td class="report-num payroll-hrs">162.80</td>
+          <td class="report-num report-revenue">$2,604.80</td>
+        </tr>
+
+        <!-- ── Expanded staff row ──────────────────────────────── -->
+        <tr class="payroll-staff-row">
+          <td>
+            <span class="payroll-expand-icon">▼</span>
+            <strong>Amy Ricketts</strong>
+            <br><small class="rates-ages">Asst. Director · Float</small>
+          </td>
+          <td>$18.25/hr</td>
+          <td class="report-num payroll-hrs">13.11 <span style="font-size:.75em;color:#7a5800"></span></td>
+          <td class="report-num report-revenue">$239.26</td>
+          <td class="report-num payroll-hrs">162.80</td>
+          <td class="report-num report-revenue">$2,971.10</td>
+        </tr>
+
+        <!-- ── Detail panel for Amy ───────────────────────────── -->
+        <tr>
+          <td colspan="6" class="payroll-panel-cell">
+            <table class="payroll-day-table">
+              <thead>
+                <tr>
+                  <th class="payroll-day-th">Date</th>
+                  <th class="payroll-day-th">Room</th>
+                  <th class="payroll-day-th">Clock Events</th>
+                  <th class="payroll-day-th">Clocked</th>
+                  <th class="payroll-day-th">Hours</th>
+                  <th class="payroll-day-th">Notes</th>
+                  <th class="payroll-day-th"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Day with clock events + manual hours -->
+                <tr class="payroll-day-row">
+                  <td class="payroll-day-date">Mon June 8</td>
+                  <td class="payroll-day-room">
+                    <select class="payroll-room-select">
+                      <option value="">—</option>
+                      <option selected>☀️ Summer Camp</option>
+                      <option>🐻 Bear Room</option>
+                      <option>🐝 Bee Room</option>
+                      <option>🦉 Owl Room</option>
+                    </select>
+                  </td>
+                  <td class="payroll-day-events">
+                    <span>8:49 AM – 12:41 PM · 1:33 PM – 4:01 PM</span>
+                    <button class="payroll-edit-clk-btn">✎</button>
+                  </td>
+                  <td class="payroll-day-clocked">6.33</td>
+                  <td class="payroll-day-input"><input type="number" value="6.33"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"><span class="payroll-src-chip src-clock">clock</span></td>
+                </tr>
+
+                <!-- Day with manual hours (no clock events) -->
+                <tr class="payroll-day-row">
+                  <td class="payroll-day-date">Tue June 9</td>
+                  <td class="payroll-day-room"><span class="text-muted">—</span></td>
+                  <td class="payroll-day-events">
+                    <span class="text-muted">—</span>
+                    <button class="payroll-edit-clk-btn">✎</button>
+                  </td>
+                  <td class="payroll-day-clocked">—</td>
+                  <td class="payroll-day-input"><input type="number" value="6.00"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"><span class="payroll-src-chip src-manual">manual</span></td>
+                </tr>
+
+                <!-- Empty days -->
+                <tr class="payroll-day-row payroll-day-empty">
+                  <td class="payroll-day-date">Wed June 10</td>
+                  <td class="payroll-day-room"><span class="text-muted">—</span></td>
+                  <td class="payroll-day-events"><span class="text-muted">—</span> <button class="payroll-edit-clk-btn">✎</button></td>
+                  <td class="payroll-day-clocked">—</td>
+                  <td class="payroll-day-input"><input type="number" placeholder="—"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"></td>
+                </tr>
+                <tr class="payroll-day-row payroll-day-empty">
+                  <td class="payroll-day-date">Thu June 11</td>
+                  <td class="payroll-day-room"><span class="text-muted">—</span></td>
+                  <td class="payroll-day-events"><span class="text-muted">—</span> <button class="payroll-edit-clk-btn">✎</button></td>
+                  <td class="payroll-day-clocked">—</td>
+                  <td class="payroll-day-input"><input type="number" placeholder="—"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"></td>
+                </tr>
+                <tr class="payroll-day-row payroll-day-empty">
+                  <td class="payroll-day-date">Fri June 12</td>
+                  <td class="payroll-day-room"><span class="text-muted">—</span></td>
+                  <td class="payroll-day-events"><span class="text-muted">—</span> <button class="payroll-edit-clk-btn">✎</button></td>
+                  <td class="payroll-day-clocked">—</td>
+                  <td class="payroll-day-input"><input type="number" placeholder="—"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"></td>
+                </tr>
+                <tr class="payroll-day-row payroll-day-empty">
+                  <td class="payroll-day-date">Sat June 13</td>
+                  <td class="payroll-day-room"><span class="text-muted">—</span></td>
+                  <td class="payroll-day-events"><span class="text-muted">—</span> <button class="payroll-edit-clk-btn">✎</button></td>
+                  <td class="payroll-day-clocked">—</td>
+                  <td class="payroll-day-input"><input type="number" placeholder="—"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"></td>
+                </tr>
+                <tr class="payroll-day-row payroll-day-empty">
+                  <td class="payroll-day-date">Sun June 14</td>
+                  <td class="payroll-day-room"><span class="text-muted">—</span></td>
+                  <td class="payroll-day-events"><span class="text-muted">—</span> <button class="payroll-edit-clk-btn">✎</button></td>
+                  <td class="payroll-day-clocked">—</td>
+                  <td class="payroll-day-input"><input type="number" placeholder="—"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"></td>
+                </tr>
+
+                <!-- Day with clock events (single session) -->
+                <tr class="payroll-day-row">
+                  <td class="payroll-day-date">Mon June 15</td>
+                  <td class="payroll-day-room">
+                    <select class="payroll-room-select">
+                      <option value="">—</option>
+                      <option selected>☀️ Summer Camp</option>
+                      <option>🐻 Bear Room</option>
+                      <option>🐝 Bee Room</option>
+                      <option>🦉 Owl Room</option>
+                    </select>
+                  </td>
+                  <td class="payroll-day-events">
+                    <span>9:05 AM – 1:37 PM</span>
+                    <button class="payroll-edit-clk-btn">✎</button>
+                  </td>
+                  <td class="payroll-day-clocked">4.54</td>
+                  <td class="payroll-day-input"><input type="number" placeholder="4.54"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"><span class="payroll-src-chip src-clock">clock</span></td>
+                </tr>
+
+                <tr class="payroll-day-row payroll-day-empty">
+                  <td class="payroll-day-date">Tue June 16</td>
+                  <td class="payroll-day-room"><span class="text-muted">—</span></td>
+                  <td class="payroll-day-events"><span class="text-muted">—</span> <button class="payroll-edit-clk-btn">✎</button></td>
+                  <td class="payroll-day-clocked">—</td>
+                  <td class="payroll-day-input"><input type="number" placeholder="—"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"></td>
+                </tr>
+                <tr class="payroll-day-row payroll-day-empty">
+                  <td class="payroll-day-date">Wed June 17</td>
+                  <td class="payroll-day-room"><span class="text-muted">—</span></td>
+                  <td class="payroll-day-events"><span class="text-muted">—</span> <button class="payroll-edit-clk-btn">✎</button></td>
+                  <td class="payroll-day-clocked">—</td>
+                  <td class="payroll-day-input"><input type="number" placeholder="—"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"></td>
+                </tr>
+
+                <!-- Day with synced hours -->
+                <tr class="payroll-day-row">
+                  <td class="payroll-day-date">Thu June 18</td>
+                  <td class="payroll-day-room">
+                    <select class="payroll-room-select">
+                      <option value="">—</option>
+                      <option selected>☀️ Summer Camp</option>
+                      <option>🐻 Bear Room</option>
+                      <option>🐝 Bee Room</option>
+                      <option>🦉 Owl Room</option>
+                    </select>
+                  </td>
+                  <td class="payroll-day-events">
+                    <span>8:46 AM – 1:13 PM · 2:05 PM – 4:44 PM</span>
+                    <button class="payroll-edit-clk-btn">✎</button>
+                  </td>
+                  <td class="payroll-day-clocked">7.11</td>
+                  <td class="payroll-day-input"><input type="number" value="7.11"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"><span class="payroll-src-chip src-manual">manual</span></td>
+                </tr>
+
+                <tr class="payroll-day-row payroll-day-empty">
+                  <td class="payroll-day-date">Fri June 19</td>
+                  <td class="payroll-day-room"><span class="text-muted">—</span></td>
+                  <td class="payroll-day-events"><span class="text-muted">—</span> <button class="payroll-edit-clk-btn">✎</button></td>
+                  <td class="payroll-day-clocked">—</td>
+                  <td class="payroll-day-input"><input type="number" placeholder="—"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"></td>
+                </tr>
+                <tr class="payroll-day-row payroll-day-empty">
+                  <td class="payroll-day-date">Sat June 20</td>
+                  <td class="payroll-day-room"><span class="text-muted">—</span></td>
+                  <td class="payroll-day-events"><span class="text-muted">—</span> <button class="payroll-edit-clk-btn">✎</button></td>
+                  <td class="payroll-day-clocked">—</td>
+                  <td class="payroll-day-input"><input type="number" placeholder="—"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"></td>
+                </tr>
+                <tr class="payroll-day-row payroll-day-empty">
+                  <td class="payroll-day-date">Sun June 21</td>
+                  <td class="payroll-day-room"><span class="text-muted">—</span></td>
+                  <td class="payroll-day-events"><span class="text-muted">—</span> <button class="payroll-edit-clk-btn">✎</button></td>
+                  <td class="payroll-day-clocked">—</td>
+                  <td class="payroll-day-input"><input type="number" placeholder="—"></td>
+                  <td class="payroll-day-notes"><input type="text" placeholder="Notes"></td>
+                  <td class="payroll-day-source"></td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <!-- PTO bar -->
+                <tr class="payroll-pto-row">
+                  <td colspan="7" style="padding:0">
+                    <div class="payroll-pto-bar">
+                      <span class="payroll-pto-label">PTO Used:</span>
+                      <input type="number" placeholder="0" style="width:72px">
+                      <span class="payroll-pto-unit">hrs</span>
+                      <span class="payroll-pto-label" style="margin-left:16px">PTO Earned:</span>
+                      <input type="number" placeholder="0" style="width:72px">
+                      <span class="payroll-pto-unit">hrs</span>
+                    </div>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ── Inline clock event editor (shown open for June 8) ── -->
+        <tr class="payroll-clk-editor-row">
+          <td colspan="6" class="payroll-clk-editor-cell">
+            <div class="cee-inline-header">
+              <strong>Amy Ricketts</strong>
+              <span class="text-muted" style="font-size:.85em;margin-left:6px">· Clock Events · June 8</span>
+              <button class="btn-ghost" style="margin-left:auto;font-size:.82em">✕ Done</button>
+            </div>
+            <div class="cee-inline-body">
+              <div class="cee-events-list">
+                <div class="cee-event-item">
+                  <div class="cee-display">
+                    <span class="cee-label">8:49 AM → 12:41 PM <span class="cee-hrs">(3.87h)</span></span>
+                    <button class="btn-ghost">Edit</button>
+                    <button class="btn-ghost" style="color:var(--tang-dark)">✕</button>
+                  </div>
+                </div>
+                <div class="cee-event-item">
+                  <div class="cee-display">
+                    <span class="cee-label">1:33 PM → 4:01 PM <span class="cee-hrs">(2.47h)</span></span>
+                    <button class="btn-ghost">Edit</button>
+                    <button class="btn-ghost" style="color:var(--tang-dark)">✕</button>
+                  </div>
+                </div>
+              </div>
+              <div class="cee-actions">
+                <button class="btn-ghost">+ Add Entry</button>
+                <button class="btn-ghost">Clock In Now</button>
+              </div>
+            </div>
+          </td>
+        </tr>
+
+        <!-- ── Another collapsed staff row ────────────────────── -->
+        <tr class="payroll-staff-row">
+          <td>
+            <span class="payroll-expand-icon">▶</span>
+            <strong>Sarah Mitchell</strong>
+            <br><small class="rates-ages">Lead Teacher · Bear Room</small>
+          </td>
+          <td>$20.00/hr</td>
+          <td class="report-num payroll-hrs">40.00</td>
+          <td class="report-num report-revenue">$800.00</td>
+          <td class="report-num payroll-hrs">520.00</td>
+          <td class="report-num report-revenue">$10,400.00</td>
+        </tr>
+
+        <!-- Salary staff -->
+        <tr class="payroll-staff-row">
+          <td>
+            <span class="payroll-expand-icon">▶</span>
+            <strong>Jessica Park</strong>
+            <br><small class="rates-ages">Director · Float</small>
+          </td>
+          <td><span class="pay-type-chip pay-salary">Salary</span></td>
+          <td class="report-num payroll-hrs">—</td>
+          <td class="report-num report-revenue">$2,115.38</td>
+          <td class="report-num payroll-hrs">—</td>
+          <td class="report-num report-revenue">$27,500.00</td>
+        </tr>
+
+      </tbody>
+      <tfoot>
+        <tr class="report-total-row">
+          <td colspan="2"><strong>Total Payroll</strong></td>
+          <td class="report-num">—</td>
+          <td class="report-num report-revenue"><strong>$3,364.40</strong></td>
+          <td class="report-num">—</td>
+          <td class="report-num report-revenue"><strong>$43,475.90</strong></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <p style="margin-top:20px;font-size:.78rem;color:var(--text-muted);text-align:center">
+    This is a static mockup — nothing saves. Edit the HTML/CSS directly or annotate a screenshot.
+  </p>
+</div>
+</body>
+</html>
