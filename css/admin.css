@@ -2648,24 +2648,22 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .payroll-pto-label { font-weight: 500; color: var(--text-muted); }
 .payroll-pto-unit  { color: var(--text-muted); }
 
-/* Clock Event Editor modal */
-.cee-modal-box {
-    background: #fff;
-    border-radius: 12px;
-    width: 540px;
-    max-width: 95vw;
-    max-height: 80vh;
-    overflow: auto;
-    box-shadow: 0 8px 40px rgba(0,0,0,.25);
+/* Clock Event Editor — inline (expands below day row) */
+.payroll-clk-editor-row > td { padding: 0 !important; }
+.payroll-clk-editor-cell {
+    border-left: 3px solid #38bdf8;
+    border-bottom: 2px solid var(--admin-border) !important;
+    background: #f0f9ff;
 }
-.cee-modal-header {
+.cee-inline-header {
     display: flex;
     align-items: center;
-    padding: 14px 18px 12px;
-    border-bottom: 1px solid var(--admin-border);
-    gap: 4px;
+    gap: 6px;
+    padding: 8px 14px;
+    border-bottom: 1px solid #bae6fd;
+    font-size: .88rem;
 }
-.cee-modal-body { padding: 16px 18px; }
+.cee-inline-body { padding: 12px 14px; }
 .cee-events-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .cee-event-item {
     background: var(--admin-hover);
