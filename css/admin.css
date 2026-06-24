@@ -2586,56 +2586,120 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 /* ============================================================
    PAYROLL TABLE
    ============================================================ */
-.payroll-table { width: 100%; }
+@keyframes payrollSaveFlash {
+  0%   { opacity: 0; transform: scale(0.5); }
+  15%  { opacity: 1; transform: scale(1.2); }
+  80%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.7); }
+}
+.payroll-table { width: 100%; min-width: 700px; }
+.payroll-table-wrap { overflow-x: auto; }
 .payroll-hrs { font-weight: 600; color: var(--navy); }
-.payroll-staff-row { cursor: pointer; }
+.payroll-staff-row { cursor: pointer; transition: background 0.15s; }
 .payroll-staff-row:hover td { background: var(--admin-hover); }
+.payroll-expand-chevron { width: 28px !important; color: #8C8070; font-size: 11px; padding: 12px 4px 12px 10px !important; user-select: none; }
+.payroll-staff-name-cell { padding: 10px 4px 10px 2px !important; }
+.payroll-rate-cell { text-align: right !important; font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+.payroll-period-hrs-cell, .payroll-period-pay-cell { text-align: right; white-space: nowrap; font-size: 13px; }
+.payroll-ytd-cell { text-align: right; white-space: nowrap; font-size: .85rem; }
+.payroll-completion-cell { text-align: right !important; padding-right: 14px !important; }
+.payroll-completion-pill { display: inline-block; border-radius: 20px; padding: 2px 9px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.payroll-period-header { border-bottom: 2px solid var(--sun) !important; }
+.payroll-outer-head-2 th { background: #17344A !important; height: 26px; padding: 0 14px !important; }
 
-/* Detail panel (expanded per-staff daily view) */
+/* Detail panel */
 .payroll-panel-cell { padding: 0 !important; border-bottom: 2px solid var(--admin-border) !important; }
 .payroll-day-table {
     width: 100%;
     border-collapse: collapse;
-    background: var(--admin-hover);
-    font-size: .83rem;
+    background: white;
+    font-size: .82rem;
+    table-layout: fixed;
 }
+.payroll-day-table colgroup col:nth-child(1) { width: 112px; }
+.payroll-day-table colgroup col:nth-child(2) { width: 132px; }
+.payroll-day-table colgroup col:nth-child(3) { width: 160px; }
+.payroll-day-table colgroup col:nth-child(4) { width: 108px; }
+.payroll-day-table colgroup col:nth-child(5) { width: 108px; }
+.payroll-day-table colgroup col:nth-child(6) { width: 68px; }
+.payroll-day-table colgroup col:nth-child(8) { width: 38px; }
 .payroll-day-th {
     text-align: left;
     padding: 5px 8px;
-    font-size: .74rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    background: var(--admin-section-bg);
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #7C7165;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: #DDD5C3;
     border-bottom: 1px solid var(--admin-border);
+    white-space: nowrap;
 }
+.payroll-day-th-center { text-align: center; }
+
+/* Day rows */
+.payroll-day-row { transition: background 0.25s; }
 .payroll-day-row td {
     padding: 5px 8px;
     border-bottom: 1px solid var(--admin-border);
     vertical-align: middle;
+    overflow: hidden;
 }
-.payroll-day-empty td { color: var(--text-muted); }
-.payroll-day-date    { white-space: nowrap; font-weight: 500; min-width: 110px; }
-.payroll-day-room    { white-space: nowrap; color: var(--text-muted); font-size: .8rem; min-width: 90px; }
-.payroll-day-events  { color: #374151; font-size: .8rem; }
-.payroll-day-clocked { text-align: right; font-weight: 600; color: var(--navy); min-width: 56px; }
-.payroll-day-input   { min-width: 82px; }
-.payroll-day-notes   { min-width: 160px; }
-.payroll-day-source  { white-space: nowrap; }
+.payroll-day-row td:first-child { border-left: 3px solid transparent; transition: border-color 0.2s; }
+.payroll-day-row[data-state="complete"]  td:first-child { border-left-color: #4CAF50; }
+.payroll-day-row[data-state="mismatch"] td:first-child,
+.payroll-day-row[data-state="missing"]  td:first-child { border-left-color: #E9A020; }
+.payroll-day-row[data-state="flash"]    td:first-child { border-left-color: #4CAF50; }
+.payroll-day-row[data-state="flash"]    { background: #EAF5EA !important; }
+.payroll-day-row[data-state="mismatch"],
+.payroll-day-row[data-state="missing"]  { background: #FFFBF2 !important; }
 
-/* Source chips */
-.payroll-src-chip {
-    display: inline-block;
-    font-size: .72em;
-    font-weight: 600;
-    padding: 1px 6px;
+.payroll-day-date   { white-space: nowrap; font-weight: 500; color: #374151; }
+.payroll-day-room   { white-space: nowrap; }
+.payroll-day-events { color: #9CA3AF; font-size: .8rem; white-space: nowrap; }
+.payroll-day-calc-hrs { text-align: center; font-weight: 700; }
+.payroll-day-status { text-align: center; white-space: nowrap; }
+
+/* Inline field styling */
+.payroll-time-input,
+.payroll-notes-input,
+.payroll-room-select {
+    border: 1px solid var(--admin-border);
     border-radius: 4px;
-    vertical-align: middle;
+    padding: 3px 6px;
+    font-size: 12px;
+    color: #374151;
+    background: white;
+    width: 100%;
+    font-family: inherit;
+    box-sizing: border-box;
 }
-.src-manual    { background: #d1fae5; color: #065f46; }
-.src-clocksync { background: #f3f4f6; color: #374151; }
-.src-clock     { background: #fef3c7; color: #92400e; }
+.payroll-time-input:focus, .payroll-notes-input:focus, .payroll-room-select:focus {
+    outline: none;
+    border-color: var(--navy);
+    box-shadow: 0 0 0 2px rgba(28,60,82,0.15);
+}
+.payroll-day-row[data-state="missing"] .payroll-room-select { border-color: #E9A020; }
+input[type="time"].payroll-time-input::-webkit-calendar-picker-indicator { opacity: 0.35; cursor: pointer; }
 
-/* PTO bar at bottom of expanded panel */
+/* Period total row */
+.payroll-period-total-row td {
+    background: #E4DCCB;
+    border-bottom: 2px solid var(--admin-border) !important;
+    padding: 0 !important;
+}
+.payroll-period-total-inner {
+    display: flex;
+    justify-content: flex-end;
+    gap: 24px;
+    align-items: center;
+    padding: 7px 12px 7px 0;
+}
+.payroll-period-total-label { font-size: 10.5px; font-weight: 700; color: #7C7165; text-transform: uppercase; letter-spacing: 0.06em; }
+.payroll-period-total-hrs { font-size: 14px; font-weight: 700; color: var(--navy); min-width: 52px; text-align: right; }
+.payroll-period-total-pay { font-size: 13px; color: #374151; min-width: 80px; text-align: right; }
+
+/* PTO bar */
 .payroll-pto-row td { padding: 0 !important; border-top: 1px solid var(--admin-border); }
 .payroll-pto-bar {
     display: flex;
@@ -2647,6 +2711,22 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .payroll-pto-label { font-weight: 500; color: var(--text-muted); }
 .payroll-pto-unit  { color: var(--text-muted); }
+
+/* Save tick */
+.payroll-day-save-tick { animation: payrollSaveFlash 1.8s ease forwards; }
+
+/* Legend */
+.payroll-legend {
+    display: flex;
+    gap: 24px;
+    margin-top: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: #7C7165;
+}
+.payroll-legend-item { display: flex; align-items: center; gap: 6px; }
+.payroll-legend-bar  { width: 3px; height: 14px; border-radius: 2px; flex-shrink: 0; }
 
 /* Clock Event Editor — inline (expands below day row) */
 .payroll-clk-editor-row > td { padding: 0 !important; }
@@ -2687,6 +2767,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     margin-bottom: 10px;
 }
 .cee-actions { display: flex; gap: 8px; margin-top: 4px; }
+
 
 /* ============================================================
    AVAILABILITY DAYS  (staff form)

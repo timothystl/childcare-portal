@@ -1263,7 +1263,7 @@ async function _buildPayrollData(startVal, endVal) {
         if (!periodDetailMap.has(h.staff_id)) periodDetailMap.set(h.staff_id, []);
         const key = manualKey(h.staff_id, h.work_date);
         const events = clockEventsByDay.get(key) || [];
-        periodDetailMap.get(h.staff_id).push({ work_date: h.work_date, hours: parseFloat(h.hours_worked), source, notes: h.notes || '', events });
+        periodDetailMap.get(h.staff_id).push({ work_date: h.work_date, hours: parseFloat(h.hours_worked), source, notes: h.notes || '', events, timeIn: h.time_in || null, timeOut: h.time_out || null, roomId: h.room_id || null });
     });
     // Add clock-only days (not yet synced to staff_hours)
     const clockOnlyDayMap = new Map(); // `staffId|date` → accumulated hours
@@ -1280,7 +1280,7 @@ async function _buildPayrollData(startVal, endVal) {
         const work_date = key.slice(sepIdx + 1);
         if (!periodDetailMap.has(staffId)) periodDetailMap.set(staffId, []);
         const events = clockEventsByDay.get(key) || [];
-        periodDetailMap.get(staffId).push({ work_date, hours: hrs, source: 'clock', notes: '', events });
+        periodDetailMap.get(staffId).push({ work_date, hours: hrs, source: 'clock', notes: '', events, timeIn: null, timeOut: null, roomId: null });
     });
     // Sort each staff's detail entries by date
     periodDetailMap.forEach(entries => entries.sort((a, b) => a.work_date.localeCompare(b.work_date)));
@@ -1342,21 +1342,79 @@ function _schedulePtoSaveUnified(container, staffId, periodStart) {
     }, 600);
 }
 
-async function _savePayrollHoursInline(hrsInput) {
-    const staffId  = hrsInput.dataset.staffId;
-    const workDate = hrsInput.dataset.workDate;
-    const container = document.getElementById('payrollContent');
-    const notesInput = container?.querySelector(`.payroll-notes-input[data-staff-id="${staffId}"][data-work-date="${workDate}"]`);
-    const hrsVal = hrsInput.value.trim();
-    if (hrsVal === '') return;
-    const hrs = parseFloat(hrsVal);
-    if (isNaN(hrs) || hrs < 0) return;
-    const notes = notesInput?.value.trim() || '';
-    const tick = hrsInput.closest('tr')?.querySelector('.payroll-day-save-tick');
+function _updatePayrollDayRowState(container, staffId, workDate) {
+    const panel  = container.querySelector(`.payroll-detail-panel[data-staff-id="${staffId}"]`);
+    const dayRow = panel?.querySelector(`tr.payroll-day-row[data-date="${workDate}"]`);
+    if (!dayRow) return;
+
+    const ti      = dayRow.querySelector('.payroll-time-in')?.value  || '';
+    const to      = dayRow.querySelector('.payroll-time-out')?.value || '';
+    const roomVal = dayRow.querySelector('.payroll-room-select')?.value || '';
+
+    const calcHrs = (() => {
+        if (!ti || !to) return null;
+        const [h1, m1] = ti.split(':').map(Number);
+        const [h2, m2] = to.split(':').map(Number);
+        const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+        return mins > 0 ? Math.round(mins / 60 * 100) / 100 : null;
+    })();
+
+    const clockedHrs  = parseFloat(dayRow.dataset.clockedHrs || '0') || 0;
+    const mismatch    = calcHrs !== null && clockedHrs > 0 && Math.abs(calcHrs - clockedHrs) > 0.09;
+    const missingRoom = !!(ti || to) && !roomVal;
+    const complete    = calcHrs !== null && !!roomVal && !mismatch;
+
+    const hrsCell = dayRow.querySelector('.payroll-day-calc-hrs');
+    if (hrsCell) hrsCell.innerHTML = calcHrs !== null
+        ? `<strong style="color:${mismatch ? '#C0392B' : 'var(--navy)'}">${calcHrs}h</strong>`
+        : '<span class="text-muted">—</span>';
+
+    const iconEl = dayRow.querySelector('.payroll-day-status-icon');
+    if (iconEl) {
+        if (mismatch)         iconEl.innerHTML = `<span title="Hours differ from clock record" style="color:#C0392B;font-weight:700;font-size:14px;cursor:help">≠</span>`;
+        else if (missingRoom) iconEl.innerHTML = `<span title="No room assigned" style="color:#E9A020;font-size:15px;cursor:help">⚠</span>`;
+        else if (complete)    iconEl.innerHTML = `<span style="color:#4CAF50;font-size:14px">✓</span>`;
+        else                  iconEl.innerHTML = '';
+    }
+
+    let state = 'empty';
+    if (complete)    state = 'complete';
+    else if (mismatch)    state = 'mismatch';
+    else if (missingRoom) state = 'missing';
+    dayRow.dataset.state = state;
+}
+
+async function _savePayrollTimeInline(staffId, workDate, container) {
+    const panel  = container?.querySelector(`.payroll-detail-panel[data-staff-id="${staffId}"]`);
+    const dayRow = panel?.querySelector(`tr.payroll-day-row[data-date="${workDate}"]`);
+    if (!dayRow) return;
+
+    const ti     = dayRow.querySelector('.payroll-time-in')?.value  || '';
+    const to     = dayRow.querySelector('.payroll-time-out')?.value || '';
+    const notes  = dayRow.querySelector('.payroll-notes-input')?.value.trim() || '';
+    const roomId = dayRow.querySelector('.payroll-room-select')?.value || null;
+
+    if (!ti && !to && !notes && !roomId) return;
+
+    let hours = 0;
+    if (ti && to) {
+        const [h1, m1] = ti.split(':').map(Number);
+        const [h2, m2] = to.split(':').map(Number);
+        const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+        if (mins > 0) hours = Math.round(mins / 60 * 100) / 100;
+    }
+
+    const tick   = dayRow.querySelector('.payroll-day-save-tick');
+    const iconEl = dayRow.querySelector('.payroll-day-status-icon');
     try {
-        await upsertStaffHours(staffId, workDate, hrs, notes);
-        if (tick) { tick.style.display = ''; setTimeout(() => { tick.style.display = 'none'; }, 1800); }
-    } catch(e) { console.error('Hours save error', e); }
+        await upsertStaffHours(staffId, workDate, hours, notes, ti || null, to || null, roomId || null);
+        dayRow.dataset.state = 'flash';
+        if (tick)   { tick.style.display = ''; if (iconEl) iconEl.style.display = 'none'; }
+        setTimeout(() => {
+            if (tick)   { tick.style.display = 'none'; if (iconEl) iconEl.style.display = ''; }
+            _updatePayrollDayRowState(container, staffId, workDate);
+        }, 1800);
+    } catch(e) { console.error('Time save error', e); }
 }
 
 function _recalcPayrollStaff(container, staffId) {
@@ -1364,18 +1422,41 @@ function _recalcPayrollStaff(container, staffId) {
     if (!summaryRow || summaryRow.dataset.payType === 'salary') return;
     const rate = parseFloat(summaryRow.dataset.rate) || 0;
 
-    let sumHrs = 0;
-    container.querySelectorAll(`.payroll-hrs-input[data-staff-id="${staffId}"]`).forEach(inp => {
-        const v = parseFloat(inp.value);
-        if (!isNaN(v) && v > 0) sumHrs += v;
+    let sumHrs = 0, completeDays = 0;
+    container.querySelectorAll(`.payroll-day-row[data-staff-id="${staffId}"]`).forEach(dayRow => {
+        const ti = dayRow.querySelector('.payroll-time-in')?.value  || '';
+        const to = dayRow.querySelector('.payroll-time-out')?.value || '';
+        if (!ti || !to) return;
+        const [h1, m1] = ti.split(':').map(Number);
+        const [h2, m2] = to.split(':').map(Number);
+        const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+        if (mins > 0) {
+            sumHrs += Math.round(mins / 60 * 100) / 100;
+            completeDays++;
+        }
     });
-    const ptoInput = container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="used"]`);
-    sumHrs += parseFloat(ptoInput?.value) || 0;
+    sumHrs += parseFloat(container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="used"]`)?.value) || 0;
 
     const hrsCell = container.querySelector(`.payroll-period-hrs-cell[data-staff-id="${staffId}"]`);
     const payCell = container.querySelector(`.payroll-period-pay-cell[data-staff-id="${staffId}"]`);
-    if (hrsCell) hrsCell.textContent = sumHrs > 0 ? sumHrs.toFixed(2) : '—';
+    if (hrsCell) hrsCell.textContent = sumHrs > 0 ? sumHrs.toFixed(2) + 'h' : '—';
     if (payCell) payCell.textContent = sumHrs > 0 ? '$' + (sumHrs * rate).toFixed(2) : '—';
+
+    const ptHrs = container.querySelector(`.payroll-period-total-hrs[data-staff-id="${staffId}"]`);
+    const ptPay = container.querySelector(`.payroll-period-total-pay[data-staff-id="${staffId}"]`);
+    if (ptHrs) ptHrs.textContent = sumHrs > 0 ? sumHrs.toFixed(2) + 'h' : '—';
+    if (ptPay) ptPay.textContent = sumHrs > 0 ? '$' + (sumHrs * rate).toFixed(2) : '—';
+
+    const totalWkDays = container.querySelectorAll(`.payroll-day-row[data-staff-id="${staffId}"]`).length;
+    const pillEl = container.querySelector(`.payroll-completion-pill[data-staff-id="${staffId}"]`);
+    if (pillEl) {
+        const pillAll  = completeDays === totalWkDays && totalWkDays > 0;
+        const pillSome = completeDays > 0 && !pillAll;
+        pillEl.style.background  = pillAll ? '#EAF5EA' : pillSome ? '#FEF3E0' : '#F3F2F0';
+        pillEl.style.color       = pillAll ? '#2E7D32' : pillSome ? '#9A6800' : '#999';
+        pillEl.style.borderColor = pillAll ? '#A5D6A7' : pillSome ? '#E0C060' : '#DDD';
+        pillEl.textContent       = `${completeDays}/${totalWkDays} days`;
+    }
 
     _recalcPayrollTotal(container);
 }
@@ -1414,12 +1495,27 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
     }
 
     const allDays    = _buildAllDaysInPeriod(startVal, endVal);
+    const weekDays   = allDays.filter(d => { const dow = new Date(d + 'T12:00:00').getDay(); return dow >= 1 && dow <= 5; });
     const ytdPeriods = _calcYtdPeriods(startVal, endVal);
     const DOW        = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
     const [sy, sm, sd] = startVal.split('-').map(Number);
     const [ey, em, ed] = endVal.split('-').map(Number);
     const periodLabel  = `${MONTH_NAMES[sm-1]} ${sd} – ${MONTH_NAMES[em-1]} ${ed}, ${ey}`;
+
+    const calcH = (ti, to) => {
+        if (!ti || !to) return null;
+        const [h1, m1] = ti.split(':').map(Number);
+        const [h2, m2] = to.split(':').map(Number);
+        const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+        return mins > 0 ? Math.round(mins / 60 * 100) / 100 : null;
+    };
+    const isoToHHMM = iso => {
+        if (!iso) return '';
+        const d = new Date(iso);
+        return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    };
+    const fmtEvt = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
     let totPeriodPay = 0, totYtdPay = 0;
 
@@ -1432,6 +1528,27 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         const ptoUsed   = (periodPtoMap.get(s.id) || {}).used   || 0;
         const ptoEarned = (periodPtoMap.get(s.id) || {}).earned || 0;
         const yHrs      = ytdMap.get(s.id) || 0;
+        const rate      = isSalary ? 0 : (s.hourly_rate || 0);
+
+        const detailByDate = new Map();
+        (periodDetailMap.get(s.id) || []).forEach(d => detailByDate.set(d.work_date, d));
+
+        let completeDays = 0;
+        weekDays.forEach(date => {
+            const d = detailByDate.get(date);
+            const ti = d?.timeIn || '';
+            const to = d?.timeOut || '';
+            if (!ti && !to) {
+                const ev0 = d?.events?.[0], evL = d?.events?.[d.events.length - 1];
+                if (ev0 && evL && calcH(isoToHHMM(ev0.clockIn), isoToHHMM(evL.clockOut)) !== null) completeDays++;
+            } else if (calcH(ti, to) !== null) completeDays++;
+        });
+        const totalWkDays = weekDays.length;
+        const pillAll  = completeDays === totalWkDays && totalWkDays > 0;
+        const pillSome = completeDays > 0 && !pillAll;
+        const pillBg    = pillAll ? '#EAF5EA' : pillSome ? '#FEF3E0' : '#F3F2F0';
+        const pillColor = pillAll ? '#2E7D32' : pillSome ? '#9A6800' : '#999';
+        const pillBdr   = pillAll ? '#A5D6A7' : pillSome ? '#E0C060' : '#DDD';
 
         let rateStr, periodHrsStr, periodPayStr, ytdHrsStr, ytdPayStr;
         if (isSalary) {
@@ -1445,119 +1562,113 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             ytdHrsStr     = '—';
             ytdPayStr     = ytdSal > 0 ? '$' + ytdSal.toFixed(2) : '—';
         } else {
-            const rate = s.hourly_rate || 0;
             totPeriodPay += pHrsTotal * rate;
             totYtdPay    += yHrs * rate;
             rateStr       = `$${rate.toFixed(2)}/hr`;
-            const ptoNote = ptoUsed > 0 ? ` <span style="font-size:.75em;color:#7a5800">(incl. ${ptoUsed.toFixed(2)} PTO)</span>` : '';
-            periodHrsStr  = pHrsTotal > 0 ? pHrsTotal.toFixed(2) + ptoNote : '—';
+            periodHrsStr  = pHrsTotal > 0 ? pHrsTotal.toFixed(2) + 'h' : '—';
             periodPayStr  = pHrsTotal > 0 ? '$' + (pHrsTotal * rate).toFixed(2) : '—';
-            ytdHrsStr     = yHrs > 0 ? yHrs.toFixed(2) : '—';
+            ytdHrsStr     = yHrs > 0 ? yHrs.toFixed(2) + 'h' : '—';
             ytdPayStr     = yHrs > 0 ? '$' + (yHrs * rate).toFixed(2) : '—';
         }
 
-        // Build per-date lookup for this staff member
-        const detailByDate = new Map();
-        (periodDetailMap.get(s.id) || []).forEach(d => detailByDate.set(d.work_date, d));
-
-        // One row per day in the period
-        const dailyRows = allDays.map(date => {
-            const d   = detailByDate.get(date);
+        const dailyRows = weekDays.map(date => {
+            const d = detailByDate.get(date);
             const [, dm, dd] = date.split('-').map(Number);
-            const dow = DOW[new Date(date + 'T12:00:00').getDay()];
-            const dateLabel = `${dow} ${MONTH_NAMES[dm-1]} ${dd}`;
+            const dowIdx    = new Date(date + 'T12:00:00').getDay();
+            const dateLabel = `${DOW[dowIdx]} ${MONTH_NAMES[dm-1]} ${dd}`;
 
-            // Room from clock events on this day
-            const dayEvents = d?.events || [];
-            const dayRooms  = [...new Set(dayEvents.map(ev => ev.roomId).filter(Boolean))];
-
-            // Room cell: select if 0–1 distinct rooms and events exist, multi-label if >1, dash if no events
-            let roomCellHtml;
-            if (dayEvents.length === 0) {
-                roomCellHtml = '<span class="text-muted">—</span>';
-            } else if (dayRooms.length > 1) {
-                roomCellHtml = escHtml(dayRooms.map(id => ROOMS.find(r => r.id === id)?.label || id).join(', '));
-            } else {
-                const curRoomId = dayRooms[0] || '';
-                const opts = ROOMS.map(r =>
-                    `<option value="${escHtml(r.id)}"${curRoomId === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
-                ).join('');
-                roomCellHtml = `<select class="payroll-room-select"
-                    data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
-                    data-prev-value="${escHtml(curRoomId)}"
-                    style="font-size:.8rem;max-width:130px;border:1px solid var(--admin-border);border-radius:6px;padding:2px 4px">
-                    <option value="">—</option>
-                    ${opts}
-                </select>`;
-            }
-
-            // Clock times display
-            const fmt = ts => new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-            const timesStr = dayEvents.map(ev => `${fmt(ev.clockIn)} – ${fmt(ev.clockOut)}`).join(' · ');
-
-            // Clocked hours (sum of completed events)
+            const dayEvents  = d?.events || [];
+            const firstIn    = dayEvents.length ? dayEvents[0].clockIn : null;
+            const lastOut    = dayEvents.length ? dayEvents[dayEvents.length-1].clockOut : null;
+            const clockStr   = firstIn && lastOut ? `${fmtEvt(firstIn)} → ${fmtEvt(lastOut)}` : '—';
             const clockedHrs = dayEvents.reduce((sum, ev) => {
                 const ms = new Date(ev.clockOut) - new Date(ev.clockIn);
                 return sum + (ms >= 600000 ? Math.round(ms / 3600000 * 100) / 100 : 0);
             }, 0);
 
-            // Hours input value: pre-fill for manual/clock-sync; for clock-only use as placeholder
-            const isClockOnly = d?.source === 'clock';
-            const hoursVal    = d && !isClockOnly ? d.hours.toFixed(2) : (isClockOnly ? '' : '');
-            const hrsPh       = isClockOnly ? d.hours.toFixed(2) : '';
-            const notesVal    = d?.notes || '';
+            const timeIn  = d?.timeIn  || (firstIn  ? isoToHHMM(firstIn)  : '');
+            const timeOut = d?.timeOut || (lastOut   ? isoToHHMM(lastOut)  : '');
 
-            // Source chip
-            let srcChip = '';
-            if (d) {
-                if (d.source === 'clock-sync') srcChip = '<span class="payroll-src-chip src-clocksync">synced</span>';
-                else if (d.source === 'clock')  srcChip = '<span class="payroll-src-chip src-clock">clock</span>';
-                else                            srcChip = '<span class="payroll-src-chip src-manual">manual</span>';
-            }
+            const dayRooms = [...new Set(dayEvents.map(ev => ev.roomId).filter(Boolean))];
+            const roomId   = d?.roomId || dayRooms[0] || '';
 
-            return `<tr class="payroll-day-row${!d ? ' payroll-day-empty' : ''}">
+            const calcHrs    = calcH(timeIn, timeOut);
+            const missingRoom = !!(timeIn || timeOut) && !roomId;
+            const mismatch    = calcHrs !== null && clockedHrs > 0 && Math.abs(calcHrs - clockedHrs) > 0.09;
+            const complete    = calcHrs !== null && !!roomId && !mismatch;
+
+            let state = 'empty';
+            if (complete)    state = 'complete';
+            else if (mismatch)    state = 'mismatch';
+            else if (missingRoom) state = 'missing';
+
+            const hoursHtml = calcHrs !== null
+                ? `<strong style="color:${mismatch ? '#C0392B' : 'var(--navy)'}">${calcHrs}h</strong>`
+                : '<span class="text-muted">—</span>';
+
+            let statusIcon = '';
+            if (mismatch)         statusIcon = `<span title="Hours differ from clock record" style="color:#C0392B;font-weight:700;font-size:14px;cursor:help">≠</span>`;
+            else if (missingRoom) statusIcon = `<span title="No room assigned" style="color:#E9A020;font-size:15px;cursor:help">⚠</span>`;
+            else if (complete)    statusIcon = `<span style="color:#4CAF50;font-size:14px">✓</span>`;
+
+            const roomOpts = ROOMS.map(r =>
+                `<option value="${escHtml(r.id)}"${roomId === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
+            ).join('');
+
+            return `<tr class="payroll-day-row" data-date="${date}" data-staff-id="${escHtml(s.id)}"
+                        data-state="${state}" data-clocked-hrs="${clockedHrs.toFixed(2)}">
                 <td class="payroll-day-date">${dateLabel}</td>
-                <td class="payroll-day-room">${roomCellHtml}</td>
+                <td class="payroll-day-room">
+                    <select class="payroll-room-select"
+                        data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
+                        data-prev-value="${escHtml(roomId)}">
+                        <option value="">— Room</option>${roomOpts}
+                    </select>
+                </td>
                 <td class="payroll-day-events">
-                    <span class="payroll-clk-times">${timesStr ? escHtml(timesStr) : '<span class="text-muted">—</span>'}</span>
+                    <span class="payroll-clk-times">${dayEvents.length ? escHtml(clockStr) : '<span class="text-muted">—</span>'}</span>
                     <button class="btn-ghost payroll-edit-clk-btn"
                         data-staff-id="${escHtml(s.id)}" data-staff-name="${escHtml(s.name)}" data-work-date="${date}"
-                        title="Edit clock events" style="font-size:.75em;padding:2px 5px;margin-left:4px;opacity:.6">✎</button>
+                        title="Edit clock events" style="font-size:.75em;padding:2px 5px;margin-left:3px;opacity:.55">✎</button>
                 </td>
-                <td class="payroll-day-clocked">${clockedHrs > 0 ? clockedHrs.toFixed(2) : '—'}</td>
-                <td class="payroll-day-input">
-                    <input type="number" class="payroll-hrs-input rate-input"
-                        min="0" max="24" step="0.25"
-                        placeholder="${hrsPh || '—'}"
+                <td class="payroll-day-timein">
+                    <input type="time" class="payroll-time-input payroll-time-in"
                         data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
-                        value="${escHtml(hoursVal)}"
-                        style="width:72px">
+                        value="${escHtml(timeIn)}">
                 </td>
+                <td class="payroll-day-timeout">
+                    <input type="time" class="payroll-time-input payroll-time-out"
+                        data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
+                        value="${escHtml(timeOut)}">
+                </td>
+                <td class="payroll-day-calc-hrs">${hoursHtml}</td>
                 <td class="payroll-day-notes">
                     <input type="text" class="payroll-notes-input"
                         placeholder="Notes"
                         data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
-                        value="${escHtml(notesVal)}"
-                        style="width:140px;font-size:.82rem">
+                        value="${escHtml(d?.notes || '')}">
                 </td>
-                <td class="payroll-day-source">
-                    ${srcChip}
-                    <span class="payroll-day-save-tick" style="display:none;color:#166534;font-size:.78em;margin-left:4px">✓</span>
+                <td class="payroll-day-status">
+                    <span class="payroll-day-status-icon">${statusIcon}</span>
+                    <span class="payroll-day-save-tick" style="display:none;color:#2E7D32;font-size:14px;font-weight:700">✓</span>
                 </td>
             </tr>`;
         }).join('');
 
-        // PTO row — hourly staff only
+        const ptHrs = isSalary ? '—' : (pHrsTotal > 0 ? pHrsTotal.toFixed(2) + 'h' : '—');
+        const ptPay = isSalary ? (s.salary_biweekly > 0 ? '$' + s.salary_biweekly.toFixed(2) : '—')
+                               : (pHrsTotal > 0 ? '$' + (pHrsTotal * rate).toFixed(2) : '—');
+
         const ptoSection = !isSalary ? `
             <tr class="payroll-pto-row">
-                <td colspan="7" style="padding:0">
+                <td colspan="8" style="padding:0">
                     <div class="payroll-pto-bar">
                         <span class="payroll-pto-label">PTO Used:</span>
-                        <input type="number" class="payroll-pto-input rate-input" min="0" step="0.25" style="width:72px"
+                        <input type="number" class="payroll-pto-input rate-input" min="0" step="0.25" style="width:68px"
                             data-sid="${escHtml(s.id)}" data-field="used" value="${ptoUsed || ''}">
                         <span class="payroll-pto-unit">hrs</span>
-                        <span class="payroll-pto-label" style="margin-left:16px">PTO Earned:</span>
-                        <input type="number" class="payroll-pto-input rate-input" min="0" step="0.25" style="width:72px"
+                        <span class="payroll-pto-label" style="margin-left:14px">PTO Earned:</span>
+                        <input type="number" class="payroll-pto-input rate-input" min="0" step="0.25" style="width:68px"
                             data-sid="${escHtml(s.id)}" data-field="earned" value="${ptoEarned || ''}">
                         <span class="payroll-pto-unit">hrs</span>
                         <span class="payroll-pto-save-tick" data-sid="${escHtml(s.id)}" style="display:none;color:#166534;font-size:.78em;margin-left:8px">✓ Saved</span>
@@ -1567,34 +1678,51 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
 
         return `
             <tr class="payroll-staff-row payroll-expandable" data-staff-id="${escHtml(s.id)}"
-                data-rate="${isSalary ? 0 : (s.hourly_rate || 0)}" data-pay-type="${s.pay_type || 'hourly'}">
-                <td>
-                    <span class="payroll-expand-icon" style="font-size:.8em;color:#6b7280;margin-right:4px">▶</span>
-                    <strong>${escHtml(s.name)}</strong>${inactive}
-                    <br><small class="rates-ages">${escHtml(s.role || '')} · ${escHtml(roomLabel)}</small>
+                data-rate="${rate}" data-pay-type="${s.pay_type || 'hourly'}">
+                <td class="payroll-expand-chevron"><span class="payroll-expand-icon">▶</span></td>
+                <td class="payroll-staff-name-cell">
+                    <div style="font-size:14px;font-weight:700;color:var(--navy)">${escHtml(s.name)}${inactive}</div>
+                    <div class="rates-ages">${escHtml(s.role || '')} · ${escHtml(roomLabel)}</div>
                 </td>
-                <td>${rateStr}</td>
-                <td class="report-num payroll-hrs payroll-period-hrs-cell" data-staff-id="${escHtml(s.id)}">${periodHrsStr}</td>
+                <td class="payroll-rate-cell">${rateStr}</td>
+                <td class="report-num payroll-period-hrs-cell" data-staff-id="${escHtml(s.id)}">${periodHrsStr}</td>
                 <td class="report-num report-revenue payroll-period-pay-cell" data-staff-id="${escHtml(s.id)}">${periodPayStr}</td>
-                <td class="report-num payroll-hrs">${ytdHrsStr}</td>
-                <td class="report-num report-revenue">${ytdPayStr}</td>
+                <td class="report-num payroll-ytd-cell">${ytdHrsStr}<br><small style="font-weight:400;color:var(--text-muted)">${ytdPayStr}</small></td>
+                <td class="payroll-completion-cell">
+                    <span class="payroll-completion-pill" data-staff-id="${escHtml(s.id)}"
+                        style="background:${pillBg};color:${pillColor};border:1px solid ${pillBdr}">
+                        ${completeDays}/${totalWkDays} days
+                    </span>
+                </td>
             </tr>
             <tr class="payroll-detail-panel" data-staff-id="${escHtml(s.id)}" style="display:none">
-                <td colspan="6" class="payroll-panel-cell">
+                <td colspan="7" class="payroll-panel-cell">
                     <table class="payroll-day-table">
                         <thead>
                             <tr>
                                 <th class="payroll-day-th">Date</th>
                                 <th class="payroll-day-th">Room</th>
                                 <th class="payroll-day-th">Clock Events</th>
-                                <th class="payroll-day-th">Clocked</th>
-                                <th class="payroll-day-th">Hours</th>
+                                <th class="payroll-day-th">Time In</th>
+                                <th class="payroll-day-th">Time Out</th>
+                                <th class="payroll-day-th payroll-day-th-center">Hours</th>
                                 <th class="payroll-day-th">Notes</th>
                                 <th class="payroll-day-th"></th>
                             </tr>
                         </thead>
                         <tbody>${dailyRows}</tbody>
-                        ${ptoSection ? `<tfoot>${ptoSection}</tfoot>` : ''}
+                        <tfoot>
+                            <tr class="payroll-period-total-row">
+                                <td colspan="8">
+                                    <div class="payroll-period-total-inner">
+                                        <span class="payroll-period-total-label">Period Total</span>
+                                        <span class="payroll-period-total-hrs" data-staff-id="${escHtml(s.id)}">${ptHrs}</span>
+                                        <span class="payroll-period-total-pay" data-staff-id="${escHtml(s.id)}">${ptPay}</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            ${ptoSection}
+                        </tfoot>
                     </table>
                 </td>
             </tr>`;
@@ -1602,64 +1730,95 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
 
     container.innerHTML = `
         <h3 class="report-month-title">Pay Period: ${periodLabel}</h3>
-        <p style="font-size:.82rem;color:var(--text-muted);margin:-6px 0 14px">Click a staff row to expand daily hours. Hours auto-save on blur.</p>
-        <div class="table-wrapper report-table-wrap">
+        <p style="font-size:.82rem;color:var(--text-muted);margin:-6px 0 14px">Click a staff row to expand daily hours. Time entries auto-save on blur.</p>
+        <div class="table-wrapper report-table-wrap payroll-table-wrap">
             <table class="report-table payroll-table">
                 <thead>
-                    <tr>
-                        <th rowspan="2">Staff Member</th>
-                        <th rowspan="2">Rate</th>
-                        <th colspan="2" class="staff-room-header">This Period</th>
-                        <th colspan="2" class="staff-room-header">Year to Date (${ey})</th>
+                    <tr class="payroll-outer-head-1">
+                        <th colspan="2" style="text-align:left">Staff Member</th>
+                        <th style="text-align:right">Rate</th>
+                        <th colspan="2" class="staff-room-header payroll-period-header">This Period</th>
+                        <th class="staff-room-header payroll-period-header">Year to Date (${ey})</th>
+                        <th style="background:var(--navy-table)"> </th>
                     </tr>
-                    <tr>
-                        <th class="staff-sub-head">Hours</th><th class="staff-sub-head">Gross Pay</th>
-                        <th class="staff-sub-head">Hours</th><th class="staff-sub-head">Gross Pay</th>
+                    <tr class="payroll-outer-head-2">
+                        <th colspan="2"></th>
+                        <th></th>
+                        <th class="staff-sub-head">Hours</th>
+                        <th class="staff-sub-head">Gross Pay</th>
+                        <th class="staff-sub-head">Hrs / Pay</th>
+                        <th style="background:#17344A"></th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
                 <tfoot>
                     <tr class="report-total-row" id="payrollTotalRow">
                         <td colspan="2"><strong>Total Payroll</strong></td>
+                        <td></td>
                         <td class="report-num">—</td>
                         <td class="report-num report-revenue"><strong>$${totPeriodPay.toFixed(2)}</strong></td>
-                        <td class="report-num">—</td>
-                        <td class="report-num report-revenue"><strong>$${totYtdPay.toFixed(2)}</strong></td>
+                        <td class="report-num report-revenue">—</td>
+                        <td></td>
                     </tr>
                 </tfoot>
             </table>
+        </div>
+        <div class="payroll-legend">
+            <div class="payroll-legend-item"><div class="payroll-legend-bar" style="background:#4CAF50"></div>Day complete</div>
+            <div class="payroll-legend-item"><div class="payroll-legend-bar" style="background:#E9A020"></div>Missing room or time</div>
+            <div class="payroll-legend-item"><span style="color:#C0392B;font-weight:700;font-size:13px">≠</span> Hours differ from clock record</div>
+            <div class="payroll-legend-item"><span style="color:#2E7D32">✓</span> Saved</div>
         </div>`;
 
-    // Expand / collapse staff row on click
     container.querySelectorAll('.payroll-expandable').forEach(row => {
         row.addEventListener('click', e => {
             if (e.target.closest('input, select, button, a')) return;
-            const staffId = row.dataset.staffId;
-            const panel   = container.querySelector(`.payroll-detail-panel[data-staff-id="${staffId}"]`);
+            const staffId  = row.dataset.staffId;
+            const panel    = container.querySelector(`.payroll-detail-panel[data-staff-id="${staffId}"]`);
             if (!panel) return;
-            const icon       = row.querySelector('.payroll-expand-icon');
-            const isExpanded = panel.style.display !== 'none';
-            panel.style.display = isExpanded ? 'none' : '';
-            if (icon) icon.textContent = isExpanded ? '▶' : '▼';
+            const icon     = row.querySelector('.payroll-expand-icon');
+            const expanded = panel.style.display !== 'none';
+            panel.style.display = expanded ? 'none' : '';
+            row.style.background = expanded ? '' : 'var(--admin-hover)';
+            if (icon) icon.textContent = expanded ? '▶' : '▼';
         });
     });
 
-    // Hours inputs: live recalc on input, save on blur
-    container.querySelectorAll('.payroll-hrs-input').forEach(input => {
-        input.addEventListener('input',  () => _recalcPayrollStaff(container, input.dataset.staffId));
-        input.addEventListener('blur',   () => _savePayrollHoursInline(input));
-    });
-
-    // Notes inputs: save on blur (alongside the row's hours value)
-    container.querySelectorAll('.payroll-notes-input').forEach(input => {
-        input.addEventListener('blur', () => {
+    container.querySelectorAll('.payroll-time-input').forEach(input => {
+        input.addEventListener('input', () => {
             const { staffId, workDate } = input.dataset;
-            const hrsInput = container.querySelector(`.payroll-hrs-input[data-staff-id="${staffId}"][data-work-date="${workDate}"]`);
-            if (hrsInput && hrsInput.value.trim() !== '') _savePayrollHoursInline(hrsInput);
+            _updatePayrollDayRowState(container, staffId, workDate);
+            _recalcPayrollStaff(container, staffId);
+        });
+        input.addEventListener('blur', () => _savePayrollTimeInline(input.dataset.staffId, input.dataset.workDate, container));
+    });
+
+    container.querySelectorAll('.payroll-notes-input').forEach(input => {
+        input.addEventListener('blur', () => _savePayrollTimeInline(input.dataset.staffId, input.dataset.workDate, container));
+    });
+
+    container.querySelectorAll('.payroll-room-select').forEach(sel => {
+        sel.addEventListener('change', async () => {
+            if (typeof currentAdminRole !== 'undefined' && currentAdminRole !== 'full') {
+                alert('You do not have permission to update room assignments.');
+                sel.value = sel.dataset.prevValue ?? '';
+                return;
+            }
+            const prev = sel.dataset.prevValue ?? '';
+            sel.dataset.prevValue = sel.value;
+            try {
+                await updateClockEventsRoom(sel.dataset.staffId, sel.dataset.workDate, sel.value || null);
+            } catch (err) {
+                alert('Failed to update room: ' + err.message);
+                sel.value = prev;
+                sel.dataset.prevValue = prev;
+                return;
+            }
+            _updatePayrollDayRowState(container, sel.dataset.staffId, sel.dataset.workDate);
+            _savePayrollTimeInline(sel.dataset.staffId, sel.dataset.workDate, container);
         });
     });
 
-    // PTO inputs: debounced save + live recalc
     container.querySelectorAll('.payroll-pto-input').forEach(input => {
         input.addEventListener('input', () => {
             const sid = input.dataset.sid;
@@ -1668,33 +1827,10 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         });
     });
 
-    // Room selects: update all clock events for this staff+date
-    container.querySelectorAll('.payroll-room-select').forEach(sel => {
-        sel.addEventListener('change', async () => {
-            if (typeof currentAdminRole !== 'undefined' && currentAdminRole !== 'full') {
-                alert('You do not have permission to update room assignments.');
-                sel.value = sel.dataset.prevValue ?? '';
-                return;
-            }
-            const { staffId, workDate } = sel.dataset;
-            const prev = sel.dataset.prevValue ?? '';
-            sel.dataset.prevValue = sel.value;
-            try {
-                await updateClockEventsRoom(staffId, workDate, sel.value || null);
-            } catch (err) {
-                alert('Failed to update room: ' + err.message);
-                sel.value = prev;
-                sel.dataset.prevValue = prev;
-            }
-        });
-    });
-
-    // Clock event edit buttons → open inline editor below the day row
     container.querySelectorAll('.payroll-edit-clk-btn').forEach(btn => {
         btn.addEventListener('click', e => {
             e.stopPropagation();
-            const dayRow = btn.closest('tr');
-            _openInlineClockEditor(dayRow, btn.dataset.staffId, btn.dataset.staffName, btn.dataset.workDate);
+            _openInlineClockEditor(btn.closest('tr'), btn.dataset.staffId, btn.dataset.staffName, btn.dataset.workDate);
         });
     });
 }
@@ -1719,7 +1855,7 @@ function _openInlineClockEditor(dayRow, staffId, staffName, workDate) {
     editorRow.dataset.staffId  = staffId;
     editorRow.dataset.workDate = workDate;
     editorRow.innerHTML = `
-        <td colspan="7" class="payroll-clk-editor-cell">
+        <td colspan="8" class="payroll-clk-editor-cell">
             <div class="cee-inline-header">
                 <strong>${escHtml(staffName)}</strong>
                 <span class="text-muted" style="font-size:.85em;margin-left:6px">· Clock Events · ${escHtml(dateLabel)}</span>
@@ -1890,69 +2026,45 @@ async function _refreshPayrollDayRow(staffId, workDate) {
         const staffEvents = allEvents.filter(e => e.staff_id === staffId && e.clock_in && e.clock_out)
             .sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in));
         const fmtTime    = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        const timesStr   = staffEvents.map(ev => `${fmtTime(ev.clock_in)} – ${fmtTime(ev.clock_out)}`).join(' · ');
+        const firstIn    = staffEvents.length ? staffEvents[0].clock_in  : null;
+        const lastOut    = staffEvents.length ? staffEvents[staffEvents.length - 1].clock_out : null;
+        const clockStr   = firstIn && lastOut ? `${fmtTime(firstIn)} → ${fmtTime(lastOut)}` : '—';
         const clockedHrs = staffEvents.reduce((sum, ev) => {
             const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
             return sum + (ms >= 600000 ? Math.round(ms / 3600000 * 100) / 100 : 0);
         }, 0);
-        const dayRooms = [...new Set(staffEvents.map(ev => ev.room_id).filter(Boolean))];
 
-        const hrsInput = container.querySelector(`.payroll-hrs-input[data-staff-id="${staffId}"][data-work-date="${workDate}"]`);
-        if (!hrsInput) return;
-        const row = hrsInput.closest('tr');
+        const panel  = container.querySelector(`.payroll-detail-panel[data-staff-id="${staffId}"]`);
+        const dayRow = panel?.querySelector(`tr.payroll-day-row[data-date="${workDate}"]`);
+        if (!dayRow) return;
 
-        const timesEl = row?.querySelector('.payroll-clk-times');
-        if (timesEl) timesEl.innerHTML = timesStr ? escHtml(timesStr) : '<span class="text-muted">—</span>';
+        // Update clock display
+        const timesEl = dayRow.querySelector('.payroll-clk-times');
+        if (timesEl) timesEl.textContent = clockStr;
+        dayRow.dataset.clockedHrs = clockedHrs.toFixed(2);
 
-        const clockedEl = row?.querySelector('.payroll-day-clocked');
-        if (clockedEl) clockedEl.textContent = clockedHrs > 0 ? clockedHrs.toFixed(2) : '—';
-
-        const roomEl = row?.querySelector('.payroll-day-room');
-        if (roomEl) {
-            if (staffEvents.length === 0) {
-                roomEl.innerHTML = '<span class="text-muted">—</span>';
-            } else if (dayRooms.length > 1) {
-                roomEl.innerHTML = escHtml(dayRooms.map(id => ROOMS.find(r => r.id === id)?.label || id).join(', '));
-            } else {
-                const curRoomId = dayRooms[0] || '';
-                const existingSel = roomEl.querySelector('select');
-                if (existingSel) {
-                    existingSel.value = curRoomId;
-                    existingSel.dataset.prevValue = curRoomId;
-                } else {
-                    const opts = ROOMS.map(r =>
-                        `<option value="${escHtml(r.id)}"${curRoomId === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
-                    ).join('');
-                    roomEl.innerHTML = `<select class="payroll-room-select"
-                        data-staff-id="${escHtml(staffId)}" data-work-date="${escHtml(workDate)}"
-                        data-prev-value="${escHtml(curRoomId)}"
-                        style="font-size:.8rem;max-width:130px;border:1px solid var(--admin-border);border-radius:6px;padding:2px 4px">
-                        <option value="">—</option>${opts}
-                    </select>`;
-                    roomEl.querySelector('select').addEventListener('change', async function() {
-                        if (typeof currentAdminRole !== 'undefined' && currentAdminRole !== 'full') {
-                            alert('You do not have permission to update room assignments.');
-                            this.value = this.dataset.prevValue ?? '';
-                            return;
-                        }
-                        const prev = this.dataset.prevValue ?? '';
-                        this.dataset.prevValue = this.value;
-                        try {
-                            await updateClockEventsRoom(this.dataset.staffId, this.dataset.workDate, this.value || null);
-                        } catch (err) {
-                            alert('Failed to update room: ' + err.message);
-                            this.value = prev;
-                            this.dataset.prevValue = prev;
-                        }
-                    });
-                }
-            }
+        // Pre-fill time inputs if they're empty and we now have clock data
+        const tiInput = dayRow.querySelector('.payroll-time-in');
+        const toInput = dayRow.querySelector('.payroll-time-out');
+        if (tiInput && toInput && !tiInput.value && !toInput.value && firstIn && lastOut) {
+            const isoHHMM = iso => { const d = new Date(iso); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+            tiInput.value = isoHHMM(firstIn);
+            toInput.value = isoHHMM(lastOut);
         }
 
-        if (!hrsInput.value) hrsInput.placeholder = clockedHrs > 0 ? clockedHrs.toFixed(2) : '—';
+        // Update room select if clock events have a consistent room and nothing is selected
+        const dayRooms = [...new Set(staffEvents.map(ev => ev.room_id).filter(Boolean))];
+        const roomSel  = dayRow.querySelector('.payroll-room-select');
+        if (roomSel && dayRooms.length === 1 && !roomSel.value) {
+            roomSel.value = dayRooms[0];
+            roomSel.dataset.prevValue = dayRooms[0];
+        }
+
+        _updatePayrollDayRowState(container, staffId, workDate);
         _recalcPayrollStaff(container, staffId);
     } catch(e) { console.error('Failed to refresh daily row', e); }
 }
+
 
 async function exportPayrollReport() {
     const sel = document.getElementById('payrollPeriod');
