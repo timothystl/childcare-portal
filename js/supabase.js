@@ -1518,7 +1518,7 @@ async function fetchStaffHours(startDate, endDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
         .from('staff_hours')
-        .select('id, staff_id, work_date, hours_worked, notes')
+        .select('id, staff_id, work_date, hours_worked, notes, time_in, time_out, room_id')
         .gte('work_date', startDate)
         .lte('work_date', endDate)
         .order('work_date');
@@ -1534,14 +1534,15 @@ async function fetchStaffHours(startDate, endDate) {
  * @param {string} [notes]     - Optional notes
  * @returns {Promise<void>}
  */
-async function upsertStaffHours(staffId, workDate, hoursWorked, notes) {
+async function upsertStaffHours(staffId, workDate, hoursWorked, notes, timeIn = null, timeOut = null, roomId = null) {
     if (!sbClient) throw new Error('Supabase not configured.');
+    const payload = { staff_id: staffId, work_date: workDate, hours_worked: hoursWorked, notes: notes || '' };
+    if (timeIn  !== null) payload.time_in  = timeIn;
+    if (timeOut !== null) payload.time_out = timeOut;
+    if (roomId  !== null) payload.room_id  = roomId;
     const { error } = await sbClient
         .from('staff_hours')
-        .upsert(
-            { staff_id: staffId, work_date: workDate, hours_worked: hoursWorked, notes: notes || '' },
-            { onConflict: 'staff_id,work_date' }
-        );
+        .upsert(payload, { onConflict: 'staff_id,work_date' });
     if (error) throw error;
 }
 
