@@ -1470,7 +1470,26 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             // Room from clock events on this day
             const dayEvents = d?.events || [];
             const dayRooms  = [...new Set(dayEvents.map(ev => ev.roomId).filter(Boolean))];
-            const dayRoomStr = dayRooms.map(id => ROOMS.find(r => r.id === id)?.label || id).join(', ') || (dayEvents.length ? '—' : '');
+
+            // Room cell: select if 0–1 distinct rooms and events exist, multi-label if >1, dash if no events
+            let roomCellHtml;
+            if (dayEvents.length === 0) {
+                roomCellHtml = '<span class="text-muted">—</span>';
+            } else if (dayRooms.length > 1) {
+                roomCellHtml = escHtml(dayRooms.map(id => ROOMS.find(r => r.id === id)?.label || id).join(', '));
+            } else {
+                const curRoomId = dayRooms[0] || '';
+                const opts = ROOMS.map(r =>
+                    `<option value="${escHtml(r.id)}"${curRoomId === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
+                ).join('');
+                roomCellHtml = `<select class="payroll-room-select"
+                    data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
+                    data-prev-value="${escHtml(curRoomId)}"
+                    style="font-size:.8rem;max-width:130px;border:1px solid var(--admin-border);border-radius:6px;padding:2px 4px">
+                    <option value="">—</option>
+                    ${opts}
+                </select>`;
+            }
 
             // Clock times display
             const fmt = ts => new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -1498,7 +1517,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
 
             return `<tr class="payroll-day-row${!d ? ' payroll-day-empty' : ''}">
                 <td class="payroll-day-date">${dateLabel}</td>
-                <td class="payroll-day-room">${escHtml(dayRoomStr)}</td>
+                <td class="payroll-day-room">${roomCellHtml}</td>
                 <td class="payroll-day-events">
                     <span class="payroll-clk-times">${timesStr ? escHtml(timesStr) : '<span class="text-muted">—</span>'}</span>
                     <button class="btn-ghost payroll-edit-clk-btn"
@@ -1646,6 +1665,27 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             const sid = input.dataset.sid;
             _schedulePtoSaveUnified(container, sid, startVal);
             _recalcPayrollStaff(container, sid);
+        });
+    });
+
+    // Room selects: update all clock events for this staff+date
+    container.querySelectorAll('.payroll-room-select').forEach(sel => {
+        sel.addEventListener('change', async () => {
+            if (typeof currentAdminRole !== 'undefined' && currentAdminRole !== 'full') {
+                alert('You do not have permission to update room assignments.');
+                sel.value = sel.dataset.prevValue ?? '';
+                return;
+            }
+            const { staffId, workDate } = sel.dataset;
+            const prev = sel.dataset.prevValue ?? '';
+            sel.dataset.prevValue = sel.value;
+            try {
+                await updateClockEventsRoom(staffId, workDate, sel.value || null);
+            } catch (err) {
+                alert('Failed to update room: ' + err.message);
+                sel.value = prev;
+                sel.dataset.prevValue = prev;
+            }
         });
     });
 
@@ -1845,7 +1885,6 @@ async function _closeClockEventEditor(staffId, workDate) {
             return sum + (ms >= 600000 ? Math.round(ms / 3600000 * 100) / 100 : 0);
         }, 0);
         const dayRooms    = [...new Set(staffEvents.map(ev => ev.room_id).filter(Boolean))];
-        const dayRoomStr  = dayRooms.map(id => ROOMS.find(r => r.id === id)?.label || id).join(', ') || '';
 
         const hrsInput = container.querySelector(`.payroll-hrs-input[data-staff-id="${staffId}"][data-work-date="${workDate}"]`);
         if (!hrsInput) return;
@@ -1857,8 +1896,48 @@ async function _closeClockEventEditor(staffId, workDate) {
         const clockedEl = row?.querySelector('.payroll-day-clocked');
         if (clockedEl) clockedEl.textContent = clockedHrs > 0 ? clockedHrs.toFixed(2) : '—';
 
+        // Rebuild the room cell: select for 0–1 rooms, read-only for multi-room, dash if no events
         const roomEl = row?.querySelector('.payroll-day-room');
-        if (roomEl) roomEl.textContent = dayRoomStr;
+        if (roomEl) {
+            if (staffEvents.length === 0) {
+                roomEl.innerHTML = '<span class="text-muted">—</span>';
+            } else if (dayRooms.length > 1) {
+                roomEl.innerHTML = escHtml(dayRooms.map(id => ROOMS.find(r => r.id === id)?.label || id).join(', '));
+            } else {
+                const existingSel = roomEl.querySelector('select');
+                const curRoomId = dayRooms[0] || '';
+                if (existingSel) {
+                    existingSel.value = curRoomId;
+                    existingSel.dataset.prevValue = curRoomId;
+                } else {
+                    const opts = ROOMS.map(r =>
+                        `<option value="${escHtml(r.id)}"${curRoomId === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
+                    ).join('');
+                    roomEl.innerHTML = `<select class="payroll-room-select"
+                        data-staff-id="${escHtml(staffId)}" data-work-date="${escHtml(workDate)}"
+                        data-prev-value="${escHtml(curRoomId)}"
+                        style="font-size:.8rem;max-width:130px;border:1px solid var(--admin-border);border-radius:6px;padding:2px 4px">
+                        <option value="">—</option>${opts}
+                    </select>`;
+                    roomEl.querySelector('select').addEventListener('change', async function() {
+                        if (typeof currentAdminRole !== 'undefined' && currentAdminRole !== 'full') {
+                            alert('You do not have permission to update room assignments.');
+                            this.value = this.dataset.prevValue ?? '';
+                            return;
+                        }
+                        const prev = this.dataset.prevValue ?? '';
+                        this.dataset.prevValue = this.value;
+                        try {
+                            await updateClockEventsRoom(this.dataset.staffId, this.dataset.workDate, this.value || null);
+                        } catch (err) {
+                            alert('Failed to update room: ' + err.message);
+                            this.value = prev;
+                            this.dataset.prevValue = prev;
+                        }
+                    });
+                }
+            }
+        }
 
         // Update hours placeholder if the input is blank (clock-only day)
         if (!hrsInput.value) hrsInput.placeholder = clockedHrs > 0 ? clockedHrs.toFixed(2) : '—';
