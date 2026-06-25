@@ -2697,6 +2697,17 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .payroll-day-events { color: #9CA3AF; font-size: .8rem; white-space: nowrap; }
 .payroll-day-calc-hrs { text-align: center; font-weight: 700; }
 .payroll-day-status { text-align: center; white-space: nowrap; }
+.payroll-time-clear-btn {
+    background: none;
+    border: none;
+    color: #BBB;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+    vertical-align: middle;
+}
+.payroll-time-clear-btn:hover { color: #C0392B; }
 
 /* Inline field styling */
 .payroll-time-input,

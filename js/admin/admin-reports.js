@@ -1364,9 +1364,11 @@ function _updatePayrollDayRowState(container, staffId, workDate) {
     const missingRoom = !!(ti || to) && !roomVal;
     const complete    = calcHrs !== null && !!roomVal && !mismatch;
 
+    const isClockOnly = calcHrs === null && clockedHrs > 0;
+    const displayHrs  = calcHrs !== null ? calcHrs : (clockedHrs > 0 ? clockedHrs : null);
     const hrsCell = dayRow.querySelector('.payroll-day-calc-hrs');
-    if (hrsCell) hrsCell.innerHTML = calcHrs !== null
-        ? `<strong style="color:${mismatch ? '#C0392B' : 'var(--navy)'}">${calcHrs}h</strong>`
+    if (hrsCell) hrsCell.innerHTML = displayHrs !== null
+        ? `<strong style="color:${mismatch ? '#C0392B' : isClockOnly ? '#888' : 'var(--navy)'}">${displayHrs}h</strong>`
         : '<span class="text-muted">—</span>';
 
     const iconEl = dayRow.querySelector('.payroll-day-status-icon');
@@ -1384,7 +1386,7 @@ function _updatePayrollDayRowState(container, staffId, workDate) {
     dayRow.dataset.state = state;
 }
 
-async function _savePayrollTimeInline(staffId, workDate, container) {
+async function _savePayrollTimeInline(staffId, workDate, container, force = false) {
     const panel  = container?.querySelector(`.payroll-detail-panel[data-staff-id="${staffId}"]`);
     const dayRow = panel?.querySelector(`tr.payroll-day-row[data-date="${workDate}"]`);
     if (!dayRow) return;
@@ -1393,8 +1395,9 @@ async function _savePayrollTimeInline(staffId, workDate, container) {
     const to     = dayRow.querySelector('.payroll-time-out')?.value || '';
     const notes  = dayRow.querySelector('.payroll-notes-input')?.value.trim() || '';
     const roomId = dayRow.querySelector('.payroll-room-select')?.value || null;
+    const clockedHrs = parseFloat(dayRow.dataset.clockedHrs || '0') || 0;
 
-    if (!ti && !to && !notes && !roomId) return;
+    if (!ti && !to && !notes && !roomId && !force) return;
 
     let hours = 0;
     if (ti && to) {
@@ -1402,6 +1405,8 @@ async function _savePayrollTimeInline(staffId, workDate, container) {
         const [h2, m2] = to.split(':').map(Number);
         const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
         if (mins > 0) hours = Math.round(mins / 60 * 100) / 100;
+    } else if (!ti && !to) {
+        hours = clockedHrs;
     }
 
     const tick   = dayRow.querySelector('.payroll-day-save-tick');
@@ -1426,13 +1431,16 @@ function _recalcPayrollStaff(container, staffId) {
     container.querySelectorAll(`.payroll-day-row[data-staff-id="${staffId}"]`).forEach(dayRow => {
         const ti = dayRow.querySelector('.payroll-time-in')?.value  || '';
         const to = dayRow.querySelector('.payroll-time-out')?.value || '';
-        if (!ti || !to) return;
-        const [h1, m1] = ti.split(':').map(Number);
-        const [h2, m2] = to.split(':').map(Number);
-        const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
-        if (mins > 0) {
-            sumHrs += Math.round(mins / 60 * 100) / 100;
-            completeDays++;
+        if (ti && to) {
+            const [h1, m1] = ti.split(':').map(Number);
+            const [h2, m2] = to.split(':').map(Number);
+            const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+            if (mins > 0) {
+                sumHrs += Math.round(mins / 60 * 100) / 100;
+                completeDays++;
+            }
+        } else {
+            sumHrs += parseFloat(dayRow.dataset.clockedHrs || '0') || 0;
         }
     });
     sumHrs += parseFloat(container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="used"]`)?.value) || 0;
@@ -1578,16 +1586,15 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             const dateLabel = `${DOW[dowIdx]} ${MONTH_NAMES[dm-1]} ${dd}`;
 
             const dayEvents  = d?.events || [];
-            const firstIn    = dayEvents.length ? dayEvents[0].clockIn : null;
-            const lastOut    = dayEvents.length ? dayEvents[dayEvents.length-1].clockOut : null;
-            const clockStr   = firstIn && lastOut ? `${fmtEvt(firstIn)} → ${fmtEvt(lastOut)}` : '—';
             const clockedHrs = dayEvents.reduce((sum, ev) => {
                 const ms = new Date(ev.clockOut) - new Date(ev.clockIn);
                 return sum + (ms >= 600000 ? Math.round(ms / 3600000 * 100) / 100 : 0);
             }, 0);
+            const validPairs = dayEvents.filter(ev => ev.clockIn && ev.clockOut);
+            const clockStr   = validPairs.map(ev => `${fmtEvt(ev.clockIn)} → ${fmtEvt(ev.clockOut)}`).join(', ');
 
-            const timeIn  = d?.timeIn  || (firstIn  ? isoToHHMM(firstIn)  : '');
-            const timeOut = d?.timeOut || (lastOut   ? isoToHHMM(lastOut)  : '');
+            const timeIn  = d?.timeIn  || '';
+            const timeOut = d?.timeOut || '';
 
             const dayRooms = [...new Set(dayEvents.map(ev => ev.roomId).filter(Boolean))];
             const roomId   = d?.roomId || dayRooms[0] || '';
@@ -1602,8 +1609,10 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             else if (mismatch)    state = 'mismatch';
             else if (missingRoom) state = 'missing';
 
-            const hoursHtml = calcHrs !== null
-                ? `<strong style="color:${mismatch ? '#C0392B' : 'var(--navy)'}">${calcHrs}h</strong>`
+            const isClockOnly = calcHrs === null && clockedHrs > 0;
+            const displayHrs  = calcHrs !== null ? calcHrs : (clockedHrs > 0 ? clockedHrs : null);
+            const hoursHtml   = displayHrs !== null
+                ? `<strong style="color:${mismatch ? '#C0392B' : isClockOnly ? '#888' : 'var(--navy)'}">${displayHrs}h</strong>`
                 : '<span class="text-muted">—</span>';
 
             let statusIcon = '';
@@ -1626,7 +1635,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                     </select>
                 </td>
                 <td class="payroll-day-events">
-                    <span class="payroll-clk-times">${dayEvents.length ? escHtml(clockStr) : '<span class="text-muted">—</span>'}</span>
+                    <span class="payroll-clk-times">${validPairs.length ? escHtml(clockStr) : '<span class="text-muted">—</span>'}</span>
                     <button class="btn-ghost payroll-edit-clk-btn"
                         data-staff-id="${escHtml(s.id)}" data-staff-name="${escHtml(s.name)}" data-work-date="${date}"
                         title="Edit clock events" style="font-size:.75em;padding:2px 5px;margin-left:3px;opacity:.55">✎</button>
@@ -1634,12 +1643,14 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 <td class="payroll-day-timein">
                     <input type="time" class="payroll-time-input payroll-time-in"
                         data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
-                        value="${escHtml(timeIn)}">
+                        value="${escHtml(timeIn)}"><button class="payroll-time-clear-btn" title="Clear time in"
+                        data-staff-id="${escHtml(s.id)}" data-work-date="${date}" data-field="in">×</button>
                 </td>
                 <td class="payroll-day-timeout">
                     <input type="time" class="payroll-time-input payroll-time-out"
                         data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
-                        value="${escHtml(timeOut)}">
+                        value="${escHtml(timeOut)}"><button class="payroll-time-clear-btn" title="Clear time out"
+                        data-staff-id="${escHtml(s.id)}" data-work-date="${date}" data-field="out">×</button>
                 </td>
                 <td class="payroll-day-calc-hrs">${hoursHtml}</td>
                 <td class="payroll-day-notes">
@@ -1829,6 +1840,21 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         btn.addEventListener('click', e => {
             e.stopPropagation();
             _openInlineClockEditor(btn.closest('tr'), btn.dataset.staffId, btn.dataset.staffName, btn.dataset.workDate);
+        });
+    });
+
+    container.querySelectorAll('.payroll-time-clear-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const { staffId, workDate, field } = btn.dataset;
+            const panel  = container.querySelector(`.payroll-detail-panel[data-staff-id="${staffId}"]`);
+            const dayRow = panel?.querySelector(`tr.payroll-day-row[data-date="${workDate}"]`);
+            if (!dayRow) return;
+            const input = dayRow.querySelector(field === 'in' ? '.payroll-time-in' : '.payroll-time-out');
+            if (input) input.value = '';
+            _updatePayrollDayRowState(container, staffId, workDate);
+            _recalcPayrollStaff(container, staffId);
+            _savePayrollTimeInline(staffId, workDate, container, true);
         });
     });
 }
