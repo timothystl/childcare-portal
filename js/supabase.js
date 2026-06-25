@@ -1985,6 +1985,23 @@ async function saveExpenseConfig(config) {
     if (error) throw error;
 }
 
+async function fetchAnnualBudget(year) {
+    if (!sbClient) return null;
+    const { data } = await sbClient.from('settings').select('value')
+        .eq('key', `annual_budget_${year}`).maybeSingle();
+    const raw = data?.value;
+    if (!raw) return null;
+    if (typeof raw === 'string') return parseJsonOr(raw, null);
+    return (raw && typeof raw === 'object') ? raw : null;
+}
+
+async function saveAnnualBudget(year, budget) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('settings')
+        .upsert({ key: `annual_budget_${year}`, value: budget }, { onConflict: 'key' });
+    if (error) throw error;
+}
+
 async function sendPasswordReset(email) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient.auth.resetPasswordForEmail(email, {
