@@ -1687,7 +1687,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 <td class="payroll-rate-cell">${rateStr}</td>
                 <td class="report-num payroll-period-hrs-cell" data-staff-id="${escHtml(s.id)}">${periodHrsStr}</td>
                 <td class="report-num report-revenue payroll-period-pay-cell" data-staff-id="${escHtml(s.id)}">${periodPayStr}</td>
-                <td class="report-num payroll-ytd-cell">${ytdHrsStr}<br><small style="font-weight:400;color:var(--text-muted)">${ytdPayStr}</small></td>
+                <td class="report-num payroll-ytd-cell">${ytdHrsStr}</td>
                 <td class="payroll-completion-cell">
                     <span class="payroll-completion-pill" data-staff-id="${escHtml(s.id)}"
                         style="background:${pillBg};color:${pillColor};border:1px solid ${pillBdr}">
@@ -1729,8 +1729,8 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
     }).join('');
 
     container.innerHTML = `
-        <h3 class="report-month-title">Pay Period: ${periodLabel}</h3>
-        <p style="font-size:.82rem;color:var(--text-muted);margin:-6px 0 14px">Click a staff row to expand daily hours. Time entries auto-save on blur.</p>
+        <h2 class="payroll-report-title">Pay Period: ${periodLabel}</h2>
+        <p style="font-size:12.5px;color:#6B7280;margin:0 0 16px">Click a staff row to expand daily hours. Time entries auto-save on blur.</p>
         <div class="table-wrapper report-table-wrap payroll-table-wrap">
             <table class="report-table payroll-table">
                 <thead>
@@ -1738,16 +1738,15 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                         <th colspan="2" style="text-align:left">Staff Member</th>
                         <th style="text-align:right">Rate</th>
                         <th colspan="2" class="staff-room-header payroll-period-header">This Period</th>
-                        <th class="staff-room-header payroll-period-header">Year to Date (${ey})</th>
-                        <th style="background:var(--navy-table)"> </th>
+                        <th colspan="2" class="staff-room-header payroll-period-header">Year to Date (${ey})</th>
                     </tr>
                     <tr class="payroll-outer-head-2">
                         <th colspan="2"></th>
                         <th></th>
                         <th class="staff-sub-head">Hours</th>
                         <th class="staff-sub-head">Gross Pay</th>
-                        <th class="staff-sub-head">Hrs / Pay</th>
-                        <th style="background:#17344A"></th>
+                        <th class="staff-sub-head">Hours</th>
+                        <th class="staff-sub-head">Gross Pay</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -1757,7 +1756,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                         <td></td>
                         <td class="report-num">—</td>
                         <td class="report-num report-revenue"><strong>$${totPeriodPay.toFixed(2)}</strong></td>
-                        <td class="report-num report-revenue">—</td>
+                        <td class="report-num">—</td>
                         <td></td>
                     </tr>
                 </tfoot>
@@ -1779,7 +1778,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             const icon     = row.querySelector('.payroll-expand-icon');
             const expanded = panel.style.display !== 'none';
             panel.style.display = expanded ? 'none' : '';
-            row.style.background = expanded ? '' : 'var(--admin-hover)';
+            row.style.background = expanded ? '' : '#EDE6D6';
             if (icon) icon.textContent = expanded ? '▶' : '▼';
         });
     });
