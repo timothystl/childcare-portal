@@ -2594,27 +2594,56 @@ tr.pending-approval:hover { background: var(--sun-pale); }
   80%  { opacity: 1; transform: scale(1); }
   100% { opacity: 0; transform: scale(0.7); }
 }
-.payroll-table { width: 100%; min-width: 700px; }
-.payroll-table-wrap { overflow-x: auto; }
+.payroll-table { width: 100%; min-width: 820px; }
+/* Outer wrapper — exact prototype: 6px radius, subtle border + shadow */
+.payroll-table-wrap {
+    border-radius: 6px !important;
+    border: 1px solid #D5CCBA !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07) !important;
+    overflow: hidden;
+}
 /* Don't let the base report-table row-hover tint override payroll state backgrounds */
 .payroll-table.report-table tbody tr:hover { background: inherit; }
-.payroll-table.report-table tbody tr.payroll-staff-row:hover td { background: var(--admin-hover); }
-/* Period heading matches prototype: 19px, navy, bold */
-.payroll-report-title { font-size: 19px; font-weight: 700; color: var(--navy); margin: 0 0 3px; }
-.payroll-hrs { font-weight: 600; color: var(--navy); }
+.payroll-table.report-table tbody tr.payroll-staff-row:hover td { background: #EDE6D6; }
+.payroll-report-title { font-size: 19px; font-weight: 700; color: #1C3C52; margin: 0 0 3px; }
+
+/* Staff summary rows */
 .payroll-staff-row { cursor: pointer; transition: background 0.15s; }
-.payroll-staff-row:hover td { background: var(--admin-hover); }
-.payroll-expand-chevron { width: 28px !important; color: #8C8070; font-size: 11px; padding: 12px 4px 12px 10px !important; user-select: none; }
-.payroll-staff-name-cell { padding: 10px 4px 10px 2px !important; }
-.payroll-rate-cell { text-align: right !important; font-size: 13px; color: var(--text-muted); white-space: nowrap; }
-.payroll-period-hrs-cell, .payroll-period-pay-cell { text-align: right; white-space: nowrap; font-size: 13px; }
-.payroll-ytd-cell { text-align: right; white-space: nowrap; font-size: .85rem; }
-.payroll-completion-cell { text-align: right !important; padding-right: 14px !important; }
+.payroll-staff-row:hover td { background: #EDE6D6; }
+.payroll-expand-chevron { width: 28px !important; color: #8C8070; font-size: 11px; padding: 12px 4px 12px 14px !important; user-select: none; }
+.payroll-staff-name-cell { padding: 12px 4px 12px 2px !important; }
+.payroll-rate-cell { text-align: right !important; font-size: 13px; color: #6B7280; white-space: nowrap; padding: 12px 16px !important; }
+.payroll-period-hrs-cell, .payroll-period-pay-cell { text-align: right; white-space: nowrap; font-size: 13px; padding: 12px 16px !important; }
+.payroll-ytd-cell { text-align: right; white-space: nowrap; font-size: 13px; padding: 12px 16px !important; }
+.payroll-completion-cell { text-align: right !important; padding: 12px 16px !important; }
 .payroll-completion-pill { display: inline-block; border-radius: 20px; padding: 2px 9px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.payroll-period-header { border-bottom: 2px solid var(--sun) !important; }
-/* Strip the base report-table gold border from ALL payroll thead cells; payroll-period-header adds it back selectively */
-.payroll-table.report-table thead th { border-bottom: none; }
-.payroll-outer-head-2 th { background: #17344A !important; height: 26px; padding: 0 14px !important; border-bottom: none !important; }
+
+/* Outer thead — override base report-table so header bg matches prototype navy exactly */
+.payroll-table.report-table thead th { background: #1C3C52 !important; border-bottom: none; }
+/* Gold underline only on the group-header cells */
+.payroll-period-header { border-bottom: 2px solid #E9A020 !important; }
+/* Group header cells: no vertical divider, correct sizing */
+.payroll-table .staff-room-header.payroll-period-header {
+    border-left: none !important;
+    font-size: 10.5px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.07em;
+    padding: 7px 16px 5px !important;
+    text-transform: uppercase;
+}
+/* Rate header: muted per prototype */
+.payroll-rate-header { color: rgba(255,255,255,0.7) !important; font-size: 12px !important; font-weight: 500 !important; text-align: right !important; }
+/* Sub-label row: darker bg, right-aligned, dim, lightweight */
+.payroll-outer-head-2 th {
+    background: #17344A !important;
+    height: 26px;
+    padding: 0 16px !important;
+    border-bottom: none !important;
+    font-size: 11px !important;
+    font-weight: 400 !important;
+    color: rgba(255,255,255,0.5) !important;
+    text-align: right !important;
+}
 
 /* Detail panel */
 .payroll-panel-cell { padding: 0 !important; border-bottom: 2px solid var(--admin-border) !important; }
