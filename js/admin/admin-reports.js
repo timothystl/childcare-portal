@@ -1254,7 +1254,7 @@ async function _buildPayrollData(startVal, endVal) {
         if (calcClockHrs(ev) <= 0) return;
         const key = manualKey(ev.staff_id, ev.work_date);
         if (!clockEventsByDay.has(key)) clockEventsByDay.set(key, []);
-        clockEventsByDay.get(key).push({ clockIn: ev.clock_in, clockOut: ev.clock_out, roomId: ev.room_id || null });
+        clockEventsByDay.get(key).push({ id: ev.id, clockIn: ev.clock_in, clockOut: ev.clock_out, roomId: ev.room_id || null });
     });
 
     const periodDetailMap = new Map(); // staff_id → [{ work_date, hours, source, notes, events }]
@@ -1590,8 +1590,12 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 const ms = new Date(ev.clockOut) - new Date(ev.clockIn);
                 return sum + (ms >= 600000 ? Math.round(ms / 3600000 * 100) / 100 : 0);
             }, 0);
-            const validPairs = dayEvents.filter(ev => ev.clockIn && ev.clockOut);
-            const clockStr   = validPairs.map(ev => `${fmtEvt(ev.clockIn)} → ${fmtEvt(ev.clockOut)}`).join(', ');
+            const validPairs    = dayEvents.filter(ev => ev.clockIn && ev.clockOut);
+            const clockPairsHtml = validPairs.length
+                ? validPairs.map(ev =>
+                    `<div class="payroll-clk-pair">${escHtml(fmtEvt(ev.clockIn))} → ${escHtml(fmtEvt(ev.clockOut))}<button class="payroll-clk-delete-btn btn-ghost" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" title="Delete clock event">×</button></div>`
+                ).join('')
+                : '<span class="text-muted">—</span>';
 
             const timeIn  = d?.timeIn  || '';
             const timeOut = d?.timeOut || '';
@@ -1635,22 +1639,20 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                     </select>
                 </td>
                 <td class="payroll-day-events">
-                    <span class="payroll-clk-times">${validPairs.length ? escHtml(clockStr) : '<span class="text-muted">—</span>'}</span>
+                    <span class="payroll-clk-times">${clockPairsHtml}</span>
                     <button class="btn-ghost payroll-edit-clk-btn"
                         data-staff-id="${escHtml(s.id)}" data-staff-name="${escHtml(s.name)}" data-work-date="${date}"
-                        title="Edit clock events" style="font-size:.75em;padding:2px 5px;margin-left:3px;opacity:.55">✎</button>
+                        title="Add / edit clock events" style="font-size:.75em;padding:2px 5px;margin-top:2px;opacity:.45">✎</button>
                 </td>
                 <td class="payroll-day-timein">
                     <input type="time" class="payroll-time-input payroll-time-in"
                         data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
-                        value="${escHtml(timeIn)}"><button class="payroll-time-clear-btn" title="Clear time in"
-                        data-staff-id="${escHtml(s.id)}" data-work-date="${date}" data-field="in">×</button>
+                        value="${escHtml(timeIn)}">
                 </td>
                 <td class="payroll-day-timeout">
                     <input type="time" class="payroll-time-input payroll-time-out"
                         data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
-                        value="${escHtml(timeOut)}"><button class="payroll-time-clear-btn" title="Clear time out"
-                        data-staff-id="${escHtml(s.id)}" data-work-date="${date}" data-field="out">×</button>
+                        value="${escHtml(timeOut)}">
                 </td>
                 <td class="payroll-day-calc-hrs">${hoursHtml}</td>
                 <td class="payroll-day-notes">
@@ -1843,18 +1845,19 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         });
     });
 
-    container.querySelectorAll('.payroll-time-clear-btn').forEach(btn => {
-        btn.addEventListener('click', e => {
+    container.querySelectorAll('.payroll-clk-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async e => {
             e.stopPropagation();
-            const { staffId, workDate, field } = btn.dataset;
-            const panel  = container.querySelector(`.payroll-detail-panel[data-staff-id="${staffId}"]`);
-            const dayRow = panel?.querySelector(`tr.payroll-day-row[data-date="${workDate}"]`);
-            if (!dayRow) return;
-            const input = dayRow.querySelector(field === 'in' ? '.payroll-time-in' : '.payroll-time-out');
-            if (input) input.value = '';
-            _updatePayrollDayRowState(container, staffId, workDate);
-            _recalcPayrollStaff(container, staffId);
-            _savePayrollTimeInline(staffId, workDate, container, true);
+            const { eventId, staffId, workDate } = btn.dataset;
+            if (!confirm('Delete this clock event?')) return;
+            btn.disabled = true; btn.textContent = '…';
+            try {
+                await deleteClockEvent(eventId);
+                await _refreshPayrollDayRow(staffId, workDate);
+            } catch(err) {
+                alert('Failed to delete: ' + err.message);
+                btn.disabled = false; btn.textContent = '×';
+            }
         });
     });
 }
@@ -2050,9 +2053,6 @@ async function _refreshPayrollDayRow(staffId, workDate) {
         const staffEvents = allEvents.filter(e => e.staff_id === staffId && e.clock_in && e.clock_out)
             .sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in));
         const fmtTime    = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        const firstIn    = staffEvents.length ? staffEvents[0].clock_in  : null;
-        const lastOut    = staffEvents.length ? staffEvents[staffEvents.length - 1].clock_out : null;
-        const clockStr   = firstIn && lastOut ? `${fmtTime(firstIn)} → ${fmtTime(lastOut)}` : '—';
         const clockedHrs = staffEvents.reduce((sum, ev) => {
             const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
             return sum + (ms >= 600000 ? Math.round(ms / 3600000 * 100) / 100 : 0);
@@ -2062,19 +2062,32 @@ async function _refreshPayrollDayRow(staffId, workDate) {
         const dayRow = panel?.querySelector(`tr.payroll-day-row[data-date="${workDate}"]`);
         if (!dayRow) return;
 
-        // Update clock display
+        // Update clock display with per-pair lines and delete buttons
+        const clockPairsHtml = staffEvents.length
+            ? staffEvents.map(ev =>
+                `<div class="payroll-clk-pair">${escHtml(fmtTime(ev.clock_in))} → ${escHtml(fmtTime(ev.clock_out))}<button class="payroll-clk-delete-btn btn-ghost" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(staffId)}" data-work-date="${escHtml(workDate)}" title="Delete clock event">×</button></div>`
+            ).join('')
+            : '<span class="text-muted">—</span>';
         const timesEl = dayRow.querySelector('.payroll-clk-times');
-        if (timesEl) timesEl.textContent = clockStr;
-        dayRow.dataset.clockedHrs = clockedHrs.toFixed(2);
-
-        // Pre-fill time inputs if they're empty and we now have clock data
-        const tiInput = dayRow.querySelector('.payroll-time-in');
-        const toInput = dayRow.querySelector('.payroll-time-out');
-        if (tiInput && toInput && !tiInput.value && !toInput.value && firstIn && lastOut) {
-            const isoHHMM = iso => { const d = new Date(iso); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
-            tiInput.value = isoHHMM(firstIn);
-            toInput.value = isoHHMM(lastOut);
+        if (timesEl) {
+            timesEl.innerHTML = clockPairsHtml;
+            timesEl.querySelectorAll('.payroll-clk-delete-btn').forEach(btn => {
+                btn.addEventListener('click', async e => {
+                    e.stopPropagation();
+                    const { eventId, staffId: sid, workDate: wd } = btn.dataset;
+                    if (!confirm('Delete this clock event?')) return;
+                    btn.disabled = true; btn.textContent = '…';
+                    try {
+                        await deleteClockEvent(eventId);
+                        await _refreshPayrollDayRow(sid, wd);
+                    } catch(err) {
+                        alert('Failed to delete: ' + err.message);
+                        btn.disabled = false; btn.textContent = '×';
+                    }
+                });
+            });
         }
+        dayRow.dataset.clockedHrs = clockedHrs.toFixed(2);
 
         // Update room select if clock events have a consistent room and nothing is selected
         const dayRooms = [...new Set(staffEvents.map(ev => ev.room_id).filter(Boolean))];
