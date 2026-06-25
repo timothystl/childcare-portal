@@ -951,6 +951,52 @@
         <!-- ══════════════════════════════════════════════════════ -->
         <div class="tab-pane hidden" id="tab-finance">
 
+            <!-- Annual Budget -->
+            <section class="admin-section collapsible-section" id="financeBudgetSection">
+                <h2>🎯 Annual Budget</h2>
+                <p class="section-desc">Set annual targets for revenue, wages, and expenses. Your wages ÷ revenue ratio becomes your personal labor-cost target — replaces the generic industry benchmark in all charts and KPIs.</p>
+                <p style="font-size:.9em;color:#6b7280;margin:-.25rem 0 1rem">Budget is saved per year — select a year in the Financial Dashboard below, fill in your targets, then click Save Budget.</p>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem;max-width:860px;margin-bottom:1rem">
+                    <div>
+                        <label style="font-weight:600;font-size:.875rem">Expected Revenue ($)</label>
+                        <input id="budgetIncome" type="number" step="100" min="0" class="form-control" placeholder="e.g. 180000">
+                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">Annual income target</p>
+                    </div>
+                    <div>
+                        <label style="font-weight:600;font-size:.875rem">Wages / Labor ($)</label>
+                        <input id="budgetWages" type="number" step="100" min="0" class="form-control" placeholder="e.g. 95000">
+                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">Sets your labor % target (wages ÷ revenue)</p>
+                    </div>
+                    <div>
+                        <label style="font-weight:600;font-size:.875rem">Payroll Taxes ($)</label>
+                        <input id="budgetTaxes" type="number" step="100" min="0" class="form-control" placeholder="e.g. 7500">
+                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">FICA, FUTA, SUTA, etc.</p>
+                    </div>
+                    <div>
+                        <label style="font-weight:600;font-size:.875rem">Workers Comp ($)</label>
+                        <input id="budgetWorkersComp" type="number" step="100" min="0" class="form-control" placeholder="e.g. 3000">
+                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">Annual premium</p>
+                    </div>
+                    <div>
+                        <label style="font-weight:600;font-size:.875rem">Other Payroll Expenses ($)</label>
+                        <input id="budgetPayrollExp" type="number" step="100" min="0" class="form-control" placeholder="e.g. 2000">
+                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">Benefits, bonuses, etc.</p>
+                    </div>
+                    <div>
+                        <label style="font-weight:600;font-size:.875rem">Other Expenses ($)</label>
+                        <input id="budgetOtherExp" type="number" step="100" min="0" class="form-control" placeholder="e.g. 12000">
+                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">Supplies, insurance, etc.</p>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
+                    <button id="saveBudgetBtn" class="btn-primary">Save Budget</button>
+                    <span id="budgetSaveStatus" style="font-size:.85em;color:#6b7280"></span>
+                </div>
+                <div id="budgetSummaryWrap" class="hidden">
+                    <div id="budgetSummary"></div>
+                </div>
+            </section>
+
             <!-- Financial Dashboard -->
             <section class="admin-section collapsible-section" id="financeDashSection">
                 <h2>💰 Financial Dashboard</h2>

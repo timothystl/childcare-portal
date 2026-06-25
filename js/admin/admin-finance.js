@@ -5,6 +5,8 @@
 // ============================================================
 
 let _financeCharts = {}; // Chart instances — destroy before re-rendering
+let _annualBudget = null;     // cached budget object for the currently-selected year
+let _annualBudgetYear = null; // which year _annualBudget was loaded for
 
 function setupFinanceDashboard() {
     document.getElementById('generateFinanceBtn')
@@ -27,6 +29,8 @@ function setupFinanceDashboard() {
             sel.appendChild(opt);
         }
     }
+
+    setupBudget();
 }
 
 function _destroyChart(key) {
@@ -53,6 +57,121 @@ function _moLab(pnl, mo) {
 }
 function _fmt$(v) { return '$' + Math.round(v).toLocaleString(); }
 
+// ── Annual Budget ─────────────────────────────────────────────
+function setupBudget() {
+    document.getElementById('saveBudgetBtn')?.addEventListener('click', saveBudget);
+    // Reload budget inputs when year changes
+    document.getElementById('financeYear')?.addEventListener('change', () => {
+        _annualBudget = null;
+        _annualBudgetYear = null;
+        loadBudgetInputs(_financeYear());
+    });
+    loadBudgetInputs(_financeYear());
+}
+
+async function loadBudgetInputs(year) {
+    _annualBudgetYear = year;
+    try {
+        const budget = await fetchAnnualBudget(year);
+        _annualBudget = budget;
+        _populateBudgetForm(budget);
+        _renderBudgetSummary(budget, year);
+    } catch(e) { console.warn('Budget load:', e); }
+}
+
+function _populateBudgetForm(budget) {
+    const set = (id, key) => {
+        const el = document.getElementById(id);
+        if (el) el.value = budget?.[key] != null ? budget[key] : '';
+    };
+    set('budgetIncome',     'income');
+    set('budgetWages',      'wages');
+    set('budgetTaxes',      'taxes');
+    set('budgetWorkersComp','workersComp');
+    set('budgetPayrollExp', 'payrollExp');
+    set('budgetOtherExp',   'otherExp');
+}
+
+async function saveBudget() {
+    const year   = _financeYear();
+    const status = document.getElementById('budgetSaveStatus');
+    const get    = id => parseFloat(document.getElementById(id)?.value) || 0;
+    const budget = {
+        income:      get('budgetIncome'),
+        wages:       get('budgetWages'),
+        taxes:       get('budgetTaxes'),
+        workersComp: get('budgetWorkersComp'),
+        payrollExp:  get('budgetPayrollExp'),
+        otherExp:    get('budgetOtherExp'),
+    };
+    if (status) status.textContent = 'Saving…';
+    try {
+        await saveAnnualBudget(year, budget);
+        _annualBudget     = budget;
+        _annualBudgetYear = year;
+        _renderBudgetSummary(budget, year);
+        if (status) { status.textContent = `Saved for ${year}.`; setTimeout(() => { status.textContent = ''; }, 3000); }
+    } catch(e) {
+        if (status) status.textContent = 'Save failed: ' + e.message;
+    }
+}
+
+function _renderBudgetSummary(budget, year) {
+    const wrap = document.getElementById('budgetSummaryWrap');
+    const el   = document.getElementById('budgetSummary');
+    if (!wrap || !el) return;
+    if (!budget?.income) { wrap.classList.add('hidden'); return; }
+
+    const totalExp = (budget.taxes||0) + (budget.workersComp||0) + (budget.payrollExp||0) + (budget.otherExp||0);
+    const totalCost = (budget.wages||0) + totalExp;
+    const netBudget = budget.income - totalCost;
+    const labPct    = budget.income > 0 ? (budget.wages / budget.income * 100) : 0;
+    const netPct    = budget.income > 0 ? (netBudget / budget.income * 100) : 0;
+    const netCls    = netPct >= 15 ? 'fin-positive' : netPct >= 0 ? 'fin-warn' : 'fin-negative';
+
+    wrap.classList.remove('hidden');
+    el.innerHTML = `
+        <h4 style="margin:0 0 .75rem;font-weight:600">Budget Summary — ${year}</h4>
+        <div class="fin-kpi-row" style="margin-bottom:.5rem">
+            <div class="fin-kpi">
+                <span class="fin-kpi-label">Revenue Target</span>
+                <span class="fin-kpi-value fin-positive">${_fmt$(budget.income)}</span>
+            </div>
+            <div class="fin-kpi">
+                <span class="fin-kpi-label">Wages Budget</span>
+                <span class="fin-kpi-value">${_fmt$(budget.wages||0)}</span>
+            </div>
+            <div class="fin-kpi">
+                <span class="fin-kpi-label">Other Expenses Budget</span>
+                <span class="fin-kpi-value">${_fmt$(totalExp)}</span>
+                ${totalExp > 0 ? `<span class="fin-kpi-target">taxes · comp · payroll exp · other</span>` : ''}
+            </div>
+            <div class="fin-kpi">
+                <span class="fin-kpi-label">Budget Net</span>
+                <span class="fin-kpi-value ${netCls}">${_fmt$(netBudget)} <span class="fin-kpi-target">${netPct.toFixed(1)}%</span></span>
+            </div>
+            <div class="fin-kpi">
+                <span class="fin-kpi-label">Wages % Target</span>
+                <span class="fin-kpi-value">${budget.income > 0 ? labPct.toFixed(1) + '%' : '—'} <span class="fin-kpi-target">of revenue</span></span>
+            </div>
+        </div>`;
+}
+
+// Returns the budget-derived labor % target, or null if no budget is set.
+function _budgetLaborPct() {
+    if (!_annualBudget?.income || !_annualBudget?.wages) return null;
+    return _annualBudget.wages / _annualBudget.income * 100;
+}
+
+// Ensure budget is loaded for the given year (no-op if already cached).
+async function _ensureBudget(year) {
+    if (_annualBudgetYear === year && _annualBudget !== undefined) return;
+    try {
+        _annualBudget     = await fetchAnnualBudget(year);
+        _annualBudgetYear = year;
+    } catch(e) { _annualBudget = null; }
+}
+
 // ── Financial Dashboard ───────────────────────────────────────
 async function generateFinanceDashboard() {
     const year  = _financeYear();
@@ -66,6 +185,8 @@ async function generateFinanceDashboard() {
     }
 
     try {
+        await _ensureBudget(year);
+
         // Ensure expense config is loaded before rendering KPIs
         if (!_expenseConfig) {
             _expenseConfig = await fetchExpenseConfig();
@@ -146,6 +267,65 @@ async function generateFinanceDashboard() {
         const totalMarginPct = totalRev > 0 ? (totalMargin / totalRev * 100) : 0;
         const marginClass    = totalMarginPct >= 30 ? 'fin-positive' : totalMarginPct >= 15 ? 'fin-warn' : 'fin-negative';
         const labPct         = totalRev > 0 ? totalLab / totalRev * 100 : 0;
+        const budgLabPct     = _budgetLaborPct();
+
+        // Build Budget vs Actuals table if budget is set
+        let bvaHtml = '';
+        if (_annualBudget?.income) {
+            const b         = _annualBudget;
+            const bTotalExp = (b.taxes||0) + (b.workersComp||0) + (b.payrollExp||0) + (b.otherExp||0);
+            const bNet      = b.income - (b.wages||0) - bTotalExp;
+            const moCount   = allMonths.length;
+            const runRate   = v => moCount > 0 ? Math.round(v / moCount * 12) : 0;
+            const varSpan   = (actual, budget, lowerIsBetter) => {
+                const v   = actual - budget;
+                const good = lowerIsBetter ? v <= 0 : v >= 0;
+                return `<span class="${good ? 'fin-positive' : 'fin-negative'}">${v >= 0 ? '+' : ''}${_fmt$(v)}</span>`;
+            };
+            bvaHtml = `
+                <h4 style="margin:1.5rem 0 .5rem;font-weight:600">Budget vs Actuals — ${year}</h4>
+                <div style="overflow-x:auto;margin-bottom:1.5rem">
+                <table class="report-table" style="max-width:720px">
+                    <thead><tr>
+                        <th>Category</th>
+                        <th class="report-num">Annual Budget</th>
+                        <th class="report-num">YTD Actual</th>
+                        <th class="report-num">Annual Run Rate</th>
+                        <th class="report-num">Variance (YTD)</th>
+                    </tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>Revenue</td>
+                            <td class="report-num">${_fmt$(b.income)}</td>
+                            <td class="report-num report-revenue">${_fmt$(totalRev)}</td>
+                            <td class="report-num">${_fmt$(runRate(totalRev))}</td>
+                            <td class="report-num">${varSpan(totalRev, b.income, false)}</td>
+                        </tr>
+                        <tr>
+                            <td>Wages / Labor</td>
+                            <td class="report-num">${_fmt$(b.wages||0)}</td>
+                            <td class="report-num">${_fmt$(totalLab)}</td>
+                            <td class="report-num">${_fmt$(runRate(totalLab))}</td>
+                            <td class="report-num">${varSpan(totalLab, b.wages||0, true)}</td>
+                        </tr>
+                        ${bTotalExp > 0 || hasExpenses ? `<tr>
+                            <td>Other Expenses</td>
+                            <td class="report-num">${bTotalExp > 0 ? _fmt$(bTotalExp) : '—'}</td>
+                            <td class="report-num">${hasExpenses ? _fmt$(totalExp) : '—'}</td>
+                            <td class="report-num">${hasExpenses ? _fmt$(runRate(totalExp)) : '—'}</td>
+                            <td class="report-num">${bTotalExp > 0 && hasExpenses ? varSpan(totalExp, bTotalExp, true) : '—'}</td>
+                        </tr>` : ''}
+                        <tr class="report-total-row">
+                            <td><strong>Net</strong></td>
+                            <td class="report-num"><strong>${_fmt$(bNet)}</strong></td>
+                            <td class="report-num"><strong>${_fmt$(totalMargin)}</strong></td>
+                            <td class="report-num"><strong>${_fmt$(runRate(totalMargin))}</strong></td>
+                            <td class="report-num">${varSpan(totalMargin, bNet, false)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                </div>`;
+        }
 
         container.innerHTML = `
             <div class="fin-kpi-row">
@@ -172,12 +352,15 @@ async function generateFinanceDashboard() {
                 </div>
                 <div class="fin-kpi">
                     <span class="fin-kpi-label">Labor % of Revenue</span>
-                    <span class="fin-kpi-value ${labPct <= 70 ? 'fin-positive' : 'fin-negative'}">
+                    <span class="fin-kpi-value ${budgLabPct !== null ? (labPct <= budgLabPct ? 'fin-positive' : 'fin-negative') : ''}">
                         ${totalRev > 0 ? labPct.toFixed(1) + '%' : '—'}
-                        <span class="fin-kpi-target">target ≤ 70%</span>
+                        ${budgLabPct !== null
+                            ? `<span class="fin-kpi-target">budget ≤ ${budgLabPct.toFixed(0)}%</span>`
+                            : `<span class="fin-kpi-target" style="color:#9ca3af">set budget above</span>`}
                     </span>
                 </div>
             </div>
+            ${bvaHtml}
             <div class="fin-charts-row">
                 <div class="fin-chart-wrap">
                     <h4 class="fin-chart-title">Revenue vs. Labor${hasExpenses ? ' vs. Net' : ''} by Month</h4>
@@ -216,26 +399,30 @@ async function generateFinanceDashboard() {
             }
         );
 
-        // Labor % line chart with 70% target line
+        // Labor % line chart with budget-derived target line (or no target if no budget set)
         _destroyChart('laborPct');
+        const laborPctDatasets = [
+            { label: 'Labor %', data: moLabPctArr,
+              borderColor: 'rgb(245,158,11)', backgroundColor: 'rgba(245,158,11,.12)',
+              tension: 0.3, fill: true, pointBackgroundColor: 'rgb(245,158,11)' },
+        ];
+        if (budgLabPct !== null) {
+            laborPctDatasets.push({
+                label: `${Math.round(budgLabPct)}% Wage Budget Target`,
+                data: moLabels.map(() => Math.round(budgLabPct * 10) / 10),
+                borderColor: 'rgba(239,68,68,.55)', borderDash: [6,3],
+                pointRadius: 0, fill: false,
+            });
+        }
+        const chartMax = budgLabPct !== null ? Math.max(105, Math.ceil(budgLabPct / 10) * 10 + 15) : 105;
         _financeCharts.laborPct = new Chart(
             document.getElementById('chartLaborPct').getContext('2d'), {
                 type: 'line',
-                data: {
-                    labels: moLabels,
-                    datasets: [
-                        { label: 'Labor %', data: moLabPctArr,
-                          borderColor: 'rgb(245,158,11)', backgroundColor: 'rgba(245,158,11,.12)',
-                          tension: 0.3, fill: true, pointBackgroundColor: 'rgb(245,158,11)' },
-                        { label: '70% Target', data: moLabels.map(() => 70),
-                          borderColor: 'rgba(239,68,68,.55)', borderDash: [6,3],
-                          pointRadius: 0, fill: false },
-                    ],
-                },
+                data: { labels: moLabels, datasets: laborPctDatasets },
                 options: {
                     responsive: true,
                     plugins: { legend: { position: 'top' } },
-                    scales: { y: { beginAtZero: true, max: 105, ticks: { callback: v => v + '%' } } },
+                    scales: { y: { beginAtZero: true, max: chartMax, ticks: { callback: v => v + '%' } } },
                 },
             }
         );
@@ -254,6 +441,7 @@ async function _generateMonthDetail(year, month, container) {
     const label    = `${['January','February','March','April','May','June','July','August','September','October','November','December'][parseInt(month)-1]} ${year}`;
 
     try {
+        await _ensureBudget(year);
         if (!_expenseConfig) _expenseConfig = await fetchExpenseConfig();
 
         // Revenue: use the same Family Billing calculation so both reports always agree.
@@ -337,6 +525,7 @@ async function _generateMonthDetail(year, month, container) {
         const netPct   = totalRev > 0 ? totalNet / totalRev * 100 : 0;
         const hasExp   = totalExp > 0;
         const marginClass = netPct >= 30 ? 'fin-positive' : netPct >= 15 ? 'fin-warn' : 'fin-negative';
+        const budgLabPct  = _budgetLaborPct();
 
         const roomRowsHtml = roomRows.map(r => {
             const net = r.revenue - r.labor;
@@ -384,9 +573,11 @@ async function _generateMonthDetail(year, month, container) {
                 </div>
                 <div class="fin-kpi">
                     <span class="fin-kpi-label">Labor % of Revenue</span>
-                    <span class="fin-kpi-value ${labPct <= 70 ? 'fin-positive' : 'fin-negative'}">
+                    <span class="fin-kpi-value ${budgLabPct !== null ? (labPct <= budgLabPct ? 'fin-positive' : 'fin-negative') : ''}">
                         ${totalRev > 0 ? labPct.toFixed(1) + '%' : '—'}
-                        <span class="fin-kpi-target">target ≤ 70%</span>
+                        ${budgLabPct !== null
+                            ? `<span class="fin-kpi-target">budget ≤ ${budgLabPct.toFixed(0)}%</span>`
+                            : `<span class="fin-kpi-target" style="color:#9ca3af">set budget above</span>`}
                     </span>
                 </div>
             </div>
