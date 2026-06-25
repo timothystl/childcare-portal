@@ -2596,6 +2596,11 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .payroll-table { width: 100%; min-width: 700px; }
 .payroll-table-wrap { overflow-x: auto; }
+/* Don't let the base report-table row-hover tint override payroll state backgrounds */
+.payroll-table.report-table tbody tr:hover { background: inherit; }
+.payroll-table.report-table tbody tr.payroll-staff-row:hover td { background: var(--admin-hover); }
+/* Period heading matches prototype: 19px, navy, bold */
+.payroll-report-title { font-size: 19px; font-weight: 700; color: var(--navy); margin: 0 0 3px; }
 .payroll-hrs { font-weight: 600; color: var(--navy); }
 .payroll-staff-row { cursor: pointer; transition: background 0.15s; }
 .payroll-staff-row:hover td { background: var(--admin-hover); }
@@ -2607,7 +2612,9 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .payroll-completion-cell { text-align: right !important; padding-right: 14px !important; }
 .payroll-completion-pill { display: inline-block; border-radius: 20px; padding: 2px 9px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .payroll-period-header { border-bottom: 2px solid var(--sun) !important; }
-.payroll-outer-head-2 th { background: #17344A !important; height: 26px; padding: 0 14px !important; }
+/* Strip the base report-table gold border from ALL payroll thead cells; payroll-period-header adds it back selectively */
+.payroll-table.report-table thead th { border-bottom: none; }
+.payroll-outer-head-2 th { background: #17344A !important; height: 26px; padding: 0 14px !important; border-bottom: none !important; }
 
 /* Detail panel */
 .payroll-panel-cell { padding: 0 !important; border-bottom: 2px solid var(--admin-border) !important; }
