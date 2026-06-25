@@ -303,59 +303,64 @@ async function generateFinanceDashboard() {
         // Build Budget vs Actuals table if budget is set
         let bvaHtml = '';
         if (b?.income) {
-            const bTotalExp = (b.taxes||0) + (b.workersComp||0) + (b.payrollExp||0) + (b.otherExp||0);
-            const bNet      = b.income - (b.wages||0) - bTotalExp;
-            const moCount   = allMonths.length;
-            const runRate   = v => moCount > 0 ? Math.round(v / moCount * 12) : 0;
-            const varSpan   = (actual, budgeted, lowerIsBetter) => {
-                if (actual === null || budgeted === null) return '—';
-                const v    = actual - budgeted;
+            const bTotalExp  = (b.taxes||0) + (b.workersComp||0) + (b.payrollExp||0) + (b.otherExp||0);
+            const bNet       = b.income - (b.wages||0) - bTotalExp;
+            const moCount    = allMonths.length;
+            // Fraction of the year covered by months with data (for prorating the budget)
+            const yearFrac   = moCount / 12;
+            const expYTD     = v => Math.round(v * yearFrac); // expected-YTD = annual budget × fraction elapsed
+
+            const varSpan = (actual, expected, lowerIsBetter) => {
+                if (!expected) return '—';
+                const v    = actual - expected;
                 const good = lowerIsBetter ? v <= 0 : v >= 0;
                 return `<span class="${good ? 'fin-positive' : 'fin-negative'}">${v >= 0 ? '+' : ''}${_fmt$(v)}</span>`;
             };
-            const aRow = (label, budgeted, actual, lowerIsBetter, note = '') => {
-                const hasA = actual > 0 || budgeted > 0;
-                if (!hasA) return '';
+            const aRow = (label, annualBudget, actual, lowerIsBetter, note = '') => {
+                if (!actual && !annualBudget) return '';
+                const exp = expYTD(annualBudget);
                 return `<tr>
                     <td>${label}${note ? ` <span style="font-size:.78em;color:#6b7280">${note}</span>` : ''}</td>
-                    <td class="report-num">${budgeted > 0 ? _fmt$(budgeted) : '—'}</td>
+                    <td class="report-num">${annualBudget > 0 ? _fmt$(annualBudget) : '—'}</td>
+                    <td class="report-num">${exp > 0 ? _fmt$(exp) : '—'}</td>
                     <td class="report-num">${actual > 0 ? _fmt$(actual) : '—'}</td>
-                    <td class="report-num">${actual > 0 ? _fmt$(runRate(actual)) : '—'}</td>
-                    <td class="report-num">${actual > 0 && budgeted > 0 ? varSpan(actual, budgeted, lowerIsBetter) : '—'}</td>
+                    <td class="report-num">${actual > 0 && exp > 0 ? varSpan(actual, exp, lowerIsBetter) : '—'}</td>
                 </tr>`;
             };
-            const aTaxes      = b.actualTaxes      || 0;
-            const aComp       = b.actualWorkersComp || 0;
-            const aPayrollExp = b.actualPayrollExp  || 0;
-            const aOtherExp   = b.actualOtherExp    || 0;
+
+            const aTaxes      = b.actualTaxes       || 0;
+            const aComp       = b.actualWorkersComp  || 0;
+            const aPayrollExp = b.actualPayrollExp   || 0;
+            const aOtherExp   = b.actualOtherExp     || 0;
             const aTotalExp   = aTaxes + aComp + aPayrollExp + aOtherExp;
             const aNet        = totalRev - totalLab - aTotalExp;
+            const bNetExp     = expYTD(bNet); // prorated budget net
 
             bvaHtml = `
                 <h4 style="margin:1.5rem 0 .5rem;font-weight:600">Budget vs Actuals — ${year}</h4>
                 <div style="overflow-x:auto;margin-bottom:1.5rem">
-                <table class="report-table" style="max-width:740px">
+                <table class="report-table" style="max-width:760px">
                     <thead><tr>
                         <th>Category</th>
                         <th class="report-num">Annual Budget</th>
+                        <th class="report-num">Expected YTD</th>
                         <th class="report-num">YTD Actual</th>
-                        <th class="report-num">Annual Run Rate</th>
-                        <th class="report-num">Variance (YTD)</th>
+                        <th class="report-num">Variance</th>
                     </tr></thead>
                     <tbody>
                         <tr>
                             <td>Revenue</td>
                             <td class="report-num">${_fmt$(b.income)}</td>
+                            <td class="report-num" style="color:#6b7280">${_fmt$(expYTD(b.income))}</td>
                             <td class="report-num report-revenue">${_fmt$(totalRev)}</td>
-                            <td class="report-num">${_fmt$(runRate(totalRev))}</td>
-                            <td class="report-num">${varSpan(totalRev, b.income, false)}</td>
+                            <td class="report-num">${varSpan(totalRev, expYTD(b.income), false)}</td>
                         </tr>
                         <tr>
                             <td>Wages / Labor <span style="font-size:.78em;color:#6b7280">(from payroll data)</span></td>
                             <td class="report-num">${_fmt$(b.wages||0)}</td>
+                            <td class="report-num" style="color:#6b7280">${_fmt$(expYTD(b.wages||0))}</td>
                             <td class="report-num">${_fmt$(totalLab)}</td>
-                            <td class="report-num">${_fmt$(runRate(totalLab))}</td>
-                            <td class="report-num">${varSpan(totalLab, b.wages||0, true)}</td>
+                            <td class="report-num">${varSpan(totalLab, expYTD(b.wages||0), true)}</td>
                         </tr>
                         ${aRow('Payroll Taxes', b.taxes||0, aTaxes, true, '(FICA, FUTA, SUTA)')}
                         ${aRow('Workers Comp', b.workersComp||0, aComp, true)}
@@ -364,20 +369,23 @@ async function generateFinanceDashboard() {
                         ${bTotalExp > 0 || aTotalExp > 0 ? `<tr style="background:#f8fafc">
                             <td><strong>Total Other Expenses</strong></td>
                             <td class="report-num"><strong>${bTotalExp > 0 ? _fmt$(bTotalExp) : '—'}</strong></td>
+                            <td class="report-num" style="color:#6b7280"><strong>${bTotalExp > 0 ? _fmt$(expYTD(bTotalExp)) : '—'}</strong></td>
                             <td class="report-num"><strong>${aTotalExp > 0 ? _fmt$(aTotalExp) : '—'}</strong></td>
-                            <td class="report-num"><strong>${aTotalExp > 0 ? _fmt$(runRate(aTotalExp)) : '—'}</strong></td>
-                            <td class="report-num">${aTotalExp > 0 && bTotalExp > 0 ? varSpan(aTotalExp, bTotalExp, true) : '—'}</td>
+                            <td class="report-num">${aTotalExp > 0 && bTotalExp > 0 ? varSpan(aTotalExp, expYTD(bTotalExp), true) : '—'}</td>
                         </tr>` : ''}
                         <tr class="report-total-row">
                             <td><strong>Net</strong></td>
                             <td class="report-num"><strong>${_fmt$(bNet)}</strong></td>
+                            <td class="report-num" style="color:#6b7280"><strong>${_fmt$(bNetExp)}</strong></td>
                             <td class="report-num"><strong>${_fmt$(aTotalExp > 0 ? aNet : totalMargin)}</strong></td>
-                            <td class="report-num"><strong>${_fmt$(runRate(aTotalExp > 0 ? aNet : totalMargin))}</strong></td>
-                            <td class="report-num">${varSpan(aTotalExp > 0 ? aNet : totalMargin, bNet, false)}</td>
+                            <td class="report-num">${varSpan(aTotalExp > 0 ? aNet : totalMargin, bNetExp, false)}</td>
                         </tr>
                     </tbody>
                 </table>
-                ${!hasEnteredActuals && bTotalExp > 0 ? `<p style="font-size:.8em;color:#6b7280;margin:.25rem 0 0">Enter YTD actual amounts in the Annual Budget section above to track expense actuals.</p>` : ''}
+                <p style="font-size:.8em;color:#6b7280;margin:.25rem 0 0">
+                    Expected YTD = annual budget × (${moCount} months of data ÷ 12).
+                    ${!hasEnteredActuals && bTotalExp > 0 ? 'Enter actual expense amounts in the Annual Budget section above to track non-labor costs.' : ''}
+                </p>
                 </div>`;
         }
 
@@ -453,7 +461,7 @@ async function generateFinanceDashboard() {
             }
         );
 
-        // Labor % line chart with budget-derived target line (or no target if no budget set)
+        // Labor % line chart — budget target + industry standard reference lines
         _destroyChart('laborPct');
         const laborPctDatasets = [
             { label: 'Labor %', data: moLabPctArr,
@@ -462,13 +470,20 @@ async function generateFinanceDashboard() {
         ];
         if (budgLabPct !== null) {
             laborPctDatasets.push({
-                label: `${Math.round(budgLabPct)}% Wage Budget Target`,
+                label: `${Math.round(budgLabPct)}% Budget Target`,
                 data: moLabels.map(() => Math.round(budgLabPct * 10) / 10),
-                borderColor: 'rgba(239,68,68,.55)', borderDash: [6,3],
+                borderColor: 'rgba(239,68,68,.7)', borderDash: [6,3],
                 pointRadius: 0, fill: false,
             });
         }
-        const chartMax = budgLabPct !== null ? Math.max(105, Math.ceil(budgLabPct / 10) * 10 + 15) : 105;
+        // Always show the 70% industry standard as a grey reference line
+        laborPctDatasets.push({
+            label: '70% Industry Standard',
+            data: moLabels.map(() => 70),
+            borderColor: 'rgba(156,163,175,.6)', borderDash: [3,3],
+            pointRadius: 0, fill: false,
+        });
+        const chartMax = Math.max(105, budgLabPct !== null ? Math.ceil(budgLabPct / 10) * 10 + 15 : 0);
         _financeCharts.laborPct = new Chart(
             document.getElementById('chartLaborPct').getContext('2d'), {
                 type: 'line',
