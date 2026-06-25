@@ -953,43 +953,54 @@
 
             <!-- Annual Budget -->
             <section class="admin-section collapsible-section" id="financeBudgetSection">
-                <h2>🎯 Annual Budget</h2>
-                <p class="section-desc">Set annual targets for revenue, wages, and expenses. Your wages ÷ revenue ratio becomes your personal labor-cost target — replaces the generic industry benchmark in all charts and KPIs.</p>
-                <p style="font-size:.9em;color:#6b7280;margin:-.25rem 0 1rem">Budget is saved per year — select a year in the Financial Dashboard below, fill in your targets, then click Save Budget.</p>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem;max-width:860px;margin-bottom:1rem">
-                    <div>
-                        <label style="font-weight:600;font-size:.875rem">Expected Revenue ($)</label>
-                        <input id="budgetIncome" type="number" step="100" min="0" class="form-control" placeholder="e.g. 180000">
-                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">Annual income target</p>
-                    </div>
-                    <div>
-                        <label style="font-weight:600;font-size:.875rem">Wages / Labor ($)</label>
-                        <input id="budgetWages" type="number" step="100" min="0" class="form-control" placeholder="e.g. 95000">
-                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">Sets your labor % target (wages ÷ revenue)</p>
-                    </div>
-                    <div>
-                        <label style="font-weight:600;font-size:.875rem">Payroll Taxes ($)</label>
-                        <input id="budgetTaxes" type="number" step="100" min="0" class="form-control" placeholder="e.g. 7500">
-                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">FICA, FUTA, SUTA, etc.</p>
-                    </div>
-                    <div>
-                        <label style="font-weight:600;font-size:.875rem">Workers Comp ($)</label>
-                        <input id="budgetWorkersComp" type="number" step="100" min="0" class="form-control" placeholder="e.g. 3000">
-                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">Annual premium</p>
-                    </div>
-                    <div>
-                        <label style="font-weight:600;font-size:.875rem">Other Payroll Expenses ($)</label>
-                        <input id="budgetPayrollExp" type="number" step="100" min="0" class="form-control" placeholder="e.g. 2000">
-                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">Benefits, bonuses, etc.</p>
-                    </div>
-                    <div>
-                        <label style="font-weight:600;font-size:.875rem">Other Expenses ($)</label>
-                        <input id="budgetOtherExp" type="number" step="100" min="0" class="form-control" placeholder="e.g. 12000">
-                        <p style="margin:.25rem 0 0;font-size:.78em;color:#6b7280">Supplies, insurance, etc.</p>
-                    </div>
+                <h2>🎯 Annual Budget &amp; Actuals</h2>
+                <p class="section-desc">Enter your annual budget targets and what you've actually spent. Revenue and wage actuals are pulled from the system — enter actual amounts paid for taxes, workers comp, and other expenses. Wages ÷ revenue sets your personal labor-cost target in all KPIs and charts.</p>
+                <p style="font-size:.9em;color:#6b7280;margin:-.25rem 0 1rem">Saved per year — select a year in the Financial Dashboard below, fill in your numbers, then click Save.</p>
+                <div style="overflow-x:auto;margin-bottom:1rem">
+                <table style="border-collapse:separate;border-spacing:0;min-width:480px;max-width:680px">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;padding:.4rem .75rem .4rem 0;font-size:.8rem;color:#6b7280;font-weight:600;white-space:nowrap">Category</th>
+                            <th style="text-align:right;padding:.4rem .5rem;font-size:.8rem;color:#6b7280;font-weight:600;white-space:nowrap">Annual Budget ($)</th>
+                            <th style="text-align:right;padding:.4rem 0 .4rem .5rem;font-size:.8rem;color:#6b7280;font-weight:600;white-space:nowrap">YTD Actual ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding:.35rem .75rem .35rem 0;font-size:.875rem;font-weight:600">Expected Revenue</td>
+                            <td style="padding:.35rem .5rem;text-align:right"><input id="budgetIncome" type="number" step="100" min="0" class="form-control" placeholder="e.g. 530000" style="width:130px;text-align:right"></td>
+                            <td style="padding:.35rem 0 .35rem .5rem;text-align:right;font-size:.8em;color:#6b7280;white-space:nowrap">from billing data</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:.35rem .75rem .35rem 0;font-size:.875rem;font-weight:600">Wages / Labor</td>
+                            <td style="padding:.35rem .5rem;text-align:right"><input id="budgetWages" type="number" step="100" min="0" class="form-control" placeholder="e.g. 274000" style="width:130px;text-align:right"></td>
+                            <td style="padding:.35rem 0 .35rem .5rem;text-align:right;font-size:.8em;color:#6b7280;white-space:nowrap">from payroll data</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:.35rem .75rem .35rem 0;font-size:.875rem">Payroll Taxes <span style="font-size:.78em;color:#6b7280">(FICA, FUTA, SUTA)</span></td>
+                            <td style="padding:.35rem .5rem;text-align:right"><input id="budgetTaxes" type="number" step="100" min="0" class="form-control" placeholder="0" style="width:130px;text-align:right"></td>
+                            <td style="padding:.35rem 0 .35rem .5rem;text-align:right"><input id="actualTaxes" type="number" step="100" min="0" class="form-control" placeholder="0" style="width:130px;text-align:right"></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:.35rem .75rem .35rem 0;font-size:.875rem">Workers Comp</td>
+                            <td style="padding:.35rem .5rem;text-align:right"><input id="budgetWorkersComp" type="number" step="100" min="0" class="form-control" placeholder="0" style="width:130px;text-align:right"></td>
+                            <td style="padding:.35rem 0 .35rem .5rem;text-align:right"><input id="actualWorkersComp" type="number" step="100" min="0" class="form-control" placeholder="0" style="width:130px;text-align:right"></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:.35rem .75rem .35rem 0;font-size:.875rem">Other Payroll Expenses <span style="font-size:.78em;color:#6b7280">(benefits, bonuses)</span></td>
+                            <td style="padding:.35rem .5rem;text-align:right"><input id="budgetPayrollExp" type="number" step="100" min="0" class="form-control" placeholder="0" style="width:130px;text-align:right"></td>
+                            <td style="padding:.35rem 0 .35rem .5rem;text-align:right"><input id="actualPayrollExp" type="number" step="100" min="0" class="form-control" placeholder="0" style="width:130px;text-align:right"></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:.35rem .75rem .35rem 0;font-size:.875rem">Other Expenses <span style="font-size:.78em;color:#6b7280">(supplies, insurance, etc.)</span></td>
+                            <td style="padding:.35rem .5rem;text-align:right"><input id="budgetOtherExp" type="number" step="100" min="0" class="form-control" placeholder="0" style="width:130px;text-align:right"></td>
+                            <td style="padding:.35rem 0 .35rem .5rem;text-align:right"><input id="actualOtherExp" type="number" step="100" min="0" class="form-control" placeholder="0" style="width:130px;text-align:right"></td>
+                        </tr>
+                    </tbody>
+                </table>
                 </div>
                 <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
-                    <button id="saveBudgetBtn" class="btn-primary">Save Budget</button>
+                    <button id="saveBudgetBtn" class="btn-primary">Save</button>
                     <span id="budgetSaveStatus" style="font-size:.85em;color:#6b7280"></span>
                 </div>
                 <div id="budgetSummaryWrap" class="hidden">

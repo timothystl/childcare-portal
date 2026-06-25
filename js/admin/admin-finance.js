@@ -84,12 +84,16 @@ function _populateBudgetForm(budget) {
         const el = document.getElementById(id);
         if (el) el.value = budget?.[key] != null ? budget[key] : '';
     };
-    set('budgetIncome',     'income');
-    set('budgetWages',      'wages');
-    set('budgetTaxes',      'taxes');
-    set('budgetWorkersComp','workersComp');
-    set('budgetPayrollExp', 'payrollExp');
-    set('budgetOtherExp',   'otherExp');
+    set('budgetIncome',      'income');
+    set('budgetWages',       'wages');
+    set('budgetTaxes',       'taxes');
+    set('budgetWorkersComp', 'workersComp');
+    set('budgetPayrollExp',  'payrollExp');
+    set('budgetOtherExp',    'otherExp');
+    set('actualTaxes',       'actualTaxes');
+    set('actualWorkersComp', 'actualWorkersComp');
+    set('actualPayrollExp',  'actualPayrollExp');
+    set('actualOtherExp',    'actualOtherExp');
 }
 
 async function saveBudget() {
@@ -97,12 +101,16 @@ async function saveBudget() {
     const status = document.getElementById('budgetSaveStatus');
     const get    = id => parseFloat(document.getElementById(id)?.value) || 0;
     const budget = {
-        income:      get('budgetIncome'),
-        wages:       get('budgetWages'),
-        taxes:       get('budgetTaxes'),
-        workersComp: get('budgetWorkersComp'),
-        payrollExp:  get('budgetPayrollExp'),
-        otherExp:    get('budgetOtherExp'),
+        income:           get('budgetIncome'),
+        wages:            get('budgetWages'),
+        taxes:            get('budgetTaxes'),
+        workersComp:      get('budgetWorkersComp'),
+        payrollExp:       get('budgetPayrollExp'),
+        otherExp:         get('budgetOtherExp'),
+        actualTaxes:      get('actualTaxes'),
+        actualWorkersComp:get('actualWorkersComp'),
+        actualPayrollExp: get('actualPayrollExp'),
+        actualOtherExp:   get('actualOtherExp'),
     };
     if (status) status.textContent = 'Saving…';
     try {
@@ -122,16 +130,26 @@ function _renderBudgetSummary(budget, year) {
     if (!wrap || !el) return;
     if (!budget?.income) { wrap.classList.add('hidden'); return; }
 
-    const totalExp = (budget.taxes||0) + (budget.workersComp||0) + (budget.payrollExp||0) + (budget.otherExp||0);
-    const totalCost = (budget.wages||0) + totalExp;
-    const netBudget = budget.income - totalCost;
+    const bTotalExp = (budget.taxes||0) + (budget.workersComp||0) + (budget.payrollExp||0) + (budget.otherExp||0);
+    const bNet      = budget.income - (budget.wages||0) - bTotalExp;
     const labPct    = budget.income > 0 ? (budget.wages / budget.income * 100) : 0;
-    const netPct    = budget.income > 0 ? (netBudget / budget.income * 100) : 0;
+    const netPct    = budget.income > 0 ? (bNet / budget.income * 100) : 0;
     const netCls    = netPct >= 15 ? 'fin-positive' : netPct >= 0 ? 'fin-warn' : 'fin-negative';
+
+    const hasActuals = (budget.actualTaxes||0) + (budget.actualWorkersComp||0) +
+                       (budget.actualPayrollExp||0) + (budget.actualOtherExp||0) > 0;
+    const aTotalExp  = (budget.actualTaxes||0) + (budget.actualWorkersComp||0) +
+                       (budget.actualPayrollExp||0) + (budget.actualOtherExp||0);
+
+    const varCell = (actual, budgeted, lowerIsBetter) => {
+        if (!actual && !budgeted) return '';
+        const v    = actual - budgeted;
+        const good = lowerIsBetter ? v <= 0 : v >= 0;
+        return `<span class="${good ? 'fin-positive' : 'fin-negative'}" style="font-size:.8em;margin-left:.3rem">(${v >= 0 ? '+' : ''}${_fmt$(v)})</span>`;
+    };
 
     wrap.classList.remove('hidden');
     el.innerHTML = `
-        <h4 style="margin:0 0 .75rem;font-weight:600">Budget Summary — ${year}</h4>
         <div class="fin-kpi-row" style="margin-bottom:.5rem">
             <div class="fin-kpi">
                 <span class="fin-kpi-label">Revenue Target</span>
@@ -143,12 +161,12 @@ function _renderBudgetSummary(budget, year) {
             </div>
             <div class="fin-kpi">
                 <span class="fin-kpi-label">Other Expenses Budget</span>
-                <span class="fin-kpi-value">${_fmt$(totalExp)}</span>
-                ${totalExp > 0 ? `<span class="fin-kpi-target">taxes · comp · payroll exp · other</span>` : ''}
+                <span class="fin-kpi-value">${_fmt$(bTotalExp)}</span>
+                ${hasActuals ? `<span class="fin-kpi-target">actual: ${_fmt$(aTotalExp)}${varCell(aTotalExp, bTotalExp, true)}</span>` : ''}
             </div>
             <div class="fin-kpi">
                 <span class="fin-kpi-label">Budget Net</span>
-                <span class="fin-kpi-value ${netCls}">${_fmt$(netBudget)} <span class="fin-kpi-target">${netPct.toFixed(1)}%</span></span>
+                <span class="fin-kpi-value ${netCls}">${_fmt$(bNet)} <span class="fin-kpi-target">${netPct.toFixed(1)}%</span></span>
             </div>
             <div class="fin-kpi">
                 <span class="fin-kpi-label">Wages % Target</span>
@@ -243,7 +261,7 @@ async function generateFinanceDashboard() {
             return;
         }
 
-        let totalRev = 0, totalLab = 0, totalExp = 0;
+        let totalRev = 0, totalLab = 0, totalExpLines = 0;
         const moRevArr = [], moLabArr = [], moExpArr = [], moNetArr = [], moLabPctArr = [], moLabels = [];
 
         allMonths.forEach(mo => {
@@ -253,16 +271,29 @@ async function generateFinanceDashboard() {
             const exp  = _monthlyExpenseBurden(moNum, lab, rev);
             totalRev += rev;
             totalLab += lab;
-            totalExp += exp;
+            totalExpLines += exp;
             moRevArr.push(Math.round(rev));
             moLabArr.push(Math.round(lab));
             moExpArr.push(Math.round(exp));
-            moNetArr.push(Math.round(rev - lab - exp));
             moLabPctArr.push(rev > 0 ? parseFloat((lab / rev * 100).toFixed(1)) : 0);
             moLabels.push(FIN_MONTH_SHORT[moNum - 1]);
         });
 
-        const hasExpenses = totalExp > 0;
+        // Prefer manually entered expense actuals from the budget record; fall back to Expense Lines
+        const b = _annualBudget;
+        const enteredActualExp = b
+            ? (b.actualTaxes||0) + (b.actualWorkersComp||0) + (b.actualPayrollExp||0) + (b.actualOtherExp||0)
+            : 0;
+        const hasEnteredActuals = enteredActualExp > 0;
+        const totalExp    = hasEnteredActuals ? enteredActualExp : totalExpLines;
+        const expLabel    = hasEnteredActuals ? 'YTD Other Expenses (actual)' : (totalExpLines > 0 ? 'YTD Other Expenses (est.)' : '');
+
+        // Rebuild moNetArr using the best expense figure per-month (Expense Lines; actuals are YTD totals not per-month)
+        allMonths.forEach((mo, i) => {
+            moNetArr.push(Math.round(moRevArr[i] - moLabArr[i] - moExpArr[i]));
+        });
+
+        const hasExpenses    = totalExp > 0;
         const totalMargin    = totalRev - totalLab - totalExp;
         const totalMarginPct = totalRev > 0 ? (totalMargin / totalRev * 100) : 0;
         const marginClass    = totalMarginPct >= 30 ? 'fin-positive' : totalMarginPct >= 15 ? 'fin-warn' : 'fin-negative';
@@ -271,21 +302,39 @@ async function generateFinanceDashboard() {
 
         // Build Budget vs Actuals table if budget is set
         let bvaHtml = '';
-        if (_annualBudget?.income) {
-            const b         = _annualBudget;
+        if (b?.income) {
             const bTotalExp = (b.taxes||0) + (b.workersComp||0) + (b.payrollExp||0) + (b.otherExp||0);
             const bNet      = b.income - (b.wages||0) - bTotalExp;
             const moCount   = allMonths.length;
             const runRate   = v => moCount > 0 ? Math.round(v / moCount * 12) : 0;
-            const varSpan   = (actual, budget, lowerIsBetter) => {
-                const v   = actual - budget;
+            const varSpan   = (actual, budgeted, lowerIsBetter) => {
+                if (actual === null || budgeted === null) return '—';
+                const v    = actual - budgeted;
                 const good = lowerIsBetter ? v <= 0 : v >= 0;
                 return `<span class="${good ? 'fin-positive' : 'fin-negative'}">${v >= 0 ? '+' : ''}${_fmt$(v)}</span>`;
             };
+            const aRow = (label, budgeted, actual, lowerIsBetter, note = '') => {
+                const hasA = actual > 0 || budgeted > 0;
+                if (!hasA) return '';
+                return `<tr>
+                    <td>${label}${note ? ` <span style="font-size:.78em;color:#6b7280">${note}</span>` : ''}</td>
+                    <td class="report-num">${budgeted > 0 ? _fmt$(budgeted) : '—'}</td>
+                    <td class="report-num">${actual > 0 ? _fmt$(actual) : '—'}</td>
+                    <td class="report-num">${actual > 0 ? _fmt$(runRate(actual)) : '—'}</td>
+                    <td class="report-num">${actual > 0 && budgeted > 0 ? varSpan(actual, budgeted, lowerIsBetter) : '—'}</td>
+                </tr>`;
+            };
+            const aTaxes      = b.actualTaxes      || 0;
+            const aComp       = b.actualWorkersComp || 0;
+            const aPayrollExp = b.actualPayrollExp  || 0;
+            const aOtherExp   = b.actualOtherExp    || 0;
+            const aTotalExp   = aTaxes + aComp + aPayrollExp + aOtherExp;
+            const aNet        = totalRev - totalLab - aTotalExp;
+
             bvaHtml = `
                 <h4 style="margin:1.5rem 0 .5rem;font-weight:600">Budget vs Actuals — ${year}</h4>
                 <div style="overflow-x:auto;margin-bottom:1.5rem">
-                <table class="report-table" style="max-width:720px">
+                <table class="report-table" style="max-width:740px">
                     <thead><tr>
                         <th>Category</th>
                         <th class="report-num">Annual Budget</th>
@@ -302,28 +351,33 @@ async function generateFinanceDashboard() {
                             <td class="report-num">${varSpan(totalRev, b.income, false)}</td>
                         </tr>
                         <tr>
-                            <td>Wages / Labor</td>
+                            <td>Wages / Labor <span style="font-size:.78em;color:#6b7280">(from payroll data)</span></td>
                             <td class="report-num">${_fmt$(b.wages||0)}</td>
                             <td class="report-num">${_fmt$(totalLab)}</td>
                             <td class="report-num">${_fmt$(runRate(totalLab))}</td>
                             <td class="report-num">${varSpan(totalLab, b.wages||0, true)}</td>
                         </tr>
-                        ${bTotalExp > 0 || hasExpenses ? `<tr>
-                            <td>Other Expenses</td>
-                            <td class="report-num">${bTotalExp > 0 ? _fmt$(bTotalExp) : '—'}</td>
-                            <td class="report-num">${hasExpenses ? _fmt$(totalExp) : '—'}</td>
-                            <td class="report-num">${hasExpenses ? _fmt$(runRate(totalExp)) : '—'}</td>
-                            <td class="report-num">${bTotalExp > 0 && hasExpenses ? varSpan(totalExp, bTotalExp, true) : '—'}</td>
+                        ${aRow('Payroll Taxes', b.taxes||0, aTaxes, true, '(FICA, FUTA, SUTA)')}
+                        ${aRow('Workers Comp', b.workersComp||0, aComp, true)}
+                        ${aRow('Other Payroll Expenses', b.payrollExp||0, aPayrollExp, true, '(benefits, bonuses)')}
+                        ${aRow('Other Expenses', b.otherExp||0, aOtherExp, true, '(supplies, insurance, etc.)')}
+                        ${bTotalExp > 0 || aTotalExp > 0 ? `<tr style="background:#f8fafc">
+                            <td><strong>Total Other Expenses</strong></td>
+                            <td class="report-num"><strong>${bTotalExp > 0 ? _fmt$(bTotalExp) : '—'}</strong></td>
+                            <td class="report-num"><strong>${aTotalExp > 0 ? _fmt$(aTotalExp) : '—'}</strong></td>
+                            <td class="report-num"><strong>${aTotalExp > 0 ? _fmt$(runRate(aTotalExp)) : '—'}</strong></td>
+                            <td class="report-num">${aTotalExp > 0 && bTotalExp > 0 ? varSpan(aTotalExp, bTotalExp, true) : '—'}</td>
                         </tr>` : ''}
                         <tr class="report-total-row">
                             <td><strong>Net</strong></td>
                             <td class="report-num"><strong>${_fmt$(bNet)}</strong></td>
-                            <td class="report-num"><strong>${_fmt$(totalMargin)}</strong></td>
-                            <td class="report-num"><strong>${_fmt$(runRate(totalMargin))}</strong></td>
-                            <td class="report-num">${varSpan(totalMargin, bNet, false)}</td>
+                            <td class="report-num"><strong>${_fmt$(aTotalExp > 0 ? aNet : totalMargin)}</strong></td>
+                            <td class="report-num"><strong>${_fmt$(runRate(aTotalExp > 0 ? aNet : totalMargin))}</strong></td>
+                            <td class="report-num">${varSpan(aTotalExp > 0 ? aNet : totalMargin, bNet, false)}</td>
                         </tr>
                     </tbody>
                 </table>
+                ${!hasEnteredActuals && bTotalExp > 0 ? `<p style="font-size:.8em;color:#6b7280;margin:.25rem 0 0">Enter YTD actual amounts in the Annual Budget section above to track expense actuals.</p>` : ''}
                 </div>`;
         }
 
@@ -339,7 +393,7 @@ async function generateFinanceDashboard() {
                 </div>
                 ${hasExpenses ? `
                 <div class="fin-kpi">
-                    <span class="fin-kpi-label">YTD Other Expenses</span>
+                    <span class="fin-kpi-label">${expLabel || 'YTD Other Expenses'}</span>
                     <span class="fin-kpi-value">${_fmt$(totalExp)}</span>
                 </div>` : ''}
                 <div class="fin-kpi">
