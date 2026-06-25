@@ -2708,9 +2708,9 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     min-width: 130px;
 }
 .payroll-pair-sep { color: #9CA3AF; flex-shrink: 0; }
-.payroll-pair-room { width: 110px; flex-shrink: 0; }
+.payroll-pair-room { width: 130px; flex-shrink: 0; }
 .payroll-pair-time-in,
-.payroll-pair-time-out { width: 82px; flex-shrink: 0; }
+.payroll-pair-time-out { width: 105px; flex-shrink: 0; }
 .payroll-clk-delete-btn {
     background: none;
     border: none;
@@ -2738,8 +2738,8 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-family: inherit;
     box-sizing: border-box;
 }
-.payroll-time-input,
 .payroll-notes-input { width: 100%; }
+.payroll-time-input { width: 105px; flex-shrink: 0; }
 .payroll-time-input:focus, .payroll-pair-time-in:focus, .payroll-pair-time-out:focus,
 .payroll-notes-input:focus, .payroll-room-select:focus {
     outline: none;
