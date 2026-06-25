@@ -2697,17 +2697,26 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .payroll-day-events { color: #9CA3AF; font-size: .8rem; white-space: nowrap; }
 .payroll-day-calc-hrs { text-align: center; font-weight: 700; }
 .payroll-day-status { text-align: center; white-space: nowrap; }
-.payroll-time-clear-btn {
+.payroll-clk-pair {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    font-size: .8rem;
+    color: #9CA3AF;
+    line-height: 1.6;
+}
+.payroll-clk-delete-btn {
     background: none;
     border: none;
-    color: #BBB;
+    color: #CCC;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1;
     padding: 0 2px;
-    vertical-align: middle;
+    flex-shrink: 0;
 }
-.payroll-time-clear-btn:hover { color: #C0392B; }
+.payroll-clk-delete-btn:hover { color: #C0392B; }
 
 /* Inline field styling */
 .payroll-time-input,
