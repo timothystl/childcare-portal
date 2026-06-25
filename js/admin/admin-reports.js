@@ -1347,42 +1347,51 @@ function _updatePayrollDayRowState(container, staffId, workDate) {
     const dayRow = panel?.querySelector(`tr.payroll-day-row[data-date="${workDate}"]`);
     if (!dayRow) return;
 
-    const ti      = dayRow.querySelector('.payroll-time-in')?.value  || '';
-    const to      = dayRow.querySelector('.payroll-time-out')?.value || '';
-    const roomVal = dayRow.querySelector('.payroll-room-select')?.value || '';
+    const clockPairs = [...dayRow.querySelectorAll('.payroll-clk-pair[data-event-id]')];
+    const clockedHrs = parseFloat(dayRow.dataset.clockedHrs || '0') || 0;
 
-    const calcHrs = (() => {
-        if (!ti || !to) return null;
-        const [h1, m1] = ti.split(':').map(Number);
-        const [h2, m2] = to.split(':').map(Number);
-        const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
-        return mins > 0 ? Math.round(mins / 60 * 100) / 100 : null;
-    })();
+    let state = 'empty';
+    let displayHrs = null;
+    let statusIcon = '';
 
-    const clockedHrs  = parseFloat(dayRow.dataset.clockedHrs || '0') || 0;
-    const mismatch    = calcHrs !== null && clockedHrs > 0 && Math.abs(calcHrs - clockedHrs) > 0.09;
-    const missingRoom = !!(ti || to) && !roomVal;
-    const complete    = calcHrs !== null && !!roomVal && !mismatch;
+    if (clockPairs.length > 0) {
+        const anyMissingRoom = clockPairs.some(p => !p.querySelector('.payroll-room-select')?.value);
+        state = anyMissingRoom ? 'missing' : 'complete';
+        displayHrs = clockedHrs > 0 ? clockedHrs : null;
+        if (state === 'missing') statusIcon = `<span title="No room assigned" style="color:#E9A020;font-size:15px;cursor:help">⚠</span>`;
+        else if (state === 'complete') statusIcon = `<span style="color:#4CAF50;font-size:14px">✓</span>`;
+    } else {
+        const ti      = dayRow.querySelector('.payroll-time-in')?.value  || '';
+        const to      = dayRow.querySelector('.payroll-time-out')?.value || '';
+        const roomVal = dayRow.querySelector('.payroll-room-select')?.value || '';
+        const calcHrs = (() => {
+            if (!ti || !to) return null;
+            const [h1, m1] = ti.split(':').map(Number);
+            const [h2, m2] = to.split(':').map(Number);
+            const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+            return mins > 0 ? Math.round(mins / 60 * 100) / 100 : null;
+        })();
+        const missingRoom = !!(ti || to) && !roomVal;
+        const complete    = calcHrs !== null && !!roomVal;
+        const isClockOnly = calcHrs === null && clockedHrs > 0;
+        displayHrs = calcHrs !== null ? calcHrs : (clockedHrs > 0 ? clockedHrs : null);
+        if (complete)         state = 'complete';
+        else if (missingRoom) state = 'missing';
+        if (missingRoom)      statusIcon = `<span title="No room assigned" style="color:#E9A020;font-size:15px;cursor:help">⚠</span>`;
+        else if (complete)    statusIcon = `<span style="color:#4CAF50;font-size:14px">✓</span>`;
+        if (displayHrs !== null && !calcHrs && isClockOnly) {
+            // gray for clock-only (no manual entry)
+        }
+    }
 
-    const isClockOnly = calcHrs === null && clockedHrs > 0;
-    const displayHrs  = calcHrs !== null ? calcHrs : (clockedHrs > 0 ? clockedHrs : null);
     const hrsCell = dayRow.querySelector('.payroll-day-calc-hrs');
     if (hrsCell) hrsCell.innerHTML = displayHrs !== null
-        ? `<strong style="color:${mismatch ? '#C0392B' : isClockOnly ? '#888' : 'var(--navy)'}">${displayHrs}h</strong>`
+        ? `<strong style="color:var(--navy)">${displayHrs}h</strong>`
         : '<span class="text-muted">—</span>';
 
     const iconEl = dayRow.querySelector('.payroll-day-status-icon');
-    if (iconEl) {
-        if (mismatch)         iconEl.innerHTML = `<span title="Hours differ from clock record" style="color:#C0392B;font-weight:700;font-size:14px;cursor:help">≠</span>`;
-        else if (missingRoom) iconEl.innerHTML = `<span title="No room assigned" style="color:#E9A020;font-size:15px;cursor:help">⚠</span>`;
-        else if (complete)    iconEl.innerHTML = `<span style="color:#4CAF50;font-size:14px">✓</span>`;
-        else                  iconEl.innerHTML = '';
-    }
+    if (iconEl) iconEl.innerHTML = statusIcon;
 
-    let state = 'empty';
-    if (complete)    state = 'complete';
-    else if (mismatch)    state = 'mismatch';
-    else if (missingRoom) state = 'missing';
     dayRow.dataset.state = state;
 }
 
@@ -1429,18 +1438,25 @@ function _recalcPayrollStaff(container, staffId) {
 
     let sumHrs = 0, completeDays = 0;
     container.querySelectorAll(`.payroll-day-row[data-staff-id="${staffId}"]`).forEach(dayRow => {
-        const ti = dayRow.querySelector('.payroll-time-in')?.value  || '';
-        const to = dayRow.querySelector('.payroll-time-out')?.value || '';
-        if (ti && to) {
-            const [h1, m1] = ti.split(':').map(Number);
-            const [h2, m2] = to.split(':').map(Number);
-            const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
-            if (mins > 0) {
-                sumHrs += Math.round(mins / 60 * 100) / 100;
-                completeDays++;
-            }
+        const clockPairs = [...dayRow.querySelectorAll('.payroll-clk-pair[data-event-id]')];
+        if (clockPairs.length > 0) {
+            const hrs = parseFloat(dayRow.dataset.clockedHrs || '0') || 0;
+            sumHrs += hrs;
+            if (dayRow.dataset.state === 'complete') completeDays++;
         } else {
-            sumHrs += parseFloat(dayRow.dataset.clockedHrs || '0') || 0;
+            const ti = dayRow.querySelector('.payroll-time-in')?.value  || '';
+            const to = dayRow.querySelector('.payroll-time-out')?.value || '';
+            if (ti && to) {
+                const [h1, m1] = ti.split(':').map(Number);
+                const [h2, m2] = to.split(':').map(Number);
+                const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+                if (mins > 0) {
+                    sumHrs += Math.round(mins / 60 * 100) / 100;
+                    completeDays++;
+                }
+            } else {
+                sumHrs += parseFloat(dayRow.dataset.clockedHrs || '0') || 0;
+            }
         }
     });
     sumHrs += parseFloat(container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="used"]`)?.value) || 0;
@@ -1590,69 +1606,71 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 const ms = new Date(ev.clockOut) - new Date(ev.clockIn);
                 return sum + (ms >= 600000 ? Math.round(ms / 3600000 * 100) / 100 : 0);
             }, 0);
-            const validPairs    = dayEvents.filter(ev => ev.clockIn && ev.clockOut);
-            const clockPairsHtml = validPairs.length
-                ? validPairs.map(ev =>
-                    `<div class="payroll-clk-pair">${escHtml(fmtEvt(ev.clockIn))} → ${escHtml(fmtEvt(ev.clockOut))}<button class="payroll-clk-delete-btn btn-ghost" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" title="Delete clock event">×</button></div>`
-                ).join('')
-                : '<span class="text-muted">—</span>';
+            const validPairs = dayEvents.filter(ev => ev.clockIn && ev.clockOut);
 
             const timeIn  = d?.timeIn  || '';
             const timeOut = d?.timeOut || '';
+            const roomId  = d?.roomId  || '';
 
-            const dayRooms = [...new Set(dayEvents.map(ev => ev.roomId).filter(Boolean))];
-            const roomId   = d?.roomId || dayRooms[0] || '';
-
-            const calcHrs    = calcH(timeIn, timeOut);
-            const missingRoom = !!(timeIn || timeOut) && !roomId;
-            const mismatch    = calcHrs !== null && clockedHrs > 0 && Math.abs(calcHrs - clockedHrs) > 0.09;
-            const complete    = calcHrs !== null && !!roomId && !mismatch;
-
-            let state = 'empty';
-            if (complete)    state = 'complete';
-            else if (mismatch)    state = 'mismatch';
-            else if (missingRoom) state = 'missing';
-
-            const isClockOnly = calcHrs === null && clockedHrs > 0;
-            const displayHrs  = calcHrs !== null ? calcHrs : (clockedHrs > 0 ? clockedHrs : null);
-            const hoursHtml   = displayHrs !== null
-                ? `<strong style="color:${mismatch ? '#C0392B' : isClockOnly ? '#888' : 'var(--navy)'}">${displayHrs}h</strong>`
-                : '<span class="text-muted">—</span>';
-
-            let statusIcon = '';
-            if (mismatch)         statusIcon = `<span title="Hours differ from clock record" style="color:#C0392B;font-weight:700;font-size:14px;cursor:help">≠</span>`;
-            else if (missingRoom) statusIcon = `<span title="No room assigned" style="color:#E9A020;font-size:15px;cursor:help">⚠</span>`;
-            else if (complete)    statusIcon = `<span style="color:#4CAF50;font-size:14px">✓</span>`;
-
-            const roomOpts = ROOMS.map(r =>
+            const roomOptsManual = ROOMS.map(r =>
                 `<option value="${escHtml(r.id)}"${roomId === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
             ).join('');
+
+            const clockPairsHtml = validPairs.length
+                ? validPairs.map(ev => {
+                    const tiVal = isoToHHMM(ev.clockIn);
+                    const toVal = isoToHHMM(ev.clockOut);
+                    const evRoomOpts = ROOMS.map(r =>
+                        `<option value="${escHtml(r.id)}"${ev.roomId === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
+                    ).join('');
+                    return `<div class="payroll-clk-pair" data-event-id="${escHtml(ev.id)}">` +
+                        `<select class="payroll-room-select payroll-pair-room" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" data-prev-value="${escHtml(ev.roomId || '')}"><option value="">— Room</option>${evRoomOpts}</select>` +
+                        `<span class="payroll-pair-clk-ref">${escHtml(fmtEvt(ev.clockIn))} → ${escHtml(fmtEvt(ev.clockOut))}</span>` +
+                        `<input type="time" class="payroll-pair-time-in" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" value="${escHtml(tiVal)}">` +
+                        `<span class="payroll-pair-sep">→</span>` +
+                        `<input type="time" class="payroll-pair-time-out" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" value="${escHtml(toVal)}">` +
+                        `<button class="payroll-clk-delete-btn btn-ghost" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" title="Delete clock event">×</button>` +
+                        `</div>`;
+                }).join('')
+                : `<div class="payroll-manual-pair">` +
+                    `<select class="payroll-room-select payroll-pair-room" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" data-prev-value="${escHtml(roomId)}"><option value="">— Room</option>${roomOptsManual}</select>` +
+                    `<input type="time" class="payroll-time-input payroll-time-in" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" value="${escHtml(timeIn)}">` +
+                    `<span class="payroll-pair-sep">→</span>` +
+                    `<input type="time" class="payroll-time-input payroll-time-out" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" value="${escHtml(timeOut)}">` +
+                    `</div>`;
+
+            let state = 'empty';
+            if (validPairs.length > 0) {
+                const anyMissingRoom = validPairs.some(ev => !ev.roomId);
+                state = anyMissingRoom ? 'missing' : 'complete';
+            } else {
+                const missingRoom = !!(timeIn || timeOut) && !roomId;
+                const calcHrs = calcH(timeIn, timeOut);
+                if (calcHrs !== null && !!roomId) state = 'complete';
+                else if (missingRoom) state = 'missing';
+            }
+
+            const isClockDay  = validPairs.length > 0;
+            const displayHrs  = isClockDay ? (clockedHrs > 0 ? clockedHrs : null)
+                                           : (calcH(timeIn, timeOut) ?? (clockedHrs > 0 ? clockedHrs : null));
+            const hoursHtml   = displayHrs !== null
+                ? `<strong style="color:${isClockDay ? 'var(--navy)' : (!timeIn || !timeOut) && clockedHrs > 0 ? '#888' : 'var(--navy)'}">${displayHrs}h</strong>`
+                : '<span class="text-muted">—</span>';
+
+            const missingRoom = !isClockDay && !!(timeIn || timeOut) && !roomId;
+            const complete    = state === 'complete';
+            let statusIcon = '';
+            if (missingRoom || state === 'missing') statusIcon = `<span title="No room assigned" style="color:#E9A020;font-size:15px;cursor:help">⚠</span>`;
+            else if (complete)                      statusIcon = `<span style="color:#4CAF50;font-size:14px">✓</span>`;
 
             return `<tr class="payroll-day-row" data-date="${date}" data-staff-id="${escHtml(s.id)}"
                         data-state="${state}" data-clocked-hrs="${clockedHrs.toFixed(2)}">
                 <td class="payroll-day-date">${dateLabel}</td>
-                <td class="payroll-day-room">
-                    <select class="payroll-room-select"
-                        data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
-                        data-prev-value="${escHtml(roomId)}">
-                        <option value="">— Room</option>${roomOpts}
-                    </select>
-                </td>
                 <td class="payroll-day-events">
-                    <span class="payroll-clk-times">${clockPairsHtml}</span>
+                    ${clockPairsHtml}
                     <button class="btn-ghost payroll-edit-clk-btn"
                         data-staff-id="${escHtml(s.id)}" data-staff-name="${escHtml(s.name)}" data-work-date="${date}"
-                        title="Add / edit clock events" style="font-size:.75em;padding:2px 5px;margin-top:2px;opacity:.45">✎</button>
-                </td>
-                <td class="payroll-day-timein">
-                    <input type="time" class="payroll-time-input payroll-time-in"
-                        data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
-                        value="${escHtml(timeIn)}">
-                </td>
-                <td class="payroll-day-timeout">
-                    <input type="time" class="payroll-time-input payroll-time-out"
-                        data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
-                        value="${escHtml(timeOut)}">
+                        title="Add / edit clock events" style="font-size:.75em;padding:2px 5px;margin-top:4px;opacity:.45;display:block">✎</button>
                 </td>
                 <td class="payroll-day-calc-hrs">${hoursHtml}</td>
                 <td class="payroll-day-notes">
@@ -1674,7 +1692,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
 
         const ptoSection = !isSalary ? `
             <tr class="payroll-pto-row">
-                <td colspan="8" style="padding:0">
+                <td colspan="5" style="padding:0">
                     <div class="payroll-pto-bar">
                         <span class="payroll-pto-label">PTO Used:</span>
                         <input type="number" class="payroll-pto-input rate-input" min="0" step="0.25" style="width:68px"
@@ -1710,13 +1728,17 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             <tr class="payroll-detail-panel" data-staff-id="${escHtml(s.id)}" style="display:none">
                 <td colspan="6" class="payroll-panel-cell">
                     <table class="payroll-day-table">
+                        <colgroup>
+                            <col style="width:85px">
+                            <col>
+                            <col style="width:52px">
+                            <col>
+                            <col style="width:38px">
+                        </colgroup>
                         <thead>
                             <tr>
                                 <th class="payroll-day-th">Date</th>
-                                <th class="payroll-day-th">Room</th>
                                 <th class="payroll-day-th">Clock Events</th>
-                                <th class="payroll-day-th">Time In</th>
-                                <th class="payroll-day-th">Time Out</th>
                                 <th class="payroll-day-th payroll-day-th-center">Hours</th>
                                 <th class="payroll-day-th">Notes</th>
                                 <th class="payroll-day-th"></th>
@@ -1725,7 +1747,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                         <tbody>${dailyRows}</tbody>
                         <tfoot>
                             <tr class="payroll-period-total-row">
-                                <td colspan="8">
+                                <td colspan="5">
                                     <div class="payroll-period-total-inner">
                                         <span class="payroll-period-total-label">Period Total</span>
                                         <span class="payroll-period-total-hrs" data-staff-id="${escHtml(s.id)}">${ptHrs}</span>
@@ -1797,11 +1819,20 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
 
     container.querySelectorAll('.payroll-time-input').forEach(input => {
         input.addEventListener('input', () => {
-            const { staffId, workDate } = input.dataset;
-            _updatePayrollDayRowState(container, staffId, workDate);
-            _recalcPayrollStaff(container, staffId);
+            _updatePayrollDayRowState(container, input.dataset.staffId, input.dataset.workDate);
+            _recalcPayrollStaff(container, input.dataset.staffId);
         });
         input.addEventListener('blur', () => _savePayrollTimeInline(input.dataset.staffId, input.dataset.workDate, container));
+    });
+
+    container.querySelectorAll('.payroll-pair-time-in, .payroll-pair-time-out').forEach(input => {
+        input.addEventListener('change', () => {
+            _updatePayrollDayRowState(container, input.dataset.staffId, input.dataset.workDate);
+            _recalcPayrollStaff(container, input.dataset.staffId);
+        });
+        input.addEventListener('blur', () =>
+            _saveClockEventEdit(input.dataset.eventId, input.dataset.workDate, input.dataset.staffId, container)
+        );
     });
 
     container.querySelectorAll('.payroll-notes-input').forEach(input => {
@@ -1817,16 +1848,22 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             }
             const prev = sel.dataset.prevValue ?? '';
             sel.dataset.prevValue = sel.value;
-            try {
-                await updateClockEventsRoom(sel.dataset.staffId, sel.dataset.workDate, sel.value || null);
-            } catch (err) {
-                alert('Failed to update room: ' + err.message);
-                sel.value = prev;
-                sel.dataset.prevValue = prev;
-                return;
+            const eventId = sel.dataset.eventId;
+            if (eventId) {
+                try {
+                    await updateClockEventRoom(eventId, sel.value || null);
+                } catch (err) {
+                    alert('Failed to update room: ' + err.message);
+                    sel.value = prev;
+                    sel.dataset.prevValue = prev;
+                    return;
+                }
+                _updatePayrollDayRowState(container, sel.dataset.staffId, sel.dataset.workDate);
+                _recalcPayrollStaff(container, sel.dataset.staffId);
+            } else {
+                _updatePayrollDayRowState(container, sel.dataset.staffId, sel.dataset.workDate);
+                _savePayrollTimeInline(sel.dataset.staffId, sel.dataset.workDate, container);
             }
-            _updatePayrollDayRowState(container, sel.dataset.staffId, sel.dataset.workDate);
-            _savePayrollTimeInline(sel.dataset.staffId, sel.dataset.workDate, container);
         });
     });
 
@@ -1882,7 +1919,7 @@ function _openInlineClockEditor(dayRow, staffId, staffName, workDate) {
     editorRow.dataset.staffId  = staffId;
     editorRow.dataset.workDate = workDate;
     editorRow.innerHTML = `
-        <td colspan="8" class="payroll-clk-editor-cell">
+        <td colspan="5" class="payroll-clk-editor-cell">
             <div class="cee-inline-header">
                 <strong>${escHtml(staffName)}</strong>
                 <span class="text-muted" style="font-size:.85em;margin-left:6px">· Clock Events · ${escHtml(dateLabel)}</span>
@@ -2045,6 +2082,30 @@ async function _renderClockEditorBody(staffId, workDate) {
     }
 }
 
+async function _saveClockEventEdit(eventId, workDate, staffId, container) {
+    const panel  = container?.querySelector(`.payroll-detail-panel[data-staff-id="${staffId}"]`);
+    const pair   = panel?.querySelector(`.payroll-clk-pair[data-event-id="${eventId}"]`);
+    if (!pair) return;
+    const tiVal  = pair.querySelector('.payroll-pair-time-in')?.value  || '';
+    const toVal  = pair.querySelector('.payroll-pair-time-out')?.value || '';
+    if (!tiVal && !toVal) return;
+    const toISO  = t => new Date(`${workDate}T${t}:00`).toISOString();
+    const ciISO  = tiVal ? toISO(tiVal) : null;
+    const coISO  = toVal ? toISO(toVal) : null;
+    const dayRow = panel?.querySelector(`tr.payroll-day-row[data-date="${workDate}"]`);
+    const tick   = dayRow?.querySelector('.payroll-day-save-tick');
+    const iconEl = dayRow?.querySelector('.payroll-day-status-icon');
+    try {
+        await updateClockEvent(eventId, ciISO, coISO);
+        if (dayRow) dayRow.dataset.state = 'flash';
+        if (tick)   { tick.style.display = ''; if (iconEl) iconEl.style.display = 'none'; }
+        setTimeout(() => {
+            if (tick)   { tick.style.display = 'none'; if (iconEl) iconEl.style.display = ''; }
+            _refreshPayrollDayRow(staffId, workDate);
+        }, 1200);
+    } catch(e) { console.error('Clock event edit error', e); }
+}
+
 async function _refreshPayrollDayRow(staffId, workDate) {
     const container = document.getElementById('payrollContent');
     if (!container) return;
@@ -2053,6 +2114,7 @@ async function _refreshPayrollDayRow(staffId, workDate) {
         const staffEvents = allEvents.filter(e => e.staff_id === staffId && e.clock_in && e.clock_out)
             .sort((a, b) => new Date(a.clock_in) - new Date(b.clock_in));
         const fmtTime    = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        const isoToHHMM = iso => { const d = new Date(iso); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
         const clockedHrs = staffEvents.reduce((sum, ev) => {
             const ms = new Date(ev.clock_out) - new Date(ev.clock_in);
             return sum + (ms >= 600000 ? Math.round(ms / 3600000 * 100) / 100 : 0);
@@ -2062,16 +2124,36 @@ async function _refreshPayrollDayRow(staffId, workDate) {
         const dayRow = panel?.querySelector(`tr.payroll-day-row[data-date="${workDate}"]`);
         if (!dayRow) return;
 
-        // Update clock display with per-pair lines and delete buttons
-        const clockPairsHtml = staffEvents.length
-            ? staffEvents.map(ev =>
-                `<div class="payroll-clk-pair">${escHtml(fmtTime(ev.clock_in))} → ${escHtml(fmtTime(ev.clock_out))}<button class="payroll-clk-delete-btn btn-ghost" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(staffId)}" data-work-date="${escHtml(workDate)}" title="Delete clock event">×</button></div>`
-            ).join('')
-            : '<span class="text-muted">—</span>';
-        const timesEl = dayRow.querySelector('.payroll-clk-times');
-        if (timesEl) {
-            timesEl.innerHTML = clockPairsHtml;
-            timesEl.querySelectorAll('.payroll-clk-delete-btn').forEach(btn => {
+        const eventsCell = dayRow.querySelector('.payroll-day-events');
+        if (eventsCell) {
+            const editBtn = eventsCell.querySelector('.payroll-edit-clk-btn');
+            const clockPairsHtml = staffEvents.length
+                ? staffEvents.map(ev => {
+                    const tiVal = isoToHHMM(ev.clock_in);
+                    const toVal = isoToHHMM(ev.clock_out);
+                    const evRoomOpts = ROOMS.map(r =>
+                        `<option value="${escHtml(r.id)}"${ev.room_id === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
+                    ).join('');
+                    return `<div class="payroll-clk-pair" data-event-id="${escHtml(ev.id)}">` +
+                        `<select class="payroll-room-select payroll-pair-room" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(staffId)}" data-work-date="${escHtml(workDate)}" data-prev-value="${escHtml(ev.room_id || '')}"><option value="">— Room</option>${evRoomOpts}</select>` +
+                        `<span class="payroll-pair-clk-ref">${escHtml(fmtTime(ev.clock_in))} → ${escHtml(fmtTime(ev.clock_out))}</span>` +
+                        `<input type="time" class="payroll-pair-time-in" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(staffId)}" data-work-date="${escHtml(workDate)}" value="${escHtml(tiVal)}">` +
+                        `<span class="payroll-pair-sep">→</span>` +
+                        `<input type="time" class="payroll-pair-time-out" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(staffId)}" data-work-date="${escHtml(workDate)}" value="${escHtml(toVal)}">` +
+                        `<button class="payroll-clk-delete-btn btn-ghost" data-event-id="${escHtml(ev.id)}" data-staff-id="${escHtml(staffId)}" data-work-date="${escHtml(workDate)}" title="Delete clock event">×</button>` +
+                        `</div>`;
+                }).join('')
+                : '';
+            // Replace everything before the ✎ button
+            [...eventsCell.children].forEach(el => { if (!el.classList.contains('payroll-edit-clk-btn')) el.remove(); });
+            if (clockPairsHtml) {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = clockPairsHtml;
+                [...tmp.children].forEach(el => eventsCell.insertBefore(el, editBtn));
+            }
+
+            // Re-attach listeners for new elements
+            eventsCell.querySelectorAll('.payroll-clk-delete-btn').forEach(btn => {
                 btn.addEventListener('click', async e => {
                     e.stopPropagation();
                     const { eventId, staffId: sid, workDate: wd } = btn.dataset;
@@ -2086,17 +2168,39 @@ async function _refreshPayrollDayRow(staffId, workDate) {
                     }
                 });
             });
+            eventsCell.querySelectorAll('.payroll-pair-time-in, .payroll-pair-time-out').forEach(input => {
+                input.addEventListener('change', () => {
+                    _updatePayrollDayRowState(container, input.dataset.staffId, input.dataset.workDate);
+                    _recalcPayrollStaff(container, input.dataset.staffId);
+                });
+                input.addEventListener('blur', () =>
+                    _saveClockEventEdit(input.dataset.eventId, input.dataset.workDate, input.dataset.staffId, container)
+                );
+            });
+            eventsCell.querySelectorAll('.payroll-room-select').forEach(sel => {
+                sel.addEventListener('change', async () => {
+                    if (typeof currentAdminRole !== 'undefined' && currentAdminRole !== 'full') {
+                        alert('You do not have permission to update room assignments.');
+                        sel.value = sel.dataset.prevValue ?? '';
+                        return;
+                    }
+                    const prev = sel.dataset.prevValue ?? '';
+                    sel.dataset.prevValue = sel.value;
+                    const evId = sel.dataset.eventId;
+                    if (evId) {
+                        try { await updateClockEventRoom(evId, sel.value || null); }
+                        catch(err) { alert('Failed to update room: ' + err.message); sel.value = prev; sel.dataset.prevValue = prev; return; }
+                        _updatePayrollDayRowState(container, sel.dataset.staffId, sel.dataset.workDate);
+                        _recalcPayrollStaff(container, sel.dataset.staffId);
+                    } else {
+                        _updatePayrollDayRowState(container, sel.dataset.staffId, sel.dataset.workDate);
+                        _savePayrollTimeInline(sel.dataset.staffId, sel.dataset.workDate, container);
+                    }
+                });
+            });
         }
+
         dayRow.dataset.clockedHrs = clockedHrs.toFixed(2);
-
-        // Update room select if clock events have a consistent room and nothing is selected
-        const dayRooms = [...new Set(staffEvents.map(ev => ev.room_id).filter(Boolean))];
-        const roomSel  = dayRow.querySelector('.payroll-room-select');
-        if (roomSel && dayRooms.length === 1 && !roomSel.value) {
-            roomSel.value = dayRooms[0];
-            roomSel.dataset.prevValue = dayRooms[0];
-        }
-
         _updatePayrollDayRowState(container, staffId, workDate);
         _recalcPayrollStaff(container, staffId);
     } catch(e) { console.error('Failed to refresh daily row', e); }

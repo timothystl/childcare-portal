@@ -1840,6 +1840,15 @@ async function updateClockEventsRoom(staffId, workDate, roomId) {
     if (error) throw error;
 }
 
+async function updateClockEventRoom(eventId, roomId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('staff_clock_events')
+        .update({ room_id: roomId || null })
+        .eq('id', eventId);
+    if (error) throw error;
+}
+
 async function deleteClockEvent(eventId) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient

@@ -2654,13 +2654,10 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .82rem;
     table-layout: fixed;
 }
-.payroll-day-table colgroup col:nth-child(1) { width: 112px; }
-.payroll-day-table colgroup col:nth-child(2) { width: 132px; }
-.payroll-day-table colgroup col:nth-child(3) { width: 160px; }
-.payroll-day-table colgroup col:nth-child(4) { width: 108px; }
-.payroll-day-table colgroup col:nth-child(5) { width: 108px; }
-.payroll-day-table colgroup col:nth-child(6) { width: 68px; }
-.payroll-day-table colgroup col:nth-child(8) { width: 38px; }
+/* Date 85px | Clock Events (auto) | Hours 52px | Notes (auto) | Status 38px */
+.payroll-day-table colgroup col:nth-child(1) { width: 85px; }
+.payroll-day-table colgroup col:nth-child(3) { width: 52px; }
+.payroll-day-table colgroup col:nth-child(5) { width: 38px; }
 .payroll-day-th {
     text-align: left;
     padding: 5px 8px;
@@ -2693,19 +2690,27 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .payroll-day-row[data-state="missing"]  { background: #FFFBF2 !important; }
 
 .payroll-day-date   { white-space: nowrap; font-weight: 500; color: #374151; }
-.payroll-day-room   { white-space: nowrap; }
-.payroll-day-events { color: #9CA3AF; font-size: .8rem; white-space: nowrap; }
+.payroll-day-events { font-size: .8rem; }
 .payroll-day-calc-hrs { text-align: center; font-weight: 700; }
 .payroll-day-status { text-align: center; white-space: nowrap; }
-.payroll-clk-pair {
+.payroll-clk-pair,
+.payroll-manual-pair {
     display: flex;
     align-items: center;
-    gap: 4px;
-    white-space: nowrap;
+    gap: 5px;
+    padding: 3px 0;
+    flex-wrap: nowrap;
+}
+.payroll-pair-clk-ref {
     font-size: .8rem;
     color: #9CA3AF;
-    line-height: 1.6;
+    white-space: nowrap;
+    min-width: 130px;
 }
+.payroll-pair-sep { color: #9CA3AF; flex-shrink: 0; }
+.payroll-pair-room { width: 110px; flex-shrink: 0; }
+.payroll-pair-time-in,
+.payroll-pair-time-out { width: 82px; flex-shrink: 0; }
 .payroll-clk-delete-btn {
     background: none;
     border: none;
@@ -2720,25 +2725,31 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
 /* Inline field styling */
 .payroll-time-input,
+.payroll-pair-time-in,
+.payroll-pair-time-out,
 .payroll-notes-input,
 .payroll-room-select {
-    border: 1px solid var(--admin-border);
+    border: 1px solid #BDB5A8;
     border-radius: 4px;
     padding: 3px 6px;
     font-size: 12px;
     color: #374151;
     background: white;
-    width: 100%;
     font-family: inherit;
     box-sizing: border-box;
 }
-.payroll-time-input:focus, .payroll-notes-input:focus, .payroll-room-select:focus {
+.payroll-time-input,
+.payroll-notes-input { width: 100%; }
+.payroll-time-input:focus, .payroll-pair-time-in:focus, .payroll-pair-time-out:focus,
+.payroll-notes-input:focus, .payroll-room-select:focus {
     outline: none;
     border-color: var(--navy);
     box-shadow: 0 0 0 2px rgba(28,60,82,0.15);
 }
 .payroll-day-row[data-state="missing"] .payroll-room-select { border-color: #E9A020; }
-input[type="time"].payroll-time-input::-webkit-calendar-picker-indicator { opacity: 0.35; cursor: pointer; }
+input[type="time"].payroll-time-input::-webkit-calendar-picker-indicator,
+input[type="time"].payroll-pair-time-in::-webkit-calendar-picker-indicator,
+input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { opacity: 0.35; cursor: pointer; }
 
 /* Period total row */
 .payroll-period-total-row td {
