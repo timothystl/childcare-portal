@@ -2054,12 +2054,14 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     }
     .admin-tab-btn:hover { font-weight: 700; background: var(--warm-gray); }
 
-    /* Backdrop — close menu on outside tap */
+    /* Backdrop — close menu on outside tap.
+       z-index must be below .admin-tabs (90) so the nav's stacking context
+       (and the dropdown inside it) stays tappable above the backdrop. */
     .mobile-nav-backdrop {
         position: fixed;
         inset: 0;
         background: rgba(0,0,0,.3);
-        z-index: 95;
+        z-index: 89;
     }
     .mobile-nav-backdrop.hidden { display: none; }
 
