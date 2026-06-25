@@ -1627,9 +1627,6 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 </td>
                 <td class="payroll-day-events">
                     <span class="payroll-clk-times">${dayEvents.length ? escHtml(clockStr) : '<span class="text-muted">—</span>'}</span>
-                    <button class="btn-ghost payroll-edit-clk-btn"
-                        data-staff-id="${escHtml(s.id)}" data-staff-name="${escHtml(s.name)}" data-work-date="${date}"
-                        title="Edit clock events" style="font-size:.75em;padding:2px 5px;margin-left:3px;opacity:.55">✎</button>
                 </td>
                 <td class="payroll-day-timein">
                     <input type="time" class="payroll-time-input payroll-time-in"
@@ -1648,10 +1645,6 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                         data-staff-id="${escHtml(s.id)}" data-work-date="${date}"
                         value="${escHtml(d?.notes || '')}">
                 </td>
-                <td class="payroll-day-status">
-                    <span class="payroll-day-status-icon">${statusIcon}</span>
-                    <span class="payroll-day-save-tick" style="display:none;color:#2E7D32;font-size:14px;font-weight:700">✓</span>
-                </td>
             </tr>`;
         }).join('');
 
@@ -1661,7 +1654,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
 
         const ptoSection = !isSalary ? `
             <tr class="payroll-pto-row">
-                <td colspan="8" style="padding:0">
+                <td colspan="7" style="padding:0">
                     <div class="payroll-pto-bar">
                         <span class="payroll-pto-label">PTO Used:</span>
                         <input type="number" class="payroll-pto-input rate-input" min="0" step="0.25" style="width:68px"
@@ -1679,24 +1672,17 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         return `
             <tr class="payroll-staff-row payroll-expandable" data-staff-id="${escHtml(s.id)}"
                 data-rate="${rate}" data-pay-type="${s.pay_type || 'hourly'}">
-                <td class="payroll-expand-chevron"><span class="payroll-expand-icon">▶</span></td>
                 <td class="payroll-staff-name-cell">
-                    <div style="font-size:14px;font-weight:700;color:var(--navy)">${escHtml(s.name)}${inactive}</div>
-                    <div class="rates-ages">${escHtml(s.role || '')} · ${escHtml(roomLabel)}</div>
+                    <span class="payroll-expand-icon" style="margin-right:6px;color:#8C8070;font-size:11px;user-select:none">▶</span><span style="font-size:14px;font-weight:700;color:var(--navy)">${escHtml(s.name)}${inactive}</span>
+                    <div class="rates-ages" style="margin-left:17px">${escHtml(s.role || '')} · ${escHtml(roomLabel)}</div>
                 </td>
                 <td class="payroll-rate-cell">${rateStr}</td>
                 <td class="report-num payroll-period-hrs-cell" data-staff-id="${escHtml(s.id)}">${periodHrsStr}</td>
                 <td class="report-num report-revenue payroll-period-pay-cell" data-staff-id="${escHtml(s.id)}">${periodPayStr}</td>
-                <td class="report-num payroll-ytd-cell">${ytdHrsStr}</td>
-                <td class="payroll-completion-cell">
-                    <span class="payroll-completion-pill" data-staff-id="${escHtml(s.id)}"
-                        style="background:${pillBg};color:${pillColor};border:1px solid ${pillBdr}">
-                        ${completeDays}/${totalWkDays} days
-                    </span>
-                </td>
+                <td class="report-num payroll-ytd-cell" data-staff-id="${escHtml(s.id)}">${ytdHrsStr}</td>
             </tr>
             <tr class="payroll-detail-panel" data-staff-id="${escHtml(s.id)}" style="display:none">
-                <td colspan="7" class="payroll-panel-cell">
+                <td colspan="5" class="payroll-panel-cell">
                     <table class="payroll-day-table">
                         <thead>
                             <tr>
@@ -1707,13 +1693,12 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                                 <th class="payroll-day-th">Time Out</th>
                                 <th class="payroll-day-th payroll-day-th-center">Hours</th>
                                 <th class="payroll-day-th">Notes</th>
-                                <th class="payroll-day-th"></th>
                             </tr>
                         </thead>
                         <tbody>${dailyRows}</tbody>
                         <tfoot>
                             <tr class="payroll-period-total-row">
-                                <td colspan="8">
+                                <td colspan="7">
                                     <div class="payroll-period-total-inner">
                                         <span class="payroll-period-total-label">Period Total</span>
                                         <span class="payroll-period-total-hrs" data-staff-id="${escHtml(s.id)}">${ptHrs}</span>
@@ -1735,29 +1720,27 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             <table class="report-table payroll-table">
                 <thead>
                     <tr class="payroll-outer-head-1">
-                        <th colspan="2" style="text-align:left">Staff Member</th>
+                        <th style="text-align:left">Staff Member</th>
                         <th class="payroll-rate-header">Rate</th>
                         <th colspan="2" class="staff-room-header payroll-period-header">This Period</th>
-                        <th colspan="2" class="staff-room-header payroll-period-header">Year to Date (${ey})</th>
+                        <th class="staff-room-header payroll-period-header">YTD</th>
                     </tr>
                     <tr class="payroll-outer-head-2">
-                        <th colspan="2"></th>
+                        <th></th>
                         <th></th>
                         <th class="staff-sub-head">Hours</th>
                         <th class="staff-sub-head">Gross Pay</th>
                         <th class="staff-sub-head">Hours</th>
-                        <th class="staff-sub-head">Gross Pay</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
                 <tfoot>
                     <tr class="report-total-row" id="payrollTotalRow">
-                        <td colspan="2"><strong>Total Payroll</strong></td>
+                        <td><strong>Total Payroll</strong></td>
                         <td></td>
                         <td class="report-num">—</td>
                         <td class="report-num report-revenue"><strong>$${totPeriodPay.toFixed(2)}</strong></td>
                         <td class="report-num">—</td>
-                        <td></td>
                     </tr>
                 </tfoot>
             </table>
