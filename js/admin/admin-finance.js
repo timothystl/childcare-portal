@@ -306,8 +306,11 @@ async function generateFinanceDashboard() {
             const bTotalExp  = (b.taxes||0) + (b.workersComp||0) + (b.payrollExp||0) + (b.otherExp||0);
             const bNet       = b.income - (b.wages||0) - bTotalExp;
             const moCount    = allMonths.length;
-            // Fraction of the year covered by months with data (for prorating the budget)
-            const yearFrac   = moCount / 12;
+            // Fraction of the year elapsed based on the calendar, not months-with-data.
+            // Past years: 100%. Current year: current month ÷ 12. Future: 0.
+            const todayYear  = new Date().getFullYear();
+            const todayMonth = new Date().getMonth() + 1; // 1–12
+            const yearFrac   = year < todayYear ? 1 : (year === todayYear ? todayMonth / 12 : 0);
             const expYTD     = v => Math.round(v * yearFrac); // expected-YTD = annual budget × fraction elapsed
 
             const varSpan = (actual, expected, lowerIsBetter) => {
@@ -383,7 +386,7 @@ async function generateFinanceDashboard() {
                     </tbody>
                 </table>
                 <p style="font-size:.8em;color:#6b7280;margin:.25rem 0 0">
-                    Expected YTD = annual budget × (${moCount} months of data ÷ 12).
+                    Expected YTD = annual budget × (${year < todayYear ? '12' : todayMonth} of 12 months elapsed).
                     ${!hasEnteredActuals && bTotalExp > 0 ? 'Enter actual expense amounts in the Annual Budget section above to track non-labor costs.' : ''}
                 </p>
                 </div>`;
