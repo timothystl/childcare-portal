@@ -1736,7 +1736,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 <thead>
                     <tr class="payroll-outer-head-1">
                         <th colspan="2" style="text-align:left">Staff Member</th>
-                        <th style="text-align:right">Rate</th>
+                        <th class="payroll-rate-header">Rate</th>
                         <th colspan="2" class="staff-room-header payroll-period-header">This Period</th>
                         <th colspan="2" class="staff-room-header payroll-period-header">Year to Date (${ey})</th>
                     </tr>
@@ -1764,7 +1764,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         </div>
         <div class="payroll-legend">
             <div class="payroll-legend-item"><div class="payroll-legend-bar" style="background:#4CAF50"></div>Day complete</div>
-            <div class="payroll-legend-item"><div class="payroll-legend-bar" style="background:#E9A020"></div>Missing room or time</div>
+            <div class="payroll-legend-item"><div class="payroll-legend-bar" style="background:#E9A020"></div>Missing room</div>
             <div class="payroll-legend-item"><span style="color:#C0392B;font-weight:700;font-size:13px">≠</span> Hours differ from clock record</div>
             <div class="payroll-legend-item"><span style="color:#2E7D32">✓</span> Saved</div>
         </div>`;
