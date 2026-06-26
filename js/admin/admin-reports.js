@@ -1634,6 +1634,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 }).join('')
                 : `<div class="payroll-manual-pair">` +
                     `<select class="payroll-room-select payroll-pair-room" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" data-prev-value="${escHtml(roomId)}"><option value="">— Room</option>${roomOptsManual}</select>` +
+                    `<span class="payroll-pair-clk-ref"></span>` +
                     `<input type="time" class="payroll-time-input payroll-time-in" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" value="${escHtml(timeIn)}">` +
                     `<span class="payroll-pair-sep">→</span>` +
                     `<input type="time" class="payroll-time-input payroll-time-out" data-staff-id="${escHtml(s.id)}" data-work-date="${date}" value="${escHtml(timeOut)}">` +

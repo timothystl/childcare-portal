@@ -2705,7 +2705,9 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .8rem;
     color: #9CA3AF;
     white-space: nowrap;
-    min-width: 130px;
+    width: 155px;
+    flex-shrink: 0;
+    overflow: hidden;
 }
 .payroll-pair-sep { color: #9CA3AF; flex-shrink: 0; }
 .payroll-pair-room { width: 130px; flex-shrink: 0; }
