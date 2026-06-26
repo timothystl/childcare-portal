@@ -2860,11 +2860,237 @@ async function exportAttendanceRevenue() {
 // ============================================================
 // EXTRA REPORTS  (Enrollment Trends · Waitlist Demand)
 // ============================================================
+// UPCOMING ROOM PROMOTIONS (AGING-OUT) REPORT
+// ============================================================
+async function generatePromotionsReport() {
+    const container = document.getElementById('promotionsContent');
+    if (!container) return;
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        // Age ceilings (months) per room and where each room transitions to
+        const ROOM_CEILINGS  = { bear: 12, bee: 24, turtle: 30, goose: 36 };
+        const ROOM_NEXT      = { bear: 'bee', bee: 'turtle', turtle: 'goose', goose: 'owl' };
+        const ROOM_LABEL     = Object.fromEntries(ROOMS.map(r => [r.id, r.label]));
+
+        const [allRegs, allFamilies] = await Promise.all([
+            fetchAllRegistrations(),
+            fetchAllFamilies(),
+        ]);
+
+        // Build recurring_days lookup: lower(child_name)|child_dob → recurring_days
+        const recurMap = {};
+        allFamilies.forEach(fam => {
+            (fam.students || []).forEach(s => {
+                if (s.child_name) recurMap[`${s.child_name.toLowerCase()}|${s.child_dob || ''}`] = s.recurring_days || '';
+            });
+        });
+
+        // Most-recent confirmed room per unique child (keyed by name|dob)
+        const childRoom = {};
+        allRegs.filter(r => r.status === 'confirmed').forEach(reg => {
+            if (!reg.child_dob || !reg.room_id) return;
+            const key        = `${(reg.child_name || '').toLowerCase()}|${reg.child_dob}`;
+            const latestDate = (reg.registration_dates || []).map(d => d.care_date).sort().pop() || '';
+            if (!childRoom[key] || latestDate > childRoom[key].latestDate) {
+                childRoom[key] = { child_name: reg.child_name, child_dob: reg.child_dob, room_id: reg.room_id, latestDate };
+            }
+        });
+
+        const today   = new Date();
+        const horizon = new Date(today.getFullYear() + 2, today.getMonth(), 1);
+
+        const promotions = [];
+        Object.entries(childRoom).forEach(([key, info]) => {
+            const { child_name, child_dob, room_id } = info;
+            if (!ROOM_CEILINGS[room_id]) return;
+            const dob         = new Date(child_dob);
+            const promoteDate = new Date(dob.getFullYear(), dob.getMonth() + ROOM_CEILINGS[room_id], 1);
+            if (promoteDate <= today || promoteDate > horizon) return;
+            const moKey   = `${promoteDate.getFullYear()}-${String(promoteDate.getMonth() + 1).padStart(2, '0')}`;
+            const dayList = (recurMap[key] || '').split(',').map(d => d.trim()).filter(Boolean);
+            promotions.push({ child_name, dob, promoteDate, moKey, fromRoom: room_id, toRoom: ROOM_NEXT[room_id], dayList });
+        });
+
+        promotions.sort((a, b) => a.promoteDate - b.promoteDate);
+
+        if (!promotions.length) {
+            container.innerHTML = '<p class="empty-hint">No upcoming promotions in the next 2 years based on current enrollment.</p>';
+            return;
+        }
+
+        // Group by month
+        const byMonth = {};
+        promotions.forEach(p => { (byMonth[p.moKey] = byMonth[p.moKey] || []).push(p); });
+
+        let html = `
+            <p style="font-size:.85em;color:#6b7280;margin-bottom:1rem">
+                Dates are when each child reaches the age ceiling for their current room.
+                "Regular Days" comes from their saved recurring schedule — if blank, no schedule is on file.
+            </p>
+            <div style="overflow-x:auto">
+            <table class="report-table">
+                <thead><tr>
+                    <th>Month</th><th>Child</th><th>Birthday</th>
+                    <th>From Room</th><th>To Room</th><th>Regular Days</th>
+                </tr></thead><tbody>`;
+
+        const MONTH_NAME = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        Object.keys(byMonth).sort().forEach(mk => {
+            const kids = byMonth[mk];
+            const [y, m] = mk.split('-').map(Number);
+            kids.forEach((p, i) => {
+                const dobStr = `${MONTH_NAME[p.dob.getMonth()].slice(0, 3)} ${p.dob.getDate()}, ${p.dob.getFullYear()}`;
+                html += `<tr>
+                    ${i === 0 ? `<td rowspan="${kids.length}" style="font-weight:600;vertical-align:top">${escHtml(MONTH_NAME[m - 1] + ' ' + y)}</td>` : ''}
+                    <td>${escHtml(p.child_name)}</td>
+                    <td style="color:#6b7280">${dobStr}</td>
+                    <td>${escHtml(ROOM_LABEL[p.fromRoom] || p.fromRoom)}</td>
+                    <td style="color:#16a34a">${escHtml(ROOM_LABEL[p.toRoom] || p.toRoom || '—')}</td>
+                    <td style="color:#6b7280">${p.dayList.length ? escHtml(p.dayList.join(', ')) : '<span style="color:#d1d5db">none on file</span>'}</td>
+                </tr>`;
+            });
+        });
+
+        html += `</tbody></table></div>`;
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+// ============================================================
+// TOTAL ENROLLMENT & FTE REPORT
+// ============================================================
+async function generateEnrollmentFteReport() {
+    const container = document.getElementById('enrollmentFteContent');
+    if (!container) return;
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const allRegs = await fetchAllRegistrations();
+        const confirmed = allRegs.filter(r => r.status === 'confirmed');
+
+        // For each registration: determine its month and whether FD or HD (majority of care dates)
+        const MONTH_NAME  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const activeRooms = ROOMS.filter(r => r.status !== 'coming_soon');
+        const ROOM_LABEL  = Object.fromEntries(ROOMS.map(r => [r.id, r.label]));
+
+        const byMonth = {}; // 'YYYY-MM' → [{ room_id, type: 'full'|'half' }, ...]
+        confirmed.forEach(reg => {
+            const dates = (reg.registration_dates || []).filter(d => !d.waitlisted);
+            if (!dates.length) return;
+            const moKey   = dates.map(d => d.care_date.slice(0, 7)).sort()[0];
+            const fullCt  = dates.filter(d => d.day_type === 'full').length;
+            const halfCt  = dates.filter(d => d.day_type === 'half').length;
+            const type    = fullCt >= halfCt ? 'full' : 'half';
+            (byMonth[moKey] = byMonth[moKey] || []).push({ room_id: reg.room_id, type });
+        });
+
+        const months = Object.keys(byMonth).sort().reverse().slice(0, 18);
+        if (!months.length) {
+            container.innerHTML = '<p class="empty-hint">No confirmed enrollment data found.</p>';
+            return;
+        }
+
+        // Current-month snapshot KPI row
+        const today     = new Date();
+        const curMo     = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const curEntries = byMonth[curMo] || byMonth[months[0]] || [];
+        const curFull   = curEntries.filter(e => e.type === 'full').length;
+        const curHalf   = curEntries.filter(e => e.type === 'half').length;
+        const curFte    = curFull + curHalf * 0.5;
+        const curMoLabel = (() => { const [y, m] = (byMonth[curMo] ? curMo : months[0]).split('-').map(Number); return `${MONTH_NAME[m - 1]} ${y}`; })();
+
+        // Build column headers from active rooms that actually appear in data
+        const roomsWithData = activeRooms.filter(r => months.some(mo => (byMonth[mo] || []).some(e => e.room_id === r.id)));
+
+        let html = `
+            <div class="fin-kpi-row" style="margin-bottom:1.25rem">
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Enrolled (${curMoLabel})</span>
+                    <span class="fin-kpi-value fin-positive">${curFull + curHalf}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Full-day children</span>
+                    <span class="fin-kpi-value">${curFull}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Half-day children</span>
+                    <span class="fin-kpi-value">${curHalf}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">FTE Enrollment</span>
+                    <span class="fin-kpi-value">${curFte % 1 === 0 ? curFte : curFte.toFixed(1)}</span>
+                </div>
+            </div>
+            <div style="overflow-x:auto">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2">Month</th>
+                        ${roomsWithData.map(r => `<th colspan="3" class="ar-room-header">${r.label}</th>`).join('')}
+                        <th colspan="4" class="ar-room-header ar-total-col">Total</th>
+                    </tr>
+                    <tr>
+                        ${roomsWithData.map(() =>
+                            `<th class="report-num ar-sub-header">FD</th>` +
+                            `<th class="report-num ar-sub-header">HD</th>` +
+                            `<th class="report-num ar-sub-header">FTE</th>`
+                        ).join('')}
+                        <th class="report-num ar-sub-header ar-total-col">FD</th>
+                        <th class="report-num ar-sub-header ar-total-col">HD</th>
+                        <th class="report-num ar-sub-header ar-total-col">Children</th>
+                        <th class="report-num ar-sub-header ar-total-col">FTE</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+        months.forEach(mo => {
+            const entries  = byMonth[mo] || [];
+            const [y, m]   = mo.split('-').map(Number);
+            const moLabel  = `${MONTH_NAME[m - 1]} ${y}`;
+            const totFull  = entries.filter(e => e.type === 'full').length;
+            const totHalf  = entries.filter(e => e.type === 'half').length;
+            const totFte   = totFull + totHalf * 0.5;
+
+            const roomCells = roomsWithData.map(r => {
+                const roomEntries = entries.filter(e => e.room_id === r.id);
+                const fd  = roomEntries.filter(e => e.type === 'full').length;
+                const hd  = roomEntries.filter(e => e.type === 'half').length;
+                const fte = fd + hd * 0.5;
+                return (fd || hd)
+                    ? `<td class="report-num">${fd || '—'}</td><td class="report-num">${hd || '—'}</td><td class="report-num" style="color:#6b7280">${fte % 1 === 0 ? fte : fte.toFixed(1)}</td>`
+                    : `<td class="report-num" style="color:#d1d5db">—</td><td class="report-num" style="color:#d1d5db">—</td><td class="report-num" style="color:#d1d5db">—</td>`;
+            }).join('');
+
+            html += `<tr${mo === curMo ? ' style="font-weight:600"' : ''}>
+                <td>${escHtml(moLabel)}${mo === curMo ? ' <span style="font-size:.75em;color:#6b7280">(current)</span>' : ''}</td>
+                ${roomCells}
+                <td class="report-num ar-total-col">${totFull || '—'}</td>
+                <td class="report-num ar-total-col">${totHalf || '—'}</td>
+                <td class="report-num ar-total-col"><strong>${totFull + totHalf}</strong></td>
+                <td class="report-num ar-total-col"><strong>${totFte % 1 === 0 ? totFte : totFte.toFixed(1)}</strong></td>
+            </tr>`;
+        });
+
+        html += `</tbody></table></div>
+            <p style="font-size:.8em;color:#6b7280;margin:.5rem 0 0">
+                FTE = full-day children × 1.0 + half-day children × 0.5.
+                Children classified by majority of their care dates for the month. Shows last 18 months.
+            </p>`;
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+// ============================================================
 function setupExtraReports() {
     document.getElementById('generateTrendsBtn')?.addEventListener('click', generateEnrollmentTrends);
     document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
     document.getElementById('generateRoomPnlBtn')?.addEventListener('click', generateRoomPnl);
     document.getElementById('exportRoomPnlBtn')?.addEventListener('click', exportRoomPnl);
+    document.getElementById('generatePromotionsBtn')?.addEventListener('click', generatePromotionsReport);
+    document.getElementById('generateFteBtn')?.addEventListener('click', generateEnrollmentFteReport);
 
     // Default P&L date range: first of current month → today
     const today = new Date().toISOString().split('T')[0];
@@ -3247,10 +3473,16 @@ async function generateRoomPnl() {
                 moRev += d.revenue;
                 // Accumulate per-room labor when we have schedule or clock-based data
                 if (hasScheduleData || hasClockBasedLabor) moLab += d.labor;
+                const revPerChild  = d.attendees > 0 ? fmt$(Math.round(d.revenue / d.attendees)) : '—';
+                const margPerChild = d.attendees > 0
+                    ? (d.margin < 0 ? '−' : '') + fmt$(Math.round(Math.abs(d.margin) / d.attendees))
+                    : '—';
                 return `<td class="report-num report-revenue">${d.revenue > 0 ? fmt$(d.revenue) : '—'}</td>` +
                        `<td class="report-num">${d.labor > 0 ? fmt$(d.labor) : '—'}</td>` +
                        `<td class="report-num"${marginStyle(d.margin)}>${d.revenue > 0 || d.labor > 0 ? (d.margin < 0 ? '−' : '') + fmt$(d.margin) : '—'}</td>` +
-                       `<td class="report-num"${marginStyle(pct)}>${d.revenue > 0 || d.labor > 0 ? fmtPct(pct) : '—'}</td>`;
+                       `<td class="report-num"${marginStyle(pct)}>${d.revenue > 0 || d.labor > 0 ? fmtPct(pct) : '—'}</td>` +
+                       `<td class="report-num" style="color:#6b7280;font-size:.85em">${revPerChild}</td>` +
+                       `<td class="report-num" style="color:#6b7280;font-size:.85em"${d.attendees > 0 ? marginStyle(d.margin / d.attendees) : ''}>${margPerChild}</td>`;
             }).join('');
 
             // Total-column labor: per-room sum + any unallocated (historical / untagged floats)
@@ -3291,20 +3523,28 @@ async function generateRoomPnl() {
         }).join('');
 
         const roomColHeaders = rooms.map(r =>
-            `<th colspan="4" class="ar-room-header">${r.label}</th>`).join('');
+            `<th colspan="6" class="ar-room-header">${r.label}</th>`).join('');
         const roomSubHeaders = rooms.map(() =>
             `<th class="report-num ar-sub-header">Revenue</th>` +
             `<th class="report-num ar-sub-header">Labor</th>` +
             `<th class="report-num ar-sub-header">Margin $</th>` +
-            `<th class="report-num ar-sub-header">Margin %</th>`).join('');
+            `<th class="report-num ar-sub-header">Margin %</th>` +
+            `<th class="report-num ar-sub-header" style="color:#6b7280">Rev/child</th>` +
+            `<th class="report-num ar-sub-header" style="color:#6b7280">Margin/child</th>`).join('');
 
         const totalCells = rooms.map(r => {
             const t   = roomTotals[r.id];
             const pct = t.revenue > 0 ? (t.margin / t.revenue) * 100 : 0;
+            const tRevPerChild  = t.attendees > 0 ? fmt$(Math.round(t.revenue / t.attendees)) : '—';
+            const tMargPerChild = t.attendees > 0
+                ? (t.margin < 0 ? '−' : '') + fmt$(Math.round(Math.abs(t.margin) / t.attendees))
+                : '—';
             return `<td class="report-num report-revenue"><strong>${fmt$(t.revenue)}</strong></td>` +
                    `<td class="report-num"><strong>${t.labor > 0 ? fmt$(t.labor) : '—'}</strong></td>` +
                    `<td class="report-num"${marginStyle(t.margin)}><strong>${t.labor > 0 || t.revenue > 0 ? (t.margin < 0 ? '−' : '') + fmt$(t.margin) : '—'}</strong></td>` +
-                   `<td class="report-num"${marginStyle(pct)}><strong>${t.revenue > 0 ? fmtPct(pct) : '—'}</strong></td>`;
+                   `<td class="report-num"${marginStyle(pct)}><strong>${t.revenue > 0 ? fmtPct(pct) : '—'}</strong></td>` +
+                   `<td class="report-num" style="color:#6b7280;font-size:.85em"><strong>${tRevPerChild}</strong></td>` +
+                   `<td class="report-num" style="color:#6b7280;font-size:.85em"${t.attendees > 0 ? marginStyle(t.margin / t.attendees) : ''}><strong>${tMargPerChild}</strong></td>`;
         }).join('');
 
         const grandMargin = grandRev - grandLab;
