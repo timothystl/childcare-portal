@@ -2251,7 +2251,9 @@ async function fetchEnrollmentByRoomForMonths(monthKeys) {
     const avg = {};
     for (const [roomId, monthCounts] of Object.entries(countsByRoomMonth)) {
         const counts = Object.values(monthCounts);
-        avg[roomId] = Math.round(counts.reduce((s, c) => s + c, 0) / monthKeys.length * 10) / 10;
+        // Divide by months where THIS room had data, not the full query window —
+        // so a new room with 1 month of data out of 6 shows its real enrollment, not 1/6 of it.
+        avg[roomId] = Math.round(counts.reduce((s, c) => s + c, 0) / counts.length * 10) / 10;
     }
     return avg;
 }
