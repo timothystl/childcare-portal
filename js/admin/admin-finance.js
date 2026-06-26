@@ -321,13 +321,15 @@ async function generateFinanceDashboard() {
             };
             const aRow = (label, annualBudget, actual, lowerIsBetter, note = '') => {
                 if (!actual && !annualBudget) return '';
-                const exp = expYTD(annualBudget);
+                const exp  = expYTD(annualBudget);
+                const proj = actual > 0 && yearFrac > 0 ? Math.round(actual / yearFrac) : annualBudget;
                 return `<tr>
                     <td>${label}${note ? ` <span style="font-size:.78em;color:#6b7280">${note}</span>` : ''}</td>
                     <td class="report-num">${annualBudget > 0 ? _fmt$(annualBudget) : '—'}</td>
                     <td class="report-num">${exp > 0 ? _fmt$(exp) : '—'}</td>
                     <td class="report-num">${actual > 0 ? _fmt$(actual) : '—'}</td>
                     <td class="report-num">${actual > 0 && exp > 0 ? varSpan(actual, exp, lowerIsBetter) : '—'}</td>
+                    <td class="report-num" style="color:#6b7280">${proj > 0 ? _fmt$(proj) : '—'}</td>
                 </tr>`;
             };
 
@@ -339,16 +341,37 @@ async function generateFinanceDashboard() {
             const aNet        = totalRev - totalLab - aTotalExp;
             const bNetExp     = expYTD(bNet); // prorated budget net
 
+            // Trend-based full-year projection: actuals + projected future months
+            const revByMoNum = {}, labByMoNum = {};
+            allMonths.forEach((mo, i) => {
+                const mn = parseInt(mo.split('-')[1]);
+                revByMoNum[mn] = moRevArr[i];
+                labByMoNum[mn] = moLabArr[i];
+            });
+            const _avg = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+            const janMayRevAvg = _avg([1,2,3,4,5].filter(m => revByMoNum[m] != null).map(m => revByMoNum[m]));
+            const janMayLabAvg = _avg([1,2,3,4,5].filter(m => labByMoNum[m] != null).map(m => labByMoNum[m]));
+            const junJulRevAvg = _avg([6,7].filter(m => revByMoNum[m] != null).map(m => revByMoNum[m]));
+            const junJulLabAvg = _avg([6,7].filter(m => labByMoNum[m] != null).map(m => labByMoNum[m]));
+            let projRev = 0, projLab = 0;
+            for (let m = 1; m <= 12; m++) {
+                projRev += revByMoNum[m] != null ? revByMoNum[m] : (m === 8 ? Math.round(junJulRevAvg) : Math.round(janMayRevAvg));
+                projLab += labByMoNum[m] != null ? labByMoNum[m] : (m === 8 ? Math.round(junJulLabAvg) : Math.round(janMayLabAvg));
+            }
+            const projExp = yearFrac > 0 && aTotalExp > 0 ? Math.round(aTotalExp / yearFrac) : bTotalExp;
+            const projNet = projRev - projLab - (aTotalExp > 0 ? projExp : 0);
+
             bvaHtml = `
                 <h4 style="margin:1.5rem 0 .5rem;font-weight:600">Budget vs Actuals — ${year}</h4>
                 <div style="overflow-x:auto;margin-bottom:1.5rem">
-                <table class="report-table" style="max-width:760px">
+                <table class="report-table" style="max-width:920px">
                     <thead><tr>
                         <th>Category</th>
                         <th class="report-num">Annual Budget</th>
                         <th class="report-num">Expected YTD</th>
                         <th class="report-num">YTD Actual</th>
                         <th class="report-num">Variance</th>
+                        <th class="report-num" style="color:#6b7280">Proj. Full Year</th>
                     </tr></thead>
                     <tbody>
                         <tr>
@@ -357,6 +380,7 @@ async function generateFinanceDashboard() {
                             <td class="report-num" style="color:#6b7280">${_fmt$(expYTD(b.income))}</td>
                             <td class="report-num report-revenue">${_fmt$(totalRev)}</td>
                             <td class="report-num">${varSpan(totalRev, expYTD(b.income), false)}</td>
+                            <td class="report-num" style="color:#6b7280">${projRev > 0 ? _fmt$(projRev) : '—'}</td>
                         </tr>
                         <tr>
                             <td>Wages / Labor <span style="font-size:.78em;color:#6b7280">(from payroll data)</span></td>
@@ -364,6 +388,7 @@ async function generateFinanceDashboard() {
                             <td class="report-num" style="color:#6b7280">${_fmt$(expYTD(b.wages||0))}</td>
                             <td class="report-num">${_fmt$(totalLab)}</td>
                             <td class="report-num">${varSpan(totalLab, expYTD(b.wages||0), true)}</td>
+                            <td class="report-num" style="color:#6b7280">${projLab > 0 ? _fmt$(projLab) : '—'}</td>
                         </tr>
                         ${aRow('Payroll Taxes', b.taxes||0, aTaxes, true, '(FICA, FUTA, SUTA)')}
                         ${aRow('Workers Comp', b.workersComp||0, aComp, true)}
@@ -375,6 +400,7 @@ async function generateFinanceDashboard() {
                             <td class="report-num" style="color:#6b7280"><strong>${bTotalExp > 0 ? _fmt$(expYTD(bTotalExp)) : '—'}</strong></td>
                             <td class="report-num"><strong>${aTotalExp > 0 ? _fmt$(aTotalExp) : '—'}</strong></td>
                             <td class="report-num">${aTotalExp > 0 && bTotalExp > 0 ? varSpan(aTotalExp, expYTD(bTotalExp), true) : '—'}</td>
+                            <td class="report-num" style="color:#6b7280"><strong>${projExp > 0 ? _fmt$(projExp) : '—'}</strong></td>
                         </tr>` : ''}
                         <tr class="report-total-row">
                             <td><strong>Net</strong></td>
@@ -382,6 +408,7 @@ async function generateFinanceDashboard() {
                             <td class="report-num" style="color:#6b7280"><strong>${_fmt$(bNetExp)}</strong></td>
                             <td class="report-num"><strong>${_fmt$(aTotalExp > 0 ? aNet : totalMargin)}</strong></td>
                             <td class="report-num">${varSpan(aTotalExp > 0 ? aNet : totalMargin, bNetExp, false)}</td>
+                            <td class="report-num" style="color:#6b7280"><strong>${_fmt$(projNet)}</strong></td>
                         </tr>
                     </tbody>
                 </table>
@@ -451,6 +478,20 @@ async function generateFinanceDashboard() {
                   type: 'line', borderColor: 'rgb(99,102,241)', backgroundColor: 'rgba(99,102,241,.12)',
                   tension: 0.3, fill: false, pointBackgroundColor: 'rgb(99,102,241)', yAxisID: 'y' }
             );
+        }
+        if (b?.income) {
+            const budgRevMo = Math.round((b.income || 0) / 12);
+            const budgLabMo = Math.round((b.wages  || 0) / 12);
+            if (budgRevMo > 0) revLaborDatasets.push({
+                label: 'Budget Rev/mo', data: moLabels.map(() => budgRevMo),
+                type: 'line', borderColor: 'rgba(22,163,74,.5)', borderDash: [5, 4],
+                pointRadius: 0, fill: false, yAxisID: 'y',
+            });
+            if (budgLabMo > 0) revLaborDatasets.push({
+                label: 'Budget Wages/mo', data: moLabels.map(() => budgLabMo),
+                type: 'line', borderColor: 'rgba(245,158,11,.5)', borderDash: [5, 4],
+                pointRadius: 0, fill: false, yAxisID: 'y',
+            });
         }
         _financeCharts.revLabor = new Chart(
             document.getElementById('chartRevLabor').getContext('2d'), {
@@ -1106,7 +1147,7 @@ async function renderRoomRateGrid() {
                 <td>${escHtml(r.label)}${r.status === 'coming_soon' ? ' <span style="font-size:.75em;color:#d97706">(upcoming)</span>' : ''}</td>
                 <td class="report-num">${r.capacity}</td>
                 <td class="report-num">${enrollStr}</td>
-                <td class="report-num" style="${slotsStyle}">${rd.availableSlots > 0 ? rd.availableSlots : 'Full'}</td>
+                <td class="report-num" style="${slotsStyle}">${rd.availableSlots > 0 ? (Math.round(rd.availableSlots * 10) / 10) : 'Full'}</td>
                 <td class="report-num">${daysStr}</td>
                 <td class="report-num">${rd.staffNeeded}</td>
             </tr>`;
