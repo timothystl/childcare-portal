@@ -888,7 +888,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                             <div style="font-size:.82em;font-weight:600;color:#374151;margin-bottom:.4rem">${escHtml(r.label)}</div>
                             ${hasHalf ? `<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem">
                                 <div style="flex:1;min-width:0">
-                                    <div style="font-size:.72em;color:#6b7280">Half-day · $${r.halfRate}/day · ~${Math.round(halfPerKid)} days/kid/mo</div>
+                                    <div style="font-size:.72em;color:#6b7280">Half-day · $${r.halfRate}/day · ~${Math.round(halfPerKid)} days/kid/mo · ~${Math.round(r.avgHalf / 20)} kids/day</div>
                                 </div>
                                 <input type="number" id="projHalfKidsAdj_${escHtml(r.id)}" value="0" step="1" min="-20" max="20"
                                     class="form-control proj-kids-input" style="width:52px;text-align:right;padding:.2rem .35rem;font-size:.85em">
@@ -897,7 +897,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                             </div>` : ''}
                             ${hasFull ? `<div style="display:flex;align-items:center;gap:.4rem">
                                 <div style="flex:1;min-width:0">
-                                    <div style="font-size:.72em;color:#6b7280">Full-day · $${r.fullRate}/day · ~${Math.round(fullPerKid)} days/kid/mo</div>
+                                    <div style="font-size:.72em;color:#6b7280">Full-day · $${r.fullRate}/day · ~${Math.round(fullPerKid)} days/kid/mo · ~${Math.round(r.avgFull / 20)} kids/day</div>
                                 </div>
                                 <input type="number" id="projFullKidsAdj_${escHtml(r.id)}" value="0" step="1" min="-20" max="20"
                                     class="form-control proj-kids-input" style="width:52px;text-align:right;padding:.2rem .35rem;font-size:.85em">
