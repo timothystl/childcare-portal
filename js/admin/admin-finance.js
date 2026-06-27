@@ -592,11 +592,10 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
 
         const today = new Date();
         const todayYear  = today.getFullYear();
-        const todayMonth = today.getMonth() + 1;
 
         const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
 
-        // Per-room: accumulate half/full days across months where the room had attendance
+        // Per-room: accumulate half/full days across months where the room had attendance (current year)
         const roomStats = {};
         activeRooms.forEach(r => { roomStats[r.id] = { halfTotal: 0, fullTotal: 0, moCount: 0 }; });
 
@@ -611,7 +610,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             });
         });
 
-        // Build per-room projection rows
+        // Build per-room projection rows (only rooms with data)
         const roomProj = activeRooms.map(r => {
             const st = roomStats[r.id];
             if (st.moCount === 0) return null;
@@ -629,27 +628,136 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
         const totalProjMonthly = roomProj.reduce((s, r) => s + r.projMonthly, 0);
         const centerAvgDaysPerKid = roomProj.reduce((s, r) => s + r.avgTotalDays, 0) / roomProj.length;
 
-        // Remaining months to project (months after the last month in allMoList)
-        const lastMoNum      = parseInt(allMoList[allMoList.length - 1].split('-')[1]);
-        const remainingMonths = year === todayYear ? Math.max(0, 12 - lastMoNum) : 0;
+        // ── Determine operational months per room from all-years billing_summary ──
+        // This prevents seasonal rooms (Summer Camp) from being projected year-round.
+        const roomOpMonths = {}; // roomId → Set<1..12>
+        activeRooms.forEach(r => { roomOpMonths[r.id] = new Set(); });
+        // Seed with current-year live data months
+        allMoList.forEach(mo => {
+            const moNum = parseInt(mo.split('-')[1]);
+            const dayData = daysByRoomMo[mo] || {};
+            activeRooms.forEach(r => {
+                const d = dayData[r.id];
+                if (d && (d.half > 0 || d.full > 0)) roomOpMonths[r.id].add(moNum);
+            });
+        });
+        // Supplement with prior years' billing_summary
+        try {
+            const allBs = await fetchBillingSummary();
+            allBs.forEach(row => {
+                if (!row.room_id || (!row.full_days && !row.half_days)) return;
+                const moNum = parseInt((row.month || '').split('-')[1]);
+                if (moNum >= 1 && moNum <= 12 && roomOpMonths[row.room_id]) {
+                    roomOpMonths[row.room_id].add(moNum);
+                }
+            });
+        } catch(e) {}
+
+        // ── Closure scaling: count weekday closures per future month ──
+        // weekdays_in_month − closure_days_in_month gives the operating fraction.
+        const lastMoNum = parseInt(allMoList[allMoList.length - 1].split('-')[1]);
+        const futureMonthNums = year === todayYear
+            ? Array.from({ length: Math.max(0, 12 - lastMoNum) }, (_, i) => lastMoNum + 1 + i)
+            : [];
+
+        // closure scale: moNum → fraction (0..1), default 1 (full month)
+        const closureScale = {};
+        futureMonthNums.forEach(m => { closureScale[m] = 1; });
+
+        if (futureMonthNums.length > 0) {
+            try {
+                const closures = await fetchClosures();
+                // Count weekday closures per future month
+                const closuresByMo = {};
+                closures.forEach(c => {
+                    const d = new Date(c.close_date + 'T12:00:00');
+                    if (isNaN(d)) return;
+                    if (d.getFullYear() !== year) return;
+                    const moNum  = d.getMonth() + 1;
+                    const dow    = d.getDay();
+                    if (dow === 0 || dow === 6) return; // skip weekends
+                    if (!futureMonthNums.includes(moNum)) return;
+                    closuresByMo[moNum] = (closuresByMo[moNum] || 0) + 1;
+                });
+                // Count total weekdays in each future month
+                futureMonthNums.forEach(m => {
+                    let weekdays = 0;
+                    const daysInMo = new Date(year, m, 0).getDate();
+                    for (let day = 1; day <= daysInMo; day++) {
+                        const dow = new Date(year, m - 1, day).getDay();
+                        if (dow !== 0 && dow !== 6) weekdays++;
+                    }
+                    const closed = closuresByMo[m] || 0;
+                    closureScale[m] = weekdays > 0 ? Math.max(0, (weekdays - closed) / weekdays) : 1;
+                });
+            } catch(e) {}
+        }
+
+        // ── Project remaining months, per-room, with closure scaling ──
+        let projRemainingTotal = 0;
+        const projMonthRows = []; // { moNum, label, rev, scale, rooms }
+        futureMonthNums.forEach(m => {
+            const scale = closureScale[m] || 1;
+            let moRev = 0;
+            const activeInMo = [];
+            roomProj.forEach(r => {
+                if (roomOpMonths[r.id]?.has(m)) {
+                    moRev += r.projMonthly * scale;
+                    activeInMo.push(r.id);
+                }
+            });
+            projRemainingTotal += moRev;
+            projMonthRows.push({ moNum: m, label: FIN_MONTH_SHORT[m - 1], rev: moRev, scale, roomCount: activeInMo.length });
+        });
 
         // YTD actual = sum of actual revenue (live preferred, historical fallback)
         const ytdActual = allMoList.reduce((s, mo) =>
             s + (liveRevByMo[mo] > 0 ? liveRevByMo[mo] : (historicalRevByMo[mo] || 0)), 0);
 
-        const fullYearProj = ytdActual + totalProjMonthly * remainingMonths;
+        const fullYearProj = ytdActual + projRemainingTotal;
 
         // ── Render HTML ───────────────────────────────────────
-        const rowHtml = roomProj.map(r => `<tr>
-            <td>${escHtml(r.label)}</td>
-            <td class="report-num">${r.moCount}</td>
-            <td class="report-num">${r.avgHalf > 0 ? r.avgHalf.toFixed(1) : '—'}</td>
-            <td class="report-num">${r.avgFull > 0 ? r.avgFull.toFixed(1) : '—'}</td>
-            <td class="report-num" style="color:#6b7280;font-size:.88em">
-                ${r.halfRate > 0 && r.avgHalf > 0 ? `$${r.halfRate}` : ''}${r.halfRate > 0 && r.avgHalf > 0 && r.fullRate > 0 ? ' / ' : ''}${r.fullRate > 0 ? `$${r.fullRate}` : ''}
-            </td>
-            <td class="report-num report-revenue"><strong>${_fmt$(r.projMonthly)}</strong></td>
-        </tr>`).join('');
+        const rowHtml = roomProj.map(r => {
+            const opMos = futureMonthNums.filter(m => roomOpMonths[r.id]?.has(m));
+            const opLabel = opMos.length === futureMonthNums.length
+                ? 'all remaining'
+                : (opMos.length === 0 ? 'none' : opMos.map(m => FIN_MONTH_SHORT[m-1]).join(', '));
+            return `<tr>
+                <td>${escHtml(r.label)}</td>
+                <td class="report-num">${r.moCount}</td>
+                <td class="report-num">${r.avgHalf > 0 ? r.avgHalf.toFixed(1) : '—'}</td>
+                <td class="report-num">${r.avgFull > 0 ? r.avgFull.toFixed(1) : '—'}</td>
+                <td class="report-num" style="color:#6b7280;font-size:.88em">
+                    ${r.halfRate > 0 && r.avgHalf > 0 ? `$${r.halfRate}` : ''}${r.halfRate > 0 && r.avgHalf > 0 && r.fullRate > 0 ? ' / ' : ''}${r.fullRate > 0 ? `$${r.fullRate}` : ''}
+                </td>
+                <td class="report-num report-revenue"><strong>${_fmt$(r.projMonthly)}</strong></td>
+                ${futureMonthNums.length > 0 ? `<td style="font-size:.8em;color:#6b7280">${escHtml(opLabel)}</td>` : ''}
+            </tr>`;
+        }).join('');
+
+        // Monthly breakdown of remaining months
+        const projMonthHtml = projMonthRows.length > 0 ? `
+            <details style="margin-top:.5rem;margin-bottom:.75rem">
+            <summary style="cursor:pointer;font-size:.85em;color:#6b7280">Monthly projection breakdown</summary>
+            <table class="report-table" style="max-width:460px;margin-top:.4rem">
+                <thead><tr>
+                    <th>Month</th>
+                    <th class="report-num">Closure Adj.</th>
+                    <th class="report-num">Projected Rev</th>
+                </tr></thead>
+                <tbody>${projMonthRows.map(m => `<tr>
+                    <td>${m.label} ${year}</td>
+                    <td class="report-num" style="color:${m.scale < 1 ? '#d97706' : '#9ca3af'};font-size:.88em">
+                        ${m.scale < 1 ? (Math.round((1 - m.scale) * 100) + '% fewer days') : '—'}
+                    </td>
+                    <td class="report-num">${_fmt$(m.rev)}</td>
+                </tr>`).join('')}</tbody>
+                <tfoot><tr class="report-total-row">
+                    <td colspan="2"><strong>Total Projected Remaining</strong></td>
+                    <td class="report-num"><strong>${_fmt$(projRemainingTotal)}</strong></td>
+                </tr></tfoot>
+            </table>
+            </details>` : '';
 
         const budgetVsHtml = _annualBudget?.income
             ? `<div class="fin-kpi">
@@ -659,41 +767,45 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                 </span>
               </div>` : '';
 
+        const hasClosureAdj = projMonthRows.some(m => m.scale < 1);
+
         el.innerHTML = `
         <details open style="margin-top:1.5rem">
         <summary style="cursor:pointer;font-weight:600;font-size:.95rem;margin-bottom:.75rem">▸ Attendance-Based Revenue Projection</summary>
         <p style="font-size:.85em;color:#6b7280;margin:.25rem 0 .75rem">
             Avg half/full attendance days per room × current room rates.
-            ${remainingMonths > 0
-                ? `Full-year = YTD actual + avg/month × <strong>${remainingMonths}</strong> remaining month${remainingMonths !== 1 ? 's' : ''} (Aug–Dec).`
-                : year < todayYear ? 'Past year — no remaining months to project.' : ''}
+            Remaining months projected only for rooms that historically operate that month.
+            ${hasClosureAdj ? 'Months with entered school closures are scaled down proportionally.' : ''}
         </p>
-        <div style="overflow-x:auto;margin-bottom:.75rem">
-        <table class="report-table" style="max-width:740px">
+        <div style="overflow-x:auto;margin-bottom:.5rem">
+        <table class="report-table" style="max-width:${futureMonthNums.length > 0 ? '860px' : '740px'}">
             <thead><tr>
                 <th>Room</th>
-                <th class="report-num">Months of Data</th>
-                <th class="report-num">Avg Half Days/Mo</th>
-                <th class="report-num">Avg Full Days/Mo</th>
+                <th class="report-num">Mo. of Data</th>
+                <th class="report-num">Avg Half/Mo</th>
+                <th class="report-num">Avg Full/Mo</th>
                 <th class="report-num">Rate H/F</th>
                 <th class="report-num">Proj. Rev/Mo</th>
+                ${futureMonthNums.length > 0 ? '<th>Projected for</th>' : ''}
             </tr></thead>
             <tbody>${rowHtml}</tbody>
             <tfoot><tr class="report-total-row">
-                <td colspan="5"><strong>Total Projected Monthly</strong></td>
+                <td colspan="5"><strong>Avg Projected Monthly (all rooms)</strong></td>
                 <td class="report-num report-revenue"><strong>${_fmt$(totalProjMonthly)}</strong></td>
+                ${futureMonthNums.length > 0 ? '<td></td>' : ''}
             </tr></tfoot>
         </table>
         </div>
-        ${remainingMonths > 0 ? `
+        ${projMonthHtml}
+        ${futureMonthNums.length > 0 ? `
         <div class="fin-kpi-row" style="margin-bottom:1rem">
             <div class="fin-kpi">
                 <span class="fin-kpi-label">YTD Actual (${allMoList.length} mo)</span>
                 <span class="fin-kpi-value fin-positive">${_fmt$(ytdActual)}</span>
             </div>
             <div class="fin-kpi">
-                <span class="fin-kpi-label">+ Projected Remaining (${remainingMonths} mo × ${_fmt$(totalProjMonthly)}/mo)</span>
-                <span class="fin-kpi-value">${_fmt$(totalProjMonthly * remainingMonths)}</span>
+                <span class="fin-kpi-label">+ Projected Remaining</span>
+                <span class="fin-kpi-value">${_fmt$(projRemainingTotal)}</span>
             </div>
             <div class="fin-kpi">
                 <span class="fin-kpi-label">Full-Year Projection</span>
@@ -742,8 +854,8 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
 
         // Store projection data on the element for the what-if handler
         el._projData = {
-            totalProjMonthly, ytdActual, remainingMonths, fullYearProj,
-            roomProj, centerAvgDaysPerKid, totalLab, allMoList, annualExpenses,
+            totalProjMonthly, ytdActual, futureMonthNums, projRemainingTotal, fullYearProj,
+            roomProj, roomOpMonths, closureScale, centerAvgDaysPerKid, totalLab, allMoList, annualExpenses,
         };
 
         const updateWhatIf = () => {
@@ -753,14 +865,29 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             const d = el._projData;
             if (!d) return;
 
-            // Extra enrollment revenue: kids × avg days/child × avg full-day rate across rooms
-            const avgFullRate = d.roomProj.reduce((s, r) => s + r.fullRate, 0) / (d.roomProj.length || 1);
-            const enrollExtra = kids * d.centerAvgDaysPerKid * avgFullRate;
+            // Extra enrollment revenue: kids × avg days/child × avg full-day rate (for regular rooms only)
+            const regularRooms = d.roomProj.filter(r => d.roomOpMonths[r.id]?.size >= 9);
+            const avgFullRate = regularRooms.length > 0
+                ? regularRooms.reduce((s, r) => s + r.fullRate, 0) / regularRooms.length
+                : d.roomProj.reduce((s, r) => s + r.fullRate, 0) / (d.roomProj.length || 1);
+            const enrollExtraPerMo = kids * d.centerAvgDaysPerKid * avgFullRate;
 
-            const adjProjMonthly = d.totalProjMonthly * (1 + revPct / 100) + enrollExtra;
-            const adjFullYear    = d.ytdActual + adjProjMonthly * d.remainingMonths;
+            // Recompute future months with adjustments
+            let adjProjRemaining = 0;
+            d.futureMonthNums.forEach(m => {
+                const scale = d.closureScale[m] || 1;
+                let moRev = 0;
+                d.roomProj.forEach(r => {
+                    if (d.roomOpMonths[r.id]?.has(m)) {
+                        moRev += r.projMonthly * (1 + revPct / 100) * scale;
+                    }
+                });
+                // Extra kids only for regular rooms (not seasonal)
+                const regRoomsInMo = d.roomProj.filter(r => d.roomOpMonths[r.id]?.has(m) && d.roomOpMonths[r.id]?.size >= 9);
+                adjProjRemaining += moRev + enrollExtraPerMo * regRoomsInMo.length * scale;
+            });
 
-            // Annualized labor baseline (from allMoList data period → scale to 12 months)
+            const adjFullYear   = d.ytdActual + adjProjRemaining;
             const moCount       = d.allMoList.length || 1;
             const adjAnnualLab  = d.totalLab * (1 + wagePct / 100) * (12 / moCount);
             const adjNet        = adjFullYear - adjAnnualLab - (d.annualExpenses || 0);
@@ -775,11 +902,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             resultEl.style.display = '';
             resultEl.innerHTML = `
                 <div class="fin-kpi-row" style="margin-top:.5rem;padding-top:.5rem;border-top:1px solid #e2e8f0">
-                    <div class="fin-kpi">
-                        <span class="fin-kpi-label">Adj. Proj. Monthly</span>
-                        <span class="fin-kpi-value">${_fmt$(adjProjMonthly)}</span>
-                    </div>
-                    ${d.remainingMonths > 0 ? `<div class="fin-kpi">
+                    ${d.futureMonthNums.length > 0 ? `<div class="fin-kpi">
                         <span class="fin-kpi-label">Adj. Full-Year Revenue</span>
                         <span class="fin-kpi-value fin-positive"><strong>${_fmt$(adjFullYear)}</strong>
                             <span class="fin-kpi-target ${delta >= 0 ? 'fin-positive' : 'fin-negative'}" style="font-size:.8em">
