@@ -872,9 +872,16 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                     ${roomProj.map(r => {
                         const estimatedKids = Math.max(1, Math.round(r.avgTotalDays / 9));
                         const revenuePerKid = r.projMonthly / estimatedKids;
+                        const halfPerKid = r.avgHalf / estimatedKids;
+                        const fullPerKid = r.avgFull / estimatedKids;
+                        const typicalParts = [];
+                        if (halfPerKid >= 0.5) typicalParts.push(`${Math.round(halfPerKid)} half`);
+                        if (fullPerKid >= 0.5) typicalParts.push(`${Math.round(fullPerKid)} full`);
+                        const typicalStr = typicalParts.length ? typicalParts.join(', ') + ' days/mo' : `${Math.round(r.avgTotalDays / estimatedKids)} days/mo`;
                         return `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:.5rem .6rem">
                             <div style="font-size:.8em;font-weight:600;color:#374151;margin-bottom:.25rem">${escHtml(r.label)}</div>
-                            <div style="font-size:.75em;color:#9ca3af;margin-bottom:.35rem">~${estimatedKids} enrolled/mo · ${_fmt$(revenuePerKid)}/kid/mo</div>
+                            <div style="font-size:.75em;color:#9ca3af;margin-bottom:.1rem">~${estimatedKids} enrolled/mo</div>
+                            <div style="font-size:.75em;color:#6b7280;margin-bottom:.35rem">typical: ${typicalStr} · ${_fmt$(revenuePerKid)}/kid</div>
                             <div style="display:flex;align-items:center;gap:.3rem">
                                 <input type="number" id="projKidsAdj_${escHtml(r.id)}" value="0" step="1" min="-20" max="20"
                                     class="form-control proj-kids-input" style="width:64px;text-align:right;padding:.25rem .4rem;font-size:.9em">
