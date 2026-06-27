@@ -626,6 +626,12 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
         if (!roomProj.length) { el.innerHTML = ''; return; }
 
         const totalProjMonthly = roomProj.reduce((s, r) => s + r.projMonthly, 0);
+        const totalChildDaysPerMo = roomProj.reduce((s, r) => s + r.avgTotalDays, 0);
+        const avgHalfRate = roomProj.filter(r => r.halfRate > 0).reduce((s, r) => s + r.halfRate, 0) / Math.max(1, roomProj.filter(r => r.halfRate > 0).length);
+        const avgFullRate = roomProj.reduce((s, r) => s + r.fullRate, 0) / Math.max(1, roomProj.length);
+        // Labor cost per child-day: used to estimate staffing impact of extra days
+        const moCount = allMoList.length || 1;
+        const laborCostPerChildDay = totalChildDaysPerMo > 0 ? (totalLab / moCount) / totalChildDaysPerMo : 0;
 
         // ── Determine operational months per room from all-years billing_summary ──
         // This prevents seasonal rooms (Summer Camp) from being projected year-round.
@@ -904,6 +910,51 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                 </div>
             </div>
 
+            <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid #e2e8f0">
+                <div style="font-size:.82em;color:#6b7280;font-weight:600;margin-bottom:.25rem">Extra care days / month (any source)</div>
+                <div style="font-size:.75em;color:#9ca3af;margin-bottom:.6rem">Use this to model extra billing days regardless of how they come about — new enrollments, existing kids adding days, etc. Billed at the center's average rate for that day type.</div>
+                <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-end">
+                    <div>
+                        <label style="display:block;font-size:.82em;color:#6b7280;margin-bottom:.2rem">Extra half days/mo <span style="color:#9ca3af">(avg $${Math.round(avgHalfRate)}/day)</span></label>
+                        <div style="display:flex;align-items:center;gap:.3rem">
+                            <input type="number" id="projExtraHalfDays" value="0" step="1" min="-500" max="500"
+                                class="form-control proj-days-input" style="width:80px;text-align:right">
+                            <span style="color:#6b7280;font-size:.9em">days</span>
+                            <span id="projExtraHalfDaysAmt" style="font-size:.82em;color:#059669;display:none"></span>
+                        </div>
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:.82em;color:#6b7280;margin-bottom:.2rem">Extra full days/mo <span style="color:#9ca3af">(avg $${Math.round(avgFullRate)}/day)</span></label>
+                        <div style="display:flex;align-items:center;gap:.3rem">
+                            <input type="number" id="projExtraFullDays" value="0" step="1" min="-500" max="500"
+                                class="form-control proj-days-input" style="width:80px;text-align:right">
+                            <span style="color:#6b7280;font-size:.9em">days</span>
+                            <span id="projExtraFullDaysAmt" style="font-size:.82em;color:#059669;display:none"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid #e2e8f0">
+                <div style="font-size:.82em;color:#6b7280;font-weight:600;margin-bottom:.25rem">Staffing impact estimate</div>
+                <div style="font-size:.75em;color:#9ca3af;margin-bottom:.6rem">
+                    Based on your current labor cost, you spend about <strong>$${Math.round(laborCostPerChildDay)}/child-day</strong> on staffing.
+                    Extra care days will estimate additional labor at that rate. Override below if you expect a different staffing cost per day.
+                </div>
+                <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-end">
+                    <div>
+                        <label style="display:block;font-size:.82em;color:#6b7280;margin-bottom:.2rem">Staff cost per extra day <span style="color:#9ca3af">(override, or leave 0 to use $${Math.round(laborCostPerChildDay)}/day)</span></label>
+                        <div style="display:flex;align-items:center;gap:.3rem">
+                            <span style="color:#6b7280;font-size:.9em">$</span>
+                            <input type="number" id="projStaffCostPerDay" value="0" step="1" min="0" max="500"
+                                class="form-control proj-days-input" style="width:80px;text-align:right">
+                            <span style="color:#6b7280;font-size:.9em">/day</span>
+                            <span id="projStaffImpactAmt" style="font-size:.82em;color:#dc2626;margin-left:.5rem;display:none"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div id="projWhatIfResult" style="display:none"></div>
         </div>
         </details>`;
@@ -912,14 +963,42 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
         el._projData = {
             totalProjMonthly, ytdActual, futureMonthNums, projRemainingTotal, fullYearProj,
             roomProj, roomOpMonths, closureScale, totalLab, allMoList, annualExpenses,
+            avgHalfRate, avgFullRate, laborCostPerChildDay,
         };
 
         const updateWhatIf = () => {
-            const revPct  = parseFloat(document.getElementById('projRevAdj')?.value)  || 0;
-            const flatAdj = parseFloat(document.getElementById('projFlatAdj')?.value)  || 0;
-            const wagePct = parseFloat(document.getElementById('projWageAdj')?.value)  || 0;
+            const revPct         = parseFloat(document.getElementById('projRevAdj')?.value)       || 0;
+            const flatAdj        = parseFloat(document.getElementById('projFlatAdj')?.value)       || 0;
+            const wagePct        = parseFloat(document.getElementById('projWageAdj')?.value)       || 0;
+            const extraHalfDays  = parseFloat(document.getElementById('projExtraHalfDays')?.value) || 0;
+            const extraFullDays  = parseFloat(document.getElementById('projExtraFullDays')?.value) || 0;
+            const staffOverride  = parseFloat(document.getElementById('projStaffCostPerDay')?.value) || 0;
             const d = el._projData;
             if (!d) return;
+
+            const extraDaysRevPerMo = extraHalfDays * d.avgHalfRate + extraFullDays * d.avgFullRate;
+            const totalExtraDays = extraHalfDays + extraFullDays;
+            const staffCostPerDay = staffOverride > 0 ? staffOverride : d.laborCostPerChildDay;
+            const extraStaffCostPerMo = totalExtraDays * staffCostPerDay;
+
+            // Update day input chips
+            const halfDaysEl = document.getElementById('projExtraHalfDaysAmt');
+            if (halfDaysEl) {
+                if (extraHalfDays !== 0) { halfDaysEl.style.display = ''; halfDaysEl.textContent = `${extraHalfDays > 0 ? '+' : ''}${_fmt$(extraHalfDays * d.avgHalfRate)}/mo`; }
+                else halfDaysEl.style.display = 'none';
+            }
+            const fullDaysEl = document.getElementById('projExtraFullDaysAmt');
+            if (fullDaysEl) {
+                if (extraFullDays !== 0) { fullDaysEl.style.display = ''; fullDaysEl.textContent = `${extraFullDays > 0 ? '+' : ''}${_fmt$(extraFullDays * d.avgFullRate)}/mo`; }
+                else fullDaysEl.style.display = 'none';
+            }
+            const staffImpactEl = document.getElementById('projStaffImpactAmt');
+            if (staffImpactEl) {
+                if (totalExtraDays !== 0) {
+                    staffImpactEl.style.display = '';
+                    staffImpactEl.textContent = `+${_fmt$(extraStaffCostPerMo)}/mo est. labor`;
+                } else staffImpactEl.style.display = 'none';
+            }
 
             // Read per-room extra half/full kids and compute each room's extra monthly revenue
             const roomKidsExtra = {}; // roomId → extra $/mo
@@ -957,7 +1036,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             });
             const kidsExtraPerMo = Object.values(roomKidsExtra).reduce((s, v) => s + v, 0);
 
-            const noChange = revPct === 0 && !anyKids && flatAdj === 0 && wagePct === 0;
+            const noChange = revPct === 0 && !anyKids && flatAdj === 0 && wagePct === 0 && extraHalfDays === 0 && extraFullDays === 0;
             const resultEl = document.getElementById('projWhatIfResult');
             if (!resultEl) return;
             if (noChange) { resultEl.style.display = 'none'; return; }
@@ -978,20 +1057,21 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                             moRev += (roomKidsExtra[r.id] || 0) * scale;
                         }
                     });
-                    adjProjRemaining += moRev + flatAdj * scale;
+                    adjProjRemaining += moRev + (flatAdj + extraDaysRevPerMo) * scale;
                 });
                 adjFullYear = d.ytdActual + adjProjRemaining;
                 adjLabel = 'Adj. Full-Year Revenue';
                 delta = adjFullYear - d.fullYearProj;
             } else {
                 // No future months (prior year or complete year): annualized model
-                const adjMonthly = d.totalProjMonthly * (1 + revPct / 100) + kidsExtraPerMo + flatAdj;
+                const adjMonthly = d.totalProjMonthly * (1 + revPct / 100) + kidsExtraPerMo + flatAdj + extraDaysRevPerMo;
                 adjFullYear = adjMonthly * 12;
                 adjLabel = 'Annualized Estimate';
                 delta = adjFullYear - d.totalProjMonthly * 12;
             }
 
-            const adjAnnualLab = d.totalLab * (1 + wagePct / 100) * (12 / moCount);
+            const adjAnnualLab = d.totalLab * (1 + wagePct / 100) * (12 / moCount)
+                + extraStaffCostPerMo * (hasFuture ? d.futureMonthNums.length : 12);
             const adjNet       = adjFullYear - adjAnnualLab - (d.annualExpenses || 0);
 
             resultEl.style.display = '';
@@ -1005,9 +1085,11 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                             </span>
                         </span>
                     </div>
-                    ${wagePct !== 0 ? `<div class="fin-kpi">
+                    ${(wagePct !== 0 || totalExtraDays !== 0) ? `<div class="fin-kpi">
                         <span class="fin-kpi-label">Adj. Annual Labor</span>
-                        <span class="fin-kpi-value">${_fmt$(adjAnnualLab)}</span>
+                        <span class="fin-kpi-value">${_fmt$(adjAnnualLab)}
+                            ${totalExtraDays !== 0 ? `<span style="font-size:.8em;color:#dc2626">+${_fmt$(extraStaffCostPerMo * (hasFuture ? d.futureMonthNums.length : 12))} staffing</span>` : ''}
+                        </span>
                     </div>
                     <div class="fin-kpi">
                         <span class="fin-kpi-label">Adj. Net (est.)</span>
@@ -1016,7 +1098,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                 </div>`;
         };
 
-        ['projRevAdj','projFlatAdj','projWageAdj'].forEach(id => {
+        ['projRevAdj','projFlatAdj','projWageAdj','projExtraHalfDays','projExtraFullDays','projStaffCostPerDay'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', updateWhatIf);
         });
         document.querySelectorAll('.proj-kids-input').forEach(inp => {
