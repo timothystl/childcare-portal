@@ -244,21 +244,43 @@ async function generateFinanceDashboard() {
 
         // Live revenue per month via Family Billing calculation
         const liveRevByMo = {};
+        const liveDaysByRoomMo = {}; // mo → roomId → { half, full }
         allMoList.forEach(mo => {
             const families = _buildFamilyBillingData(mo, overridesByMo.get(mo) || new Map());
-            liveRevByMo[mo] = families.reduce((s, fam) => s + fam.children.reduce((cs, c) =>
-                cs + (c.hasOverride ? c.overrideAmount : c.subtotal) + (c.changeFees || 0), 0), 0);
+            liveDaysByRoomMo[mo] = {};
+            liveRevByMo[mo] = families.reduce((s, fam) => s + fam.children.reduce((cs, c) => {
+                if (c.roomId) {
+                    if (!liveDaysByRoomMo[mo][c.roomId]) liveDaysByRoomMo[mo][c.roomId] = { half: 0, full: 0 };
+                    liveDaysByRoomMo[mo][c.roomId].half += c.halfDays || 0;
+                    liveDaysByRoomMo[mo][c.roomId].full += c.fullDays || 0;
+                }
+                return cs + (c.hasOverride ? c.overrideAmount : c.subtotal) + (c.changeFees || 0);
+            }, 0), 0);
         });
 
         // Historical billing_summary totals — used as fallback for months with no live registrations
         const historicalRevByMo = {};
+        const historicalDaysByRoomMo = {}; // mo → roomId → { half, full }
         try {
             const rows = await fetchBillingSummary();
             rows.forEach(r => {
                 const mo = (r.month || '').substring(0, 7);
-                if (mo.startsWith(String(year))) historicalRevByMo[mo] = (historicalRevByMo[mo] || 0) + (parseFloat(r.net_billed) || 0);
+                if (!mo.startsWith(String(year))) return;
+                historicalRevByMo[mo] = (historicalRevByMo[mo] || 0) + (parseFloat(r.net_billed) || 0);
+                if (r.room_id) {
+                    if (!historicalDaysByRoomMo[mo]) historicalDaysByRoomMo[mo] = {};
+                    if (!historicalDaysByRoomMo[mo][r.room_id]) historicalDaysByRoomMo[mo][r.room_id] = { half: 0, full: 0 };
+                    historicalDaysByRoomMo[mo][r.room_id].half += r.half_days || 0;
+                    historicalDaysByRoomMo[mo][r.room_id].full += r.full_days || 0;
+                }
             });
         } catch(e) {}
+
+        // Combined day counts per room per month: prefer live data, fall back to billing_summary
+        const daysByRoomMo = {};
+        allMoList.forEach(mo => {
+            daysByRoomMo[mo] = liveRevByMo[mo] > 0 ? (liveDaysByRoomMo[mo] || {}) : (historicalDaysByRoomMo[mo] || {});
+        });
 
         // Combine: use live rev if > 0, else fall back to historical (e.g. Jan-Mar manual entries)
         const { months } = pnl;
@@ -471,7 +493,8 @@ async function generateFinanceDashboard() {
                     <h4 class="fin-chart-title">Labor as % of Revenue</h4>
                     <canvas id="chartLaborPct"></canvas>
                 </div>
-            </div>`;
+            </div>
+            <div id="finAttendanceProj"></div>`;
 
         // Revenue vs Labor (+ Net if expenses exist) bar chart
         _destroyChart('revLabor');
@@ -549,8 +572,238 @@ async function generateFinanceDashboard() {
             }
         );
 
+        // Attendance-based projection section
+        _renderAttendanceProjection(
+            document.getElementById('finAttendanceProj'),
+            { year, allMoList, daysByRoomMo, liveRevByMo, historicalRevByMo, totalLab,
+              annualExpenses: totalExp * (12 / (allMonths.length || 1)) }
+        );
+
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+// ── Attendance-Based Revenue Projection ──────────────────────
+async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, liveRevByMo, historicalRevByMo, totalLab, annualExpenses }) {
+    if (!el) return;
+    try {
+        await loadRateSettings();
+
+        const today = new Date();
+        const todayYear  = today.getFullYear();
+        const todayMonth = today.getMonth() + 1;
+
+        const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
+
+        // Per-room: accumulate half/full days across months where the room had attendance
+        const roomStats = {};
+        activeRooms.forEach(r => { roomStats[r.id] = { halfTotal: 0, fullTotal: 0, moCount: 0 }; });
+
+        allMoList.forEach(mo => {
+            const dayData = daysByRoomMo[mo] || {};
+            activeRooms.forEach(r => {
+                const d = dayData[r.id];
+                if (!d || (d.half === 0 && d.full === 0)) return;
+                roomStats[r.id].halfTotal += d.half;
+                roomStats[r.id].fullTotal += d.full;
+                roomStats[r.id].moCount++;
+            });
+        });
+
+        // Build per-room projection rows
+        const roomProj = activeRooms.map(r => {
+            const st = roomStats[r.id];
+            if (st.moCount === 0) return null;
+            const avgHalf = st.halfTotal / st.moCount;
+            const avgFull = st.fullTotal / st.moCount;
+            const halfRate = r.halfDayRate || 0;
+            const fullRate = r.fullDayRate || 0;
+            const projMonthly = avgHalf * halfRate + avgFull * fullRate;
+            const avgTotalDays = avgHalf + avgFull;
+            return { id: r.id, label: r.label, avgHalf, avgFull, avgTotalDays, halfRate, fullRate, projMonthly, moCount: st.moCount };
+        }).filter(Boolean);
+
+        if (!roomProj.length) { el.innerHTML = ''; return; }
+
+        const totalProjMonthly = roomProj.reduce((s, r) => s + r.projMonthly, 0);
+        const centerAvgDaysPerKid = roomProj.reduce((s, r) => s + r.avgTotalDays, 0) / roomProj.length;
+
+        // Remaining months to project (months after the last month in allMoList)
+        const lastMoNum      = parseInt(allMoList[allMoList.length - 1].split('-')[1]);
+        const remainingMonths = year === todayYear ? Math.max(0, 12 - lastMoNum) : 0;
+
+        // YTD actual = sum of actual revenue (live preferred, historical fallback)
+        const ytdActual = allMoList.reduce((s, mo) =>
+            s + (liveRevByMo[mo] > 0 ? liveRevByMo[mo] : (historicalRevByMo[mo] || 0)), 0);
+
+        const fullYearProj = ytdActual + totalProjMonthly * remainingMonths;
+
+        // ── Render HTML ───────────────────────────────────────
+        const rowHtml = roomProj.map(r => `<tr>
+            <td>${escHtml(r.label)}</td>
+            <td class="report-num">${r.moCount}</td>
+            <td class="report-num">${r.avgHalf > 0 ? r.avgHalf.toFixed(1) : '—'}</td>
+            <td class="report-num">${r.avgFull > 0 ? r.avgFull.toFixed(1) : '—'}</td>
+            <td class="report-num" style="color:#6b7280;font-size:.88em">
+                ${r.halfRate > 0 && r.avgHalf > 0 ? `$${r.halfRate}` : ''}${r.halfRate > 0 && r.avgHalf > 0 && r.fullRate > 0 ? ' / ' : ''}${r.fullRate > 0 ? `$${r.fullRate}` : ''}
+            </td>
+            <td class="report-num report-revenue"><strong>${_fmt$(r.projMonthly)}</strong></td>
+        </tr>`).join('');
+
+        const budgetVsHtml = _annualBudget?.income
+            ? `<div class="fin-kpi">
+                <span class="fin-kpi-label">vs. Annual Budget</span>
+                <span class="fin-kpi-value ${fullYearProj >= _annualBudget.income ? 'fin-positive' : 'fin-negative'}">
+                    ${fullYearProj >= _annualBudget.income ? '+' : ''}${_fmt$(fullYearProj - _annualBudget.income)}
+                </span>
+              </div>` : '';
+
+        el.innerHTML = `
+        <details open style="margin-top:1.5rem">
+        <summary style="cursor:pointer;font-weight:600;font-size:.95rem;margin-bottom:.75rem">▸ Attendance-Based Revenue Projection</summary>
+        <p style="font-size:.85em;color:#6b7280;margin:.25rem 0 .75rem">
+            Avg half/full attendance days per room × current room rates.
+            ${remainingMonths > 0
+                ? `Full-year = YTD actual + avg/month × <strong>${remainingMonths}</strong> remaining month${remainingMonths !== 1 ? 's' : ''} (Aug–Dec).`
+                : year < todayYear ? 'Past year — no remaining months to project.' : ''}
+        </p>
+        <div style="overflow-x:auto;margin-bottom:.75rem">
+        <table class="report-table" style="max-width:740px">
+            <thead><tr>
+                <th>Room</th>
+                <th class="report-num">Months of Data</th>
+                <th class="report-num">Avg Half Days/Mo</th>
+                <th class="report-num">Avg Full Days/Mo</th>
+                <th class="report-num">Rate H/F</th>
+                <th class="report-num">Proj. Rev/Mo</th>
+            </tr></thead>
+            <tbody>${rowHtml}</tbody>
+            <tfoot><tr class="report-total-row">
+                <td colspan="5"><strong>Total Projected Monthly</strong></td>
+                <td class="report-num report-revenue"><strong>${_fmt$(totalProjMonthly)}</strong></td>
+            </tr></tfoot>
+        </table>
+        </div>
+        ${remainingMonths > 0 ? `
+        <div class="fin-kpi-row" style="margin-bottom:1rem">
+            <div class="fin-kpi">
+                <span class="fin-kpi-label">YTD Actual (${allMoList.length} mo)</span>
+                <span class="fin-kpi-value fin-positive">${_fmt$(ytdActual)}</span>
+            </div>
+            <div class="fin-kpi">
+                <span class="fin-kpi-label">+ Projected Remaining (${remainingMonths} mo × ${_fmt$(totalProjMonthly)}/mo)</span>
+                <span class="fin-kpi-value">${_fmt$(totalProjMonthly * remainingMonths)}</span>
+            </div>
+            <div class="fin-kpi">
+                <span class="fin-kpi-label">Full-Year Projection</span>
+                <span class="fin-kpi-value fin-positive"><strong>${_fmt$(fullYearProj)}</strong></span>
+            </div>
+            ${budgetVsHtml}
+        </div>` : `
+        <div class="fin-kpi-row" style="margin-bottom:1rem">
+            <div class="fin-kpi">
+                <span class="fin-kpi-label">Avg Monthly Revenue (attendance-based)</span>
+                <span class="fin-kpi-value fin-positive">${_fmt$(totalProjMonthly)}</span>
+            </div>
+        </div>`}
+
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:1rem;max-width:740px;margin-top:.25rem">
+            <h5 style="margin:0 0 .6rem;font-weight:600;font-size:.92rem">What-If Adjustments</h5>
+            <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.75rem">
+                <div>
+                    <label style="display:block;font-size:.82em;color:#6b7280;margin-bottom:.2rem">Revenue % change</label>
+                    <div style="display:flex;align-items:center;gap:.3rem">
+                        <input type="number" id="projRevAdj" value="0" step="1" min="-50" max="100"
+                            class="form-control" style="width:80px;text-align:right">
+                        <span style="color:#6b7280;font-size:.9em">%</span>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-size:.82em;color:#6b7280;margin-bottom:.2rem">Extra kids / room</label>
+                    <div style="display:flex;align-items:center;gap:.3rem">
+                        <input type="number" id="projKidsAdj" value="0" step="1" min="-20" max="20"
+                            class="form-control" style="width:80px;text-align:right">
+                        <span style="color:#6b7280;font-size:.9em">kids</span>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-size:.82em;color:#6b7280;margin-bottom:.2rem">Wages % change</label>
+                    <div style="display:flex;align-items:center;gap:.3rem">
+                        <input type="number" id="projWageAdj" value="0" step="1" min="-50" max="100"
+                            class="form-control" style="width:80px;text-align:right">
+                        <span style="color:#6b7280;font-size:.9em">%</span>
+                    </div>
+                </div>
+            </div>
+            <div id="projWhatIfResult" style="display:none"></div>
+        </div>
+        </details>`;
+
+        // Store projection data on the element for the what-if handler
+        el._projData = {
+            totalProjMonthly, ytdActual, remainingMonths, fullYearProj,
+            roomProj, centerAvgDaysPerKid, totalLab, allMoList, annualExpenses,
+        };
+
+        const updateWhatIf = () => {
+            const revPct  = parseFloat(document.getElementById('projRevAdj')?.value)  || 0;
+            const kids    = parseFloat(document.getElementById('projKidsAdj')?.value)  || 0;
+            const wagePct = parseFloat(document.getElementById('projWageAdj')?.value)  || 0;
+            const d = el._projData;
+            if (!d) return;
+
+            // Extra enrollment revenue: kids × avg days/child × avg full-day rate across rooms
+            const avgFullRate = d.roomProj.reduce((s, r) => s + r.fullRate, 0) / (d.roomProj.length || 1);
+            const enrollExtra = kids * d.centerAvgDaysPerKid * avgFullRate;
+
+            const adjProjMonthly = d.totalProjMonthly * (1 + revPct / 100) + enrollExtra;
+            const adjFullYear    = d.ytdActual + adjProjMonthly * d.remainingMonths;
+
+            // Annualized labor baseline (from allMoList data period → scale to 12 months)
+            const moCount       = d.allMoList.length || 1;
+            const adjAnnualLab  = d.totalLab * (1 + wagePct / 100) * (12 / moCount);
+            const adjNet        = adjFullYear - adjAnnualLab - (d.annualExpenses || 0);
+
+            const resultEl = document.getElementById('projWhatIfResult');
+            if (!resultEl) return;
+
+            const delta = adjFullYear - d.fullYearProj;
+            const noChange = revPct === 0 && kids === 0 && wagePct === 0;
+            if (noChange) { resultEl.style.display = 'none'; return; }
+
+            resultEl.style.display = '';
+            resultEl.innerHTML = `
+                <div class="fin-kpi-row" style="margin-top:.5rem;padding-top:.5rem;border-top:1px solid #e2e8f0">
+                    <div class="fin-kpi">
+                        <span class="fin-kpi-label">Adj. Proj. Monthly</span>
+                        <span class="fin-kpi-value">${_fmt$(adjProjMonthly)}</span>
+                    </div>
+                    ${d.remainingMonths > 0 ? `<div class="fin-kpi">
+                        <span class="fin-kpi-label">Adj. Full-Year Revenue</span>
+                        <span class="fin-kpi-value fin-positive"><strong>${_fmt$(adjFullYear)}</strong>
+                            <span class="fin-kpi-target ${delta >= 0 ? 'fin-positive' : 'fin-negative'}" style="font-size:.8em">
+                                ${delta >= 0 ? '+' : ''}${_fmt$(delta)} vs base
+                            </span>
+                        </span>
+                    </div>` : ''}
+                    ${wagePct !== 0 ? `<div class="fin-kpi">
+                        <span class="fin-kpi-label">Adj. Annual Labor</span>
+                        <span class="fin-kpi-value">${_fmt$(adjAnnualLab)}</span>
+                    </div>
+                    <div class="fin-kpi">
+                        <span class="fin-kpi-label">Adj. Net (est.)</span>
+                        <span class="fin-kpi-value ${adjNet >= 0 ? 'fin-positive' : 'fin-negative'}">${_fmt$(adjNet)}</span>
+                    </div>` : ''}
+                </div>`;
+        };
+
+        ['projRevAdj','projKidsAdj','projWageAdj'].forEach(id => {
+            document.getElementById(id)?.addEventListener('input', updateWhatIf);
+        });
+
+    } catch(e) {
+        console.warn('Attendance projection:', e);
     }
 }
 
