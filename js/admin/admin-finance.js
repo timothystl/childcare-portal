@@ -197,10 +197,15 @@ async function generateFinanceDashboard() {
     const container = document.getElementById('financeDashContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
 
-    if (month) {
+    if (month && month !== 'ytd') {
         await _generateMonthDetail(year, month, container);
         return;
     }
+
+    // For YTD: cap at the current month when viewing the current year
+    const todayYearGlobal  = new Date().getFullYear();
+    const todayMonthGlobal = new Date().getMonth() + 1; // 1–12
+    const ytdCutoff = (month === 'ytd' && year === todayYearGlobal) ? todayMonthGlobal : 12;
 
     try {
         await _ensureBudget(year);
@@ -213,16 +218,19 @@ async function generateFinanceDashboard() {
         // Labor comes from _buildRoomPnlData (staff schedules/clock events).
         // Revenue comes from _buildFamilyBillingData per month — same calculation as the
         // month detail view and Family Billing report — to guarantee consistent numbers.
+        const endDate = month === 'ytd' && year === todayYearGlobal
+            ? new Date(year, todayMonthGlobal - 1 + 1, 0).toISOString().split('T')[0]  // last day of current month
+            : `${year}-12-31`;
         const [pnl] = await Promise.all([
-            _buildRoomPnlData(`${year}-01-01`, `${year}-12-31`),
+            _buildRoomPnlData(`${year}-01-01`, endDate),
         ]);
 
         // Fresh data for revenue calculation
         try { allFamiliesData = await fetchAllFamilies({ includeArchived: true }); _discountMap = null; } catch(e) {}
         try { const f = await fetchAllRegistrations(); if (f?.length) allRegistrations = f; } catch(e) {}
 
-        // Billing overrides for all months in parallel
-        const allMoList = Array.from({length: 12}, (_, i) => `${year}-${String(i+1).padStart(2,'0')}`);
+        // Billing overrides for months in range (YTD or full year)
+        const allMoList = Array.from({length: ytdCutoff}, (_, i) => `${year}-${String(i+1).padStart(2,'0')}`);
         const overridesByMo = new Map();
         await Promise.all(allMoList.map(async mo => {
             try {
@@ -286,7 +294,8 @@ async function generateFinanceDashboard() {
             : 0;
         const hasEnteredActuals = enteredActualExp > 0;
         const totalExp    = hasEnteredActuals ? enteredActualExp : totalExpLines;
-        const expLabel    = hasEnteredActuals ? 'YTD Other Expenses (actual)' : (totalExpLines > 0 ? 'YTD Other Expenses (est.)' : '');
+        const periodLabel = month === 'ytd' ? 'YTD' : 'Annual';
+        const expLabel    = hasEnteredActuals ? `${periodLabel} Other Expenses (actual)` : (totalExpLines > 0 ? `${periodLabel} Other Expenses (est.)` : '');
 
         // Rebuild moNetArr using the best expense figure per-month (Expense Lines; actuals are YTD totals not per-month)
         allMonths.forEach((mo, i) => {
@@ -422,20 +431,20 @@ async function generateFinanceDashboard() {
         container.innerHTML = `
             <div class="fin-kpi-row">
                 <div class="fin-kpi">
-                    <span class="fin-kpi-label">YTD Revenue</span>
+                    <span class="fin-kpi-label">${periodLabel} Revenue</span>
                     <span class="fin-kpi-value fin-positive">${_fmt$(totalRev)}</span>
                 </div>
                 <div class="fin-kpi">
-                    <span class="fin-kpi-label">YTD Labor</span>
+                    <span class="fin-kpi-label">${periodLabel} Labor</span>
                     <span class="fin-kpi-value">${_fmt$(totalLab)}</span>
                 </div>
                 ${hasExpenses ? `
                 <div class="fin-kpi">
-                    <span class="fin-kpi-label">${expLabel || 'YTD Other Expenses'}</span>
+                    <span class="fin-kpi-label">${expLabel || `${periodLabel} Other Expenses`}</span>
                     <span class="fin-kpi-value">${_fmt$(totalExp)}</span>
                 </div>` : ''}
                 <div class="fin-kpi">
-                    <span class="fin-kpi-label">YTD Net${hasExpenses ? '' : ' (before expenses)'}</span>
+                    <span class="fin-kpi-label">${periodLabel} Net${hasExpenses ? '' : ' (before expenses)'}</span>
                     <span class="fin-kpi-value ${marginClass}">${_fmt$(totalMargin)}</span>
                 </div>
                 <div class="fin-kpi">
