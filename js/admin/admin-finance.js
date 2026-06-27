@@ -411,7 +411,7 @@ async function generateFinanceDashboard() {
                             <td class="report-num" style="color:#6b7280">${_fmt$(expYTD(b.income))}</td>
                             <td class="report-num report-revenue">${_fmt$(totalRev)}</td>
                             <td class="report-num">${varSpan(totalRev, expYTD(b.income), false)}</td>
-                            <td class="report-num" style="color:#6b7280">${projRev > 0 ? _fmt$(projRev) : '—'}</td>
+                            <td class="report-num" style="color:#6b7280" id="finBvaProjRev">${projRev > 0 ? _fmt$(projRev) : '—'}</td>
                         </tr>
                         <tr>
                             <td>Wages / Labor <span style="font-size:.78em;color:#6b7280">(from payroll data)</span></td>
@@ -439,7 +439,7 @@ async function generateFinanceDashboard() {
                             <td class="report-num" style="color:#6b7280"><strong>${_fmt$(bNetExp)}</strong></td>
                             <td class="report-num"><strong>${_fmt$(aTotalExp > 0 ? aNet : totalMargin)}</strong></td>
                             <td class="report-num">${varSpan(aTotalExp > 0 ? aNet : totalMargin, bNetExp, false)}</td>
-                            <td class="report-num" style="color:#6b7280"><strong>${_fmt$(projNet)}</strong></td>
+                            <td class="report-num" style="color:#6b7280" id="finBvaProjNet" data-lab="${projLab}" data-exp="${projExp}"><strong>${_fmt$(projNet)}</strong></td>
                         </tr>
                     </tbody>
                 </table>
@@ -737,6 +737,21 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             s + (liveRevByMo[mo] > 0 ? liveRevByMo[mo] : (historicalRevByMo[mo] || 0)), 0);
 
         const fullYearProj = ytdActual + projRemainingTotal;
+
+        // Update Budget vs Actuals projected revenue with attendance-based number
+        // (BVA uses a simple YTD×2 annualization; attendance-based is more accurate
+        //  since regular rooms run year-round and fall enrollment may differ from spring)
+        const bvaProjRevEl = document.getElementById('finBvaProjRev');
+        const bvaProjNetEl = document.getElementById('finBvaProjNet');
+        if (bvaProjRevEl && fullYearProj > 0) {
+            bvaProjRevEl.innerHTML = `${_fmt$(fullYearProj)} <span style="font-size:.78em;color:#9ca3af" title="Attendance-based projection">(att.)</span>`;
+            if (bvaProjNetEl) {
+                const pLab = parseFloat(bvaProjNetEl.dataset.lab) || 0;
+                const pExp = parseFloat(bvaProjNetEl.dataset.exp) || 0;
+                const attNet = fullYearProj - pLab - pExp;
+                bvaProjNetEl.innerHTML = `<strong>${_fmt$(attNet)}</strong>`;
+            }
+        }
 
         // ── Render HTML ───────────────────────────────────────
         const rowHtml = roomProj.map(r => {
