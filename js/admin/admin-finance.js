@@ -874,7 +874,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                         const revenuePerKid = r.projMonthly / estimatedKids;
                         return `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:.5rem .6rem">
                             <div style="font-size:.8em;font-weight:600;color:#374151;margin-bottom:.25rem">${escHtml(r.label)}</div>
-                            <div style="font-size:.75em;color:#9ca3af;margin-bottom:.35rem">~${estimatedKids} kids avg · ${_fmt$(revenuePerKid)}/kid/mo</div>
+                            <div style="font-size:.75em;color:#9ca3af;margin-bottom:.35rem">~${estimatedKids} enrolled/mo · ${_fmt$(revenuePerKid)}/kid/mo</div>
                             <div style="display:flex;align-items:center;gap:.3rem">
                                 <input type="number" id="projKidsAdj_${escHtml(r.id)}" value="0" step="1" min="-20" max="20"
                                     class="form-control proj-kids-input" style="width:64px;text-align:right;padding:.25rem .4rem;font-size:.9em">
