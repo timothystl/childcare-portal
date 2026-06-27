@@ -626,7 +626,6 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
         if (!roomProj.length) { el.innerHTML = ''; return; }
 
         const totalProjMonthly = roomProj.reduce((s, r) => s + r.projMonthly, 0);
-        const centerAvgDaysPerKid = roomProj.reduce((s, r) => s + r.avgTotalDays, 0) / roomProj.length;
 
         // ── Determine operational months per room from all-years billing_summary ──
         // This prevents seasonal rooms (Summer Camp) from being projected year-round.
@@ -655,9 +654,16 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
 
         // ── Closure scaling: count weekday closures per future month ──
         // weekdays_in_month − closure_days_in_month gives the operating fraction.
-        const lastMoNum = parseInt(allMoList[allMoList.length - 1].split('-')[1]);
-        const futureMonthNums = year === todayYear
-            ? Array.from({ length: Math.max(0, 12 - lastMoNum) }, (_, i) => lastMoNum + 1 + i)
+        // Use the last month that has actual data — not the last month in allMoList,
+        // which for "All months" view is always December, leaving no future months.
+        let lastDataMoNum = 0;
+        allMoList.forEach(mo => {
+            const dayData = daysByRoomMo[mo] || {};
+            const hasData = activeRooms.some(r => { const d = dayData[r.id]; return d && (d.half > 0 || d.full > 0); });
+            if (hasData) { const n = parseInt(mo.split('-')[1]); if (n > lastDataMoNum) lastDataMoNum = n; }
+        });
+        const futureMonthNums = (year === todayYear && lastDataMoNum > 0 && lastDataMoNum < 12)
+            ? Array.from({ length: 12 - lastDataMoNum }, (_, i) => lastDataMoNum + 1 + i)
             : [];
 
         // closure scale: moNum → fraction (0..1), default 1 (full month)
@@ -840,6 +846,14 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                     </div>
                 </div>
                 <div>
+                    <label style="display:block;font-size:.82em;color:#6b7280;margin-bottom:.2rem">Flat $ / month extra</label>
+                    <div style="display:flex;align-items:center;gap:.3rem">
+                        <span style="color:#6b7280;font-size:.9em">$</span>
+                        <input type="number" id="projFlatAdj" value="0" step="100" min="-50000" max="50000"
+                            class="form-control" style="width:100px;text-align:right">
+                    </div>
+                </div>
+                <div>
                     <label style="display:block;font-size:.82em;color:#6b7280;margin-bottom:.2rem">Wages % change</label>
                     <div style="display:flex;align-items:center;gap:.3rem">
                         <input type="number" id="projWageAdj" value="0" step="1" min="-50" max="100"
@@ -855,22 +869,21 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
         // Store projection data on the element for the what-if handler
         el._projData = {
             totalProjMonthly, ytdActual, futureMonthNums, projRemainingTotal, fullYearProj,
-            roomProj, roomOpMonths, closureScale, centerAvgDaysPerKid, totalLab, allMoList, annualExpenses,
+            roomProj, roomOpMonths, closureScale, totalLab, allMoList, annualExpenses,
         };
 
         const updateWhatIf = () => {
             const revPct  = parseFloat(document.getElementById('projRevAdj')?.value)  || 0;
             const kids    = parseFloat(document.getElementById('projKidsAdj')?.value)  || 0;
+            const flatAdj = parseFloat(document.getElementById('projFlatAdj')?.value)  || 0;
             const wagePct = parseFloat(document.getElementById('projWageAdj')?.value)  || 0;
             const d = el._projData;
             if (!d) return;
 
-            // Extra enrollment revenue: kids × avg days/child × avg full-day rate (for regular rooms only)
-            const regularRooms = d.roomProj.filter(r => d.roomOpMonths[r.id]?.size >= 9);
-            const avgFullRate = regularRooms.length > 0
-                ? regularRooms.reduce((s, r) => s + r.fullRate, 0) / regularRooms.length
-                : d.roomProj.reduce((s, r) => s + r.fullRate, 0) / (d.roomProj.length || 1);
-            const enrollExtraPerMo = kids * d.centerAvgDaysPerKid * avgFullRate;
+            // Extra kids: assume each extra kid attends ~9 days/month at each room's blended daily rate.
+            // blendedDailyRate = projMonthly / avgTotalDays (revenue per child-day in that room).
+            // estimatedKids = avgTotalDays / 9 (assumed 9 days/mo per kid).
+            // extra per room/mo = kids × blendedDailyRate × 9 = kids × (projMonthly / estimatedKids).
 
             // Recompute future months with adjustments
             let adjProjRemaining = 0;
@@ -879,12 +892,15 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                 let moRev = 0;
                 d.roomProj.forEach(r => {
                     if (d.roomOpMonths[r.id]?.has(m)) {
-                        moRev += r.projMonthly * (1 + revPct / 100) * scale;
+                        const base = r.projMonthly * (1 + revPct / 100) * scale;
+                        // Only add extra kids to regular (year-round) rooms
+                        const isRegular = d.roomOpMonths[r.id]?.size >= 9;
+                        const estimatedKids = Math.max(1, Math.round(r.avgTotalDays / 9));
+                        const kidsExtra = isRegular ? kids * (r.projMonthly / estimatedKids) * scale : 0;
+                        moRev += base + kidsExtra;
                     }
                 });
-                // Extra kids only for regular rooms (not seasonal)
-                const regRoomsInMo = d.roomProj.filter(r => d.roomOpMonths[r.id]?.has(m) && d.roomOpMonths[r.id]?.size >= 9);
-                adjProjRemaining += moRev + enrollExtraPerMo * regRoomsInMo.length * scale;
+                adjProjRemaining += moRev + flatAdj * scale;
             });
 
             const adjFullYear   = d.ytdActual + adjProjRemaining;
@@ -896,7 +912,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             if (!resultEl) return;
 
             const delta = adjFullYear - d.fullYearProj;
-            const noChange = revPct === 0 && kids === 0 && wagePct === 0;
+            const noChange = revPct === 0 && kids === 0 && flatAdj === 0 && wagePct === 0;
             if (noChange) { resultEl.style.display = 'none'; return; }
 
             resultEl.style.display = '';
@@ -921,7 +937,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                 </div>`;
         };
 
-        ['projRevAdj','projKidsAdj','projWageAdj'].forEach(id => {
+        ['projRevAdj','projKidsAdj','projFlatAdj','projWageAdj'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', updateWhatIf);
         });
 
