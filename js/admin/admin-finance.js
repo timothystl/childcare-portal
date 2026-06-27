@@ -880,52 +880,68 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             const d = el._projData;
             if (!d) return;
 
-            // Extra kids: assume each extra kid attends ~9 days/month at each room's blended daily rate.
-            // blendedDailyRate = projMonthly / avgTotalDays (revenue per child-day in that room).
-            // estimatedKids = avgTotalDays / 9 (assumed 9 days/mo per kid).
-            // extra per room/mo = kids × blendedDailyRate × 9 = kids × (projMonthly / estimatedKids).
-
-            // Recompute future months with adjustments
-            let adjProjRemaining = 0;
-            d.futureMonthNums.forEach(m => {
-                const scale = d.closureScale[m] || 1;
-                let moRev = 0;
-                d.roomProj.forEach(r => {
-                    if (d.roomOpMonths[r.id]?.has(m)) {
-                        const base = r.projMonthly * (1 + revPct / 100) * scale;
-                        // Only add extra kids to regular (year-round) rooms
-                        const isRegular = d.roomOpMonths[r.id]?.size >= 9;
-                        const estimatedKids = Math.max(1, Math.round(r.avgTotalDays / 9));
-                        const kidsExtra = isRegular ? kids * (r.projMonthly / estimatedKids) * scale : 0;
-                        moRev += base + kidsExtra;
-                    }
-                });
-                adjProjRemaining += moRev + flatAdj * scale;
-            });
-
-            const adjFullYear   = d.ytdActual + adjProjRemaining;
-            const moCount       = d.allMoList.length || 1;
-            const adjAnnualLab  = d.totalLab * (1 + wagePct / 100) * (12 / moCount);
-            const adjNet        = adjFullYear - adjAnnualLab - (d.annualExpenses || 0);
-
+            const noChange = revPct === 0 && kids === 0 && flatAdj === 0 && wagePct === 0;
             const resultEl = document.getElementById('projWhatIfResult');
             if (!resultEl) return;
-
-            const delta = adjFullYear - d.fullYearProj;
-            const noChange = revPct === 0 && kids === 0 && flatAdj === 0 && wagePct === 0;
             if (noChange) { resultEl.style.display = 'none'; return; }
+
+            // Compute per-room extra-kids revenue: each extra kid contributes proportionally
+            // to the room's monthly revenue. estimatedKids = avgTotalDays / 9 (≈9 days/mo/kid).
+            const kidsExtraPerMo = d.roomProj.reduce((s, r) => {
+                if (d.roomOpMonths[r.id]?.size < 9) return s; // skip seasonal rooms
+                const estimatedKids = Math.max(1, Math.round(r.avgTotalDays / 9));
+                return s + kids * (r.projMonthly / estimatedKids);
+            }, 0);
+
+            const hasFuture = d.futureMonthNums.length > 0;
+            let adjFullYear, adjLabel, delta;
+            const moCount = d.allMoList.length || 1;
+
+            if (hasFuture) {
+                // Current year with remaining months: adjust the future projection
+                let adjProjRemaining = 0;
+                d.futureMonthNums.forEach(m => {
+                    const scale = d.closureScale[m] || 1;
+                    let moRev = 0;
+                    d.roomProj.forEach(r => {
+                        if (d.roomOpMonths[r.id]?.has(m)) {
+                            moRev += r.projMonthly * (1 + revPct / 100) * scale;
+                        }
+                    });
+                    const regRoomsInMo = d.roomProj.filter(r => d.roomOpMonths[r.id]?.has(m) && d.roomOpMonths[r.id]?.size >= 9).length;
+                    const kidsExtra = d.roomProj.reduce((s, r) => {
+                        if (!d.roomOpMonths[r.id]?.has(m) || d.roomOpMonths[r.id]?.size < 9) return s;
+                        const est = Math.max(1, Math.round(r.avgTotalDays / 9));
+                        return s + kids * (r.projMonthly / est) * scale;
+                    }, 0);
+                    adjProjRemaining += moRev + kidsExtra + flatAdj * scale;
+                });
+                adjFullYear = d.ytdActual + adjProjRemaining;
+                adjLabel = 'Adj. Full-Year Revenue';
+                delta = adjFullYear - d.fullYearProj;
+            } else {
+                // No future months (prior year or complete year): annualized model —
+                // "what would a full year look like at these levels?"
+                const adjMonthly = d.totalProjMonthly * (1 + revPct / 100) + kidsExtraPerMo + flatAdj;
+                adjFullYear = adjMonthly * 12;
+                adjLabel = 'Annualized Estimate';
+                delta = adjFullYear - d.totalProjMonthly * 12; // vs unadjusted annualized
+            }
+
+            const adjAnnualLab = d.totalLab * (1 + wagePct / 100) * (12 / moCount);
+            const adjNet       = adjFullYear - adjAnnualLab - (d.annualExpenses || 0);
 
             resultEl.style.display = '';
             resultEl.innerHTML = `
                 <div class="fin-kpi-row" style="margin-top:.5rem;padding-top:.5rem;border-top:1px solid #e2e8f0">
-                    ${d.futureMonthNums.length > 0 ? `<div class="fin-kpi">
-                        <span class="fin-kpi-label">Adj. Full-Year Revenue</span>
+                    <div class="fin-kpi">
+                        <span class="fin-kpi-label">${adjLabel}</span>
                         <span class="fin-kpi-value fin-positive"><strong>${_fmt$(adjFullYear)}</strong>
                             <span class="fin-kpi-target ${delta >= 0 ? 'fin-positive' : 'fin-negative'}" style="font-size:.8em">
                                 ${delta >= 0 ? '+' : ''}${_fmt$(delta)} vs base
                             </span>
                         </span>
-                    </div>` : ''}
+                    </div>
                     ${wagePct !== 0 ? `<div class="fin-kpi">
                         <span class="fin-kpi-label">Adj. Annual Labor</span>
                         <span class="fin-kpi-value">${_fmt$(adjAnnualLab)}</span>
