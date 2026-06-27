@@ -244,15 +244,19 @@ async function generateFinanceDashboard() {
 
         // Live revenue per month via Family Billing calculation
         const liveRevByMo = {};
-        const liveDaysByRoomMo = {}; // mo → roomId → { half, full }
+        const liveDaysByRoomMo = {};    // mo → roomId → { half, full }
+        const liveRevByRoomMo = {};     // mo → roomId → actual billed $ (includes discounts/overrides)
         allMoList.forEach(mo => {
             const families = _buildFamilyBillingData(mo, overridesByMo.get(mo) || new Map());
             liveDaysByRoomMo[mo] = {};
+            liveRevByRoomMo[mo] = {};
             liveRevByMo[mo] = families.reduce((s, fam) => s + fam.children.reduce((cs, c) => {
                 if (c.roomId) {
                     if (!liveDaysByRoomMo[mo][c.roomId]) liveDaysByRoomMo[mo][c.roomId] = { half: 0, full: 0 };
                     liveDaysByRoomMo[mo][c.roomId].half += c.halfDays || 0;
                     liveDaysByRoomMo[mo][c.roomId].full += c.fullDays || 0;
+                    const childRev = (c.hasOverride ? c.overrideAmount : c.subtotal) + (c.changeFees || 0);
+                    liveRevByRoomMo[mo][c.roomId] = (liveRevByRoomMo[mo][c.roomId] || 0) + childRev;
                 }
                 return cs + (c.hasOverride ? c.overrideAmount : c.subtotal) + (c.changeFees || 0);
             }, 0), 0);
@@ -261,6 +265,7 @@ async function generateFinanceDashboard() {
         // Historical billing_summary totals — used as fallback for months with no live registrations
         const historicalRevByMo = {};
         const historicalDaysByRoomMo = {}; // mo → roomId → { half, full }
+        const historicalRevByRoomMo = {};  // mo → roomId → net_billed (includes discounts)
         try {
             const rows = await fetchBillingSummary();
             rows.forEach(r => {
@@ -272,14 +277,19 @@ async function generateFinanceDashboard() {
                     if (!historicalDaysByRoomMo[mo][r.room_id]) historicalDaysByRoomMo[mo][r.room_id] = { half: 0, full: 0 };
                     historicalDaysByRoomMo[mo][r.room_id].half += r.half_days || 0;
                     historicalDaysByRoomMo[mo][r.room_id].full += r.full_days || 0;
+                    if (!historicalRevByRoomMo[mo]) historicalRevByRoomMo[mo] = {};
+                    historicalRevByRoomMo[mo][r.room_id] = (historicalRevByRoomMo[mo][r.room_id] || 0) + (parseFloat(r.net_billed) || 0);
                 }
             });
         } catch(e) {}
 
-        // Combined day counts per room per month: prefer live data, fall back to billing_summary
+        // Combined day counts and revenue per room per month: prefer live data, fall back to billing_summary
         const daysByRoomMo = {};
+        const revByRoomMo = {};
         allMoList.forEach(mo => {
-            daysByRoomMo[mo] = liveRevByMo[mo] > 0 ? (liveDaysByRoomMo[mo] || {}) : (historicalDaysByRoomMo[mo] || {});
+            const useLive = liveRevByMo[mo] > 0;
+            daysByRoomMo[mo] = useLive ? (liveDaysByRoomMo[mo] || {}) : (historicalDaysByRoomMo[mo] || {});
+            revByRoomMo[mo]  = useLive ? (liveRevByRoomMo[mo]  || {}) : (historicalRevByRoomMo[mo]  || {});
         });
 
         // Combine: use live rev if > 0, else fall back to historical (e.g. Jan-Mar manual entries)
@@ -575,7 +585,7 @@ async function generateFinanceDashboard() {
         // Attendance-based projection section
         _renderAttendanceProjection(
             document.getElementById('finAttendanceProj'),
-            { year, allMoList, daysByRoomMo, liveRevByMo, historicalRevByMo, totalLab,
+            { year, allMoList, daysByRoomMo, revByRoomMo, liveRevByMo, historicalRevByMo, totalLab,
               annualExpenses: totalExp * (12 / (allMonths.length || 1)) }
         );
 
@@ -585,7 +595,7 @@ async function generateFinanceDashboard() {
 }
 
 // ── Attendance-Based Revenue Projection ──────────────────────
-async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, liveRevByMo, historicalRevByMo, totalLab, annualExpenses }) {
+async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, revByRoomMo, liveRevByMo, historicalRevByMo, totalLab, annualExpenses }) {
     if (!el) return;
     try {
         await loadRateSettings();
@@ -595,22 +605,26 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
 
         const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
 
-        // Per-room: accumulate half/full days across months where the room had attendance (current year)
+        // Per-room: accumulate half/full days and actual revenue across months with attendance
         const roomStats = {};
-        activeRooms.forEach(r => { roomStats[r.id] = { halfTotal: 0, fullTotal: 0, moCount: 0 }; });
+        activeRooms.forEach(r => { roomStats[r.id] = { halfTotal: 0, fullTotal: 0, revTotal: 0, moCount: 0 }; });
 
         allMoList.forEach(mo => {
             const dayData = daysByRoomMo[mo] || {};
+            const revData = revByRoomMo[mo] || {};
             activeRooms.forEach(r => {
                 const d = dayData[r.id];
                 if (!d || (d.half === 0 && d.full === 0)) return;
                 roomStats[r.id].halfTotal += d.half;
                 roomStats[r.id].fullTotal += d.full;
+                roomStats[r.id].revTotal  += revData[r.id] || 0;
                 roomStats[r.id].moCount++;
             });
         });
 
         // Build per-room projection rows (only rooms with data)
+        // projMonthly uses actual average revenue (includes discounts for staff kids etc.)
+        // If actual revenue data isn't available per-room, fall back to days × rate.
         const roomProj = activeRooms.map(r => {
             const st = roomStats[r.id];
             if (st.moCount === 0) return null;
@@ -618,8 +632,11 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             const avgFull = st.fullTotal / st.moCount;
             const halfRate = r.halfDayRate || 0;
             const fullRate = r.fullDayRate || 0;
-            const projMonthly = avgHalf * halfRate + avgFull * fullRate;
             const avgTotalDays = avgHalf + avgFull;
+            // Use actual billed revenue average when available; fall back to rate × days
+            const projMonthly = st.revTotal > 0
+                ? st.revTotal / st.moCount
+                : avgHalf * halfRate + avgFull * fullRate;
             return { id: r.id, label: r.label, avgHalf, avgFull, avgTotalDays, halfRate, fullRate, projMonthly, moCount: st.moCount };
         }).filter(Boolean);
 
