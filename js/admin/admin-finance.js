@@ -867,27 +867,38 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             </div>
 
             <div style="margin-bottom:.5rem">
-                <div style="font-size:.82em;color:#6b7280;font-weight:600;margin-bottom:.5rem">Extra kids per room</div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.6rem">
+                <div style="font-size:.82em;color:#6b7280;font-weight:600;margin-bottom:.25rem">Extra kids per room</div>
+                <div style="font-size:.75em;color:#9ca3af;margin-bottom:.6rem">Each "kid" = 1 child at that room's typical monthly attendance. Half-day and full-day kids are billed at different rates.</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem">
                     ${roomProj.map(r => {
                         const estimatedKids = Math.max(1, Math.round(r.avgTotalDays / 9));
-                        const revenuePerKid = r.projMonthly / estimatedKids;
                         const halfPerKid = r.avgHalf / estimatedKids;
                         const fullPerKid = r.avgFull / estimatedKids;
-                        const typicalParts = [];
-                        if (halfPerKid >= 0.5) typicalParts.push(`${Math.round(halfPerKid)} half`);
-                        if (fullPerKid >= 0.5) typicalParts.push(`${Math.round(fullPerKid)} full`);
-                        const typicalStr = typicalParts.length ? typicalParts.join(', ') + ' days/mo' : `${Math.round(r.avgTotalDays / estimatedKids)} days/mo`;
-                        return `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:.5rem .6rem">
-                            <div style="font-size:.8em;font-weight:600;color:#374151;margin-bottom:.25rem">${escHtml(r.label)}</div>
-                            <div style="font-size:.75em;color:#9ca3af;margin-bottom:.1rem">~${estimatedKids} enrolled/mo</div>
-                            <div style="font-size:.75em;color:#6b7280;margin-bottom:.35rem">typical: ${typicalStr} · ${_fmt$(revenuePerKid)}/kid</div>
-                            <div style="display:flex;align-items:center;gap:.3rem">
-                                <input type="number" id="projKidsAdj_${escHtml(r.id)}" value="0" step="1" min="-20" max="20"
-                                    class="form-control proj-kids-input" style="width:64px;text-align:right;padding:.25rem .4rem;font-size:.9em">
-                                <span style="color:#6b7280;font-size:.8em">kids</span>
-                                <span id="projKidsAdjAmt_${escHtml(r.id)}" style="font-size:.78em;color:#059669;margin-left:auto;display:none"></span>
-                            </div>
+                        const revenuePerHalfKid = Math.round(halfPerKid) * (r.halfRate || 0);
+                        const revenuePerFullKid = Math.round(fullPerKid) * (r.fullRate || 0);
+                        const hasHalf = halfPerKid >= 0.5 && r.halfRate > 0;
+                        const hasFull = fullPerKid >= 0.5 && r.fullRate > 0;
+                        return `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:.55rem .7rem">
+                            <div style="font-size:.82em;font-weight:600;color:#374151;margin-bottom:.4rem">${escHtml(r.label)}</div>
+                            ${hasHalf ? `<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem">
+                                <div style="flex:1;min-width:0">
+                                    <div style="font-size:.72em;color:#6b7280">Half-day · $${r.halfRate}/day · ~${Math.round(halfPerKid)} days/kid/mo</div>
+                                </div>
+                                <input type="number" id="projHalfKidsAdj_${escHtml(r.id)}" value="0" step="1" min="-20" max="20"
+                                    class="form-control proj-kids-input" style="width:52px;text-align:right;padding:.2rem .35rem;font-size:.85em">
+                                <span style="font-size:.75em;color:#6b7280;white-space:nowrap">kids</span>
+                                <span id="projHalfKidsAmt_${escHtml(r.id)}" style="font-size:.75em;min-width:52px;text-align:right;display:none"></span>
+                            </div>` : ''}
+                            ${hasFull ? `<div style="display:flex;align-items:center;gap:.4rem">
+                                <div style="flex:1;min-width:0">
+                                    <div style="font-size:.72em;color:#6b7280">Full-day · $${r.fullRate}/day · ~${Math.round(fullPerKid)} days/kid/mo</div>
+                                </div>
+                                <input type="number" id="projFullKidsAdj_${escHtml(r.id)}" value="0" step="1" min="-20" max="20"
+                                    class="form-control proj-kids-input" style="width:52px;text-align:right;padding:.2rem .35rem;font-size:.85em">
+                                <span style="font-size:.75em;color:#6b7280;white-space:nowrap">kids</span>
+                                <span id="projFullKidsAmt_${escHtml(r.id)}" style="font-size:.75em;min-width:52px;text-align:right;display:none"></span>
+                            </div>` : ''}
+                            ${!hasHalf && !hasFull ? `<div style="font-size:.75em;color:#9ca3af">No rate data</div>` : ''}
                         </div>`;
                     }).join('')}
                 </div>
@@ -910,25 +921,38 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             const d = el._projData;
             if (!d) return;
 
-            // Read per-room extra kids and compute each room's extra monthly revenue
+            // Read per-room extra half/full kids and compute each room's extra monthly revenue
             const roomKidsExtra = {}; // roomId → extra $/mo
             let anyKids = false;
             d.roomProj.forEach(r => {
-                const kids = parseFloat(document.getElementById(`projKidsAdj_${r.id}`)?.value) || 0;
-                if (kids !== 0) anyKids = true;
                 const estimatedKids = Math.max(1, Math.round(r.avgTotalDays / 9));
-                const extra = kids * (r.projMonthly / estimatedKids);
-                roomKidsExtra[r.id] = extra;
-                // Update inline amount chip
-                const chip = document.getElementById(`projKidsAdjAmt_${r.id}`);
-                if (chip) {
-                    if (kids !== 0) {
-                        chip.style.display = '';
-                        chip.textContent = `${extra >= 0 ? '+' : ''}${_fmt$(extra)}/mo`;
-                        chip.style.color = extra >= 0 ? '#059669' : '#dc2626';
-                    } else {
-                        chip.style.display = 'none';
-                    }
+                const halfPerKid = r.avgHalf / estimatedKids;
+                const fullPerKid = r.avgFull / estimatedKids;
+
+                const extraHalf = parseFloat(document.getElementById(`projHalfKidsAdj_${r.id}`)?.value) || 0;
+                const extraFull = parseFloat(document.getElementById(`projFullKidsAdj_${r.id}`)?.value) || 0;
+                if (extraHalf !== 0 || extraFull !== 0) anyKids = true;
+
+                const halfExtra = extraHalf * Math.round(halfPerKid) * (r.halfRate || 0);
+                const fullExtra = extraFull * Math.round(fullPerKid) * (r.fullRate || 0);
+                roomKidsExtra[r.id] = halfExtra + fullExtra;
+
+                // Update inline amount chips
+                const halfChip = document.getElementById(`projHalfKidsAmt_${r.id}`);
+                if (halfChip) {
+                    if (extraHalf !== 0) {
+                        halfChip.style.display = '';
+                        halfChip.textContent = `${halfExtra >= 0 ? '+' : ''}${_fmt$(halfExtra)}/mo`;
+                        halfChip.style.color = halfExtra >= 0 ? '#059669' : '#dc2626';
+                    } else { halfChip.style.display = 'none'; }
+                }
+                const fullChip = document.getElementById(`projFullKidsAmt_${r.id}`);
+                if (fullChip) {
+                    if (extraFull !== 0) {
+                        fullChip.style.display = '';
+                        fullChip.textContent = `${fullExtra >= 0 ? '+' : ''}${_fmt$(fullExtra)}/mo`;
+                        fullChip.style.color = fullExtra >= 0 ? '#059669' : '#dc2626';
+                    } else { fullChip.style.display = 'none'; }
                 }
             });
             const kidsExtraPerMo = Object.values(roomKidsExtra).reduce((s, v) => s + v, 0);
