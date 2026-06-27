@@ -836,23 +836,16 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             </div>
         </div>`}
 
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:1rem;max-width:740px;margin-top:.25rem">
-            <h5 style="margin:0 0 .6rem;font-weight:600;font-size:.92rem">What-If Adjustments</h5>
-            <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.75rem">
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:1rem;max-width:860px;margin-top:.25rem">
+            <h5 style="margin:0 0 .75rem;font-weight:600;font-size:.92rem">What-If Adjustments</h5>
+
+            <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid #e2e8f0">
                 <div>
                     <label style="display:block;font-size:.82em;color:#6b7280;margin-bottom:.2rem">Revenue % change</label>
                     <div style="display:flex;align-items:center;gap:.3rem">
                         <input type="number" id="projRevAdj" value="0" step="1" min="-50" max="100"
                             class="form-control" style="width:80px;text-align:right">
                         <span style="color:#6b7280;font-size:.9em">%</span>
-                    </div>
-                </div>
-                <div>
-                    <label style="display:block;font-size:.82em;color:#6b7280;margin-bottom:.2rem">Extra kids / room</label>
-                    <div style="display:flex;align-items:center;gap:.3rem">
-                        <input type="number" id="projKidsAdj" value="0" step="1" min="-20" max="20"
-                            class="form-control" style="width:80px;text-align:right">
-                        <span style="color:#6b7280;font-size:.9em">kids</span>
                     </div>
                 </div>
                 <div>
@@ -872,6 +865,27 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                     </div>
                 </div>
             </div>
+
+            <div style="margin-bottom:.5rem">
+                <div style="font-size:.82em;color:#6b7280;font-weight:600;margin-bottom:.5rem">Extra kids per room</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.6rem">
+                    ${roomProj.map(r => {
+                        const estimatedKids = Math.max(1, Math.round(r.avgTotalDays / 9));
+                        const revenuePerKid = r.projMonthly / estimatedKids;
+                        return `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:.5rem .6rem">
+                            <div style="font-size:.8em;font-weight:600;color:#374151;margin-bottom:.25rem">${escHtml(r.label)}</div>
+                            <div style="font-size:.75em;color:#9ca3af;margin-bottom:.35rem">~${estimatedKids} kids avg · ${_fmt$(revenuePerKid)}/kid/mo</div>
+                            <div style="display:flex;align-items:center;gap:.3rem">
+                                <input type="number" id="projKidsAdj_${escHtml(r.id)}" value="0" step="1" min="-20" max="20"
+                                    class="form-control proj-kids-input" style="width:64px;text-align:right;padding:.25rem .4rem;font-size:.9em">
+                                <span style="color:#6b7280;font-size:.8em">kids</span>
+                                <span id="projKidsAdjAmt_${escHtml(r.id)}" style="font-size:.78em;color:#059669;margin-left:auto;display:none"></span>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>
+
             <div id="projWhatIfResult" style="display:none"></div>
         </div>
         </details>`;
@@ -884,24 +898,38 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
 
         const updateWhatIf = () => {
             const revPct  = parseFloat(document.getElementById('projRevAdj')?.value)  || 0;
-            const kids    = parseFloat(document.getElementById('projKidsAdj')?.value)  || 0;
             const flatAdj = parseFloat(document.getElementById('projFlatAdj')?.value)  || 0;
             const wagePct = parseFloat(document.getElementById('projWageAdj')?.value)  || 0;
             const d = el._projData;
             if (!d) return;
 
-            const noChange = revPct === 0 && kids === 0 && flatAdj === 0 && wagePct === 0;
+            // Read per-room extra kids and compute each room's extra monthly revenue
+            const roomKidsExtra = {}; // roomId → extra $/mo
+            let anyKids = false;
+            d.roomProj.forEach(r => {
+                const kids = parseFloat(document.getElementById(`projKidsAdj_${r.id}`)?.value) || 0;
+                if (kids !== 0) anyKids = true;
+                const estimatedKids = Math.max(1, Math.round(r.avgTotalDays / 9));
+                const extra = kids * (r.projMonthly / estimatedKids);
+                roomKidsExtra[r.id] = extra;
+                // Update inline amount chip
+                const chip = document.getElementById(`projKidsAdjAmt_${r.id}`);
+                if (chip) {
+                    if (kids !== 0) {
+                        chip.style.display = '';
+                        chip.textContent = `${extra >= 0 ? '+' : ''}${_fmt$(extra)}/mo`;
+                        chip.style.color = extra >= 0 ? '#059669' : '#dc2626';
+                    } else {
+                        chip.style.display = 'none';
+                    }
+                }
+            });
+            const kidsExtraPerMo = Object.values(roomKidsExtra).reduce((s, v) => s + v, 0);
+
+            const noChange = revPct === 0 && !anyKids && flatAdj === 0 && wagePct === 0;
             const resultEl = document.getElementById('projWhatIfResult');
             if (!resultEl) return;
             if (noChange) { resultEl.style.display = 'none'; return; }
-
-            // Compute per-room extra-kids revenue: each extra kid contributes proportionally
-            // to the room's monthly revenue. estimatedKids = avgTotalDays / 9 (≈9 days/mo/kid).
-            const kidsExtraPerMo = d.roomProj.reduce((s, r) => {
-                if (d.roomOpMonths[r.id]?.size < 9) return s; // skip seasonal rooms
-                const estimatedKids = Math.max(1, Math.round(r.avgTotalDays / 9));
-                return s + kids * (r.projMonthly / estimatedKids);
-            }, 0);
 
             const hasFuture = d.futureMonthNums.length > 0;
             let adjFullYear, adjLabel, delta;
@@ -916,26 +944,20 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                     d.roomProj.forEach(r => {
                         if (d.roomOpMonths[r.id]?.has(m)) {
                             moRev += r.projMonthly * (1 + revPct / 100) * scale;
+                            moRev += (roomKidsExtra[r.id] || 0) * scale;
                         }
                     });
-                    const regRoomsInMo = d.roomProj.filter(r => d.roomOpMonths[r.id]?.has(m) && d.roomOpMonths[r.id]?.size >= 9).length;
-                    const kidsExtra = d.roomProj.reduce((s, r) => {
-                        if (!d.roomOpMonths[r.id]?.has(m) || d.roomOpMonths[r.id]?.size < 9) return s;
-                        const est = Math.max(1, Math.round(r.avgTotalDays / 9));
-                        return s + kids * (r.projMonthly / est) * scale;
-                    }, 0);
-                    adjProjRemaining += moRev + kidsExtra + flatAdj * scale;
+                    adjProjRemaining += moRev + flatAdj * scale;
                 });
                 adjFullYear = d.ytdActual + adjProjRemaining;
                 adjLabel = 'Adj. Full-Year Revenue';
                 delta = adjFullYear - d.fullYearProj;
             } else {
-                // No future months (prior year or complete year): annualized model —
-                // "what would a full year look like at these levels?"
+                // No future months (prior year or complete year): annualized model
                 const adjMonthly = d.totalProjMonthly * (1 + revPct / 100) + kidsExtraPerMo + flatAdj;
                 adjFullYear = adjMonthly * 12;
                 adjLabel = 'Annualized Estimate';
-                delta = adjFullYear - d.totalProjMonthly * 12; // vs unadjusted annualized
+                delta = adjFullYear - d.totalProjMonthly * 12;
             }
 
             const adjAnnualLab = d.totalLab * (1 + wagePct / 100) * (12 / moCount);
@@ -963,8 +985,11 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                 </div>`;
         };
 
-        ['projRevAdj','projKidsAdj','projFlatAdj','projWageAdj'].forEach(id => {
+        ['projRevAdj','projFlatAdj','projWageAdj'].forEach(id => {
             document.getElementById(id)?.addEventListener('input', updateWhatIf);
+        });
+        document.querySelectorAll('.proj-kids-input').forEach(inp => {
+            inp.addEventListener('input', updateWhatIf);
         });
 
     } catch(e) {
