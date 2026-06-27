@@ -640,7 +640,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                 if (d && (d.half > 0 || d.full > 0)) roomOpMonths[r.id].add(moNum);
             });
         });
-        // Supplement with prior years' billing_summary
+        // Supplement with prior years' billing_summary (provides room_id if the column exists)
         try {
             const allBs = await fetchBillingSummary();
             allBs.forEach(row => {
@@ -651,6 +651,16 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
                 }
             });
         } catch(e) {}
+
+        // Fallback: if billing_summary had no room_id data, a non-seasonal room's set will
+        // only contain the months seen so far this year. In that case, assume the room
+        // operates all 12 months (the school restricts via Summer Camp status, not room data).
+        // Seasonal rooms keep only the months confirmed by actual data.
+        activeRooms.forEach(r => {
+            if (r.status !== 'seasonal' && roomOpMonths[r.id].size <= 6) {
+                for (let m = 1; m <= 12; m++) roomOpMonths[r.id].add(m);
+            }
+        });
 
         // ── Closure scaling: count weekday closures per future month ──
         // weekdays_in_month − closure_days_in_month gives the operating fraction.
