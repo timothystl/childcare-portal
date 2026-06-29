@@ -2912,7 +2912,7 @@ async function generatePromotionsReport() {
         });
 
         const today   = new Date();
-        const horizon = new Date(today.getFullYear() + 2, today.getMonth(), 1);
+        const horizon = new Date(today.getFullYear(), today.getMonth() + 13, 1);
 
         const promotions = [];
         Object.entries(childRoom).forEach(([key, info]) => {
@@ -2935,7 +2935,7 @@ async function generatePromotionsReport() {
         promotions.sort((a, b) => a.promoteDate - b.promoteDate);
 
         if (!promotions.length) {
-            container.innerHTML = '<p class="empty-hint">No upcoming promotions in the next 2 years based on current enrollment.</p>';
+            container.innerHTML = '<p class="empty-hint">No upcoming promotions in the next 13 months based on current enrollment.</p>';
             return;
         }
 
