@@ -4902,7 +4902,7 @@ async function generateDiscountPricingReport() {
 
     if (allFamiliesData.length === 0) await loadFamilies();
 
-    const { data: regs, error } = await supabase
+    const { data: regs, error } = await sbClient
         .from('registrations')
         .select('id, child_name, parent_name, parent_email, room_id')
         .eq('month_key', monthVal)
@@ -4913,7 +4913,7 @@ async function generateDiscountPricingReport() {
     const regIds = (regs || []).map(r => r.id);
     let dateRows = [];
     if (regIds.length > 0) {
-        const { data: dates } = await supabase
+        const { data: dates } = await sbClient
             .from('registration_dates')
             .select('registration_id, day_type')
             .in('registration_id', regIds)
