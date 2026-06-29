@@ -4901,37 +4901,17 @@ async function generateDiscountPricingReport() {
     document.getElementById('exportDiscountPricingBtn').style.display = 'none';
 
     if (allFamiliesData.length === 0) await loadFamilies();
-
-    const { data: regs, error } = await sbClient
-        .from('registrations')
-        .select('id, child_name, parent_name, parent_email, room_id')
-        .eq('month_key', monthVal)
-        .neq('status', 'cancelled');
-
-    if (error) { el.innerHTML = `<p class="error-msg">Error: ${escHtml(error.message)}</p>`; return; }
-
-    const regIds = (regs || []).map(r => r.id);
-    let dateRows = [];
-    if (regIds.length > 0) {
-        const { data: dates } = await sbClient
-            .from('registration_dates')
-            .select('registration_id, day_type')
-            .in('registration_id', regIds)
-            .eq('waitlisted', false);
-        dateRows = dates || [];
-    }
-
-    const dayCountMap = new Map();
-    dateRows.forEach(d => {
-        if (!dayCountMap.has(d.registration_id)) dayCountMap.set(d.registration_id, { full: 0, half: 0 });
-        const c = dayCountMap.get(d.registration_id);
-        if (d.day_type === 'full') c.full++; else c.half++;
-    });
+    if (!allRegistrations.length) allRegistrations = await fetchAllRegistrations();
 
     const dmap = getDiscountMap();
 
     _discountPricingRows = [];
-    (regs || []).forEach(reg => {
+    allRegistrations.forEach(reg => {
+        if (reg.status === 'cancelled') return;
+        const dates = (reg.registration_dates || []).filter(d =>
+            !d.waitlisted && d.care_date && d.care_date.startsWith(monthVal));
+        if (!dates.length) return;
+
         const key  = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
         const disc = dmap.get(key);
         if (!disc || disc.type === 'none') return;
@@ -4941,9 +4921,10 @@ async function generateDiscountPricingReport() {
         const halfRate = room?.rates?.half || 0;
         const effFull  = effectiveAdminRate(fullRate, disc.type, disc.value);
         const effHalf  = effectiveAdminRate(halfRate, disc.type, disc.value);
-        const days     = dayCountMap.get(reg.id) || { full: 0, half: 0 };
-        const listPrice = days.full * fullRate  + days.half * halfRate;
-        const amtDue    = days.full * effFull   + days.half * effHalf;
+        const fullDays = dates.filter(d => d.day_type === 'full').length;
+        const halfDays = dates.filter(d => d.day_type === 'half').length;
+        const listPrice = fullDays * fullRate + halfDays * halfRate;
+        const amtDue    = fullDays * effFull  + halfDays * effHalf;
 
         _discountPricingRows.push({
             childName:  reg.child_name,
@@ -4953,9 +4934,9 @@ async function generateDiscountPricingReport() {
             roomLabel:  room?.label || reg.room_id,
             discType:   disc.type,
             discValue:  disc.value,
-            fullDays:   days.full,
-            halfDays:   days.half,
-            totalDays:  days.full + days.half,
+            fullDays,
+            halfDays,
+            totalDays:  fullDays + halfDays,
             listPrice,
             amtDue,
             saved: listPrice - amtDue,
