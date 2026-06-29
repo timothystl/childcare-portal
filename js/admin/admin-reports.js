@@ -4985,8 +4985,8 @@ async function generateDiscountPricingReport() {
         if (!disc || disc.type === 'none') return;
 
         const room     = ROOMS.find(r => r.id === reg.room_id);
-        const fullRate = room?.rates?.full || 0;
-        const halfRate = room?.rates?.half || 0;
+        const fullRate = room?.fullDayRate || 0;
+        const halfRate = room?.halfDayRate || room?.fullDayRate || 0;
         const effFull  = effectiveAdminRate(fullRate, disc.type, disc.value);
         const effHalf  = effectiveAdminRate(halfRate, disc.type, disc.value);
         const fullDays = dates.filter(d => d.day_type === 'full').length;
