@@ -2872,21 +2872,33 @@ async function generatePromotionsReport() {
         const ROOM_NEXT      = { bear: 'bee', bee: 'turtle', turtle: 'goose', goose: 'owl' };
         const ROOM_LABEL     = Object.fromEntries(ROOMS.map(r => [r.id, r.label]));
 
-        const [allRegs, allFamilies] = await Promise.all([
-            fetchAllRegistrations(),
-            fetchAllFamilies(),
-        ]);
+        const allRegs = await fetchAllRegistrations();
 
-        // Build recurring_days lookup: lower(child_name)|child_dob → recurring_days
-        const recurMap = {};
-        allFamilies.forEach(fam => {
-            (fam.students || []).forEach(s => {
-                if (s.child_name) {
-                    const rd = s.recurring_days;
-                    recurMap[`${s.child_name.toLowerCase()}|${s.child_dob || ''}`] = Array.isArray(rd) ? rd.join(',') : (rd || '');
-                }
+        // Build day-pattern from actual registration_dates history.
+        // For each child, track which months they attended and how often each weekday appears.
+        // A day is "typical" if it shows up in ≥50% of the months they've been enrolled.
+        const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const childDayInfo = {};
+        allRegs.filter(r => r.status === 'confirmed').forEach(reg => {
+            if (!reg.child_dob) return;
+            const key = `${(reg.child_name || '').toLowerCase()}|${reg.child_dob}`;
+            if (!childDayInfo[key]) childDayInfo[key] = { months: new Set(), dayCounts: {} };
+            (reg.registration_dates || []).forEach(d => {
+                if (!d.care_date) return;
+                const dt  = new Date(d.care_date + 'T12:00:00');
+                const mo  = d.care_date.slice(0, 7);
+                const dow = dt.getDay();
+                childDayInfo[key].months.add(mo);
+                childDayInfo[key].dayCounts[dow] = (childDayInfo[key].dayCounts[dow] || 0) + 1;
             });
         });
+
+        function typicalDays(key) {
+            const info = childDayInfo[key];
+            if (!info || !info.months.size) return [];
+            const threshold = Math.max(1, Math.ceil(info.months.size * 0.5));
+            return [1, 2, 3, 4, 5].filter(d => (info.dayCounts[d] || 0) >= threshold).map(d => DAY_ABBR[d]);
+        }
 
         // Most-recent confirmed room per unique child (keyed by name|dob)
         const childRoom = {};
@@ -2910,7 +2922,7 @@ async function generatePromotionsReport() {
             const promoteDate = new Date(dob.getFullYear(), dob.getMonth() + ROOM_CEILINGS[room_id], 1);
             if (promoteDate <= today || promoteDate > horizon) return;
             const moKey   = `${promoteDate.getFullYear()}-${String(promoteDate.getMonth() + 1).padStart(2, '0')}`;
-            const dayList = (recurMap[key] || '').split(',').map(d => d.trim()).filter(Boolean);
+            const dayList = typicalDays(key);
             promotions.push({ child_name, dob, promoteDate, moKey, fromRoom: room_id, toRoom: ROOM_NEXT[room_id], dayList });
         });
 
@@ -2928,13 +2940,13 @@ async function generatePromotionsReport() {
         let html = `
             <p style="font-size:.85em;color:#6b7280;margin-bottom:1rem">
                 Dates are when each child reaches the age ceiling for their current room.
-                "Regular Days" comes from their saved recurring schedule — if blank, no schedule is on file.
+                "Typical Days" shows weekdays the child attended in at least half their enrolled months. "varies" means no consistent pattern.
             </p>
             <div style="overflow-x:auto">
             <table class="report-table">
                 <thead><tr>
                     <th>Month</th><th>Child</th><th>Birthday</th>
-                    <th>From Room</th><th>To Room</th><th>Regular Days</th>
+                    <th>From Room</th><th>To Room</th><th>Typical Days</th>
                 </tr></thead><tbody>`;
 
         const MONTH_NAME = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -2949,7 +2961,7 @@ async function generatePromotionsReport() {
                     <td style="color:#6b7280">${dobStr}</td>
                     <td>${escHtml(ROOM_LABEL[p.fromRoom] || p.fromRoom)}</td>
                     <td style="color:#16a34a">${escHtml(ROOM_LABEL[p.toRoom] || p.toRoom || '—')}</td>
-                    <td style="color:#6b7280">${p.dayList.length ? escHtml(p.dayList.join(', ')) : '<span style="color:#d1d5db">none on file</span>'}</td>
+                    <td style="color:#6b7280">${p.dayList.length ? escHtml(p.dayList.join(', ')) : '<span style="color:#d1d5db">varies</span>'}</td>
                 </tr>`;
             });
         });
