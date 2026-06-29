@@ -2866,6 +2866,8 @@ async function generatePromotionsReport() {
     const container = document.getElementById('promotionsContent');
     if (!container) return;
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    document.getElementById('exportPromotionsBtn').style.display = 'none';
+    document.getElementById('printPromotionsBtn').style.display = 'none';
     try {
         // Age ceilings (months) per room and where each room transitions to
         const ROOM_CEILINGS  = { bear: 12, bee: 24, turtle: 30, goose: 36 };
@@ -3042,9 +3044,63 @@ async function generatePromotionsReport() {
         });
 
         container.innerHTML = html;
+        _promotionsData = promotions;
+        document.getElementById('exportPromotionsBtn').style.display = '';
+        document.getElementById('printPromotionsBtn').style.display = '';
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
     }
+}
+
+let _promotionsData = [];
+
+function exportPromotionsReport() {
+    if (!_promotionsData.length) return;
+    const ROOM_LABEL = Object.fromEntries(ROOMS.map(r => [r.id, r.label]));
+    const headers = ['Month', 'Child', 'Birthday', 'From Room', 'To Room', 'Typical Days'];
+    const rows = _promotionsData.map(p => {
+        const dob = p.dob;
+        const dobStr = `${dob.getFullYear()}-${String(dob.getMonth()+1).padStart(2,'0')}-${String(dob.getDate()).padStart(2,'0')}`;
+        const [y, m] = p.moKey.split('-').map(Number);
+        const MONTH_NAME = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        return [
+            MONTH_NAME[m - 1] + ' ' + y,
+            p.child_name,
+            dobStr,
+            ROOM_LABEL[p.fromRoom] || p.fromRoom,
+            ROOM_LABEL[p.toRoom]   || p.toRoom || '',
+            p.dayList.length ? p.dayList.join(', ') : 'varies',
+        ];
+    });
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Room Promotions');
+    XLSX.writeFile(wb, 'room-promotions.xlsx');
+}
+
+function printPromotionsReport() {
+    const content = document.getElementById('promotionsContent');
+    if (!content || !_promotionsData.length) return;
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Upcoming Room Promotions</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 24px; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  p.subtitle { font-size: 10px; color: #666; margin: 0 0 16px; }
+  h4 { font-size: 13px; margin: 20px 0 4px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th { background: #1e3a5f; color: #fff; padding: 5px 8px; text-align: left; font-size: 11px; }
+  td { padding: 4px 8px; font-size: 11px; border-bottom: 1px solid #e8e8e8; vertical-align: top; }
+  @media print { body { margin: 12px; } }
+</style></head><body>
+<h1>Upcoming Room Promotions</h1>
+<p class="subtitle">Printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</p>
+${content.innerHTML}
+</body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
 }
 
 // ============================================================
@@ -3179,9 +3235,12 @@ function setupExtraReports() {
     document.getElementById('generateRoomPnlBtn')?.addEventListener('click', generateRoomPnl);
     document.getElementById('exportRoomPnlBtn')?.addEventListener('click', exportRoomPnl);
     document.getElementById('generatePromotionsBtn')?.addEventListener('click', generatePromotionsReport);
+    document.getElementById('exportPromotionsBtn')?.addEventListener('click', exportPromotionsReport);
+    document.getElementById('printPromotionsBtn')?.addEventListener('click', printPromotionsReport);
     document.getElementById('generateFteBtn')?.addEventListener('click', generateEnrollmentFteReport);
     document.getElementById('generateDiscountPricingBtn')?.addEventListener('click', generateDiscountPricingReport);
     document.getElementById('exportDiscountPricingBtn')?.addEventListener('click', exportDiscountPricingReport);
+    document.getElementById('printDiscountPricingBtn')?.addEventListener('click', printDiscountPricingReport);
 
     const now2 = new Date();
     const dpEl = document.getElementById('discountPricingMonth');
@@ -4967,6 +5026,7 @@ async function generateDiscountPricingReport() {
     const el = document.getElementById('discountPricingContent');
     el.innerHTML = '<p class="empty-hint">Loading…</p>';
     document.getElementById('exportDiscountPricingBtn').style.display = 'none';
+    document.getElementById('printDiscountPricingBtn').style.display = 'none';
 
     if (allFamiliesData.length === 0) await loadFamilies();
     if (!allRegistrations.length) allRegistrations = await fetchAllRegistrations();
@@ -5029,12 +5089,11 @@ async function generateDiscountPricingReport() {
     const otherRows  = _discountPricingRows.filter(r => r.discType !== 'staff');
 
     const subtotal = rows => ({
-        fullDays:  rows.reduce((s,r)=>s+r.fullDays,0),
-        halfDays:  rows.reduce((s,r)=>s+r.halfDays,0),
-        totalDays: rows.reduce((s,r)=>s+r.totalDays,0),
-        listPrice: rows.reduce((s,r)=>s+r.listPrice,0),
+        fullDays:     rows.reduce((s,r)=>s+r.fullDays,0),
+        halfDays:     rows.reduce((s,r)=>s+r.halfDays,0),
+        totalDays:    rows.reduce((s,r)=>s+r.totalDays,0),
+        listPrice:    rows.reduce((s,r)=>s+r.listPrice,0),
         costToCenter: rows.reduce((s,r)=>s+r.saved,0),
-        amtDue:    rows.reduce((s,r)=>s+r.amtDue,0),
     });
 
     const renderRows = rows => rows.map(r => {
@@ -5049,7 +5108,6 @@ async function generateDiscountPricingReport() {
   <td class="report-num">${r.totalDays}</td>
   <td class="report-num">${fmt(r.listPrice)}</td>
   <td class="report-num" style="color:#c0392b;">${fmt(r.saved)}</td>
-  <td class="report-num" style="font-weight:600;">${fmt(r.amtDue)}</td>
 </tr>`;
     }).join('');
 
@@ -5063,7 +5121,6 @@ async function generateDiscountPricingReport() {
   <td class="report-num">${t.totalDays}</td>
   <td class="report-num">${fmt(t.listPrice)}</td>
   <td class="report-num" style="color:#c0392b;">${fmt(t.costToCenter)}</td>
-  <td class="report-num">${fmt(t.amtDue)}</td>
 </tr>`;
     };
 
@@ -5073,16 +5130,16 @@ async function generateDiscountPricingReport() {
     html += `<table class="admin-table" id="discountPricingTable"><thead><tr>
   <th>Child</th><th>Parent</th><th>Room</th><th>Discount</th>
   <th class="report-num">Full Days</th><th class="report-num">Half Days</th><th class="report-num">Total Days</th>
-  <th class="report-num">List Price</th><th class="report-num">Cost to Center</th><th class="report-num">Amount Due</th>
+  <th class="report-num">List Price</th><th class="report-num">Cost to Center</th>
 </tr></thead><tbody>`;
 
     if (staffRows.length) {
-        html += `<tr><td colspan="10" style="background:#f5f5f5;font-weight:700;font-size:11px;letter-spacing:.04em;padding:6px 10px;color:#555;">STAFF</td></tr>`;
+        html += `<tr><td colspan="9" style="background:#f5f5f5;font-weight:700;font-size:11px;letter-spacing:.04em;padding:6px 10px;color:#555;">STAFF</td></tr>`;
         html += renderRows(staffRows);
         html += renderSubtotal('Staff', staffRows);
     }
     if (otherRows.length) {
-        html += `<tr><td colspan="10" style="background:#f5f5f5;font-weight:700;font-size:11px;letter-spacing:.04em;padding:6px 10px;color:#555;">OTHER DISCOUNTS</td></tr>`;
+        html += `<tr><td colspan="9" style="background:#f5f5f5;font-weight:700;font-size:11px;letter-spacing:.04em;padding:6px 10px;color:#555;">OTHER DISCOUNTS</td></tr>`;
         html += renderRows(otherRows);
         html += renderSubtotal('Other discounts', otherRows);
     }
@@ -5094,11 +5151,11 @@ async function generateDiscountPricingReport() {
   <td class="report-num">${grand.totalDays}</td>
   <td class="report-num">${fmt(grand.listPrice)}</td>
   <td class="report-num" style="color:#c0392b;">${fmt(grand.costToCenter)}</td>
-  <td class="report-num">${fmt(grand.amtDue)}</td>
 </tr></tfoot></table>`;
 
     el.innerHTML = html;
     document.getElementById('exportDiscountPricingBtn').style.display = '';
+    document.getElementById('printDiscountPricingBtn').style.display = '';
 }
 
 function exportDiscountPricingReport() {
@@ -5106,15 +5163,45 @@ function exportDiscountPricingReport() {
     const monthVal   = document.getElementById('discountPricingMonth')?.value || '';
     const [y, m]     = monthVal.split('-').map(Number);
     const monthLabel = m ? (MONTH_NAMES[m - 1] + ' ' + y) : monthVal;
-    const headers = ['Child', 'Parent', 'Email', 'Room', 'Discount Type', 'Discount %', 'Full Days', 'Half Days', 'Total Days', 'List Price', 'Cost to Center', 'Amount Due'];
+    const headers = ['Child', 'Parent', 'Email', 'Room', 'Discount Type', 'Discount %', 'Full Days', 'Half Days', 'Total Days', 'List Price', 'Cost to Center'];
     const rows = _discountPricingRows.map(r => [
         r.childName, r.parentName || '', r.parentEmail || '', r.roomLabel,
         r.discType === 'staff' ? 'Staff' : 'Custom',
         r.discType === 'staff' ? 100 : (r.discValue || 0),
-        r.fullDays, r.halfDays, r.totalDays, r.listPrice, r.saved, r.amtDue,
+        r.fullDays, r.halfDays, r.totalDays, r.listPrice, r.saved,
     ]);
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, monthLabel.substring(0, 31));
     XLSX.writeFile(wb, `discount-pricing-${monthVal}.xlsx`);
+}
+
+function printDiscountPricingReport() {
+    const monthVal = document.getElementById('discountPricingMonth')?.value || '';
+    const table    = document.getElementById('discountPricingTable');
+    if (!table || !_discountPricingRows.length) return;
+    const [y, m]     = monthVal.split('-').map(Number);
+    const monthLabel = m ? (MONTH_NAMES[m - 1] + ' ' + y) : monthVal;
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Discount Pricing — ${escHtml(monthLabel)}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 24px; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  p.subtitle { font-size: 10px; color: #666; margin: 0 0 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #1e3a5f; color: #fff; padding: 5px 8px; text-align: left; font-size: 11px; }
+  th:nth-child(n+5) { text-align: right; }
+  td { padding: 4px 8px; font-size: 11px; border-bottom: 1px solid #e8e8e8; }
+  td.report-num { text-align: right; }
+  tfoot tr td { font-weight: 700; background: #f0ebe0; border-top: 2px solid #bbb; }
+  @media print { body { margin: 12px; } }
+</style></head><body>
+<h1>Kids Discount Pricing — ${escHtml(monthLabel)}</h1>
+<p class="subtitle">Printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</p>
+${table.outerHTML}
+</body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
 }
