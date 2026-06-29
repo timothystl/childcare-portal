@@ -2973,6 +2973,74 @@ async function generatePromotionsReport() {
         });
 
         html += `</tbody></table></div>`;
+
+        // ---- Subsection: Days opening up (by source room) ----
+        const byFromRoom = {};
+        promotions.forEach(p => {
+            if (!byFromRoom[p.fromRoom]) byFromRoom[p.fromRoom] = {};
+            (byFromRoom[p.fromRoom][p.moKey] = byFromRoom[p.fromRoom][p.moKey] || []).push(p);
+        });
+
+        html += `<h4 style="margin:2rem 0 .5rem;font-size:1rem">Days Opening Up (by Room)</h4>
+            <p style="font-size:.85em;color:#6b7280;margin-bottom:1rem">Spots that will become available when a child ages out of each room.</p>`;
+
+        Object.keys(byFromRoom).sort((a, b) => {
+            const order = ['bear','bee','turtle','goose'];
+            return order.indexOf(a) - order.indexOf(b);
+        }).forEach(room => {
+            html += `<div style="margin-bottom:1.25rem">
+                <div style="font-weight:600;margin-bottom:.35rem">${escHtml(ROOM_LABEL[room] || room)}</div>
+                <div style="overflow-x:auto"><table class="report-table"><thead><tr>
+                    <th>Month</th><th>Child</th><th>Typical Days</th>
+                </tr></thead><tbody>`;
+            Object.keys(byFromRoom[room]).sort().forEach(mk => {
+                const kids = byFromRoom[room][mk];
+                const [y, m] = mk.split('-').map(Number);
+                kids.forEach((p, i) => {
+                    html += `<tr>
+                        ${i === 0 ? `<td rowspan="${kids.length}" style="font-weight:600;vertical-align:top">${escHtml(MONTH_NAME[m - 1] + ' ' + y)}</td>` : ''}
+                        <td>${escHtml(p.child_name)}</td>
+                        <td style="color:#6b7280">${p.dayList.length ? escHtml(p.dayList.join(', ')) : '<span style="color:#d1d5db">varies</span>'}</td>
+                    </tr>`;
+                });
+            });
+            html += `</tbody></table></div></div>`;
+        });
+
+        // ---- Subsection: Rooms gaining children (by destination room) ----
+        const byToRoom = {};
+        promotions.forEach(p => {
+            if (!p.toRoom) return;
+            if (!byToRoom[p.toRoom]) byToRoom[p.toRoom] = {};
+            (byToRoom[p.toRoom][p.moKey] = byToRoom[p.toRoom][p.moKey] || []).push(p);
+        });
+
+        html += `<h4 style="margin:2rem 0 .5rem;font-size:1rem">Rooms Gaining Children (by Room)</h4>
+            <p style="font-size:.85em;color:#6b7280;margin-bottom:1rem">Rooms that will need to accommodate an incoming child.</p>`;
+
+        Object.keys(byToRoom).sort((a, b) => {
+            const order = ['bee','turtle','goose','owl'];
+            return order.indexOf(a) - order.indexOf(b);
+        }).forEach(room => {
+            html += `<div style="margin-bottom:1.25rem">
+                <div style="font-weight:600;margin-bottom:.35rem">${escHtml(ROOM_LABEL[room] || room)}</div>
+                <div style="overflow-x:auto"><table class="report-table"><thead><tr>
+                    <th>Month</th><th>Child</th><th>Typical Days</th>
+                </tr></thead><tbody>`;
+            Object.keys(byToRoom[room]).sort().forEach(mk => {
+                const kids = byToRoom[room][mk];
+                const [y, m] = mk.split('-').map(Number);
+                kids.forEach((p, i) => {
+                    html += `<tr>
+                        ${i === 0 ? `<td rowspan="${kids.length}" style="font-weight:600;vertical-align:top">${escHtml(MONTH_NAME[m - 1] + ' ' + y)}</td>` : ''}
+                        <td>${escHtml(p.child_name)}</td>
+                        <td style="color:#6b7280">${p.dayList.length ? escHtml(p.dayList.join(', ')) : '<span style="color:#d1d5db">varies</span>'}</td>
+                    </tr>`;
+                });
+            });
+            html += `</tbody></table></div></div>`;
+        });
+
         container.innerHTML = html;
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
