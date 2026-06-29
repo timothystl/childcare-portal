@@ -759,6 +759,25 @@
                 </div>
             </section>
 
+            <!-- Kids Discount Pricing Report -->
+            <section class="admin-section collapsible-section" id="discountPricingSection">
+                <h2>🏷️ Kids Discount Pricing Report</h2>
+                <p class="section-desc">All children with a staff or custom discount for the selected month — shows days in care and the discounted price tag.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="discountPricingMonth">Month</label>
+                        <input type="month" id="discountPricingMonth">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateDiscountPricingBtn" class="btn-secondary">Generate Report</button>
+                        <button id="exportDiscountPricingBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="discountPricingContent">
+                    <p class="empty-hint">Select a month and click Generate Report.</p>
+                </div>
+            </section>
+
             <!-- Missing Care Calendar Report -->
             <section class="admin-section collapsible-section" id="missingCalendarSection">
                 <h2>⚠️ Missing Care Calendar Report</h2>
