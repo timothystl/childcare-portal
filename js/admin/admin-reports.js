@@ -3112,6 +3112,12 @@ function setupExtraReports() {
     document.getElementById('exportRoomPnlBtn')?.addEventListener('click', exportRoomPnl);
     document.getElementById('generatePromotionsBtn')?.addEventListener('click', generatePromotionsReport);
     document.getElementById('generateFteBtn')?.addEventListener('click', generateEnrollmentFteReport);
+    document.getElementById('generateDiscountPricingBtn')?.addEventListener('click', generateDiscountPricingReport);
+    document.getElementById('exportDiscountPricingBtn')?.addEventListener('click', exportDiscountPricingReport);
+
+    const now2 = new Date();
+    const dpEl = document.getElementById('discountPricingMonth');
+    if (dpEl) dpEl.value = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, '0')}`;
 
     // Default P&L date range: first of current month → today
     const today = new Date().toISOString().split('T')[0];
@@ -4880,3 +4886,150 @@ function matchStaffNames(rows, allStaff) {
 }
 
 // ============================================================
+
+// KIDS DISCOUNT PRICING REPORT
+// ============================================================
+
+let _discountPricingRows = [];
+
+async function generateDiscountPricingReport() {
+    const monthVal = document.getElementById('discountPricingMonth')?.value;
+    if (!monthVal) { alert('Please select a month.'); return; }
+
+    const el = document.getElementById('discountPricingContent');
+    el.innerHTML = '<p class="empty-hint">Loading…</p>';
+    document.getElementById('exportDiscountPricingBtn').style.display = 'none';
+
+    if (allFamiliesData.length === 0) await loadFamilies();
+
+    const { data: regs, error } = await supabase
+        .from('registrations')
+        .select('id, child_name, parent_name, parent_email, room_id')
+        .eq('month_key', monthVal)
+        .neq('status', 'cancelled');
+
+    if (error) { el.innerHTML = `<p class="error-msg">Error: ${escHtml(error.message)}</p>`; return; }
+
+    const regIds = (regs || []).map(r => r.id);
+    let dateRows = [];
+    if (regIds.length > 0) {
+        const { data: dates } = await supabase
+            .from('registration_dates')
+            .select('registration_id, day_type')
+            .in('registration_id', regIds)
+            .eq('waitlisted', false);
+        dateRows = dates || [];
+    }
+
+    const dayCountMap = new Map();
+    dateRows.forEach(d => {
+        if (!dayCountMap.has(d.registration_id)) dayCountMap.set(d.registration_id, { full: 0, half: 0 });
+        const c = dayCountMap.get(d.registration_id);
+        if (d.day_type === 'full') c.full++; else c.half++;
+    });
+
+    const dmap = getDiscountMap();
+
+    _discountPricingRows = [];
+    (regs || []).forEach(reg => {
+        const key  = `${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`;
+        const disc = dmap.get(key);
+        if (!disc || disc.type === 'none') return;
+
+        const room     = ROOMS.find(r => r.id === reg.room_id);
+        const fullRate = room?.rates?.full || 0;
+        const halfRate = room?.rates?.half || 0;
+        const effFull  = effectiveAdminRate(fullRate, disc.type, disc.value);
+        const effHalf  = effectiveAdminRate(halfRate, disc.type, disc.value);
+        const days     = dayCountMap.get(reg.id) || { full: 0, half: 0 };
+        const listPrice = days.full * fullRate  + days.half * halfRate;
+        const amtDue    = days.full * effFull   + days.half * effHalf;
+
+        _discountPricingRows.push({
+            childName:  reg.child_name,
+            parentName: reg.parent_name,
+            parentEmail: reg.parent_email,
+            roomId:     reg.room_id,
+            roomLabel:  room?.label || reg.room_id,
+            discType:   disc.type,
+            discValue:  disc.value,
+            fullDays:   days.full,
+            halfDays:   days.half,
+            totalDays:  days.full + days.half,
+            listPrice,
+            amtDue,
+            saved: listPrice - amtDue,
+        });
+    });
+
+    _discountPricingRows.sort((a, b) => {
+        if (a.discType !== b.discType) return a.discType === 'staff' ? -1 : 1;
+        return a.childName.localeCompare(b.childName);
+    });
+
+    if (_discountPricingRows.length === 0) {
+        el.innerHTML = '<p class="empty-hint">No children with discounts found for this month.</p>';
+        return;
+    }
+
+    const [y, m]     = monthVal.split('-').map(Number);
+    const monthLabel = MONTH_NAMES[m - 1] + ' ' + y;
+    const fmt        = v => '$' + v.toFixed(2);
+    const totalListPrice = _discountPricingRows.reduce((s, r) => s + r.listPrice, 0);
+    const totalAmtDue    = _discountPricingRows.reduce((s, r) => s + r.amtDue, 0);
+    const totalSaved     = _discountPricingRows.reduce((s, r) => s + r.saved, 0);
+
+    let html = `<p style="margin:0 0 10px;font-size:13px;color:#555;">${escHtml(monthLabel)} &mdash; ${_discountPricingRows.length} children with discounts</p>`;
+    html += `<table class="admin-table" id="discountPricingTable"><thead><tr>
+  <th>Child</th><th>Parent</th><th>Room</th><th>Discount</th>
+  <th class="report-num">Full Days</th><th class="report-num">Half Days</th><th class="report-num">Total Days</th>
+  <th class="report-num">List Price</th><th class="report-num">You Save</th><th class="report-num">Amount Due</th>
+</tr></thead><tbody>`;
+
+    _discountPricingRows.forEach(r => {
+        const discLabel = r.discType === 'staff' ? 'Staff (100% off)' : `${r.discValue}% off`;
+        html += `<tr>
+  <td>${escHtml(r.childName)}</td>
+  <td>${escHtml(r.parentName || '')}</td>
+  <td>${escHtml(r.roomLabel)}</td>
+  <td><span class="${r.discType === 'staff' ? 'badge-confirmed' : 'family-badge-discount'}">${escHtml(discLabel)}</span></td>
+  <td class="report-num">${r.fullDays}</td>
+  <td class="report-num">${r.halfDays}</td>
+  <td class="report-num">${r.totalDays}</td>
+  <td class="report-num">${fmt(r.listPrice)}</td>
+  <td class="report-num" style="color:#c0392b;">&minus;${fmt(r.saved)}</td>
+  <td class="report-num" style="font-weight:600;">${fmt(r.amtDue)}</td>
+</tr>`;
+    });
+
+    html += `</tbody><tfoot><tr style="font-weight:700;background:#f0ebe0;">
+  <td colspan="4">Totals</td>
+  <td class="report-num">${_discountPricingRows.reduce((s,r)=>s+r.fullDays,0)}</td>
+  <td class="report-num">${_discountPricingRows.reduce((s,r)=>s+r.halfDays,0)}</td>
+  <td class="report-num">${_discountPricingRows.reduce((s,r)=>s+r.totalDays,0)}</td>
+  <td class="report-num">${fmt(totalListPrice)}</td>
+  <td class="report-num" style="color:#c0392b;">&minus;${fmt(totalSaved)}</td>
+  <td class="report-num">${fmt(totalAmtDue)}</td>
+</tr></tfoot></table>`;
+
+    el.innerHTML = html;
+    document.getElementById('exportDiscountPricingBtn').style.display = '';
+}
+
+function exportDiscountPricingReport() {
+    if (!_discountPricingRows.length) return;
+    const monthVal   = document.getElementById('discountPricingMonth')?.value || '';
+    const [y, m]     = monthVal.split('-').map(Number);
+    const monthLabel = m ? (MONTH_NAMES[m - 1] + ' ' + y) : monthVal;
+    const headers = ['Child', 'Parent', 'Email', 'Room', 'Discount Type', 'Discount %', 'Full Days', 'Half Days', 'Total Days', 'List Price', 'You Save', 'Amount Due'];
+    const rows = _discountPricingRows.map(r => [
+        r.childName, r.parentName || '', r.parentEmail || '', r.roomLabel,
+        r.discType === 'staff' ? 'Staff' : 'Custom',
+        r.discType === 'staff' ? 100 : (r.discValue || 0),
+        r.fullDays, r.halfDays, r.totalDays, r.listPrice, r.saved, r.amtDue,
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, monthLabel.substring(0, 31));
+    XLSX.writeFile(wb, `discount-pricing-${monthVal}.xlsx`);
+}
