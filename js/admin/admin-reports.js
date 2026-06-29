@@ -5024,20 +5024,22 @@ async function generateDiscountPricingReport() {
     const [y, m]     = monthVal.split('-').map(Number);
     const monthLabel = MONTH_NAMES[m - 1] + ' ' + y;
     const fmt        = v => '$' + v.toFixed(2);
-    const totalListPrice = _discountPricingRows.reduce((s, r) => s + r.listPrice, 0);
-    const totalAmtDue    = _discountPricingRows.reduce((s, r) => s + r.amtDue, 0);
-    const totalSaved     = _discountPricingRows.reduce((s, r) => s + r.saved, 0);
 
-    let html = `<p style="margin:0 0 10px;font-size:13px;color:#555;">${escHtml(monthLabel)} &mdash; ${_discountPricingRows.length} children with discounts</p>`;
-    html += `<table class="admin-table" id="discountPricingTable"><thead><tr>
-  <th>Child</th><th>Parent</th><th>Room</th><th>Discount</th>
-  <th class="report-num">Full Days</th><th class="report-num">Half Days</th><th class="report-num">Total Days</th>
-  <th class="report-num">List Price</th><th class="report-num">You Save</th><th class="report-num">Amount Due</th>
-</tr></thead><tbody>`;
+    const staffRows  = _discountPricingRows.filter(r => r.discType === 'staff');
+    const otherRows  = _discountPricingRows.filter(r => r.discType !== 'staff');
 
-    _discountPricingRows.forEach(r => {
+    const subtotal = rows => ({
+        fullDays:  rows.reduce((s,r)=>s+r.fullDays,0),
+        halfDays:  rows.reduce((s,r)=>s+r.halfDays,0),
+        totalDays: rows.reduce((s,r)=>s+r.totalDays,0),
+        listPrice: rows.reduce((s,r)=>s+r.listPrice,0),
+        costToCenter: rows.reduce((s,r)=>s+r.saved,0),
+        amtDue:    rows.reduce((s,r)=>s+r.amtDue,0),
+    });
+
+    const renderRows = rows => rows.map(r => {
         const discLabel = r.discType === 'staff' ? 'Staff (100% off)' : `${r.discValue}% off`;
-        html += `<tr>
+        return `<tr>
   <td>${escHtml(r.childName)}</td>
   <td>${escHtml(r.parentName || '')}</td>
   <td>${escHtml(r.roomLabel)}</td>
@@ -5046,19 +5048,53 @@ async function generateDiscountPricingReport() {
   <td class="report-num">${r.halfDays}</td>
   <td class="report-num">${r.totalDays}</td>
   <td class="report-num">${fmt(r.listPrice)}</td>
-  <td class="report-num" style="color:#c0392b;">&minus;${fmt(r.saved)}</td>
+  <td class="report-num" style="color:#c0392b;">${fmt(r.saved)}</td>
   <td class="report-num" style="font-weight:600;">${fmt(r.amtDue)}</td>
 </tr>`;
-    });
+    }).join('');
+
+    const renderSubtotal = (label, rows) => {
+        if (!rows.length) return '';
+        const t = subtotal(rows);
+        return `<tr style="font-weight:700;background:#e8f0f8;">
+  <td colspan="4">${escHtml(label)} subtotal (${rows.length} child${rows.length !== 1 ? 'ren' : ''})</td>
+  <td class="report-num">${t.fullDays}</td>
+  <td class="report-num">${t.halfDays}</td>
+  <td class="report-num">${t.totalDays}</td>
+  <td class="report-num">${fmt(t.listPrice)}</td>
+  <td class="report-num" style="color:#c0392b;">${fmt(t.costToCenter)}</td>
+  <td class="report-num">${fmt(t.amtDue)}</td>
+</tr>`;
+    };
+
+    const grand = subtotal(_discountPricingRows);
+
+    let html = `<p style="margin:0 0 10px;font-size:13px;color:#555;">${escHtml(monthLabel)} &mdash; ${_discountPricingRows.length} children with discounts</p>`;
+    html += `<table class="admin-table" id="discountPricingTable"><thead><tr>
+  <th>Child</th><th>Parent</th><th>Room</th><th>Discount</th>
+  <th class="report-num">Full Days</th><th class="report-num">Half Days</th><th class="report-num">Total Days</th>
+  <th class="report-num">List Price</th><th class="report-num">Cost to Center</th><th class="report-num">Amount Due</th>
+</tr></thead><tbody>`;
+
+    if (staffRows.length) {
+        html += `<tr><td colspan="10" style="background:#f5f5f5;font-weight:700;font-size:11px;letter-spacing:.04em;padding:6px 10px;color:#555;">STAFF</td></tr>`;
+        html += renderRows(staffRows);
+        html += renderSubtotal('Staff', staffRows);
+    }
+    if (otherRows.length) {
+        html += `<tr><td colspan="10" style="background:#f5f5f5;font-weight:700;font-size:11px;letter-spacing:.04em;padding:6px 10px;color:#555;">OTHER DISCOUNTS</td></tr>`;
+        html += renderRows(otherRows);
+        html += renderSubtotal('Other discounts', otherRows);
+    }
 
     html += `</tbody><tfoot><tr style="font-weight:700;background:#f0ebe0;">
-  <td colspan="4">Totals</td>
-  <td class="report-num">${_discountPricingRows.reduce((s,r)=>s+r.fullDays,0)}</td>
-  <td class="report-num">${_discountPricingRows.reduce((s,r)=>s+r.halfDays,0)}</td>
-  <td class="report-num">${_discountPricingRows.reduce((s,r)=>s+r.totalDays,0)}</td>
-  <td class="report-num">${fmt(totalListPrice)}</td>
-  <td class="report-num" style="color:#c0392b;">&minus;${fmt(totalSaved)}</td>
-  <td class="report-num">${fmt(totalAmtDue)}</td>
+  <td colspan="4">Grand Total</td>
+  <td class="report-num">${grand.fullDays}</td>
+  <td class="report-num">${grand.halfDays}</td>
+  <td class="report-num">${grand.totalDays}</td>
+  <td class="report-num">${fmt(grand.listPrice)}</td>
+  <td class="report-num" style="color:#c0392b;">${fmt(grand.costToCenter)}</td>
+  <td class="report-num">${fmt(grand.amtDue)}</td>
 </tr></tfoot></table>`;
 
     el.innerHTML = html;
@@ -5070,7 +5106,7 @@ function exportDiscountPricingReport() {
     const monthVal   = document.getElementById('discountPricingMonth')?.value || '';
     const [y, m]     = monthVal.split('-').map(Number);
     const monthLabel = m ? (MONTH_NAMES[m - 1] + ' ' + y) : monthVal;
-    const headers = ['Child', 'Parent', 'Email', 'Room', 'Discount Type', 'Discount %', 'Full Days', 'Half Days', 'Total Days', 'List Price', 'You Save', 'Amount Due'];
+    const headers = ['Child', 'Parent', 'Email', 'Room', 'Discount Type', 'Discount %', 'Full Days', 'Half Days', 'Total Days', 'List Price', 'Cost to Center', 'Amount Due'];
     const rows = _discountPricingRows.map(r => [
         r.childName, r.parentName || '', r.parentEmail || '', r.roomLabel,
         r.discType === 'staff' ? 'Staff' : 'Custom',
