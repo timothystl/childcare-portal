@@ -2918,12 +2918,18 @@ async function generatePromotionsReport() {
         Object.entries(childRoom).forEach(([key, info]) => {
             const { child_name, child_dob, room_id } = info;
             if (!ROOM_CEILINGS[room_id]) return;
-            const dob         = new Date(child_dob);
-            const promoteDate = new Date(dob.getFullYear(), dob.getMonth() + ROOM_CEILINGS[room_id], 1);
-            if (promoteDate <= today || promoteDate > horizon) return;
-            const moKey   = `${promoteDate.getFullYear()}-${String(promoteDate.getMonth() + 1).padStart(2, '0')}`;
+            const dob     = new Date(child_dob);
             const dayList = typicalDays(key);
-            promotions.push({ child_name, dob, promoteDate, moKey, fromRoom: room_id, toRoom: ROOM_NEXT[room_id], dayList });
+            // Walk the full room chain from the child's current room forward
+            let room = room_id;
+            while (ROOM_CEILINGS[room] && ROOM_NEXT[room]) {
+                const promoteDate = new Date(dob.getFullYear(), dob.getMonth() + ROOM_CEILINGS[room], 1);
+                if (promoteDate > today && promoteDate <= horizon) {
+                    const moKey = `${promoteDate.getFullYear()}-${String(promoteDate.getMonth() + 1).padStart(2, '0')}`;
+                    promotions.push({ child_name, dob, promoteDate, moKey, fromRoom: room, toRoom: ROOM_NEXT[room], dayList });
+                }
+                room = ROOM_NEXT[room];
+            }
         });
 
         promotions.sort((a, b) => a.promoteDate - b.promoteDate);
