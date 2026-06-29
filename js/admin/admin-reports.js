@@ -2881,7 +2881,10 @@ async function generatePromotionsReport() {
         const recurMap = {};
         allFamilies.forEach(fam => {
             (fam.students || []).forEach(s => {
-                if (s.child_name) recurMap[`${s.child_name.toLowerCase()}|${s.child_dob || ''}`] = s.recurring_days || '';
+                if (s.child_name) {
+                    const rd = s.recurring_days;
+                    recurMap[`${s.child_name.toLowerCase()}|${s.child_dob || ''}`] = Array.isArray(rd) ? rd.join(',') : (rd || '');
+                }
             });
         });
 
