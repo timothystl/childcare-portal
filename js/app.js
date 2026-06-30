@@ -706,7 +706,8 @@ function effectiveRate(baseRate, discountType, discountValue) {
 
 // Returns an HTML string showing the discounted rate with an inline note.
 function formatChildRate(child, dayType) {
-    const base = dayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0);
+    const effectiveDayType = child.room.fullDayOnly ? 'full' : dayType;
+    const base = effectiveDayType === 'half' ? (child.room.halfDayRate || 0) : (child.room.fullDayRate || 0);
     const rate = effectiveRate(base, child.discountType, child.discountValue);
     if (child.discountType === 'staff')
         return `$0<span class="disc-note"> (staff)</span>`;
@@ -734,7 +735,8 @@ function formatChildRate(child, dayType) {
  */
 function getChildDayAmounts(dayType, children = selectedChildren) {
     const entries = children.map(c => {
-        const base = dayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
+        const effectiveDayType = c.room.fullDayOnly ? 'full' : dayType;
+        const base = effectiveDayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
         return { child: c, eff: effectiveRate(base, c.discountType, c.discountValue) };
     }).sort((a, b) => b.eff - a.eff);   // highest payer first
 

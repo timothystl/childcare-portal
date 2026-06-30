@@ -152,7 +152,7 @@ function calcRegistrationBill(reg) {
     return (reg.registration_dates || [])
         .filter(d => !d.waitlisted)
         .reduce((sum, d) => {
-            const rate = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
+            const rate = (!room.fullDayOnly && d.day_type === 'half') ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
             return sum + effectiveAdminRate(rate, disc.type, disc.value);
         }, 0);
 }

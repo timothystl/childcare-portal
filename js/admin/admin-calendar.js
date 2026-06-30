@@ -420,6 +420,8 @@ async function _handleCalDayClick(dateStr) {
         // Show inline picker
         _editDaysPickDate = dateStr;
         document.getElementById('editDaysPickerDate').textContent = friendlyShort(dateStr);
+        const room = ROOMS.find(r => r.id === editDaysReg?.room_id);
+        document.getElementById('editDaysPickerHalf').style.display = room?.fullDayOnly ? 'none' : '';
         document.getElementById('editDaysPicker').style.display = '';
         errEl.textContent = '';
     }
@@ -1013,7 +1015,7 @@ async function _aadConfirm() {
         // Add day rate + change fee to the family's invoice for this month
         try {
             const room = ROOMS.find(r => r.id === _aadRoomId);
-            const dayRate = dayType === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+            const dayRate = (!room?.fullDayOnly && dayType === 'half') ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
             const month   = _aadDateStr.substring(0, 7);
             await addDayToInvoiceByEmail(_aadSelected.parent_email, month, dayRate, changeFee);
         } catch (_) { /* non-blocking */ }
@@ -1033,14 +1035,14 @@ async function _aadConfirm() {
         // Send change notice email (non-blocking)
         try {
             const room = ROOMS.find(r => r.id === (updatedReg.room_id || _aadRoomId));
-            const rate = dayType === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+            const rate = (!room?.fullDayOnly && dayType === 'half') ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
             const [y, m] = _aadDateStr.substring(0, 7).split('-').map(Number);
             const monthLabel = MONTH_NAMES[m - 1] + ' ' + y;
             const existingDates = (updatedReg.registration_dates || [])
                 .filter(d => !d.waitlisted && d.care_date !== _aadDateStr && d.care_date.startsWith(_aadDateStr.substring(0, 7)))
                 .map(d => {
                     const r2 = ROOMS.find(x => x.id === (d.room_id || updatedReg.room_id));
-                    const r2rate = d.day_type === 'half' ? (r2?.halfDayRate || 0) : (r2?.fullDayRate || 0);
+                    const r2rate = (!r2?.fullDayOnly && d.day_type === 'half') ? (r2?.halfDayRate || 0) : (r2?.fullDayRate || 0);
                     return { date: d.care_date, dayType: d.day_type, amount: r2rate };
                 });
             await sendScheduleChangeEmail({
