@@ -168,7 +168,7 @@ function renderChildCard({ childName, roomId, dates }) {
 
     // Compute grand totals
     const grandTotal = dates.reduce((sum, d) => {
-        const rate = d.day_type === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+        const rate = (!room?.fullDayOnly && d.day_type === 'half') ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
         return sum + rate;
     }, 0);
     const grandFull = dates.filter(d => d.day_type !== 'half').length;
@@ -181,7 +181,7 @@ function renderChildCard({ childName, roomId, dates }) {
         const monthFull = monthDates.filter(d => d.day_type !== 'half').length;
         const monthHalf = monthDates.filter(d => d.day_type === 'half').length;
         const monthBill = monthDates.reduce((sum, d) => {
-            const rate = d.day_type === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+            const rate = (!room?.fullDayOnly && d.day_type === 'half') ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
             return sum + rate;
         }, 0);
 
