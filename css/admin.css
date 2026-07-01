@@ -1967,88 +1967,97 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 
 /* ============================================================
-   MOBILE NAVIGATION — hamburger menu + drawer overlay
-   Placed AFTER base tab rules so mobile overrides cascade win
+   MOBILE NAVIGATION — hamburger + full-screen drawer
+   Rule order: base styles first, then @media override LAST
+   so the mobile media query always wins the cascade.
    ============================================================ */
 
-/* Mobile-only: hide desktop tab bar, show hamburger */
-@media (max-width: 700px) {
-    .admin-tabs { display: none; }
-    .mobile-menu-btn { display: flex; }
-}
-
-/* Hamburger button (hidden on desktop by default) */
+/* Hamburger button — base state is hidden (desktop shows tab bar) */
 .mobile-menu-btn {
-    display: none;
+    display: none;           /* overridden to flex by mobile @media below */
+    -webkit-appearance: none;
+    appearance: none;
     align-items: center;
     justify-content: center;
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 1.4em;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 6px 10px;
+    font-size: 1.5em;
     line-height: 1;
     cursor: pointer;
     color: var(--navy);
-    padding: 5px 10px;
     flex-shrink: 0;
-    transition: background .15s;
 }
 .mobile-menu-btn:hover { background: var(--warm-gray); }
 
-/* Full-screen overlay backdrop */
+/* Full-screen overlay backdrop — always in DOM, hidden by default */
 .mobile-nav-overlay {
+    display: none;           /* JS removes .hidden to show; .hidden adds display:none */
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
     z-index: 9999;
     background: rgba(0, 0, 0, .55);
-    display: flex;
     align-items: flex-start;
     justify-content: flex-start;
 }
-.mobile-nav-overlay.hidden { display: none; }
+.mobile-nav-overlay.open {
+    display: flex;
+}
 
-/* Slide-in drawer panel */
+/* White drawer panel on the left */
 .mobile-nav-drawer {
     background: var(--white);
-    width: min(280px, 82%);
+    width: 75%;
+    max-width: 280px;
     height: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    box-shadow: 4px 0 24px rgba(0, 0, 0, .25);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, .3);
     display: flex;
     flex-direction: column;
-    padding-top: 4px;
+    flex-shrink: 0;
 }
 
-/* Close (×) button at top-right of drawer */
+/* × close button */
 .mobile-nav-close {
+    -webkit-appearance: none;
+    appearance: none;
     align-self: flex-end;
     background: none;
     border: none;
+    border-radius: 0;
     font-size: 1.8em;
     line-height: 1;
     cursor: pointer;
     color: var(--text-muted);
-    padding: 8px 14px;
+    padding: 12px 16px;
 }
 .mobile-nav-close:hover { color: var(--text); }
 
-/* "Admin Menu" heading inside drawer */
+/* Section label */
 .mobile-nav-heading {
-    padding: 2px 20px 12px;
-    font-size: .75em;
+    padding: 4px 16px 10px;
+    font-size: .7em;
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: .08em;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 4px;
+    border-bottom: 2px solid var(--border);
 }
 
-/* Each nav item row */
+/* Each nav item — full reset, then list-item style */
 .mobile-nav-item {
+    -webkit-appearance: none;
+    appearance: none;
     display: block;
     width: 100%;
+    box-sizing: border-box;
     text-align: left;
     padding: 15px 20px;
     font-size: 1em;
@@ -2056,10 +2065,11 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     color: var(--text);
     background: none;
     border: none;
-    border-bottom: 1px solid var(--warm-gray);
+    border-radius: 0;
+    border-bottom: 1px solid var(--border);
     cursor: pointer;
     font-family: var(--font-body);
-    transition: background .12s;
+    transition: background .1s;
 }
 .mobile-nav-item:hover,
 .mobile-nav-item:active { background: var(--linen); }
@@ -2068,6 +2078,12 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     background: var(--green-lt);
     border-left: 3px solid var(--sun);
     padding-left: 17px;
+}
+
+/* Mobile overrides — placed LAST so they beat same-specificity base rules */
+@media (max-width: 700px) {
+    .admin-tabs { display: none; }
+    .mobile-menu-btn { display: flex; }
 }
 
 /* ============================================================
@@ -2209,8 +2225,6 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     .tab-label { display: inline; }
     .admin-tabs { overflow-x: auto; scrollbar-width: none; }
     .admin-tabs::-webkit-scrollbar { display: none; }
-    .mobile-menu-btn { display: none; }
-    .mobile-nav-overlay { display: none !important; }
 }
 
 .admin-tab-btn {
