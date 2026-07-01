@@ -400,6 +400,10 @@ function renderChildSection() {
 }
 
 async function onChildrenChanged() {
+    // A day-picker popup/backdrop left open from a previous selection would
+    // otherwise stay stuck on screen (full-page dark overlay, intercepting
+    // clicks) once the child selection changes and the calendar re-renders.
+    closeDayPicker();
     selectedDates = new Map();
     capacityCache = {};
     if (!selectedChildren.length) {
