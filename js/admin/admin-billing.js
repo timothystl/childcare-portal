@@ -618,12 +618,22 @@ async function onPaymentCsvChange(file) {
             return;
         }
 
-        _csvHeaders    = (rows[0] || []).map(h => String(h));
-        _csvParsedRows = rows.slice(1).filter(r => r.some(cell => cell !== ''));
+        // ProCare xlsx files have a title row then a blank row before the real headers.
+        // Scan the first 5 rows to find the actual header row.
+        const PROCARE_COLS = ['Date','Student','Type','Description','Due Date','Status','Amount'];
+        let headerRowIdx = 0;
+        for (let i = 0; i < Math.min(5, rows.length); i++) {
+            if (PROCARE_COLS.every((col, j) => (String(rows[i][j] || '')).trim() === col)) {
+                headerRowIdx = i;
+                break;
+            }
+        }
+
+        _csvHeaders    = (rows[headerRowIdx] || []).map(h => String(h));
+        _csvParsedRows = rows.slice(headerRowIdx + 1).filter(r => r.some(cell => cell !== ''));
 
         // Auto-detect ProCare format: Date, Student, Type, Description, Due Date, Status, Amount
-        const isProCare = ['Date','Student','Type','Description','Due Date','Status','Amount']
-            .every((col, i) => (_csvHeaders[i] || '').trim() === col);
+        const isProCare = PROCARE_COLS.every((col, i) => (_csvHeaders[i] || '').trim() === col);
         if (isProCare) {
             await _handleProCareImport(_csvParsedRows, wrap);
             return;
