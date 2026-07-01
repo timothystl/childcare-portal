@@ -1095,6 +1095,25 @@ async function archiveSummerFamilies() {
     return (data || []).length;
 }
 
+async function fetchStudents() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('students')
+        .select('id, child_name, child_dob, family_id, room_override, reg_fee_paid_year')
+        .order('child_name');
+    if (error) throw error;
+    return data || [];
+}
+
+async function updateStudentRegFee(studentId, paidYear) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('students')
+        .update({ reg_fee_paid_year: paidYear })
+        .eq('id', studentId);
+    if (error) throw error;
+}
+
 async function updateStudentRoomOverride(studentId, roomOverride) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient

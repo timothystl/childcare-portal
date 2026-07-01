@@ -609,10 +609,142 @@ async function onPaymentCsvChange(file) {
         _csvHeaders    = (rows[0] || []).map(h => String(h));
         _csvParsedRows = rows.slice(1).filter(r => r.some(cell => cell !== ''));
 
+        // Auto-detect ProCare format: Date, Student, Type, Description, Due Date, Status, Amount
+        const isProCare = ['Date','Student','Type','Description','Due Date','Status','Amount']
+            .every((col, i) => (_csvHeaders[i] || '').trim() === col);
+        if (isProCare) {
+            await _handleProCareImport(_csvParsedRows, wrap);
+            return;
+        }
+
         renderColumnMappingStep(_csvHeaders);
     } catch (err) {
         if (wrap) wrap.innerHTML = `<p class="empty-hint">Error parsing file: ${escHtml(err.message)}</p>`;
         alert('Failed to parse CSV/XLSX file: ' + err.message);
+    }
+}
+
+// ============================================================
+// PROCARE IMPORT
+// ============================================================
+
+async function _handleProCareImport(rows, wrap) {
+    wrap.innerHTML = '<p class="empty-hint">Loading child roster for matching…</p>';
+
+    let students = [];
+    try { students = await fetchStudents(); } catch (_) {}
+
+    // Build name → family_id map, stripping quoted nicknames (e.g. Sullivan "Sully" O'Neill)
+    const nameMap = new Map();
+    students.forEach(s => {
+        const clean = (s.child_name || '').replace(/"[^"]*"\s*/g, '').trim().toLowerCase();
+        if (clean) nameMap.set(clean, s.family_id);
+    });
+
+    // Parse each row and attempt a match
+    const parsed = rows.map((r, idx) => {
+        const [dateRaw, studentRaw, type, description, dueDateRaw, status, amountRaw] = r;
+        // Convert Excel serial dates
+        const dateVal = typeof dateRaw === 'number'
+            ? new Date(Math.round((dateRaw - 25569) * 86400 * 1000)).toISOString().substring(0, 10)
+            : dateRaw instanceof Date
+                ? dateRaw.toISOString().substring(0, 10)
+                : String(dateRaw || '').substring(0, 10);
+
+        const firstChild = String(studentRaw || '').split(',')[0].replace(/"[^"]*"\s*/g, '').trim();
+        const familyId = nameMap.get(firstChild.toLowerCase()) || null;
+        return { idx, dateVal, studentRaw: String(studentRaw || ''), firstChild, familyId, type: String(type || ''), description: String(description || ''), status: String(status || ''), amount: Number(amountRaw) || 0 };
+    }).filter(r => r.dateVal && r.type && r.amount > 0);
+
+    const matched   = parsed.filter(r => r.familyId);
+    const unmatched = parsed.filter(r => !r.familyId);
+
+    // Build family options for unmatched rows
+    const familyOpts = [...new Map(students.map(s => [s.family_id, s])).values()]
+        .sort((a, b) => (a.child_name || '').localeCompare(b.child_name || ''))
+        .map(s => `<option value="${escHtml(String(s.family_id))}">${escHtml(s.child_name)}</option>`)
+        .join('');
+
+    const typeLabel = type => type === 'Invoice' ? '🧾 Invoice' : type === 'Credit' ? '💳 Credit' : '✅ Payment';
+
+    const rows_html = parsed.map(r => {
+        const isMatched = !!r.familyId;
+        const bg = isMatched ? '' : 'background:#fffbeb';
+        const matchCell = isMatched
+            ? `<td style="color:#15803d">✓ ${escHtml(r.firstChild)}</td>`
+            : `<td><select class="procare-family-sel form-control" data-idx="${r.idx}" style="font-size:.8rem;padding:2px 4px">
+                <option value="">— skip —</option>${familyOpts}
+               </select></td>`;
+        return `<tr style="${bg}">
+            <td style="white-space:nowrap">${escHtml(r.dateVal)}</td>
+            <td style="font-size:.8rem">${escHtml(r.studentRaw)}</td>
+            <td>${typeLabel(r.type)}</td>
+            <td style="font-size:.8rem;color:#6b7280">${escHtml(r.description.substring(0, 50))}${r.description.length > 50 ? '…' : ''}</td>
+            <td>${escHtml(r.status)}</td>
+            <td style="text-align:right">$${r.amount.toFixed(2)}</td>
+            ${matchCell}
+        </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+        <div style="margin-bottom:12px;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+            <span style="font-size:.9rem"><strong>${matched.length}</strong> matched &nbsp;·&nbsp; <strong style="color:#d97706">${unmatched.length}</strong> unmatched (assign below or skip)</span>
+            <button id="procareImportBtn" class="btn-primary">Import ${matched.length} matched rows</button>
+        </div>
+        <div style="overflow-x:auto">
+        <table class="report-table" style="font-size:.82rem">
+            <thead><tr><th>Date</th><th>Student</th><th>Type</th><th>Description</th><th>Status</th><th>Amount</th><th>Matched To</th></tr></thead>
+            <tbody>${rows_html}</tbody>
+        </table>
+        </div>`;
+
+    document.getElementById('procareImportBtn')?.addEventListener('click', () => _confirmProCareImport(parsed, wrap));
+
+    // When a manual family assignment is made, update familyId in parsed array and refresh button label
+    wrap.querySelectorAll('.procare-family-sel').forEach(sel => {
+        sel.addEventListener('change', () => {
+            const idx = Number(sel.dataset.idx);
+            const row = parsed.find(r => r.idx === idx);
+            if (row) row.familyId = sel.value || null;
+            const nowMatched = parsed.filter(r => r.familyId).length;
+            const btn = document.getElementById('procareImportBtn');
+            if (btn) btn.textContent = `Import ${nowMatched} matched rows`;
+        });
+    });
+}
+
+async function _confirmProCareImport(rows, wrap) {
+    const btn = document.getElementById('procareImportBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+
+    const valid = rows.filter(r => r.familyId && !(r.type === 'Payment' && r.status !== 'Success'));
+
+    try {
+        const batch = await insertImportBatch({ source: 'procare_xlsx', row_count: valid.length, notes: `ProCare import — ${valid.length} rows` });
+        const batchId = batch?.id || null;
+
+        let ok = 0, fail = 0;
+        for (const row of valid) {
+            const method = row.type === 'Invoice' ? 'procare_invoice'
+                         : row.type === 'Credit'  ? 'procare_credit'
+                         :                          'procare_payment';
+            try {
+                await insertBillingPayment({
+                    family_id:      row.familyId,
+                    amount:         row.amount,
+                    payment_date:   row.dateVal,
+                    payment_method: method,
+                    note:           row.description,
+                    import_batch_id: batchId,
+                });
+                ok++;
+            } catch (_) { fail++; }
+        }
+
+        wrap.innerHTML = `<p class="empty-hint" style="color:#15803d">✓ Imported ${ok} rows${fail ? ` (${fail} failed)` : ''}. Upload another file to import more.</p>`;
+    } catch (err) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Retry Import'; }
+        alert('Import failed: ' + err.message);
     }
 }
 

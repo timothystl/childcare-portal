@@ -66,8 +66,7 @@ async function initDashboard() {
         else if (active === 'messages')  loadMessages();
         else if (active === 'waitlist')  loadWaitlist();
         else if (active === 'staffing')  loadStaffList();
-        else if (active === 'billing') { /* billing sub-tabs handle their own refresh */ }
-        else loadRegistrations(); // daily / settings / reports — fall back to registrations
+        else loadRegistrations(); // daily / settings / reports / finance — fall back to registrations
     });
     document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
 }

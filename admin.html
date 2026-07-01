@@ -87,7 +87,6 @@
                 <button class="admin-tab-btn" data-tab="reports">📊<span class="tab-label"> Reports</span></button>
                 <button class="admin-tab-btn" data-tab="staffing">👷<span class="tab-label"> Staffing</span></button>
                 <button class="admin-tab-btn" data-tab="finance">💰<span class="tab-label"> Finance</span></button>
-                <button class="admin-tab-btn" data-tab="billing">🏦<span class="tab-label"> Billing</span></button>
                 <button class="admin-tab-btn" data-tab="settings">⚙️<span class="tab-label"> Settings</span></button>
             </div>
         </nav>
@@ -1241,11 +1240,6 @@
                 </div>
             </section>
 
-        </div><!-- /#tab-finance -->
-
-        <!-- ── BILLING TAB ──────────────────────────────────── -->
-        <div class="tab-pane hidden" id="tab-billing">
-
             <!-- Accounts Receivable -->
             <section class="admin-section collapsible-section" id="billingArSection">
                 <h2>📋 Accounts Receivable</h2>
@@ -1272,18 +1266,18 @@
                 </div>
             </section>
 
-            <!-- CSV Payment Import -->
+            <!-- ProCare Import -->
             <section class="admin-section collapsible-section" id="billingPaymentsSection">
-                <h2>📂 CSV Payment Import — Procare</h2>
-                <p class="section-desc">Upload a Procare payment export CSV. Map columns, review matches, then confirm to create payment records. Each import is logged as an audit batch.</p>
+                <h2>📂 ProCare Import</h2>
+                <p class="section-desc">Upload a ProCare transaction export (.xlsx). The portal matches each row to a child by name, shows you unmatched rows for review, then saves payment and invoice records.</p>
                 <div class="families-import-row" style="margin-bottom:16px">
-                    <label class="file-upload-label" for="paymentCsvInput">📂 Choose CSV File</label>
+                    <label class="file-upload-label" for="paymentCsvInput">📂 Choose File</label>
                     <input type="file" id="paymentCsvInput" accept=".csv,.xlsx" class="hidden-file-input">
                     <span id="paymentCsvFileName" class="families-file-name">No file chosen</span>
                     <button id="clearPaymentCsvBtn" class="btn-ghost" style="display:none">✕ Clear</button>
                 </div>
                 <div id="paymentImportWrap">
-                    <p class="empty-hint">Choose a Procare CSV export file to begin the import wizard.</p>
+                    <p class="empty-hint">Choose a ProCare export file (.xlsx) to begin the import wizard.</p>
                 </div>
             </section>
 
@@ -1304,7 +1298,7 @@
                 </div>
             </section>
 
-        </div><!-- /#tab-billing -->
+        </div><!-- /#tab-finance -->
 
     </div>
 
