@@ -1289,6 +1289,14 @@
                 <div id="paymentImportWrap">
                     <p class="empty-hint">Choose a ProCare export file (.xlsx) to begin the import wizard.</p>
                 </div>
+                <hr style="margin:1.5rem 0;border:none;border-top:1px solid #e5e7eb;">
+                <h3 style="margin:0 0 .4rem 0;color:#1e3a5f;">ProCare Transaction Aging</h3>
+                <p style="margin:0 0 .75rem 0;font-size:.875rem;color:#555;">Balance per family from imported ProCare transactions. Green = current, yellow = 1–30 days overdue, red = 31+ days overdue.</p>
+                <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin-bottom:.75rem;">
+                    <button id="loadProcareArBtn" class="btn-secondary">&#8635; Load Aging Report</button>
+                    <button id="exportProcareArBtn" class="btn-primary" style="display:none">&#8595; Export Excel</button>
+                </div>
+                <div id="procareArWrap"></div>
             </section>
 
             <!-- Revenue Dashboard -->
