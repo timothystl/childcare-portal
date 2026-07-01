@@ -39,9 +39,19 @@ jobs:
               exit 1
             fi
 
-            ours="$(git show :2:package.json   | sed -nE 's/.*"version": *"([^"]+)".*/\1/p' | head -1)"
-            theirs="$(git show :3:package.json | sed -nE 's/.*"version": *"([^"]+)".*/\1/p' | head -1)"
+            # Read from HEAD (main, pre-merge) and the incoming branch tip directly
+            # rather than the conflict stages — package.json/build-version.js may
+            # not actually be among the conflicted files (e.g. only a dist bundle
+            # conflicted), in which case stage 2/3 blobs don't exist and `git show
+            # :2:/:3:` silently produce nothing, corrupting the version.
+            ours="$(git show HEAD:package.json | sed -nE 's/.*"version": *"([^"]+)".*/\1/p' | head -1)"
+            theirs="$(git show "origin/${{ github.ref_name }}:package.json" | sed -nE 's/.*"version": *"([^"]+)".*/\1/p' | head -1)"
             high="$(printf '%s\n%s\n' "$ours" "$theirs" | sort -V | tail -1)"
+            if [ -z "$high" ]; then
+              echo "::error::Could not determine version from either side — aborting merge."
+              git merge --abort
+              exit 1
+            fi
             echo "Resolving version conflict: ours=$ours theirs=$theirs -> $high"
 
             # Take the incoming branch's package.json, then force the version field
