@@ -2584,6 +2584,16 @@ async function fetchAllBillingPayments() {
     return data || [];
 }
 
+async function fetchARSummary(monthKey) {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('billing_payments')
+        .select('family_id, amount, payment_date, payment_method, note, families(parent_name, parent_email)')
+        .order('payment_date', { ascending: false });
+    if (error || !data) return [];
+    return data;
+}
+
 // Fetch all payments whose payment_date falls within a given YYYY-MM month
 async function fetchPaymentsForMonth(month) {
     if (!sbClient) throw new Error('Supabase not configured.');
