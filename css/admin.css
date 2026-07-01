@@ -1970,103 +1970,61 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     .family-row-meta   { grid-column: 1 / -1; }
     .family-row-actions{ grid-column: 1 / -1; }
 
-    /* Tab navigation — hamburger menu on mobile */
+    /* Tab navigation — compact emoji tab bar; no hamburger, no overlay */
+
+    /* Header scrolls with the page so the sticky tab bar owns the top slot */
+    .admin-header { position: static; }
+
+    /* Tab bar sticks at top of viewport once the header scrolls away */
     .admin-tabs {
-        padding: 0;
-        overflow: visible;
+        position: sticky;
         top: 0;
-        flex-direction: column;
+        padding: 0 2px;
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-direction: row;
     }
+    .admin-tabs::-webkit-scrollbar { display: none; }
 
-    /* Mobile bar: active tab label + toggle button */
-    .mobile-tab-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 10px 16px;
-        min-height: 48px;
-        width: 100%;
-        box-sizing: border-box;
-    }
-
-    .mobile-tab-name {
-        font-size: .95em;
-        font-weight: 700;
-        color: var(--navy);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .mobile-tab-toggle {
-        background: var(--navy);
-        color: var(--white);
-        border: none;
-        border-radius: 8px;
-        padding: 8px 14px;
-        font-size: .82em;
-        font-weight: 700;
-        cursor: pointer;
-        font-family: var(--font-body);
-        flex-shrink: 0;
-        transition: background .2s;
-    }
-    .mobile-tab-toggle:active { background: var(--sun); color: var(--navy); }
-
-    /* Tab button list — hidden by default, drops down when menu is open.
-       position:fixed puts it in the root stacking context so it reliably
-       paints above the backdrop on mobile Safari (sticky-child z-index quirk). */
+    /* Tab buttons always visible — plain flex row, never a dropdown */
     .tab-btn-container {
-        display: none;
-        position: fixed;
-        left: 0;
-        right: 0;
-        /* top is set dynamically by JS to adminTabs.getBoundingClientRect().bottom */
-        flex-direction: column;
-        background: var(--white);
-        box-shadow: 0 6px 24px rgba(0,0,0,.18);
-        z-index: 300;
-        max-height: 80dvh;
-        overflow-y: auto;
-        border-top: 1px solid var(--border);
+        display: flex;
+        position: static;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        flex: 1;
+        background: transparent;
+        box-shadow: none;
+        border-top: none;
+        max-height: none;
+        overflow-y: visible;
+        z-index: auto;
     }
 
-    .admin-tabs.mobile-open .tab-btn-container {
-        display: flex;
-    }
+    /* Emoji only — text labels hidden to keep each tab narrow */
+    .tab-label { display: none; }
 
     .admin-tab-btn {
-        display: flex;
-        align-items: center;
-        width: 100%;
-        text-align: left;
-        padding: 16px 20px;
-        border-bottom: 1px solid var(--warm-gray);
+        font-size: 1.35em;
+        padding: 9px 10px;
+        min-width: 44px;   /* WCAG touch target */
+        width: auto;
+        white-space: nowrap;
+        border-bottom: 3px solid transparent;
         border-right: none;
-        margin-bottom: 0;
-        font-size: 1em;
-        white-space: normal;
+        margin-bottom: -2px;
+        text-align: center;
     }
-    .admin-tab-btn:last-child { border-bottom: none; }
+    /* Reset the old dropdown-style active indicator */
     .admin-tab-btn.active {
-        background: var(--green-lt);
-        border-left: 4px solid var(--sun);
-        padding-left: 16px;
-        border-bottom-color: transparent;
+        background: none;
+        border-left: none;
+        padding-left: 10px;
+        border-bottom-color: var(--sun);
     }
-    .admin-tab-btn:hover { font-weight: 700; background: var(--warm-gray); }
-
-    /* Backdrop: purely decorative overlay.
-       pointer-events:none means it NEVER blocks taps on the dropdown or page.
-       Closing on outside tap is handled by a document-level listener in JS. */
-    .mobile-nav-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,.3);
-        z-index: 89;
-        pointer-events: none;
-    }
-    .mobile-nav-backdrop.hidden { display: none; }
+    .admin-tab-btn:hover { background: var(--warm-gray); }
 
     /* Report tables — allow horizontal scroll on narrow screens */
     .report-table-wrap { overflow-x: auto; }
@@ -2208,12 +2166,10 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     box-shadow: 0 2px 6px rgba(0,0,0,.05);
 }
 
-/* Desktop/landscape: tab buttons as a flex row; mobile hamburger elements hidden;
-   overflow-x:auto lives here so it never affects the mobile dropdown */
+/* Desktop/landscape ≥ 701px: full-text tabs, scrollable if many tabs */
 @media (min-width: 701px) {
     .tab-btn-container { display: flex; flex: 1; }
-    .mobile-tab-bar { display: none; }
-    .mobile-nav-backdrop { display: none; }
+    .tab-label { display: inline; }   /* show text labels on desktop */
     .admin-tabs { overflow-x: auto; scrollbar-width: none; }
     .admin-tabs::-webkit-scrollbar { display: none; }
 }

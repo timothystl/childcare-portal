@@ -308,49 +308,17 @@ async function loadClosureList() {
 // TABS
 // ============================================================
 function setupTabs() {
-    const btns              = document.querySelectorAll('#adminTabs .admin-tab-btn');
-    const panes             = document.querySelectorAll('.tab-pane');
-    const adminTabs         = document.getElementById('adminTabs');
-    const mobileTabName     = document.getElementById('mobileTabName');
-    const mobileToggle      = document.getElementById('mobileTabToggle');
-    const backdrop          = document.getElementById('mobileNavBackdrop');
-    const tabBtnContainer   = document.getElementById('tabBtnContainer');
-
-    function positionDropdown() {
-        if (!tabBtnContainer || !adminTabs) return;
-        const navBottom = adminTabs.getBoundingClientRect().bottom;
-        tabBtnContainer.style.top = navBottom + 'px';
-        tabBtnContainer.style.maxHeight = (window.innerHeight - navBottom - 8) + 'px';
-    }
-
-    // Document-level click trap: closes menu when tapping outside admin-tabs.
-    // Using a named function so we can remove it precisely.
-    function outsideTapHandler(e) {
-        if (!adminTabs.contains(e.target)) closeMobileMenu();
-    }
-
-    function closeMobileMenu() {
-        adminTabs.classList.remove('mobile-open');
-        backdrop.classList.add('hidden');
-        document.removeEventListener('click', outsideTapHandler, true);
-        if (mobileToggle) {
-            mobileToggle.textContent = '☰ Menu';
-            mobileToggle.setAttribute('aria-expanded', 'false');
-        }
-    }
+    const btns  = document.querySelectorAll('#adminTabs .admin-tab-btn');
+    const panes = document.querySelectorAll('.tab-pane');
 
     function activate(tab) {
         btns.forEach(b  => b.classList.toggle('active', b.dataset.tab === tab));
         panes.forEach(p => p.classList.toggle('hidden', p.id !== 'tab-' + tab));
         localStorage.setItem('adminActiveTab', tab);
 
-        // Update mobile label to show the active tab name
-        if (mobileTabName) {
-            const activeBtn = [...btns].find(b => b.dataset.tab === tab);
-            if (activeBtn) mobileTabName.textContent = activeBtn.textContent;
-        }
-
-        closeMobileMenu();
+        // Scroll active tab into view within the horizontal tab bar
+        const activeBtn = [...btns].find(b => b.dataset.tab === tab);
+        if (activeBtn) activeBtn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 
         // Lazy-load heavy data the first time each tab is opened
         if (tab === 'families'  && allFamiliesData.length === 0) loadFamilies();
@@ -361,28 +329,6 @@ function setupTabs() {
     }
 
     btns.forEach(btn => btn.addEventListener('click', () => activate(btn.dataset.tab)));
-
-    // Mobile hamburger toggle
-    if (mobileToggle) {
-        mobileToggle.addEventListener('click', () => {
-            const isOpen = adminTabs.classList.toggle('mobile-open');
-            backdrop.classList.toggle('hidden', !isOpen);
-            mobileToggle.textContent = isOpen ? '✕ Close' : '☰ Menu';
-            mobileToggle.setAttribute('aria-expanded', String(isOpen));
-            if (isOpen) {
-                positionDropdown();
-                // Defer so this same click doesn't immediately trigger the close handler
-                setTimeout(() => document.addEventListener('click', outsideTapHandler, true), 0);
-            } else {
-                document.removeEventListener('click', outsideTapHandler, true);
-            }
-        });
-    }
-
-    // Reposition fixed dropdown on resize/orientation change
-    window.addEventListener('resize', () => {
-        if (adminTabs.classList.contains('mobile-open')) positionDropdown();
-    });
 
     // Restore last-used tab, defaulting to 'daily'
     const saved = localStorage.getItem('adminActiveTab') || 'daily';
