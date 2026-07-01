@@ -23,6 +23,18 @@ async function _sendSchedulePush(parentEmail, childName, title, body) {
     }
 }
 
+// Human-readable "who entered this registration" label. `submitted_by` is
+// 'parent1' / 'parent2' (the registration's own parent_name is the real name
+// in those cases) or 'admin' / 'admin:<email>' (recorded at submit time so we
+// can show which staff member entered it on the family's behalf).
+function submittedByLabel(reg) {
+    const raw = reg.submitted_by || '';
+    if (raw === 'parent1' || raw === 'parent2') return reg.parent_name || (raw === 'parent1' ? 'Parent 1' : 'Parent 2');
+    if (raw === 'admin') return 'Admin';
+    if (raw.startsWith('admin:')) return `Admin (${raw.slice('admin:'.length)})`;
+    return raw || '—';
+}
+
 // LOAD REGISTRATIONS
 // ============================================================
 async function loadRegistrations() {
@@ -90,11 +102,7 @@ function renderTable(data) {
         const dates = (reg.registration_dates || [])
             .sort((a, b) => a.care_date.localeCompare(b.care_date));
 
-        const submittedByLabel = {
-            parent1: 'Parent 1',
-            parent2: 'Parent 2',
-            admin:   'Admin',
-        }[reg.submitted_by] || (reg.submitted_by || '—');
+        const enteredByLabel = submittedByLabel(reg);
 
         // Date chips — show ½ day or Full
         const datesHtml = dates.map(d => {
@@ -127,7 +135,7 @@ function renderTable(data) {
         return `
             <tr data-id="${reg.id}" data-room="${reg.room_id}">
                 <td>${submitted}</td>
-                <td class="submitted-by-cell">${escHtml(submittedByLabel)}</td>
+                <td class="submitted-by-cell">${escHtml(enteredByLabel)}</td>
                 <td>${escHtml(reg.parent_name)}</td>
                 <td><a href="mailto:${escHtml(reg.parent_email)}">${escHtml(reg.parent_email)}</a></td>
                 <td>${escHtml(reg.parent_phone)}</td>
@@ -1785,7 +1793,7 @@ async function _arSubmit() {
             roomId:         _arRoom?.id,
             confirmedDates,
             status:         'confirmed',
-            submittedBy:    'admin',
+            submittedBy:    window._adminSession?.user?.email ? `admin:${window._adminSession.user.email}` : 'admin',
         });
         await logAdminAction('create', 'registration', String(newReg.id), {
             child_name:   _arStudent.child_name,
@@ -1939,10 +1947,9 @@ function baseRow(reg, roomLabel, date, status, dayType) {
     const room = ROOMS.find(r => r.label === roomLabel);
     const rate = dayType === 'Half Day' ? room?.halfDayRate : room?.fullDayRate;
     const bill = calcRegistrationBill(reg);
-    const submittedByLabel = { parent1: 'Parent 1', parent2: 'Parent 2', admin: 'Admin' }[reg.submitted_by] || (reg.submitted_by || '');
     return {
         'Submitted':    new Date(reg.created_at).toLocaleDateString('en-US'),
-        'Entered By':   submittedByLabel,
+        'Entered By':   submittedByLabel(reg),
         'Parent Name':  reg.parent_name,
         'Email':        reg.parent_email,
         'Phone':        reg.parent_phone,
