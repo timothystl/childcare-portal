@@ -85,14 +85,30 @@
     align-items: center;
 }
 .current-user-display {
-    font-size: .82em;
+    display: inline-block;
+    margin-top: 6px;
+    font-size: .68em;
     color: var(--navy);
     background: rgba(1,41,74,0.08);
     border: 1px solid rgba(1,41,74,0.18);
-    border-radius: 6px;
-    padding: 4px 10px;
+    border-radius: 5px;
+    padding: 3px 8px;
     white-space: nowrap;
 }
+
+.current-tab-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .85em;
+    font-weight: 800;
+    color: var(--navy);
+    background: var(--green-lt);
+    border-radius: 20px;
+    padding: 7px 14px 7px 10px;
+    white-space: nowrap;
+}
+.current-tab-chip .ctc-icon { font-size: 1.1em; line-height: 1; }
 
 .btn-secondary {
     background: var(--sun);
@@ -119,6 +135,12 @@
     transition: all .2s;
 }
 .btn-ghost:hover { background: var(--warm-gray); color: var(--text); }
+.admin-header .btn-ghost {
+    height: 44px;
+    padding: 0 20px;
+    border-radius: 8px;
+    font-weight: 700;
+}
 
 /* Filters — sits inside the All Registrations section */
 .filters {
@@ -1781,10 +1803,8 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     .admin-header { padding: 12px 16px; gap: 8px; }
     .admin-header h1 { font-size: 1.1em; }
     .filters, .capacity-section, .table-section { padding: 16px; }
-    /* On mobile keep only Logout + hamburger in the header */
+    /* On mobile keep the tab chip + Logout + hamburger in the header */
     .header-actions { gap: 8px; flex-wrap: nowrap; }
-    .current-user-display { display: none; }
-    #refreshBtn, #exportXlsxBtn { display: none; }
     #logoutBtn { padding: 8px 12px; font-size: .82em; }
     .families-import-row { gap: 8px; }
     .families-list { max-height: none; }
@@ -1822,15 +1842,15 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 
 .mobile-menu-btn {
-    display: none;
+    display: flex;
     -webkit-appearance: none;
     appearance: none;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     background: transparent;
-    border: none;
+    border: 2px solid var(--border);
     border-radius: 8px;
     padding: 0;
     cursor: pointer;
@@ -1916,11 +1936,6 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .82em; cursor: pointer; font-family: var(--font-body);
 }
 .mobile-nav-footer .mnf-logout:hover { text-decoration: underline; }
-
-@media (max-width: 700px) {
-    .admin-tabs { display: none; }
-    .mobile-menu-btn { display: flex; }
-}
 
 /* ============================================================
    ROOM CALENDAR — CLICKABLE DAY CELLS
@@ -2039,50 +2054,6 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
 /* Make rcal-dialog position:relative so the detail panel anchors to it */
 .rcal-dialog { position: relative; }
-
-/* ============================================================
-   TAB NAVIGATION
-   ============================================================ */
-.admin-tabs {
-    display: flex;
-    gap: 0;
-    background: var(--white);
-    border-bottom: 2px solid var(--border);
-    padding: 0 24px;
-    position: sticky;
-    top: 73px;   /* sits flush below the sticky admin-header */
-    z-index: 90;
-    box-shadow: 0 2px 6px rgba(0,0,0,.05);
-}
-
-/* Desktop/landscape ≥ 701px: full-text tabs, scrollable if many tabs */
-@media (min-width: 701px) {
-    .tab-btn-container { display: flex; flex: 1; }
-    .tab-label { display: inline; }
-    .admin-tabs { overflow-x: auto; scrollbar-width: none; }
-    .admin-tabs::-webkit-scrollbar { display: none; }
-}
-
-.admin-tab-btn {
-    background: none;
-    border: none;
-    border-bottom: 3px solid transparent;
-    font-family: var(--font-body);
-    padding: 14px 22px 12px;
-    font-size: .92em;
-    font-weight: 600;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: color .2s, border-color .2s;
-    white-space: nowrap;
-    margin-bottom: -2px; /* overlap the nav border-bottom */
-}
-.admin-tab-btn:hover { color: var(--navy); font-weight: 700; }
-.admin-tab-btn.active {
-    color: var(--navy);
-    border-bottom-color: var(--sun);
-    border-bottom-width: 3px;
-}
 
 /* ============================================================
    COLLAPSIBLE SECTIONS
