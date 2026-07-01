@@ -1,7 +1,7 @@
 // Service Worker for Timothy Lutheran MDO
 // Cache-first for static assets, network-only for API calls
 
-const CACHE_NAME = 'tl-mdo-v4';
+const CACHE_NAME = 'tl-mdo-v5';
 
 // Static assets to pre-cache on install
 // Uses clean URLs (no .html) to match how Cloudflare Assets serves them
@@ -54,14 +54,17 @@ self.addEventListener('fetch', event => {
     return; // fall through to browser default (network)
   }
 
-  // Network-first for HTML pages and JS files (so code changes are always picked up).
+  // Network-first for HTML pages, JS, and CSS (so code/style changes are always
+  // picked up — CSS used to be cache-first, which could strand a browser on a
+  // stale stylesheet indefinitely if it was already cached under the same URL).
   // Cache-first for images and other truly static assets.
-  const isHtmlOrJs = request.mode === 'navigate' ||
-                     url.pathname.endsWith('.js') ||
-                     url.pathname === '/admin' ||
-                     url.pathname === '/';
+  const isHtmlOrJsOrCss = request.mode === 'navigate' ||
+                          url.pathname.endsWith('.js') ||
+                          url.pathname.endsWith('.css') ||
+                          url.pathname === '/admin' ||
+                          url.pathname === '/';
 
-  if (isHtmlOrJs) {
+  if (isHtmlOrJsOrCss) {
     // Network-first: try network, fall back to cache if offline
     event.respondWith(
       fetch(request).then(response => {
