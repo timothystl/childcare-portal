@@ -457,7 +457,7 @@ async function fetchAllRegistrations({ sinceDate = null, untilDate = null } = {}
     let query = sbClient
         .from('registrations')
         .select(`
-            id, created_at, status,
+            id, created_at, status, submitted_by,
             parent_name, parent_email, parent_phone,
             child_name, child_age, child_dob, room_id,
             registration_dates ( id, care_date, waitlisted, day_type, room_id, change_fee )
