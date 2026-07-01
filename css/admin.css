@@ -2056,14 +2056,15 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     }
     .admin-tab-btn:hover { font-weight: 700; background: var(--warm-gray); }
 
-    /* Backdrop — close menu on outside tap.
-       z-index must be below .admin-tabs (90) so the nav's stacking context
-       (and the dropdown inside it) stays tappable above the backdrop. */
+    /* Backdrop: purely decorative overlay.
+       pointer-events:none means it NEVER blocks taps on the dropdown or page.
+       Closing on outside tap is handled by a document-level listener in JS. */
     .mobile-nav-backdrop {
         position: fixed;
         inset: 0;
         background: rgba(0,0,0,.3);
         z-index: 89;
+        pointer-events: none;
     }
     .mobile-nav-backdrop.hidden { display: none; }
 
@@ -2205,16 +2206,16 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     top: 73px;   /* sits flush below the sticky admin-header */
     z-index: 90;
     box-shadow: 0 2px 6px rgba(0,0,0,.05);
-    overflow-x: auto;
-    scrollbar-width: none;   /* Firefox */
 }
-.admin-tabs::-webkit-scrollbar { display: none; } /* Safari/Chrome */
 
-/* Desktop-only: tab buttons as a flex row; mobile hamburger elements are hidden */
+/* Desktop/landscape: tab buttons as a flex row; mobile hamburger elements hidden;
+   overflow-x:auto lives here so it never affects the mobile dropdown */
 @media (min-width: 701px) {
     .tab-btn-container { display: flex; flex: 1; }
     .mobile-tab-bar { display: none; }
     .mobile-nav-backdrop { display: none; }
+    .admin-tabs { overflow-x: auto; scrollbar-width: none; }
+    .admin-tabs::-webkit-scrollbar { display: none; }
 }
 
 .admin-tab-btn {

@@ -323,9 +323,16 @@ function setupTabs() {
         tabBtnContainer.style.maxHeight = (window.innerHeight - navBottom - 8) + 'px';
     }
 
+    // Document-level click trap: closes menu when tapping outside admin-tabs.
+    // Using a named function so we can remove it precisely.
+    function outsideTapHandler(e) {
+        if (!adminTabs.contains(e.target)) closeMobileMenu();
+    }
+
     function closeMobileMenu() {
         adminTabs.classList.remove('mobile-open');
         backdrop.classList.add('hidden');
+        document.removeEventListener('click', outsideTapHandler, true);
         if (mobileToggle) {
             mobileToggle.textContent = '☰ Menu';
             mobileToggle.setAttribute('aria-expanded', 'false');
@@ -359,15 +366,17 @@ function setupTabs() {
     if (mobileToggle) {
         mobileToggle.addEventListener('click', () => {
             const isOpen = adminTabs.classList.toggle('mobile-open');
-            if (isOpen) positionDropdown();
             backdrop.classList.toggle('hidden', !isOpen);
             mobileToggle.textContent = isOpen ? '✕ Close' : '☰ Menu';
             mobileToggle.setAttribute('aria-expanded', String(isOpen));
+            if (isOpen) {
+                positionDropdown();
+                // Defer so this same click doesn't immediately trigger the close handler
+                setTimeout(() => document.addEventListener('click', outsideTapHandler, true), 0);
+            } else {
+                document.removeEventListener('click', outsideTapHandler, true);
+            }
         });
-    }
-
-    if (backdrop) {
-        backdrop.addEventListener('click', closeMobileMenu);
     }
 
     // Reposition fixed dropdown on resize/orientation change
