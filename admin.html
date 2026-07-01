@@ -47,10 +47,13 @@
                 <img src="/images/logo/myMDO_playful_admin_variant.png" alt="myMDO Admin" height="50">
                 <div>
                     <h1>Admin Dashboard <span id="versionBadge" class="version-badge"></span></h1>
+                    <span id="currentUserDisplay" class="current-user-display"></span>
                 </div>
             </div>
             <div class="header-actions">
-                <span id="currentUserDisplay" class="current-user-display"></span>
+                <span id="currentTabChip" class="current-tab-chip">
+                    <span class="ctc-icon" id="currentTabIcon">🏫</span><span id="currentTabLabel">Classrooms</span>
+                </span>
                 <button id="logoutBtn" class="btn-ghost">Logout</button>
                 <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open navigation menu" aria-expanded="false">
                     <span class="hamburger-bars" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -87,20 +90,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- Tab Navigation -->
-        <nav class="admin-tabs" id="adminTabs">
-            <div class="tab-btn-container" id="tabBtnContainer">
-                <button class="admin-tab-btn" data-tab="daily">🏫<span class="tab-label"> Classrooms</span></button>
-                <button class="admin-tab-btn" data-tab="registrations">📅<span class="tab-label"> Care Calendar</span></button>
-                <button class="admin-tab-btn" data-tab="families">👨‍👩‍👧<span class="tab-label"> Families</span></button>
-                <button class="admin-tab-btn" data-tab="waitlist">⏳<span class="tab-label"> Waitlist</span></button>
-                <button class="admin-tab-btn" data-tab="reports">📊<span class="tab-label"> Reports</span></button>
-                <button class="admin-tab-btn" data-tab="staffing">👷<span class="tab-label"> Staffing</span></button>
-                <button class="admin-tab-btn" data-tab="finance">💰<span class="tab-label"> Finance</span></button>
-                <button class="admin-tab-btn" data-tab="settings">⚙️<span class="tab-label"> Settings</span></button>
-            </div>
-        </nav>
 
         <!-- ── Tab: Daily ─────────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-daily">

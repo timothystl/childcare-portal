@@ -139,8 +139,8 @@ function _resetRoleRestrictions() {
             const el = document.getElementById(id);
             if (el) el.style.display = '';
         });
-    document.querySelectorAll('#adminTabs .admin-tab-btn')
-        .forEach(btn => { btn.style.display = ''; });
+    document.querySelectorAll('.mobile-nav-item')
+        .forEach(item => { item.style.display = ''; });
 }
 
 // Auto-restore session if already logged in — wait for all scripts to load first

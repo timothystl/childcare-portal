@@ -307,13 +307,26 @@ async function loadClosureList() {
 
 // TABS
 // ============================================================
+const TAB_META = {
+    daily:         { icon: '🏫', label: 'Classrooms' },
+    registrations: { icon: '📅', label: 'Care Calendar' },
+    waitlist:      { icon: '⏳', label: 'Waitlist' },
+    families:      { icon: '👨‍👩‍👧', label: 'Families' },
+    staffing:      { icon: '👷', label: 'Staffing' },
+    finance:       { icon: '💰', label: 'Finance' },
+    billing:       { icon: '💳', label: 'Billing' },
+    reports:       { icon: '📊', label: 'Reports' },
+    settings:      { icon: '⚙️', label: 'Settings' }
+};
+
 function setupTabs() {
-    const btns     = document.querySelectorAll('#adminTabs .admin-tab-btn');
     const panes    = document.querySelectorAll('.tab-pane');
     const menuBtn  = document.getElementById('mobileMenuBtn');
     const overlay  = document.getElementById('mobileNavOverlay');
     const closeBtn = document.getElementById('mobileNavClose');
     const navItems = document.querySelectorAll('.mobile-nav-item');
+    const chipIcon  = document.getElementById('currentTabIcon');
+    const chipLabel = document.getElementById('currentTabLabel');
 
     // Move overlay to <body> so position:fixed is relative to the viewport,
     // not to any transformed/stacking-context ancestor.
@@ -325,14 +338,13 @@ function setupTabs() {
     function closeMenu() { if (overlay) overlay.classList.remove('open'); if (menuBtn) menuBtn.setAttribute('aria-expanded', 'false'); }
 
     function activate(tab) {
-        btns.forEach(b     => b.classList.toggle('active', b.dataset.tab === tab));
         navItems.forEach(i => i.classList.toggle('active', i.dataset.tab === tab));
         panes.forEach(p    => p.classList.toggle('hidden', p.id !== 'tab-' + tab));
         localStorage.setItem('adminActiveTab', tab);
         closeMenu();
 
-        const activeBtn = [...btns].find(b => b.dataset.tab === tab);
-        if (activeBtn) activeBtn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        const meta = TAB_META[tab];
+        if (meta && chipIcon && chipLabel) { chipIcon.textContent = meta.icon; chipLabel.textContent = meta.label; }
 
         if (tab === 'families'  && allFamiliesData.length === 0) loadFamilies();
         if (tab === 'staffing'  && allStaffData.length === 0)    loadStaffList();
@@ -340,7 +352,6 @@ function setupTabs() {
         if (tab === 'settings')                                  loadGeofenceSettings();
     }
 
-    btns.forEach(btn => btn.addEventListener('click', () => activate(btn.dataset.tab)));
     navItems.forEach(item => item.addEventListener('click', () => activate(item.dataset.tab)));
 
     if (menuBtn)  menuBtn.addEventListener('click', openMenu);
@@ -594,8 +605,7 @@ function applyRoleRestrictions() {
     if (currentAdminRole === 'full') return;
 
     // Finance tab is full-access only
-    const finBtn = document.querySelector('[data-tab="finance"]');
-    if (finBtn) finBtn.style.display = 'none';
+    document.querySelectorAll('[data-tab="finance"]').forEach(el => { el.style.display = 'none'; });
 
     if (currentAdminRole === 'restricted') {
         // Staffing tab: hide everything except the schedule planner
@@ -611,14 +621,17 @@ function applyRoleRestrictions() {
 
     if (currentAdminRole === 'staff') {
         // Hide all tabs except Classrooms and force it active
-        document.querySelectorAll('#adminTabs .admin-tab-btn').forEach(btn => {
-            if (btn.dataset.tab !== 'daily') btn.style.display = 'none';
+        document.querySelectorAll('.mobile-nav-item').forEach(item => {
+            if (item.dataset.tab !== 'daily') item.style.display = 'none';
         });
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
         document.getElementById('tab-daily')?.classList.remove('hidden');
-        document.querySelectorAll('#adminTabs .admin-tab-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.tab === 'daily');
+        document.querySelectorAll('.mobile-nav-item').forEach(item => {
+            item.classList.toggle('active', item.dataset.tab === 'daily');
         });
+        const chipIcon  = document.getElementById('currentTabIcon');
+        const chipLabel = document.getElementById('currentTabLabel');
+        if (chipIcon && chipLabel) { chipIcon.textContent = TAB_META.daily.icon; chipLabel.textContent = TAB_META.daily.label; }
         localStorage.setItem('adminActiveTab', 'daily');
     }
 }
