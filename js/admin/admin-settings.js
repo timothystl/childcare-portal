@@ -308,12 +308,20 @@ async function loadClosureList() {
 // TABS
 // ============================================================
 function setupTabs() {
-    const btns           = document.querySelectorAll('#adminTabs .admin-tab-btn');
-    const panes          = document.querySelectorAll('.tab-pane');
-    const adminTabs      = document.getElementById('adminTabs');
-    const mobileTabName  = document.getElementById('mobileTabName');
-    const mobileToggle   = document.getElementById('mobileTabToggle');
-    const backdrop       = document.getElementById('mobileNavBackdrop');
+    const btns              = document.querySelectorAll('#adminTabs .admin-tab-btn');
+    const panes             = document.querySelectorAll('.tab-pane');
+    const adminTabs         = document.getElementById('adminTabs');
+    const mobileTabName     = document.getElementById('mobileTabName');
+    const mobileToggle      = document.getElementById('mobileTabToggle');
+    const backdrop          = document.getElementById('mobileNavBackdrop');
+    const tabBtnContainer   = document.getElementById('tabBtnContainer');
+
+    function positionDropdown() {
+        if (!tabBtnContainer || !adminTabs) return;
+        const navBottom = adminTabs.getBoundingClientRect().bottom;
+        tabBtnContainer.style.top = navBottom + 'px';
+        tabBtnContainer.style.maxHeight = (window.innerHeight - navBottom - 8) + 'px';
+    }
 
     function closeMobileMenu() {
         adminTabs.classList.remove('mobile-open');
@@ -351,6 +359,7 @@ function setupTabs() {
     if (mobileToggle) {
         mobileToggle.addEventListener('click', () => {
             const isOpen = adminTabs.classList.toggle('mobile-open');
+            if (isOpen) positionDropdown();
             backdrop.classList.toggle('hidden', !isOpen);
             mobileToggle.textContent = isOpen ? '✕ Close' : '☰ Menu';
             mobileToggle.setAttribute('aria-expanded', String(isOpen));
@@ -360,6 +369,11 @@ function setupTabs() {
     if (backdrop) {
         backdrop.addEventListener('click', closeMobileMenu);
     }
+
+    // Reposition fixed dropdown on resize/orientation change
+    window.addEventListener('resize', () => {
+        if (adminTabs.classList.contains('mobile-open')) positionDropdown();
+    });
 
     // Restore last-used tab, defaulting to 'daily'
     const saved = localStorage.getItem('adminActiveTab') || 'daily';
