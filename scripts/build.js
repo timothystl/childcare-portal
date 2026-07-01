@@ -87,7 +87,6 @@ const ENTRIES = [
                 'js/admin/admin-finance.js',
                 'js/admin/admin-billing.js',
                 'js/admin/admin-staffing.js',
-                'js/admin/admin-messages.js',
                 'js/admin/admin-settings.js',
                 'js/admin/admin-waitlist.js',
             ].map((f, i) => i === 0 ? f : fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),

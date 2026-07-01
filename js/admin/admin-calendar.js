@@ -1916,17 +1916,6 @@ function exportCSV() {
     downloadFile('registrations.csv', 'text/csv', csv);
 }
 
-function exportExcel() {
-    const rows = flattenForExport(allRegistrations);
-    const ws   = XLSX.utils.json_to_sheet(rows);
-    const wb   = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Registrations');
-    ws['!cols'] = Object.keys(rows[0] || {}).map(k => ({
-        wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
-    }));
-    XLSX.writeFile(wb, 'registrations.xlsx');
-}
-
 function flattenForExport(data) {
     const rows = [];
     data.forEach(reg => {

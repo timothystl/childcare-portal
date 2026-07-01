@@ -41,7 +41,6 @@ async function initDashboard() {
     setupMissingCalendarReport();
     setupWindowOverride();
     setupFamilies();
-    setupMessages();
     setupRoomCalendar();
     setupRates();
     setupRegFee();
@@ -62,16 +61,6 @@ async function initDashboard() {
     setupBilling();
     setupTabs();
     setupCollapsibles();
-    document.getElementById('refreshBtn').addEventListener('click', () => {
-        const active = localStorage.getItem('adminActiveTab') || 'daily';
-        if (active === 'registrations') loadRegistrations();
-        else if (active === 'families')  loadFamilies();
-        else if (active === 'messages')  loadMessages();
-        else if (active === 'waitlist')  loadWaitlist();
-        else if (active === 'staffing')  loadStaffList();
-        else loadRegistrations(); // daily / settings / reports / finance — fall back to registrations
-    });
-    document.getElementById('exportXlsxBtn').addEventListener('click', exportExcel);
 }
 
 function populateRoomFilter() {

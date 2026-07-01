@@ -1185,59 +1185,6 @@ async function submitFamilyDeletionRequest({ familyId, parentEmail, parentName, 
     if (error) throw error;
 }
 
-async function fetchMessages(showArchived = false) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    // Try with is_archived column; fall back gracefully if it hasn't been added yet
-    let query = sbClient
-        .from('messages')
-        .select('id, parent_name, parent_email, message, created_at, is_read, is_archived')
-        .order('created_at', { ascending: false })
-        .limit(75);
-    if (!showArchived) query = query.eq('is_archived', false);
-    const { data, error } = await query;
-    if (error) {
-        // Column doesn't exist yet — fetch without it and default is_archived to false
-        if (error.message && error.message.includes('is_archived')) {
-            const fallback = await sbClient
-                .from('messages')
-                .select('id, parent_name, parent_email, message, created_at, is_read')
-                .order('created_at', { ascending: false })
-                .limit(75);
-            if (fallback.error) throw fallback.error;
-            return (fallback.data || []).map(m => ({ ...m, is_archived: false }));
-        }
-        throw error;
-    }
-    return data || [];
-}
-
-async function markMessageRead(id, isRead = true) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    const { error } = await sbClient
-        .from('messages')
-        .update({ is_read: isRead })
-        .eq('id', id);
-    if (error) throw error;
-}
-
-async function archiveMessage(id, archived = true) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    const { error } = await sbClient
-        .from('messages')
-        .update({ is_archived: archived })
-        .eq('id', id);
-    if (error) throw error;
-}
-
-async function deleteMessage(id) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    const { error } = await sbClient
-        .from('messages')
-        .delete()
-        .eq('id', id);
-    if (error) throw error;
-}
-
 // fetchRegistrationsByEmail — used by parent lookup portal
 async function fetchRegistrationsByEmail(email) {
     if (!sbClient) throw new Error('Supabase not configured.');
