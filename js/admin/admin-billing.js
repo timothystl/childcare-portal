@@ -979,9 +979,47 @@ async function loadProcareArView() {
     }
 }
 
+// Collapse the per-family-per-month rows in _procareArData into one row per family,
+// summed across the selected date range. daysOverdue/dueDate reflect the oldest
+// month that still has a balance (the worst-case aging for that family).
+function _groupProcareArByFamily(data) {
+    const map = new Map();
+    data.forEach(r => {
+        if (!map.has(r.familyId)) {
+            map.set(r.familyId, {
+                familyId:    r.familyId,
+                familyName:  r.familyName,
+                familyEmail: r.familyEmail,
+                owed:        0,
+                paid:        0,
+                balance:     0,
+                daysOverdue: 0,
+                dueDate:     r.dueDate,
+                monthsBilled: 0,
+            });
+        }
+        const g = map.get(r.familyId);
+        g.owed    += r.owed;
+        g.paid    += r.paid;
+        g.balance += r.balance;
+        g.monthsBilled++;
+        if (r.balance > 0 && r.daysOverdue > g.daysOverdue) {
+            g.daysOverdue = r.daysOverdue;
+            g.dueDate     = r.dueDate;
+        }
+    });
+    return [...map.values()].sort((a, b) => {
+        if (b.daysOverdue !== a.daysOverdue) return b.daysOverdue - a.daysOverdue;
+        if (b.balance !== a.balance) return b.balance - a.balance;
+        return (a.familyName || '').localeCompare(b.familyName || '');
+    });
+}
+
 function renderProcareArTable() {
     const wrap = document.getElementById('procareArWrap');
     if (!wrap || !_procareArData.length) return;
+
+    const grouped = _groupProcareArByFamily(_procareArData);
 
     const rowBg = d => d > 30 ? '#fef2f2' : d > 0 ? '#fffbeb' : '#f0fdf4';
     const ageBadge = d => {
@@ -990,28 +1028,28 @@ function renderProcareArTable() {
         return `<span style="background:#fee2e2;color:#991b1b;font-size:.75em;padding:2px 7px;border-radius:3px;white-space:nowrap;">${d}d overdue</span>`;
     };
 
-    const rows = _procareArData.map(r => `
+    const rows = grouped.map(r => `
         <tr style="background:${rowBg(r.daysOverdue)}">
             <td>${escHtml(r.familyName)}<br><small style="color:var(--muted)">${escHtml(r.familyEmail)}</small></td>
-            <td>${escHtml(r.monthLabel)}</td>
+            <td>${r.monthsBilled} mo${r.monthsBilled !== 1 ? 's' : ''}</td>
             <td class="report-num">${r.owed > 0 ? '$' + r.owed.toFixed(2) : '—'}</td>
             <td class="report-num">${r.paid > 0 ? '$' + r.paid.toFixed(2) : '—'}</td>
             <td class="report-num" style="font-weight:${r.balance > 0 ? '600' : 'normal'}">${r.balance > 0 ? '$' + r.balance.toFixed(2) : '—'}</td>
-            <td>${escHtml(r.dueDate)}</td>
+            <td>${r.balance > 0 ? escHtml(r.dueDate) : '—'}</td>
             <td>${ageBadge(r.daysOverdue)}</td>
         </tr>`).join('');
 
-    const totOwed    = _procareArData.reduce((s, r) => s + r.owed, 0);
-    const totPaid    = _procareArData.reduce((s, r) => s + r.paid, 0);
-    const totBalance = _procareArData.reduce((s, r) => s + r.balance, 0);
-    const overdueCount = _procareArData.filter(r => r.daysOverdue > 0).length;
+    const totOwed    = grouped.reduce((s, r) => s + r.owed, 0);
+    const totPaid    = grouped.reduce((s, r) => s + r.paid, 0);
+    const totBalance = grouped.reduce((s, r) => s + r.balance, 0);
+    const overdueCount = grouped.filter(r => r.daysOverdue > 0).length;
 
     wrap.innerHTML = `
-        ${overdueCount > 0 ? `<p style="margin:0 0 .5rem 0;font-size:.875rem;color:#991b1b;font-weight:600;">${overdueCount} row${overdueCount !== 1 ? 's' : ''} with outstanding balance</p>` : ''}
+        ${overdueCount > 0 ? `<p style="margin:0 0 .5rem 0;font-size:.875rem;color:#991b1b;font-weight:600;">${overdueCount} famil${overdueCount !== 1 ? 'ies' : 'y'} with outstanding balance</p>` : ''}
         <div class="table-wrapper" style="margin-top:.25rem">
             <table class="report-table" id="procareArTable">
                 <thead><tr>
-                    <th>Family</th><th>Month</th><th>Owed</th><th>Paid (ProCare)</th><th>Balance</th><th>Due Date</th><th>Aging</th>
+                    <th>Family</th><th>Months Billed</th><th>Owed</th><th>Paid (ProCare)</th><th>Balance</th><th>Due Since</th><th>Aging</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
                 <tfoot><tr class="report-total-row">
@@ -1027,14 +1065,15 @@ function renderProcareArTable() {
 
 function exportProcareArXlsx() {
     if (!_procareArData.length) return;
-    const rows = _procareArData.map(r => ({
+    const grouped = _groupProcareArByFamily(_procareArData);
+    const rows = grouped.map(r => ({
         'Family':        r.familyName,
         'Email':         r.familyEmail,
-        'Month':         r.monthLabel,
+        'Months Billed': r.monthsBilled,
         'Owed':          r.owed,
         'Paid (ProCare)': r.paid,
         'Balance':       r.balance,
-        'Due Date':      r.dueDate,
+        'Due Since':     r.balance > 0 ? r.dueDate : '',
         'Days Overdue':  r.daysOverdue > 0 ? r.daysOverdue : 0,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
