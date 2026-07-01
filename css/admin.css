@@ -2013,18 +2013,20 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     }
     .mobile-tab-toggle:active { background: var(--sun); color: var(--navy); }
 
-    /* Tab button list — hidden by default, drops down when menu is open */
+    /* Tab button list — hidden by default, drops down when menu is open.
+       position:fixed puts it in the root stacking context so it reliably
+       paints above the backdrop on mobile Safari (sticky-child z-index quirk). */
     .tab-btn-container {
         display: none;
-        position: absolute;
-        top: 100%;
+        position: fixed;
         left: 0;
         right: 0;
+        /* top is set dynamically by JS to adminTabs.getBoundingClientRect().bottom */
         flex-direction: column;
         background: var(--white);
         box-shadow: 0 6px 24px rgba(0,0,0,.18);
-        z-index: 200;
-        max-height: calc(100svh - 160px);
+        z-index: 300;
+        max-height: 80dvh;
         overflow-y: auto;
         border-top: 1px solid var(--border);
     }
@@ -2203,7 +2205,10 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     top: 73px;   /* sits flush below the sticky admin-header */
     z-index: 90;
     box-shadow: 0 2px 6px rgba(0,0,0,.05);
+    overflow-x: auto;
+    scrollbar-width: none;   /* Firefox */
 }
+.admin-tabs::-webkit-scrollbar { display: none; } /* Safari/Chrome */
 
 /* Desktop-only: tab buttons as a flex row; mobile hamburger elements are hidden */
 @media (min-width: 701px) {
