@@ -42,6 +42,7 @@ async function initDashboard() {
     setupMessages();
     setupRoomCalendar();
     setupRates();
+    setupRegFee();
     setupRatios();
     setupSummerCamp();
     setupEnrollmentCapacity();
