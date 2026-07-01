@@ -31,7 +31,7 @@ jobs:
             # and must stop for a human.
             conflicts="$(git diff --name-only --diff-filter=U)"
             echo "Conflicted files:"; echo "$conflicts"
-            other="$(echo "$conflicts" | grep -vE '^(package\.json|js/build-version\.js)$' || true)"
+            other="$(echo "$conflicts" | grep -vE '^(package\.json|js/build-version\.js|dist/admin\.min\.js|dist/app\.min\.js|dist/lookup\.min\.js)$' || true)"
             if [ -n "$other" ]; then
               echo "::error::Conflict in non-version files — manual merge required:"
               echo "$other"
@@ -49,6 +49,14 @@ jobs:
             git checkout --theirs package.json
             sed -i -E "s/(\"version\": *\")[^\"]+/\1${high}/" package.json
             printf 'window.__BUILD_VERSION__ = "v%s";\n' "$high" > js/build-version.js
+
+            # Take the branch's dist bundles (they were built on top of main's JS)
+            for f in dist/admin.min.js dist/app.min.js dist/lookup.min.js; do
+              if echo "$conflicts" | grep -q "^${f}$"; then
+                git checkout --theirs "$f"
+                git add "$f"
+              fi
+            done
 
             git add package.json js/build-version.js
             git commit --no-edit
