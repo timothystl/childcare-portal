@@ -59,27 +59,20 @@
 
         <!-- Tab Navigation -->
         <nav class="admin-tabs" id="adminTabs">
-            <!-- Mobile: current section name + menu toggle (hidden on desktop) -->
-            <div class="mobile-tab-bar">
-                <span class="mobile-tab-name" id="mobileTabName"></span>
-                <button class="mobile-tab-toggle" id="mobileTabToggle" aria-expanded="false" aria-label="Open navigation menu">☰ Menu</button>
-            </div>
-            <!-- Tab buttons: flex row on desktop, dropdown list on mobile -->
+            <!-- Scrollable tab row — labels hidden on mobile (emoji only) -->
             <div class="tab-btn-container" id="tabBtnContainer">
-                <button class="admin-tab-btn" data-tab="daily">🏫 Classrooms</button>
-                <button class="admin-tab-btn" data-tab="registrations">📅 Care Calendar</button>
-                <button class="admin-tab-btn" data-tab="families">👨‍👩‍👧 Families</button>
-                <button class="admin-tab-btn" data-tab="messages">💬 Messages</button>
-                <button class="admin-tab-btn" data-tab="waitlist">⏳ Waitlist</button>
-                <button class="admin-tab-btn" data-tab="reports">📊 Reports</button>
-                <button class="admin-tab-btn" data-tab="staffing">👷 Staffing</button>
-                <button class="admin-tab-btn" data-tab="finance">💰 Finance</button>
-                <button class="admin-tab-btn" data-tab="billing">🏦 Billing</button>
-                <button class="admin-tab-btn" data-tab="settings">⚙️ Settings</button>
+                <button class="admin-tab-btn" data-tab="daily">🏫<span class="tab-label"> Classrooms</span></button>
+                <button class="admin-tab-btn" data-tab="registrations">📅<span class="tab-label"> Care Calendar</span></button>
+                <button class="admin-tab-btn" data-tab="families">👨‍👩‍👧<span class="tab-label"> Families</span></button>
+                <button class="admin-tab-btn" data-tab="messages">💬<span class="tab-label"> Messages</span></button>
+                <button class="admin-tab-btn" data-tab="waitlist">⏳<span class="tab-label"> Waitlist</span></button>
+                <button class="admin-tab-btn" data-tab="reports">📊<span class="tab-label"> Reports</span></button>
+                <button class="admin-tab-btn" data-tab="staffing">👷<span class="tab-label"> Staffing</span></button>
+                <button class="admin-tab-btn" data-tab="finance">💰<span class="tab-label"> Finance</span></button>
+                <button class="admin-tab-btn" data-tab="billing">🏦<span class="tab-label"> Billing</span></button>
+                <button class="admin-tab-btn" data-tab="settings">⚙️<span class="tab-label"> Settings</span></button>
             </div>
         </nav>
-        <!-- Mobile nav backdrop (click to close menu) -->
-        <div class="mobile-nav-backdrop hidden" id="mobileNavBackdrop"></div>
 
         <!-- ── Tab: Daily ─────────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-daily">
