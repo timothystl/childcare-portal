@@ -668,7 +668,7 @@ async function checkExistingRegistration(email, monthKey, childName = null) {
             : `${yr}-${String(parseInt(mo) + 1).padStart(2, '0')}`;
         const { data: dates, error: datesErr } = await sbClient
             .from('registration_dates')
-            .select('id')
+            .select('registration_id')
             .in('registration_id', ids)
             .gte('care_date', monthKey + '-01')
             .lt('care_date', nextMo + '-01')
@@ -676,7 +676,11 @@ async function checkExistingRegistration(email, monthKey, childName = null) {
             .limit(1);
         if (datesErr) return null;
         if (!(dates && dates.length > 0)) return null;
-        return regs[0];
+        // Return the specific registration that has dates in this month — a parent
+        // can have multiple registrations for the same child across different
+        // months, and regs[0] (arbitrary query order) may not be the one that
+        // actually conflicts, showing the wrong "submitted on" date to the parent.
+        return regs.find(r => r.id === dates[0].registration_id) || regs[0];
     } catch {
         return null;
     }
