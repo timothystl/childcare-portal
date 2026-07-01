@@ -308,16 +308,21 @@ async function loadClosureList() {
 // TABS
 // ============================================================
 function setupTabs() {
-    const btns      = document.querySelectorAll('#adminTabs .admin-tab-btn');
-    const panes     = document.querySelectorAll('.tab-pane');
-    const menuBtn   = document.getElementById('mobileMenuBtn');
-    const overlay   = document.getElementById('mobileNavOverlay');
-    const closeBtn  = document.getElementById('mobileNavClose');
-    const navItems  = document.querySelectorAll('.mobile-nav-item');
+    const btns     = document.querySelectorAll('#adminTabs .admin-tab-btn');
+    const panes    = document.querySelectorAll('.tab-pane');
+    const menuBtn  = document.getElementById('mobileMenuBtn');
+    const overlay  = document.getElementById('mobileNavOverlay');
+    const closeBtn = document.getElementById('mobileNavClose');
+    const navItems = document.querySelectorAll('.mobile-nav-item');
 
-    function closeMenu() {
-        if (overlay) overlay.classList.add('hidden');
+    // Move overlay to <body> so position:fixed is relative to the viewport,
+    // not to any transformed/stacking-context ancestor.
+    if (overlay && overlay.parentNode !== document.body) {
+        document.body.appendChild(overlay);
     }
+
+    function openMenu()  { if (overlay) overlay.classList.add('open'); }
+    function closeMenu() { if (overlay) overlay.classList.remove('open'); }
 
     function activate(tab) {
         btns.forEach(b     => b.classList.toggle('active', b.dataset.tab === tab));
@@ -339,9 +344,10 @@ function setupTabs() {
     btns.forEach(btn => btn.addEventListener('click', () => activate(btn.dataset.tab)));
     navItems.forEach(item => item.addEventListener('click', () => activate(item.dataset.tab)));
 
-    if (menuBtn) menuBtn.addEventListener('click', () => overlay && overlay.classList.remove('hidden'));
+    if (menuBtn)  menuBtn.addEventListener('click', openMenu);
     if (closeBtn) closeBtn.addEventListener('click', closeMenu);
-    if (overlay) overlay.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
+    // Tap the dark backdrop (not the drawer) to close
+    if (overlay)  overlay.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
 
     const saved = localStorage.getItem('adminActiveTab') || 'daily';
     activate(saved);
