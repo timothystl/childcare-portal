@@ -3037,10 +3037,12 @@ async function generatePromotionsReport() {
         html += `</tbody></table></div>`;
 
         // ---- Subsection: Days opening up (by source room) ----
+        // Group promotions by fromRoom, then by month
         const byFromRoom = {};
         promotions.forEach(p => {
             if (!byFromRoom[p.fromRoom]) byFromRoom[p.fromRoom] = {};
-            (byFromRoom[p.fromRoom][p.moKey] = byFromRoom[p.fromRoom][p.moKey] || []).push(p);
+            const mk = p.moKey;
+            (byFromRoom[p.fromRoom][mk] = byFromRoom[p.fromRoom][mk] || []).push(p);
         });
 
         html += `<h4 style="margin:2rem 0 .5rem;font-size:1rem">Days Opening Up (by Room)</h4>
@@ -3074,7 +3076,8 @@ async function generatePromotionsReport() {
         promotions.forEach(p => {
             if (!p.toRoom) return;
             if (!byToRoom[p.toRoom]) byToRoom[p.toRoom] = {};
-            (byToRoom[p.toRoom][p.moKey] = byToRoom[p.toRoom][p.moKey] || []).push(p);
+            const mk = p.moKey;
+            (byToRoom[p.toRoom][mk] = byToRoom[p.toRoom][mk] || []).push(p);
         });
 
         html += `<h4 style="margin:2rem 0 .5rem;font-size:1rem">Rooms Gaining Children (by Room)</h4>
