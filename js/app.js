@@ -1336,7 +1336,10 @@ async function handleSubmit(e) {
                     date: w.dates[0], dayType: w.dayType, amount: w.weeklyAmount, childName: w.child.name,
                     label: `Weekly rate (${friendlyDate(w.dates[0])} – ${friendlyDate(w.dates[w.dates.length - 1])})`,
                 })),
-                ...dailyRows.map(r => ({ date: r.date, dayType: r.dayType, amount: r.amount, childName: r.child.name })),
+                ...dailyRows.map(r => ({
+                    date: r.date, dayType: r.dayType, amount: r.amount, childName: r.child.name,
+                    multiDiscount: r.multiDiscount || 0,
+                })),
             ];
 
             // Create billing invoice — non-blocking, never delays the confirmation
