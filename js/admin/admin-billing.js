@@ -89,7 +89,16 @@ function setupBilling() {
     document.getElementById('exportBlDashBtn')
         ?.addEventListener('click', exportBlDashCsv);
 
-    // ProCare AR aging
+    // ProCare AR aging — default to Jan of current year through current month
+    {
+        const now = new Date();
+        const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const jan = `${now.getFullYear()}-01`;
+        const fromEl = document.getElementById('procareArFrom');
+        const toEl   = document.getElementById('procareArTo');
+        if (fromEl && !fromEl.value) fromEl.value = jan;
+        if (toEl   && !toEl.value)   toEl.value   = cur;
+    }
     document.getElementById('loadProcareArBtn')
         ?.addEventListener('click', loadProcareArView);
     document.getElementById('exportProcareArBtn')
@@ -512,19 +521,16 @@ async function savePaymentFromModal() {
 
     try {
         let recordedBy = '';
-        try {
-            const session = await getAdminSession();
-            recordedBy = session?.user?.email || '';
-        } catch (_) {}
+        try { recordedBy = await getAdminEmail(); } catch (_) {}
 
         const row = {
-            family_id:    familyId,
-            invoice_id:   invoiceId || null,
-            amount:       amount,
-            payment_date: date,
-            method:       method,
-            note:         note,
-            recorded_by:  recordedBy,
+            family_id:      familyId,
+            invoice_id:     invoiceId || null,
+            amount:         amount,
+            payment_date:   date,
+            payment_method: method || 'other',
+            note:           note,
+            created_by:     recordedBy,
         };
         await insertBillingPayment(row);
 
@@ -726,6 +732,7 @@ async function _confirmProCareImport(rows, wrap) {
     const valid = rows.filter(r => r.familyId && !(r.type === 'Payment' && r.status !== 'Success'));
 
     try {
+        const adminEmail = await getAdminEmail();
         const batch = await insertImportBatch({ source: 'procare_xlsx', row_count: valid.length, notes: `ProCare import — ${valid.length} rows` });
         const batchId = batch?.id || null;
 
@@ -736,12 +743,13 @@ async function _confirmProCareImport(rows, wrap) {
                          :                          'procare_payment';
             try {
                 await insertBillingPayment({
-                    family_id:      row.familyId,
-                    amount:         row.amount,
-                    payment_date:   row.dateVal,
-                    payment_method: method,
-                    note:           row.description,
+                    family_id:       row.familyId,
+                    amount:          row.amount,
+                    payment_date:    row.dateVal,
+                    payment_method:  method,
+                    note:            row.description,
                     import_batch_id: batchId,
+                    created_by:      adminEmail,
                 });
                 ok++;
             } catch (_) { fail++; }
@@ -760,74 +768,153 @@ async function _confirmProCareImport(rows, wrap) {
 
 let _procareArData = [];
 
+// Build YYYY-MM list between two YYYY-MM strings (inclusive)
+function _monthRange(from, to) {
+    const months = [];
+    let [y, m] = from.split('-').map(Number);
+    const [ey, em] = to.split('-').map(Number);
+    while (y < ey || (y === ey && m <= em)) {
+        months.push(`${y}-${String(m).padStart(2, '0')}`);
+        m++; if (m > 12) { m = 1; y++; }
+    }
+    return months;
+}
+
 async function loadProcareArView() {
-    const wrap    = document.getElementById('procareArWrap');
-    const expBtn  = document.getElementById('exportProcareArBtn');
+    const wrap   = document.getElementById('procareArWrap');
+    const expBtn = document.getElementById('exportProcareArBtn');
     if (!wrap) return;
     wrap.innerHTML = '<p class="empty-hint">Loading…</p>';
     if (expBtn) expBtn.style.display = 'none';
 
+    // Read month range from pickers
+    const now     = new Date();
+    const todayM  = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const fromVal = document.getElementById('procareArFrom')?.value || `${now.getFullYear()}-01`;
+    const toVal   = document.getElementById('procareArTo')?.value   || todayM;
+
     try {
+        // Load payments + families + registrations in parallel
         const [payments, families] = await Promise.all([
             fetchAllBillingPayments(),
             fetchAllFamilies({ includeArchived: true }),
         ]);
+        allFamiliesData = families;
+        _discountMap = null;
 
-        // Only rows from ProCare imports
-        const procare = payments.filter(p =>
-            ['procare_invoice','procare_payment','procare_credit'].includes(p.payment_method)
-        );
+        // Refresh registrations if stale
+        if (!allRegistrations.length) {
+            const fresh = await fetchAllRegistrations();
+            if (fresh?.length) allRegistrations = fresh;
+        }
 
-        if (!procare.length) {
-            wrap.innerHTML = '<p class="empty-hint">No ProCare transactions imported yet. Upload a ProCare export file above.</p>';
+        // Only successful ProCare payments
+        const procarePaid = payments.filter(p => p.payment_method === 'procare_payment');
+
+        if (!procarePaid.length) {
+            wrap.innerHTML = '<p class="empty-hint">No ProCare payments imported yet. Upload a ProCare export file above.</p>';
             return;
         }
 
         const familyById = new Map(families.map(f => [String(f.id), f]));
 
-        // Group by family_id + month (YYYY-MM from payment_date)
-        const grouped = new Map(); // key = familyId:month
-        procare.forEach(p => {
-            const month  = (p.payment_date || '').substring(0, 7);
-            const key    = `${p.family_id}:${month}`;
-            if (!grouped.has(key)) grouped.set(key, { familyId: p.family_id, month, invoiced: 0, paid: 0, credits: 0, lastPayDate: null });
-            const g = grouped.get(key);
-            const amt = parseFloat(p.amount) || 0;
-            if (p.payment_method === 'procare_invoice') g.invoiced += amt;
-            else if (p.payment_method === 'procare_payment') { g.paid += amt; if (!g.lastPayDate || p.payment_date > g.lastPayDate) g.lastPayDate = p.payment_date; }
-            else if (p.payment_method === 'procare_credit') g.credits += amt;
+        // Group payments by family_id + month
+        const paidByKey = new Map(); // key = familyId:month → total paid
+        procarePaid.forEach(p => {
+            const month = (p.payment_date || '').substring(0, 7);
+            if (!month) return;
+            const key = `${p.family_id}:${month}`;
+            paidByKey.set(key, (paidByKey.get(key) || 0) + (parseFloat(p.amount) || 0));
         });
 
-        const today = new Date();
-        today.setHours(0,0,0,0);
+        // For each month in range, run billing calculation to get "owed" per family
+        const months = _monthRange(fromVal, toVal);
+        const today  = new Date(); today.setHours(0,0,0,0);
+        const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-        _procareArData = [...grouped.values()].map(g => {
-            const fam     = familyById.get(String(g.familyId));
-            const balance = Math.max(0, g.invoiced - g.paid - g.credits);
-            // Due date = last day of the billing month
-            const [y, m]  = (g.month || '0000-00').split('-').map(Number);
-            const dueDate = new Date(y, m, 0); // last day of month m (0 = last day of prev month)
-            const daysOverdue = balance > 0 ? Math.floor((today - dueDate) / 86400000) : 0;
-            return {
-                familyName:  fam?.parent_name || '(unknown)',
-                familyEmail: fam?.parent_email || '',
-                month:       g.month,
-                invoiced:    Math.round(g.invoiced * 100) / 100,
-                paid:        Math.round(g.paid * 100) / 100,
-                credits:     Math.round(g.credits * 100) / 100,
-                balance:     Math.round(balance * 100) / 100,
+        const resultMap = new Map(); // key = familyId:month
+
+        for (const month of months) {
+            let overrideRows = [];
+            try { overrideRows = await fetchBillingOverrides(month); } catch (_) {}
+            const overridesMap = new Map(overrideRows.map(r => [
+                `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+                parseFloat(r.override_amount),
+            ]));
+
+            const billingData = _buildFamilyBillingData(month, overridesMap);
+
+            billingData.forEach(fam => {
+                const matchedFamily = families.find(f =>
+                    (f.parent_email  || '').toLowerCase() === (fam.parentEmail || '').toLowerCase() ||
+                    (f.parent2_email || '').toLowerCase() === (fam.parentEmail || '').toLowerCase()
+                );
+                if (!matchedFamily) return;
+
+                const owed = fam.children.reduce((s, c) => {
+                    const billed = c.hasOverride ? c.overrideAmount : c.subtotal;
+                    return s + billed + (c.changeFees || 0);
+                }, 0);
+                if (owed <= 0) return;
+
+                const key  = `${matchedFamily.id}:${month}`;
+                const paid = paidByKey.get(key) || 0;
+                const [y, mo] = month.split('-').map(Number);
+                const dueDate = new Date(y, mo, 0); // last day of billing month
+                const balance = Math.max(0, owed - paid);
+                const daysOverdue = balance > 0 ? Math.floor((today - dueDate) / 86400000) : 0;
+
+                resultMap.set(key, {
+                    familyId:    matchedFamily.id,
+                    familyName:  matchedFamily.parent_name || fam.parentName || '(unknown)',
+                    familyEmail: matchedFamily.parent_email || fam.parentEmail || '',
+                    month,
+                    monthLabel:  `${MONTH_SHORT[mo - 1]} ${y}`,
+                    owed:        Math.round(owed * 100) / 100,
+                    paid:        Math.round(paid * 100) / 100,
+                    balance:     Math.round(balance * 100) / 100,
+                    dueDate:     dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                    daysOverdue,
+                });
+            });
+        }
+
+        // Also include any ProCare payments that don't match a billing row
+        // (payments in months outside the range or for families with no registrations)
+        paidByKey.forEach((paid, key) => {
+            if (resultMap.has(key)) return;
+            const [familyId, month] = key.split(':');
+            if (month < fromVal || month > toVal) return;
+            const fam = familyById.get(familyId);
+            if (!fam) return;
+            const [y, mo] = month.split('-').map(Number);
+            const dueDate = new Date(y, mo, 0);
+            resultMap.set(key, {
+                familyId,
+                familyName:  fam.parent_name || '',
+                familyEmail: fam.parent_email || '',
+                month,
+                monthLabel:  `${MONTH_SHORT[mo - 1]} ${y}`,
+                owed:        0,
+                paid:        Math.round(paid * 100) / 100,
+                balance:     0,
                 dueDate:     dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-                daysOverdue,
-            };
-        }).sort((a, b) => {
+                daysOverdue: 0,
+            });
+        });
+
+        _procareArData = [...resultMap.values()].sort((a, b) => {
+            // Most overdue first, then by month desc, then by family name
             if (b.daysOverdue !== a.daysOverdue) return b.daysOverdue - a.daysOverdue;
+            if (b.month !== a.month) return b.month.localeCompare(a.month);
             return (a.familyName || '').localeCompare(b.familyName || '');
         });
 
         renderProcareArTable();
-        if (expBtn) expBtn.style.display = '';
+        if (expBtn && _procareArData.length) expBtn.style.display = '';
     } catch (err) {
         wrap.innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
+        console.error('loadProcareArView:', err);
     }
 }
 
@@ -835,52 +922,41 @@ function renderProcareArTable() {
     const wrap = document.getElementById('procareArWrap');
     if (!wrap || !_procareArData.length) return;
 
-    const rowColor = daysOverdue => {
-        if (daysOverdue <= 0) return '#f0fdf4'; // green — current
-        if (daysOverdue <= 30) return '#fffbeb'; // yellow — 1-30 days
-        return '#fef2f2'; // red — 31+
-    };
-    const ageBadge = daysOverdue => {
-        if (daysOverdue <= 0) return '<span style="background:#dcfce7;color:#166534;font-size:.75em;padding:1px 6px;border-radius:3px;">Current</span>';
-        if (daysOverdue <= 30) return `<span style="background:#fef9c3;color:#854d0e;font-size:.75em;padding:1px 6px;border-radius:3px;">${daysOverdue}d overdue</span>`;
-        return `<span style="background:#fee2e2;color:#991b1b;font-size:.75em;padding:1px 6px;border-radius:3px;">${daysOverdue}d overdue</span>`;
-    };
-
-    const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const fmtMonth = m => {
-        const [y, mo] = (m || '').split('-').map(Number);
-        return mo ? `${MONTH_SHORT[mo - 1]} ${y}` : m;
+    const rowBg = d => d > 30 ? '#fef2f2' : d > 0 ? '#fffbeb' : '#f0fdf4';
+    const ageBadge = d => {
+        if (d <= 0) return '<span style="background:#dcfce7;color:#166534;font-size:.75em;padding:2px 7px;border-radius:3px;white-space:nowrap;">Current</span>';
+        if (d <= 30) return `<span style="background:#fef9c3;color:#854d0e;font-size:.75em;padding:2px 7px;border-radius:3px;white-space:nowrap;">${d}d overdue</span>`;
+        return `<span style="background:#fee2e2;color:#991b1b;font-size:.75em;padding:2px 7px;border-radius:3px;white-space:nowrap;">${d}d overdue</span>`;
     };
 
     const rows = _procareArData.map(r => `
-        <tr style="background:${rowColor(r.daysOverdue)}">
+        <tr style="background:${rowBg(r.daysOverdue)}">
             <td>${escHtml(r.familyName)}<br><small style="color:var(--muted)">${escHtml(r.familyEmail)}</small></td>
-            <td>${escHtml(fmtMonth(r.month))}</td>
-            <td class="report-num">${r.invoiced > 0 ? '$' + r.invoiced.toFixed(2) : '—'}</td>
+            <td>${escHtml(r.monthLabel)}</td>
+            <td class="report-num">${r.owed > 0 ? '$' + r.owed.toFixed(2) : '—'}</td>
             <td class="report-num">${r.paid > 0 ? '$' + r.paid.toFixed(2) : '—'}</td>
-            <td class="report-num">${r.credits > 0 ? '$' + r.credits.toFixed(2) : '—'}</td>
             <td class="report-num" style="font-weight:${r.balance > 0 ? '600' : 'normal'}">${r.balance > 0 ? '$' + r.balance.toFixed(2) : '—'}</td>
             <td>${escHtml(r.dueDate)}</td>
             <td>${ageBadge(r.daysOverdue)}</td>
         </tr>`).join('');
 
-    const totInvoiced = _procareArData.reduce((s, r) => s + r.invoiced, 0);
-    const totPaid     = _procareArData.reduce((s, r) => s + r.paid, 0);
-    const totCredits  = _procareArData.reduce((s, r) => s + r.credits, 0);
-    const totBalance  = _procareArData.reduce((s, r) => s + r.balance, 0);
+    const totOwed    = _procareArData.reduce((s, r) => s + r.owed, 0);
+    const totPaid    = _procareArData.reduce((s, r) => s + r.paid, 0);
+    const totBalance = _procareArData.reduce((s, r) => s + r.balance, 0);
+    const overdueCount = _procareArData.filter(r => r.daysOverdue > 0).length;
 
     wrap.innerHTML = `
-        <div class="table-wrapper" style="margin-top:.5rem">
+        ${overdueCount > 0 ? `<p style="margin:0 0 .5rem 0;font-size:.875rem;color:#991b1b;font-weight:600;">${overdueCount} row${overdueCount !== 1 ? 's' : ''} with outstanding balance</p>` : ''}
+        <div class="table-wrapper" style="margin-top:.25rem">
             <table class="report-table" id="procareArTable">
                 <thead><tr>
-                    <th>Family</th><th>Month</th><th>Invoiced</th><th>Paid</th><th>Credits</th><th>Balance</th><th>Due Date</th><th>Aging</th>
+                    <th>Family</th><th>Month</th><th>Owed</th><th>Paid (ProCare)</th><th>Balance</th><th>Due Date</th><th>Aging</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
                 <tfoot><tr class="report-total-row">
                     <td colspan="2"><strong>Total</strong></td>
-                    <td class="report-num"><strong>$${totInvoiced.toFixed(2)}</strong></td>
+                    <td class="report-num"><strong>$${totOwed.toFixed(2)}</strong></td>
                     <td class="report-num"><strong>$${totPaid.toFixed(2)}</strong></td>
-                    <td class="report-num"><strong>$${totCredits.toFixed(2)}</strong></td>
                     <td class="report-num"><strong>$${totBalance.toFixed(2)}</strong></td>
                     <td colspan="2"></td>
                 </tr></tfoot>
@@ -890,18 +966,15 @@ function renderProcareArTable() {
 
 function exportProcareArXlsx() {
     if (!_procareArData.length) return;
-    const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const fmtMonth = m => { const [y, mo] = (m || '').split('-').map(Number); return mo ? `${MONTH_SHORT[mo - 1]} ${y}` : m; };
     const rows = _procareArData.map(r => ({
-        'Family':      r.familyName,
-        'Email':       r.familyEmail,
-        'Month':       fmtMonth(r.month),
-        'Invoiced':    r.invoiced,
-        'Paid':        r.paid,
-        'Credits':     r.credits,
-        'Balance':     r.balance,
-        'Due Date':    r.dueDate,
-        'Days Overdue': r.daysOverdue > 0 ? r.daysOverdue : 0,
+        'Family':        r.familyName,
+        'Email':         r.familyEmail,
+        'Month':         r.monthLabel,
+        'Owed':          r.owed,
+        'Paid (ProCare)': r.paid,
+        'Balance':       r.balance,
+        'Due Date':      r.dueDate,
+        'Days Overdue':  r.daysOverdue > 0 ? r.daysOverdue : 0,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -1117,10 +1190,7 @@ async function confirmPaymentImport(matchResults) {
     if (confirmBtn) confirmBtn.disabled = true;
 
     let recordedBy = '';
-    try {
-        const session = await getAdminSession();
-        recordedBy = session?.user?.email || '';
-    } catch (_) {}
+    try { recordedBy = await getAdminEmail(); } catch (_) {}
 
     try {
         // Insert batch record
@@ -1158,9 +1228,9 @@ async function confirmPaymentImport(matchResults) {
                 invoice_id:      null,
                 amount:          r.amount,
                 payment_date:    _normalizeImportDate(r.date),
-                method:          r.method || '',
+                payment_method:  r.method || 'other',
                 note:            `Imported from CSV`,
-                recorded_by:     recordedBy,
+                created_by:      recordedBy,
                 import_batch_id: batchId,
             });
             matched++;

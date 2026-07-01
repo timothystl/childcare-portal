@@ -1095,6 +1095,14 @@ async function archiveSummerFamilies() {
     return (data || []).length;
 }
 
+let _cachedAdminEmail = null;
+async function getAdminEmail() {
+    if (_cachedAdminEmail) return _cachedAdminEmail;
+    const { data } = await sbClient.auth.getUser();
+    _cachedAdminEmail = data?.user?.email || 'admin';
+    return _cachedAdminEmail;
+}
+
 async function fetchStudents() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
