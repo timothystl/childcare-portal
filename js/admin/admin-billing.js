@@ -746,11 +746,37 @@ async function _confirmProCareImport(rows, wrap) {
         const batch = await insertImportBatch({ source: 'procare_xlsx', imported_by: adminEmail, filename: '', row_count: valid.length, notes: `ProCare import — ${valid.length} rows` });
         const batchId = batch?.id || null;
 
-        let ok = 0, fail = 0;
+        // Aggregate invoice rows by (familyId, month) so each family gets one invoice record per month
+        const invoiceMap = new Map(); // key: `${familyId}|${month}`
         for (const row of valid) {
-            const method = row.type === 'Invoice' ? 'procare_invoice'
-                         : row.type === 'Credit'  ? 'procare_credit'
-                         :                          'procare_payment';
+            if (row.type !== 'Invoice') continue;
+            const month = row.dateVal.substring(0, 7); // YYYY-MM
+            const key = `${row.familyId}|${month}`;
+            if (!invoiceMap.has(key)) invoiceMap.set(key, { familyId: row.familyId, month, amount: 0 });
+            invoiceMap.get(key).amount += row.amount;
+        }
+
+        let ok = 0, fail = 0;
+
+        // Import invoices → billing_invoices
+        for (const { familyId, month, amount } of invoiceMap.values()) {
+            try {
+                const cycle = await getOrCreateBillingCycle(month);
+                await upsertBillingInvoice({
+                    cycle_id:     cycle.id,
+                    family_id:    familyId,
+                    base_amount:  amount,
+                    final_amount: amount,
+                    status:       'finalized',
+                });
+                ok++;
+            } catch (_) { fail++; }
+        }
+
+        // Import payments and credits → billing_payments
+        for (const row of valid) {
+            if (row.type === 'Invoice') continue;
+            const method = row.type === 'Credit' ? 'procare_credit' : 'procare_payment';
             try {
                 await insertBillingPayment({
                     family_id:       row.familyId,
@@ -765,7 +791,9 @@ async function _confirmProCareImport(rows, wrap) {
             } catch (_) { fail++; }
         }
 
-        wrap.innerHTML = `<p class="empty-hint" style="color:#15803d">✓ Imported ${ok} rows${fail ? ` (${fail} failed)` : ''}. Upload another file to import more.</p>`;
+        const invoiceCount = invoiceMap.size;
+        const paymentCount = valid.filter(r => r.type !== 'Invoice').length;
+        wrap.innerHTML = `<p class="empty-hint" style="color:#15803d">✓ Imported ${invoiceCount} invoice${invoiceCount !== 1 ? 's' : ''} and ${paymentCount} payment/credit row${paymentCount !== 1 ? 's' : ''}${fail ? ` (${fail} failed)` : ''}. Upload another file to import more.</p>`;
     } catch (err) {
         if (btn) { btn.disabled = false; btn.textContent = 'Retry Import'; }
         alert('Import failed: ' + err.message);
