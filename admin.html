@@ -105,13 +105,29 @@
         <!-- ── Tab: Daily ─────────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-daily">
 
-            <!-- Daily Roster (most-used — at top) -->
+            <!-- Classroom Roster (most-used — at top) -->
             <section class="admin-section collapsible-section" id="dailyRosterSection">
-                <h2>📋 Daily Classroom Roster</h2>
+                <h2>📋 Classroom Roster</h2>
                 <div class="roster-controls">
                     <div class="roster-field">
+                        <label for="rosterViewMode">View</label>
+                        <select id="rosterViewMode">
+                            <option value="day">Day</option>
+                            <option value="week">Week</option>
+                            <option value="month">Month</option>
+                        </select>
+                    </div>
+                    <div class="roster-field" id="rosterDateField">
                         <label for="rosterDate">Date</label>
                         <input type="date" id="rosterDate">
+                    </div>
+                    <div class="roster-field hidden" id="rosterWeekField">
+                        <label for="rosterWeekOf">Week of (Monday)</label>
+                        <input type="date" id="rosterWeekOf">
+                    </div>
+                    <div class="roster-field hidden" id="rosterMonthField">
+                        <label for="rosterMonth">Month</label>
+                        <input type="month" id="rosterMonth">
                     </div>
                     <div class="roster-field">
                         <label for="rosterRoomFilter">Room</label>
@@ -695,25 +711,6 @@
 
         <!-- ── Tab: Reports ───────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-reports">
-
-            <!-- Monthly Classroom Roster -->
-            <section class="admin-section collapsible-section" id="monthlyRosterSection">
-                <h2>📋 Monthly Classroom Roster</h2>
-                <p class="section-desc">Full-month attendance roster for all rooms — one page per room, each day's enrolled children listed. Print after the registration window closes to have the complete month's roster on hand.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="rosterMonth">Month</label>
-                        <input type="month" id="rosterMonth">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="generateRosterBtn" class="btn-secondary">Generate Roster</button>
-                        <button id="printRosterBtn" class="btn-primary" style="display:none;">🖨️ Print Roster</button>
-                    </div>
-                </div>
-                <div id="monthlyRosterContent">
-                    <p class="empty-hint">Select a month above and click Generate Roster.</p>
-                </div>
-            </section>
 
             <!-- Family Billing Summary -->
             <section class="admin-section collapsible-section" id="familyBillingSection">

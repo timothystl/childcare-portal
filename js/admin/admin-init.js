@@ -35,7 +35,6 @@ async function initDashboard() {
     setupFilters();
     setupRoster();
     setupClosures();
-    setupMonthlyRoster();
     setupAttendanceRevenue();
     setupFamilyBilling();
     setupMissingCalendarReport();

@@ -371,7 +371,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 
 /* ============================================================
-   DAILY ROSTER
+   CLASSROOM ROSTER (Day / Week / Month)
    ============================================================ */
 .roster-controls {
     display: flex;
@@ -3020,7 +3020,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 
 
 /* ============================================================
-   MONTHLY CLASSROOM ROSTER
+   CLASSROOM ROSTER — MONTH VIEW
    ============================================================ */
 .roster-report-header {
     font-size: .9em;
@@ -3105,15 +3105,13 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     font-size: .85em;
 }
 
-/* Print styles for roster */
-@media print {
-    .print-page-break { page-break-before: always; }
-    .print-page-break:first-child { page-break-before: avoid; }
-    .roster-room-block { page-break-inside: avoid; }
-    #printRosterBtn, .admin-header, .admin-tabs, .tab-pane > section:not(.active),
-    .capacity-section, .roster-controls { display: none !important; }
-    body { background: white; }
-    .roster-day-table { font-size: .8em; }
+.roster-week-day {
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+}
+.roster-week-day:last-child {
+    border-bottom: none;
 }
 
 /* ── Finance Tab ─────────────────────────────────────────── */

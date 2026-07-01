@@ -30,26 +30,27 @@ The admin dashboard is your central control panel for managing all aspects of th
 
 Your session is saved in the browser — if you leave and come back on the same device, you will be returned directly to the dashboard. Click **Logout** in the top-right header to end your session.
 
-**Header buttons available on every tab:**
-
-- **↻ Refresh** — reloads data on the current tab.
-- **↓ Export Excel** — exports the currently visible data table to an Excel file.
-- **Logout** — signs you out.
+**Header:** the current logged-in admin and role are shown top-right, next to **Logout**.
 
 ---
 
 ## Tab: 🏫 Classrooms
 
-### Daily Classroom Roster
+### Classroom Roster
 
-Shows a list of enrolled children for a specific date, organized by room.
+Shows enrolled children organized by room, for a day, a week, or a whole month.
 
-1. Enter a **date** in the Date field.
-2. Optionally filter by a specific **room**.
-3. Click **View Roster**.
-4. Click **🖨️ Print / PDF** to print the roster or save it as a PDF.
+1. Choose a **View**: Day, Week, or Month.
+2. Fill in the matching field — **Date**, **Week of (Monday)**, or **Month**.
+3. Optionally filter by a specific **room**.
+4. Click **View Roster** to see it on screen.
+5. Click **🖨️ Print / PDF**:
+   - **Day** — prints that day's roster, organized by room.
+   - **Week** — prints one full daily roster page per weekday in the week (Monday–Friday), day by day, in a single print job.
+   - **Month** — prints one continuous list per room, showing every day of the month in one table (best used after the registration window closes, to capture the complete month).
+6. **📅 Print All Rooms** (Day view only) — a compact one-page landscape grid showing every room at once, for handoff to staff.
 
-Use this as your daily attendance sheet.
+Use Day view as your daily attendance sheet.
 
 ### Capacity Overview
 
@@ -94,7 +95,7 @@ Changes are saved immediately.
 
 ### Adding a Child to a Specific Day (From the Roster)
 
-From the **Daily Classroom Roster** in the Classrooms tab, an admin can add a child to a day who was not previously registered:
+From the **Classroom Roster** (Day view) in the Classrooms tab, an admin can add a child to a day who was not previously registered:
 
 1. Click the **+ Add Child** button on a specific date in the roster.
 2. Search for the child by name.
@@ -298,16 +299,6 @@ Click **💾 Save Links** when done.
 
 ## Tab: 📊 Reports
 
-### Monthly Classroom Roster
-
-A full-month attendance roster, one page per room, listing enrolled children for each day.
-
-1. Select a **month**.
-2. Click **Generate Roster**.
-3. Click **🖨️ Print Roster** to print or save as PDF.
-
-Best practice: generate this after the registration window closes (after the 15th of the prior month) to capture the complete roster.
-
 ### Attendance & Revenue
 
 Monthly attendance counts and net revenue for any date range.
@@ -421,21 +412,21 @@ Click the 🗑 **Delete** button to permanently remove a staff member. This cann
 
 | Task | Where |
 |------|-------|
-| Print today's classroom list | Classrooms → Daily Classroom Roster |
+| Print today's classroom list | Classrooms → Classroom Roster (Day view) |
+| Print a week's rosters, day by day | Classrooms → Classroom Roster (Week view) |
+| Print the full month's roster | Classrooms → Classroom Roster (Month view) |
 | See how full rooms are this month | Classrooms → Capacity Overview |
 | Find a parent's registration | Care Calendar → search bar |
 | Add or remove a child's days | Care Calendar → Edit Days |
 | Reset a parent's PIN | Families → Edit family |
 | Add a new family | Families → + Add Family |
 | Import families from ProCare | Families → Import section |
-| View parent contact messages | Messages tab |
 | Add someone to the waitlist | Waitlist → + Add to Waitlist |
 | Offer a spot to a waitlisted family | Waitlist → Make Offer |
 | Block a holiday or snow day | Settings → Closed Days |
 | Change room rates | Settings → Room Rates |
 | Force registration open or closed | Settings → Registration Window Override |
 | Generate monthly billing | Reports → Family Billing Summary |
-| Print the full month roster | Reports → Monthly Classroom Roster |
 | Run payroll | Staffing → Payroll Report |
 | Enter daily hours | Staffing → Log Hours |
 | Add or edit a staff member | Staffing → Staff Roster |
