@@ -321,8 +321,8 @@ function setupTabs() {
         document.body.appendChild(overlay);
     }
 
-    function openMenu()  { if (overlay) overlay.classList.add('open'); }
-    function closeMenu() { if (overlay) overlay.classList.remove('open'); }
+    function openMenu()  { if (overlay) overlay.classList.add('open'); if (menuBtn) menuBtn.setAttribute('aria-expanded', 'true'); }
+    function closeMenu() { if (overlay) overlay.classList.remove('open'); if (menuBtn) menuBtn.setAttribute('aria-expanded', 'false'); }
 
     function activate(tab) {
         btns.forEach(b     => b.classList.toggle('active', b.dataset.tab === tab));
@@ -348,6 +348,7 @@ function setupTabs() {
     if (closeBtn) closeBtn.addEventListener('click', closeMenu);
     // Tap the dark backdrop (not the drawer) to close
     if (overlay)  overlay.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
+    document.getElementById('mobileNavLogout')?.addEventListener('click', () => document.getElementById('logoutBtn').click());
 
     const saved = localStorage.getItem('adminActiveTab') || 'daily';
     activate(saved);

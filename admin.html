@@ -54,25 +54,40 @@
                 <button id="refreshBtn" class="btn-secondary">&#8635; Refresh</button>
                 <button id="exportXlsxBtn" class="btn-primary">&#8595; Export Excel</button>
                 <button id="logoutBtn" class="btn-ghost">Logout</button>
-                <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open navigation menu">&#9776;</button>
+                <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open navigation menu" aria-expanded="false">
+                    <span class="hamburger-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+                </button>
             </div>
         </header>
 
         <!-- Mobile navigation drawer overlay -->
         <div id="mobileNavOverlay" class="mobile-nav-overlay">
             <div class="mobile-nav-drawer">
-                <button id="mobileNavClose" class="mobile-nav-close" aria-label="Close menu">&times;</button>
-                <div class="mobile-nav-heading">Admin Menu</div>
-                <button class="mobile-nav-item" data-tab="daily">Classrooms</button>
-                <button class="mobile-nav-item" data-tab="registrations">Care Calendar</button>
-                <button class="mobile-nav-item" data-tab="families">Families</button>
-                <button class="mobile-nav-item" data-tab="messages">Messages</button>
-                <button class="mobile-nav-item" data-tab="waitlist">Waitlist</button>
-                <button class="mobile-nav-item" data-tab="reports">Reports</button>
-                <button class="mobile-nav-item" data-tab="staffing">Staffing</button>
-                <button class="mobile-nav-item" data-tab="finance">Finance</button>
-                <button class="mobile-nav-item" data-tab="billing">Billing</button>
-                <button class="mobile-nav-item" data-tab="settings">Settings</button>
+                <div class="mobile-nav-drawer-header">
+                    <span>Admin Menu</span>
+                    <button id="mobileNavClose" class="mobile-nav-close" aria-label="Close menu">&times;</button>
+                </div>
+                <div class="mobile-nav-list">
+                    <div class="mobile-nav-group-label">Daily Ops</div>
+                    <button class="mobile-nav-item" data-tab="daily"><span class="mni-icon">🏫</span><span>Classrooms</span></button>
+                    <button class="mobile-nav-item" data-tab="registrations"><span class="mni-icon">📅</span><span>Care Calendar</span></button>
+                    <button class="mobile-nav-item" data-tab="waitlist"><span class="mni-icon">⏳</span><span>Waitlist</span></button>
+
+                    <div class="mobile-nav-group-label">People</div>
+                    <button class="mobile-nav-item" data-tab="families"><span class="mni-icon">👨‍👩‍👧</span><span>Families</span></button>
+                    <button class="mobile-nav-item" data-tab="staffing"><span class="mni-icon">👷</span><span>Staffing</span></button>
+                    <button class="mobile-nav-item" data-tab="messages"><span class="mni-icon">💬</span><span>Messages</span></button>
+
+                    <div class="mobile-nav-group-label">Money &amp; Admin</div>
+                    <button class="mobile-nav-item" data-tab="finance"><span class="mni-icon">💰</span><span>Finance</span></button>
+                    <button class="mobile-nav-item" data-tab="billing"><span class="mni-icon">💳</span><span>Billing</span></button>
+                    <button class="mobile-nav-item" data-tab="reports"><span class="mni-icon">📊</span><span>Reports</span></button>
+                    <button class="mobile-nav-item" data-tab="settings"><span class="mni-icon">⚙️</span><span>Settings</span></button>
+                </div>
+                <div class="mobile-nav-footer">
+                    <span class="mnf-version" id="mobileNavVersion"></span>
+                    <button class="mnf-logout" id="mobileNavLogout">Logout</button>
+                </div>
             </div>
         </div>
 
