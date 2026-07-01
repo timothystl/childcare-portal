@@ -743,7 +743,7 @@ async function _confirmProCareImport(rows, wrap) {
 
     try {
         const adminEmail = await getAdminEmail();
-        const batch = await insertImportBatch({ source: 'procare_xlsx', row_count: valid.length, notes: `ProCare import — ${valid.length} rows` });
+        const batch = await insertImportBatch({ source: 'procare_xlsx', imported_by: adminEmail, filename: '', row_count: valid.length, notes: `ProCare import — ${valid.length} rows` });
         const batchId = batch?.id || null;
 
         let ok = 0, fail = 0;
@@ -1206,6 +1206,7 @@ async function confirmPaymentImport(matchResults) {
         // Insert batch record
         const batchRow = await insertImportBatch({
             imported_by: recordedBy,
+            filename:    '',
             row_count:   matchResults.length,
             source:      'procare_csv',
             imported_at: new Date().toISOString(),
