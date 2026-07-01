@@ -1970,64 +1970,112 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     .family-row-meta   { grid-column: 1 / -1; }
     .family-row-actions{ grid-column: 1 / -1; }
 
-    /* Tab navigation — compact emoji tab bar; no hamburger, no overlay */
-
-    /* Header scrolls with the page so the sticky tab bar owns the top slot */
-    .admin-header { position: static; }
-
-    /* Tab bar sticks at top of viewport once the header scrolls away */
-    .admin-tabs {
-        position: sticky;
-        top: 0;
-        padding: 0 2px;
-        overflow-x: auto;
-        overflow-y: visible;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        flex-direction: row;
-    }
-    .admin-tabs::-webkit-scrollbar { display: none; }
-
-    /* Tab buttons always visible — plain flex row, never a dropdown */
-    .tab-btn-container {
-        display: flex;
-        position: static;
-        flex-direction: row;
-        flex-wrap: nowrap;
-        flex: 1;
-        background: transparent;
-        box-shadow: none;
-        border-top: none;
-        max-height: none;
-        overflow-y: visible;
-        z-index: auto;
-    }
-
-    /* Emoji only — text labels hidden to keep each tab narrow */
-    .tab-label { display: none; }
-
-    .admin-tab-btn {
-        font-size: 1.35em;
-        padding: 9px 10px;
-        min-width: 44px;   /* WCAG touch target */
-        width: auto;
-        white-space: nowrap;
-        border-bottom: 3px solid transparent;
-        border-right: none;
-        margin-bottom: -2px;
-        text-align: center;
-    }
-    /* Reset the old dropdown-style active indicator */
-    .admin-tab-btn.active {
-        background: none;
-        border-left: none;
-        padding-left: 10px;
-        border-bottom-color: var(--sun);
-    }
-    .admin-tab-btn:hover { background: var(--warm-gray); }
-
     /* Report tables — allow horizontal scroll on narrow screens */
     .report-table-wrap { overflow-x: auto; }
+}
+
+/* ============================================================
+   MOBILE NAVIGATION — hamburger menu + drawer overlay
+   Placed AFTER base tab rules so mobile overrides cascade win
+   ============================================================ */
+
+/* Mobile-only: hide desktop tab bar, show hamburger */
+@media (max-width: 700px) {
+    .admin-tabs { display: none; }
+    .mobile-menu-btn { display: flex; }
+}
+
+/* Hamburger button (hidden on desktop by default) */
+.mobile-menu-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 1.4em;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--navy);
+    padding: 5px 10px;
+    flex-shrink: 0;
+    transition: background .15s;
+}
+.mobile-menu-btn:hover { background: var(--warm-gray); }
+
+/* Full-screen overlay backdrop */
+.mobile-nav-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, .55);
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+}
+.mobile-nav-overlay.hidden { display: none; }
+
+/* Slide-in drawer panel */
+.mobile-nav-drawer {
+    background: var(--white);
+    width: min(280px, 82%);
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, .25);
+    display: flex;
+    flex-direction: column;
+    padding-top: 4px;
+}
+
+/* Close (×) button at top-right of drawer */
+.mobile-nav-close {
+    align-self: flex-end;
+    background: none;
+    border: none;
+    font-size: 1.8em;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 8px 14px;
+}
+.mobile-nav-close:hover { color: var(--text); }
+
+/* "Admin Menu" heading inside drawer */
+.mobile-nav-heading {
+    padding: 2px 20px 12px;
+    font-size: .75em;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+}
+
+/* Each nav item row */
+.mobile-nav-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 15px 20px;
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--text);
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--warm-gray);
+    cursor: pointer;
+    font-family: var(--font-body);
+    transition: background .12s;
+}
+.mobile-nav-item:hover,
+.mobile-nav-item:active { background: var(--linen); }
+.mobile-nav-item.active {
+    color: var(--navy);
+    background: var(--green-lt);
+    border-left: 3px solid var(--sun);
+    padding-left: 17px;
 }
 
 /* ============================================================
@@ -2166,9 +2214,11 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 /* Desktop/landscape ≥ 701px: full-text tabs, scrollable if many tabs */
 @media (min-width: 701px) {
     .tab-btn-container { display: flex; flex: 1; }
-    .tab-label { display: inline; }   /* show text labels on desktop */
+    .tab-label { display: inline; }
     .admin-tabs { overflow-x: auto; scrollbar-width: none; }
     .admin-tabs::-webkit-scrollbar { display: none; }
+    .mobile-menu-btn { display: none; }
+    .mobile-nav-overlay { display: none !important; }
 }
 
 .admin-tab-btn {

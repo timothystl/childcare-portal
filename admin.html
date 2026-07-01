@@ -50,6 +50,7 @@
                 </div>
             </div>
             <div class="header-actions">
+                <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open navigation menu">&#9776;</button>
                 <span id="currentUserDisplay" class="current-user-display"></span>
                 <button id="refreshBtn" class="btn-secondary">&#8635; Refresh</button>
                 <button id="exportXlsxBtn" class="btn-primary">&#8595; Export Excel</button>
@@ -57,9 +58,26 @@
             </div>
         </header>
 
+        <!-- Mobile navigation drawer overlay -->
+        <div id="mobileNavOverlay" class="mobile-nav-overlay hidden">
+            <div class="mobile-nav-drawer">
+                <button id="mobileNavClose" class="mobile-nav-close" aria-label="Close menu">&times;</button>
+                <div class="mobile-nav-heading">Admin Menu</div>
+                <button class="mobile-nav-item" data-tab="daily">🏫 Classrooms</button>
+                <button class="mobile-nav-item" data-tab="registrations">📅 Care Calendar</button>
+                <button class="mobile-nav-item" data-tab="families">👨‍👩‍👧 Families</button>
+                <button class="mobile-nav-item" data-tab="messages">💬 Messages</button>
+                <button class="mobile-nav-item" data-tab="waitlist">⏳ Waitlist</button>
+                <button class="mobile-nav-item" data-tab="reports">📊 Reports</button>
+                <button class="mobile-nav-item" data-tab="staffing">👷 Staffing</button>
+                <button class="mobile-nav-item" data-tab="finance">💰 Finance</button>
+                <button class="mobile-nav-item" data-tab="billing">🏦 Billing</button>
+                <button class="mobile-nav-item" data-tab="settings">⚙️ Settings</button>
+            </div>
+        </div>
+
         <!-- Tab Navigation -->
         <nav class="admin-tabs" id="adminTabs">
-            <!-- Scrollable tab row — labels hidden on mobile (emoji only) -->
             <div class="tab-btn-container" id="tabBtnContainer">
                 <button class="admin-tab-btn" data-tab="daily">🏫<span class="tab-label"> Classrooms</span></button>
                 <button class="admin-tab-btn" data-tab="registrations">📅<span class="tab-label"> Care Calendar</span></button>
