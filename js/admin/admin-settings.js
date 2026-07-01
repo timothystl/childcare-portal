@@ -336,7 +336,6 @@ function setupTabs() {
 
         if (tab === 'families'  && allFamiliesData.length === 0) loadFamilies();
         if (tab === 'staffing'  && allStaffData.length === 0)    loadStaffList();
-        if (tab === 'messages'  && !_messagesLoaded)             { _messagesLoaded = true; loadMessages(); }
         if (tab === 'billing'   && !_arLoaded)                   { setupBillingDashYear(); }
         if (tab === 'settings')                                  loadGeofenceSettings();
     }
@@ -621,7 +620,6 @@ function applyRoleRestrictions() {
             b.classList.toggle('active', b.dataset.tab === 'daily');
         });
         localStorage.setItem('adminActiveTab', 'daily');
-        _hide('exportXlsxBtn');
     }
 }
 

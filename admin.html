@@ -51,8 +51,6 @@
             </div>
             <div class="header-actions">
                 <span id="currentUserDisplay" class="current-user-display"></span>
-                <button id="refreshBtn" class="btn-secondary">&#8635; Refresh</button>
-                <button id="exportXlsxBtn" class="btn-primary">&#8595; Export Excel</button>
                 <button id="logoutBtn" class="btn-ghost">Logout</button>
                 <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open navigation menu" aria-expanded="false">
                     <span class="hamburger-bars" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -76,7 +74,6 @@
                     <div class="mobile-nav-group-label">People</div>
                     <button class="mobile-nav-item" data-tab="families"><span class="mni-icon">👨‍👩‍👧</span><span>Families</span></button>
                     <button class="mobile-nav-item" data-tab="staffing"><span class="mni-icon">👷</span><span>Staffing</span></button>
-                    <button class="mobile-nav-item" data-tab="messages"><span class="mni-icon">💬</span><span>Messages</span></button>
 
                     <div class="mobile-nav-group-label">Money &amp; Admin</div>
                     <button class="mobile-nav-item" data-tab="finance"><span class="mni-icon">💰</span><span>Finance</span></button>
@@ -97,7 +94,6 @@
                 <button class="admin-tab-btn" data-tab="daily">🏫<span class="tab-label"> Classrooms</span></button>
                 <button class="admin-tab-btn" data-tab="registrations">📅<span class="tab-label"> Care Calendar</span></button>
                 <button class="admin-tab-btn" data-tab="families">👨‍👩‍👧<span class="tab-label"> Families</span></button>
-                <button class="admin-tab-btn" data-tab="messages">💬<span class="tab-label"> Messages</span></button>
                 <button class="admin-tab-btn" data-tab="waitlist">⏳<span class="tab-label"> Waitlist</span></button>
                 <button class="admin-tab-btn" data-tab="reports">📊<span class="tab-label"> Reports</span></button>
                 <button class="admin-tab-btn" data-tab="staffing">👷<span class="tab-label"> Staffing</span></button>
@@ -258,24 +254,6 @@
             </section>
 
         </div><!-- /#tab-families -->
-
-        <!-- ── Tab: Messages ─────────────────────────────────── -->
-        <div class="tab-pane hidden" id="tab-messages">
-
-            <section class="admin-section collapsible-section" id="messagesSection">
-                <h2>💬 Parent Messages</h2>
-                <p class="section-desc">Messages sent by parents via the Contact Us button on the registration portal.</p>
-                <div class="messages-header">
-                    <button id="refreshMessagesBtn" class="btn-secondary">&#8635; Refresh</button>
-                    <button id="toggleArchivedBtn" class="btn-secondary">Show Archived</button>
-                    <span id="unreadBadge" class="unread-badge hidden"></span>
-                </div>
-                <div id="messagesList">
-                    <p class="empty-hint">Loading messages…</p>
-                </div>
-            </section>
-
-        </div><!-- /#tab-messages -->
 
         <!-- ── Tab: Waitlist ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-waitlist">

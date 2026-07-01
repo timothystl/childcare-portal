@@ -144,7 +144,6 @@ js/
     admin-reports.js    Payroll report, attendance/revenue report
     admin-finance.js    Finance dashboard, P&L, expense modeling
     admin-settings.js   Room rates, closures, admin roles, settings
-    admin-messages.js   Push notification management
 
 css/
   styles.css        Shared styles

@@ -133,7 +133,7 @@ async function applySessionRole() {
 // Undo any restrictions from a previous session before applying new ones.
 function _resetRoleRestrictions() {
     ['logHoursSection', 'payrollSection', 'staffRosterToggleWrap',
-     'staffRosterSection', 'adminRolesSection', 'exportXlsxBtn',
+     'staffRosterSection', 'adminRolesSection',
      'closedDaysSection', 'ratesSection', 'ratiosSection', 'offerLinksSection', 'summerCampSection']
         .forEach(id => {
             const el = document.getElementById(id);
