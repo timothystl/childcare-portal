@@ -1657,10 +1657,16 @@ async function toggleArRowDetail(familyId) {
         const topInvoice = arRow?.invoiceId || null;
 
         const invRows = invoices.map(inv => {
-            const invPayments = payments.filter(p => String(p.invoice_id) === String(inv.id));
+            const invMonth = inv.billing_cycles?.month || null;
+            // Match payments linked by invoice_id, or by payment_date falling in the invoice's month (for imports)
+            const invPayments = payments.filter(p => {
+                if (p.invoice_id && String(p.invoice_id) === String(inv.id)) return true;
+                if (!p.invoice_id && invMonth && p.payment_date?.startsWith(invMonth)) return true;
+                return false;
+            });
             const totalPaid   = invPayments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
             return `<tr>
-                <td>${escHtml(inv.month || '—')}</td>
+                <td>${escHtml(invMonth || '—')}</td>
                 <td>$${parseFloat(inv.final_amount || 0).toFixed(2)}</td>
                 <td>$${totalPaid.toFixed(2)}</td>
                 <td>$${Math.max(0, parseFloat(inv.final_amount || 0) - totalPaid).toFixed(2)}</td>
@@ -1691,9 +1697,13 @@ async function toggleArRowDetail(familyId) {
                 )">💳 Record Payment</button>
             </div>`;
 
-        const invPayments = topInvoice
-            ? payments.filter(p => String(p.invoice_id) === String(topInvoice))
-            : payments;
+        // Include payments linked by invoice_id, or (for imports) by payment_date in the current AR month
+        const invPayments = payments.filter(p => {
+            if (topInvoice && p.invoice_id && String(p.invoice_id) === String(topInvoice)) return true;
+            if (!p.invoice_id && _blArMonth && p.payment_date?.startsWith(_blArMonth)) return true;
+            if (!topInvoice) return true;
+            return false;
+        });
 
         renderPaymentHistory(invPayments, topFinalAmt, payHistContainerId);
     } catch (err) {
