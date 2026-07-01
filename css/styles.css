@@ -276,6 +276,43 @@ button:focus-visible,
 
 .calendar-wrapper { margin-top: 10px; }
 
+.child-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 4px 0 16px;
+}
+.child-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 16px;
+    background: var(--linen);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: .9em;
+    color: var(--navy);
+    transition: background .15s, border-color .15s;
+}
+.child-tab:hover { border-color: var(--sun); }
+.child-tab.active { background: var(--navy); border-color: var(--navy); color: var(--white); }
+.child-tab-count { font-size: .8em; font-weight: 500; opacity: .8; }
+
+.all-children-summary {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+}
+.child-summary-row { font-size: .85em; color: var(--text-muted); }
+.child-summary-row.active { color: var(--navy); font-weight: 700; }
+
 .calendar-controls {
     display: flex;
     justify-content: space-between;

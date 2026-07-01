@@ -11,14 +11,22 @@ let currentDate         = new Date();
 let selectedFamily      = null;     // { id, parent_name, parent_email, parent_phone, pin, students:[] }
 let _isParent2          = false;   // whether the logged-in parent is parent 2
 let _familySessionToken = null;    // short-lived HMAC token issued at login, passed to push-subscribe
-let selectedChildren    = [];       // [{ name, dob, room: ROOMS[i], isNew: bool, studentId: string|null }]
-let selectedDates       = new Map();  // 'YYYY-MM-DD' -> { dayType: 'full'|'half' }
+let selectedChildren    = [];       // [{ name, dob, room: ROOMS[i], isNew: bool, studentId: string|null }] — every child being registered this session
+let childSchedules      = new Map();   // studentId -> Map('YYYY-MM-DD' -> { dayType: 'full'|'half', locked?: bool }) — each child's own care days
+let activeChildId       = null;        // studentId of the child currently shown on the calendar
 let capacityCache       = {};         // { roomId: { 'YYYY-MM-DD': count } }
 let closureMap          = new Map();  // 'YYYY-MM-DD' -> reason string
 let calendarLoading     = false;
 let pickerOpenDate      = null;
 let regWindowOverride   = 'auto';     // 'auto' | 'open' | 'closed'
 const studentDataMap    = new Map();  // studentId -> { dob, roomOverride, discountType, discountValue } — kept in JS, not DOM
+
+function activeChild() {
+    return selectedChildren.find(c => c.studentId === activeChildId) || null;
+}
+function activeSchedule() {
+    return childSchedules.get(activeChildId) || new Map();
+}
 
 // ============================================================
 // REGISTRATION WINDOW
@@ -234,7 +242,8 @@ function selectFamily(family, isParent2 = false) {
 
     // Reset any state from a previous family lookup
     selectedChildren = [];
-    selectedDates    = new Map();
+    childSchedules   = new Map();
+    activeChildId    = null;
     capacityCache    = {};
     closeDayPicker();
     hideCalendar();
@@ -284,7 +293,8 @@ function resetFamilyLookup() {
     clearPrefilled('parentPhone');
 
     hideCalendar();
-    selectedDates = new Map();
+    childSchedules = new Map();
+    activeChildId  = null;
 }
 
 function setPrefilled(id, value) {
@@ -360,22 +370,18 @@ function renderChildSection() {
             }
             cb.closest('.child-card-label').classList.toggle('selected', cb.checked);
             if (cb.checked) {
-                // Only one child can be registered at a time — each child needs their
-                // own care-day schedule, and selectedDates is a single shared calendar.
+                // Multiple children can be added in one session — each keeps their own
+                // independent care-day schedule (childSchedules, keyed per studentId), so
+                // adding a second child never touches the first child's day picks.
                 if (!selectedChildren.some(c => c.studentId === studentId)) {
-                    section.querySelectorAll('.child-card-checkbox').forEach(other => {
-                        if (other !== cb && other.checked) {
-                            other.checked = false;
-                            other.closest('.child-card-label')?.classList.remove('selected');
-                        }
-                    });
                     const rdRaw = cb.dataset.recurringDays || '';
-                    selectedChildren = [{
+                    selectedChildren.push({
                         name: childName, dob: childDob, room, isNew: false, studentId,
                         discountType:  sd.discountType  || 'none',
                         discountValue: sd.discountValue || 0,
                         recurringDays: rdRaw ? rdRaw.split(',').filter(Boolean) : [],
-                    }];
+                    });
+                    activeChildId = studentId;
                     onChildrenChanged();
                     // Non-blocking: warn if already registered for the target month.
                     // Checks by this parent's email first, then by child name (catches parent 2).
@@ -393,7 +399,12 @@ function renderChildSection() {
                 }
             } else {
                 const idx = selectedChildren.findIndex(c => c.studentId === studentId);
-                if (idx !== -1) { selectedChildren.splice(idx, 1); onChildrenChanged(); }
+                if (idx !== -1) selectedChildren.splice(idx, 1);
+                childSchedules.delete(studentId);
+                if (activeChildId === studentId) {
+                    activeChildId = selectedChildren[0]?.studentId || null;
+                }
+                onChildrenChanged();
             }
         });
     });
@@ -404,33 +415,46 @@ async function onChildrenChanged() {
     // otherwise stay stuck on screen (full-page dark overlay, intercepting
     // clicks) once the child selection changes and the calendar re-renders.
     closeDayPicker();
-    selectedDates = new Map();
     capacityCache = {};
+
     if (!selectedChildren.length) {
+        activeChildId = null;
         hideCalendar();
+        renderChildTabs();
         renderSelectedDates();
         return;
     }
 
-    // Pre-populate recurring days for selected children who have them set
+    if (!activeChildId || !selectedChildren.some(c => c.studentId === activeChildId)) {
+        activeChildId = selectedChildren[0].studentId;
+    }
+
+    // Pre-populate recurring days into each child's OWN schedule — only the first
+    // time a child is added this session, so it never overwrites picks already made.
     const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const { targetDate } = getRegistrationWindow();
     const yr = targetDate.getFullYear(), mo = targetDate.getMonth();
     const daysInMonth = new Date(yr, mo + 1, 0).getDate();
-    const allRecurring = new Set(selectedChildren.flatMap(c => c.recurringDays || []));
-    if (allRecurring.size) {
-        for (let day = 1; day <= daysInMonth; day++) {
-            const d   = new Date(yr, mo, day);
-            const dow = DOW_NAMES[d.getDay()];
-            if (allRecurring.has(dow)) {
-                const dateStr = `${yr}-${String(mo+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                selectedDates.set(dateStr, { dayType: 'full', locked: true });
+    for (const child of selectedChildren) {
+        if (childSchedules.has(child.studentId)) continue;
+        const sched     = new Map();
+        const recurring = new Set(child.recurringDays || []);
+        if (recurring.size) {
+            for (let day = 1; day <= daysInMonth; day++) {
+                const d   = new Date(yr, mo, day);
+                const dow = DOW_NAMES[d.getDay()];
+                if (recurring.has(dow)) {
+                    const dateStr = `${yr}-${String(mo+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                    sched.set(dateStr, { dayType: 'full', locked: true });
+                }
             }
         }
+        childSchedules.set(child.studentId, sched);
     }
 
     document.getElementById('calendarWrapper')?.classList.remove('hidden');
     document.getElementById('calendarHint')?.classList.add('hidden');
+    renderChildTabs();
     await loadMonthCapacity();
     renderCalendar();
     renderSelectedDates();
@@ -439,6 +463,36 @@ async function onChildrenChanged() {
 function hideCalendar() {
     document.getElementById('calendarWrapper')?.classList.add('hidden');
     document.getElementById('calendarHint')?.classList.remove('hidden');
+}
+
+// Shows a tab per added child so the parent can switch whose calendar they're
+// editing — only rendered once a second child is added.
+function renderChildTabs() {
+    const container = document.getElementById('childTabs');
+    if (!container) return;
+    if (selectedChildren.length <= 1) {
+        container.innerHTML = '';
+        container.classList.add('hidden');
+        return;
+    }
+    container.classList.remove('hidden');
+    container.innerHTML = selectedChildren.map(c => {
+        const dayCount = childSchedules.get(c.studentId)?.size || 0;
+        const isActive = c.studentId === activeChildId;
+        return `<button type="button" class="child-tab${isActive ? ' active' : ''}" data-student-id="${c.studentId}">
+            ${escHtml(c.name.split(' ')[0])}
+            <span class="child-tab-count">${dayCount} day${dayCount !== 1 ? 's' : ''}</span>
+        </button>`;
+    }).join('');
+    container.querySelectorAll('.child-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            activeChildId = btn.getAttribute('data-student-id');
+            closeDayPicker();
+            renderChildTabs();
+            renderCalendar();
+            renderSelectedDates();
+        });
+    });
 }
 
 // ============================================================
@@ -466,38 +520,36 @@ async function loadMonthCapacity() {
     calendarLoading = false;
 }
 
+// How many OTHER selected children already have this exact date booked in the
+// same room (e.g. siblings sharing a room) — they occupy a spot too, on top of
+// whatever the live capacityCache count (from already-submitted registrations) shows.
+function othersScheduledSameRoom(dateStr, room) {
+    let count = 0;
+    for (const other of selectedChildren) {
+        if (other.studentId === activeChildId) continue;
+        if (other.room.id !== room.id) continue;
+        if (childSchedules.get(other.studentId)?.has(dateStr)) count++;
+    }
+    return count;
+}
+
 function getDateStatus(dateStr) {
-    if (!selectedChildren.length) return 'disabled';
-    // Count how many selected children share each room (siblings each need a spot)
-    const spotsNeeded = {};
-    for (const child of selectedChildren) {
-        spotsNeeded[child.room.id] = (spotsNeeded[child.room.id] || 0) + 1;
-    }
-    let worstStatus = 'available';
-    for (const [roomId, needed] of Object.entries(spotsNeeded)) {
-        const room      = ROOMS.find(r => r.id === roomId);
-        const booked    = (capacityCache[roomId] || {})[dateStr] || 0;
-        const available = (room?.capacity || 0) - booked;
-        if (available < needed)           return 'full';
-        if (available - needed < 3)       worstStatus = 'limited';
-    }
-    return worstStatus;
+    const child = activeChild();
+    if (!child) return 'disabled';
+    const room      = child.room;
+    const booked    = (capacityCache[room.id] || {})[dateStr] || 0;
+    const available = (room.capacity || 0) - booked - othersScheduledSameRoom(dateStr, room);
+    if (available < 1)     return 'full';
+    if (available - 1 < 3) return 'limited';
+    return 'available';
 }
 
 function spotsLeft(dateStr) {
-    if (!selectedChildren.length) return 0;
-    const spotsNeeded = {};
-    for (const child of selectedChildren) {
-        spotsNeeded[child.room.id] = (spotsNeeded[child.room.id] || 0) + 1;
-    }
-    let minEffective = Infinity;
-    for (const [roomId, needed] of Object.entries(spotsNeeded)) {
-        const room      = ROOMS.find(r => r.id === roomId);
-        const booked    = (capacityCache[roomId] || {})[dateStr] || 0;
-        const available = Math.max(0, (room?.capacity || 0) - booked);
-        minEffective    = Math.min(minEffective, Math.max(0, available - needed + 1));
-    }
-    return minEffective === Infinity ? 0 : minEffective;
+    const child = activeChild();
+    if (!child) return 0;
+    const room      = child.room;
+    const booked    = (capacityCache[room.id] || {})[dateStr] || 0;
+    return Math.max(0, (room.capacity || 0) - booked - othersScheduledSameRoom(dateStr, room));
 }
 
 // ============================================================
@@ -545,7 +597,7 @@ function renderCalendar() {
         const dateStr      = formatDate(date);
         const isPast       = date < today;
         const isClosed     = closureMap.has(dateStr);
-        const entry        = selectedDates.get(dateStr);
+        const entry        = activeSchedule().get(dateStr);
         const isSelected   = !!entry;
         const isPickerOpen = pickerOpenDate === dateStr;
 
@@ -606,16 +658,19 @@ function renderCalendar() {
 // DAY PICKER POPUP
 // ============================================================
 function handleDayClick(dateStr, status, cellEl) {
-    if (!selectedChildren.length) return;
+    const child = activeChild();
+    if (!child) return;
+    const sched = childSchedules.get(child.studentId);
 
-    if (selectedDates.has(dateStr)) {
-        if (selectedDates.get(dateStr)?.locked) {
+    if (sched.has(dateStr)) {
+        if (sched.get(dateStr)?.locked) {
             showToast('This is one of your recurring days and can\'t be removed here — contact the office to change your recurring schedule.');
             return;
         }
-        selectedDates.delete(dateStr);
+        sched.delete(dateStr);
         closeDayPicker();
         renderCalendar();
+        renderChildTabs();
         renderSelectedDates();
         return;
     }
@@ -628,6 +683,9 @@ function showDayPicker(dateStr, cellEl) {
     pickerOpenDate = dateStr;
     renderCalendar();
 
+    const child = activeChild();
+    if (!child) return;
+
     const backdrop = document.createElement('div');
     backdrop.id        = 'dayPickerBackdrop';
     backdrop.className = 'day-picker-backdrop';
@@ -638,12 +696,10 @@ function showDayPicker(dateStr, cellEl) {
     });
     document.body.appendChild(backdrop);
 
-    const fullTotal = selectedChildren.reduce((s, c) => s + (c.room.fullDayRate || 0), 0);
-    const halfTotal = selectedChildren.reduce((s, c) => s + (c.room.halfDayRate || 0), 0);
-    const hasHalf   = selectedChildren.some(c => !c.room.fullDayOnly);
+    const hasHalf = !child.room.fullDayOnly;
 
-    const childCountNote = selectedChildren.length > 1
-        ? `<p class="picker-subtitle">${selectedChildren.length} children · rates combined</p>`
+    const childNote = selectedChildren.length > 1
+        ? `<p class="picker-subtitle">For ${escHtml(child.name.split(' ')[0])}</p>`
         : '';
 
     const popup = document.createElement('div');
@@ -651,15 +707,15 @@ function showDayPicker(dateStr, cellEl) {
     popup.className = 'day-picker-popup';
     popup.innerHTML = `
         <p class="picker-title">${friendlyDate(dateStr)}</p>
-        ${childCountNote}
+        ${childNote}
         <div class="picker-buttons">
             <button type="button" class="picker-btn" data-date="${dateStr}" data-type="full">
                 <span class="picker-label">Full Day</span>
-                <span class="picker-rate">$${fullTotal}</span>
+                <span class="picker-rate">${formatChildRate(child, 'full')}</span>
             </button>
             ${hasHalf ? `<button type="button" class="picker-btn" data-date="${dateStr}" data-type="half">
                 <span class="picker-label">Half Day</span>
-                <span class="picker-rate">$${halfTotal}</span>
+                <span class="picker-rate">${formatChildRate(child, 'half')}</span>
             </button>` : `<div class="picker-btn picker-btn-disabled" title="This room is full-day only">
                 <span class="picker-label">Half Day</span>
                 <span class="picker-rate">Not available for this room</span>
@@ -674,11 +730,12 @@ function showDayPicker(dateStr, cellEl) {
     popup.querySelectorAll('.picker-btn').forEach(btn => {
         btn.addEventListener('click', e => {
             e.stopPropagation();
-            selectedDates.set(btn.getAttribute('data-date'), {
+            childSchedules.get(activeChildId).set(btn.getAttribute('data-date'), {
                 dayType: btn.getAttribute('data-type'),
             });
             closeDayPicker();
             renderCalendar();
+            renderChildTabs();
             renderSelectedDates();
         });
     });
@@ -734,40 +791,8 @@ function formatChildRate(child, dayType) {
 }
 
 // ============================================================
-// SELECTED DATES + BILLING TOTAL (multi-child aware)
+// SELECTED DATES + BILLING TOTAL (per-child schedules, combined into one invoice)
 // ============================================================
-
-/**
- * Per-child billing breakdown for a single day, applying both discount layers:
- *   1. Each child's individual discount (staff = free, custom = % off).
- *   2. Sibling discount — children are sorted highest-rate first and every child
- *      after the first gets $10 off (capped at their own rate so it never goes negative).
- *
- * @param {'full'|'half'} dayType
- * @param {Array} [children=selectedChildren] child set to bill — defaults to the
- *   current selection; the submit flow passes the successfully-registered subset.
- * @returns {Array<{child: object, preMulti: number, multiDiscount: number, finalAmount: number}>}
- *   preMulti = rate after the individual discount; multiDiscount = sibling $ taken off;
- *   finalAmount = what this child is actually billed for the day.
- */
-function getChildDayAmounts(dayType, children = selectedChildren) {
-    const entries = children.map(c => {
-        const effectiveDayType = c.room.fullDayOnly ? 'full' : dayType;
-        const base = effectiveDayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
-        return { child: c, eff: effectiveRate(base, c.discountType, c.discountValue) };
-    }).sort((a, b) => b.eff - a.eff);   // highest payer first
-
-    return entries.map((entry, i) => ({
-        child:         entry.child,
-        preMulti:      entry.eff,               // rate after individual discount
-        multiDiscount: i > 0 ? Math.min(10, entry.eff) : 0,
-        finalAmount:   Math.max(0, entry.eff - (i > 0 ? 10 : 0)),
-    }));
-}
-
-function calcDayTotal(dayType) {
-    return getChildDayAmounts(dayType).reduce((s, e) => s + e.finalAmount, 0);
-}
 
 // Returns the ISO date string for the Monday of the week containing dateStr
 function getWeekMonday(dateStr) {
@@ -779,122 +804,204 @@ function getWeekMonday(dateStr) {
     return mon.toISOString().slice(0, 10);
 }
 
-function calcTotal() {
-    if (!selectedChildren.length) return 0;
+// Every child (from the given set) who has this specific date in their OWN schedule.
+function childrenScheduledOn(dateStr, children = selectedChildren) {
+    return children.filter(c => childSchedules.get(c.studentId)?.has(dateStr));
+}
 
-    // Group dates by calendar week (Mon–Fri)
+/**
+ * Per-day billing breakdown for one calendar date, applying both discount layers:
+ *   1. Each child's individual discount (staff = free, custom = % off).
+ *   2. Sibling discount — among children billed on this date (excluding any whose
+ *      day is already covered by their own weekly rate — see buildBillingBreakdown),
+ *      sorted highest-rate first, every child after the first gets $10 off (capped
+ *      at their own rate so it never goes negative).
+ * @param {string} dateStr
+ * @param {Array} [children=selectedChildren]
+ * @param {Set<string>} [excludeStudentIds] — children already billed via weekly rate this date
+ * @returns {Array<{child, dayType, preMulti, multiDiscount, finalAmount}>}
+ */
+function getChildDayAmounts(dateStr, children = selectedChildren, excludeStudentIds = new Set()) {
+    const dayChildren = childrenScheduledOn(dateStr, children).filter(c => !excludeStudentIds.has(c.studentId));
+    const entries = dayChildren.map(c => {
+        const entry = childSchedules.get(c.studentId).get(dateStr);
+        const effectiveDayType = c.room.fullDayOnly ? 'full' : entry.dayType;
+        const base = effectiveDayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
+        return { child: c, dayType: entry.dayType, eff: effectiveRate(base, c.discountType, c.discountValue) };
+    }).sort((a, b) => b.eff - a.eff);   // highest payer first
+
+    return entries.map((entry, i) => ({
+        child:         entry.child,
+        dayType:       entry.dayType,
+        preMulti:      entry.eff,               // rate after individual discount
+        multiDiscount: i > 0 ? Math.min(10, entry.eff) : 0,
+        finalAmount:   Math.max(0, entry.eff - (i > 0 ? 10 : 0)),
+    }));
+}
+
+/**
+ * Finds the weeks (Mon–Fri) in ONE child's own schedule where all 5 weekdays are
+ * booked with the same day type and their room has a weekly rate — those weeks bill
+ * at the flat weekly rate (with the child's own discount) instead of per-day.
+ * Weekly rate is evaluated per child individually: siblings may not share the exact
+ * same full week, so the sibling discount doesn't stack on top of a weekly rate.
+ * @returns {Map<string, {dayType, dates: string[], weeklyAmount: number}>} weekMonday -> info
+ */
+function getChildWeeklyWeeks(child) {
+    const sched = childSchedules.get(child.studentId) || new Map();
     const byWeek = new Map();
-    for (const [dateStr, entry] of selectedDates) {
+    for (const [dateStr, entry] of sched) {
         const wk = getWeekMonday(dateStr);
         if (!byWeek.has(wk)) byWeek.set(wk, []);
         byWeek.get(wk).push({ dateStr, dayType: entry.dayType });
     }
-
-    let total = 0;
-    for (const [, days] of byWeek) {
-        const isFullWeek = days.length === 5;
-        const allFull    = isFullWeek && days.every(d => d.dayType === 'full');
-        const allHalf    = isFullWeek && days.every(d => d.dayType === 'half');
-
-        // Weekly rate applies only when all 5 weekdays are booked with the same day type
-        if (allFull || allHalf) {
-            const weeklyChildren = selectedChildren.map(c => {
-                const weeklyRate = allFull ? c.room.weeklyFullRate : c.room.weeklyHalfRate;
-                if (weeklyRate != null) {
-                    return effectiveRate(weeklyRate, c.discountType, c.discountValue);
-                }
-                return null; // no weekly rate for this room
-            });
-
-            if (weeklyChildren.every(v => v !== null)) {
-                // All children have a weekly rate — apply it
-                const sorted = [...weeklyChildren].sort((a, b) => b - a);
-                total += sorted.reduce((s, v, i) => s + Math.max(0, v - (i > 0 ? 10 : 0)), 0);
-                continue;
-            }
-        }
-
-        // Partial week or mixed types — sum individual days
-        for (const { dayType } of days) {
-            total += calcDayTotal(dayType);
-        }
+    const weeks = new Map();
+    for (const [wk, days] of byWeek) {
+        if (days.length !== 5) continue;
+        const allFull = days.every(d => d.dayType === 'full');
+        const allHalf = days.every(d => d.dayType === 'half');
+        if (!allFull && !allHalf) continue;
+        const weeklyRate = allFull ? child.room.weeklyFullRate : child.room.weeklyHalfRate;
+        if (weeklyRate == null) continue;
+        weeks.set(wk, {
+            dayType:      allFull ? 'full' : 'half',
+            dates:        days.map(d => d.dateStr).sort(),
+            weeklyAmount: effectiveRate(weeklyRate, child.discountType, child.discountValue),
+        });
     }
-    return total;
+    return weeks;
 }
 
-function renderSelectedDates() {
-    const container = document.getElementById('selectedDates');
-    if (selectedDates.size === 0) {
-        container.innerHTML = '<p class="empty-state">No dates selected yet.</p>';
-        return;
+/**
+ * Full itemized billing breakdown across every given child's own independent
+ * schedule — this is the single source of truth used both for the live "Estimated
+ * total" preview and the final invoice/receipt, so the two can never disagree.
+ * @param {Array} [children=selectedChildren]
+ * @returns {{ weeklyRows: Array<{child, dayType, dates, weeklyAmount}>, dailyRows: Array<{child, date, dayType, multiDiscount, amount}>, total: number }}
+ */
+function buildBillingBreakdown(children = selectedChildren) {
+    const weeklyRows = [];
+    const weeklyDatesByChild = new Map(); // studentId -> Set(dateStr) already billed via weekly rate
+    let total = 0;
+
+    for (const child of children) {
+        const billedDates = new Set();
+        for (const weekInfo of getChildWeeklyWeeks(child).values()) {
+            weeklyRows.push({ child, ...weekInfo });
+            total += weekInfo.weeklyAmount;
+            weekInfo.dates.forEach(d => billedDates.add(d));
+        }
+        weeklyDatesByChild.set(child.studentId, billedDates);
     }
 
+    const allDates = new Set();
+    for (const child of children) {
+        for (const dateStr of childSchedules.get(child.studentId)?.keys() || []) {
+            if (!weeklyDatesByChild.get(child.studentId)?.has(dateStr)) allDates.add(dateStr);
+        }
+    }
+
+    const dailyRows = [];
+    for (const dateStr of [...allDates].sort()) {
+        const excludeIds = new Set(
+            children.filter(c => weeklyDatesByChild.get(c.studentId)?.has(dateStr)).map(c => c.studentId)
+        );
+        for (const amt of getChildDayAmounts(dateStr, children, excludeIds)) {
+            dailyRows.push({ child: amt.child, date: dateStr, dayType: amt.dayType, multiDiscount: amt.multiDiscount, amount: amt.finalAmount });
+            total += amt.finalAmount;
+        }
+    }
+
+    return { weeklyRows, dailyRows, total };
+}
+
+function calcTotal(children = selectedChildren) {
+    if (!children.length) return 0;
+    return buildBillingBreakdown(children).total;
+}
+
+// Renders the ACTIVE child's own date list (Step 3 review) plus a running combined
+// total across every child added to this session so far.
+function renderSelectedDates() {
+    const container = document.getElementById('selectedDates');
+    const child      = activeChild();
+
+    let activeSectionHtml;
+    if (!child) {
+        activeSectionHtml = '<p class="empty-state">Select a child above to begin.</p>';
+    } else {
+        const sched = childSchedules.get(child.studentId) || new Map();
+        if (sched.size === 0) {
+            activeSectionHtml = `<p class="empty-state">No dates selected yet for ${escHtml(child.name.split(' ')[0])}.</p>`;
+        } else {
+            const sorted = [...sched.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+            const rows = sorted.map(([dateStr, entry]) => {
+                const typeText    = entry.dayType === 'half' ? 'Half Day' : 'Full Day';
+                const dayAmounts  = getChildDayAmounts(dateStr);
+                const own         = dayAmounts.find(a => a.child.studentId === child.studentId);
+                const multiNote   = own && own.multiDiscount > 0
+                    ? `<span class="disc-note"> (−$${own.multiDiscount} sibling)</span>` : '';
+                const otherKids   = dayAmounts.filter(a => a.child.studentId !== child.studentId);
+                const otherNote   = otherKids.length
+                    ? `<span class="rate-breakdown">Also scheduled: ${otherKids.map(a => `${escHtml(a.child.name.split(' ')[0])} ($${a.finalAmount.toFixed(2)})`).join(', ')}</span>`
+                    : '';
+                const rateLabel = own ? formatChildRate(own.child, entry.dayType) : '';
+
+                return `
+                    <li class="date-list-item">
+                        <div class="date-row">
+                            <div class="date-info">
+                                <span class="date-label">${friendlyDate(dateStr)}</span>
+                                <span class="day-type-label">${typeText} — ${rateLabel}${multiNote}</span>
+                                ${otherNote}
+                            </div>
+                            <button type="button" class="remove-btn" data-date="${dateStr}">&times;</button>
+                        </div>
+                    </li>`;
+            }).join('');
+
+            let fullDayCount = 0, halfDayCount = 0;
+            for (const [, entry] of sched) {
+                if (entry.dayType === 'half') halfDayCount++;
+                else fullDayCount++;
+            }
+            const totalDayCount = fullDayCount + halfDayCount;
+            const parts = [];
+            if (fullDayCount > 0) parts.push(`${fullDayCount} full day${fullDayCount !== 1 ? 's' : ''}`);
+            if (halfDayCount > 0) parts.push(`${halfDayCount} half day${halfDayCount !== 1 ? 's' : ''}`);
+
+            activeSectionHtml = `
+                <ul class="date-list">${rows}</ul>
+                <div class="billing-day-counts">${escHtml(child.name.split(' ')[0])}: ${totalDayCount} day${totalDayCount !== 1 ? 's' : ''} total (${parts.join(', ')})</div>`;
+        }
+    }
+
+    const showTotal        = selectedChildren.length > 0;
+    const grandTotal        = calcTotal();
     const hasIndivDiscount  = selectedChildren.some(c => c.discountType && c.discountType !== 'none');
     const hasMultiDiscount  = selectedChildren.length > 1;
     const hasAnyDiscount    = hasIndivDiscount || hasMultiDiscount;
+    const totalLabel        = hasAnyDiscount ? 'Total' : 'Estimated total';
+    const discountNote      = hasAnyDiscount ? `<span class="billing-note">Discount(s) applied.</span>` : '';
 
-    const sorted = [...selectedDates.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    const rows = sorted.map(([dateStr, entry]) => {
-        let dayTypeLabel = '';
-        if (selectedChildren.length) {
-            const typeText   = entry.dayType === 'half' ? 'Half Day' : 'Full Day';
-            const dayAmounts = getChildDayAmounts(entry.dayType);
-            const lineTotal  = dayAmounts.reduce((s, e) => s + e.finalAmount, 0);
-
-            if (selectedChildren.length === 1) {
-                const amt = dayAmounts[0];
-                dayTypeLabel = `<span class="day-type-label">${typeText} — ${formatChildRate(amt.child, entry.dayType)}</span>`;
-            } else {
-                const breakdown = dayAmounts.map(amt => {
-                    const multiNote = amt.multiDiscount > 0
-                        ? `<span class="disc-note"> (−$${amt.multiDiscount} sibling)</span>` : '';
-                    return `${escHtml(amt.child.name)}: $${amt.finalAmount.toFixed(2)}${multiNote}`;
-                }).join(' · ');
-                dayTypeLabel = `<span class="day-type-label">${typeText} — $${lineTotal.toFixed(2)}</span><span class="rate-breakdown">${breakdown}</span>`;
-            }
-        }
-
-        return `
-            <li class="date-list-item">
-                <div class="date-row">
-                    <div class="date-info">
-                        <span class="date-label">${friendlyDate(dateStr)}</span>
-                        ${dayTypeLabel}
-                    </div>
-                    <button type="button" class="remove-btn" data-date="${dateStr}">&times;</button>
-                </div>
-            </li>`;
-    }).join('');
-
-    const total      = calcTotal();
-    const totalLabel = hasAnyDiscount ? 'Total' : 'Estimated total';
-    const discountNote = hasAnyDiscount
-        ? `<span class="billing-note">Discount(s) applied.</span>`
+    const summaryHtml = selectedChildren.length > 1
+        ? `<div class="all-children-summary">${selectedChildren.map(c => {
+              const s = childSchedules.get(c.studentId) || new Map();
+              const isActive = c.studentId === activeChildId;
+              return `<div class="child-summary-row${isActive ? ' active' : ''}">${escHtml(c.name.split(' ')[0])}: ${s.size} day${s.size !== 1 ? 's' : ''}</div>`;
+          }).join('')}</div>`
         : '';
 
-    // Day count summary
-    let fullDayCount = 0, halfDayCount = 0;
-    for (const [, entry] of selectedDates) {
-        if (entry.dayType === 'half') halfDayCount++;
-        else fullDayCount++;
-    }
-    const totalDayCount = fullDayCount + halfDayCount;
-    const daySummaryParts = [];
-    if (fullDayCount > 0) daySummaryParts.push(`${fullDayCount} full day${fullDayCount !== 1 ? 's' : ''}`);
-    if (halfDayCount > 0) daySummaryParts.push(`${halfDayCount} half day${halfDayCount !== 1 ? 's' : ''}`);
-    const daySummary = `<div class="billing-day-counts">${totalDayCount} day${totalDayCount !== 1 ? 's' : ''} total (${daySummaryParts.join(', ')})</div>`;
-
     container.innerHTML = `
-        <ul class="date-list">${rows}</ul>
-        ${daySummary}
-        <div class="billing-total">
-            ${totalLabel}: <strong>$${total.toFixed(2)}</strong>${discountNote}
-        </div>`;
+        ${activeSectionHtml}
+        ${summaryHtml}
+        ${showTotal ? `<div class="billing-total">${totalLabel}: <strong>$${grandTotal.toFixed(2)}</strong>${discountNote}</div>` : ''}`;
 
     container.querySelectorAll('.remove-btn').forEach(btn => {
         btn.addEventListener('click', e => {
-            selectedDates.delete(e.currentTarget.getAttribute('data-date'));
+            childSchedules.get(activeChildId)?.delete(e.currentTarget.getAttribute('data-date'));
             renderCalendar();
+            renderChildTabs();
             renderSelectedDates();
         });
     });
@@ -1111,8 +1218,9 @@ async function handleSubmit(e) {
         showToast('Please add at least one child.');
         return;
     }
-    if (selectedDates.size === 0) {
-        showToast('Please select at least one care date.');
+    const emptyChildren = selectedChildren.filter(c => !(childSchedules.get(c.studentId)?.size));
+    if (emptyChildren.length) {
+        showToast(`Please select at least one care date for ${emptyChildren.map(c => c.name).join(', ')} (or remove them from this registration).`);
         return;
     }
 
@@ -1121,10 +1229,6 @@ async function handleSubmit(e) {
     btn.textContent = 'Submitting…';
 
     try {
-        // All selected dates are confirmed
-        const confirmedDates = [...selectedDates.entries()]
-            .map(([d, en]) => ({ date: d, dayType: en.dayType }));
-
         const results = [];
         const errors  = [];
 
@@ -1132,6 +1236,9 @@ async function handleSubmit(e) {
         const familyStudentIds = (selectedFamily?.students || []).map(s => String(s.id));
 
         for (const child of selectedChildren) {
+            const confirmedDates = [...(childSchedules.get(child.studentId) || new Map()).entries()]
+                .map(([d, en]) => ({ date: d, dayType: en.dayType }));
+
             // Guard: child must still belong to the currently selected family.
             // Catches the edge-case where a user switches families mid-session.
             if (child.studentId && !familyStudentIds.includes(String(child.studentId))) {
@@ -1182,45 +1289,61 @@ async function handleSubmit(e) {
 
         localStorage.setItem(`childcare_submitted_${targetMonthKey}`, 'true');
 
-        // Build itemized receipt (uses multi-child + individual discounts)
-        const sortedDates = confirmedDates.slice().sort((a, b) => a.date.localeCompare(b.date));
+        // Build ONE combined itemized receipt/invoice across every successfully
+        // registered child — this reuses buildBillingBreakdown, the exact same
+        // calc that drives the live "Estimated total" preview, so the two can
+        // never disagree.
+        const submitChildren = results.map(r => r.child);
+        const { weeklyRows, dailyRows, total: grandTotal } = buildBillingBreakdown(submitChildren);
+
+        // Flattened list of {date, dayType, childName} rows — used for the receipt
+        // table, the print schedule, the iCal export, and the confirmation email.
+        const sortedDates = [
+            ...weeklyRows.flatMap(w => w.dates.map(date => ({
+                date, dayType: w.dayType, childName: w.child.name,
+                amount: null, // per-day amount not meaningful inside a flat weekly rate
+                weeklyAmount: w.weeklyAmount, isWeekly: true,
+            }))),
+            ...dailyRows.map(r => ({ date: r.date, dayType: r.dayType, childName: r.child.name, amount: r.amount, isWeekly: false })),
+        ].sort((a, b) => a.date.localeCompare(b.date) || a.childName.localeCompare(b.childName));
+
         let receiptHtml = '';
         let emailDatesWithAmounts = [];
         let emailGrandTotal = 0;
         if (sortedDates.length) {
-            // Build per-day amounts using same logic as renderSelectedDates
-            // results[].child mirrors selectedChildren at submit time
-            const submitChildren = results.map(r => r.child);
-            // Reuse the canonical billing calc on the registered subset (same
-            // sort + sibling-discount logic as the live receipt preview).
-            const calcSubmitDayAmounts = (dayType) => getChildDayAmounts(dayType, submitChildren);
-
-            const receiptRows = sortedDates.map(({ date, dayType }) => {
-                const typeLabel  = dayType === 'half' ? 'Half Day' : 'Full Day';
-                const dayAmts    = calcSubmitDayAmounts(dayType);
-                const lineTotal  = dayAmts.reduce((s, e) => s + e.finalAmount, 0);
+            const weeklyReceiptRows = weeklyRows.map(w => {
+                const label      = w.dayType === 'half' ? 'Half Day (weekly rate)' : 'Full Day (weekly rate)';
+                const rangeLabel = `${friendlyDate(w.dates[0])} – ${friendlyDate(w.dates[w.dates.length - 1])}`;
                 return `<tr>
-                    <td>${friendlyDate(date)}</td>
-                    <td>${typeLabel}</td>
-                    <td class="receipt-amount">$${lineTotal.toFixed(2)}</td>
+                    <td>${escHtml(w.child.name)} — ${rangeLabel}</td>
+                    <td>${label}</td>
+                    <td class="receipt-amount">$${w.weeklyAmount.toFixed(2)}</td>
                 </tr>`;
             }).join('');
 
-            const grandTotal = sortedDates.reduce((s, { dayType }) =>
-                s + calcSubmitDayAmounts(dayType).reduce((ss, e) => ss + e.finalAmount, 0), 0);
+            const dailyReceiptRows = dailyRows.map(r => {
+                const typeLabel = r.dayType === 'half' ? 'Half Day' : 'Full Day';
+                return `<tr>
+                    <td>${escHtml(r.child.name)} — ${friendlyDate(r.date)}</td>
+                    <td>${typeLabel}</td>
+                    <td class="receipt-amount">$${r.amount.toFixed(2)}</td>
+                </tr>`;
+            }).join('');
 
-            // Pre-compute for email (must happen here while calcSubmitDayAmounts is in scope)
             emailGrandTotal = grandTotal;
-            emailDatesWithAmounts = sortedDates.map(({ date, dayType }) => ({
-                date,
-                dayType,
-                amount: calcSubmitDayAmounts(dayType).reduce((s, e) => s + e.finalAmount, 0),
-            }));
+            emailDatesWithAmounts = [
+                ...weeklyRows.map(w => ({
+                    date: w.dates[0], dayType: w.dayType, amount: w.weeklyAmount, childName: w.child.name,
+                    label: `Weekly rate (${friendlyDate(w.dates[0])} – ${friendlyDate(w.dates[w.dates.length - 1])})`,
+                })),
+                ...dailyRows.map(r => ({ date: r.date, dayType: r.dayType, amount: r.amount, childName: r.child.name })),
+            ];
 
             // Create billing invoice — non-blocking, never delays the confirmation
             createInvoiceByEmail(parentEmail, targetMonthKey, emailGrandTotal).catch(() => {});
 
-            // Day count summary for receipt
+            // Day count summary for receipt (unique child-day pairs; a weekly-rate
+            // week still counts as 5 individual days for this summary)
             let rcptFull = 0, rcptHalf = 0;
             sortedDates.forEach(({ dayType }) => {
                 if (dayType === 'half') rcptHalf++; else rcptFull++;
@@ -1233,8 +1356,8 @@ async function handleSubmit(e) {
             receiptHtml = `
                 <p class="receipt-day-summary">${rcptTotal} day${rcptTotal !== 1 ? 's' : ''} total &mdash; ${rcptParts.join(', ')}</p>
                 <table class="receipt-table">
-                    <thead><tr><th>Date</th><th>Type</th><th>Amount</th></tr></thead>
-                    <tbody>${receiptRows}</tbody>
+                    <thead><tr><th>Child — Date</th><th>Type</th><th>Amount</th></tr></thead>
+                    <tbody>${weeklyReceiptRows}${dailyReceiptRows}</tbody>
                     <tfoot>
                         <tr class="receipt-total-row">
                             <td colspan="2"><strong>Total</strong></td>
@@ -1268,7 +1391,6 @@ async function handleSubmit(e) {
         document.getElementById('printScheduleBtn')?.addEventListener('click', () => {
             openPrintSchedule({
                 sortedDates,
-                childNames: results.map(r => r.child.name),
                 monthLabel: win.targetLabel,
                 parentName,
             });
@@ -1276,7 +1398,7 @@ async function handleSubmit(e) {
 
         // Wire up the iCal download button
         document.getElementById('icalDownloadBtn')?.addEventListener('click', () => {
-            downloadIcal(sortedDates, results.map(r => r.child.name), parentName, win.targetLabel);
+            downloadIcal(sortedDates, parentName);
         });
 
         // Send the confirmation email automatically. Non-blocking: the success
@@ -1336,13 +1458,14 @@ function setupListeners() {}   // kept for compatibility
 // ============================================================
 // PRINT SCHEDULE POPUP
 // ============================================================
-function openPrintSchedule({ sortedDates, childNames, monthLabel, parentName }) {
-    const rows = sortedDates.map(({ date, dayType }) => {
+function openPrintSchedule({ sortedDates, monthLabel, parentName }) {
+    const rows = sortedDates.map(({ date, dayType, childName }) => {
         const label = dayType === 'half' ? 'Half Day' : 'Full Day';
         const d = new Date(date + 'T00:00:00').toLocaleDateString('en-US',
             { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-        return `<tr><td>${d}</td><td class="dt">${label}</td></tr>`;
+        return `<tr><td>${d}</td><td>${escHtml(childName)}</td><td class="dt">${label}</td></tr>`;
     }).join('');
+    const childNames = [...new Set(sortedDates.map(d => d.childName))];
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1366,7 +1489,7 @@ function openPrintSchedule({ sortedDates, childNames, monthLabel, parentName }) 
   <h1>${monthLabel} — Confirmed Care Schedule</h1>
   <p class="sub">Family: <strong>${escHtml(parentName)}</strong> &nbsp;·&nbsp; Children: ${childNames.map(escHtml).join(', ')}</p>
   <table>
-    <thead><tr><th>Date</th><th>Type</th></tr></thead>
+    <thead><tr><th>Date</th><th>Child</th><th>Type</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
   <div class="footer">Printed ${new Date().toLocaleString('en-US')}</div>
@@ -1383,31 +1506,28 @@ function openPrintSchedule({ sortedDates, childNames, monthLabel, parentName }) 
 // ============================================================
 // iCAL DOWNLOAD
 // ============================================================
-function generateIcal(sortedDates, childNames, parentName) {
+function generateIcal(sortedDates, parentName) {
     const now = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + 'Z';
     const uid = () => `childcare-${Date.now()}-${Math.random().toString(36).slice(2,7)}@tlcmdo`;
     const desc = `Timothy Lutheran Church Mother's Day Out (${parentName})`;
 
-    // One calendar event per child per date
-    const events = [];
-    sortedDates.forEach(({ date, dayType }) => {
+    // One calendar event per (child, date) row \u2014 each child may have a different schedule.
+    const events = sortedDates.map(({ date, dayType, childName }) => {
         const dtStart  = date.replace(/-/g, '');
         const [y, m, d] = date.split('-').map(Number);
         const nextDay  = new Date(y, m - 1, d + 1);
         const dtEnd    = `${nextDay.getFullYear()}${String(nextDay.getMonth() + 1).padStart(2, '0')}${String(nextDay.getDate()).padStart(2, '0')}`;
         const dayLabel = dayType === 'half' ? 'Half Day' : 'Full Day';
-        childNames.forEach(childName => {
-            events.push([
-                'BEGIN:VEVENT',
-                `UID:${uid()}`,
-                `DTSTAMP:${now}`,
-                `DTSTART;VALUE=DATE:${dtStart}`,
-                `DTEND;VALUE=DATE:${dtEnd}`,
-                `SUMMARY:MDO \u2014 ${childName} \u2014 ${dayLabel}`,
-                `DESCRIPTION:${desc}`,
-                'END:VEVENT',
-            ].join('\r\n'));
-        });
+        return [
+            'BEGIN:VEVENT',
+            `UID:${uid()}`,
+            `DTSTAMP:${now}`,
+            `DTSTART;VALUE=DATE:${dtStart}`,
+            `DTEND;VALUE=DATE:${dtEnd}`,
+            `SUMMARY:MDO \u2014 ${childName} \u2014 ${dayLabel}`,
+            `DESCRIPTION:${desc}`,
+            'END:VEVENT',
+        ].join('\r\n');
     });
 
     return [
@@ -1421,14 +1541,15 @@ function generateIcal(sortedDates, childNames, parentName) {
     ].join('\r\n');
 }
 
-function downloadIcal(sortedDates, childNames, parentName) {
+function downloadIcal(sortedDates, parentName) {
     if (!sortedDates.length) { showToast('No dates to export.'); return; }
-    const ical     = generateIcal(sortedDates, childNames, parentName);
-    const blob     = new Blob([ical], { type: 'text/calendar;charset=utf-8' });
-    const url      = URL.createObjectURL(blob);
-    const a        = document.createElement('a');
-    const safeName = childNames.join('-').replace(/\s+/g, '').slice(0, 24);
-    a.href         = url;
+    const ical      = generateIcal(sortedDates, parentName);
+    const blob      = new Blob([ical], { type: 'text/calendar;charset=utf-8' });
+    const url       = URL.createObjectURL(blob);
+    const a         = document.createElement('a');
+    const childNames = [...new Set(sortedDates.map(d => d.childName))];
+    const safeName  = childNames.join('-').replace(/\s+/g, '').slice(0, 24);
+    a.href          = url;
     a.download     = `care-schedule-${safeName}.ics`;
     document.body.appendChild(a);
     a.click();
