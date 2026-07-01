@@ -110,6 +110,15 @@
 }
 .current-tab-chip .ctc-icon { font-size: 1.1em; line-height: 1; }
 
+/* Dashboard buttons inherit oversized sizing from the site-wide .btn-primary
+   in css/styles.css (12px 26px, 1.05em) — scope a smaller size here so
+   .btn-primary matches .btn-secondary/.btn-ghost in the same toolbar row.
+   Scoped to #dashboard so the login screen's Login button is unaffected. */
+#dashboard .btn-primary {
+    padding: 9px 18px;
+    font-size: .9em;
+}
+
 .btn-secondary {
     background: var(--sun);
     color: var(--navy);
