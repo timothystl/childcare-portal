@@ -1926,19 +1926,11 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     .admin-header { padding: 12px 16px; gap: 8px; }
     .admin-header h1 { font-size: 1.1em; }
     .filters, .capacity-section, .table-section { padding: 16px; }
-    /* Scroll buttons horizontally instead of wrapping to a second row */
-    .header-actions {
-        gap: 6px;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        width: 100%;
-    }
-    .header-actions::-webkit-scrollbar { display: none; }
-    /* Hide logged-in email — not critical on small screens */
+    /* On mobile keep only Logout + hamburger in the header */
+    .header-actions { gap: 8px; flex-wrap: nowrap; }
     .current-user-display { display: none; }
-    .btn-secondary, .btn-ghost, .btn-primary { padding: 8px 12px; font-size: .82em; flex-shrink: 0; }
+    #refreshBtn, #exportXlsxBtn { display: none; }
+    #logoutBtn { padding: 8px 12px; font-size: .82em; }
     .families-import-row { gap: 8px; }
     .families-list { max-height: none; }
 
