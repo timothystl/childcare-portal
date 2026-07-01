@@ -64,6 +64,25 @@ function setupFamilyBilling() {
                 await generateFamilyBillingReport();
             } catch (err) { alert('Failed to remove override: ' + err.message); }
         }
+
+        // Toggle annual enrollment fee paid/unpaid
+        if (e.target.classList.contains('billing-reg-fee-btn')) {
+            const btn       = e.target;
+            const studentId = btn.dataset.studentId;
+            const isPaid    = btn.dataset.paid === '1';
+            if (!studentId) return;
+            btn.disabled    = true;
+            btn.textContent = '…';
+            try {
+                const newYear = isPaid ? null : new Date().getFullYear();
+                await updateStudentRegFee(studentId, newYear);
+                await generateFamilyBillingReport();
+            } catch (err) {
+                alert('Failed to update enrollment fee: ' + err.message);
+                btn.disabled    = false;
+                btn.textContent = isPaid ? '✓ Paid' : 'Unpaid';
+            }
+        }
     });
 }
 
@@ -244,6 +263,7 @@ async function generateFamilyBillingReport() {
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
 
     // Always load fresh families and registrations so discounts and new entries are up to date.
+    let allStudents = [];
     await Promise.all([
         fetchAllFamilies({ includeArchived: true })
             .then(d => { allFamiliesData = d; _discountMap = null; })
@@ -251,7 +271,28 @@ async function generateFamilyBillingReport() {
         fetchAllRegistrations()
             .then(d => { if (d?.length) allRegistrations = d; })
             .catch(e => console.warn('Could not refresh registrations:', e)),
+        fetchStudents()
+            .then(d => { allStudents = d || []; })
+            .catch(e => console.warn('Could not load students:', e)),
     ]);
+
+    // Reg fee amount from settings (cached on window by setupRegFee; fall back to DB fetch)
+    let regFeeAmount = window._regFeeAmount ?? 0;
+    if (!regFeeAmount) {
+        try {
+            const val = await fetchSetting('registration_fee');
+            regFeeAmount = (typeof val === 'number' && val >= 0) ? val : 0;
+            window._regFeeAmount = regFeeAmount;
+        } catch (e) { /* ignore */ }
+    }
+
+    // Build student lookup: childName.toLowerCase() → {id, reg_fee_paid_year, family_id}
+    // A child may appear multiple times (shouldn't, but guard). Use first match.
+    const studentByName = new Map();
+    allStudents.forEach(s => {
+        const k = (s.child_name || '').toLowerCase().trim();
+        if (!studentByName.has(k)) studentByName.set(k, s);
+    });
 
     // Load any manual billing overrides for this month
     let overrideRows = [];
@@ -268,11 +309,14 @@ async function generateFamilyBillingReport() {
         return;
     }
 
+    const currentYear = new Date().getFullYear();
     let grandTotal = 0;
     const rows = families.map(fam => {
         const familyTotal = fam.children.reduce((s, c) => {
             const billed = c.hasOverride ? c.overrideAmount : c.subtotal;
-            return s + billed + (c.changeFees || 0);
+            const student = studentByName.get((c.childName || '').toLowerCase().trim());
+            const regFeePaid = student && student.reg_fee_paid_year === currentYear;
+            return s + billed + (c.changeFees || 0) + (regFeeAmount > 0 && regFeePaid ? regFeeAmount : 0);
         }, 0);
         grandTotal += familyTotal;
 
@@ -281,6 +325,10 @@ async function generateFamilyBillingReport() {
             const discDisplay = c.discountDollar > 0
                 ? `${escHtml(c.discLabel)} (−$${c.discountDollar.toFixed(2)})`
                 : escHtml(c.discLabel);
+
+            const student    = studentByName.get((c.childName || '').toLowerCase().trim());
+            const studentId  = student?.id;
+            const regFeePaid = student && student.reg_fee_paid_year === currentYear;
 
             const feeRow = c.changeFees > 0
                 ? `<tr class="billing-child-row" style="background:#fffbeb">
@@ -294,6 +342,18 @@ async function generateFamilyBillingReport() {
                     <td class="billing-indent" style="color:#166534;font-size:.85em" colspan="4">↳ Sibling discount applied</td>
                     <td class="report-num" style="color:#166534">—</td>
                     <td class="report-num report-revenue" style="color:#166534">−$${c.sibDiscount.toFixed(2)}</td>
+                   </tr>`
+                : '';
+            const regFeeRow = regFeeAmount > 0
+                ? `<tr class="billing-child-row billing-reg-fee-row" style="background:${regFeePaid ? '#f0fdf4' : '#fafafa'}" data-student-id="${escHtml(String(studentId || ''))}">
+                    <td class="billing-indent" colspan="4" style="font-size:.85em;color:${regFeePaid ? '#166534' : '#6b7280'}">
+                        ↳ Annual enrollment fee
+                        <button class="billing-reg-fee-btn" data-student-id="${escHtml(String(studentId || ''))}" data-paid="${regFeePaid ? '1' : '0'}"
+                            style="margin-left:.5rem;font-size:.8em;padding:1px 8px;border-radius:3px;border:1px solid ${regFeePaid ? '#86efac' : '#d1d5db'};background:${regFeePaid ? '#dcfce7' : '#f3f4f6'};color:${regFeePaid ? '#166534' : '#374151'};cursor:pointer;"
+                            title="${regFeePaid ? 'Mark as unpaid' : 'Mark as paid'}">${regFeePaid ? '✓ Paid ' + currentYear : 'Unpaid'}</button>
+                    </td>
+                    <td class="report-num" style="color:${regFeePaid ? '#166534' : '#9ca3af'}">—</td>
+                    <td class="report-num report-revenue" style="color:${regFeePaid ? '#166534' : '#9ca3af'}">${regFeePaid ? '+$' + regFeeAmount.toFixed(2) : '($' + regFeeAmount.toFixed(2) + ')'}</td>
                    </tr>`
                 : '';
 
@@ -323,7 +383,7 @@ async function generateFamilyBillingReport() {
                 <td class="report-num">${c.halfDays || '—'}</td>
                 <td class="report-num">${discDisplay}</td>
                 ${amountCell}
-            </tr>${sibRow}${feeRow}`;
+            </tr>${sibRow}${feeRow}${regFeeRow}`;
         }).join('');
 
         return `

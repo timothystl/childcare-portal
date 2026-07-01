@@ -528,6 +528,47 @@ async function onSaveRates() {
 }
 
 // ============================================================
+// REGISTRATION FEE SETTING
+// ============================================================
+async function loadRegFeeSetting() {
+    const val = await fetchSetting('registration_fee');
+    window._regFeeAmount = (typeof val === 'number' && val >= 0) ? val : 0;
+    const inp = document.getElementById('regFeeInput');
+    if (inp) inp.value = window._regFeeAmount > 0 ? window._regFeeAmount.toFixed(2) : '';
+}
+
+async function setupRegFee() {
+    await loadRegFeeSetting();
+    document.getElementById('saveRegFeeBtn')?.addEventListener('click', async () => {
+        const btn      = document.getElementById('saveRegFeeBtn');
+        const statusEl = document.getElementById('regFeeStatus');
+        const inp      = document.getElementById('regFeeInput');
+        if (!btn || !inp) return;
+        btn.disabled    = true;
+        btn.textContent = 'Saving…';
+        if (statusEl) statusEl.textContent = '';
+        try {
+            const fee = parseFloat(inp.value) || 0;
+            await upsertSetting('registration_fee', fee);
+            window._regFeeAmount = fee;
+            if (statusEl) {
+                statusEl.textContent = '✓ Saved!';
+                statusEl.style.color = '#2e7d32';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+        } catch (err) {
+            if (statusEl) {
+                statusEl.textContent = '⚠️ ' + err.message;
+                statusEl.style.color = '#c62828';
+            }
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = '💾 Save Fee';
+        }
+    });
+}
+
+// ============================================================
 
 // ADMIN ROLES  (access control)
 // ============================================================
@@ -546,11 +587,9 @@ function _hide(id) {
 function applyRoleRestrictions() {
     if (currentAdminRole === 'full') return;
 
-    // Finance and Billing tabs are full-access only
+    // Finance tab is full-access only
     const finBtn = document.querySelector('[data-tab="finance"]');
     if (finBtn) finBtn.style.display = 'none';
-    const bilBtn = document.querySelector('[data-tab="billing"]');
-    if (bilBtn) bilBtn.style.display = 'none';
 
     if (currentAdminRole === 'restricted') {
         // Staffing tab: hide everything except the schedule planner

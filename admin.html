@@ -87,7 +87,6 @@
                 <button class="admin-tab-btn" data-tab="reports">📊<span class="tab-label"> Reports</span></button>
                 <button class="admin-tab-btn" data-tab="staffing">👷<span class="tab-label"> Staffing</span></button>
                 <button class="admin-tab-btn" data-tab="finance">💰<span class="tab-label"> Finance</span></button>
-                <button class="admin-tab-btn" data-tab="billing">🏦<span class="tab-label"> Billing</span></button>
                 <button class="admin-tab-btn" data-tab="settings">⚙️<span class="tab-label"> Settings</span></button>
             </div>
         </nav>
@@ -594,6 +593,16 @@
                 <div class="rates-actions">
                     <button id="saveRatesBtn" class="btn-primary">💾 Save Rates</button>
                     <span id="ratesStatus" class="rates-status"></span>
+                </div>
+                <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #e5e7eb;">
+                    <label style="display:flex;align-items:center;gap:.75rem;font-weight:600;color:#1e3a5f;">
+                        Annual Enrollment Fee ($)
+                        <input type="number" id="regFeeInput" min="0" step="0.01" placeholder="0.00"
+                            style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
+                    </label>
+                    <p style="margin:.4rem 0 .75rem 0;font-size:.85rem;color:#555;">One-time annual fee per child. Shown as a badge in Family Billing Summary; admin can toggle paid/unpaid per child.</p>
+                    <button id="saveRegFeeBtn" class="btn-primary" style="font-size:.9rem;padding:6px 16px;">💾 Save Fee</button>
+                    <span id="regFeeStatus" style="margin-left:.75rem;font-size:.85rem;"></span>
                 </div>
             </section>
 
@@ -1241,11 +1250,6 @@
                 </div>
             </section>
 
-        </div><!-- /#tab-finance -->
-
-        <!-- ── BILLING TAB ──────────────────────────────────── -->
-        <div class="tab-pane hidden" id="tab-billing">
-
             <!-- Accounts Receivable -->
             <section class="admin-section collapsible-section" id="billingArSection">
                 <h2>📋 Accounts Receivable</h2>
@@ -1272,19 +1276,33 @@
                 </div>
             </section>
 
-            <!-- CSV Payment Import -->
+            <!-- ProCare Import -->
             <section class="admin-section collapsible-section" id="billingPaymentsSection">
-                <h2>📂 CSV Payment Import — Procare</h2>
-                <p class="section-desc">Upload a Procare payment export CSV. Map columns, review matches, then confirm to create payment records. Each import is logged as an audit batch.</p>
+                <h2>📂 ProCare Import</h2>
+                <p class="section-desc">Upload a ProCare transaction export (.xlsx). The portal matches each row to a child by name, shows you unmatched rows for review, then saves payment and invoice records.</p>
                 <div class="families-import-row" style="margin-bottom:16px">
-                    <label class="file-upload-label" for="paymentCsvInput">📂 Choose CSV File</label>
+                    <label class="file-upload-label" for="paymentCsvInput">📂 Choose File</label>
                     <input type="file" id="paymentCsvInput" accept=".csv,.xlsx" class="hidden-file-input">
                     <span id="paymentCsvFileName" class="families-file-name">No file chosen</span>
                     <button id="clearPaymentCsvBtn" class="btn-ghost" style="display:none">✕ Clear</button>
                 </div>
                 <div id="paymentImportWrap">
-                    <p class="empty-hint">Choose a Procare CSV export file to begin the import wizard.</p>
+                    <p class="empty-hint">Choose a ProCare export file (.xlsx) to begin the import wizard.</p>
                 </div>
+                <hr style="margin:1.5rem 0;border:none;border-top:1px solid #e5e7eb;">
+                <h3 style="margin:0 0 .4rem 0;color:#1e3a5f;">ProCare Transaction Aging</h3>
+                <p style="margin:0 0 .75rem 0;font-size:.875rem;color:#555;">Balance per family from imported ProCare transactions. Green = current, yellow = 1–30 days overdue, red = 31+ days overdue.</p>
+                <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin-bottom:.75rem;">
+                    <label style="font-size:.875rem;color:#374151;">From
+                        <input type="month" id="procareArFrom" style="margin-left:.35rem;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;">
+                    </label>
+                    <label style="font-size:.875rem;color:#374151;">To
+                        <input type="month" id="procareArTo" style="margin-left:.35rem;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;">
+                    </label>
+                    <button id="loadProcareArBtn" class="btn-secondary">&#8635; Load Aging Report</button>
+                    <button id="exportProcareArBtn" class="btn-primary" style="display:none">&#8595; Export Excel</button>
+                </div>
+                <div id="procareArWrap"></div>
             </section>
 
             <!-- Revenue Dashboard -->
@@ -1304,7 +1322,7 @@
                 </div>
             </section>
 
-        </div><!-- /#tab-billing -->
+        </div><!-- /#tab-finance -->
 
     </div>
 

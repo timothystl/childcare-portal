@@ -1095,6 +1095,33 @@ async function archiveSummerFamilies() {
     return (data || []).length;
 }
 
+let _cachedAdminEmail = null;
+async function getAdminEmail() {
+    if (_cachedAdminEmail) return _cachedAdminEmail;
+    const { data } = await sbClient.auth.getUser();
+    _cachedAdminEmail = data?.user?.email || 'admin';
+    return _cachedAdminEmail;
+}
+
+async function fetchStudents() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('students')
+        .select('id, child_name, child_dob, family_id, room_override, reg_fee_paid_year')
+        .order('child_name');
+    if (error) throw error;
+    return data || [];
+}
+
+async function updateStudentRegFee(studentId, paidYear) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('students')
+        .update({ reg_fee_paid_year: paidYear })
+        .eq('id', studentId);
+    if (error) throw error;
+}
+
 async function updateStudentRoomOverride(studentId, roomOverride) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
@@ -2563,6 +2590,16 @@ async function fetchAllBillingPayments() {
         .order('payment_date', { ascending: false });
     if (error) throw error;
     return data || [];
+}
+
+async function fetchARSummary(monthKey) {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('billing_payments')
+        .select('family_id, amount, payment_date, payment_method, note, families(parent_name, parent_email)')
+        .order('payment_date', { ascending: false });
+    if (error || !data) return [];
+    return data;
 }
 
 // Fetch all payments whose payment_date falls within a given YYYY-MM month
