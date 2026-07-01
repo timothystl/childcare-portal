@@ -308,19 +308,27 @@ async function loadClosureList() {
 // TABS
 // ============================================================
 function setupTabs() {
-    const btns  = document.querySelectorAll('#adminTabs .admin-tab-btn');
-    const panes = document.querySelectorAll('.tab-pane');
+    const btns      = document.querySelectorAll('#adminTabs .admin-tab-btn');
+    const panes     = document.querySelectorAll('.tab-pane');
+    const menuBtn   = document.getElementById('mobileMenuBtn');
+    const overlay   = document.getElementById('mobileNavOverlay');
+    const closeBtn  = document.getElementById('mobileNavClose');
+    const navItems  = document.querySelectorAll('.mobile-nav-item');
+
+    function closeMenu() {
+        if (overlay) overlay.classList.add('hidden');
+    }
 
     function activate(tab) {
-        btns.forEach(b  => b.classList.toggle('active', b.dataset.tab === tab));
-        panes.forEach(p => p.classList.toggle('hidden', p.id !== 'tab-' + tab));
+        btns.forEach(b     => b.classList.toggle('active', b.dataset.tab === tab));
+        navItems.forEach(i => i.classList.toggle('active', i.dataset.tab === tab));
+        panes.forEach(p    => p.classList.toggle('hidden', p.id !== 'tab-' + tab));
         localStorage.setItem('adminActiveTab', tab);
+        closeMenu();
 
-        // Scroll active tab into view within the horizontal tab bar
         const activeBtn = [...btns].find(b => b.dataset.tab === tab);
         if (activeBtn) activeBtn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 
-        // Lazy-load heavy data the first time each tab is opened
         if (tab === 'families'  && allFamiliesData.length === 0) loadFamilies();
         if (tab === 'staffing'  && allStaffData.length === 0)    loadStaffList();
         if (tab === 'messages'  && !_messagesLoaded)             { _messagesLoaded = true; loadMessages(); }
@@ -329,8 +337,12 @@ function setupTabs() {
     }
 
     btns.forEach(btn => btn.addEventListener('click', () => activate(btn.dataset.tab)));
+    navItems.forEach(item => item.addEventListener('click', () => activate(item.dataset.tab)));
 
-    // Restore last-used tab, defaulting to 'daily'
+    if (menuBtn) menuBtn.addEventListener('click', () => overlay && overlay.classList.remove('hidden'));
+    if (closeBtn) closeBtn.addEventListener('click', closeMenu);
+    if (overlay) overlay.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
+
     const saved = localStorage.getItem('adminActiveTab') || 'daily';
     activate(saved);
 }
