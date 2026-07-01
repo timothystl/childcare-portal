@@ -667,12 +667,21 @@ button:focus-visible,
     cursor: pointer;
     transition: background .15s, transform .1s;
 }
+.picker-btn-disabled {
+    cursor: not-allowed;
+    opacity: .55;
+    border-color: var(--border);
+}
+.picker-btn-disabled .picker-rate { font-size: .75em; color: var(--text-muted); }
+
 .picker-btn:hover {
     background: var(--navy);
     color: var(--white);
     transform: translateY(-1px);
 }
 .picker-btn:hover .picker-rate { color: rgba(255,255,255,.85); }
+.picker-btn-disabled:hover { background: var(--linen); color: inherit; transform: none; }
+.picker-btn-disabled:hover .picker-rate { color: var(--text-muted); }
 
 .picker-label {
     font-size: .85em;

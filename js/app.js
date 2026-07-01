@@ -360,14 +360,22 @@ function renderChildSection() {
             }
             cb.closest('.child-card-label').classList.toggle('selected', cb.checked);
             if (cb.checked) {
+                // Only one child can be registered at a time — each child needs their
+                // own care-day schedule, and selectedDates is a single shared calendar.
                 if (!selectedChildren.some(c => c.studentId === studentId)) {
+                    section.querySelectorAll('.child-card-checkbox').forEach(other => {
+                        if (other !== cb && other.checked) {
+                            other.checked = false;
+                            other.closest('.child-card-label')?.classList.remove('selected');
+                        }
+                    });
                     const rdRaw = cb.dataset.recurringDays || '';
-                    selectedChildren.push({
+                    selectedChildren = [{
                         name: childName, dob: childDob, room, isNew: false, studentId,
                         discountType:  sd.discountType  || 'none',
                         discountValue: sd.discountValue || 0,
                         recurringDays: rdRaw ? rdRaw.split(',').filter(Boolean) : [],
-                    });
+                    }];
                     onChildrenChanged();
                     // Non-blocking: warn if already registered for the target month.
                     // Checks by this parent's email first, then by child name (catches parent 2).
@@ -576,6 +584,14 @@ function renderCalendar() {
                 e.stopPropagation();
                 handleDayClick(dateStr, status, cell);
             });
+        } else if (!isPast) {
+            // Blocked days (closed/full) still get a tap handler so the tap isn't
+            // silently ignored — parents on mobile reported taps "not working" when
+            // really the day just isn't selectable.
+            cell.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showToast(isClosed ? 'This day is closed — no care available.' : 'This day is full — no spots remaining.');
+            });
         }
 
         cal.appendChild(cell);
@@ -589,18 +605,12 @@ function handleDayClick(dateStr, status, cellEl) {
     if (!selectedChildren.length) return;
 
     if (selectedDates.has(dateStr)) {
-        if (selectedDates.get(dateStr)?.locked) return; // cannot remove a recurring day
+        if (selectedDates.get(dateStr)?.locked) {
+            showToast('This is one of your recurring days and can\'t be removed here — contact the office to change your recurring schedule.');
+            return;
+        }
         selectedDates.delete(dateStr);
         closeDayPicker();
-        renderCalendar();
-        renderSelectedDates();
-        return;
-    }
-
-    const allFullDayOnly = selectedChildren.every(c => c.room.fullDayOnly);
-    if (allFullDayOnly) {
-        closeDayPicker();
-        selectedDates.set(dateStr, { dayType: 'full' });
         renderCalendar();
         renderSelectedDates();
         return;
@@ -646,7 +656,10 @@ function showDayPicker(dateStr, cellEl) {
             ${hasHalf ? `<button type="button" class="picker-btn" data-date="${dateStr}" data-type="half">
                 <span class="picker-label">Half Day</span>
                 <span class="picker-rate">$${halfTotal}</span>
-            </button>` : ''}
+            </button>` : `<div class="picker-btn picker-btn-disabled" title="This room is full-day only">
+                <span class="picker-label">Half Day</span>
+                <span class="picker-rate">Not available for this room</span>
+            </div>`}
         </div>
         <button type="button" class="picker-cancel">✕ Cancel</button>
     `;
