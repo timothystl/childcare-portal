@@ -758,28 +758,51 @@ async function _confirmProCareImport(rows, wrap) {
 
         let ok = 0, fail = 0;
 
-        // Import invoices → billing_invoices
+        // Import invoices → billing_invoices, tracking each invoice's id by (familyId, month)
+        // so payments below can be linked to the invoice they're paying off.
+        const invoiceIdMap = new Map(); // key: `${familyId}|${month}` -> invoice id
         for (const { familyId, month, amount } of invoiceMap.values()) {
             try {
                 const cycle = await getOrCreateBillingCycle(month);
-                await upsertBillingInvoice({
+                const invoice = await upsertBillingInvoice({
                     cycle_id:     cycle.id,
                     family_id:    familyId,
                     base_amount:  amount,
                     final_amount: amount,
                     status:       'finalized',
                 });
+                if (invoice?.id) invoiceIdMap.set(`${familyId}|${month}`, invoice.id);
                 ok++;
             } catch (_) { fail++; }
         }
 
-        // Import payments and credits → billing_payments
+        // Also look up any invoices that already existed before this import (e.g. created
+        // by a prior import run) so payments can link to those too.
+        const paymentMonths = new Set(
+            valid.filter(r => r.type !== 'Invoice').map(r => r.dateVal.substring(0, 7))
+        );
+        for (const month of paymentMonths) {
+            try {
+                const cycle = await getOrCreateBillingCycle(month);
+                const existingInvoices = await fetchInvoicesForCycle(cycle.id);
+                existingInvoices.forEach(inv => {
+                    const key = `${inv.family_id}|${month}`;
+                    if (!invoiceIdMap.has(key)) invoiceIdMap.set(key, inv.id);
+                });
+            } catch (_) { /* leave unlinked if lookup fails */ }
+        }
+
+        // Import payments and credits → billing_payments, linking to the matching invoice
+        // (same family + same month as the payment date) when one exists.
         for (const row of valid) {
             if (row.type === 'Invoice') continue;
             const method = row.type === 'Credit' ? 'procare_credit' : 'procare_payment';
+            const month = row.dateVal.substring(0, 7);
+            const invoiceId = invoiceIdMap.get(`${row.familyId}|${month}`) || null;
             try {
                 await insertBillingPayment({
                     family_id:       row.familyId,
+                    invoice_id:      invoiceId,
                     amount:          row.amount,
                     payment_date:    row.dateVal,
                     payment_method:  method,
