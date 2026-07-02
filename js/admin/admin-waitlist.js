@@ -698,30 +698,57 @@ function renderWaitlistPlanning() {
         waitlistByRoom[rid].push(a);
     });
 
+    // Typical per-weekday booking pattern, from the CURRENT month's actual
+    // registrations (the only month with anywhere near complete data — future
+    // months are mostly unregistered yet, so averaging a whole future month
+    // just shows near-empty rooms regardless of the real weekly pattern).
+    // Applied forward to every projected month below, since day-of-week
+    // demand (e.g. "Mon/Wed/Fri is always full, Tue/Thu has room") is what
+    // actually recurs — not the blended monthly average.
+    const curYear = today.getFullYear(), curMonthIdx = today.getMonth();
+    const daysInCurMonth = new Date(curYear, curMonthIdx + 1, 0).getDate();
+    const WEEKDAY_INIT = { 1: 'M', 2: 'T', 3: 'W', 4: 'Th', 5: 'F' };
+    function typicalWeekdayPattern(roomId) {
+        const buckets = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+        for (let day = 1; day <= daysInCurMonth; day++) {
+            const dow = new Date(curYear, curMonthIdx, day).getDay();
+            if (dow === 0 || dow === 6) continue;
+            const dateStr = `${curYear}-${String(curMonthIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            buckets[dow].push(dailyBookings[dateStr]?.[roomId] || 0);
+        }
+        const avg = {};
+        [1, 2, 3, 4, 5].forEach(dow => {
+            avg[dow] = buckets[dow].length ? buckets[dow].reduce((a, b) => a + b, 0) / buckets[dow].length : 0;
+        });
+        return avg;
+    }
+
     const roomRows = ROOMS.filter(r => r.id !== 'summer').map(room => {
-        const monthCells = months.map(({ key, label, year, month: mo }) => {
-            // Count working days in month
-            const daysInMonth = new Date(year, mo + 1, 0).getDate();
-            let workDays = 0; const dailyCounts = [];
-            for (let day = 1; day <= daysInMonth; day++) {
-                const dow = new Date(year, mo, day).getDay();
-                if (dow === 0 || dow === 6) continue;
-                workDays++;
-                const dateStr = `${key}-${String(day).padStart(2,'0')}`;
-                dailyCounts.push((dailyBookings[dateStr]?.[room.id] || 0));
-            }
-            const avgBooked  = workDays ? dailyCounts.reduce((a,b)=>a+b,0)/workDays : 0;
-            const avgOpen    = Math.max(0, room.capacity - avgBooked).toFixed(1);
-            const pct        = room.capacity > 0 ? avgBooked / room.capacity : 0;
-            const color      = pct >= 0.9 ? '#fff5f5' : pct >= 0.7 ? '#fffaf0' : '#f0fff4';
-            const textColor  = pct >= 0.9 ? '#9b2c2c' : pct >= 0.7 ? '#b45309' : '#276749';
+        const pattern = typicalWeekdayPattern(room.id);
 
+        const weekdayChips = [1, 2, 3, 4, 5].map(dow => {
+            const avgBooked = pattern[dow];
+            const avgOpen   = Math.max(0, room.capacity - avgBooked).toFixed(1);
+            const pct       = room.capacity > 0 ? avgBooked / room.capacity : 0;
+            const color     = pct >= 0.9 ? '#fff5f5' : pct >= 0.7 ? '#fffaf0' : '#f0fff4';
+            const textColor = pct >= 0.9 ? '#9b2c2c' : pct >= 0.7 ? '#b45309' : '#276749';
+            return `<div style="background:${color};color:${textColor};border-radius:4px;padding:3px 2px;text-align:center;min-width:26px">
+                <div style="font-size:.7em;font-weight:600">${WEEKDAY_INIT[dow]}</div>
+                <div style="font-size:.82em;font-weight:700">${avgOpen}</div>
+            </div>`;
+        }).join('');
+
+        const monthCells = months.map(({ key, label }, i) => {
             // Aging-out events this month
-            const outs  = (agingOut[key]?.[room.id] || []);
-            const outHtml = outs.length ? `<div style="font-size:.75em;color:#667eea;margin-top:3px">→ ${outs.length} graduate${outs.length>1?'s':''} out</div>` : '';
+            const outs    = (agingOut[key]?.[room.id] || []);
+            const outHtml = outs.length ? `<div style="font-size:.75em;color:#667eea;margin-top:4px">→ ${outs.length} graduate${outs.length>1?'s':''} out</div>` : '';
+            const projectedNote = i === 0
+                ? ''
+                : '<div style="font-size:.7em;color:#aaa;margin-top:3px">(projected)</div>';
 
-            return `<td style="background:${color};color:${textColor};text-align:center;padding:8px 6px;font-size:.85em;white-space:nowrap">
-                <strong>${avgOpen}</strong><br><span style="font-size:.78em;color:#888">avg open/day</span>${outHtml}
+            return `<td style="text-align:center;padding:8px 6px;white-space:nowrap">
+                <div style="display:flex;gap:3px;justify-content:center">${weekdayChips}</div>
+                ${outHtml}${projectedNote}
             </td>`;
         }).join('');
 
@@ -739,7 +766,7 @@ function renderWaitlistPlanning() {
 
     container.innerHTML = `
         <div style="overflow-x:auto">
-        <table class="report-table" style="min-width:700px">
+        <table class="report-table" style="min-width:1080px">
             <thead><tr>
                 <th>Room</th>
                 ${months.map(m => `<th style="text-align:center">${m.label}</th>`).join('')}
@@ -747,7 +774,7 @@ function renderWaitlistPlanning() {
             </tr></thead>
             <tbody>${roomRows}</tbody>
         </table></div>
-        <p style="font-size:.8em;color:#888;margin-top:8px">Avg open/day based on known registrations. → Graduates = children aging out of this room that month, freeing a permanent spot.</p>`;
+        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip shows avg open slots for that day (M/T/W/Th/F), based on ${MONTH_NAMES[curMonthIdx]}'s actual registrations — the same current weekly pattern is carried forward into later months (marked "projected") since those months don't have registrations yet. → Graduates = children aging out of this room that month, freeing a permanent spot.</p>`;
 }
 
 // ============================================================
