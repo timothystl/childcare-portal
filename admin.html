@@ -286,6 +286,21 @@
                 <h2>⏳ Enrollment Waitlist</h2>
                 <p class="section-desc">Active applications — click a column header to sort. Use <strong>Make Offer</strong> to send a spot offer by email.</p>
 
+                <div class="admin-wl-row" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+                    <label style="font-weight:600;font-size:.88em;">Shareable Inquiry Form Link</label>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+                        <input type="text" id="wlInquiryLink" readonly style="flex:1;min-width:220px;background:#fff;font-size:.85em;">
+                        <button id="wlCopyInquiryLinkBtn" class="btn-secondary" type="button">📋 Copy Link</button>
+                    </div>
+                    <p class="section-desc" style="margin:6px 0 10px;">Send this link to prospective families to apply themselves — submissions land here automatically, timestamped for first-come, first-served.</p>
+                    <label style="font-weight:600;font-size:.88em;">Notify This Email on New Inquiries</label>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+                        <input type="email" id="wlNotifyEmail" placeholder="director@timothystl.org" style="flex:1;min-width:220px;">
+                        <button id="wlSaveNotifyEmailBtn" class="btn-secondary" type="button">💾 Save</button>
+                        <span id="wlNotifyEmailStatus" class="rates-status"></span>
+                    </div>
+                </div>
+
                 <div class="families-dir-controls" style="margin-bottom:12px;">
                     <button id="addToWaitlistBtn" class="btn-primary">+ Add to Waitlist</button>
                     <input type="search" id="wlSearchInput" class="family-search-input"
@@ -335,6 +350,27 @@
                     <div class="admin-wl-footer">
                         <button type="button" id="wlOfferCancelBtn" class="btn-ghost">Cancel</button>
                         <button type="button" id="wlOfferSendBtn" class="btn-primary">Send &amp; Email Parent</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tour Scheduling Modal -->
+            <div id="wlTourModal" class="admin-wl-overlay hidden">
+                <div class="admin-wl-dialog" style="max-width:420px">
+                    <h3>Schedule a Tour</h3>
+                    <p id="wlTourModalDesc" style="color:#666;font-size:.9em;margin:0 0 16px"></p>
+                    <div class="admin-wl-row">
+                        <label>Tour Date &amp; Time <span class="req">*</span></label>
+                        <input type="datetime-local" id="wlTourDateTime">
+                    </div>
+                    <div class="admin-wl-row">
+                        <label>Notes</label>
+                        <textarea id="wlTourNotes" rows="2" style="width:100%;resize:vertical;box-sizing:border-box" placeholder="Optional notes…"></textarea>
+                    </div>
+                    <p id="wlTourErr" class="import-error" style="margin:8px 0 0;min-height:1em"></p>
+                    <div class="admin-wl-footer">
+                        <button type="button" id="wlTourCancelBtn" class="btn-ghost">Cancel</button>
+                        <button type="button" id="wlTourSaveBtn" class="btn-primary">Save Tour</button>
                     </div>
                 </div>
             </div>

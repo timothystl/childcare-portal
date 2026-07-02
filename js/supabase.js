@@ -2119,6 +2119,71 @@ async function sendWaitlistOfferEmail({ parentName, parentEmail, childName, offe
 }
 
 /**
+ * Sends the "we received your inquiry" auto-reply to the applicant plus a
+ * new-inquiry heads-up to the configured admin notify address. Called by the
+ * public inquiry form right after a successful insert. The edge function looks
+ * up the email addresses itself from the applicationId (service role), so no
+ * PII needs to travel back through this anonymous call.
+ */
+async function sendWaitlistConfirmationEmail(applicationId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.functions.invoke('send-waitlist-confirmation', {
+        body: { applicationId },
+        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    if (error) throw error;
+    return data;
+}
+
+/**
+ * Parent-facing response to a "still interested?" tour reminder email.
+ * @param {string}  token       - The application's interest_token (from the emailed link)
+ * @param {boolean} interested  - true = still interested, false = no longer needed
+ */
+async function confirmWaitlistInterest(token, interested) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.functions.invoke('confirm-waitlist-interest', {
+        body: { token, interested },
+        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    if (error) throw error;
+    return data;
+}
+
+/**
+ * Updates tour-scheduling fields on a waitlist application (admin action).
+ */
+async function updateWaitlistTourStatus(id, fields) {
+    return updateWaitlistApplication(id, fields);
+}
+
+// Load/save the address that gets notified whenever a new inquiry comes in.
+async function loadWaitlistNotifySettings() {
+    if (!sbClient) return { notifyEmail: null };
+    try {
+        const { data, error } = await sbClient
+            .from('settings')
+            .select('value')
+            .eq('key', 'waitlist_notify')
+            .maybeSingle();
+        if (error || !data) return { notifyEmail: null };
+        const raw = data.value;
+        if (typeof raw === 'string') return parseJsonOr(raw, { notifyEmail: null });
+        return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : { notifyEmail: null };
+    } catch (_) {
+        return { notifyEmail: null };
+    }
+}
+
+async function saveWaitlistNotifySettings(settings) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'waitlist_notify', value: settings }, { onConflict: 'key' });
+    if (error) throw error;
+}
+
+/**
  * Sends the registration confirmation email to a parent via Edge Function.
  * @param {Object}   params
  * @param {string}   params.parentName
