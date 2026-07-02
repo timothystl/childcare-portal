@@ -203,9 +203,15 @@ async function generateFinanceDashboard() {
     }
 
     // For YTD: cap at the current month when viewing the current year
-    const todayYearGlobal  = new Date().getFullYear();
-    const todayMonthGlobal = new Date().getMonth() + 1; // 1–12
+    const todayDateGlobal  = new Date();
+    const todayYearGlobal  = todayDateGlobal.getFullYear();
+    const todayMonthGlobal = todayDateGlobal.getMonth() + 1; // 1–12
     const ytdCutoff = (month === 'ytd' && year === todayYearGlobal) ? todayMonthGlobal : 12;
+    const isCurrentYearYtd  = month === 'ytd' && year === todayYearGlobal;
+    // Elapsed fraction of the current calendar month (1.0 once the month is over)
+    const daysInCurrentMonth = new Date(todayYearGlobal, todayMonthGlobal, 0).getDate();
+    const currentMonthFrac   = todayDateGlobal.getDate() / daysInCurrentMonth;
+    const currentMoKey       = isCurrentYearYtd ? `${year}-${String(todayMonthGlobal).padStart(2,'0')}` : null;
 
     try {
         await _ensureBudget(year);
@@ -218,8 +224,14 @@ async function generateFinanceDashboard() {
         // Labor comes from _buildRoomPnlData (staff schedules/clock events).
         // Revenue comes from _buildFamilyBillingData per month — same calculation as the
         // month detail view and Family Billing report — to guarantee consistent numbers.
-        const endDate = month === 'ytd' && year === todayYearGlobal
-            ? new Date(year, todayMonthGlobal - 1 + 1, 0).toISOString().split('T')[0]  // last day of current month
+        //
+        // Cap at TODAY, not the end of the current month: _buildRoomPnlData's labor
+        // cost is driven by planned staff_schedules rows, which include shifts already
+        // scheduled for the rest of the current month — using end-of-month here would
+        // count those not-yet-worked days as "actual" labor (mirrors the fix already
+        // applied in _buildRoomModelData for the same reason).
+        const endDate = isCurrentYearYtd
+            ? todayDateGlobal.toISOString().split('T')[0]
             : `${year}-12-31`;
         const [pnl] = await Promise.all([
             _buildRoomPnlData(`${year}-01-01`, endDate),
@@ -305,7 +317,11 @@ async function generateFinanceDashboard() {
         const moRevArr = [], moLabArr = [], moExpArr = [], moNetArr = [], moLabPctArr = [], moLabels = [];
 
         allMonths.forEach(mo => {
-            const rev  = liveRevByMo[mo] > 0 ? liveRevByMo[mo] : (historicalRevByMo[mo] || 0);
+            let rev = liveRevByMo[mo] > 0 ? liveRevByMo[mo] : (historicalRevByMo[mo] || 0);
+            // _buildFamilyBillingData bills the whole calendar month regardless of
+            // which day it is "today" — prorate the current partial month so it
+            // isn't counted as a fully-elapsed month of actual revenue.
+            if (mo === currentMoKey) rev = Math.round(rev * currentMonthFrac);
             const lab  = _moLab(pnl, mo);
             const moNum = parseInt(mo.split('-')[1]);
             const exp  = _monthlyExpenseBurden(moNum, lab, rev);
@@ -348,10 +364,12 @@ async function generateFinanceDashboard() {
             const bNet       = b.income - (b.wages||0) - bTotalExp;
             const moCount    = allMonths.length;
             // Fraction of the year elapsed based on the calendar, not months-with-data.
-            // Past years: 100%. Current year: current month ÷ 12. Future: 0.
-            const todayYear  = new Date().getFullYear();
-            const todayMonth = new Date().getMonth() + 1; // 1–12
-            const yearFrac   = year < todayYear ? 1 : (year === todayYear ? todayMonth / 12 : 0);
+            // Past years: 100%. Current year: (whole months so far + fraction of the
+            // current month elapsed) ÷ 12, so this lines up with how actual revenue
+            // above is now prorated for the current partial month. Future: 0.
+            const yearFrac = year < todayYearGlobal
+                ? 1
+                : (year === todayYearGlobal ? (todayMonthGlobal - 1 + currentMonthFrac) / 12 : 0);
             const expYTD     = v => Math.round(v * yearFrac); // expected-YTD = annual budget × fraction elapsed
 
             const varSpan = (actual, expected, lowerIsBetter) => {
@@ -382,23 +400,15 @@ async function generateFinanceDashboard() {
             const aNet        = totalRev - totalLab - aTotalExp;
             const bNetExp     = expYTD(bNet); // prorated budget net
 
-            // Trend-based full-year projection: actuals + projected future months
-            const revByMoNum = {}, labByMoNum = {};
-            allMonths.forEach((mo, i) => {
-                const mn = parseInt(mo.split('-')[1]);
-                revByMoNum[mn] = moRevArr[i];
-                labByMoNum[mn] = moLabArr[i];
-            });
-            const _avg = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
-            const janMayRevAvg = _avg([1,2,3,4,5].filter(m => revByMoNum[m] != null).map(m => revByMoNum[m]));
-            const janMayLabAvg = _avg([1,2,3,4,5].filter(m => labByMoNum[m] != null).map(m => labByMoNum[m]));
-            const junJulRevAvg = _avg([6,7].filter(m => revByMoNum[m] != null).map(m => revByMoNum[m]));
-            const junJulLabAvg = _avg([6,7].filter(m => labByMoNum[m] != null).map(m => labByMoNum[m]));
-            let projRev = 0, projLab = 0;
-            for (let m = 1; m <= 12; m++) {
-                projRev += revByMoNum[m] != null ? revByMoNum[m] : (m === 8 ? Math.round(junJulRevAvg) : Math.round(janMayRevAvg));
-                projLab += labByMoNum[m] != null ? labByMoNum[m] : (m === 8 ? Math.round(junJulLabAvg) : Math.round(janMayLabAvg));
-            }
+            // Full-year projection: annualize YTD actuals by the elapsed fraction of
+            // the year — same approach the smaller expense-line rows use (aRow's
+            // `proj`). Previously used a trend average hardcoded to specific months
+            // (Jan–May / Jun–Jul, with month 8 as a special case), which broke down
+            // for any month past August and — combined with the current month being
+            // counted as fully elapsed above — could overstate the projection by
+            // roughly one extra month of revenue.
+            const projRev = totalRev > 0 && yearFrac > 0 ? Math.round(totalRev / yearFrac) : b.income;
+            const projLab = totalLab > 0 && yearFrac > 0 ? Math.round(totalLab / yearFrac) : (b.wages || 0);
             const projExp = yearFrac > 0 && aTotalExp > 0 ? Math.round(aTotalExp / yearFrac) : bTotalExp;
             const projNet = projRev - projLab - (aTotalExp > 0 ? projExp : 0);
 
@@ -454,7 +464,7 @@ async function generateFinanceDashboard() {
                     </tbody>
                 </table>
                 <p style="font-size:.8em;color:#6b7280;margin:.25rem 0 0">
-                    Expected YTD = annual budget × (${year < todayYear ? '12' : todayMonth} of 12 months elapsed).
+                    Expected YTD = annual budget × (${year < todayYearGlobal ? '12.0' : (todayMonthGlobal - 1 + currentMonthFrac).toFixed(1)} of 12 months elapsed).
                     ${!hasEnteredActuals && bTotalExp > 0 ? 'Enter actual expense amounts in the Annual Budget section above to track non-labor costs.' : ''}
                 </p>
                 </div>`;
@@ -586,7 +596,7 @@ async function generateFinanceDashboard() {
         _renderAttendanceProjection(
             document.getElementById('finAttendanceProj'),
             { year, allMoList, daysByRoomMo, revByRoomMo, liveRevByMo, historicalRevByMo, totalLab,
-              annualExpenses: totalExp * (12 / (allMonths.length || 1)) }
+              annualExpenses: totalExp * (12 / (allMonths.length || 1)), currentMoKey, currentMonthFrac }
         );
 
     } catch (err) {
@@ -595,7 +605,7 @@ async function generateFinanceDashboard() {
 }
 
 // ── Attendance-Based Revenue Projection ──────────────────────
-async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, revByRoomMo, liveRevByMo, historicalRevByMo, totalLab, annualExpenses }) {
+async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, revByRoomMo, liveRevByMo, historicalRevByMo, totalLab, annualExpenses, currentMoKey, currentMonthFrac }) {
     if (!el) return;
     try {
         await loadRateSettings();
@@ -605,11 +615,15 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
 
         const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
 
-        // Per-room: accumulate half/full days and actual revenue across months with attendance
+        // Per-room: accumulate half/full days and actual revenue across *complete* months
+        // only — the current (partial) month is excluded here rather than prorated, since
+        // it's used to compute a "typical complete month" average for projecting future
+        // months; including a partial month (even scaled down) would still skew that average.
         const roomStats = {};
         activeRooms.forEach(r => { roomStats[r.id] = { halfTotal: 0, fullTotal: 0, revTotal: 0, moCount: 0 }; });
 
         allMoList.forEach(mo => {
+            if (mo === currentMoKey) return;
             const dayData = daysByRoomMo[mo] || {};
             const revData = revByRoomMo[mo] || {};
             activeRooms.forEach(r => {
@@ -749,9 +763,17 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             projMonthRows.push({ moNum: m, label: FIN_MONTH_SHORT[m - 1], rev: moRev, scale, roomCount: activeInMo.length });
         });
 
-        // YTD actual = sum of actual revenue (live preferred, historical fallback)
-        const ytdActual = allMoList.reduce((s, mo) =>
-            s + (liveRevByMo[mo] > 0 ? liveRevByMo[mo] : (historicalRevByMo[mo] || 0)), 0);
+        // YTD actual = sum of actual revenue (live preferred, historical fallback).
+        // The current month is billed for the whole calendar month regardless of
+        // today's date, so prorate it by how much of the month has elapsed —
+        // otherwise this (and the Full-Year Projection below, which the Budget vs
+        // Actuals table's Proj. Full Year cell defers to) counts the not-yet-elapsed
+        // remainder of the current month as if it had already happened.
+        const ytdActual = allMoList.reduce((s, mo) => {
+            let rev = liveRevByMo[mo] > 0 ? liveRevByMo[mo] : (historicalRevByMo[mo] || 0);
+            if (mo === currentMoKey) rev = Math.round(rev * currentMonthFrac);
+            return s + rev;
+        }, 0);
 
         const fullYearProj = ytdActual + projRemainingTotal;
 

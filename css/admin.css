@@ -2922,6 +2922,19 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     white-space: nowrap;
 }
 .btn-wl-offer-quick:hover { background: var(--navy); }
+.btn-wl-remove-quick {
+    background: transparent;
+    color: var(--tang);
+    border: 1px solid var(--tang);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: .78em;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    margin-left: 6px;
+}
+.btn-wl-remove-quick:hover { background: var(--tang); color: var(--white); }
 
 /* ============================================================
    ADMIN MANUAL WAITLIST ENTRY MODAL
