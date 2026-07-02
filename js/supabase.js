@@ -1041,6 +1041,20 @@ async function fetchStudentRegFeeInfo(parentEmail, childName) {
     return student ? { id: student.id, reg_fee_paid_year: student.reg_fee_paid_year } : null;
 }
 
+// The annual enrollment fee's "cycle year" label, given the renewal date
+// ("MM-DD", month/day only — year is irrelevant and ignored). A student's
+// reg_fee_paid_year is compared against this to decide whether they still
+// owe the fee: once today's month/day reaches the renewal date, everyone's
+// fee becomes due again for the new cycle, regardless of calendar year.
+// Falls back to "01-01" (matches plain calendar-year behavior) if unset.
+function currentFeeCycleYear(renewalMonthDay) {
+    const renewalMD = /^\d{2}-\d{2}$/.test(renewalMonthDay || '') ? renewalMonthDay : '01-01';
+    const now   = new Date();
+    const todayMD = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const year  = now.getFullYear();
+    return todayMD >= renewalMD ? year : year - 1;
+}
+
 async function restoreFamily(id) {
     return updateFamily(id, { active: true });
 }

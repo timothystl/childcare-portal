@@ -657,7 +657,12 @@
                         <input type="number" id="regFeeInput" min="0" step="0.01" placeholder="0.00"
                             style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
                     </label>
-                    <p style="margin:.4rem 0 .75rem 0;font-size:.85rem;color:#555;">One-time annual fee per child. Shown as a badge in Family Billing Summary; admin can toggle paid/unpaid per child.</p>
+                    <label style="display:flex;align-items:center;gap:.75rem;font-weight:600;color:#1e3a5f;margin-top:.6rem;">
+                        Annual Renewal Date
+                        <input type="date" id="regFeeRenewalDate"
+                            style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
+                    </label>
+                    <p style="margin:.4rem 0 .75rem 0;font-size:.85rem;color:#555;">Charged once per child at enrollment. Every returning family owes it again once a year on the renewal date above (year doesn't matter, only month/day). Shown as a badge in Family Billing Summary; admin can toggle paid/unpaid per child.</p>
                     <button id="saveRegFeeBtn" class="btn-primary">💾 Save Fee</button>
                     <span id="regFeeStatus" style="margin-left:.75rem;font-size:.85rem;"></span>
                 </div>
