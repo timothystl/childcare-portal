@@ -26,6 +26,8 @@ For minor or major bumps (new features, breaking changes), edit `package.json` m
 | `minor` | New features, meaningful additions |
 | `major` | Radical redesigns, breaking changes (reserved for 2.0.0) |
 
+**End every coding-task response (in this repo or any other) with the resulting version number** (e.g. "Current version: v1.17.6") so it's always clear what's live after a change.
+
 ---
 
 ## Project overview
