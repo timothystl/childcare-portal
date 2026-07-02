@@ -286,6 +286,12 @@ Sets the maximum number of children per staff member for each room. These ratios
 
 Adjust the number for each room and click **💾 Save Ratios**.
 
+### Classroom Capacity
+
+Sets the maximum number of children enrolled per room per day. Used to compute open spots on the parent registration calendar, the Classrooms roster, the Care Calendar capacity badges, waitlist matching, and the Finance room-model grid.
+
+Adjust the number for each room and click **💾 Save Capacity**. Leave a room blank to fall back to the hardcoded default in `js/supabase.js` (e.g. while awaiting a state licensing inspection).
+
 ### Offer Email Links
 
 Pre-fill the ProCare enrollment link and paperwork document links that are automatically inserted into every spot offer email. These can still be overridden per individual offer.
@@ -425,6 +431,7 @@ Click the 🗑 **Delete** button to permanently remove a staff member. This cann
 | Offer a spot to a waitlisted family | Waitlist → Make Offer |
 | Block a holiday or snow day | Settings → Closed Days |
 | Change room rates | Settings → Room Rates |
+| Change a room's daily capacity | Settings → Classroom Capacity |
 | Force registration open or closed | Settings → Registration Window Override |
 | Generate monthly billing | Reports → Family Billing Summary |
 | Run payroll | Staffing → Payroll Report |
@@ -438,6 +445,8 @@ Click the 🗑 **Delete** button to permanently remove a staff member. This cann
 ### The single source of truth
 
 All room definitions live in one place: the `ROOMS` array at the top of `js/supabase.js`. Every part of the system — the parent portal, admin dropdowns, capacity overview, rates table, waitlist filter — reads from this array automatically. **To add a new room, edit only this file.** Nothing else needs to change.
+
+The `capacity` value in `ROOMS` is just the default — like rates and staff ratios, it can be overridden per room without a deploy via **Settings → Classroom Capacity**.
 
 ### Room status values
 

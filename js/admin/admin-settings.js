@@ -545,6 +545,85 @@ async function onSaveRates() {
 }
 
 // ============================================================
+// CLASSROOM CAPACITY
+// ============================================================
+function setupCapacity() {
+    renderCapacityTable();
+    document.getElementById('saveCapacityBtn')?.addEventListener('click', onSaveCapacity);
+}
+
+function renderCapacityTable() {
+    const wrap = document.getElementById('capacityTableWrap');
+    if (!wrap) return;
+    wrap.innerHTML = `
+        <table class="rates-table">
+            <thead>
+                <tr>
+                    <th>Room</th>
+                    <th>Age Group</th>
+                    <th>Max Children per Day</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${ROOMS.map(room => `
+                    <tr data-room-id="${room.id}">
+                        <td class="rates-room-label">
+                            <strong>${escHtml(room.label)}</strong>
+                        </td>
+                        <td class="rates-ages">${escHtml(room.ages)}</td>
+                        <td>
+                            <input type="number" class="capacity-input rate-input"
+                                value="${room.capacity ?? ''}" min="0" step="1" placeholder="e.g. 12"
+                                style="width:80px;">
+                        </td>
+                    </tr>`).join('')}
+            </tbody>
+        </table>
+        <p class="rates-hint">💡 Enter the maximum number of children enrolled in each room per day. Changes take effect immediately for new registrations, waitlist matching, and capacity displays.</p>`;
+}
+
+async function onSaveCapacity() {
+    const btn      = document.getElementById('saveCapacityBtn');
+    const statusEl = document.getElementById('capacityStatus');
+    if (!btn) return;
+    btn.disabled    = true;
+    btn.textContent = 'Saving…';
+    if (statusEl) statusEl.textContent = '';
+
+    try {
+        const capacities = {};
+        document.querySelectorAll('#capacityTableWrap tbody tr[data-room-id]').forEach(row => {
+            const id  = row.dataset.roomId;
+            const val = row.querySelector('.capacity-input')?.value.trim();
+            capacities[id] = val === '' ? null : parseInt(val, 10);
+        });
+
+        await saveCapacitySettings(capacities);
+        await logAdminAction('update', 'capacity_settings', null, { rooms: Object.keys(capacities) });
+        // Merge directly into ROOMS to avoid a silent DB round-trip failure.
+        ROOMS.forEach(room => {
+            if (capacities[room.id] != null) room.capacity = capacities[room.id];
+        });
+        renderCapacityTable();
+
+        if (statusEl) {
+            statusEl.textContent = '✓ Saved!';
+            statusEl.style.color = '#2e7d32';
+            setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+    } catch (err) {
+        if (statusEl) {
+            statusEl.textContent = '⚠️ ' + err.message;
+            statusEl.style.color = '#c62828';
+        }
+        console.error('onSaveCapacity:', err);
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = '💾 Save Capacity';
+    }
+}
+
+// ============================================================
 // REGISTRATION FEE SETTING
 // ============================================================
 async function loadRegFeeSetting() {
@@ -614,7 +693,7 @@ function applyRoleRestrictions() {
         _hide('staffRosterToggleWrap');
         _hide('staffRosterSection');
         // Settings tab: show only Registration Window Override
-        ['closedDaysSection', 'ratesSection', 'ratiosSection',
+        ['closedDaysSection', 'ratesSection', 'ratiosSection', 'capacitySection',
          'offerLinksSection', 'adminRolesSection', 'summerCampSection']
             .forEach(id => _hide(id));
     }

@@ -22,6 +22,7 @@ async function initDashboard() {
             loadClosureList(),
             loadRateSettings(),
             loadRatioSettings(),
+            loadCapacitySettings(),
             loadSummerCampSetting(),
             loadOfferLinks().then(v => { window._globalOfferLinks = v; }),
             loadGeofenceSettings(),
@@ -44,6 +45,7 @@ async function initDashboard() {
     setupRates();
     setupRegFee();
     setupRatios();
+    setupCapacity();
     setupSummerCamp();
     setupEnrollmentCapacity();
     setupEnrollmentForms();
