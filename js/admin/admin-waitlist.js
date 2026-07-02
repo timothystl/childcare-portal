@@ -204,7 +204,7 @@ function renderWaitlistQuickList() {
                         <th class="wl-th" data-col="status" style="width:88px">Status${sortArrow('status')}</th>
                         <th class="wl-th" data-col="parent">Parent / Contact${sortArrow('parent')}</th>
                         <th class="wl-th" data-col="waiting" style="width:90px">Waiting Since${sortArrow('waiting')}</th>
-                        <th>Actions</th>
+                        <th style="width:190px">Actions</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
