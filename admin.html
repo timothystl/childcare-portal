@@ -72,15 +72,15 @@
                     <div class="mobile-nav-group-label">Daily Ops</div>
                     <button class="mobile-nav-item" data-tab="daily"><span class="mni-icon">🏫</span><span>Classrooms</span></button>
                     <button class="mobile-nav-item" data-tab="registrations"><span class="mni-icon">📅</span><span>Care Calendar</span></button>
-                    <button class="mobile-nav-item" data-tab="waitlist"><span class="mni-icon">🗓️</span><span>Planning</span></button>
 
                     <div class="mobile-nav-group-label">People</div>
                     <button class="mobile-nav-item" data-tab="families"><span class="mni-icon">👨‍👩‍👧</span><span>Families</span></button>
                     <button class="mobile-nav-item" data-tab="staffing"><span class="mni-icon">👷</span><span>Staffing</span></button>
 
-                    <div class="mobile-nav-group-label">Money &amp; Admin</div>
+                    <div class="mobile-nav-group-label">Admin</div>
+                    <button class="mobile-nav-item" data-tab="waitlist"><span class="mni-icon">🗓️</span><span>Planning</span></button>
                     <button class="mobile-nav-item" data-tab="finance"><span class="mni-icon">💰</span><span>Finance</span></button>
-                    <button class="mobile-nav-item" data-tab="reports"><span class="mni-icon">📊</span><span>Reports</span></button>
+                    <button class="mobile-nav-item" data-tab="reports"><span class="mni-icon">📊</span><span>Billing</span></button>
                     <button class="mobile-nav-item" data-tab="settings"><span class="mni-icon">⚙️</span><span>Settings</span></button>
                 </div>
                 <div class="mobile-nav-footer">
@@ -170,12 +170,31 @@
         <!-- ── Tab: Registrations ─────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-registrations">
 
+            <!-- Missing Care Calendar Report -->
+            <section class="admin-section collapsible-section" id="missingCalendarSection">
+                <h2>⚠️ Missing Care Calendar Report</h2>
+                <p class="section-desc">Shows which active children do not have a care calendar (registration) submitted for the selected month. Use this after the registration window closes to follow up with families who haven't registered.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="missingCalendarMonth">Month</label>
+                        <input type="month" id="missingCalendarMonth">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateMissingCalendarBtn" class="btn-secondary">Generate Report</button>
+                        <button id="exportMissingCalendarBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="missingCalendarContent">
+                    <p class="empty-hint">Select a month above and click Generate Report.</p>
+                </div>
+            </section>
+
             <section class="table-section collapsible-section" id="allRegistrationsSection">
                 <h2 style="display:flex;align-items:center;flex:1;min-width:0">
                     <span style="flex:1">All Registrations</span>
                     <button id="adminNewRegBtn" class="btn-primary"
                             style="font-size:.85rem;padding:.4rem 1rem;margin-right:.5rem;flex-shrink:0">
-                        &#43; New Registration
+                        &#43; Add New Care Calendar
                     </button>
                 </h2>
                 <div class="filters">
@@ -762,25 +781,6 @@
                 </div>
             </section>
 
-            <!-- Missing Care Calendar Report -->
-            <section class="admin-section collapsible-section" id="missingCalendarSection">
-                <h2>⚠️ Missing Care Calendar Report</h2>
-                <p class="section-desc">Shows which active children do not have a care calendar (registration) submitted for the selected month. Use this after the registration window closes to follow up with families who haven't registered.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="missingCalendarMonth">Month</label>
-                        <input type="month" id="missingCalendarMonth">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="generateMissingCalendarBtn" class="btn-secondary">Generate Report</button>
-                        <button id="exportMissingCalendarBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
-                    </div>
-                </div>
-                <div id="missingCalendarContent">
-                    <p class="empty-hint">Select a month above and click Generate Report.</p>
-                </div>
-            </section>
-
         </div><!-- /#tab-reports -->
 
         <!-- ── Tab: Staffing ─────────────────────────────────── -->
@@ -1046,7 +1046,7 @@
                     <label for="financeMonth" style="font-weight:600">Month</label>
                     <select id="financeMonth" class="form-control" style="width:150px">
                         <option value="">All months</option>
-                        <option value="ytd">Year to Date</option>
+                        <option value="ytd" selected>Year to Date</option>
                         <option value="01">January</option>
                         <option value="02">February</option>
                         <option value="03">March</option>
