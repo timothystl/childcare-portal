@@ -3887,13 +3887,14 @@ function _trendDayName(dateStr) {
 function _trendCell(map, roomId, day) {
     return map[roomId]?.[day] || { halfSum: 0, fullSum: 0, dates: new Set() };
 }
-// Families can still add/change days for a month up to the 15th of that same month,
-// so a month's numbers aren't "typical" — they're a partial in-progress count — until
-// that date has passed. Historical months (from attendance_summary) are always final.
+// Families submit a month's schedule by the 15th of the month before it starts,
+// with a few days' buffer for late changes/admin cleanup — so a month's numbers
+// aren't dependable ("final") until we're 20+ days into the month before it.
+// Historical months (from attendance_summary) are always final.
 function _isTrendMonthComplete(mo, isHistorical, today) {
     if (isHistorical) return true;
-    const [y, m] = mo.split('-').map(Number);
-    return today >= new Date(y, m - 1, 15);
+    const [y, m] = mo.split('-').map(Number); // m is 1-based
+    return today >= new Date(y, m - 2, 20); // 20th of the month before `mo`
 }
 
 async function _buildTrendMap() {
@@ -4175,7 +4176,7 @@ async function generateEnrollmentTrends() {
         const trendMap = await _buildTrendMap();
         const html = _renderTrendsTable(trendMap);
         container.innerHTML = html +
-            `<p style="font-size:.8em;color:#888;margin-top:8px">(hist) = sourced from imported attendance records &nbsp;·&nbsp; (in progress) = families can still add/change days for this month through the 15th, so it's excluded from "Avg across months" until then</p>`;
+            `<p style="font-size:.8em;color:#888;margin-top:8px">(hist) = sourced from imported attendance records &nbsp;·&nbsp; (in progress) = this month's registrations aren't final yet (they're locked in on the 15th of the prior month, with a few days' buffer), so it's excluded from "Avg across months" until then</p>`;
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error loading trends: ${escHtml(err.message)}</p>`;
     }
