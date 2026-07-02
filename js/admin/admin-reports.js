@@ -3887,6 +3887,14 @@ function _trendDayName(dateStr) {
 function _trendCell(map, roomId, day) {
     return map[roomId]?.[day] || { halfSum: 0, fullSum: 0, dates: new Set() };
 }
+// Families can still add/change days for a month up to the 15th of that same month,
+// so a month's numbers aren't "typical" — they're a partial in-progress count — until
+// that date has passed. Historical months (from attendance_summary) are always final.
+function _isTrendMonthComplete(mo, isHistorical, today) {
+    if (isHistorical) return true;
+    const [y, m] = mo.split('-').map(Number);
+    return today >= new Date(y, m - 1, 15);
+}
 
 async function _buildTrendMap() {
     const trendMap = {};
@@ -3965,6 +3973,7 @@ async function _buildTrendMap() {
 function _renderTrendsTable(trendMap) {
     const months = Object.keys(trendMap).sort();
     if (!months.length) return '<p class="empty-hint">No enrollment data found.</p>';
+    const today = new Date();
 
     // Format an average value: show one decimal unless it's a whole number, '—' for zero
     function fmtAvg(v) {
@@ -4003,7 +4012,10 @@ function _renderTrendsTable(trendMap) {
             const [y, m] = mo.split('-').map(Number);
             const label  = MONTH_NAMES[m - 1] + ' ' + y;
             const isHist = trendMap[mo]._historical;
-            const src    = isHist ? ' <span style="font-size:.7em;color:#888">(hist)</span>' : '';
+            const isComplete = _isTrendMonthComplete(mo, isHist, today);
+            const src = isHist
+                ? ' <span style="font-size:.7em;color:#888">(hist)</span>'
+                : (!isComplete ? ' <span style="font-size:.7em;color:#888">(in progress)</span>' : '');
             let moHalfTotal = 0, moFullTotal = 0;
 
             const dayCells = TREND_DAYS.map(d => {
@@ -4020,9 +4032,11 @@ function _renderTrendsTable(trendMap) {
                 const avgFull = c.fullSum / count;
                 moHalfTotal += c.halfSum;
                 moFullTotal += c.fullSum;
-                roomAccum[d].halfSum += avgHalf;
-                roomAccum[d].fullSum += avgFull;
-                roomAccum[d].count++;
+                if (isComplete) {
+                    roomAccum[d].halfSum += avgHalf;
+                    roomAccum[d].fullSum += avgFull;
+                    roomAccum[d].count++;
+                }
                 return showSplit
                     ? `<td class="report-num" style="border-left:2px solid #ddd">${fmtAvg(avgHalf)}</td>` +
                       `<td class="report-num">${fmtAvg(avgFull)}</td>` +
@@ -4161,7 +4175,7 @@ async function generateEnrollmentTrends() {
         const trendMap = await _buildTrendMap();
         const html = _renderTrendsTable(trendMap);
         container.innerHTML = html +
-            `<p style="font-size:.8em;color:#888;margin-top:8px">(hist) = sourced from imported attendance records</p>`;
+            `<p style="font-size:.8em;color:#888;margin-top:8px">(hist) = sourced from imported attendance records &nbsp;·&nbsp; (in progress) = families can still add/change days for this month through the 15th, so it's excluded from "Avg across months" until then</p>`;
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error loading trends: ${escHtml(err.message)}</p>`;
     }
