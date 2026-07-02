@@ -702,57 +702,88 @@ async function renderWaitlistPlanning() {
         waitlistByRoom[rid].push(a);
     });
 
-    // Typical per-weekday booking pattern, from the most recently COMPLETE
-    // month's actual registrations. Families can still add/change days for
-    // the current month up until the 15th, so until that date the current
-    // month is a partial count, not "typical" — fall back to the last full
-    // month instead. Applied forward to every projected month below, since
-    // day-of-week demand (e.g. "Mon/Wed/Fri is always full, Tue/Thu has
-    // room") is what actually recurs — not the blended monthly average.
-    //
-    // Uses the exact same trendMap/_trendCell averaging (and the same
-    // _isTrendMonthComplete cutoff) as Enrollment Trends so the two reports
-    // agree with each other.
-    const curYear = today.getFullYear(), curMonthIdx = today.getMonth();
-    const curMoKey = `${curYear}-${String(curMonthIdx + 1).padStart(2, '0')}`;
-    const isCurMoComplete = _isTrendMonthComplete(curMoKey, !!(trendMap[curMoKey] || {})._historical, today);
-    let refMoKey = curMoKey;
-    if (!isCurMoComplete) {
-        const prev = new Date(curYear, curMonthIdx - 1, 1);
-        refMoKey = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
-    }
+    // Families submit a month's schedule by the 15th of the month before it starts,
+    // with a few days' buffer for late changes/admin cleanup — so a given month's
+    // registrations aren't dependable ("final") until we're 20+ days into the month
+    // before it. Right now that means: the current month is already final (its own
+    // window closed last month), and the very next month only becomes final once
+    // we're 20+ days into the current month. Uses the same cutoff as Enrollment
+    // Trends' _isTrendMonthComplete so the two reports agree.
     const WEEKDAY_INIT = { 1: 'M', 2: 'T', 3: 'W', 4: 'Th', 5: 'F' };
     const DOW_TO_TRENDDAY = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri' };
-    function typicalWeekdayPattern(roomId) {
+    function isMonthFinal(year, month0) {
+        return _isTrendMonthComplete(`${year}-${String(month0 + 1).padStart(2, '0')}`, false, today);
+    }
+
+    // A specific finalized month's own actual weekday pattern.
+    function actualWeekdayPattern(roomId, moKey) {
         const avg = {};
         [1, 2, 3, 4, 5].forEach(dow => {
-            const c = _trendCell(trendMap[refMoKey] || {}, roomId, DOW_TO_TRENDDAY[dow]);
+            const c = _trendCell(trendMap[moKey] || {}, roomId, DOW_TO_TRENDDAY[dow]);
             const count = c.dates.size;
             avg[dow] = count ? (c.halfSum + c.fullSum) / count : 0;
         });
         return avg;
     }
 
+    // For months whose own registrations haven't closed/stabilized yet, project
+    // using what's typical for the past few finalized months (blended), rather
+    // than any single month's snapshot.
+    const RECENT_MONTHS_FOR_TYPICAL = 3;
+    function typicalBlendedPattern(roomId, throughMoKey) {
+        const [ty, tm] = throughMoKey.split('-').map(Number);
+        const avg = {};
+        [1, 2, 3, 4, 5].forEach(dow => {
+            let halfSum = 0, fullSum = 0, dateCount = 0;
+            for (let i = 0; i < RECENT_MONTHS_FOR_TYPICAL; i++) {
+                const d = new Date(ty, tm - 1 - i, 1);
+                const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                const c = _trendCell(trendMap[k] || {}, roomId, DOW_TO_TRENDDAY[dow]);
+                halfSum += c.halfSum;
+                fullSum += c.fullSum;
+                dateCount += c.dates.size;
+            }
+            avg[dow] = dateCount ? (halfSum + fullSum) / dateCount : 0;
+        });
+        return avg;
+    }
+
+    // Latest month in the displayed window whose data is finalized — the base
+    // that projected months blend backward from.
+    let lastFinalMoKey = months[0].key;
+    months.forEach(({ year, month, key }) => {
+        if (isMonthFinal(year, month)) lastFinalMoKey = key;
+    });
+
     const roomRows = ROOMS.filter(r => r.id !== 'summer').map(room => {
-        const pattern = typicalWeekdayPattern(room.id);
+        const waitlistCount = (waitlistByRoom[room.id] || []).length;
+        const blendedPattern = typicalBlendedPattern(room.id, lastFinalMoKey);
 
-        const weekdayChips = [1, 2, 3, 4, 5].map(dow => {
-            const avgBooked = pattern[dow];
-            const avgOpen   = Math.max(0, room.capacity - avgBooked).toFixed(1);
-            const pct       = room.capacity > 0 ? avgBooked / room.capacity : 0;
-            const color     = pct >= 0.9 ? '#fff5f5' : pct >= 0.7 ? '#fffaf0' : '#f0fff4';
-            const textColor = pct >= 0.9 ? '#9b2c2c' : pct >= 0.7 ? '#b45309' : '#276749';
-            return `<div style="background:${color};color:${textColor};border-radius:4px;padding:3px 2px;text-align:center;min-width:26px">
-                <div style="font-size:.7em;font-weight:600">${WEEKDAY_INIT[dow]}</div>
-                <div style="font-size:.82em;font-weight:700">${avgOpen}</div>
-            </div>`;
-        }).join('');
+        const monthCells = months.map(({ key, year, month }) => {
+            const isFinal  = isMonthFinal(year, month);
+            const pattern  = isFinal ? actualWeekdayPattern(room.id, key) : blendedPattern;
 
-        const monthCells = months.map(({ key, label }, i) => {
+            const weekdayChips = [1, 2, 3, 4, 5].map(dow => {
+                const avgBooked = pattern[dow];
+                let avgOpen = Math.max(0, room.capacity - avgBooked);
+                // Projected months: net out kids already on the waitlist for this
+                // room — they'd fill these slots before any new family would, so
+                // this reflects what's truly available to offer someone new.
+                if (!isFinal) avgOpen = Math.max(0, avgOpen - waitlistCount);
+                avgOpen = avgOpen.toFixed(1);
+                const pct       = room.capacity > 0 ? avgBooked / room.capacity : 0;
+                const color     = pct >= 0.9 ? '#fff5f5' : pct >= 0.7 ? '#fffaf0' : '#f0fff4';
+                const textColor = pct >= 0.9 ? '#9b2c2c' : pct >= 0.7 ? '#b45309' : '#276749';
+                return `<div style="background:${color};color:${textColor};border-radius:4px;padding:3px 2px;text-align:center;min-width:26px">
+                    <div style="font-size:.7em;font-weight:600">${WEEKDAY_INIT[dow]}</div>
+                    <div style="font-size:.82em;font-weight:700">${avgOpen}</div>
+                </div>`;
+            }).join('');
+
             // Aging-out events this month
             const outs    = (agingOut[key]?.[room.id] || []);
             const outHtml = outs.length ? `<div style="font-size:.75em;color:#667eea;margin-top:4px">→ ${outs.length} graduate${outs.length>1?'s':''} out</div>` : '';
-            const projectedNote = key === refMoKey
+            const projectedNote = isFinal
                 ? ''
                 : '<div style="font-size:.7em;color:#aaa;margin-top:3px">(projected)</div>';
 
@@ -784,7 +815,7 @@ async function renderWaitlistPlanning() {
             </tr></thead>
             <tbody>${roomRows}</tbody>
         </table></div>
-        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip shows avg open slots for that day (M/T/W/Th/F), based on ${MONTH_NAMES[Number(refMoKey.split('-')[1]) - 1]}'s actual registrations${isCurMoComplete ? '' : ` (${MONTH_NAMES[curMonthIdx]} isn't used yet — families can still add/change days until the 15th)`} — that weekly pattern is carried forward into other months (marked "projected"). → Graduates = children aging out of this room that month, freeing a permanent spot.</p>`;
+        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip shows avg open slots for that day (M/T/W/Th/F). Months already finalized (registrations lock in on the 15th of the prior month) show their own actual bookings; months marked "projected" show what's typical for the past few finalized months, minus kids already on that room's waitlist. → Graduates = children aging out of this room that month, freeing a permanent spot.</p>`;
 }
 
 // ============================================================
