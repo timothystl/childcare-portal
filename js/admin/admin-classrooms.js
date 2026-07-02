@@ -4,20 +4,23 @@
 
 // ROSTER — MODE SWITCHING
 // ============================================================
+// The current week's Monday, as an ISO date string (YYYY-MM-DD).
+function _currentWeekMonday() {
+    const today = new Date();
+    const day   = today.getDay();               // 0=Sun … 6=Sat
+    const diff  = (day === 0 ? -6 : 1 - day);    // days back to Mon
+    const mon   = new Date(today);
+    mon.setDate(today.getDate() + diff);
+    return mon.toISOString().split('T')[0];
+}
+
 function setupRoster() {
     document.getElementById('rosterViewMode')?.addEventListener('change', updateRosterModeUI);
     updateRosterModeUI();
 
     // Default week-of to the current Monday
     const weekInput = document.getElementById('rosterWeekOf');
-    if (weekInput) {
-        const today = new Date();
-        const day   = today.getDay();               // 0=Sun … 6=Sat
-        const diff  = (day === 0 ? -6 : 1 - day);    // days back to Mon
-        const mon   = new Date(today);
-        mon.setDate(today.getDate() + diff);
-        weekInput.value = mon.toISOString().split('T')[0];
-    }
+    if (weekInput) weekInput.value = _currentWeekMonday();
 
     // Default month to the current month
     const monthInput = document.getElementById('rosterMonth');
@@ -38,6 +41,13 @@ function updateRosterModeUI() {
     document.getElementById('rosterMonthField')?.classList.toggle('hidden', mode !== 'month');
     // "Print All Rooms" is a day-only compact one-page grid
     document.getElementById('printAllRoomsBtn')?.classList.toggle('hidden', mode !== 'day');
+
+    // Switching back into Week view should always land on the current week's
+    // Monday, not whatever date was left over from a prior visit to this view.
+    if (mode === 'week') {
+        const weekInput = document.getElementById('rosterWeekOf');
+        if (weekInput) weekInput.value = _currentWeekMonday();
+    }
 
     const hint = mode === 'week'
         ? 'Select a week above and click View Roster.'
