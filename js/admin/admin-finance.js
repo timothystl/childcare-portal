@@ -1642,7 +1642,7 @@ async function _buildRoomModelData() {
     const fromDate = candidateMonths[candidateMonths.length-1].start;
     const toDate   = candidateMonths[0].end;
 
-    await loadRateSettings();
+    await Promise.all([loadRateSettings(), loadCapacitySettings()]);
 
     const [pnlData, allBilling, allStaff] = await Promise.all([
         _buildRoomPnlData(fromDate, toDate),

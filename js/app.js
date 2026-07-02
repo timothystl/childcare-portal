@@ -83,13 +83,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Fetch the independent admin settings in parallel. Using allSettled so a
     // single failed request degrades gracefully instead of aborting the whole
     // init (e.g. a missing room_rates row shouldn't stop the form rendering).
-    const [rateRes, campRes, overrideRes, closuresRes] = await Promise.allSettled([
+    const [rateRes, capRes, campRes, overrideRes, closuresRes] = await Promise.allSettled([
         loadRateSettings(),
+        loadCapacitySettings(),
         loadSummerCampSetting(),
         fetchSetting('reg_window_override'),
         fetchClosures(),
     ]);
     if (rateRes.status     === 'rejected') console.error('loadRateSettings failed:', rateRes.reason);
+    if (capRes.status      === 'rejected') console.error('loadCapacitySettings failed:', capRes.reason);
     if (campRes.status     === 'rejected') console.error('loadSummerCampSetting failed:', campRes.reason);
     if (closuresRes.status === 'rejected') console.error('fetchClosures failed:', closuresRes.reason);
 

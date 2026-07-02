@@ -10,8 +10,9 @@ const MONTH_NAMES = ['January','February','March','April','May','June',
 // ============================================================
 // ROOM CONFIG
 // ============================================================
-// ROOMS — base config. Rates can be overridden by admin via the Settings section
-// (stored in Supabase `settings` table, key = 'room_rates').
+// ROOMS — base config. Rates, staff ratios, and capacity can be overridden by
+// admin via the Settings section (stored in Supabase `settings` table, keys
+// 'room_rates', 'staff_ratios', 'room_capacity').
 // To enable the settings table, run in Supabase SQL Editor:
 //   CREATE TABLE IF NOT EXISTS settings (key text PRIMARY KEY, value jsonb NOT NULL);
 //   ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
@@ -1412,6 +1413,37 @@ async function saveRatioSettings(ratios) {
     const { error } = await sbClient
         .from('settings')
         .upsert({ key: 'staff_ratios', value: ratios }, { onConflict: 'key' });
+    if (error) throw error;
+}
+
+// Load room capacities from Supabase and merge into ROOMS array.
+async function loadCapacitySettings() {
+    if (!sbClient) return false;
+    try {
+        const { data, error } = await sbClient
+            .from('settings')
+            .select('value')
+            .eq('key', 'room_capacity')
+            .maybeSingle();
+        if (error || !data) return false;
+        const raw       = data.value;
+        const capacities = typeof raw === 'string' ? parseJsonOr(raw, null) : raw;
+        if (!capacities || typeof capacities !== 'object' || Array.isArray(capacities)) return false;
+        ROOMS.forEach(room => {
+            if (capacities[room.id] != null) room.capacity = capacities[room.id];
+        });
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+// Save room capacities to Supabase.
+async function saveCapacitySettings(capacities) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'room_capacity', value: capacities }, { onConflict: 'key' });
     if (error) throw error;
 }
 
