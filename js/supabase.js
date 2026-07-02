@@ -1026,22 +1026,6 @@ async function fetchStudentRecurringDays(parentEmail, childName) {
     return student?.recurring_days || null;
 }
 
-// Fetch a single student's id + reg_fee_paid_year by parent email + child name
-// (checks both parent1 and parent2 email on the family). Returns
-// { id, reg_fee_paid_year } or null if no matching student is found.
-async function fetchStudentRegFeeInfo(parentEmail, childName) {
-    if (!sbClient) return null;
-    const { data, error } = await sbClient
-        .from('families')
-        .select('students(id, child_name, reg_fee_paid_year)')
-        .or(`parent_email.eq.${parentEmail},parent2_email.eq.${parentEmail}`)
-        .maybeSingle();
-    if (error || !data) return null;
-    const student = (data.students || []).find(s =>
-        (s.child_name || '').toLowerCase() === (childName || '').toLowerCase());
-    return student ? { id: student.id, reg_fee_paid_year: student.reg_fee_paid_year } : null;
-}
-
 // The annual enrollment fee's "cycle year" label, given the renewal date
 // ("MM-DD", month/day only — year is irrelevant and ignored). A student's
 // reg_fee_paid_year is compared against this to decide whether they still
