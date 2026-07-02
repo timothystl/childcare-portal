@@ -315,7 +315,7 @@ const TAB_META = {
     staffing:      { icon: '👷', label: 'Staffing' },
     finance:       { icon: '💰', label: 'Finance' },
     billing:       { icon: '💳', label: 'Billing' },
-    reports:       { icon: '📊', label: 'Reports' },
+    reports:       { icon: '📊', label: 'Billing' },
     settings:      { icon: '⚙️', label: 'Settings' }
 };
 
