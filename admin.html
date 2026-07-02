@@ -72,7 +72,7 @@
                     <div class="mobile-nav-group-label">Daily Ops</div>
                     <button class="mobile-nav-item" data-tab="daily"><span class="mni-icon">🏫</span><span>Classrooms</span></button>
                     <button class="mobile-nav-item" data-tab="registrations"><span class="mni-icon">📅</span><span>Care Calendar</span></button>
-                    <button class="mobile-nav-item" data-tab="waitlist"><span class="mni-icon">⏳</span><span>Waitlist</span></button>
+                    <button class="mobile-nav-item" data-tab="waitlist"><span class="mni-icon">🗓️</span><span>Planning</span></button>
 
                     <div class="mobile-nav-group-label">People</div>
                     <button class="mobile-nav-item" data-tab="families"><span class="mni-icon">👨‍👩‍👧</span><span>Families</span></button>
@@ -357,6 +357,33 @@
                 </div>
                 <div id="waitlistContent">
                     <p class="empty-hint">Click Generate Report to view waitlist demand.</p>
+                </div>
+            </section>
+
+            <!-- Enrollment Trends -->
+            <section class="admin-section collapsible-section" id="enrollmentTrendsSection">
+                <h2>📈 Enrollment Trends</h2>
+                <p class="section-desc">Month-by-month enrollment count per room — useful for spotting growth patterns and planning ahead.</p>
+                <div class="roster-btns" style="margin-bottom:12px">
+                    <button id="generateTrendsBtn" class="btn-secondary">Generate Trends</button>
+                    <button id="exportTrendsBtn" class="btn-primary">&#8595; Export Excel</button>
+                </div>
+                <div id="trendsContent">
+                    <p class="empty-hint">Click Generate Trends to view enrollment history.</p>
+                </div>
+            </section>
+
+            <!-- Upcoming Room Promotions -->
+            <section class="admin-section collapsible-section" id="promotionsSection">
+                <h2>🎂 Upcoming Room Promotions</h2>
+                <p class="section-desc">Children aging out of their current room in the next 2 years, based on their birthday. Shows which days open up in the current room when they move up.</p>
+                <div class="roster-btns" style="margin-bottom:12px">
+                    <button id="generatePromotionsBtn" class="btn-secondary">Generate Report</button>
+                    <button id="exportPromotionsBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
+                    <button id="printPromotionsBtn" class="btn-secondary" style="display:none;">&#128438; Print</button>
+                </div>
+                <div id="promotionsContent">
+                    <p class="empty-hint">Click Generate Report to view upcoming promotions.</p>
                 </div>
             </section>
 
@@ -720,33 +747,6 @@
                 </div>
                 <div id="familyBillingContent">
                     <p class="empty-hint">Select a month above and click Generate.</p>
-                </div>
-            </section>
-
-            <!-- Enrollment Trends -->
-            <section class="admin-section collapsible-section" id="enrollmentTrendsSection">
-                <h2>📈 Enrollment Trends</h2>
-                <p class="section-desc">Month-by-month enrollment count per room — useful for spotting growth patterns and planning ahead.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateTrendsBtn" class="btn-secondary">Generate Trends</button>
-                    <button id="exportTrendsBtn" class="btn-primary">&#8595; Export Excel</button>
-                </div>
-                <div id="trendsContent">
-                    <p class="empty-hint">Click Generate Trends to view enrollment history.</p>
-                </div>
-            </section>
-
-            <!-- Upcoming Room Promotions -->
-            <section class="admin-section collapsible-section" id="promotionsSection">
-                <h2>🎂 Upcoming Room Promotions</h2>
-                <p class="section-desc">Children aging out of their current room in the next 2 years, based on their birthday. Shows which days open up in the current room when they move up.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generatePromotionsBtn" class="btn-secondary">Generate Report</button>
-                    <button id="exportPromotionsBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
-                    <button id="printPromotionsBtn" class="btn-secondary" style="display:none;">&#128438; Print</button>
-                </div>
-                <div id="promotionsContent">
-                    <p class="empty-hint">Click Generate Report to view upcoming promotions.</p>
                 </div>
             </section>
 

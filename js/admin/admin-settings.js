@@ -310,7 +310,7 @@ async function loadClosureList() {
 const TAB_META = {
     daily:         { icon: '🏫', label: 'Classrooms' },
     registrations: { icon: '📅', label: 'Care Calendar' },
-    waitlist:      { icon: '⏳', label: 'Waitlist' },
+    waitlist:      { icon: '🗓️', label: 'Planning' },
     families:      { icon: '👨‍👩‍👧', label: 'Families' },
     staffing:      { icon: '👷', label: 'Staffing' },
     finance:       { icon: '💰', label: 'Finance' },
