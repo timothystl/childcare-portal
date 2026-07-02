@@ -64,25 +64,6 @@ function setupFamilyBilling() {
                 await generateFamilyBillingReport();
             } catch (err) { alert('Failed to remove override: ' + err.message); }
         }
-
-        // Toggle annual enrollment fee paid/unpaid
-        if (e.target.classList.contains('billing-reg-fee-btn')) {
-            const btn       = e.target;
-            const studentId = btn.dataset.studentId;
-            const isPaid    = btn.dataset.paid === '1';
-            if (!studentId) return;
-            btn.disabled    = true;
-            btn.textContent = '…';
-            try {
-                const newYear = isPaid ? null : currentFeeCycleYear(window._regFeeRenewalDate);
-                await updateStudentRegFee(studentId, newYear);
-                await generateFamilyBillingReport();
-            } catch (err) {
-                alert('Failed to update enrollment fee: ' + err.message);
-                btn.disabled    = false;
-                btn.textContent = isPaid ? '✓ Paid' : 'Unpaid';
-            }
-        }
     });
 }
 
@@ -312,14 +293,34 @@ async function generateFamilyBillingReport() {
     // "currentYear" here labels the current annual-fee cycle (see
     // currentFeeCycleYear), not necessarily the calendar year — the fee
     // becomes due again for everyone once the renewal date passes each year.
+    // The fee is fully automatic: a child owes it whenever they haven't yet
+    // been charged for the current cycle (student.reg_fee_paid_year !==
+    // currentYear) — either because a new cycle just started (renewal date
+    // passed) or because they're a brand-new student who's never been
+    // charged. Whoever owes it gets charged and stamped for this cycle the
+    // moment their billing report is generated — no manual paid/unpaid step.
     const currentYear = currentFeeCycleYear(window._regFeeRenewalDate);
+    const regFeeOwedByChild = new Map(); // childName key → { owed, studentId }
+    const feeChargeStudentIds = [];
+    families.forEach(fam => fam.children.forEach(c => {
+        const key = (c.childName || '').toLowerCase().trim();
+        if (regFeeOwedByChild.has(key)) return;
+        const student = studentByName.get(key);
+        const owed = regFeeAmount > 0 && !!student && student.reg_fee_paid_year !== currentYear;
+        regFeeOwedByChild.set(key, { owed, studentId: student?.id });
+        if (owed && student.id) feeChargeStudentIds.push(student.id);
+    }));
+    if (feeChargeStudentIds.length) {
+        await Promise.all(feeChargeStudentIds.map(id =>
+            updateStudentRegFee(id, currentYear).catch(e => console.warn('updateStudentRegFee failed for', id, e))));
+    }
+
     let grandTotal = 0;
     const rows = families.map(fam => {
         const familyTotal = fam.children.reduce((s, c) => {
             const billed = c.hasOverride ? c.overrideAmount : c.subtotal;
-            const student = studentByName.get((c.childName || '').toLowerCase().trim());
-            const regFeePaid = student && student.reg_fee_paid_year === currentYear;
-            return s + billed + (c.changeFees || 0) + (regFeeAmount > 0 && regFeePaid ? regFeeAmount : 0);
+            const { owed: regFeeOwed } = regFeeOwedByChild.get((c.childName || '').toLowerCase().trim());
+            return s + billed + (c.changeFees || 0) + (regFeeOwed ? regFeeAmount : 0);
         }, 0);
         grandTotal += familyTotal;
 
@@ -329,9 +330,7 @@ async function generateFamilyBillingReport() {
                 ? `${escHtml(c.discLabel)} (−$${c.discountDollar.toFixed(2)})`
                 : escHtml(c.discLabel);
 
-            const student    = studentByName.get((c.childName || '').toLowerCase().trim());
-            const studentId  = student?.id;
-            const regFeePaid = student && student.reg_fee_paid_year === currentYear;
+            const { owed: regFeeOwed } = regFeeOwedByChild.get((c.childName || '').toLowerCase().trim());
 
             const feeRow = c.changeFees > 0
                 ? `<tr class="billing-child-row" style="background:#fffbeb">
@@ -347,16 +346,11 @@ async function generateFamilyBillingReport() {
                     <td class="report-num report-revenue" style="color:#166534">−$${c.sibDiscount.toFixed(2)}</td>
                    </tr>`
                 : '';
-            const regFeeRow = regFeeAmount > 0
-                ? `<tr class="billing-child-row billing-reg-fee-row" style="background:${regFeePaid ? '#f0fdf4' : '#fafafa'}" data-student-id="${escHtml(String(studentId || ''))}">
-                    <td class="billing-indent" colspan="4" style="font-size:.85em;color:${regFeePaid ? '#166534' : '#6b7280'}">
-                        ↳ Annual enrollment fee
-                        <button class="billing-reg-fee-btn" data-student-id="${escHtml(String(studentId || ''))}" data-paid="${regFeePaid ? '1' : '0'}"
-                            style="margin-left:.5rem;font-size:.8em;padding:1px 8px;border-radius:3px;border:1px solid ${regFeePaid ? '#86efac' : '#d1d5db'};background:${regFeePaid ? '#dcfce7' : '#f3f4f6'};color:${regFeePaid ? '#166534' : '#374151'};cursor:pointer;"
-                            title="${regFeePaid ? 'Mark as unpaid' : 'Mark as paid'}">${regFeePaid ? '✓ Paid ' + currentYear : 'Unpaid'}</button>
-                    </td>
-                    <td class="report-num" style="color:${regFeePaid ? '#166534' : '#9ca3af'}">—</td>
-                    <td class="report-num report-revenue" style="color:${regFeePaid ? '#166534' : '#9ca3af'}">${regFeePaid ? '+$' + regFeeAmount.toFixed(2) : '($' + regFeeAmount.toFixed(2) + ')'}</td>
+            const regFeeRow = regFeeOwed
+                ? `<tr class="billing-child-row" style="background:#f0fdf4">
+                    <td class="billing-indent" style="color:#166534;font-size:.85em" colspan="4">↳ Annual enrollment fee</td>
+                    <td class="report-num" style="color:#166534">—</td>
+                    <td class="report-num report-revenue" style="color:#166534">+$${regFeeAmount.toFixed(2)}</td>
                    </tr>`
                 : '';
 
