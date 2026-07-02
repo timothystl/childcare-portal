@@ -225,7 +225,7 @@ async function toggleRegistrationFee(reg, btn) {
             alert(`Could not find ${reg.child_name} in Families — add them there first.`);
             return;
         }
-        const currentYear = new Date().getFullYear();
+        const currentYear = currentFeeCycleYear(window._regFeeRenewalDate);
         const isPaid      = info.reg_fee_paid_year === currentYear;
         const action      = isPaid
             ? `mark the $${feeAmount.toFixed(2)} annual enrollment fee UNPAID for ${reg.child_name}?`

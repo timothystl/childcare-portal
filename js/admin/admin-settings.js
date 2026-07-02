@@ -552,6 +552,14 @@ async function loadRegFeeSetting() {
     window._regFeeAmount = (typeof val === 'number' && val >= 0) ? val : 0;
     const inp = document.getElementById('regFeeInput');
     if (inp) inp.value = window._regFeeAmount > 0 ? window._regFeeAmount.toFixed(2) : '';
+
+    const renewalMD = await fetchSetting('registration_fee_renewal_date');
+    window._regFeeRenewalDate = /^\d{2}-\d{2}$/.test(renewalMD) ? renewalMD : '01-01';
+    const dateInp = document.getElementById('regFeeRenewalDate');
+    // <input type="date"> needs a full date — the year is a throwaway
+    // placeholder (2000, a leap year so 02-29 round-trips) since only the
+    // month/day portion is ever read or stored.
+    if (dateInp) dateInp.value = `2000-${window._regFeeRenewalDate}`;
 }
 
 async function setupRegFee() {
@@ -560,6 +568,7 @@ async function setupRegFee() {
         const btn      = document.getElementById('saveRegFeeBtn');
         const statusEl = document.getElementById('regFeeStatus');
         const inp      = document.getElementById('regFeeInput');
+        const dateInp  = document.getElementById('regFeeRenewalDate');
         if (!btn || !inp) return;
         btn.disabled    = true;
         btn.textContent = 'Saving…';
@@ -568,6 +577,13 @@ async function setupRegFee() {
             const fee = parseFloat(inp.value) || 0;
             await upsertSetting('registration_fee', fee);
             window._regFeeAmount = fee;
+
+            const renewalMD = (dateInp?.value || '').slice(5); // "YYYY-MM-DD" → "MM-DD"
+            if (/^\d{2}-\d{2}$/.test(renewalMD)) {
+                await upsertSetting('registration_fee_renewal_date', renewalMD);
+                window._regFeeRenewalDate = renewalMD;
+            }
+
             if (statusEl) {
                 statusEl.textContent = '✓ Saved!';
                 statusEl.style.color = '#2e7d32';
