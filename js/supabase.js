@@ -1026,6 +1026,36 @@ async function fetchStudentRecurringDays(parentEmail, childName) {
     return student?.recurring_days || null;
 }
 
+// Fetch a single student's id + reg_fee_paid_year by parent email + child name
+// (checks both parent1 and parent2 email on the family). Returns
+// { id, reg_fee_paid_year } or null if no matching student is found.
+async function fetchStudentRegFeeInfo(parentEmail, childName) {
+    if (!sbClient) return null;
+    const { data, error } = await sbClient
+        .from('families')
+        .select('students(id, child_name, reg_fee_paid_year)')
+        .or(`parent_email.eq.${parentEmail},parent2_email.eq.${parentEmail}`)
+        .maybeSingle();
+    if (error || !data) return null;
+    const student = (data.students || []).find(s =>
+        (s.child_name || '').toLowerCase() === (childName || '').toLowerCase());
+    return student ? { id: student.id, reg_fee_paid_year: student.reg_fee_paid_year } : null;
+}
+
+// The annual enrollment fee's "cycle year" label, given the renewal date
+// ("MM-DD", month/day only — year is irrelevant and ignored). A student's
+// reg_fee_paid_year is compared against this to decide whether they still
+// owe the fee: once today's month/day reaches the renewal date, everyone's
+// fee becomes due again for the new cycle, regardless of calendar year.
+// Falls back to "01-01" (matches plain calendar-year behavior) if unset.
+function currentFeeCycleYear(renewalMonthDay) {
+    const renewalMD = /^\d{2}-\d{2}$/.test(renewalMonthDay || '') ? renewalMonthDay : '01-01';
+    const now   = new Date();
+    const todayMD = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const year  = now.getFullYear();
+    return todayMD >= renewalMD ? year : year - 1;
+}
+
 async function restoreFamily(id) {
     return updateFamily(id, { active: true });
 }
@@ -2118,6 +2148,71 @@ async function sendWaitlistOfferEmail({ parentName, parentEmail, childName, offe
     });
     if (error) throw error;
     return data;
+}
+
+/**
+ * Sends the "we received your inquiry" auto-reply to the applicant plus a
+ * new-inquiry heads-up to the configured admin notify address. Called by the
+ * public inquiry form right after a successful insert. The edge function looks
+ * up the email addresses itself from the applicationId (service role), so no
+ * PII needs to travel back through this anonymous call.
+ */
+async function sendWaitlistConfirmationEmail(applicationId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.functions.invoke('send-waitlist-confirmation', {
+        body: { applicationId },
+        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    if (error) throw error;
+    return data;
+}
+
+/**
+ * Parent-facing response to a "still interested?" tour reminder email.
+ * @param {string}  token       - The application's interest_token (from the emailed link)
+ * @param {boolean} interested  - true = still interested, false = no longer needed
+ */
+async function confirmWaitlistInterest(token, interested) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.functions.invoke('confirm-waitlist-interest', {
+        body: { token, interested },
+        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    if (error) throw error;
+    return data;
+}
+
+/**
+ * Updates tour-scheduling fields on a waitlist application (admin action).
+ */
+async function updateWaitlistTourStatus(id, fields) {
+    return updateWaitlistApplication(id, fields);
+}
+
+// Load/save the address that gets notified whenever a new inquiry comes in.
+async function loadWaitlistNotifySettings() {
+    if (!sbClient) return { notifyEmail: null };
+    try {
+        const { data, error } = await sbClient
+            .from('settings')
+            .select('value')
+            .eq('key', 'waitlist_notify')
+            .maybeSingle();
+        if (error || !data) return { notifyEmail: null };
+        const raw = data.value;
+        if (typeof raw === 'string') return parseJsonOr(raw, { notifyEmail: null });
+        return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : { notifyEmail: null };
+    } catch (_) {
+        return { notifyEmail: null };
+    }
+}
+
+async function saveWaitlistNotifySettings(settings) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('settings')
+        .upsert({ key: 'waitlist_notify', value: settings }, { onConflict: 'key' });
+    if (error) throw error;
 }
 
 /**

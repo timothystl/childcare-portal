@@ -74,7 +74,7 @@ function setupFamilyBilling() {
             btn.disabled    = true;
             btn.textContent = '…';
             try {
-                const newYear = isPaid ? null : new Date().getFullYear();
+                const newYear = isPaid ? null : currentFeeCycleYear(window._regFeeRenewalDate);
                 await updateStudentRegFee(studentId, newYear);
                 await generateFamilyBillingReport();
             } catch (err) {
@@ -309,7 +309,10 @@ async function generateFamilyBillingReport() {
         return;
     }
 
-    const currentYear = new Date().getFullYear();
+    // "currentYear" here labels the current annual-fee cycle (see
+    // currentFeeCycleYear), not necessarily the calendar year — the fee
+    // becomes due again for everyone once the renewal date passes each year.
+    const currentYear = currentFeeCycleYear(window._regFeeRenewalDate);
     let grandTotal = 0;
     const rows = families.map(fam => {
         const familyTotal = fam.children.reduce((s, c) => {

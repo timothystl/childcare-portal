@@ -4,20 +4,23 @@
 
 // ROSTER — MODE SWITCHING
 // ============================================================
+// The current week's Monday, as an ISO date string (YYYY-MM-DD).
+function _currentWeekMonday() {
+    const today = new Date();
+    const day   = today.getDay();               // 0=Sun … 6=Sat
+    const diff  = (day === 0 ? -6 : 1 - day);    // days back to Mon
+    const mon   = new Date(today);
+    mon.setDate(today.getDate() + diff);
+    return mon.toISOString().split('T')[0];
+}
+
 function setupRoster() {
     document.getElementById('rosterViewMode')?.addEventListener('change', updateRosterModeUI);
     updateRosterModeUI();
 
     // Default week-of to the current Monday
     const weekInput = document.getElementById('rosterWeekOf');
-    if (weekInput) {
-        const today = new Date();
-        const day   = today.getDay();               // 0=Sun … 6=Sat
-        const diff  = (day === 0 ? -6 : 1 - day);    // days back to Mon
-        const mon   = new Date(today);
-        mon.setDate(today.getDate() + diff);
-        weekInput.value = mon.toISOString().split('T')[0];
-    }
+    if (weekInput) weekInput.value = _currentWeekMonday();
 
     // Default month to the current month
     const monthInput = document.getElementById('rosterMonth');
@@ -38,6 +41,13 @@ function updateRosterModeUI() {
     document.getElementById('rosterMonthField')?.classList.toggle('hidden', mode !== 'month');
     // "Print All Rooms" is a day-only compact one-page grid
     document.getElementById('printAllRoomsBtn')?.classList.toggle('hidden', mode !== 'day');
+
+    // Switching back into Week view should always land on the current week's
+    // Monday, not whatever date was left over from a prior visit to this view.
+    if (mode === 'week') {
+        const weekInput = document.getElementById('rosterWeekOf');
+        if (weekInput) weekInput.value = _currentWeekMonday();
+    }
 
     const hint = mode === 'week'
         ? 'Select a week above and click View Roster.'
@@ -271,75 +281,142 @@ function exportRoster() {
     return _printDayRoster(document.getElementById('rosterDate').value, roomId);
 }
 
-const _ROSTER_PRINT_STYLE = `
+// Shared with "Print All Rooms" — compact landscape grid of room tiles,
+// one page per day. Print/PDF (day & week) reuses this same layout so all
+// three roster print paths look identical; only "Print All Rooms" always
+// shows every room regardless of the room filter, the other two respect it.
+const _ROSTER_GRID_PRINT_STYLE = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { size: landscape; margin: 0.4in 0.45in; }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    padding: 36px 48px;
-    color: #222;
-    max-width: 680px;
-    margin: 0 auto;
+    color: #111;
+    font-size: 9pt;
   }
-  h1 {
-    font-size: 1.4em;
-    font-weight: 700;
-    border-bottom: 3px solid #333;
-    padding-bottom: 10px;
-    margin-bottom: 28px;
+  .print-page { width: 10.1in; }
+  .print-page.page-break { page-break-before: always; }
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 2px solid #333;
+    padding-bottom: 5px;
+    margin-bottom: 8px;
   }
-  h1 .facility { font-size: .75em; font-weight: 400; color: #666; display: block; margin-bottom: 4px; }
-  .room-block { margin-bottom: 32px; page-break-inside: avoid; }
-  h2 {
-    font-size: 1.05em;
-    font-weight: 700;
-    background: #f0f0f0;
-    padding: 8px 14px;
-    border-left: 4px solid #555;
-    margin-bottom: 0;
+  .page-header h1 { font-size: 12pt; font-weight: 700; }
+  .page-header .sub { font-size: 9pt; color: #555; font-weight: 400; }
+  .page-header .printed { font-size: 7.5pt; color: #999; }
+  .rooms-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px 12px;
   }
-  .count { font-size: .8em; font-weight: 400; color: #666; margin-left: 10px; }
-  ul { list-style: none; border: 1px solid #ddd; border-top: none; }
-  li {
+  .room-block {
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .room-header {
+    background: #f2f2f2;
+    border-bottom: 1px solid #ccc;
+    padding: 4px 8px;
+  }
+  .room-label { font-weight: 700; font-size: 10pt; display: block; }
+  .room-count { font-size: 7.5pt; color: #666; }
+  .kids-list { padding: 2px 0; }
+  .kids-list.two-col {
+    columns: 2;
+    column-gap: 0;
+    padding: 0;
+  }
+  .kids-list.two-col .kid-row { break-inside: avoid; }
+  .kid-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 9px 14px;
-    border-bottom: 1px solid #eee;
-    font-size: .97em;
+    padding: 3px 8px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 9pt;
   }
-  li:last-child { border-bottom: none; }
-  .child-name { font-weight: 500; }
-  .day-label {
-    font-size: .82em;
-    padding: 3px 10px;
-    border-radius: 12px;
-    font-weight: 600;
-    letter-spacing: .02em;
+  .kid-row:last-child { border-bottom: none; }
+  .kid-name { font-weight: 500; }
+  .day-badge {
+    font-size: 7pt;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 8px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
-  .day-label.full { background: #d1fae5; color: #065f46; }
-  .day-label.half { background: #fef3c7; color: #92400e; }
-  .empty-day { color: #999; font-style: italic; padding: 10px 0; }
-  .footer { margin-top: 40px; font-size: .78em; color: #aaa; text-align: center; }
-  @media print {
-    body { padding: 20px 24px; }
-    @page { margin: 0.75in; }
-  }
+  .day-badge.full { background: #d1fae5; color: #065f46; }
+  .day-badge.half { background: #fef3c7; color: #92400e; }
+  .empty-room { padding: 5px 8px; color: #bbb; font-size: 8.5pt; }
 `;
 
-function _rosterRoomBlocksHtml(roster) {
-    const byRoom = _groupRosterByRoom(roster);
-    const blocks = Object.entries(byRoom).map(([roomLabel, kids]) => `
-        <div class="room-block">
-            <h2>${escHtml(roomLabel)} <span class="count">${kids.length} child${kids.length !== 1 ? 'ren' : ''}</span></h2>
-            <ul>
-                ${kids.map(k => `
-                    <li>
-                        <span class="child-name">${escHtml(k.childName)}</span>
-                        <span class="day-label ${k.dayType}">${k.dayType === 'half' ? 'Half Day' : 'Full Day'}</span>
-                    </li>`).join('')}
-            </ul>
-        </div>`).join('');
-    return blocks || '<p class="empty-day">No confirmed registrations.</p>';
+// Auto-scales each .print-page to fit one printed page (landscape letter,
+// 8.5in - 2×0.4in margins = 7.7in printable height), independently per page.
+const _ROSTER_GRID_AUTOSCALE_SCRIPT = `
+    window.addEventListener('load', function() {
+      var PAGE_H = 7.7 * 96;
+      var MIN_SCALE = 7 / 9;
+      document.querySelectorAll('.print-page').forEach(function(pageEl) {
+        var h = pageEl.scrollHeight;
+        if (h > PAGE_H) {
+          var s = Math.max(PAGE_H / h, MIN_SCALE);
+          pageEl.style.transformOrigin = 'top left';
+          pageEl.style.transform = 'scale(' + s + ')';
+          pageEl.style.width = (10.1 / s) + 'in';
+        }
+      });
+      window.print();
+    });
+`;
+
+function _rosterGridBlocksHtml(roster, roomId) {
+    const roomsToShow = roomId ? ROOMS.filter(r => r.id === roomId) : ROOMS;
+    return roomsToShow.map(room => {
+        const kids = roster.filter(r => r.roomId === room.id)
+            .sort((a, b) => a.childName.localeCompare(b.childName));
+        const fullCount = kids.filter(k => k.dayType !== 'half').length;
+        const halfCount = kids.filter(k => k.dayType === 'half').length;
+
+        const countParts = [];
+        if (fullCount) countParts.push(`${fullCount} full`);
+        if (halfCount) countParts.push(`${halfCount} half`);
+        const countLabel = kids.length
+            ? `${kids.length} child${kids.length !== 1 ? 'ren' : ''} (${countParts.join(', ')})`
+            : 'No registrations';
+
+        const rows = kids.length
+            ? kids.map(k => `
+                <div class="kid-row">
+                    <span class="kid-name">${escHtml(k.childName)}</span>
+                    <span class="day-badge ${k.dayType === 'half' ? 'half' : 'full'}">${k.dayType === 'half' ? 'Half' : 'Full'}</span>
+                </div>`).join('')
+            : '<div class="empty-room">—</div>';
+        const twoCol = kids.length > 12 ? ' two-col' : '';
+
+        return `
+            <div class="room-block">
+                <div class="room-header">
+                    <span class="room-label">${escHtml(room.label)}</span>
+                    <span class="room-count">${countLabel}</span>
+                </div>
+                <div class="kids-list${twoCol}">${rows}</div>
+            </div>`;
+    }).join('');
+}
+
+function _rosterGridPageHtml(dateLabel, roster, roomId, pageBreak) {
+    return `
+        <div class="print-page${pageBreak ? ' page-break' : ''}">
+            <div class="page-header">
+                <h1>Daily Classroom Roster &nbsp;<span class="sub">${escHtml(dateLabel)}</span></h1>
+                <span class="printed">Timothy Lutheran MDO &nbsp;·&nbsp; Printed ${new Date().toLocaleString('en-US')}</span>
+            </div>
+            <div class="rooms-grid">${_rosterGridBlocksHtml(roster, roomId)}</div>
+        </div>`;
 }
 
 function _printDayRoster(date, roomId) {
@@ -356,15 +433,11 @@ function _printDayRoster(date, roomId) {
 <head>
 <meta charset="UTF-8">
 <title>Daily Roster — ${dateLabel}</title>
-<style>${_ROSTER_PRINT_STYLE}</style>
+<style>${_ROSTER_GRID_PRINT_STYLE}</style>
 </head>
 <body>
-  <h1><span class="facility">Daily Classroom Roster</span>${dateLabel}</h1>
-  ${_rosterRoomBlocksHtml(roster)}
-  <div class="footer">Printed ${new Date().toLocaleString('en-US')}</div>
-  <script>
-    window.addEventListener('load', function() { window.print(); });
-  <\/script>
+  ${_rosterGridPageHtml(dateLabel, roster, roomId, false)}
+  <script>${_ROSTER_GRID_AUTOSCALE_SCRIPT}<\/script>
 </body>
 </html>`;
 
@@ -374,7 +447,7 @@ function _printDayRoster(date, roomId) {
     w.document.close();
 }
 
-// "Print day by day" — one full daily-roster page per weekday in the week, in a single print job.
+// "Print day by day" — one full daily-roster grid page per weekday in the week, in a single print job.
 function _printWeekRoster(weekOf, roomId) {
     if (!weekOf) { alert('Please select a week first.'); return; }
     const weekDates = _buildWeekDates(weekOf);
@@ -384,12 +457,7 @@ function _printWeekRoster(weekOf, roomId) {
         const roster    = getRosterForDate(date, roomId);
         const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US',
             { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-        return `
-            <section class="day-page${i > 0 ? ' page-break' : ''}">
-                <h1><span class="facility">Daily Classroom Roster</span>${dateLabel}</h1>
-                ${_rosterRoomBlocksHtml(roster)}
-                <div class="footer">Printed ${new Date().toLocaleString('en-US')}</div>
-            </section>`;
+        return _rosterGridPageHtml(dateLabel, roster, roomId, i > 0);
     }).join('');
 
     const html = `<!DOCTYPE html>
@@ -397,17 +465,11 @@ function _printWeekRoster(weekOf, roomId) {
 <head>
 <meta charset="UTF-8">
 <title>Weekly Roster — Week of ${escHtml(weekOf)}</title>
-<style>
-  ${_ROSTER_PRINT_STYLE}
-  .day-page { page-break-inside: avoid; }
-  .day-page.page-break { page-break-before: always; }
-</style>
+<style>${_ROSTER_GRID_PRINT_STYLE}</style>
 </head>
 <body>
   ${pages}
-  <script>
-    window.addEventListener('load', function() { window.print(); });
-  <\/script>
+  <script>${_ROSTER_GRID_AUTOSCALE_SCRIPT}<\/script>
 </body>
 </html>`;
 
@@ -493,7 +555,8 @@ function _printMonthRoster(monthVal, roomId) {
     w.document.close();
 }
 
-// "Print All Rooms" — compact single-page grid of every room for one day (Day view only)
+// "Print All Rooms" — compact single-page grid of every room for one day (Day view only).
+// Always shows every room regardless of the room filter (unlike Print/PDF above).
 function printAllRoomsRoster() {
     const date = document.getElementById('rosterDate').value;
     if (!date) { alert('Please select a date first.'); return; }
@@ -502,132 +565,16 @@ function printAllRoomsRoster() {
     const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US',
         { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-    // Build per-room child lists in ROOMS order (include every room, even empty)
-    const roomBlocks = ROOMS.map(room => {
-        const kids = roster.filter(r => r.roomId === room.id)
-            .sort((a, b) => a.childName.localeCompare(b.childName));
-        const fullCount = kids.filter(k => k.dayType !== 'half').length;
-        const halfCount = kids.filter(k => k.dayType === 'half').length;
-
-        const countParts = [];
-        if (fullCount) countParts.push(`${fullCount} full`);
-        if (halfCount) countParts.push(`${halfCount} half`);
-        const countLabel = kids.length
-            ? `${kids.length} child${kids.length !== 1 ? 'ren' : ''} (${countParts.join(', ')})`
-            : 'No registrations';
-
-        const rows = kids.length
-            ? kids.map(k => `
-                <div class="kid-row">
-                    <span class="kid-name">${escHtml(k.childName)}</span>
-                    <span class="day-badge ${k.dayType === 'half' ? 'half' : 'full'}">${k.dayType === 'half' ? 'Half' : 'Full'}</span>
-                </div>`).join('')
-            : '<div class="empty-room">—</div>';
-        const twoCol = kids.length > 12 ? ' two-col' : '';
-
-        return `
-            <div class="room-block">
-                <div class="room-header">
-                    <span class="room-label">${escHtml(room.label)}</span>
-                    <span class="room-count">${countLabel}</span>
-                </div>
-                <div class="kids-list${twoCol}">${rows}</div>
-            </div>`;
-    }).join('');
-
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Daily Roster — ${dateLabel}</title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: landscape; margin: 0.4in 0.45in; }
-  body {
-    font-family: Arial, Helvetica, sans-serif;
-    color: #111;
-    font-size: 9pt;
-    width: 10.1in;
-  }
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    border-bottom: 2px solid #333;
-    padding-bottom: 5px;
-    margin-bottom: 8px;
-  }
-  .page-header h1 { font-size: 12pt; font-weight: 700; }
-  .page-header .sub { font-size: 9pt; color: #555; font-weight: 400; }
-  .page-header .printed { font-size: 7.5pt; color: #999; }
-  .rooms-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px 12px;
-  }
-  .room-block {
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    overflow: hidden;
-  }
-  .room-header {
-    background: #f2f2f2;
-    border-bottom: 1px solid #ccc;
-    padding: 4px 8px;
-  }
-  .room-label { font-weight: 700; font-size: 10pt; display: block; }
-  .room-count { font-size: 7.5pt; color: #666; }
-  .kids-list { padding: 2px 0; }
-  .kids-list.two-col {
-    columns: 2;
-    column-gap: 0;
-    padding: 0;
-  }
-  .kids-list.two-col .kid-row { break-inside: avoid; }
-  .kid-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 3px 8px;
-    border-bottom: 1px solid #f0f0f0;
-    font-size: 9pt;
-  }
-  .kid-row:last-child { border-bottom: none; }
-  .kid-name { font-weight: 500; }
-  .day-badge {
-    font-size: 7pt;
-    font-weight: 700;
-    padding: 1px 6px;
-    border-radius: 8px;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .day-badge.full { background: #d1fae5; color: #065f46; }
-  .day-badge.half { background: #fef3c7; color: #92400e; }
-  .empty-room { padding: 5px 8px; color: #bbb; font-size: 8.5pt; }
-</style>
+<style>${_ROSTER_GRID_PRINT_STYLE}</style>
 </head>
 <body>
-  <div class="page-header">
-    <h1>Daily Classroom Roster &nbsp;<span class="sub">${escHtml(dateLabel)}</span></h1>
-    <span class="printed">Timothy Lutheran MDO &nbsp;·&nbsp; Printed ${new Date().toLocaleString('en-US')}</span>
-  </div>
-  <div class="rooms-grid">${roomBlocks}</div>
-  <script>
-    window.addEventListener('load', function() {
-      var PAGE_H = 7.7 * 96;   // printable height in CSS px (8.5in - 2×0.4in margins)
-      var MIN_SCALE = 7 / 9;   // floor: ~7pt from 9pt base — don't go smaller than this
-      var h = document.body.scrollHeight;
-      if (h > PAGE_H) {
-        var s = Math.max(PAGE_H / h, MIN_SCALE);
-        document.body.style.transformOrigin = 'top left';
-        document.body.style.transform = 'scale(' + s + ')';
-        document.body.style.width = (10.1 / s) + 'in';
-      }
-      window.print();
-    });
-  <\/script>
+  ${_rosterGridPageHtml(dateLabel, roster, null, false)}
+  <script>${_ROSTER_GRID_AUTOSCALE_SCRIPT}<\/script>
 </body>
 </html>`;
 

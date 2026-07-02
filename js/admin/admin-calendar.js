@@ -43,7 +43,7 @@ async function loadRegistrations() {
     try {
         allRegistrations = await fetchAllRegistrations();
         populateCareMonthFilter();
-        renderTable(allRegistrations);
+        applyFilters();
         renderCapacityOverview();
     } catch (err) {
         console.error(err);
@@ -51,6 +51,11 @@ async function loadRegistrations() {
             '<tr><td colspan="10" class="loading-cell error">Failed to load — check Supabase config.</td></tr>';
     }
 }
+
+// Only auto-select the current month once, on the tab's first load — later
+// reloads (e.g. after adding a registration) must preserve whatever the
+// admin has since chosen, including explicitly switching back to "All".
+let _careMonthFilterDefaulted = false;
 
 // Populate care-month dropdown with all months present in registration_dates
 function populateCareMonthFilter() {
@@ -74,7 +79,14 @@ function populateCareMonthFilter() {
         sel.appendChild(opt);
     });
 
-    if (current) sel.value = current; // restore selection
+    if (current) {
+        sel.value = current; // restore selection
+    } else if (!_careMonthFilterDefaulted) {
+        const now = new Date();
+        const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        if (months.has(thisMonth)) sel.value = thisMonth;
+        _careMonthFilterDefaulted = true;
+    }
 }
 
 // ============================================================
@@ -148,6 +160,7 @@ function renderTable(data) {
                 <td class="actions-cell">
                     <button class="btn-secondary btn-edit-days" data-id="${reg.id}">Edit Days</button>
                     <button class="btn-secondary btn-edit-bill" data-id="${reg.id}" title="Edit Bill">&#128178; Bill</button>
+                    <button class="btn-secondary btn-reg-fee" data-id="${reg.id}" title="Mark the annual enrollment fee paid/unpaid">&#127991;&#65039; Fee</button>
                     <button class="btn-delete" data-id="${reg.id}">Delete</button>
                 </td>
             </tr>`;
@@ -183,6 +196,52 @@ function renderTable(data) {
             if (reg) openEditBillModal(reg);
         });
     });
+
+    tbody.querySelectorAll('.btn-reg-fee').forEach(btn => {
+        btn.addEventListener('click', async e => {
+            const id  = e.currentTarget.getAttribute('data-id');
+            const reg = allRegistrations.find(r => String(r.id) === id);
+            if (reg) await toggleRegistrationFee(reg, e.currentTarget);
+        });
+    });
+}
+
+// Shortcut to the same annual-enrollment-fee paid/unpaid toggle used in
+// Reports → Family Billing Summary (updateStudentRegFee), so admins can mark
+// it directly from a submitted care calendar row instead of hunting it down
+// in the billing report.
+async function toggleRegistrationFee(reg, btn) {
+    const feeAmount = window._regFeeAmount || 0;
+    if (feeAmount <= 0) {
+        alert('No annual enrollment fee is configured — set one in Settings → Room Rates & Settings first.');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+        const info = await fetchStudentRegFeeInfo(reg.parent_email, reg.child_name);
+        if (!info) {
+            alert(`Could not find ${reg.child_name} in Families — add them there first.`);
+            return;
+        }
+        const currentYear = currentFeeCycleYear(window._regFeeRenewalDate);
+        const isPaid      = info.reg_fee_paid_year === currentYear;
+        const action      = isPaid
+            ? `mark the $${feeAmount.toFixed(2)} annual enrollment fee UNPAID for ${reg.child_name}?`
+            : `mark the $${feeAmount.toFixed(2)} annual enrollment fee PAID for ${reg.child_name} (${currentYear})?`;
+        if (!confirm(`Are you sure you want to ${action}`)) return;
+
+        await updateStudentRegFee(info.id, isPaid ? null : currentYear);
+        alert(isPaid
+            ? `Marked unpaid for ${reg.child_name}.`
+            : `Marked paid (${currentYear}) for ${reg.child_name}.`);
+    } catch (err) {
+        alert('Failed to update enrollment fee: ' + err.message);
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = '\u{1F3F7}\u{FE0F} Fee';
+    }
 }
 
 // ============================================================

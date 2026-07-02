@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" href="/images/logo/myMDO_app_icon.png">
+  <link rel="apple-touch-icon" href="/images/logo/myMDO_app_icon.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#01294A">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join Our Waitlist — Timothy Lutheran Church MDO</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/inquiry.css">
+</head>
+<body class="inquiry-body">
+
+  <div class="inquiry-wrap">
+    <div class="inquiry-card">
+
+      <!-- Form Screen -->
+      <div id="inquiryFormScreen">
+        <div class="inquiry-header">
+          <img src="/images/logo/myMDO_primary_logo_light.png" alt="myMDO" class="inquiry-logo">
+          <h1>Join Our Enrollment Waitlist</h1>
+          <p>Tell us a bit about your family and we'll be in touch. You're welcome to apply even before your child is born — spots are offered first-come, first-served based on when we receive your inquiry.</p>
+        </div>
+
+        <form id="inquiryForm" novalidate>
+
+          <div class="wl-section-label">Your Information</div>
+          <div class="contact-form-grid">
+            <div class="form-group">
+              <label for="iqParentName">Parent / Guardian Name <span class="req">*</span></label>
+              <input type="text" id="iqParentName" placeholder="Jane Smith" autocomplete="name" required>
+            </div>
+            <div class="form-group">
+              <label for="iqParentEmail">Email <span class="req">*</span></label>
+              <input type="email" id="iqParentEmail" placeholder="jane@example.com" autocomplete="email" required>
+            </div>
+            <div class="form-group">
+              <label for="iqParentPhone">Phone</label>
+              <input type="tel" id="iqParentPhone" placeholder="(555) 000-0000" autocomplete="tel">
+            </div>
+          </div>
+
+          <div class="wl-section-label" style="margin-top:14px;">Child Information</div>
+          <div class="contact-form-grid">
+            <div class="form-group">
+              <label for="iqChildName">Child's Name <span class="req">*</span></label>
+              <input type="text" id="iqChildName" placeholder="First name is fine" required>
+            </div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer;">
+                <input type="checkbox" id="iqIsUnborn" style="width:16px;height:16px;flex-shrink:0;margin:0;">
+                Child not yet born (expecting)
+              </label>
+              <div id="iqDobRow" style="margin-top:8px;">
+                <label for="iqChildDob">Date of Birth <span class="req">*</span></label>
+                <input type="date" id="iqChildDob">
+              </div>
+              <div id="iqDueRow" class="hidden" style="margin-top:8px;">
+                <label for="iqDueDate">Expected Due Date <span class="req">*</span></label>
+                <input type="date" id="iqDueDate">
+              </div>
+            </div>
+          </div>
+
+          <div class="wl-section-label" style="margin-top:14px;">Care Preferences</div>
+          <div class="contact-form-grid">
+            <div class="form-group">
+              <label for="iqStartDate">Desired Start Date <span class="req">*</span></label>
+              <input type="date" id="iqStartDate" required>
+            </div>
+            <div class="form-group">
+              <label for="iqFlexibility">How flexible is your start date?</label>
+              <select id="iqFlexibility">
+                <option value="exact">This date only</option>
+                <option value="within_month">Within a month of this date</option>
+                <option value="within_quarter" selected>Within a few months</option>
+                <option value="flexible">Very flexible</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Days Needed <span class="req">*</span></label>
+              <div class="wl-days-row">
+                <label><input type="checkbox" class="iqDay" value="Mon"> Mon</label>
+                <label><input type="checkbox" class="iqDay" value="Tue"> Tue</label>
+                <label><input type="checkbox" class="iqDay" value="Wed"> Wed</label>
+                <label><input type="checkbox" class="iqDay" value="Thu"> Thu</label>
+                <label><input type="checkbox" class="iqDay" value="Fri"> Fri</label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Full Day or Half Day?</label>
+              <div class="wl-days-row">
+                <label><input type="radio" name="iqDayType" value="full" checked> Full Day</label>
+                <label><input type="radio" name="iqDayType" value="half"> Half Day</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="wl-section-label" style="margin-top:14px;">Sibling</div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="iqHasSibling" style="margin-right:6px;">
+              A sibling is already enrolled at Timothy Lutheran MDO
+            </label>
+            <div id="iqSiblingFields" class="hidden" style="margin-top:10px;">
+              <div class="contact-form-grid">
+                <div class="form-group">
+                  <label for="iqSiblingName">Sibling's Name</label>
+                  <input type="text" id="iqSiblingName" placeholder="Child's name">
+                </div>
+                <div class="form-group">
+                  <label for="iqSiblingRoom">Sibling's Room</label>
+                  <select id="iqSiblingRoom">
+                    <option value="">— Not sure —</option>
+                    <option value="bear">🐻 Bear Room (0–12 mo)</option>
+                    <option value="bee">🐝 Bee Room (12–24 mo)</option>
+                    <option value="turtle">🐢 Turtle Room (2 yrs)</option>
+                    <option value="owl">🦉 Owl Room (3+ yrs)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top:10px;">
+            <label for="iqNotes">Anything else we should know? (optional)</label>
+            <textarea id="iqNotes" rows="3" placeholder="Special circumstances, schedule needs, questions…"></textarea>
+          </div>
+
+          <div class="contact-form-actions" style="margin-top:16px;justify-content:center;">
+            <button type="submit" id="iqSubmitBtn" class="btn-primary">Join Waitlist</button>
+          </div>
+          <p id="iqError" class="login-error hidden" style="text-align:center;margin-top:10px;"></p>
+        </form>
+
+        <p class="inquiry-footer-note">Questions? Reply to any of our emails or reach out to the church office directly.</p>
+      </div>
+
+      <!-- Success Screen -->
+      <div id="inquirySuccessScreen" class="inquiry-success hidden">
+        <div class="modal-icon">✓</div>
+        <h2>You're on the Waitlist!</h2>
+        <p id="inquirySuccessDetails" style="color:#555;"></p>
+        <div class="inquiry-timestamp">Received: <span id="inquiryTimestamp"></span></div>
+        <p style="color:#888;font-size:.9em;">We'll reach out about scheduling a tour and let you know as soon as a spot opens up. A confirmation email is on its way to you now.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="dist/supabase.min.js"></script>
+    <script src="dist/error-monitor.min.js"></script>
+    <script src="dist/inquiry.min.js"></script>
+</body>
+</html>

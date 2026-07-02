@@ -72,15 +72,15 @@
                     <div class="mobile-nav-group-label">Daily Ops</div>
                     <button class="mobile-nav-item" data-tab="daily"><span class="mni-icon">🏫</span><span>Classrooms</span></button>
                     <button class="mobile-nav-item" data-tab="registrations"><span class="mni-icon">📅</span><span>Care Calendar</span></button>
-                    <button class="mobile-nav-item" data-tab="waitlist"><span class="mni-icon">⏳</span><span>Waitlist</span></button>
 
                     <div class="mobile-nav-group-label">People</div>
                     <button class="mobile-nav-item" data-tab="families"><span class="mni-icon">👨‍👩‍👧</span><span>Families</span></button>
                     <button class="mobile-nav-item" data-tab="staffing"><span class="mni-icon">👷</span><span>Staffing</span></button>
 
-                    <div class="mobile-nav-group-label">Money &amp; Admin</div>
+                    <div class="mobile-nav-group-label">Admin</div>
+                    <button class="mobile-nav-item" data-tab="waitlist"><span class="mni-icon">🗓️</span><span>Planning</span></button>
                     <button class="mobile-nav-item" data-tab="finance"><span class="mni-icon">💰</span><span>Finance</span></button>
-                    <button class="mobile-nav-item" data-tab="reports"><span class="mni-icon">📊</span><span>Reports</span></button>
+                    <button class="mobile-nav-item" data-tab="reports"><span class="mni-icon">📊</span><span>Billing</span></button>
                     <button class="mobile-nav-item" data-tab="settings"><span class="mni-icon">⚙️</span><span>Settings</span></button>
                 </div>
                 <div class="mobile-nav-footer">
@@ -170,12 +170,31 @@
         <!-- ── Tab: Registrations ─────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-registrations">
 
+            <!-- Missing Care Calendar Report -->
+            <section class="admin-section collapsible-section" id="missingCalendarSection">
+                <h2>⚠️ Missing Care Calendar Report</h2>
+                <p class="section-desc">Shows which active children do not have a care calendar (registration) submitted for the selected month. Use this after the registration window closes to follow up with families who haven't registered.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="missingCalendarMonth">Month</label>
+                        <input type="month" id="missingCalendarMonth">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateMissingCalendarBtn" class="btn-secondary">Generate Report</button>
+                        <button id="exportMissingCalendarBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
+                    </div>
+                </div>
+                <div id="missingCalendarContent">
+                    <p class="empty-hint">Select a month above and click Generate Report.</p>
+                </div>
+            </section>
+
             <section class="table-section collapsible-section" id="allRegistrationsSection">
                 <h2 style="display:flex;align-items:center;flex:1;min-width:0">
                     <span style="flex:1">All Registrations</span>
                     <button id="adminNewRegBtn" class="btn-primary"
                             style="font-size:.85rem;padding:.4rem 1rem;margin-right:.5rem;flex-shrink:0">
-                        &#43; New Registration
+                        &#43; Add New Care Calendar
                     </button>
                 </h2>
                 <div class="filters">
@@ -267,6 +286,21 @@
                 <h2>⏳ Enrollment Waitlist</h2>
                 <p class="section-desc">Active applications — click a column header to sort. Use <strong>Make Offer</strong> to send a spot offer by email.</p>
 
+                <div class="admin-wl-row" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+                    <label style="font-weight:600;font-size:.88em;">Shareable Inquiry Form Link</label>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+                        <input type="text" id="wlInquiryLink" readonly style="flex:1;min-width:220px;background:#fff;font-size:.85em;">
+                        <button id="wlCopyInquiryLinkBtn" class="btn-secondary" type="button">📋 Copy Link</button>
+                    </div>
+                    <p class="section-desc" style="margin:6px 0 10px;">Send this link to prospective families to apply themselves — submissions land here automatically, timestamped for first-come, first-served.</p>
+                    <label style="font-weight:600;font-size:.88em;">Notify This Email on New Inquiries</label>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+                        <input type="email" id="wlNotifyEmail" placeholder="director@timothystl.org" style="flex:1;min-width:220px;">
+                        <button id="wlSaveNotifyEmailBtn" class="btn-secondary" type="button">💾 Save</button>
+                        <span id="wlNotifyEmailStatus" class="rates-status"></span>
+                    </div>
+                </div>
+
                 <div class="families-dir-controls" style="margin-bottom:12px;">
                     <button id="addToWaitlistBtn" class="btn-primary">+ Add to Waitlist</button>
                     <input type="search" id="wlSearchInput" class="family-search-input"
@@ -320,6 +354,27 @@
                 </div>
             </div>
 
+            <!-- Tour Scheduling Modal -->
+            <div id="wlTourModal" class="admin-wl-overlay hidden">
+                <div class="admin-wl-dialog" style="max-width:420px">
+                    <h3>Schedule a Tour</h3>
+                    <p id="wlTourModalDesc" style="color:#666;font-size:.9em;margin:0 0 16px"></p>
+                    <div class="admin-wl-row">
+                        <label>Tour Date &amp; Time <span class="req">*</span></label>
+                        <input type="datetime-local" id="wlTourDateTime">
+                    </div>
+                    <div class="admin-wl-row">
+                        <label>Notes</label>
+                        <textarea id="wlTourNotes" rows="2" style="width:100%;resize:vertical;box-sizing:border-box" placeholder="Optional notes…"></textarea>
+                    </div>
+                    <p id="wlTourErr" class="import-error" style="margin:8px 0 0;min-height:1em"></p>
+                    <div class="admin-wl-footer">
+                        <button type="button" id="wlTourCancelBtn" class="btn-ghost">Cancel</button>
+                        <button type="button" id="wlTourSaveBtn" class="btn-primary">Save Tour</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Detailed card view (for archive/restore/accept actions) -->
             <section class="admin-section collapsible-section" id="waitlistSection" style="display:none">
                 <div id="waitlistAdminContent"></div>
@@ -357,6 +412,45 @@
                 </div>
                 <div id="waitlistContent">
                     <p class="empty-hint">Click Generate Report to view waitlist demand.</p>
+                </div>
+            </section>
+
+            <!-- Enrollment Trends -->
+            <section class="admin-section collapsible-section" id="enrollmentTrendsSection">
+                <h2>📈 Enrollment Trends</h2>
+                <p class="section-desc">Month-by-month enrollment count per room — useful for spotting growth patterns and planning ahead.</p>
+                <div class="roster-btns" style="margin-bottom:12px">
+                    <button id="generateTrendsBtn" class="btn-secondary">Generate Trends</button>
+                    <button id="exportTrendsBtn" class="btn-primary">&#8595; Export Excel</button>
+                </div>
+                <div id="trendsContent">
+                    <p class="empty-hint">Click Generate Trends to view enrollment history.</p>
+                </div>
+            </section>
+
+            <!-- Total Enrollment & FTE -->
+            <section class="admin-section collapsible-section" id="enrollmentFteSection">
+                <h2>📊 Total Enrollment &amp; FTE</h2>
+                <p class="section-desc">Monthly headcount and full-time-equivalent enrollment per room. FTE = full-day children &times; 1.0 + half-day children &times; 0.5.</p>
+                <div class="roster-btns" style="margin-bottom:12px">
+                    <button id="generateFteBtn" class="btn-secondary">Generate Report</button>
+                </div>
+                <div id="enrollmentFteContent">
+                    <p class="empty-hint">Click Generate Report to view enrollment totals.</p>
+                </div>
+            </section>
+
+            <!-- Upcoming Room Promotions -->
+            <section class="admin-section collapsible-section" id="promotionsSection">
+                <h2>🎂 Upcoming Room Promotions</h2>
+                <p class="section-desc">Children aging out of their current room in the next 2 years, based on their birthday. Shows which days open up in the current room when they move up.</p>
+                <div class="roster-btns" style="margin-bottom:12px">
+                    <button id="generatePromotionsBtn" class="btn-secondary">Generate Report</button>
+                    <button id="exportPromotionsBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
+                    <button id="printPromotionsBtn" class="btn-secondary" style="display:none;">&#128438; Print</button>
+                </div>
+                <div id="promotionsContent">
+                    <p class="empty-hint">Click Generate Report to view upcoming promotions.</p>
                 </div>
             </section>
 
@@ -599,7 +693,12 @@
                         <input type="number" id="regFeeInput" min="0" step="0.01" placeholder="0.00"
                             style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
                     </label>
-                    <p style="margin:.4rem 0 .75rem 0;font-size:.85rem;color:#555;">One-time annual fee per child. Shown as a badge in Family Billing Summary; admin can toggle paid/unpaid per child.</p>
+                    <label style="display:flex;align-items:center;gap:.75rem;font-weight:600;color:#1e3a5f;margin-top:.6rem;">
+                        Annual Renewal Date
+                        <input type="date" id="regFeeRenewalDate"
+                            style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
+                    </label>
+                    <p style="margin:.4rem 0 .75rem 0;font-size:.85rem;color:#555;">Charged once per child at enrollment. Every returning family owes it again once a year on the renewal date above (year doesn't matter, only month/day). Shown as a badge in Family Billing Summary; admin can toggle paid/unpaid per child.</p>
                     <button id="saveRegFeeBtn" class="btn-primary">💾 Save Fee</button>
                     <span id="regFeeStatus" style="margin-left:.75rem;font-size:.85rem;"></span>
                 </div>
@@ -733,84 +832,6 @@
                 </div>
                 <div id="familyBillingContent">
                     <p class="empty-hint">Select a month above and click Generate.</p>
-                </div>
-            </section>
-
-            <!-- Enrollment Trends -->
-            <section class="admin-section collapsible-section" id="enrollmentTrendsSection">
-                <h2>📈 Enrollment Trends</h2>
-                <p class="section-desc">Month-by-month enrollment count per room — useful for spotting growth patterns and planning ahead.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateTrendsBtn" class="btn-secondary">Generate Trends</button>
-                    <button id="exportTrendsBtn" class="btn-primary">&#8595; Export Excel</button>
-                </div>
-                <div id="trendsContent">
-                    <p class="empty-hint">Click Generate Trends to view enrollment history.</p>
-                </div>
-            </section>
-
-            <!-- Upcoming Room Promotions -->
-            <section class="admin-section collapsible-section" id="promotionsSection">
-                <h2>🎂 Upcoming Room Promotions</h2>
-                <p class="section-desc">Children aging out of their current room in the next 2 years, based on their birthday. Shows which days open up in the current room when they move up.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generatePromotionsBtn" class="btn-secondary">Generate Report</button>
-                    <button id="exportPromotionsBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
-                    <button id="printPromotionsBtn" class="btn-secondary" style="display:none;">&#128438; Print</button>
-                </div>
-                <div id="promotionsContent">
-                    <p class="empty-hint">Click Generate Report to view upcoming promotions.</p>
-                </div>
-            </section>
-
-            <!-- Total Enrollment & FTE -->
-            <section class="admin-section collapsible-section" id="enrollmentFteSection">
-                <h2>📊 Total Enrollment &amp; FTE</h2>
-                <p class="section-desc">Monthly headcount and full-time-equivalent enrollment per room. FTE = full-day children &times; 1.0 + half-day children &times; 0.5.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateFteBtn" class="btn-secondary">Generate Report</button>
-                </div>
-                <div id="enrollmentFteContent">
-                    <p class="empty-hint">Click Generate Report to view enrollment totals.</p>
-                </div>
-            </section>
-
-            <!-- Kids Discount Pricing Report -->
-            <section class="admin-section collapsible-section" id="discountPricingSection">
-                <h2>🏷️ Kids Discount Pricing Report</h2>
-                <p class="section-desc">All children with a staff or custom discount for the selected month — shows days in care and the discounted price tag.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="discountPricingMonth">Month</label>
-                        <input type="month" id="discountPricingMonth">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="generateDiscountPricingBtn" class="btn-secondary">Generate Report</button>
-                        <button id="exportDiscountPricingBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
-                        <button id="printDiscountPricingBtn" class="btn-secondary" style="display:none;">&#128438; Print</button>
-                    </div>
-                </div>
-                <div id="discountPricingContent">
-                    <p class="empty-hint">Select a month and click Generate Report.</p>
-                </div>
-            </section>
-
-            <!-- Missing Care Calendar Report -->
-            <section class="admin-section collapsible-section" id="missingCalendarSection">
-                <h2>⚠️ Missing Care Calendar Report</h2>
-                <p class="section-desc">Shows which active children do not have a care calendar (registration) submitted for the selected month. Use this after the registration window closes to follow up with families who haven't registered.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="missingCalendarMonth">Month</label>
-                        <input type="month" id="missingCalendarMonth">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="generateMissingCalendarBtn" class="btn-secondary">Generate Report</button>
-                        <button id="exportMissingCalendarBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
-                    </div>
-                </div>
-                <div id="missingCalendarContent">
-                    <p class="empty-hint">Select a month above and click Generate Report.</p>
                 </div>
             </section>
 
@@ -1079,7 +1100,7 @@
                     <label for="financeMonth" style="font-weight:600">Month</label>
                     <select id="financeMonth" class="form-control" style="width:150px">
                         <option value="">All months</option>
-                        <option value="ytd">Year to Date</option>
+                        <option value="ytd" selected>Year to Date</option>
                         <option value="01">January</option>
                         <option value="02">February</option>
                         <option value="03">March</option>
@@ -1219,6 +1240,26 @@
                 </div>
                 <div id="arContent">
                     <p class="empty-hint">Select a date range above and click Generate.</p>
+                </div>
+            </section>
+
+            <!-- Kids Discount Pricing Report -->
+            <section class="admin-section collapsible-section" id="discountPricingSection">
+                <h2>🏷️ Kids Discount Pricing Report</h2>
+                <p class="section-desc">All children with a staff or custom discount for the selected month — shows days in care and the discounted price tag.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="discountPricingMonth">Month</label>
+                        <input type="month" id="discountPricingMonth">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="generateDiscountPricingBtn" class="btn-secondary">Generate Report</button>
+                        <button id="exportDiscountPricingBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
+                        <button id="printDiscountPricingBtn" class="btn-secondary" style="display:none;">&#128438; Print</button>
+                    </div>
+                </div>
+                <div id="discountPricingContent">
+                    <p class="empty-hint">Select a month and click Generate Report.</p>
                 </div>
             </section>
 
