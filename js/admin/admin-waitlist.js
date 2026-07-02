@@ -702,26 +702,31 @@ async function renderWaitlistPlanning() {
         waitlistByRoom[rid].push(a);
     });
 
-    // Typical per-weekday booking pattern, from the CURRENT month's actual
-    // registrations (the only month with anywhere near complete data — future
-    // months are mostly unregistered yet, so averaging a whole future month
-    // just shows near-empty rooms regardless of the real weekly pattern).
-    // Applied forward to every projected month below, since day-of-week
-    // demand (e.g. "Mon/Wed/Fri is always full, Tue/Thu has room") is what
-    // actually recurs — not the blended monthly average.
+    // Typical per-weekday booking pattern, from the most recently COMPLETE
+    // month's actual registrations. Families can still add/change days for
+    // the current month up until the 15th, so until that date the current
+    // month is a partial count, not "typical" — fall back to the last full
+    // month instead. Applied forward to every projected month below, since
+    // day-of-week demand (e.g. "Mon/Wed/Fri is always full, Tue/Thu has
+    // room") is what actually recurs — not the blended monthly average.
     //
-    // Uses the exact same trendMap/_trendCell averaging as Enrollment Trends
-    // (average booked = halfSum+fullSum over only the days that actually had
-    // a booking, not over every weekday in the month) so the two reports
+    // Uses the exact same trendMap/_trendCell averaging (and the same
+    // _isTrendMonthComplete cutoff) as Enrollment Trends so the two reports
     // agree with each other.
     const curYear = today.getFullYear(), curMonthIdx = today.getMonth();
     const curMoKey = `${curYear}-${String(curMonthIdx + 1).padStart(2, '0')}`;
+    const isCurMoComplete = _isTrendMonthComplete(curMoKey, !!(trendMap[curMoKey] || {})._historical, today);
+    let refMoKey = curMoKey;
+    if (!isCurMoComplete) {
+        const prev = new Date(curYear, curMonthIdx - 1, 1);
+        refMoKey = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+    }
     const WEEKDAY_INIT = { 1: 'M', 2: 'T', 3: 'W', 4: 'Th', 5: 'F' };
     const DOW_TO_TRENDDAY = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri' };
     function typicalWeekdayPattern(roomId) {
         const avg = {};
         [1, 2, 3, 4, 5].forEach(dow => {
-            const c = _trendCell(trendMap[curMoKey] || {}, roomId, DOW_TO_TRENDDAY[dow]);
+            const c = _trendCell(trendMap[refMoKey] || {}, roomId, DOW_TO_TRENDDAY[dow]);
             const count = c.dates.size;
             avg[dow] = count ? (c.halfSum + c.fullSum) / count : 0;
         });
@@ -747,7 +752,7 @@ async function renderWaitlistPlanning() {
             // Aging-out events this month
             const outs    = (agingOut[key]?.[room.id] || []);
             const outHtml = outs.length ? `<div style="font-size:.75em;color:#667eea;margin-top:4px">→ ${outs.length} graduate${outs.length>1?'s':''} out</div>` : '';
-            const projectedNote = i === 0
+            const projectedNote = key === refMoKey
                 ? ''
                 : '<div style="font-size:.7em;color:#aaa;margin-top:3px">(projected)</div>';
 
@@ -779,7 +784,7 @@ async function renderWaitlistPlanning() {
             </tr></thead>
             <tbody>${roomRows}</tbody>
         </table></div>
-        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip shows avg open slots for that day (M/T/W/Th/F), based on ${MONTH_NAMES[curMonthIdx]}'s actual registrations — the same current weekly pattern is carried forward into later months (marked "projected") since those months don't have registrations yet. → Graduates = children aging out of this room that month, freeing a permanent spot.</p>`;
+        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip shows avg open slots for that day (M/T/W/Th/F), based on ${MONTH_NAMES[Number(refMoKey.split('-')[1]) - 1]}'s actual registrations${isCurMoComplete ? '' : ` (${MONTH_NAMES[curMonthIdx]} isn't used yet — families can still add/change days until the 15th)`} — that weekly pattern is carried forward into other months (marked "projected"). → Graduates = children aging out of this room that month, freeing a permanent spot.</p>`;
 }
 
 // ============================================================
