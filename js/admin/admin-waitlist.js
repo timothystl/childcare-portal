@@ -184,7 +184,10 @@ function renderWaitlistQuickList() {
             <td class="wl-td-status">${wlStatusBadge(a)}</td>
             <td class="wl-td-parent">${escHtml(a.parent_name)}<br><a href="mailto:${escHtml(a.parent_email)}" class="wl-email-link">${escHtml(a.parent_email)}</a>${a.parent_phone ? `<br><span class="wl-phone">${escHtml(a.parent_phone)}</span>` : ''}</td>
             <td class="wl-td-waiting">${wlDaysWaiting(a.applied_at)}</td>
-            <td class="wl-td-actions">${canOffer ? `<button class="btn-wl-offer-quick" data-id="${a.id}" data-name="${escHtml(a.parent_name)}" data-email="${escHtml(a.parent_email)}" data-child="${escHtml(a.child_name)}">Make Offer</button>` : ''}</td>
+            <td class="wl-td-actions">
+                ${canOffer ? `<button class="btn-wl-offer-quick" data-id="${a.id}" data-name="${escHtml(a.parent_name)}" data-email="${escHtml(a.parent_email)}" data-child="${escHtml(a.child_name)}">Make Offer</button>` : ''}
+                <button class="btn-wl-remove-quick" data-id="${a.id}" data-child="${escHtml(a.child_name)}" title="Permanently remove from the waitlist">🗑 Remove</button>
+            </td>
         </tr>`;
     }).join('');
 
@@ -239,6 +242,24 @@ function renderWaitlistQuickList() {
                 if (paperwkEl && !paperwkEl.value) paperwkEl.value = (g.paperworkLinks || []).join(', ');
             }).catch(() => {});
             modal.classList.remove('hidden');
+        });
+    });
+
+    // Remove buttons — permanently deletes the application (no archive step required)
+    container.querySelectorAll('.btn-wl-remove-quick').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id    = Number(btn.dataset.id);
+            const child = btn.dataset.child || 'this entry';
+            if (!confirm(`Permanently remove ${child} from the waitlist? This cannot be undone.`)) return;
+            btn.disabled = true;
+            try {
+                await deleteWaitlistApplication(id);
+                _allWaitlistApps = _allWaitlistApps.filter(a => a.id !== id);
+                renderWaitlistQuickList();
+            } catch (err) {
+                alert('Error: ' + err.message);
+                btn.disabled = false;
+            }
         });
     });
 }
@@ -331,7 +352,8 @@ function renderWaitlistAdmin() {
                 ? `<button class="btn-secondary wl-action wl-accept" data-id="${id}">✓ Mark Accepted</button>`
                 : '';
             const archive = `<button class="btn-ghost wl-action wl-archive" data-id="${id}">Archive ▾</button>`;
-            return [offer, accept, archive].filter(Boolean).join(' ');
+            const remove  = `<button class="btn-danger wl-action wl-delete" data-id="${id}" data-child="${escHtml(app.child_name)}" title="Permanently remove without archiving">🗑 Remove</button>`;
+            return [offer, accept, archive, remove].filter(Boolean).join(' ');
         })();
 
         // Offer details row
