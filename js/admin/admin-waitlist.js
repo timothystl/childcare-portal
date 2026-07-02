@@ -649,9 +649,10 @@ function renderWaitlistAdmin() {
 // ============================================================
 // WAITLIST PLANNING PANEL
 // ============================================================
-function renderWaitlistPlanning() {
+async function renderWaitlistPlanning() {
     const container = document.getElementById('wlPlanContent');
     if (!container) return;
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
 
     // Show next 4 months starting from current month
     const today = new Date();
@@ -660,16 +661,19 @@ function renderWaitlistPlanning() {
         return { year: d.getFullYear(), month: d.getMonth(), key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear() };
     });
 
-    // Count confirmed bookings per room per day from allRegistrations
-    const dailyBookings = {}; // 'YYYY-MM-DD' → { roomId: count }
-    allRegistrations.forEach(reg => {
-        (reg.registration_dates || []).forEach(d => {
-            if (d.waitlisted || !d.care_date) return;
-            const roomId = d.room_id || reg.room_id;
-            if (!dailyBookings[d.care_date]) dailyBookings[d.care_date] = {};
-            dailyBookings[d.care_date][roomId] = (dailyBookings[d.care_date][roomId] || 0) + 1;
-        });
-    });
+    // Shares _buildTrendMap()/_trendCell() with Enrollment Trends (Reports tab)
+    // so the two never disagree about what "typical" enrollment looks like —
+    // previously this section computed its own average from a different,
+    // possibly-stale cached registrations list, and used a different
+    // denominator (all weekdays in the month vs. only days with bookings),
+    // so the two reports showed different numbers for the same room/month.
+    let trendMap;
+    try {
+        trendMap = await _buildTrendMap();
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error loading planning data: ${escHtml(err.message)}</p>`;
+        return;
+    }
 
     // Aging-out: for each enrolled child, calculate when they graduate to next room
     // Bear → Bee at 12mo, Bee → Turtle at 24mo, Turtle → Owl at 36mo, Owl → out at 60mo
@@ -705,20 +709,21 @@ function renderWaitlistPlanning() {
     // Applied forward to every projected month below, since day-of-week
     // demand (e.g. "Mon/Wed/Fri is always full, Tue/Thu has room") is what
     // actually recurs — not the blended monthly average.
+    //
+    // Uses the exact same trendMap/_trendCell averaging as Enrollment Trends
+    // (average booked = halfSum+fullSum over only the days that actually had
+    // a booking, not over every weekday in the month) so the two reports
+    // agree with each other.
     const curYear = today.getFullYear(), curMonthIdx = today.getMonth();
-    const daysInCurMonth = new Date(curYear, curMonthIdx + 1, 0).getDate();
+    const curMoKey = `${curYear}-${String(curMonthIdx + 1).padStart(2, '0')}`;
     const WEEKDAY_INIT = { 1: 'M', 2: 'T', 3: 'W', 4: 'Th', 5: 'F' };
+    const DOW_TO_TRENDDAY = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri' };
     function typicalWeekdayPattern(roomId) {
-        const buckets = { 1: [], 2: [], 3: [], 4: [], 5: [] };
-        for (let day = 1; day <= daysInCurMonth; day++) {
-            const dow = new Date(curYear, curMonthIdx, day).getDay();
-            if (dow === 0 || dow === 6) continue;
-            const dateStr = `${curYear}-${String(curMonthIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            buckets[dow].push(dailyBookings[dateStr]?.[roomId] || 0);
-        }
         const avg = {};
         [1, 2, 3, 4, 5].forEach(dow => {
-            avg[dow] = buckets[dow].length ? buckets[dow].reduce((a, b) => a + b, 0) / buckets[dow].length : 0;
+            const c = _trendCell(trendMap[curMoKey] || {}, roomId, DOW_TO_TRENDDAY[dow]);
+            const count = c.dates.size;
+            avg[dow] = count ? (c.halfSum + c.fullSum) / count : 0;
         });
         return avg;
     }
