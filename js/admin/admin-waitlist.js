@@ -46,6 +46,24 @@ function wlFlexLabel(f) {
     return { exact: 'Exact date', within_month: 'Within a month', within_quarter: 'Within a few months', flexible: 'Very flexible' }[f] || f;
 }
 
+function wlTourBadge(app) {
+    const status = app.tour_status || 'not_scheduled';
+    if (status === 'completed') {
+        return '<span class="wl-badge wl-badge-enrolled">✓ Toured</span>';
+    }
+    if (status === 'scheduled' && app.tour_scheduled_at) {
+        const d = new Date(app.tour_scheduled_at);
+        return `<span class="wl-badge wl-badge-offered">📅 ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>`;
+    }
+    return '<span class="wl-badge wl-badge-pending">Not Scheduled</span>';
+}
+
+function wlInterestTag(app) {
+    if (!app.still_interested_confirmed_at) return '';
+    const d = new Date(app.still_interested_confirmed_at);
+    return `<br><span class="wl-sib-tag" title="Confirmed via reminder email">👍 confirmed ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>`;
+}
+
 function wlDaysWaiting(appliedAt) {
     const ms = Date.now() - new Date(appliedAt).getTime();
     const d  = Math.floor(ms / 86400000);
@@ -173,7 +191,13 @@ function renderWaitlistQuickList() {
             else                  ageLabel = `${Math.floor(months/12)} yr ${months%12} mo`;
         }
 
-        const canOffer = ['pending','offered'].includes(a.status);
+        const canOffer  = ['pending','offered'].includes(a.status);
+        const tourStatus = a.tour_status || 'not_scheduled';
+        const tourBtn = tourStatus === 'not_scheduled'
+            ? `<button class="btn-wl-tour-quick" data-id="${a.id}" data-name="${escHtml(a.parent_name)}" data-child="${escHtml(a.child_name)}">📅 Schedule Tour</button>`
+            : tourStatus === 'scheduled'
+                ? `<button class="btn-wl-tour-complete-quick" data-id="${a.id}">✓ Mark Toured</button>`
+                : '';
 
         return `<tr>
             <td class="wl-td-pos">${a._pos}</td>
@@ -182,10 +206,12 @@ function renderWaitlistQuickList() {
             <td class="wl-td-age">${escHtml(ageLabel)}</td>
             <td class="wl-td-room">${escHtml(roomLabel)}</td>
             <td class="wl-td-status">${wlStatusBadge(a)}</td>
+            <td class="wl-td-tour">${wlTourBadge(a)}${wlInterestTag(a)}</td>
             <td class="wl-td-parent">${escHtml(a.parent_name)}<br><a href="mailto:${escHtml(a.parent_email)}" class="wl-email-link">${escHtml(a.parent_email)}</a>${a.parent_phone ? `<br><span class="wl-phone">${escHtml(a.parent_phone)}</span>` : ''}</td>
             <td class="wl-td-waiting">${wlDaysWaiting(a.applied_at)}</td>
             <td class="wl-td-actions">
                 ${canOffer ? `<button class="btn-wl-offer-quick" data-id="${a.id}" data-name="${escHtml(a.parent_name)}" data-email="${escHtml(a.parent_email)}" data-child="${escHtml(a.child_name)}">Make Offer</button>` : ''}
+                ${tourBtn}
                 <button class="btn-wl-remove-quick" data-id="${a.id}" data-child="${escHtml(a.child_name)}" title="Permanently remove from the waitlist">🗑 Remove</button>
             </td>
         </tr>`;
@@ -202,6 +228,7 @@ function renderWaitlistQuickList() {
                         <th class="wl-th" data-col="age"   style="width:90px">Age at Start${sortArrow('age')}</th>
                         <th class="wl-th" data-col="room"  style="width:13%">Room${sortArrow('room')}</th>
                         <th class="wl-th" data-col="status" style="width:88px">Status${sortArrow('status')}</th>
+                        <th style="width:100px">Tour</th>
                         <th class="wl-th" data-col="parent">Parent / Contact${sortArrow('parent')}</th>
                         <th class="wl-th" data-col="waiting" style="width:90px">Waiting Since${sortArrow('waiting')}</th>
                         <th style="width:190px">Actions</th>
@@ -242,6 +269,33 @@ function renderWaitlistQuickList() {
                 if (paperwkEl && !paperwkEl.value) paperwkEl.value = (g.paperworkLinks || []).join(', ');
             }).catch(() => {});
             modal.classList.remove('hidden');
+        });
+    });
+
+    // Schedule Tour buttons
+    container.querySelectorAll('.btn-wl-tour-quick').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const modal = document.getElementById('wlTourModal');
+            modal.dataset.appId = btn.dataset.id;
+            document.getElementById('wlTourModalDesc').textContent = `Scheduling a tour for ${btn.dataset.child} (parent: ${btn.dataset.name})`;
+            document.getElementById('wlTourDateTime').value = '';
+            document.getElementById('wlTourNotes').value = '';
+            document.getElementById('wlTourErr').textContent = '';
+            modal.classList.remove('hidden');
+        });
+    });
+
+    // Mark Toured buttons
+    container.querySelectorAll('.btn-wl-tour-complete-quick').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = Number(btn.dataset.id);
+            btn.disabled = true;
+            try {
+                await updateWaitlistTourStatus(id, { tour_status: 'completed', tour_completed_at: new Date().toISOString() });
+                const app = _allWaitlistApps.find(a => a.id === id);
+                if (app) { app.tour_status = 'completed'; app.tour_completed_at = new Date().toISOString(); }
+                renderWaitlistQuickList();
+            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
         });
     });
 
@@ -822,6 +876,35 @@ function setupWaitlistAdmin() {
     document.getElementById('wlStatusFilter')?.addEventListener('change', () => { renderWaitlistAdmin(); renderWaitlistQuickList(); });
     document.getElementById('wlRoomFilter')?.addEventListener('change', () => { renderWaitlistAdmin(); renderWaitlistQuickList(); });
 
+    setupWaitlistNotifications();
+
+    // Tour modal
+    document.getElementById('wlTourCancelBtn')?.addEventListener('click', () => document.getElementById('wlTourModal').classList.add('hidden'));
+    document.getElementById('wlTourModal')?.addEventListener('click', e => { if (e.target === document.getElementById('wlTourModal')) document.getElementById('wlTourModal').classList.add('hidden'); });
+    document.getElementById('wlTourSaveBtn')?.addEventListener('click', async () => {
+        const modal    = document.getElementById('wlTourModal');
+        const id       = Number(modal.dataset.appId);
+        const dateTime = document.getElementById('wlTourDateTime').value;
+        const notes    = document.getElementById('wlTourNotes').value.trim() || null;
+        const errEl    = document.getElementById('wlTourErr');
+        if (!dateTime) { errEl.textContent = 'Please choose a tour date and time.'; return; }
+        const btn = document.getElementById('wlTourSaveBtn');
+        btn.disabled = true; btn.textContent = 'Saving…'; errEl.textContent = '';
+        try {
+            const iso = new Date(dateTime).toISOString();
+            await updateWaitlistTourStatus(id, { tour_status: 'scheduled', tour_scheduled_at: iso, tour_notes: notes });
+            const app = _allWaitlistApps.find(a => a.id === id);
+            if (app) { app.tour_status = 'scheduled'; app.tour_scheduled_at = iso; app.tour_notes = notes; }
+            modal.classList.add('hidden');
+            renderWaitlistQuickList();
+            renderWaitlistAdmin();
+        } catch (err) {
+            errEl.textContent = 'Error: ' + err.message;
+        } finally {
+            btn.disabled = false; btn.textContent = 'Save Tour';
+        }
+    });
+
     // Offer modal
     document.getElementById('wlOfferCancelBtn')?.addEventListener('click', () => document.getElementById('wlOfferModal').classList.add('hidden'));
     document.getElementById('wlOfferModal')?.addEventListener('click', e => { if (e.target === document.getElementById('wlOfferModal')) document.getElementById('wlOfferModal').classList.add('hidden'); });
@@ -877,6 +960,51 @@ function setupWaitlistAdmin() {
     });
     document.getElementById('adminWlHasSibling')?.addEventListener('change', e => {
         document.getElementById('adminWlSibRow').classList.toggle('hidden', !e.target.checked);
+    });
+}
+
+// ============================================================
+// WAITLIST NOTIFICATIONS  (shareable inquiry link + notify email)
+// ============================================================
+async function setupWaitlistNotifications() {
+    const linkEl = document.getElementById('wlInquiryLink');
+    if (linkEl) linkEl.value = `${window.location.origin}/inquiry`;
+
+    document.getElementById('wlCopyInquiryLinkBtn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('wlCopyInquiryLinkBtn');
+        try {
+            await navigator.clipboard.writeText(linkEl.value);
+            const orig = btn.textContent;
+            btn.textContent = '✓ Copied!';
+            setTimeout(() => { btn.textContent = orig; }, 2000);
+        } catch (_) {
+            linkEl.select();
+            document.execCommand('copy');
+        }
+    });
+
+    const emailEl = document.getElementById('wlNotifyEmail');
+    try {
+        const settings = await loadWaitlistNotifySettings();
+        if (emailEl) emailEl.value = settings.notifyEmail || '';
+    } catch (_) {}
+
+    document.getElementById('wlSaveNotifyEmailBtn')?.addEventListener('click', async () => {
+        const btn      = document.getElementById('wlSaveNotifyEmailBtn');
+        const statusEl = document.getElementById('wlNotifyEmailStatus');
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try {
+            await saveWaitlistNotifySettings({ notifyEmail: emailEl.value.trim() || null });
+            if (statusEl) {
+                statusEl.textContent = '✓ Saved!';
+                statusEl.style.color = '#2e7d32';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+        } catch (err) {
+            if (statusEl) { statusEl.textContent = '⚠️ ' + err.message; statusEl.style.color = '#c62828'; }
+        } finally {
+            btn.disabled = false; btn.textContent = '💾 Save';
+        }
     });
 }
 

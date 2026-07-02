@@ -72,6 +72,20 @@ const ENTRIES = [
         },
     },
     {
+        outfile: 'dist/inquiry.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/inquiry.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
+        outfile: 'dist/confirm-interest.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/confirm-interest.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         // Admin dashboard: concatenate all modules in dependency order
         outfile: 'dist/admin.min.js',
         stdin: {
@@ -150,6 +164,32 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/lookup.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'inquiry.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/inquiry\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/error-monitor.min.js"></script>`,
+            `    <script src="dist/inquiry.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'confirm-interest.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/confirm-interest\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/error-monitor.min.js"></script>`,
+            `    <script src="dist/confirm-interest.min.js"></script>`,
         ],
     },
 ];

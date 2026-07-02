@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" href="/images/logo/myMDO_app_icon.png">
+  <link rel="apple-touch-icon" href="/images/logo/myMDO_app_icon.png">
+  <meta name="theme-color" content="#01294A">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Still on Our Waitlist? — Timothy Lutheran Church MDO</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/lookup.css">
+</head>
+<body class="lookup-body">
+
+  <div class="lookup-screen">
+    <div class="lookup-card">
+      <div class="lookup-logo">
+        <img src="/images/logo/myMDO_primary_logo_light.png" alt="myMDO" style="height:60px;display:block;margin:0 auto;">
+      </div>
+
+      <div id="ciPrompt">
+        <h1>Still Interested?</h1>
+        <p class="lookup-sub">You're on our Mother's Day Out enrollment waitlist. Let us know if you'd still like to keep your spot.</p>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
+          <button id="ciYesBtn" class="btn-primary">✅ Yes, still interested</button>
+          <button id="ciNoBtn" class="btn-ghost">No longer need care</button>
+        </div>
+        <p id="ciError" class="login-error hidden"></p>
+      </div>
+
+      <div id="ciResult" class="hidden">
+        <div class="modal-icon" id="ciResultIcon" style="margin:0 auto 14px;">✓</div>
+        <h1 id="ciResultTitle">Thanks!</h1>
+        <p id="ciResultMsg" class="lookup-sub"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="dist/supabase.min.js"></script>
+    <script src="dist/error-monitor.min.js"></script>
+    <script src="dist/confirm-interest.min.js"></script>
+</body>
+</html>

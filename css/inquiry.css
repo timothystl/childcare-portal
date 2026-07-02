@@ -1,0 +1,78 @@
+/* ============================================================
+   PUBLIC WAITLIST INQUIRY FORM
+   Sunlit Neighborhood — Variation B brand system
+   ============================================================ */
+
+.inquiry-body {
+    background: var(--green-lt);
+    min-height: 100vh;
+    padding: 24px 16px 60px;
+    font-family: var(--font-body);
+}
+
+.inquiry-wrap {
+    display: flex;
+    justify-content: center;
+    padding-top: 24px;
+}
+
+.inquiry-card {
+    background: var(--white);
+    border-radius: var(--radius-md);
+    padding: 40px 40px 32px;
+    max-width: 640px;
+    width: 100%;
+    box-shadow: 0 16px 56px rgba(0,0,0,.18);
+    border: 1px solid var(--border);
+}
+
+.inquiry-header {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.inquiry-logo { height: 60px; display: block; margin: 0 auto 12px; }
+
+.inquiry-header h1 {
+    font-size: 1.5em;
+    font-weight: 700;
+    font-family: var(--font-head);
+    color: var(--navy);
+    margin-bottom: 8px;
+}
+
+.inquiry-header p {
+    color: var(--text-muted);
+    font-size: .95em;
+    line-height: 1.5;
+}
+
+.inquiry-success {
+    text-align: center;
+    padding: 20px 0;
+}
+
+.inquiry-success .modal-icon { margin: 0 auto 16px; }
+
+.inquiry-success h2 {
+    font-family: var(--font-head);
+    color: var(--navy);
+    margin-bottom: 10px;
+}
+
+.inquiry-timestamp {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
+    margin: 18px 0;
+    color: #0369a1;
+    font-weight: 700;
+}
+
+.inquiry-footer-note {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: .85em;
+    margin-top: 26px;
+}
