@@ -761,7 +761,12 @@ function _projectedWeekdayPattern(trendMap, roomId, moKey, today) {
     const { gradOut, gradIn } = _buildGraduationIndex();
     const waitlistStart       = _buildWaitlistStartIndex();
 
-    let cursor = _nextMoKey(lastFinalMoKey);
+    // Start at lastFinalMoKey itself, not the month after: a child who ages out
+    // partway through the last real month is still counted for that whole month
+    // in its own real data (families don't split a month's registration), so
+    // their departure/arrival only actually shows up starting the next month —
+    // applying lastFinalMoKey's own events here is what carries that forward.
+    let cursor = lastFinalMoKey;
     while (cursor <= moKey) {
         TREND_DAYS.forEach(day => {
             (gradOut[cursor]?.[roomId] || []).forEach(child => {
@@ -809,11 +814,20 @@ async function renderWaitlistPlanning() {
         return;
     }
 
-    // Who graduates into/out of each room each month — same index that feeds
-    // the projected weekday pattern (_projectedWeekdayPattern), so the "→ N
-    // graduates out" annotation always agrees with what actually moved the
-    // projection for that month.
+    // Who graduates into/out of, and who from the waitlist starts in, each
+    // room each month — the same indexes that feed the projected weekday
+    // pattern (_projectedWeekdayPattern), so these annotations always agree
+    // with what actually moved the projection for that month.
     const { gradOut } = _buildGraduationIndex();
+    const waitlistStart = _buildWaitlistStartIndex();
+
+    // Union of weekdays a group of children (each with their own weekdays map)
+    // actually affects, in Mon..Fri order — e.g. "Mon, Wed, Fri".
+    function _weekdaySummary(entries) {
+        const present = new Set();
+        entries.forEach(e => Object.keys(e.weekdays).forEach(d => present.add(d)));
+        return TREND_DAYS.filter(d => present.has(d)).join(', ');
+    }
 
     // Build the planning grid. Group by the room the applicant themselves is
     // waiting for (derived from age at their desired start date) — not
@@ -856,16 +870,25 @@ async function renderWaitlistPlanning() {
                 </div>`;
             }).join('');
 
-            // Aging-out events this month
+            // Aging-out events this month — which weekdays actually open up
             const outs    = (gradOut[key]?.[room.id] || []);
-            const outHtml = outs.length ? `<div style="font-size:.75em;color:#667eea;margin-top:4px">→ ${outs.length} graduate${outs.length>1?'s':''} out</div>` : '';
+            const outHtml = outs.length
+                ? `<div style="font-size:.75em;color:#667eea;margin-top:4px">→ ${outs.length} graduate${outs.length > 1 ? 's' : ''} out (${_weekdaySummary(outs)})</div>`
+                : '';
+
+            // Waitlist starts this month — which weekdays they fill
+            const ins     = (waitlistStart[key]?.[room.id] || []);
+            const inHtml  = ins.length
+                ? `<div style="font-size:.75em;color:#c05621;margin-top:2px">→ ${ins.length} incoming from waitlist (${_weekdaySummary(ins)})</div>`
+                : '';
+
             const projectedNote = isFinal
                 ? ''
                 : '<div style="font-size:.7em;color:#aaa;margin-top:3px">(projected)</div>';
 
             return `<td style="text-align:center;padding:8px 6px;white-space:nowrap">
                 <div style="display:flex;gap:3px;justify-content:center">${weekdayChips}</div>
-                ${outHtml}${projectedNote}
+                ${outHtml}${inHtml}${projectedNote}
             </td>`;
         }).join('');
 
@@ -891,7 +914,7 @@ async function renderWaitlistPlanning() {
             </tr></thead>
             <tbody>${roomRows}</tbody>
         </table></div>
-        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip's big number is the average kids booked for that day (M/T/W/Th/F) — the same number Enrollment Trends shows for that room/month; the small number underneath is open slots (capacity minus booked). Months already finalized (registrations lock in on the 15th of the prior month) show their own actual bookings. Months marked "projected" start from the last finalized month and carry it forward through every known change: kids graduating into or out of the room, and waitlisted families whose desired start date falls in that month. → Graduates = children aging out of this room that month, freeing a permanent spot (and, unless it's Owl, filling a spot in the next room up).</p>`;
+        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip's big number is the average kids booked for that day (M/T/W/Th/F) — the same number Enrollment Trends shows for that room/month; the small number underneath is open slots (capacity minus booked). Months already finalized (registrations lock in on the 15th of the prior month) show their own actual bookings. Months marked "projected" start from the last finalized month and carry it forward through every known change: kids graduating into or out of the room, and waitlisted families whose desired start date falls in that month — both are listed under the month they take effect, with the specific weekdays affected, and a graduation dated a given month already shows up as lower booked counts (more open slots) starting the following month. → Graduates = children aging out of this room that month, freeing a permanent spot (and, unless it's Owl, filling a spot in the next room up).</p>`;
 }
 
 // ============================================================
