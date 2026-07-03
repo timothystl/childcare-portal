@@ -839,16 +839,20 @@ async function renderWaitlistPlanning() {
             const weekdayChips = [1, 2, 3, 4, 5].map(dow => {
                 const day = pattern[DOW_TO_TRENDDAY[dow]];
                 const avgBooked = day.half + day.full;
-                // Projected months already carry forward known graduations and
-                // waitlist starts (see _projectedWeekdayPattern), so this is
-                // simply capacity minus the (real or projected) booked count.
-                const avgOpen = Math.max(0, room.capacity - avgBooked).toFixed(1);
+                const avgOpen   = Math.max(0, room.capacity - avgBooked);
                 const pct       = room.capacity > 0 ? avgBooked / room.capacity : 0;
                 const color     = pct >= 0.9 ? '#fff5f5' : pct >= 0.7 ? '#fffaf0' : '#f0fff4';
                 const textColor = pct >= 0.9 ? '#9b2c2c' : pct >= 0.7 ? '#b45309' : '#276749';
+                // Booked is the headline number — uses fmtAvg() (admin-reports.js)
+                // so a finalized month reads as the exact same figure Enrollment
+                // Trends shows for that room/day, not just the same underlying
+                // value formatted differently. Open slots (capacity - booked) is
+                // the smaller secondary line, since that's the actionable number
+                // for offering a spot but derives from the booked count above it.
                 return `<div style="background:${color};color:${textColor};border-radius:4px;padding:3px 2px;text-align:center;min-width:26px">
                     <div style="font-size:.7em;font-weight:600">${WEEKDAY_INIT[dow]}</div>
-                    <div style="font-size:.82em;font-weight:700">${avgOpen}</div>
+                    <div style="font-size:.82em;font-weight:700">${fmtAvg(avgBooked)}</div>
+                    <div style="font-size:.62em;font-weight:400;opacity:.8">${fmtAvg(avgOpen)} open</div>
                 </div>`;
             }).join('');
 
@@ -887,7 +891,7 @@ async function renderWaitlistPlanning() {
             </tr></thead>
             <tbody>${roomRows}</tbody>
         </table></div>
-        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip shows open slots for that day (M/T/W/Th/F). Months already finalized (registrations lock in on the 15th of the prior month) show their own actual bookings. Months marked "projected" start from the last finalized month and carry it forward through every known change: kids graduating into or out of the room, and waitlisted families whose desired start date falls in that month — the same numbers Enrollment Trends shows for that room/month. → Graduates = children aging out of this room that month, freeing a permanent spot (and, unless it's Owl, filling a spot in the next room up).</p>`;
+        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip's big number is the average kids booked for that day (M/T/W/Th/F) — the same number Enrollment Trends shows for that room/month; the small number underneath is open slots (capacity minus booked). Months already finalized (registrations lock in on the 15th of the prior month) show their own actual bookings. Months marked "projected" start from the last finalized month and carry it forward through every known change: kids graduating into or out of the room, and waitlisted families whose desired start date falls in that month. → Graduates = children aging out of this room that month, freeing a permanent spot (and, unless it's Owl, filling a spot in the next room up).</p>`;
 }
 
 // ============================================================
