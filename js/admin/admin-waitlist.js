@@ -208,7 +208,7 @@ function renderWaitlistQuickList() {
             <td class="wl-td-room">${escHtml(roomLabel)}</td>
             <td class="wl-td-status">${wlStatusBadge(a)}</td>
             <td class="wl-td-tour">${wlTourBadge(a)}${wlInterestTag(a)}</td>
-            <td class="wl-td-parent">${escHtml(a.parent_name)}<br><a href="mailto:${escHtml(a.parent_email)}" class="wl-email-link">${escHtml(a.parent_email)}</a>${a.parent_phone ? `<br><span class="wl-phone">${escHtml(a.parent_phone)}</span>` : ''}</td>
+            <td class="wl-td-parent">${escHtml(a.parent_name)}<br>${a.parent_email ? `<a href="mailto:${escHtml(a.parent_email)}" class="wl-email-link">${escHtml(a.parent_email)}</a>` : '<span class="wl-phone">No email on file</span>'}${a.parent_phone ? `<br><span class="wl-phone">${escHtml(a.parent_phone)}</span>` : ''}</td>
             <td class="wl-td-waiting">${wlDaysWaiting(a.applied_at)}</td>
             <td class="wl-td-actions">
                 ${canOffer ? `<button class="btn-wl-offer-quick" data-id="${a.id}" data-name="${escHtml(a.parent_name)}" data-email="${escHtml(a.parent_email)}" data-child="${escHtml(a.child_name)}">Make Offer</button>` : ''}
@@ -442,7 +442,7 @@ function renderWaitlistAdmin() {
                 <div class="wl-detail-row">
                     <span class="wl-detail-label">Parent:</span>
                     ${escHtml(app.parent_name)}
-                    · <a href="mailto:${escHtml(app.parent_email)}">${escHtml(app.parent_email)}</a>
+                    ${app.parent_email ? `· <a href="mailto:${escHtml(app.parent_email)}">${escHtml(app.parent_email)}</a>` : '· <em>no email on file</em>'}
                     ${app.parent_phone ? `· ${escHtml(app.parent_phone)}` : ''}
                 </div>
                 ${app.has_sibling ? `<div class="wl-detail-row"><span class="wl-detail-label">Sibling:</span> ${escHtml(app.sibling_child_name || '—')} ${app.sibling_room_id ? `(${wlRoomLabel(app.sibling_room_id)})` : ''}</div>` : ''}
@@ -950,15 +950,17 @@ async function previewWaitlistImport() {
     const colType    = col(['day type','full or half','half or full','type']);
     const colNotes   = col(['notes','comments','note']);
 
-    if (!colParent || !colEmail || !colChild) {
-        preview.innerHTML = `<p class="import-error">Missing required columns. Need at least: Parent Name, Email, Child Name. Detected columns: ${escHtml(headers.join(', '))}</p>`;
+    if (!colParent || !colChild) {
+        preview.innerHTML = `<p class="import-error">Missing required columns. Need at least: Parent Name, Child Name. Detected columns: ${escHtml(headers.join(', '))}</p>`;
         return;
     }
 
-    // Normalize rows into waitlist records
+    // Normalize rows into waitlist records. Email is picked up when present but
+    // isn't required — plenty of real waitlist entries only have a phone number,
+    // or no contact info yet at all, and shouldn't be silently dropped from import.
     const records = rows.map(r => {
         const parentName  = (r[colParent] || '').trim();
-        const parentEmail = (r[colEmail]  || '').trim().toLowerCase();
+        const parentEmail = colEmail  ? (r[colEmail]  || '').trim().toLowerCase() : '';
         const parentPhone = colPhone  ? (r[colPhone]  || '').trim() : '';
         const childName   = (r[colChild]  || '').trim();
         const childDob    = colDob    ? _normDateStr(r[colDob])   : null;
@@ -967,7 +969,7 @@ async function previewWaitlistImport() {
         const dayType     = colType   ? ((r[colType] || '').toLowerCase().includes('half') ? 'half' : 'full') : 'full';
         const notes       = colNotes  ? (r[colNotes] || '').trim() : '';
         return { parentName, parentEmail, parentPhone, childName, childDob, startDate, daysOfWeek, dayType, notes };
-    }).filter(r => r.parentName && r.parentEmail && r.childName);
+    }).filter(r => r.parentName && r.childName);
 
     if (!records.length) { preview.innerHTML = '<p class="import-error">No valid rows after normalization.</p>'; return; }
 
@@ -982,7 +984,7 @@ async function previewWaitlistImport() {
             <tbody>
                 ${records.map(r => `<tr>
                     <td>${escHtml(r.parentName)}</td>
-                    <td>${escHtml(r.parentEmail)}</td>
+                    <td>${escHtml(r.parentEmail) || '—'}</td>
                     <td>${escHtml(r.childName)}</td>
                     <td>${r.childDob || '—'}</td>
                     <td>${r.startDate || '—'}</td>
