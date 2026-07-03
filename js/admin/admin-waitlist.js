@@ -16,12 +16,13 @@ function wlDeriveRoom(app) {
                    (start.getMonth() - dob.getMonth());
     if (months < 12)  return 'bear';
     if (months < 24)  return 'bee';
-    if (months < 36)  return 'turtle';
+    if (months < 30)  return 'turtle';
+    if (months < 36)  return 'goose';
     return 'owl';
 }
 
 function wlRoomLabel(roomId) {
-    const map = { bear: '🐻 Bear', bee: '🐝 Bee', turtle: '🐢 Turtle', owl: '🦉 Owl' };
+    const map = { bear: '🐻 Bear', bee: '🐝 Bee', turtle: '🐢 Turtle', goose: '🪿 Goose', owl: '🦉 Owl' };
     return map[roomId] || '—';
 }
 
@@ -694,10 +695,13 @@ async function renderWaitlistPlanning() {
         agingOut[gradKey][reg.room_id].push(reg.child_name);
     });
 
-    // Build the planning grid
+    // Build the planning grid. Group by the room the applicant themselves is
+    // waiting for (derived from age at their desired start date) — not
+    // sibling_room_id, which only records where an existing sibling is enrolled
+    // and left almost every applicant uncounted (or counted under the wrong room).
     const waitlistByRoom = {};
     (_allWaitlistApps || []).filter(a => ['pending','offered','accepted'].includes(a.status)).forEach(a => {
-        const rid = a.sibling_room_id || 'tbd';
+        const rid = wlDeriveRoom(a) || 'tbd';
         if (!waitlistByRoom[rid]) waitlistByRoom[rid] = [];
         waitlistByRoom[rid].push(a);
     });
@@ -712,7 +716,8 @@ async function renderWaitlistPlanning() {
     const WEEKDAY_INIT = { 1: 'M', 2: 'T', 3: 'W', 4: 'Th', 5: 'F' };
     const DOW_TO_TRENDDAY = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri' };
     function isMonthFinal(year, month0) {
-        return _isTrendMonthComplete(`${year}-${String(month0 + 1).padStart(2, '0')}`, false, today);
+        const key = `${year}-${String(month0 + 1).padStart(2, '0')}`;
+        return _isTrendMonthComplete(key, !!trendMap[key]?._historical, today);
     }
 
     // A specific finalized month's own actual weekday pattern.
