@@ -706,70 +706,21 @@ async function renderWaitlistPlanning() {
         waitlistByRoom[rid].push(a);
     });
 
-    // Families submit a month's schedule by the 15th of the month before it starts,
-    // with a few days' buffer for late changes/admin cleanup — so a given month's
-    // registrations aren't dependable ("final") until we're 20+ days into the month
-    // before it. Right now that means: the current month is already final (its own
-    // window closed last month), and the very next month only becomes final once
-    // we're 20+ days into the current month. Uses the same cutoff as Enrollment
-    // Trends' _isTrendMonthComplete so the two reports agree.
+    // Uses _weekdayPatternForMonth() (admin-reports.js) — the same resolver
+    // Enrollment Trends calls — so the two reports can never disagree about
+    // whether a month is final, or what its weekday pattern looks like.
     const WEEKDAY_INIT = { 1: 'M', 2: 'T', 3: 'W', 4: 'Th', 5: 'F' };
     const DOW_TO_TRENDDAY = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri' };
-    function isMonthFinal(year, month0) {
-        const key = `${year}-${String(month0 + 1).padStart(2, '0')}`;
-        return _isTrendMonthComplete(key, !!trendMap[key]?._historical, today);
-    }
-
-    // A specific finalized month's own actual weekday pattern.
-    function actualWeekdayPattern(roomId, moKey) {
-        const avg = {};
-        [1, 2, 3, 4, 5].forEach(dow => {
-            const c = _trendCell(trendMap[moKey] || {}, roomId, DOW_TO_TRENDDAY[dow]);
-            const count = c.dates.size;
-            avg[dow] = count ? (c.halfSum + c.fullSum) / count : 0;
-        });
-        return avg;
-    }
-
-    // For months whose own registrations haven't closed/stabilized yet, project
-    // using what's typical for the past few finalized months (blended), rather
-    // than any single month's snapshot.
-    const RECENT_MONTHS_FOR_TYPICAL = 3;
-    function typicalBlendedPattern(roomId, throughMoKey) {
-        const [ty, tm] = throughMoKey.split('-').map(Number);
-        const avg = {};
-        [1, 2, 3, 4, 5].forEach(dow => {
-            let halfSum = 0, fullSum = 0, dateCount = 0;
-            for (let i = 0; i < RECENT_MONTHS_FOR_TYPICAL; i++) {
-                const d = new Date(ty, tm - 1 - i, 1);
-                const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                const c = _trendCell(trendMap[k] || {}, roomId, DOW_TO_TRENDDAY[dow]);
-                halfSum += c.halfSum;
-                fullSum += c.fullSum;
-                dateCount += c.dates.size;
-            }
-            avg[dow] = dateCount ? (halfSum + fullSum) / dateCount : 0;
-        });
-        return avg;
-    }
-
-    // Latest month in the displayed window whose data is finalized — the base
-    // that projected months blend backward from.
-    let lastFinalMoKey = months[0].key;
-    months.forEach(({ year, month, key }) => {
-        if (isMonthFinal(year, month)) lastFinalMoKey = key;
-    });
 
     const roomRows = ROOMS.filter(r => r.id !== 'summer').map(room => {
         const waitlistCount = (waitlistByRoom[room.id] || []).length;
-        const blendedPattern = typicalBlendedPattern(room.id, lastFinalMoKey);
 
-        const monthCells = months.map(({ key, year, month }) => {
-            const isFinal  = isMonthFinal(year, month);
-            const pattern  = isFinal ? actualWeekdayPattern(room.id, key) : blendedPattern;
+        const monthCells = months.map(({ key }) => {
+            const { isFinal, pattern } = _weekdayPatternForMonth(trendMap, room.id, key, today);
 
             const weekdayChips = [1, 2, 3, 4, 5].map(dow => {
-                const avgBooked = pattern[dow];
+                const day = pattern[DOW_TO_TRENDDAY[dow]];
+                const avgBooked = day.half + day.full;
                 let avgOpen = Math.max(0, room.capacity - avgBooked);
                 // Projected months: net out kids already on the waitlist for this
                 // room — they'd fill these slots before any new family would, so
