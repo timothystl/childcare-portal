@@ -3891,6 +3891,66 @@ function _isTrendMonthComplete(mo, isHistorical, today) {
     return today >= new Date(y, m - 2, 20); // 20th of the month before `mo`
 }
 
+// ── Shared "what does this room's weekday pattern look like" resolver ──────
+// Single source of truth used by BOTH Enrollment Trends and Waitlist Planning,
+// so the two can never show different numbers for the same room/month again:
+// a finalized month shows its own real bookings; a month whose registrations
+// haven't locked in yet (see _isTrendMonthComplete) shows a blend of the last
+// few finalized months instead of its own still-changing partial data.
+const TREND_BLEND_MONTHS = 3;
+
+function _isTrendMonthFinal(trendMap, moKey, today) {
+    return _isTrendMonthComplete(moKey, !!(trendMap[moKey] || {})._historical, today);
+}
+
+// Most recent month in trendMap that's finalized — the anchor that blended/
+// projected months blend backward from.
+function _lastFinalTrendMonthKey(trendMap, today) {
+    return Object.keys(trendMap).filter(mo => _isTrendMonthFinal(trendMap, mo, today)).sort().pop() || null;
+}
+
+function _trendMonthOwnPattern(trendMap, roomId, moKey) {
+    const avg = {};
+    TREND_DAYS.forEach(day => {
+        const c = _trendCell(trendMap[moKey] || {}, roomId, day);
+        const count = c.dates.size;
+        avg[day] = { half: count ? c.halfSum / count : 0, full: count ? c.fullSum / count : 0, count };
+    });
+    return avg;
+}
+
+function _trendBlendedPattern(trendMap, roomId, throughMoKey) {
+    const [ty, tm] = throughMoKey.split('-').map(Number);
+    const avg = {};
+    TREND_DAYS.forEach(day => {
+        let halfSum = 0, fullSum = 0, dateCount = 0;
+        for (let i = 0; i < TREND_BLEND_MONTHS; i++) {
+            const d = new Date(ty, tm - 1 - i, 1);
+            const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const c = _trendCell(trendMap[k] || {}, roomId, day);
+            halfSum += c.halfSum;
+            fullSum += c.fullSum;
+            dateCount += c.dates.size;
+        }
+        avg[day] = { half: dateCount ? halfSum / dateCount : 0, full: dateCount ? fullSum / dateCount : 0, count: dateCount };
+    });
+    return avg;
+}
+
+/**
+ * The single weekday-pattern resolver both reports call: finalized months get
+ * their own actual bookings; non-final months get a blend of the last few
+ * finalized months (anchored at the most recent finalized month overall, not
+ * at whatever partial data this month has so far).
+ * @returns {{isFinal: boolean, pattern: Object<string, {half:number, full:number, count:number}>}}
+ */
+function _weekdayPatternForMonth(trendMap, roomId, moKey, today) {
+    const isFinal = _isTrendMonthFinal(trendMap, moKey, today);
+    if (isFinal) return { isFinal, pattern: _trendMonthOwnPattern(trendMap, roomId, moKey) };
+    const anchor = _lastFinalTrendMonthKey(trendMap, today) || moKey;
+    return { isFinal, pattern: _trendBlendedPattern(trendMap, roomId, anchor) };
+}
+
 async function _buildTrendMap() {
     const trendMap = {};
 
@@ -4007,27 +4067,24 @@ function _renderTrendsTable(trendMap) {
             const [y, m] = mo.split('-').map(Number);
             const label  = MONTH_NAMES[m - 1] + ' ' + y;
             const isHist = trendMap[mo]._historical;
-            const isComplete = _isTrendMonthComplete(mo, isHist, today);
+            // Same resolver Waitlist Planning uses, so the two reports can never
+            // show different weekday numbers for the same room/month again.
+            const { isFinal, pattern } = _weekdayPatternForMonth(trendMap, room.id, mo, today);
             const src = isHist
                 ? ' <span style="font-size:.7em;color:#888">(hist)</span>'
-                : (!isComplete ? ' <span style="font-size:.7em;color:#888">(in progress)</span>' : '');
+                : (!isFinal ? ' <span style="font-size:.7em;color:#888">(in progress)</span>' : '');
             let moHalfTotal = 0, moFullTotal = 0;
 
             const dayCells = TREND_DAYS.map(d => {
-                const c = _trendCell(trendMap[mo], room.id, d);
-                const count = c.dates.size;
-                if (!count) {
-                    return showSplit
-                        ? `<td class="report-num" style="border-left:2px solid #ddd">—</td>` +
-                          `<td class="report-num">—</td>` +
-                          `<td class="report-num">—</td>`
-                        : `<td class="report-num" style="border-left:2px solid #ddd">—</td>`;
-                }
-                const avgHalf = c.halfSum / count;
-                const avgFull = c.fullSum / count;
-                moHalfTotal += c.halfSum;
-                moFullTotal += c.fullSum;
-                if (isComplete) {
+                // Month Total stays a real running count of bookings entered so
+                // far, even for an in-progress month whose weekday cells below
+                // show a blended projection rather than that partial count.
+                const raw = _trendCell(trendMap[mo], room.id, d);
+                moHalfTotal += raw.halfSum;
+                moFullTotal += raw.fullSum;
+
+                const { half: avgHalf, full: avgFull } = pattern[d];
+                if (isFinal && raw.dates.size) {
                     roomAccum[d].halfSum += avgHalf;
                     roomAccum[d].fullSum += avgFull;
                     roomAccum[d].count++;
