@@ -4007,16 +4007,18 @@ async function _buildTrendMap() {
     return trendMap;
 }
 
+// Format an average value: show one decimal unless it's a whole number, '—' for
+// zero. Shared with Waitlist Planning so a booked count reads identically in
+// both places — not just the same number, the same formatted string.
+function fmtAvg(v) {
+    if (!v) return '—';
+    return v % 1 === 0 ? String(v) : v.toFixed(1);
+}
+
 function _renderTrendsTable(trendMap) {
     const months = Object.keys(trendMap).sort();
     if (!months.length) return '<p class="empty-hint">No enrollment data found.</p>';
     const today = new Date();
-
-    // Format an average value: show one decimal unless it's a whole number, '—' for zero
-    function fmtAvg(v) {
-        if (!v) return '—';
-        return v % 1 === 0 ? String(v) : v.toFixed(1);
-    }
 
     // facilityAccum: accumulates per-room avg across all months, then sums across rooms
     // shape: { day: { halfSum, fullSum } } — summed room averages (already averaged per month)
