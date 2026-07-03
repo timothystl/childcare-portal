@@ -650,6 +650,139 @@ function renderWaitlistAdmin() {
 // ============================================================
 // WAITLIST PLANNING PANEL
 // ============================================================
+
+// Which room a child moves into when they age out of their current room, and
+// at what age. Owl has no destination — aging out of Owl means leaving the
+// program (e.g. off to kindergarten), not moving to another MDO room.
+const PROMOTION_CHAIN = {
+    bear:   { ageOutMonths: 12, nextRoom: 'bee' },
+    bee:    { ageOutMonths: 24, nextRoom: 'turtle' },
+    turtle: { ageOutMonths: 30, nextRoom: 'goose' },
+    goose:  { ageOutMonths: 36, nextRoom: 'owl' },
+    owl:    { ageOutMonths: 60, nextRoom: null },
+};
+
+function _nextMoKey(moKey) {
+    const [y, m] = moKey.split('-').map(Number);
+    const d = new Date(y, m, 1); // m is 1-based, so this already lands on next month
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Which weekdays a registration actually attends, and whether each is a half
+// or full day — read straight from its own registration_dates rather than
+// assumed, so a graduating/moving child's real schedule carries with them.
+function _weekdayDayTypeMap(reg) {
+    const map = {};
+    (reg.registration_dates || []).forEach(d => {
+        if (d.waitlisted || !d.care_date) return;
+        const day = _trendDayName(d.care_date);
+        if (day) map[day] = d.day_type === 'half' ? 'half' : 'full';
+    });
+    return map;
+}
+
+// For each child aging out of a room this month: who's leaving (gradOut, keyed
+// by the room they're leaving) and who's arriving (gradIn, keyed by the room
+// they're moving into) — each with the weekday/day-type pattern they actually
+// keep from their current registration.
+function _buildGraduationIndex() {
+    const gradOut = {}, gradIn = {};
+    const seen = new Set();
+    (allRegistrations || []).forEach(reg => {
+        const chain = PROMOTION_CHAIN[reg.room_id];
+        if (!chain || !reg.child_dob) return;
+        const key = `${reg.child_name}:${reg.room_id}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+
+        const weekdays = _weekdayDayTypeMap(reg);
+        if (!Object.keys(weekdays).length) return; // no known schedule to carry forward
+
+        const dob       = new Date(reg.child_dob);
+        const graduates = new Date(dob.getFullYear(), dob.getMonth() + chain.ageOutMonths, 1);
+        const moKey     = `${graduates.getFullYear()}-${String(graduates.getMonth() + 1).padStart(2, '0')}`;
+
+        if (!gradOut[moKey]) gradOut[moKey] = {};
+        if (!gradOut[moKey][reg.room_id]) gradOut[moKey][reg.room_id] = [];
+        gradOut[moKey][reg.room_id].push({ childName: reg.child_name, weekdays });
+
+        if (chain.nextRoom) {
+            if (!gradIn[moKey]) gradIn[moKey] = {};
+            if (!gradIn[moKey][chain.nextRoom]) gradIn[moKey][chain.nextRoom] = [];
+            gradIn[moKey][chain.nextRoom].push({ childName: reg.child_name, weekdays });
+        }
+    });
+    return { gradOut, gradIn };
+}
+
+// For each active waitlist applicant: which month/room they're expected to
+// start in, with their requested weekday/day-type pattern (defaulting to a
+// full 5-day week when a family hasn't specified particular days yet).
+function _buildWaitlistStartIndex() {
+    const idx = {};
+    (_allWaitlistApps || [])
+        .filter(a => ['pending', 'offered', 'accepted'].includes(a.status))
+        .forEach(a => {
+            if (!a.desired_start_date) return;
+            const roomId = wlDeriveRoom(a);
+            if (!roomId) return;
+            const moKey  = a.desired_start_date.slice(0, 7);
+            const named  = (a.days_of_week || '').split(',').map(s => s.trim()).filter(Boolean);
+            const days   = named.length ? named : TREND_DAYS;
+            const type   = a.day_type === 'half' ? 'half' : 'full';
+            const weekdays = {};
+            days.forEach(d => { if (TREND_DAYS.includes(d)) weekdays[d] = type; });
+
+            if (!idx[moKey]) idx[moKey] = {};
+            if (!idx[moKey][roomId]) idx[moKey][roomId] = [];
+            idx[moKey][roomId].push({ childName: a.child_name, weekdays });
+        });
+    return idx;
+}
+
+/**
+ * Forecast for a non-final month: start from the last real, locked-in month
+ * for this room, then carry it forward month by month through every known
+ * graduation (in and out) and waitlist start up to (and including) moKey.
+ * This is what "based on the past, plus who's being promoted and who on the
+ * waitlist will be starting" means concretely — not a generic statistical
+ * blend, which would ignore facts we already have on hand.
+ */
+function _projectedWeekdayPattern(trendMap, roomId, moKey, today) {
+    const pattern = {};
+    TREND_DAYS.forEach(day => { pattern[day] = { half: 0, full: 0 }; });
+
+    const lastFinalMoKey = _lastFinalTrendMonthKey(trendMap, today);
+    if (!lastFinalMoKey) return pattern;
+
+    const base = _trendMonthOwnPattern(trendMap, roomId, lastFinalMoKey);
+    TREND_DAYS.forEach(day => { pattern[day] = { half: base[day].half, full: base[day].full }; });
+
+    const { gradOut, gradIn } = _buildGraduationIndex();
+    const waitlistStart       = _buildWaitlistStartIndex();
+
+    let cursor = _nextMoKey(lastFinalMoKey);
+    while (cursor <= moKey) {
+        TREND_DAYS.forEach(day => {
+            (gradOut[cursor]?.[roomId] || []).forEach(child => {
+                const type = child.weekdays[day];
+                if (type) pattern[day][type] = Math.max(0, pattern[day][type] - 1);
+            });
+            (gradIn[cursor]?.[roomId] || []).forEach(child => {
+                const type = child.weekdays[day];
+                if (type) pattern[day][type] += 1;
+            });
+            (waitlistStart[cursor]?.[roomId] || []).forEach(child => {
+                const type = child.weekdays[day];
+                if (type) pattern[day][type] += 1;
+            });
+        });
+        if (cursor === moKey) break;
+        cursor = _nextMoKey(cursor);
+    }
+    return pattern;
+}
+
 async function renderWaitlistPlanning() {
     const container = document.getElementById('wlPlanContent');
     if (!container) return;
@@ -676,24 +809,11 @@ async function renderWaitlistPlanning() {
         return;
     }
 
-    // Aging-out: for each enrolled child, calculate when they graduate to next room
-    // Bear → Bee at 12mo, Bee → Turtle at 24mo, Turtle → Owl at 36mo, Owl → out at 60mo
-    const ageOutThresholds = { bear: 12, bee: 24, turtle: 36, owl: 60 };
-    const agingOut = {}; // 'YYYY-MM' → { roomId: [childName, ...] }
-    const seenChildren = new Set();
-    allRegistrations.forEach(reg => {
-        if (!reg.child_dob || !reg.room_id || !ageOutThresholds[reg.room_id]) return;
-        const key = `${reg.child_name}:${reg.room_id}`;
-        if (seenChildren.has(key)) return;
-        seenChildren.add(key);
-        const dob        = new Date(reg.child_dob);
-        const monthsOld  = ageOutThresholds[reg.room_id];
-        const graduates  = new Date(dob.getFullYear(), dob.getMonth() + monthsOld, 1);
-        const gradKey    = `${graduates.getFullYear()}-${String(graduates.getMonth()+1).padStart(2,'0')}`;
-        if (!agingOut[gradKey]) agingOut[gradKey] = {};
-        if (!agingOut[gradKey][reg.room_id]) agingOut[gradKey][reg.room_id] = [];
-        agingOut[gradKey][reg.room_id].push(reg.child_name);
-    });
+    // Who graduates into/out of each room each month — same index that feeds
+    // the projected weekday pattern (_projectedWeekdayPattern), so the "→ N
+    // graduates out" annotation always agrees with what actually moved the
+    // projection for that month.
+    const { gradOut } = _buildGraduationIndex();
 
     // Build the planning grid. Group by the room the applicant themselves is
     // waiting for (derived from age at their desired start date) — not
@@ -713,20 +833,16 @@ async function renderWaitlistPlanning() {
     const DOW_TO_TRENDDAY = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri' };
 
     const roomRows = ROOMS.filter(r => r.id !== 'summer').map(room => {
-        const waitlistCount = (waitlistByRoom[room.id] || []).length;
-
         const monthCells = months.map(({ key }) => {
             const { isFinal, pattern } = _weekdayPatternForMonth(trendMap, room.id, key, today);
 
             const weekdayChips = [1, 2, 3, 4, 5].map(dow => {
                 const day = pattern[DOW_TO_TRENDDAY[dow]];
                 const avgBooked = day.half + day.full;
-                let avgOpen = Math.max(0, room.capacity - avgBooked);
-                // Projected months: net out kids already on the waitlist for this
-                // room — they'd fill these slots before any new family would, so
-                // this reflects what's truly available to offer someone new.
-                if (!isFinal) avgOpen = Math.max(0, avgOpen - waitlistCount);
-                avgOpen = avgOpen.toFixed(1);
+                // Projected months already carry forward known graduations and
+                // waitlist starts (see _projectedWeekdayPattern), so this is
+                // simply capacity minus the (real or projected) booked count.
+                const avgOpen = Math.max(0, room.capacity - avgBooked).toFixed(1);
                 const pct       = room.capacity > 0 ? avgBooked / room.capacity : 0;
                 const color     = pct >= 0.9 ? '#fff5f5' : pct >= 0.7 ? '#fffaf0' : '#f0fff4';
                 const textColor = pct >= 0.9 ? '#9b2c2c' : pct >= 0.7 ? '#b45309' : '#276749';
@@ -737,7 +853,7 @@ async function renderWaitlistPlanning() {
             }).join('');
 
             // Aging-out events this month
-            const outs    = (agingOut[key]?.[room.id] || []);
+            const outs    = (gradOut[key]?.[room.id] || []);
             const outHtml = outs.length ? `<div style="font-size:.75em;color:#667eea;margin-top:4px">→ ${outs.length} graduate${outs.length>1?'s':''} out</div>` : '';
             const projectedNote = isFinal
                 ? ''
@@ -771,7 +887,7 @@ async function renderWaitlistPlanning() {
             </tr></thead>
             <tbody>${roomRows}</tbody>
         </table></div>
-        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip shows avg open slots for that day (M/T/W/Th/F). Months already finalized (registrations lock in on the 15th of the prior month) show their own actual bookings; months marked "projected" show what's typical for the past few finalized months, minus kids already on that room's waitlist. → Graduates = children aging out of this room that month, freeing a permanent spot.</p>`;
+        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip shows open slots for that day (M/T/W/Th/F). Months already finalized (registrations lock in on the 15th of the prior month) show their own actual bookings. Months marked "projected" start from the last finalized month and carry it forward through every known change: kids graduating into or out of the room, and waitlisted families whose desired start date falls in that month — the same numbers Enrollment Trends shows for that room/month. → Graduates = children aging out of this room that month, freeing a permanent spot (and, unless it's Owl, filling a spot in the next room up).</p>`;
 }
 
 // ============================================================

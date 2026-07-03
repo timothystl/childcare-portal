@@ -3894,17 +3894,20 @@ function _isTrendMonthComplete(mo, isHistorical, today) {
 // ── Shared "what does this room's weekday pattern look like" resolver ──────
 // Single source of truth used by BOTH Enrollment Trends and Waitlist Planning,
 // so the two can never show different numbers for the same room/month again:
-// a finalized month shows its own real bookings; a month whose registrations
-// haven't locked in yet (see _isTrendMonthComplete) shows a blend of the last
-// few finalized months instead of its own still-changing partial data.
-const TREND_BLEND_MONTHS = 3;
+// a finalized month shows its own real bookings. A month whose registrations
+// haven't locked in yet (see _isTrendMonthComplete) shows a forecast rooted in
+// the last known real month, carried forward through known graduations (kids
+// aging into/out of the room) and known waitlist starts — see
+// _projectedWeekdayPattern() in admin-waitlist.js, which owns that domain
+// knowledge. A plain statistical blend would ignore facts we already know
+// (who's leaving, who's starting), so it isn't used here.
 
 function _isTrendMonthFinal(trendMap, moKey, today) {
     return _isTrendMonthComplete(moKey, !!(trendMap[moKey] || {})._historical, today);
 }
 
-// Most recent month in trendMap that's finalized — the anchor that blended/
-// projected months blend backward from.
+// Most recent month in trendMap that's finalized — the real-data anchor that
+// projected months are carried forward from.
 function _lastFinalTrendMonthKey(trendMap, today) {
     return Object.keys(trendMap).filter(mo => _isTrendMonthFinal(trendMap, mo, today)).sort().pop() || null;
 }
@@ -3919,36 +3922,15 @@ function _trendMonthOwnPattern(trendMap, roomId, moKey) {
     return avg;
 }
 
-function _trendBlendedPattern(trendMap, roomId, throughMoKey) {
-    const [ty, tm] = throughMoKey.split('-').map(Number);
-    const avg = {};
-    TREND_DAYS.forEach(day => {
-        let halfSum = 0, fullSum = 0, dateCount = 0;
-        for (let i = 0; i < TREND_BLEND_MONTHS; i++) {
-            const d = new Date(ty, tm - 1 - i, 1);
-            const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-            const c = _trendCell(trendMap[k] || {}, roomId, day);
-            halfSum += c.halfSum;
-            fullSum += c.fullSum;
-            dateCount += c.dates.size;
-        }
-        avg[day] = { half: dateCount ? halfSum / dateCount : 0, full: dateCount ? fullSum / dateCount : 0, count: dateCount };
-    });
-    return avg;
-}
-
 /**
  * The single weekday-pattern resolver both reports call: finalized months get
- * their own actual bookings; non-final months get a blend of the last few
- * finalized months (anchored at the most recent finalized month overall, not
- * at whatever partial data this month has so far).
+ * their own actual bookings; non-final months get a forecast (see above).
  * @returns {{isFinal: boolean, pattern: Object<string, {half:number, full:number, count:number}>}}
  */
 function _weekdayPatternForMonth(trendMap, roomId, moKey, today) {
     const isFinal = _isTrendMonthFinal(trendMap, moKey, today);
     if (isFinal) return { isFinal, pattern: _trendMonthOwnPattern(trendMap, roomId, moKey) };
-    const anchor = _lastFinalTrendMonthKey(trendMap, today) || moKey;
-    return { isFinal, pattern: _trendBlendedPattern(trendMap, roomId, anchor) };
+    return { isFinal, pattern: _projectedWeekdayPattern(trendMap, roomId, moKey, today) };
 }
 
 async function _buildTrendMap() {
