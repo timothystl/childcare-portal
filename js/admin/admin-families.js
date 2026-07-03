@@ -209,7 +209,11 @@ async function onFamiliesFileChange(e) {
     }
 }
 
-function parseUploadedFile(file) {
+// range=2 skips 2 leading rows before the header row — matches the Families
+// importer's typical ProCare export (which has title/blank rows up top).
+// Other importers with a plain header-on-row-1 file (e.g. Waitlist Import)
+// should pass range=0.
+function parseUploadedFile(file, range = 2) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = e => {
@@ -217,7 +221,7 @@ function parseUploadedFile(file) {
                 const data = new Uint8Array(e.target.result);
                 const wb   = XLSX.read(data, { type: 'array', cellDates: true });
                 const ws   = wb.Sheets[wb.SheetNames[0]];
-                const rows = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '', range: 2 });
+                const rows = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '', range });
                 resolve(rows);
             } catch (err) { reject(err); }
         };
