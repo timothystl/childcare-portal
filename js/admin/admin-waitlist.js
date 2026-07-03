@@ -928,7 +928,10 @@ async function previewWaitlistImport() {
     const file = fileInput.files[0];
     let rows;
     try {
-        rows = await parseUploadedFile(file);
+        // range=0: this importer expects a plain file with headers on row 1,
+        // unlike the Families importer (parseUploadedFile's default range=2,
+        // tuned for ProCare-style exports with leading title rows).
+        rows = await parseUploadedFile(file, 0);
     } catch (err) {
         preview.innerHTML = `<p class="import-error">Could not read file: ${escHtml(err.message)}</p>`;
         return;
