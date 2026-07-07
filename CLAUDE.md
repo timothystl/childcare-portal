@@ -6,6 +6,12 @@ Always use descriptive branch names in the format `type/short-description` (e.g.
 
 ---
 
+## PR workflow
+
+`.github/workflows/auto-merge-claude.yml` auto-merges any push to a `claude/**` branch straight into `main` (and deploys) — no human action required, no draft PR needed to unblock the merge. When working in a cloud session (feature branch required by session config), push your work, then still open the PR via the GitHub MCP tool for visibility/history — by the time it's created, CI will typically have already merged the branch into `main`, so the PR will show as merged automatically. Don't wait on or babysit a PR here expecting it to need manual merging; if CI hasn't picked it up yet, that's a CI issue to flag, not something to leave sitting as a draft for the user to click a button on.
+
+---
+
 ## Version numbering
 
 The app version uses **semantic versioning** (`major.minor.patch`) stored in `package.json`.
