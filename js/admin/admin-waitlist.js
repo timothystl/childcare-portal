@@ -87,591 +87,988 @@ let _wlSortCol = 'start';   // 'pos'|'child'|'start'|'age'|'room'|'status'|'pare
 let _wlSortDir = 1;          // 1 = asc, -1 = desc
 
 async function loadWaitlistApplications() {
-    const container = document.getElementById('wlQuickListContent');
-    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    const root = document.getElementById('wlpRoot');
+    if (root) root.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
         _allWaitlistApps = await fetchWaitlistApplications();
-        renderWaitlistAdmin();
-        renderWaitlistQuickList();
+        renderWaitlistPlanner();
     } catch (err) {
-        document.getElementById('wlQuickListContent').innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
+        if (root) root.innerHTML = `<p class="empty-hint">Error: ${escHtml(err.message)}</p>`;
     }
 }
 
-function renderWaitlistQuickList() {
-    const container = document.getElementById('wlQuickListContent');
-    if (!container) return;
+// ============================================================
+// WAITLIST & CAPACITY PLANNER  (Queue / Grid / Board)
+// ============================================================
+// One priority-ordered capacity allocation drives all three views so they can
+// never disagree — see wlpRunAllocation(). Reuses PROMOTION_CHAIN and
+// _buildGraduationIndex() below (graduation events are domain knowledge
+// already computed for the Enrollment Trends forecast — not something this
+// tool should derive a second, possibly-divergent way).
+//
+// Render pattern matches the rest of this file: state → render function →
+// container.innerHTML → re-attach listeners. The whole tool is rebuilt from
+// scratch on every interaction (cheap: 5 rooms × dozens of kids × 12 months)
+// EXCEPT the Queue search box, which gets a lighter partial re-render
+// (wlpRerenderQueueRows) so typing doesn't steal focus from the input.
 
-    const searchQ      = (document.getElementById('wlSearchInput')?.value || '').toLowerCase().trim();
-    const statusFilter = document.getElementById('wlStatusFilter')?.value || 'active';
-    const roomFilter   = document.getElementById('wlRoomFilter')?.value   || '';
+let _wlp = {
+    activeTab: 'queue',       // 'queue' | 'capacity'
+    capacityView: 'grid',     // 'grid' | 'board'
+    selCellA: null,           // Grid: {roomId, monthIdx}
+    expandedKidB: null,       // Queue: waitlist_applications.id
+    selStripB: null,          // Queue: {kidId, monthIdx}
+    archivingKidId: null,     // Queue: id whose inline archive-reason form is open
+    boardMonthIdx: 0,         // Board: 0-11
+    selSlotC: null,           // Board: {roomId, day}
+    highlightKidC: null,      // Board: waitlist_applications.id
+    search: '',
+    roomFilter: '',
+    toastText: null,
+};
+let _wlpAlloc = null; // last computed allocation — see wlpRunAllocation()
 
-    let apps = (_allWaitlistApps || []).slice();
+function wlpRooms() {
+    return getSortedRooms().filter(r => r.id !== 'summer');
+}
 
-    if (statusFilter === 'active') {
-        apps = apps.filter(a => ['pending','offered','accepted'].includes(a.status));
-    } else if (statusFilter === 'enrolled') {
-        apps = apps.filter(a => a.status === 'enrolled');
-    } else if (statusFilter === 'archived') {
-        apps = apps.filter(a => ['declined','expired','archived'].includes(a.status));
-    }
+function wlpMonths() {
+    const today = new Date();
+    return Array.from({ length: 12 }, (_, i) => {
+        const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+        return { idx: i, key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: `${MONTH_NAMES[d.getMonth()].slice(0, 3)} ${d.getFullYear()}` };
+    });
+}
 
-    if (roomFilter) {
-        apps = apps.filter(a => {
-            if (roomFilter === 'tbd') return !a.child_dob && !a.expected_due_date;
-            return wlDeriveRoom(a) === roomFilter;
+// This week's Mon–Fri dates (YYYY-MM-DD) — the "today's real bookings"
+// baseline for month 0 of the allocation.
+function wlpCurrentWeekDates() {
+    const today = new Date();
+    const diffToMon = (today.getDay() + 6) % 7; // 0=Sun..6=Sat -> days since Monday
+    const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - diffToMon);
+    const out = {};
+    TREND_DAYS.forEach((day, i) => {
+        const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+        out[day] = d.toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+    });
+    return out;
+}
+
+// { [roomId]: { Mon:count, ... } } — live bookings for this week, straight
+// from the already-loaded allRegistrations (same source of truth
+// _buildTrendMap() uses) — no separate query. Rooms grouped by the parent
+// registration's room_id, matching _buildTrendMap()'s convention.
+function wlpBaseBooked() {
+    const weekDates = wlpCurrentWeekDates();
+    const dateToDay = {};
+    Object.entries(weekDates).forEach(([day, date]) => { dateToDay[date] = day; });
+
+    const booked = {};
+    wlpRooms().forEach(r => { booked[r.id] = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 }; });
+
+    (allRegistrations || []).forEach(reg => {
+        if (!booked[reg.room_id]) return;
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date) return;
+            const day = dateToDay[d.care_date];
+            if (day) booked[reg.room_id][day]++;
         });
-    }
+    });
+    return booked;
+}
 
-    if (searchQ) {
-        apps = apps.filter(a =>
-            (a.child_name   || '').toLowerCase().includes(searchQ) ||
-            (a.parent_name  || '').toLowerCase().includes(searchQ) ||
-            (a.parent_email || '').toLowerCase().includes(searchQ)
-        );
-    }
+// Reuses _buildGraduationIndex() (below) as-is, reshaping its 'YYYY-MM'-keyed
+// output into { [roomId]: { [monthIdx]: [{name, days}] } } for the 12-month
+// window this tool plans against.
+function wlpGradEvents(months) {
+    const { gradOut, gradIn } = _buildGraduationIndex();
+    const keyToIdx = {};
+    months.forEach(m => { keyToIdx[m.key] = m.idx; });
 
-    // Priority sort baseline (sibling priority stays as tiebreaker for position)
-    apps.sort((a, b) => {
-        const sibA = a.has_sibling ? 0 : 1, sibB = b.has_sibling ? 0 : 1;
+    const out = {}, into = {};
+    wlpRooms().forEach(r => { out[r.id] = {}; into[r.id] = {}; });
+
+    Object.entries(gradOut).forEach(([moKey, byRoom]) => {
+        const idx = keyToIdx[moKey];
+        if (idx == null) return;
+        Object.entries(byRoom).forEach(([roomId, kidsArr]) => {
+            if (!out[roomId]) return;
+            out[roomId][idx] = kidsArr.map(k => ({ name: k.childName, days: Object.keys(k.weekdays) }));
+        });
+    });
+    Object.entries(gradIn).forEach(([moKey, byRoom]) => {
+        const idx = keyToIdx[moKey];
+        if (idx == null) return;
+        Object.entries(byRoom).forEach(([roomId, kidsArr]) => {
+            if (!into[roomId]) return;
+            into[roomId][idx] = kidsArr.map(k => ({ name: k.childName, days: Object.keys(k.weekdays) }));
+        });
+    });
+    return { gradOut: out, gradIn: into };
+}
+
+// Per-room, 12-month grid of open slots per weekday, BEFORE any waitlist
+// seating — this week's live bookings carried forward through every known
+// graduation (both the room a child leaves, which gains a slot, and the room
+// they move into, which loses one).
+function wlpComputeGradGrid(room, gradOutForRoom, gradInForRoom, baseBookedForRoom) {
+    const cap = room.capacity ?? 0;
+    const booked = { ...baseBookedForRoom };
+    const grid = [];
+    for (let m = 0; m < 12; m++) {
+        (gradOutForRoom[m] || []).forEach(ev => ev.days.forEach(d => { booked[d] = Math.max(0, booked[d] - 1); }));
+        (gradInForRoom[m] || []).forEach(ev => ev.days.forEach(d => { booked[d] = booked[d] + 1; }));
+        const openDay = {};
+        TREND_DAYS.forEach(d => { openDay[d] = Math.max(0, Math.min(cap, cap - booked[d])); });
+        grid.push(openDay);
+    }
+    return grid;
+}
+
+// Requested weekdays for a waitlist row — empty days_of_week defaults to all
+// 5, same convention _buildWaitlistPriorityQueues() already uses.
+function wlpAppDays(app) {
+    const named = (app.days_of_week || '').split(',').map(s => s.trim()).filter(Boolean);
+    return named.length ? named.filter(d => TREND_DAYS.includes(d)) : TREND_DAYS.slice();
+}
+
+// desired_start_date -> month index (0-11) within the planning window,
+// clamped to the window (a past-due or far-future date lands on the nearest
+// edge rather than being excluded).
+function wlpDesiredMonthIdx(app) {
+    if (!app.desired_start_date) return 0;
+    const [y, m] = app.desired_start_date.split('-').map(Number);
+    const today = new Date();
+    const diff = (y - today.getFullYear()) * 12 + (m - 1 - today.getMonth());
+    return Math.max(0, Math.min(11, diff));
+}
+
+// Sibling-priority first, then longest-waiting first — the single ordering
+// every view in this tool uses (matches the app's existing convention).
+function wlpSortByPriority(list) {
+    return list.slice().sort((a, b) => {
+        const sibA = a.sibling ? 0 : 1, sibB = b.sibling ? 0 : 1;
         if (sibA !== sibB) return sibA - sibB;
-        return new Date(a.applied_at) - new Date(b.applied_at);
+        return new Date(a.appliedAt) - new Date(b.appliedAt);
     });
+}
 
-    // Numbered position before user sort
-    apps.forEach((a, i) => { a._pos = i + 1; });
-
-    // User-selected sort
-    apps.sort((a, b) => {
-        let va, vb;
-        switch (_wlSortCol) {
-            case 'pos':     va = a._pos; vb = b._pos; break;
-            case 'child':   va = a.child_name || ''; vb = b.child_name || ''; break;
-            case 'start':   va = a.desired_start_date || ''; vb = b.desired_start_date || ''; break;
-            case 'age': {
-                const ageMonths = x => {
-                    const dob = x.child_dob || x.expected_due_date;
-                    if (!dob || !x.desired_start_date) return 9999;
-                    return Math.round((new Date(x.desired_start_date+'T00:00:00') - new Date(dob+'T00:00:00')) / (1000*60*60*24*30.44));
-                };
-                va = ageMonths(a); vb = ageMonths(b); break;
-            }
-            case 'room':    va = wlDeriveRoom(a) || 'zzz'; vb = wlDeriveRoom(b) || 'zzz'; break;
-            case 'status':  va = a.status || ''; vb = b.status || ''; break;
-            case 'parent':  va = a.parent_name || ''; vb = b.parent_name || ''; break;
-            case 'waiting': va = a.applied_at || ''; vb = b.applied_at || ''; break;
-            default:        va = 0; vb = 0;
-        }
-        if (va < vb) return -1 * _wlSortDir;
-        if (va > vb) return  1 * _wlSortDir;
-        return 0;
+function wlpDayChips(kid, dayMap) {
+    return TREND_DAYS.map(d => {
+        if (!kid.days.includes(d)) return { day: d, cls: 'wlp-chip-off' };
+        return dayMap[d] >= 1 ? { day: d, cls: 'wlp-chip-open' } : { day: d, cls: 'wlp-chip-full' };
     });
+}
+function wlpChipHtml(c) { return `<span class="wlp-chip ${c.cls}">${c.day}</span>`; }
+function wlpDayTypeTag(k) { return k.dayType === 'half' ? ' <span class="wlp-row-room">(half day)</span>' : ''; }
+function wlpPriorityLabel(k) { return k.sibling ? '👨‍👩‍👧 Sibling priority' : 'Standard priority'; }
 
-    document.getElementById('wlCount').textContent = `${apps.length} application${apps.length !== 1 ? 's' : ''}`;
+function wlpAvailClass(open, capacity) {
+    const cap = capacity || 0;
+    const frac = cap > 0 ? open / cap : 0;
+    if (open <= 0) return 'wlp-avail-red';
+    if (frac < 0.2) return 'wlp-avail-amber';
+    return 'wlp-avail-green';
+}
 
-    if (!apps.length) {
-        container.innerHTML = '<p class="empty-hint">No applications match the current filter.</p>';
-        return;
+// Every graduation-out and waitlist-start event for one room across the
+// 12-month window, in month order — the "who's moving" narrative. Only the
+// leaving side is ever narrated as a card (matches the design); the arriving
+// side's capacity is still applied under the hood by wlpComputeGradGrid().
+function wlpMovementEvents(roomId, alloc) {
+    const nextId = PROMOTION_CHAIN[roomId]?.nextRoom;
+    const nextLabel = nextId ? alloc.roomMeta[nextId]?.room.label.replace(/^\S+\s/, '') : null;
+    const out = [];
+    alloc.months.forEach(mo => {
+        (alloc.gradOut[roomId][mo.idx] || []).forEach(ev => {
+            out.push({
+                monthLabel: mo.label, name: ev.name, days: ev.days,
+                iconCls: 'wlp-event-icon-grad', icon: '↑',
+                actionLabel: nextId ? `moves up to ${nextLabel}` : 'graduates the program',
+            });
+        });
+        (alloc.incoming[roomId][mo.idx] || []).forEach(k => {
+            out.push({ monthLabel: mo.label, name: k.name, days: k.days, iconCls: 'wlp-event-icon-start', icon: '+', actionLabel: 'starts from the waitlist' });
+        });
+    });
+    return out;
+}
+
+function wlpEventCardHtml(ev) {
+    const chips = TREND_DAYS.map(d => ev.days.includes(d)
+        ? `<span class="wlp-chip ${ev.iconCls === 'wlp-event-icon-grad' ? 'wlp-chip-grad' : 'wlp-chip-start'}">${d}</span>`
+        : `<span class="wlp-chip wlp-chip-off">${d}</span>`).join('');
+    return `
+        <div class="wlp-event-card">
+            <div class="wlp-event-icon ${ev.iconCls}">${ev.icon}</div>
+            <div class="wlp-event-body">
+                <div class="wlp-event-top"><span class="wlp-event-name">${escHtml(ev.name)}</span><span class="wlp-event-month">${escHtml(ev.monthLabel)}</span></div>
+                <div class="wlp-event-action">${escHtml(ev.actionLabel)}</div>
+                <div class="wlp-chip-row" style="margin:0">${chips}</div>
+            </div>
+        </div>`;
+}
+
+// Compact one-line note (Board view — not the card format Grid uses).
+function wlpBoardNoteFor(roomId, monthIdx, alloc) {
+    const grads = alloc.gradOut[roomId][monthIdx] || [];
+    const incoming = alloc.incoming[roomId][monthIdx] || [];
+    const parts = [];
+    if (grads.length) {
+        const nextId = PROMOTION_CHAIN[roomId]?.nextRoom;
+        const nextLabel = nextId ? alloc.roomMeta[nextId]?.room.label.replace(/^\S+\s/, '') : 'graduates the program';
+        parts.push(grads.map(g => `↑ ${g.name} → ${nextLabel} (${g.days.join(',')})`).join('; '));
     }
+    if (incoming.length) parts.push(incoming.map(k => `+ ${k.name} starts (${k.days.join(',')})`).join('; '));
+    if (!parts.length) return null;
+    return { text: parts.join(' · '), color: grads.length ? 'var(--wlp-grad-fg)' : 'var(--wlp-start-fg)' };
+}
 
-    const allRooms = [...ROOMS, { id: 'tbd', label: 'TBD / Unborn' }];
+// ── Core allocation ──────────────────────────────────────────
+// Recomputed from scratch on every render — see the header comment above for
+// why (cheap, and guarantees the three views can never disagree).
+function wlpRunAllocation() {
+    const rooms = wlpRooms();
+    const months = wlpMonths();
+    const baseBooked = wlpBaseBooked();
+    const { gradOut, gradIn } = wlpGradEvents(months);
 
-    const sortArrow = col => {
-        if (_wlSortCol !== col) return ' <span class="sort-arrow sort-arrow-none">⇅</span>';
-        return _wlSortDir === 1 ? ' <span class="sort-arrow">▲</span>' : ' <span class="sort-arrow">▼</span>';
-    };
+    const roomMeta = {};
+    rooms.forEach(r => {
+        roomMeta[r.id] = { room: r, gradGrid: wlpComputeGradGrid(r, gradOut[r.id], gradIn[r.id], baseBooked[r.id]) };
+    });
 
-    const rows = apps.map((a, idx) => {
-        const roomId    = wlDeriveRoom(a) || 'tbd';
-        const roomObj   = allRooms.find(r => r.id === roomId);
-        const roomLabel = roomObj?.label || 'TBD';
+    const activeApps = (_allWaitlistApps || []).filter(a => ['pending', 'offered', 'accepted'].includes(a.status));
+    const kids = activeApps.map(a => ({
+        app: a,
+        id: a.id,
+        name: a.child_name,
+        room: wlDeriveRoom(a),
+        days: wlpAppDays(a),
+        desiredStartM: wlpDesiredMonthIdx(a),
+        sibling: !!a.has_sibling,
+        appliedAt: a.applied_at,
+        dayType: a.day_type === 'half' ? 'half' : 'full',
+        parentName: a.parent_name,
+        parentEmail: a.parent_email,
+    })).filter(k => k.room && roomMeta[k.room]);
 
-        const startStr = a.desired_start_date
-            ? new Date(a.desired_start_date + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
-            : '—';
+    const working = {};
+    rooms.forEach(r => { working[r.id] = roomMeta[r.id].gradGrid.map(day => ({ ...day })); });
 
-        let ageLabel = '—';
-        const dobStr = a.child_dob || a.expected_due_date;
-        if (dobStr && a.desired_start_date) {
-            const months = Math.round((new Date(a.desired_start_date+'T00:00:00') - new Date(dobStr+'T00:00:00')) / (1000*60*60*24*30.44));
-            if (months < 0)       ageLabel = 'Unborn';
-            else if (months < 24) ageLabel = `${months} mo`;
-            else                  ageLabel = `${Math.floor(months/12)} yr ${months%12} mo`;
+    const preGridByKid = {}, fitMonthByKid = {};
+    rooms.forEach(r => {
+        const roomKids = wlpSortByPriority(kids.filter(k => k.room === r.id));
+        roomKids.forEach(k => {
+            const preGrid = working[r.id].map(day => ({ ...day }));
+            preGridByKid[k.id] = preGrid;
+            let fitMonth = null;
+            for (let m = k.desiredStartM; m < 12; m++) {
+                if (k.days.every(d => preGrid[m][d] >= 1)) { fitMonth = m; break; }
+            }
+            fitMonthByKid[k.id] = fitMonth;
+            if (fitMonth !== null) {
+                for (let mm = fitMonth; mm < 12; mm++) {
+                    k.days.forEach(d => { working[r.id][mm][d] = Math.max(0, working[r.id][mm][d] - 1); });
+                }
+            }
+        });
+    });
+
+    const incoming = {};
+    rooms.forEach(r => { incoming[r.id] = {}; });
+    kids.forEach(k => {
+        const fm = fitMonthByKid[k.id];
+        if (fm != null) {
+            if (!incoming[k.room][fm]) incoming[k.room][fm] = [];
+            incoming[k.room][fm].push(k);
         }
+    });
 
-        const canOffer  = ['pending','offered'].includes(a.status);
-        const tourStatus = a.tour_status || 'not_scheduled';
-        const tourBtn = tourStatus === 'not_scheduled'
-            ? `<button class="btn-wl-tour-quick" data-id="${a.id}" data-name="${escHtml(a.parent_name)}" data-child="${escHtml(a.child_name)}">📅 Schedule Tour</button>`
-            : tourStatus === 'scheduled'
-                ? `<button class="btn-wl-tour-complete-quick" data-id="${a.id}">✓ Mark Toured</button>`
-                : '';
+    return { rooms, months, roomMeta, finalGrid: working, kids, preGridByKid, fitMonthByKid, incoming, gradOut, gradIn };
+}
 
-        return `<tr>
-            <td class="wl-td-pos">${a._pos}</td>
-            <td class="wl-td-child"><strong>${escHtml(a.child_name)}</strong>${a.has_sibling ? `<br><span class="wl-sib-tag">👨‍👩‍👧 sibling</span>` : ''}</td>
-            <td class="wl-td-start">${startStr}</td>
-            <td class="wl-td-age">${escHtml(ageLabel)}</td>
-            <td class="wl-td-room">${escHtml(roomLabel)}</td>
-            <td class="wl-td-days">${escHtml(wlDaysLabel(a))}</td>
-            <td class="wl-td-status">${wlStatusBadge(a)}</td>
-            <td class="wl-td-tour">${wlTourBadge(a)}${wlInterestTag(a)}</td>
-            <td class="wl-td-parent">${escHtml(a.parent_name)}<br>${a.parent_email ? `<a href="mailto:${escHtml(a.parent_email)}" class="wl-email-link">${escHtml(a.parent_email)}</a>` : '<span class="wl-phone">No email on file</span>'}${a.parent_phone ? `<br><span class="wl-phone">${escHtml(a.parent_phone)}</span>` : ''}</td>
-            <td class="wl-td-waiting">${wlDaysWaiting(a.applied_at)}</td>
-            <td class="wl-td-actions">
-                ${canOffer ? `<button class="btn-wl-offer-quick" data-id="${a.id}" data-name="${escHtml(a.parent_name)}" data-email="${escHtml(a.parent_email)}" data-child="${escHtml(a.child_name)}">Make Offer</button>` : ''}
-                ${tourBtn}
-                <button class="btn-wl-edit-quick" data-id="${a.id}" title="Edit this waitlist entry">✏️ Edit</button>
-                <button class="btn-wl-remove-quick" data-id="${a.id}" data-child="${escHtml(a.child_name)}" title="Permanently remove from the waitlist">🗑 Remove</button>
-            </td>
-        </tr>`;
-    }).join('');
+// ── Top-level render ─────────────────────────────────────────
+function renderWaitlistPlanner() {
+    const root = document.getElementById('wlpRoot');
+    if (!root) return;
+    const alloc = wlpRunAllocation();
+    _wlpAlloc = alloc;
 
-    container.innerHTML = `
-        <div class="table-wrapper">
-            <table class="report-table wl-quick-table">
-                <thead>
-                    <tr>
-                        <th class="wl-th" data-col="pos"   style="width:36px">#${sortArrow('pos')}</th>
-                        <th class="wl-th" data-col="child" style="width:13%">Child${sortArrow('child')}</th>
-                        <th class="wl-th" data-col="start" style="width:108px">Desired Start${sortArrow('start')}</th>
-                        <th class="wl-th" data-col="age"   style="width:90px">Age at Start${sortArrow('age')}</th>
-                        <th class="wl-th" data-col="room"  style="width:13%">Room${sortArrow('room')}</th>
-                        <th style="width:120px">Days</th>
-                        <th class="wl-th" data-col="status" style="width:88px">Status${sortArrow('status')}</th>
-                        <th style="width:100px">Tour</th>
-                        <th class="wl-th" data-col="parent">Parent / Contact${sortArrow('parent')}</th>
-                        <th class="wl-th" data-col="waiting" style="width:90px">Waiting Since${sortArrow('waiting')}</th>
-                        <th style="width:230px">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
+    const isQueue = _wlp.activeTab === 'queue';
+    const isCapacity = _wlp.activeTab === 'capacity';
+    const isGrid = isCapacity && _wlp.capacityView === 'grid';
+    const isBoard = isCapacity && _wlp.capacityView === 'board';
+
+    root.innerHTML = `
+        <div class="wlp-card">
+            ${wlpRenderHeader()}
+            ${isCapacity ? wlpRenderToolbar(alloc) : ''}
+            ${isQueue ? wlpRenderQueue(alloc) : ''}
+            ${isGrid ? wlpRenderGrid(alloc) : ''}
+            ${isBoard ? wlpRenderBoard(alloc) : ''}
         </div>`;
 
-    // Sort header clicks
-    container.querySelectorAll('.wl-th').forEach(th => {
-        th.style.cursor = 'pointer';
-        th.addEventListener('click', () => {
-            const col = th.dataset.col;
-            if (_wlSortCol === col) _wlSortDir *= -1;
-            else { _wlSortCol = col; _wlSortDir = 1; }
-            renderWaitlistQuickList();
+    wlpAttachHeaderListeners();
+    if (isQueue) wlpAttachQueueListeners();
+    if (isGrid) wlpAttachGridListeners();
+    if (isBoard) wlpAttachBoardListeners();
+}
+
+function wlpRenderHeader() {
+    const isQueue = _wlp.activeTab === 'queue';
+    const sub = isQueue
+        ? "Every waitlisted child, ranked by priority — expand any row for their 12-month outlook."
+        : (_wlp.capacityView === 'grid'
+            ? 'Open slots per room, 12 months out — click a month to see who fits.'
+            : 'One month at a time — click an open slot to see who to offer it to.');
+    return `
+        <div class="wlp-header">
+            <div>
+                <div class="wlp-header-title">Waitlist &amp; Capacity Planner</div>
+                <div class="wlp-header-sub">${escHtml(sub)}</div>
+            </div>
+            <div class="wlp-header-actions">
+                <div class="wlp-pill-group">
+                    <button type="button" class="wlp-pill-btn ${isQueue ? 'active' : ''}" data-wlp-tab="queue">Waitlist Queue</button>
+                    <button type="button" class="wlp-pill-btn ${!isQueue ? 'active' : ''}" data-wlp-tab="capacity">Capacity Planner</button>
+                </div>
+                <button type="button" class="btn-secondary" id="wlpAddBtn">+ Add to Waitlist</button>
+            </div>
+        </div>`;
+}
+
+function wlpRenderToolbar(alloc) {
+    const isGrid = _wlp.capacityView === 'grid';
+    const mi = _wlp.boardMonthIdx;
+    return `
+        <div class="wlp-toolbar">
+            <div class="wlp-pill-group">
+                <button type="button" class="wlp-pill-btn ${isGrid ? 'active' : ''}" data-wlp-view="grid">📅 Grid — 12 months</button>
+                <button type="button" class="wlp-pill-btn ${!isGrid ? 'active' : ''}" data-wlp-view="board">🎯 Board — 1 month, match &amp; assign</button>
+            </div>
+            ${!isGrid ? `
+            <div class="wlp-month-nav">
+                <button type="button" class="wlp-month-nav-btn" id="wlpPrevMonth" ${mi === 0 ? 'disabled' : ''}>‹</button>
+                <span class="wlp-month-nav-label">${escHtml(alloc.months[mi].label)}</span>
+                <button type="button" class="wlp-month-nav-btn" id="wlpNextMonth" ${mi === 11 ? 'disabled' : ''}>›</button>
+            </div>` : ''}
+        </div>`;
+}
+
+function wlpAttachHeaderListeners() {
+    document.querySelectorAll('[data-wlp-tab]').forEach(btn => {
+        btn.addEventListener('click', () => { _wlp.activeTab = btn.dataset.wlpTab; renderWaitlistPlanner(); });
+    });
+    document.querySelectorAll('[data-wlp-view]').forEach(btn => {
+        btn.addEventListener('click', () => { _wlp.capacityView = btn.dataset.wlpView; renderWaitlistPlanner(); });
+    });
+    document.getElementById('wlpAddBtn')?.addEventListener('click', _openAdminWlModal);
+    document.getElementById('wlpPrevMonth')?.addEventListener('click', () => {
+        _wlp.boardMonthIdx = Math.max(0, _wlp.boardMonthIdx - 1);
+        _wlp.selSlotC = null; _wlp.highlightKidC = null;
+        renderWaitlistPlanner();
+    });
+    document.getElementById('wlpNextMonth')?.addEventListener('click', () => {
+        _wlp.boardMonthIdx = Math.min(11, _wlp.boardMonthIdx + 1);
+        _wlp.selSlotC = null; _wlp.highlightKidC = null;
+        renderWaitlistPlanner();
+    });
+}
+
+// ── Queue view ───────────────────────────────────────────────
+function wlpQueueFilteredKids(alloc) {
+    const search = _wlp.search.toLowerCase().trim();
+    const roomFilter = _wlp.roomFilter;
+    let kids = wlpSortByPriority(alloc.kids);
+    kids.forEach((k, i) => { k._pos = i + 1; }); // true priority position, before filtering
+    if (roomFilter) kids = kids.filter(k => k.room === roomFilter);
+    if (search) {
+        kids = kids.filter(k =>
+            k.name.toLowerCase().includes(search) ||
+            (k.parentName || '').toLowerCase().includes(search) ||
+            (k.parentEmail || '').toLowerCase().includes(search));
+    }
+    return kids;
+}
+
+function wlpRenderQueue(alloc) {
+    const kids = wlpQueueFilteredKids(alloc);
+    const roomOptions = alloc.rooms.map(r => `<option value="${r.id}" ${_wlp.roomFilter === r.id ? 'selected' : ''}>${escHtml(r.label)}</option>`).join('');
+    return `
+        <div>
+            <div class="wlp-filter-bar">
+                <input type="search" id="wlpSearch" class="family-search-input" placeholder="Search by child or parent name…" value="${escHtml(_wlp.search)}" style="min-width:220px">
+                <select id="wlpRoomFilterSel" class="family-search-input" style="width:auto;">
+                    <option value="">All Rooms</option>
+                    ${roomOptions}
+                </select>
+                <span class="rates-status" id="wlpQueueCount">${kids.length} on the waitlist</span>
+            </div>
+            <div class="wlp-queue-hint">Day chips show their exact request at desired start: green = open, red = taken, dim = not requested. Click a month in the strip for that month's breakdown.</div>
+            <div id="wlpQueueRows">${wlpQueueRowsHtml(kids, alloc)}</div>
+            ${_wlp.toastText ? `<div class="wlp-toast">${escHtml(_wlp.toastText)}</div>` : ''}
+        </div>`;
+}
+
+function wlpQueueRowsHtml(kids, alloc) {
+    return kids.map(k => wlpRenderQueueRow(k, alloc)).join('') || '<p class="empty-hint">No applications match the current filter.</p>';
+}
+
+function wlpRenderQueueRow(k, alloc) {
+    const preGrid = alloc.preGridByKid[k.id];
+    const fitM = alloc.fitMonthByKid[k.id];
+    const fitNow = fitM === k.desiredStartM;
+    let fitCls, fitLabel;
+    if (fitM === null) { fitCls = 'wlp-status-red'; fitLabel = 'No fit in 12 mo'; }
+    else if (fitNow) { fitCls = 'wlp-status-green'; fitLabel = 'Fits now'; }
+    else { fitCls = 'wlp-status-amber'; fitLabel = `Fits ${alloc.months[fitM].label}`; }
+
+    const startDayMap = preGrid[k.desiredStartM];
+    const chips = wlpDayChips(k, startDayMap).map(wlpChipHtml).join('');
+    const expanded = _wlp.expandedKidB === k.id;
+    const room = alloc.roomMeta[k.room].room;
+
+    return `
+        <div class="wlp-row" data-kid-id="${k.id}">
+            <div class="wlp-row-main" data-wlp-toggle="${k.id}">
+                <div class="wlp-pos ${k.sibling ? 'wlp-pos-sib' : 'wlp-pos-std'}">${k._pos}</div>
+                <div class="wlp-row-body">
+                    <div class="wlp-row-name">${escHtml(k.name)}${wlpDayTypeTag(k)} <span class="wlp-row-room">· ${escHtml(room.label.replace(/^\S+\s/, ''))}</span></div>
+                    <div class="wlp-chip-row">${chips}</div>
+                    <div class="wlp-row-meta">${k.sibling ? '👨‍👩‍👧 sibling · ' : ''}waiting ${escHtml(wlDaysWaiting(k.appliedAt))} · desired start ${escHtml(alloc.months[k.desiredStartM].label)}</div>
+                </div>
+                <div class="wlp-status-pill ${fitCls}">${fitLabel}</div>
+                <button type="button" class="wlp-edit-btn" data-wlp-edit="${k.id}" title="Edit child">✎ Edit</button>
+                <div class="wlp-chevron">${expanded ? '▲' : '▼'}</div>
+            </div>
+            ${expanded ? wlpRenderQueueExpand(k, alloc) : ''}
+        </div>`;
+}
+
+function wlpRenderQueueExpand(k, alloc) {
+    const preGrid = alloc.preGridByKid[k.id];
+    const stripSel = _wlp.selStripB;
+    const stripTiles = alloc.months.map(mo => {
+        const dayMap = preGrid[mo.idx];
+        const before = mo.idx < k.desiredStartM;
+        let cls = 'wlp-strip-before', sub = '—';
+        if (!before) {
+            const all = k.days.every(d => dayMap[d] >= 1);
+            const some = k.days.some(d => dayMap[d] >= 1);
+            if (all) { cls = 'wlp-strip-fits'; sub = 'fits'; }
+            else if (some) { cls = 'wlp-strip-partial'; sub = 'partial'; }
+            else { cls = 'wlp-strip-full'; sub = 'full'; }
+        }
+        const isSel = stripSel && stripSel.kidId === k.id && stripSel.monthIdx === mo.idx;
+        return `<div class="wlp-month-tile ${cls} ${isSel ? 'selected' : ''}" data-wlp-strip="${k.id}:${mo.idx}" title="${escHtml(mo.label)}${before ? ' (before desired start)' : ''}">
+            <div class="wlp-month-tile-label">${mo.label.split(' ')[0]}</div>
+            <div class="wlp-month-tile-sub">${sub}</div>
+        </div>`;
+    }).join('');
+
+    let stripDetail = '';
+    if (stripSel && stripSel.kidId === k.id) {
+        const chips = wlpDayChips(k, preGrid[stripSel.monthIdx]).map(wlpChipHtml).join('');
+        stripDetail = `<div class="wlp-strip-detail"><span class="wlp-strip-detail-label">${escHtml(alloc.months[stripSel.monthIdx].label)}:</span><div class="wlp-chip-row" style="margin:0">${chips}</div></div>`;
+    }
+
+    const startDayMap = preGrid[k.desiredStartM];
+    const avail = k.days.filter(d => startDayMap[d] >= 1);
+    const missing = k.days.filter(d => !avail.includes(d));
+    const hasPartial = avail.length > 0 && missing.length > 0;
+    const fitM = alloc.fitMonthByKid[k.id];
+    const fitNow = fitM === k.desiredStartM;
+
+    return `
+        <div class="wlp-expand">
+            <div class="wlp-month-strip">${stripTiles}</div>
+            ${stripDetail}
+            <div class="wlp-expand-footer">
+                <div class="wlp-parent-line">${escHtml(k.parentName)} · ${escHtml(k.parentEmail)}</div>
+                <div class="wlp-offer-actions">
+                    ${hasPartial ? `<button type="button" class="wlp-btn-partial-offer" data-wlp-partial-offer="${k.id}">Offer ${avail.length} of ${k.days.length} days (${escHtml(avail.join(', '))})</button>` : ''}
+                    <button type="button" class="wlp-btn-offer" data-wlp-offer="${k.id}" ${!fitNow ? 'disabled' : ''}>${fitNow ? '🎉 Offer a Spot' : 'Not open yet'}</button>
+                </div>
+            </div>
+            ${wlpRenderSecondaryActions(k)}
+        </div>`;
+}
+
+function wlpRenderSecondaryActions(k) {
+    const app = k.app;
+    if (_wlp.archivingKidId === k.id) {
+        return `
+            <div class="wlp-secondary-actions">
+                <span style="font-size:11px;color:var(--text-muted)">Archive reason:</span>
+                <select id="wlpArchiveReason" style="font-size:11px;padding:3px 6px;">
+                    <option value="declined">Family declined</option>
+                    <option value="no_response">No response to offer</option>
+                    <option value="enrolled_elsewhere">Enrolled elsewhere</option>
+                    <option value="other">Other</option>
+                </select>
+                <button type="button" class="btn-warning" data-wlp-archive-confirm="${k.id}">Archive</button>
+                <button type="button" class="btn-ghost" data-wlp-archive-cancel="${k.id}">Cancel</button>
+            </div>`;
+    }
+    const tourStatus = app.tour_status || 'not_scheduled';
+    const tourBtn = tourStatus === 'not_scheduled'
+        ? `<button type="button" class="btn-ghost" data-wlp-tour="${k.id}">📅 Schedule Tour</button>`
+        : tourStatus === 'scheduled'
+            ? `<button type="button" class="btn-ghost" data-wlp-tour-complete="${k.id}">✓ Mark Toured</button>`
+            : `<span class="wl-badge wl-badge-enrolled">✓ Toured</span>`;
+    const acceptBtn = app.status === 'offered' ? `<button type="button" class="btn-ghost" data-wlp-accept="${k.id}">✓ Mark Accepted</button>` : '';
+    const enrollBtn = app.status === 'accepted' ? `<button type="button" class="btn-ghost" data-wlp-enroll="${k.id}">✓ Mark Enrolled</button>` : '';
+    return `
+        <div class="wlp-secondary-actions">
+            ${tourBtn}
+            ${acceptBtn}
+            ${enrollBtn}
+            <button type="button" class="btn-ghost" data-wlp-archive="${k.id}">Archive ▾</button>
+            <button type="button" class="btn-danger" data-wlp-delete="${k.id}" data-child="${escHtml(k.name)}">🗑 Delete</button>
+        </div>`;
+}
+
+// Lightweight re-render — swaps only the rows list (and count), leaving the
+// search input untouched so typing doesn't lose focus.
+function wlpRerenderQueueRows() {
+    const alloc = _wlpAlloc;
+    if (!alloc) return;
+    const kids = wlpQueueFilteredKids(alloc);
+    const rowsEl = document.getElementById('wlpQueueRows');
+    const countEl = document.getElementById('wlpQueueCount');
+    if (countEl) countEl.textContent = `${kids.length} on the waitlist`;
+    if (rowsEl) rowsEl.innerHTML = wlpQueueRowsHtml(kids, alloc);
+    wlpWireQueueRowActions();
+}
+
+function wlpAttachQueueListeners() {
+    const searchEl = document.getElementById('wlpSearch');
+    searchEl?.addEventListener('input', () => { _wlp.search = searchEl.value; wlpRerenderQueueRows(); });
+    document.getElementById('wlpRoomFilterSel')?.addEventListener('change', e => { _wlp.roomFilter = e.target.value; wlpRerenderQueueRows(); });
+    wlpWireQueueRowActions();
+}
+
+function wlpWireQueueRowActions() {
+    document.querySelectorAll('[data-wlp-toggle]').forEach(el => {
+        el.addEventListener('click', () => {
+            const id = Number(el.dataset.wlpToggle);
+            _wlp.expandedKidB = _wlp.expandedKidB === id ? null : id;
+            _wlp.selStripB = null;
+            _wlp.archivingKidId = null;
+            wlpRerenderQueueRows();
         });
     });
-
-    // Make Offer buttons
-    container.querySelectorAll('.btn-wl-offer-quick').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const modal = document.getElementById('wlOfferModal');
-            modal.dataset.appId      = btn.dataset.id;
-            modal.dataset.parentName = btn.dataset.name;
-            modal.dataset.parentEmail= btn.dataset.email;
-            modal.dataset.childName  = btn.dataset.child;
-            document.getElementById('wlOfferModalDesc').textContent = `Offering a spot to ${btn.dataset.child} — parent: ${btn.dataset.name} (${btn.dataset.email})`;
-            document.getElementById('wlOfferErr').textContent = '';
-            document.getElementById('wlOfferSendBtn').disabled = false;
-            document.getElementById('wlOfferSendBtn').textContent = 'Send & Email Parent';
-            // Pre-fill global links
-            fetchGlobalOfferLinks().then(g => {
-                const procareEl  = document.getElementById('wlOfferProcare');
-                const paperwkEl  = document.getElementById('wlOfferPaperwork');
-                if (procareEl && !procareEl.value) procareEl.value = g.procareLink || '';
-                if (paperwkEl && !paperwkEl.value) paperwkEl.value = (g.paperworkLinks || []).join(', ');
-            }).catch(() => {});
-            modal.classList.remove('hidden');
+    document.querySelectorAll('[data-wlp-strip]').forEach(el => {
+        el.addEventListener('click', e => {
+            e.stopPropagation();
+            const [kidId, monthIdx] = el.dataset.wlpStrip.split(':').map(Number);
+            const cur = _wlp.selStripB;
+            _wlp.selStripB = (cur && cur.kidId === kidId && cur.monthIdx === monthIdx) ? null : { kidId, monthIdx };
+            wlpRerenderQueueRows();
         });
     });
-
-    // Edit buttons
-    container.querySelectorAll('.btn-wl-edit-quick').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const app = _allWaitlistApps.find(a => a.id === Number(btn.dataset.id));
+    document.querySelectorAll('[data-wlp-edit]').forEach(el => {
+        el.addEventListener('click', e => {
+            e.stopPropagation();
+            const app = _allWaitlistApps.find(a => a.id === Number(el.dataset.wlpEdit));
             if (app) _openAdminWlModalForEdit(app);
         });
     });
-
-    // Schedule Tour buttons
-    container.querySelectorAll('.btn-wl-tour-quick').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const modal = document.getElementById('wlTourModal');
-            modal.dataset.appId = btn.dataset.id;
-            document.getElementById('wlTourModalDesc').textContent = `Scheduling a tour for ${btn.dataset.child} (parent: ${btn.dataset.name})`;
-            document.getElementById('wlTourDateTime').value = '';
-            document.getElementById('wlTourNotes').value = '';
-            document.getElementById('wlTourErr').textContent = '';
-            modal.classList.remove('hidden');
+    document.querySelectorAll('[data-wlp-offer]').forEach(el => {
+        el.addEventListener('click', e => {
+            e.stopPropagation();
+            if (el.disabled) return;
+            wlpOpenOfferModal(Number(el.dataset.wlpOffer), 'full');
         });
     });
-
-    // Mark Toured buttons
-    container.querySelectorAll('.btn-wl-tour-complete-quick').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id = Number(btn.dataset.id);
-            btn.disabled = true;
+    document.querySelectorAll('[data-wlp-partial-offer]').forEach(el => {
+        el.addEventListener('click', e => { e.stopPropagation(); wlpOpenOfferModal(Number(el.dataset.wlpPartialOffer), 'partial'); });
+    });
+    document.querySelectorAll('[data-wlp-tour]').forEach(el => {
+        el.addEventListener('click', e => { e.stopPropagation(); wlpOpenTourModal(Number(el.dataset.wlpTour)); });
+    });
+    document.querySelectorAll('[data-wlp-tour-complete]').forEach(el => {
+        el.addEventListener('click', async e => {
+            e.stopPropagation();
+            const id = Number(el.dataset.wlpTourComplete);
+            el.disabled = true;
             try {
                 await updateWaitlistTourStatus(id, { tour_status: 'completed', tour_completed_at: new Date().toISOString() });
                 const app = _allWaitlistApps.find(a => a.id === id);
                 if (app) { app.tour_status = 'completed'; app.tour_completed_at = new Date().toISOString(); }
-                renderWaitlistQuickList();
-            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
+                renderWaitlistPlanner();
+            } catch (err) { alert('Error: ' + err.message); el.disabled = false; }
         });
     });
-
-    // Remove buttons — permanently deletes the application (no archive step required)
-    container.querySelectorAll('.btn-wl-remove-quick').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id    = Number(btn.dataset.id);
-            const child = btn.dataset.child || 'this entry';
-            if (!confirm(`Permanently remove ${child} from the waitlist? This cannot be undone.`)) return;
-            btn.disabled = true;
+    document.querySelectorAll('[data-wlp-accept]').forEach(el => {
+        el.addEventListener('click', async e => {
+            e.stopPropagation();
+            const id = Number(el.dataset.wlpAccept);
+            el.disabled = true;
             try {
-                await deleteWaitlistApplication(id);
-                _allWaitlistApps = _allWaitlistApps.filter(a => a.id !== id);
-                renderWaitlistQuickList();
-            } catch (err) {
-                alert('Error: ' + err.message);
-                btn.disabled = false;
-            }
-        });
-    });
-}
-
-function renderWaitlistAdmin() {
-    const statusFilter = document.getElementById('wlStatusFilter').value;
-    const roomFilter   = document.getElementById('wlRoomFilter').value;
-    const container    = document.getElementById('waitlistAdminContent');
-    const today        = new Date().toISOString().split('T')[0];
-
-    let apps = _allWaitlistApps.slice();
-
-    // Status filter
-    if (statusFilter === 'active') {
-        apps = apps.filter(a => ['pending','offered','accepted'].includes(a.status));
-    } else if (statusFilter === 'enrolled') {
-        apps = apps.filter(a => a.status === 'enrolled');
-    } else if (statusFilter === 'archived') {
-        apps = apps.filter(a => ['declined','expired','archived'].includes(a.status));
-    }
-
-    // Room filter
-    if (roomFilter) {
-        apps = apps.filter(a => {
-            if (roomFilter === 'tbd') return !a.child_dob && !a.expected_due_date;
-            return wlDeriveRoom(a) === roomFilter;
-        });
-    }
-
-    // Priority sort: sibling first (tier 1 vs 2), then desired_start_date, then applied_at
-    apps.sort((a, b) => {
-        const sibA = a.has_sibling ? 0 : 1;
-        const sibB = b.has_sibling ? 0 : 1;
-        if (sibA !== sibB) return sibA - sibB;
-        const startA = a.desired_start_date || '';
-        const startB = b.desired_start_date || '';
-        if (startA !== startB) return startA < startB ? -1 : 1;
-        return new Date(a.applied_at) - new Date(b.applied_at);
-    });
-
-    document.getElementById('wlCount').textContent = `${apps.length} application${apps.length !== 1 ? 's' : ''}`;
-
-    if (!apps.length) {
-        container.innerHTML = '<p class="empty-hint">No applications match the current filter.</p>';
-        return;
-    }
-
-    const cards = apps.map(app => {
-        const room     = wlDeriveRoom(app);
-        const isUnborn = !!app.expected_due_date && !app.child_dob;
-        const dobInfo  = isUnborn
-            ? `Due ${app.expected_due_date}`
-            : app.child_dob ? `DOB ${app.child_dob}` : '';
-        const daysStr  = (app.days_of_week || '').split(',').filter(Boolean).join(', ');
-        const offerExpired = app.status === 'offered' && app.offer_deadline && app.offer_deadline < today;
-
-        const priorityBadges = [
-            app.has_sibling ? '<span class="wl-pri-badge wl-sib">👨‍👩‍👧 Sibling</span>' : '',
-            isUnborn        ? '<span class="wl-pri-badge wl-prenatal">👶 Prenatal</span>' : '',
-            offerExpired    ? '<span class="wl-pri-badge wl-expired-warn">⚠️ Offer Expired</span>' : '',
-        ].filter(Boolean).join(' ');
-
-        // Checklist (shown once accepted)
-        const checklistHtml = ['accepted','enrolled'].includes(app.status) ? `
-            <div class="wl-checklist">
-                <label class="wl-check-item">
-                    <input type="checkbox" class="wl-paperwork" data-id="${app.id}" ${app.paperwork_received ? 'checked' : ''}>
-                    Paperwork received
-                </label>
-                <label class="wl-check-item">
-                    <input type="checkbox" class="wl-deposit" data-id="${app.id}" ${app.deposit_paid ? 'checked' : ''}>
-                    Deposit paid
-                </label>
-                ${(app.paperwork_received && app.deposit_paid && app.status !== 'enrolled') ? `
-                    <button class="btn-primary wl-action wl-enroll" data-id="${app.id}" style="margin-left:10px;">✓ Mark Enrolled</button>
-                ` : ''}
-            </div>` : '';
-
-        // Action buttons
-        const actionBtns = (() => {
-            const id = app.id;
-            const edit = `<button class="btn-ghost wl-action wl-edit" data-id="${id}">✏️ Edit</button>`;
-            if (['declined','expired','archived','enrolled'].includes(app.status)) {
-                return `${edit}
-                        <button class="btn-ghost wl-action wl-unarchive" data-id="${id}">↩ Restore</button>
-                        <button class="btn-danger wl-action wl-delete" data-id="${id}" data-child="${escHtml(app.child_name)}">🗑 Delete</button>`;
-            }
-            const offer = app.status === 'pending' || offerExpired
-                ? `<button class="btn-secondary wl-action wl-offer" data-id="${id}">🎉 Offer a Spot</button>`
-                : '';
-            const accept = app.status === 'offered'
-                ? `<button class="btn-secondary wl-action wl-accept" data-id="${id}">✓ Mark Accepted</button>`
-                : '';
-            const archive = `<button class="btn-ghost wl-action wl-archive" data-id="${id}">Archive ▾</button>`;
-            const remove  = `<button class="btn-danger wl-action wl-delete" data-id="${id}" data-child="${escHtml(app.child_name)}" title="Permanently remove without archiving">🗑 Remove</button>`;
-            return [edit, offer, accept, archive, remove].filter(Boolean).join(' ');
-        })();
-
-        // Offer details row
-        const offerRow = app.status === 'offered' && app.offer_deadline ? `
-            <div class="wl-offer-row">
-                Spot offered ${app.offered_at ? new Date(app.offered_at).toLocaleDateString() : ''}
-                · Deadline: <strong>${app.offer_deadline}</strong>
-                ${app.offer_notes ? `· <em>${escHtml(app.offer_notes)}</em>` : ''}
-            </div>` : '';
-
-        return `
-        <div class="wl-card" data-id="${app.id}">
-            <div class="wl-card-header">
-                <div class="wl-card-title">
-                    <strong>${escHtml(app.child_name)}</strong>
-                    ${dobInfo ? `<span class="wl-dob">${escHtml(dobInfo)}</span>` : ''}
-                    ${room ? `<span class="wl-room">${wlRoomLabel(room)}</span>` : '<span class="wl-room">Room TBD</span>'}
-                    ${priorityBadges}
-                </div>
-                <div class="wl-card-status">${wlStatusBadge(app)}</div>
-            </div>
-            <div class="wl-card-body">
-                <div class="wl-detail-row">
-                    <span class="wl-detail-label">Start:</span>
-                    ${escHtml(app.desired_start_date)} <em class="wl-flex">(${wlFlexLabel(app.start_flexibility)})</em>
-                </div>
-                <div class="wl-detail-row">
-                    <span class="wl-detail-label">Days:</span>
-                    ${escHtml(daysStr)} · ${app.day_type === 'half' ? 'Half Day' : 'Full Day'}
-                </div>
-                <div class="wl-detail-row">
-                    <span class="wl-detail-label">Parent:</span>
-                    ${escHtml(app.parent_name)}
-                    ${app.parent_email ? `· <a href="mailto:${escHtml(app.parent_email)}">${escHtml(app.parent_email)}</a>` : '· <em>no email on file</em>'}
-                    ${app.parent_phone ? `· ${escHtml(app.parent_phone)}` : ''}
-                </div>
-                ${app.has_sibling ? `<div class="wl-detail-row"><span class="wl-detail-label">Sibling:</span> ${escHtml(app.sibling_child_name || '—')} ${app.sibling_room_id ? `(${wlRoomLabel(app.sibling_room_id)})` : ''}</div>` : ''}
-                ${app.notes ? `<div class="wl-detail-row"><span class="wl-detail-label">Notes:</span> <em>${escHtml(app.notes)}</em></div>` : ''}
-                <div class="wl-detail-row wl-applied">Applied ${wlDaysWaiting(app.applied_at)} (${new Date(app.applied_at).toLocaleDateString()})</div>
-            </div>
-            ${offerRow}
-            ${checklistHtml}
-            <div class="wl-card-actions">${actionBtns}</div>
-
-            <!-- Offer form (hidden by default) -->
-            <div class="wl-offer-form hidden" id="wl-offer-form-${app.id}">
-                <div class="wl-offer-fields">
-                    <label>Offer deadline: <input type="date" class="wl-deadline-input" id="wl-deadline-${app.id}"
-                        value="${new Date(Date.now() + 14*86400000).toISOString().split('T')[0]}"></label>
-                    <label style="flex:1">Notes (optional): <input type="text" class="wl-notes-input" id="wl-ofnotes-${app.id}" placeholder="e.g. Bear room opening Sept 1"></label>
-                </div>
-                <div class="wl-offer-fields" style="margin-top:8px;">
-                    <label style="flex:1">Paperwork link(s) (optional, comma-separated URLs):
-                        <input type="text" class="wl-paperwork-links" id="wl-paperwk-${app.id}" placeholder="https://docs.google.com/..."></label>
-                    <label style="flex:1">Procare enrollment link (optional):
-                        <input type="text" class="wl-procare-link" id="wl-procare-${app.id}" placeholder="https://app.procaresoftware.com/..."></label>
-                </div>
-                <div class="wl-offer-fields" style="margin-top:8px;">
-                    <button class="btn-primary wl-offer-send" data-id="${app.id}" data-name="${escHtml(app.parent_name)}" data-email="${escHtml(app.parent_email)}" data-child="${escHtml(app.child_name)}">🎉 Send Spot Offer</button>
-                    <button class="btn-ghost wl-offer-cancel" data-id="${app.id}">Cancel</button>
-                </div>
-            </div>
-
-            <!-- Archive dropdown (hidden by default) -->
-            <div class="wl-archive-form hidden" id="wl-archive-form-${app.id}">
-                <div class="wl-offer-fields">
-                    <span>Archive reason:</span>
-                    <select id="wl-archive-reason-${app.id}">
-                        <option value="declined">Family declined</option>
-                        <option value="no_response">No response to offer</option>
-                        <option value="enrolled_elsewhere">Enrolled elsewhere</option>
-                        <option value="other">Other</option>
-                    </select>
-                    <button class="btn-warning wl-archive-confirm" data-id="${app.id}">Archive</button>
-                    <button class="btn-ghost wl-archive-cancel" data-id="${app.id}">Cancel</button>
-                </div>
-            </div>
-        </div>`;
-    }).join('');
-
-    container.innerHTML = `<div class="wl-list">${cards}</div>`;
-
-    // Wire up all event handlers
-    container.querySelectorAll('.wl-edit').forEach(btn =>
-        btn.addEventListener('click', () => {
-            const app = _allWaitlistApps.find(a => a.id === Number(btn.dataset.id));
-            if (app) _openAdminWlModalForEdit(app);
-        }));
-
-    container.querySelectorAll('.wl-offer').forEach(btn =>
-        btn.addEventListener('click', () => {
-            const id = btn.dataset.id;
-            const g = window._globalOfferLinks || {};
-            const procareEl   = document.getElementById(`wl-procare-${id}`);
-            const paperwkEl   = document.getElementById(`wl-paperwk-${id}`);
-            if (procareEl && !procareEl.value)   procareEl.value   = g.procareLink   || '';
-            if (paperwkEl && !paperwkEl.value)   paperwkEl.value   = (g.paperworkLinks || []).join(', ');
-            document.getElementById(`wl-offer-form-${id}`)?.classList.remove('hidden');
-        }));
-
-    container.querySelectorAll('.wl-offer-cancel').forEach(btn =>
-        btn.addEventListener('click', () => {
-            document.getElementById(`wl-offer-form-${btn.dataset.id}`)?.classList.add('hidden');
-        }));
-
-    container.querySelectorAll('.wl-offer-send').forEach(btn =>
-        btn.addEventListener('click', async () => {
-            const id          = btn.dataset.id;
-            const deadline    = document.getElementById(`wl-deadline-${id}`)?.value;
-            const notes       = document.getElementById(`wl-ofnotes-${id}`)?.value || '';
-            const parentName  = btn.dataset.name;
-            const parentEmail = btn.dataset.email;
-            const childName   = btn.dataset.child;
-            const paperwkRaw  = document.getElementById(`wl-paperwk-${id}`)?.value || '';
-            const procareLink = document.getElementById(`wl-procare-${id}`)?.value.trim() || null;
-            const papeworkLinks = paperwkRaw.split(',').map(s => s.trim()).filter(Boolean);
-            if (!deadline) { alert('Please set an offer deadline.'); return; }
-            btn.disabled    = true;
-            btn.textContent = 'Sending…';
-            try {
-                // Save status first
-                await updateWaitlistApplication(Number(id), {
-                    status:         'offered',
-                    offered_at:     new Date().toISOString(),
-                    offer_deadline: deadline,
-                    offer_notes:    notes || null,
-                });
-                // Send email
-                await sendWaitlistOfferEmail({ parentName, parentEmail, childName, offerDeadline: deadline, offerNotes: notes || null, papeworkLinks, procareLink });
-                const app = _allWaitlistApps.find(a => a.id === Number(id));
-                if (app) { app.status = 'offered'; app.offered_at = new Date().toISOString(); app.offer_deadline = deadline; app.offer_notes = notes || null; }
-                renderWaitlistAdmin();
-            } catch (err) {
-                // If only the email failed, status was already saved — note this in the alert
-                let detail = err.message;
-                try { const ctx = await err.context?.json(); detail += '\n' + JSON.stringify(ctx); } catch {}
-                console.error('Email error full detail:', err);
-                alert('Offer saved, but email failed: ' + detail + '\n\nYou can email the parent manually at ' + parentEmail);
-                const app = _allWaitlistApps.find(a => a.id === Number(id));
-                if (app && app.status !== 'offered') { btn.disabled = false; btn.textContent = 'Send & Email Parent'; }
-                else renderWaitlistAdmin();
-            }
-        }));
-
-    container.querySelectorAll('.wl-accept').forEach(btn =>
-        btn.addEventListener('click', async () => {
-            btn.disabled = true;
-            try {
-                const id = Number(btn.dataset.id);
                 await updateWaitlistApplication(id, { status: 'accepted' });
                 const app = _allWaitlistApps.find(a => a.id === id);
                 if (app) app.status = 'accepted';
-                renderWaitlistAdmin();
-            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
-        }));
-
-    container.querySelectorAll('.wl-enroll').forEach(btn =>
-        btn.addEventListener('click', async () => {
-            btn.disabled = true;
+                renderWaitlistPlanner();
+            } catch (err) { alert('Error: ' + err.message); el.disabled = false; }
+        });
+    });
+    document.querySelectorAll('[data-wlp-enroll]').forEach(el => {
+        el.addEventListener('click', async e => {
+            e.stopPropagation();
+            const id = Number(el.dataset.wlpEnroll);
+            el.disabled = true;
             try {
-                const id = Number(btn.dataset.id);
                 await updateWaitlistApplication(id, { status: 'enrolled' });
                 const app = _allWaitlistApps.find(a => a.id === id);
                 if (app) app.status = 'enrolled';
-                renderWaitlistAdmin();
-            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
-        }));
-
-    container.querySelectorAll('.wl-paperwork').forEach(cb =>
-        cb.addEventListener('change', async () => {
-            const id = Number(cb.dataset.id);
+                renderWaitlistPlanner();
+            } catch (err) { alert('Error: ' + err.message); el.disabled = false; }
+        });
+    });
+    document.querySelectorAll('[data-wlp-archive]').forEach(el => {
+        el.addEventListener('click', e => { e.stopPropagation(); _wlp.archivingKidId = Number(el.dataset.wlpArchive); wlpRerenderQueueRows(); });
+    });
+    document.querySelectorAll('[data-wlp-archive-cancel]').forEach(el => {
+        el.addEventListener('click', e => { e.stopPropagation(); _wlp.archivingKidId = null; wlpRerenderQueueRows(); });
+    });
+    document.querySelectorAll('[data-wlp-archive-confirm]').forEach(el => {
+        el.addEventListener('click', async e => {
+            e.stopPropagation();
+            const id = Number(el.dataset.wlpArchiveConfirm);
+            const reason = document.getElementById('wlpArchiveReason')?.value || 'other';
+            el.disabled = true;
             try {
-                await updateWaitlistApplication(id, { paperwork_received: cb.checked });
-                const app = _allWaitlistApps.find(a => a.id === id);
-                if (app) app.paperwork_received = cb.checked;
-                renderWaitlistAdmin();
-            } catch (err) { alert('Error: ' + err.message); cb.checked = !cb.checked; }
-        }));
-
-    container.querySelectorAll('.wl-deposit').forEach(cb =>
-        cb.addEventListener('change', async () => {
-            const id = Number(cb.dataset.id);
-            try {
-                await updateWaitlistApplication(id, { deposit_paid: cb.checked });
-                const app = _allWaitlistApps.find(a => a.id === id);
-                if (app) app.deposit_paid = cb.checked;
-                renderWaitlistAdmin();
-            } catch (err) { alert('Error: ' + err.message); cb.checked = !cb.checked; }
-        }));
-
-    container.querySelectorAll('.wl-archive').forEach(btn =>
-        btn.addEventListener('click', () => {
-            const id = btn.dataset.id;
-            document.getElementById(`wl-archive-form-${id}`)?.classList.remove('hidden');
-        }));
-
-    container.querySelectorAll('.wl-archive-cancel').forEach(btn =>
-        btn.addEventListener('click', () => {
-            document.getElementById(`wl-archive-form-${btn.dataset.id}`)?.classList.add('hidden');
-        }));
-
-    container.querySelectorAll('.wl-archive-confirm').forEach(btn =>
-        btn.addEventListener('click', async () => {
-            const id     = Number(btn.dataset.id);
-            const reason = document.getElementById(`wl-archive-reason-${id}`)?.value || 'other';
-            btn.disabled = true;
-            try {
-                await updateWaitlistApplication(id, {
-                    status:         'archived',
-                    archive_reason: reason,
-                    archived_at:    new Date().toISOString(),
-                });
+                await updateWaitlistApplication(id, { status: 'archived', archive_reason: reason, archived_at: new Date().toISOString() });
                 const app = _allWaitlistApps.find(a => a.id === id);
                 if (app) { app.status = 'archived'; app.archive_reason = reason; }
-                renderWaitlistAdmin();
-            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
-        }));
-
-    container.querySelectorAll('.wl-unarchive').forEach(btn =>
-        btn.addEventListener('click', async () => {
-            btn.disabled = true;
-            try {
-                const id = Number(btn.dataset.id);
-                await updateWaitlistApplication(id, { status: 'pending', archived_at: null, archive_reason: null });
-                const app = _allWaitlistApps.find(a => a.id === id);
-                if (app) { app.status = 'pending'; app.archived_at = null; app.archive_reason = null; }
-                renderWaitlistAdmin();
-            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
-        }));
-
-    container.querySelectorAll('.wl-delete').forEach(btn =>
-        btn.addEventListener('click', async () => {
-            const id    = Number(btn.dataset.id);
-            const child = btn.dataset.child || 'this entry';
-            if (!confirm(`Permanently delete the waitlist entry for ${child}? This cannot be undone.`)) return;
-            btn.disabled = true;
+                _wlp.archivingKidId = null;
+                renderWaitlistPlanner();
+            } catch (err) { alert('Error: ' + err.message); el.disabled = false; }
+        });
+    });
+    document.querySelectorAll('[data-wlp-delete]').forEach(el => {
+        el.addEventListener('click', async e => {
+            e.stopPropagation();
+            const id = Number(el.dataset.wlpDelete);
+            const child = el.dataset.child || 'this entry';
+            if (!confirm(`Permanently remove ${child} from the waitlist? This cannot be undone.`)) return;
+            el.disabled = true;
             try {
                 await deleteWaitlistApplication(id);
                 _allWaitlistApps = _allWaitlistApps.filter(a => a.id !== id);
-                renderWaitlistAdmin();
-            } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
-        }));
+                renderWaitlistPlanner();
+            } catch (err) { alert('Error: ' + err.message); el.disabled = false; }
+        });
+    });
 }
+
+// ── Capacity Planner — Grid view ────────────────────────────
+function wlpRenderGrid(alloc) {
+    const movementCols = alloc.rooms.map(room => ({ room, events: wlpMovementEvents(room.id, alloc) })).filter(x => x.events.length);
+    const movementHtml = movementCols.map(({ room, events }) => `
+        <div style="min-width:0;">
+            <div class="wlp-movement-col-title">${escHtml(room.label)}</div>
+            <div class="wlp-movement-events">${events.map(wlpEventCardHtml).join('')}</div>
+        </div>`).join('');
+
+    const monthHeads = alloc.months.map(m => `<th class="wlp-month-head">${escHtml(m.label)}</th>`).join('');
+    const roomRows = alloc.rooms.map(room => {
+        const cells = alloc.months.map(mo => {
+            const dayMap = alloc.finalGrid[room.id][mo.idx];
+            const sel = _wlp.selCellA;
+            const isSel = sel && sel.roomId === room.id && sel.monthIdx === mo.idx;
+            const chips = TREND_DAYS.map(d => {
+                const open = dayMap[d];
+                return `<div class="wlp-cap-chip ${wlpAvailClass(open, room.capacity)}"><div class="wlp-cap-chip-day">${d}</div><div class="wlp-cap-chip-open">${open}</div></div>`;
+            }).join('');
+            return `<td class="wlp-month-cell ${isSel ? 'selected' : ''}" data-wlp-cell="${room.id}:${mo.idx}"><div class="wlp-cap-chip-row">${chips}</div></td>`;
+        }).join('');
+        return `<tr><td class="wlp-room-cell">${escHtml(room.label)}<br><span class="wlp-room-cell-cap">Cap ${room.capacity ?? '—'}/day</span></td>${cells}</tr>`;
+    }).join('');
+
+    let matchPanel = '';
+    if (_wlp.selCellA) {
+        const { roomId, monthIdx } = _wlp.selCellA;
+        const room = alloc.roomMeta[roomId].room;
+        const candidates = alloc.kids.filter(k => k.room === roomId && k.desiredStartM <= monthIdx);
+        const ranked = wlpSortByPriority(candidates);
+        const matchesHtml = ranked.map((k, i) => {
+            const dayMap = alloc.preGridByKid[k.id][monthIdx];
+            const allFit = k.days.every(d => dayMap[d] >= 1);
+            const someFit = k.days.some(d => dayMap[d] >= 1);
+            const status = allFit ? { label: 'Fits now', cls: 'wlp-status-green' }
+                : someFit ? { label: 'Partial fit', cls: 'wlp-status-amber' }
+                : { label: 'No room', cls: 'wlp-status-red' };
+            const fm = alloc.fitMonthByKid[k.id];
+            const seatedNote = fm == null ? 'no fit found in the 12-month window'
+                : fm === monthIdx ? 'this is their turn in queue order'
+                : `queue turn: ${alloc.months[fm].label}`;
+            const chips = wlpDayChips(k, dayMap).map(wlpChipHtml).join('');
+            return `
+                <div class="wlp-match-card">
+                    <div class="wlp-match-rank ${allFit ? 'wlp-match-rank-fit' : 'wlp-match-rank-nofit'}">${i + 1}</div>
+                    <div class="wlp-match-body">
+                        <div class="wlp-match-top">
+                            <span class="wlp-match-name">${escHtml(k.name)}${wlpDayTypeTag(k)}</span>
+                            <span class="wlp-status-pill ${status.cls}">${status.label}</span>
+                        </div>
+                        <div class="wlp-chip-row">${chips}</div>
+                        <div class="wlp-match-note">${wlpPriorityLabel(k)} · waiting ${escHtml(wlDaysWaiting(k.appliedAt))} · ${escHtml(seatedNote)}</div>
+                    </div>
+                </div>`;
+        }).join('');
+        matchPanel = `
+            <div class="wlp-match-panel">
+                <div class="wlp-match-head">
+                    <div class="wlp-match-title">${escHtml(room.label)} · ${escHtml(alloc.months[monthIdx].label)} — who fits?</div>
+                    <button type="button" class="wlp-match-close" id="wlpMatchClose">✕ close</button>
+                </div>
+                ${ranked.length ? `<div class="wlp-match-list">${matchesHtml}</div>` : '<div class="wlp-empty-note">No one on the waitlist is asking for this room.</div>'}
+            </div>`;
+    }
+
+    return `
+        <div class="wlp-movement-panel">
+            <div class="wlp-section-label">Who's moving — next 12 months</div>
+            <div class="wlp-section-hint">↑ graduating up to the next room · + starting from the waitlist</div>
+            <div class="wlp-movement-grid">${movementHtml || '<div class="wlp-empty-note">No graduations or waitlist starts in the next 12 months.</div>'}</div>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="wlp-cap-table">
+                <thead><tr><th class="wlp-room-head">Room</th>${monthHeads}</tr></thead>
+                <tbody>${roomRows}</tbody>
+            </table>
+        </div>
+        ${matchPanel}`;
+}
+
+function wlpAttachGridListeners() {
+    document.querySelectorAll('[data-wlp-cell]').forEach(el => {
+        el.addEventListener('click', () => {
+            const [roomId, monthIdx] = el.dataset.wlpCell.split(':');
+            _wlp.selCellA = { roomId, monthIdx: Number(monthIdx) };
+            renderWaitlistPlanner();
+        });
+    });
+    document.getElementById('wlpMatchClose')?.addEventListener('click', () => { _wlp.selCellA = null; renderWaitlistPlanner(); });
+}
+
+// ── Capacity Planner — Board view ───────────────────────────
+function wlpRenderBoard(alloc) {
+    const mi = _wlp.boardMonthIdx;
+    const sel = _wlp.selSlotC;
+    const hlKid = _wlp.highlightKidC != null ? alloc.kids.find(k => k.id === _wlp.highlightKidC) : null;
+
+    const roomsHtml = alloc.rooms.map(room => {
+        const note = wlpBoardNoteFor(room.id, mi, alloc);
+        const slots = TREND_DAYS.map(d => {
+            const open = alloc.finalGrid[room.id][mi][d];
+            const availCls = wlpAvailClass(open, room.capacity);
+            const isSel = sel && sel.roomId === room.id && sel.day === d;
+            const isHl = hlKid && hlKid.room === room.id && hlKid.days.includes(d);
+            return `<div class="wlp-slot ${availCls} ${isSel ? 'selected' : ''} ${isHl && !isSel ? 'highlight' : ''}" data-wlp-slot="${room.id}:${d}">
+                <div class="wlp-slot-day">${d}</div>
+                <div class="wlp-slot-open">${open}</div>
+            </div>`;
+        }).join('');
+        return `
+            <div class="wlp-board-room">
+                <div class="wlp-board-room-title">${escHtml(room.label)} <span class="wlp-board-room-cap">Cap ${room.capacity ?? '—'}/day</span></div>
+                <div class="wlp-board-slots">${slots}</div>
+                ${note ? `<div class="wlp-board-note" style="color:${note.color}">${escHtml(note.text)}</div>` : ''}
+            </div>`;
+    }).join('');
+
+    const right = sel ? wlpRenderBoardSidebar(sel, mi, alloc) : '';
+    const below = sel ? '' : wlpRenderBoardDefaultPanels(mi, alloc);
+
+    return `
+        <div class="wlp-board-wrap">
+            <div class="wlp-board-rooms">${roomsHtml}</div>
+            ${right}
+        </div>
+        ${below}`;
+}
+
+function wlpMovingCardHtml(ev) {
+    return `
+        <div class="wlp-moving-card">
+            <div class="wlp-moving-icon ${ev.iconCls}">${ev.icon}</div>
+            <div style="font-size:11.5px;line-height:1.4;"><strong>${escHtml(ev.name)}</strong><br><span style="color:var(--text-muted);font-size:10.5px;">${escHtml(ev.actionLabel)} (${escHtml(ev.days.join(', '))})</span></div>
+        </div>`;
+}
+function wlpTopRowHtml(k) {
+    return `<div class="wlp-top-row"><strong>${escHtml(k.name)}</strong><span style="color:var(--text-muted)">${escHtml(wlDaysWaiting(k.appliedAt))}</span></div>`;
+}
+
+function wlpRenderBoardSidebar(sel, mi, alloc) {
+    const room = alloc.roomMeta[sel.roomId].room;
+    const candidates = alloc.kids.filter(k => k.room === sel.roomId && k.days.includes(sel.day) && k.desiredStartM <= mi);
+    const ranked = wlpSortByPriority(candidates);
+    const suggestionsHtml = ranked.map(k => {
+        const dayMap = alloc.preGridByKid[k.id][mi];
+        const avail = k.days.filter(d => dayMap[d] >= 1);
+        const missing = k.days.filter(d => !avail.includes(d));
+        const isHl = _wlp.highlightKidC === k.id;
+        const chips = wlpDayChips(k, dayMap).map(wlpChipHtml).join('');
+        const offerLabel = missing.length ? `Offer ${avail.length} of ${k.days.length} days` : `Offer all ${k.days.length} days`;
+        const offerCls = missing.length ? 'wlp-suggestion-offer-partial' : 'wlp-suggestion-offer-full';
+        return `
+            <div class="wlp-suggestion-card ${isHl ? 'highlight' : ''}" data-wlp-suggest="${k.id}">
+                <div class="wlp-suggestion-top"><span class="wlp-suggestion-name">${escHtml(k.name)}${wlpDayTypeTag(k)}</span><span class="wlp-suggestion-waiting">${escHtml(wlDaysWaiting(k.appliedAt))}</span></div>
+                <div class="wlp-suggestion-priority">${wlpPriorityLabel(k)}</div>
+                <div class="wlp-chip-row">${chips}</div>
+                <button type="button" class="wlp-suggestion-offer ${offerCls}" data-wlp-board-offer="${k.id}">${offerLabel}</button>
+            </div>`;
+    }).join('');
+
+    const roomLabel = room.label.replace(/^\S+\s/, '');
+    const roomMoving = wlpMovementEvents(sel.roomId, alloc).filter(ev => ev.monthLabel === alloc.months[mi].label);
+    const movingHtml = roomMoving.length ? roomMoving.map(wlpMovingCardHtml).join('') : '<div class="wlp-empty-note" style="margin-bottom:18px">No graduations or waitlist starts land here this month.</div>';
+
+    const topWl = wlpSortByPriority(alloc.kids.filter(k => k.room === sel.roomId)).slice(0, 4);
+    const topHtml = topWl.length ? topWl.map(wlpTopRowHtml).join('') : '<div class="wlp-empty-note">No one waiting for this room.</div>';
+
+    return `
+        <div class="wlp-sidebar">
+            <div class="wlp-sidebar-head">
+                <div class="wlp-sidebar-title">${escHtml(room.label)} · ${sel.day} · ${escHtml(alloc.months[mi].label)}</div>
+                <button type="button" class="wlp-sidebar-close" id="wlpSlotClose">✕</button>
+            </div>
+            <div class="wlp-sidebar-hint">Suggested, best fit first — click a card to see their full pattern on the board:</div>
+            <div style="margin-bottom:18px">${suggestionsHtml || '<div class="wlp-empty-note">No one waiting needs this day.</div>'}</div>
+            <div class="wlp-section-label" style="margin-bottom:8px">Moving this month — ${escHtml(roomLabel)}</div>
+            ${movingHtml}
+            <div class="wlp-section-label" style="margin-bottom:4px">Top of the waitlist — ${escHtml(roomLabel)}</div>
+            <div class="wlp-section-hint">Ranked by sibling priority, then longest wait — regardless of whether this room has an opening yet.</div>
+            ${topHtml}
+            ${_wlp.toastText ? `<div class="wlp-toast" style="margin-top:14px;border-radius:7px;">${escHtml(_wlp.toastText)}</div>` : ''}
+        </div>`;
+}
+
+function wlpRenderBoardDefaultPanels(mi, alloc) {
+    const allRoomsMoving = alloc.rooms.map(room => ({
+        room, events: wlpMovementEvents(room.id, alloc).filter(ev => ev.monthLabel === alloc.months[mi].label),
+    })).filter(r => r.events.length);
+    const movingCols = allRoomsMoving.map(({ room, events }) => `
+        <div class="wlp-default-group">
+            <div class="wlp-movement-col-title">${escHtml(room.label)}</div>
+            <div class="wlp-movement-events">${events.map(wlpEventCardHtml).join('')}</div>
+        </div>`).join('');
+
+    const allRoomsTop = alloc.rooms.map(room => ({
+        room, kids: wlpSortByPriority(alloc.kids.filter(k => k.room === room.id)).slice(0, 3),
+    })).filter(r => r.kids.length);
+    const topCols = allRoomsTop.map(({ room, kids }) => `
+        <div class="wlp-default-group">
+            <div class="wlp-movement-col-title">${escHtml(room.label)}</div>
+            ${kids.map(wlpTopRowHtml).join('')}
+        </div>`).join('');
+
+    return `
+        <div class="wlp-default-panels">
+            <div class="wlp-default-cols">
+                <div class="wlp-default-col">
+                    <div class="wlp-section-label" style="margin-bottom:2px">Moving this month, all rooms</div>
+                    <div class="wlp-section-hint">Click a slot above to focus this on one room.</div>
+                    <div class="wlp-default-groups">${movingCols || '<div class="wlp-empty-note">No graduations or waitlist starts land anywhere this month.</div>'}</div>
+                </div>
+                <div class="wlp-default-col">
+                    <div class="wlp-section-label" style="margin-bottom:2px">Top of the waitlist, by room</div>
+                    <div class="wlp-section-hint">Ranked by sibling priority, then longest wait.</div>
+                    <div class="wlp-default-groups">${topCols || '<div class="wlp-empty-note">No one on the waitlist.</div>'}</div>
+                </div>
+            </div>
+        </div>`;
+}
+
+function wlpAttachBoardListeners() {
+    document.querySelectorAll('[data-wlp-slot]').forEach(el => {
+        el.addEventListener('click', () => {
+            const [roomId, day] = el.dataset.wlpSlot.split(':');
+            _wlp.selSlotC = { roomId, day };
+            _wlp.highlightKidC = null;
+            renderWaitlistPlanner();
+        });
+    });
+    document.getElementById('wlpSlotClose')?.addEventListener('click', () => { _wlp.selSlotC = null; _wlp.highlightKidC = null; renderWaitlistPlanner(); });
+    document.querySelectorAll('[data-wlp-suggest]').forEach(el => {
+        el.addEventListener('click', e => {
+            if (e.target.closest('[data-wlp-board-offer]')) return;
+            const id = Number(el.dataset.wlpSuggest);
+            _wlp.highlightKidC = _wlp.highlightKidC === id ? null : id;
+            renderWaitlistPlanner();
+        });
+    });
+    document.querySelectorAll('[data-wlp-board-offer]').forEach(el => {
+        el.addEventListener('click', e => { e.stopPropagation(); wlpOpenOfferModal(Number(el.dataset.wlpBoardOffer), null, _wlp.boardMonthIdx); });
+    });
+}
+
+// ── Offer / Tour modal bridges (reuses the existing #wlOfferModal /
+// #wlTourModal — see setupWaitlistAdmin() for the Send/Save handlers) ──────
+function wlpOfferDaysForKid(k, monthIdx) {
+    const dayMap = _wlpAlloc.preGridByKid[k.id][monthIdx];
+    const avail = k.days.filter(d => dayMap[d] >= 1);
+    const missing = k.days.filter(d => !avail.includes(d));
+    return { avail, missing };
+}
+
+function wlpOpenOfferModal(kidId, forceType, monthIdx) {
+    const alloc = _wlpAlloc;
+    if (!alloc) return;
+    const k = alloc.kids.find(x => x.id === kidId);
+    if (!k) return;
+    const mi = monthIdx != null ? monthIdx : k.desiredStartM;
+    const { avail, missing } = wlpOfferDaysForKid(k, mi);
+    const offerType = forceType || (missing.length ? 'partial' : 'full');
+    const offeredDays = offerType === 'partial' ? avail : k.days;
+    if (!offeredDays.length) { alert(`${k.name} has no open days this month to offer.`); return; }
+
+    const modal = document.getElementById('wlOfferModal');
+    if (!modal) return;
+    modal.dataset.appId = k.id;
+    modal.dataset.parentName = k.parentName || '';
+    modal.dataset.parentEmail = k.parentEmail || '';
+    modal.dataset.childName = k.name;
+    modal.dataset.offerType = offerType;
+    modal.dataset.offeredDays = offeredDays.join(', ');
+    document.getElementById('wlOfferModalDesc').textContent = offerType === 'partial'
+        ? `Offering ${k.name} ${offeredDays.length} of ${k.days.length} requested days (${offeredDays.join(', ')}) — parent: ${k.parentName} (${k.parentEmail})`
+        : `Offering a spot to ${k.name} for all ${k.days.length} requested days (${offeredDays.join(', ')}) — parent: ${k.parentName} (${k.parentEmail})`;
+    document.getElementById('wlOfferErr').textContent = '';
+    document.getElementById('wlOfferSendBtn').disabled = false;
+    document.getElementById('wlOfferSendBtn').textContent = 'Send & Email Parent';
+    document.getElementById('wlOfferDeadline').value = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+    document.getElementById('wlOfferNotes').value = '';
+    const g = window._globalOfferLinks || {};
+    const procareEl = document.getElementById('wlOfferProcare');
+    const paperwkEl = document.getElementById('wlOfferPaperwork');
+    if (procareEl) procareEl.value = g.procareLink || '';
+    if (paperwkEl) paperwkEl.value = (g.paperworkLinks || []).join(', ');
+    modal.classList.remove('hidden');
+}
+
+function wlpOpenTourModal(kidId) {
+    const k = _wlpAlloc?.kids.find(x => x.id === kidId);
+    if (!k) return;
+    const modal = document.getElementById('wlTourModal');
+    if (!modal) return;
+    modal.dataset.appId = kidId;
+    document.getElementById('wlTourModalDesc').textContent = `Scheduling a tour for ${k.name} (parent: ${k.parentName})`;
+    document.getElementById('wlTourDateTime').value = '';
+    document.getElementById('wlTourNotes').value = '';
+    document.getElementById('wlTourErr').textContent = '';
+    modal.classList.remove('hidden');
+}
+
+function wlpFlashToast(text) {
+    _wlp.toastText = text;
+    setTimeout(() => { _wlp.toastText = null; renderWaitlistPlanner(); }, 3200);
+}
+
 
 // ============================================================
 // WAITLIST PLANNING PANEL
@@ -872,146 +1269,6 @@ function _projectedWeekdayPattern(trendMap, roomId, moKey, today) {
     return _simulateRoomAdmissions(trendMap, roomId, moKey, today).pattern;
 }
 
-async function renderWaitlistPlanning() {
-    const container = document.getElementById('wlPlanContent');
-    if (!container) return;
-    container.innerHTML = '<p class="empty-hint">Loading…</p>';
-
-    // Show next 4 months starting from current month
-    const today = new Date();
-    const months = Array.from({ length: 4 }, (_, i) => {
-        const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-        return { year: d.getFullYear(), month: d.getMonth(), key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear() };
-    });
-
-    // Shares _buildTrendMap()/_trendCell() with Enrollment Trends (Reports tab)
-    // so the two never disagree about what "typical" enrollment looks like —
-    // previously this section computed its own average from a different,
-    // possibly-stale cached registrations list, and used a different
-    // denominator (all weekdays in the month vs. only days with bookings),
-    // so the two reports showed different numbers for the same room/month.
-    let trendMap;
-    try {
-        trendMap = await _buildTrendMap();
-    } catch (err) {
-        container.innerHTML = `<p class="import-error">Error loading planning data: ${escHtml(err.message)}</p>`;
-        return;
-    }
-
-    // Who graduates into/out of each room each month — the same index that
-    // feeds the projection (_simulateRoomAdmissions), so this annotation
-    // always agrees with what actually moved the projection for that month.
-    const { gradOut } = _buildGraduationIndex();
-    // One priority-ordered admission queue per room (siblings, then applied
-    // date) — same ordering the Quick List calls "position", used both for
-    // the capacity simulation and for the trailing "Waitlisted (next up)"
-    // column so the two never disagree about who's next.
-    const waitlistQueues = _buildWaitlistPriorityQueues();
-
-    // Union of weekdays a group of children (each with their own weekdays map)
-    // actually affects, in Mon..Fri order — e.g. "Mon, Wed, Fri".
-    function _weekdaySummary(entries) {
-        const present = new Set();
-        entries.forEach(e => Object.keys(e.weekdays).forEach(d => present.add(d)));
-        return TREND_DAYS.filter(d => present.has(d)).join(', ');
-    }
-
-    // Uses _weekdayPatternForMonth() (admin-reports.js) — the same resolver
-    // Enrollment Trends calls — so the two reports can never disagree about
-    // whether a month is final, or what its weekday pattern looks like.
-    const WEEKDAY_INIT = { 1: 'M', 2: 'T', 3: 'W', 4: 'Th', 5: 'F' };
-    const DOW_TO_TRENDDAY = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri' };
-
-    const roomFilter = document.getElementById('wlPlanRoomFilter')?.value || '';
-
-    const roomRows = getSortedRooms().filter(r => r.id !== 'summer' && (!roomFilter || r.id === roomFilter)).map(room => {
-        const monthCells = months.map(({ key }) => {
-            const { isFinal, pattern } = _weekdayPatternForMonth(trendMap, room.id, key, today);
-
-            // Only non-final (projected) months need the admission simulation
-            // for their annotations — a final month's real bookings already
-            // reflect whatever actually happened, no simulation needed.
-            let admittedThisMonth = [], stillWaiting = [];
-            if (!isFinal) {
-                ({ admittedThisMonth, stillWaiting } = _simulateRoomAdmissions(trendMap, room.id, key, today));
-            }
-
-            const weekdayChips = [1, 2, 3, 4, 5].map(dow => {
-                const day = pattern[DOW_TO_TRENDDAY[dow]];
-                const avgBooked = day.half + day.full;
-                const avgOpen   = Math.max(0, room.capacity - avgBooked);
-                const pct       = room.capacity > 0 ? avgBooked / room.capacity : 0;
-                const color     = pct >= 0.9 ? '#fff5f5' : pct >= 0.7 ? '#fffaf0' : '#f0fff4';
-                const textColor = pct >= 0.9 ? '#9b2c2c' : pct >= 0.7 ? '#b45309' : '#276749';
-                // Booked is the headline number — uses fmtAvg() (admin-reports.js)
-                // so a finalized month reads as the exact same figure Enrollment
-                // Trends shows for that room/day, not just the same underlying
-                // value formatted differently. Open slots (capacity - booked) is
-                // the smaller secondary line, since that's the actionable number
-                // for offering a spot but derives from the booked count above it.
-                return `<div style="background:${color};color:${textColor};border-radius:4px;padding:3px 2px;text-align:center;min-width:26px">
-                    <div style="font-size:.7em;font-weight:600">${WEEKDAY_INIT[dow]}</div>
-                    <div style="font-size:.82em;font-weight:700">${fmtAvg(avgBooked)}</div>
-                    <div style="font-size:.62em;font-weight:400;opacity:.8">${fmtAvg(avgOpen)} open</div>
-                </div>`;
-            }).join('');
-
-            // Aging-out events this month — which weekdays actually open up.
-            // On a final month, real bookings can't be split mid-month, so a
-            // graduation dated this month doesn't lower the counts above
-            // until next month's card — call that out explicitly here rather
-            // than leave it ambiguous.
-            const outs    = (gradOut[key]?.[room.id] || []);
-            const outHtml = outs.length
-                ? `<div style="font-size:.75em;color:#667eea;margin-top:4px">→ ${outs.length} graduate${outs.length > 1 ? 's' : ''} out (${_weekdaySummary(outs)})${isFinal ? ' <span style="color:#999">— seat opens next month</span>' : ''}</div>`
-                : '';
-
-            // Waitlist admissions this month — only applicants who actually
-            // fit within capacity, in priority order (empty for final months).
-            const ins     = admittedThisMonth;
-            const inHtml  = ins.length
-                ? `<div style="font-size:.75em;color:#c05621;margin-top:2px">→ ${ins.length} admitted from waitlist (${_weekdaySummary(ins)})</div>`
-                : '';
-
-            // Applicants for this room who still can't fit as of this month.
-            const waitHtml = (!isFinal && stillWaiting.length)
-                ? `<div style="font-size:.72em;color:#a0aec0;margin-top:2px">⏳ ${stillWaiting.length} still waiting (${stillWaiting.slice(0, 3).map(e => escHtml(e.childName)).join(', ')}${stillWaiting.length > 3 ? '…' : ''})</div>`
-                : '';
-
-            const projectedNote = isFinal
-                ? ''
-                : '<div style="font-size:.7em;color:#aaa;margin-top:3px">(projected)</div>';
-
-            return `<td style="text-align:center;padding:8px 6px;white-space:nowrap">
-                <div style="display:flex;gap:3px;justify-content:center">${weekdayChips}</div>
-                ${outHtml}${inHtml}${waitHtml}${projectedNote}
-            </td>`;
-        }).join('');
-
-        const wl = (waitlistQueues[room.id] || []).slice(0, 5);
-        const wlHtml = wl.length
-            ? wl.map(e => `<div style="font-size:.8em;color:#555;padding:2px 0">${escHtml(e.childName)} <span style="color:#aaa">(${e.desiredStartDate || '?'})</span></div>`).join('')
-            : '<div style="font-size:.8em;color:#aaa">No waitlist</div>';
-
-        return `<tr>
-            <td style="font-weight:600;white-space:nowrap;padding:8px 10px">${room.label}<br><span style="font-weight:400;font-size:.8em;color:#888">Cap ${room.capacity}/day</span></td>
-            ${monthCells}
-            <td style="padding:8px 10px;max-width:200px">${wlHtml}</td>
-        </tr>`;
-    }).join('');
-
-    container.innerHTML = `
-        <div style="overflow-x:auto">
-        <table class="report-table" style="min-width:1080px">
-            <thead><tr>
-                <th>Room</th>
-                ${months.map(m => `<th style="text-align:center">${m.label}</th>`).join('')}
-                <th>Waitlisted (next up)</th>
-            </tr></thead>
-            <tbody>${roomRows}</tbody>
-        </table></div>
-        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip's big number is the average kids booked for that day (M/T/W/Th/F) — the same number Enrollment Trends shows for that room/month; the small number underneath is open slots (capacity minus booked), and never goes below zero because "admitted from waitlist" below is capped at capacity. Months already finalized (registrations lock in on the 15th of the prior month) show their own actual bookings. Months marked "projected" start from the last finalized month and carry it forward through every known change: kids graduating into or out of the room (always automatic — an aging-out child never waits on room), and waitlisted families admitted in priority order (siblings first, then who applied earliest) only once every day they need has room — both are listed under the month they take effect, with the specific weekdays affected. A waitlisted family who doesn't fit yet stays queued and shows up under "⏳ still waiting" until a later month's graduations free up enough room to admit them. → Graduates = children aging out of this room that month, freeing a permanent spot (and, unless it's Owl, filling a spot in the next room up).</p>`;
-}
 
 // ============================================================
 // WAITLIST IMPORT
@@ -1140,10 +1397,6 @@ function _normDateStr(val) {
 
 function setupWaitlistAdmin() {
     populateSiblingRoomSelect(document.getElementById('adminWlSibRoom'));
-    document.getElementById('refreshWaitlistBtn')?.addEventListener('click', loadWaitlistApplications);
-    document.getElementById('wlSearchInput')?.addEventListener('input', renderWaitlistQuickList);
-    document.getElementById('wlStatusFilter')?.addEventListener('change', () => { renderWaitlistAdmin(); renderWaitlistQuickList(); });
-    document.getElementById('wlRoomFilter')?.addEventListener('change', () => { renderWaitlistAdmin(); renderWaitlistQuickList(); });
 
     setupWaitlistNotifications();
 
@@ -1165,8 +1418,7 @@ function setupWaitlistAdmin() {
             const app = _allWaitlistApps.find(a => a.id === id);
             if (app) { app.tour_status = 'scheduled'; app.tour_scheduled_at = iso; app.tour_notes = notes; }
             modal.classList.add('hidden');
-            renderWaitlistQuickList();
-            renderWaitlistAdmin();
+            renderWaitlistPlanner();
         } catch (err) {
             errEl.textContent = 'Error: ' + err.message;
         } finally {
@@ -1174,7 +1426,10 @@ function setupWaitlistAdmin() {
         }
     });
 
-    // Offer modal
+    // Offer modal — opened via wlpOpenOfferModal() from the Waitlist &
+    // Capacity Planner's Queue/Board views, which pre-fill dataset.offerType
+    // ('full'|'partial') and dataset.offeredDays (which exact weekdays are
+    // being offered — may be a subset of the child's full request).
     document.getElementById('wlOfferCancelBtn')?.addEventListener('click', () => document.getElementById('wlOfferModal').classList.add('hidden'));
     document.getElementById('wlOfferModal')?.addEventListener('click', e => { if (e.target === document.getElementById('wlOfferModal')) document.getElementById('wlOfferModal').classList.add('hidden'); });
     document.getElementById('wlOfferSendBtn')?.addEventListener('click', async () => {
@@ -1188,45 +1443,45 @@ function setupWaitlistAdmin() {
         const parentName    = modal.dataset.parentName;
         const parentEmail   = modal.dataset.parentEmail;
         const childName     = modal.dataset.childName;
+        const offerType     = modal.dataset.offerType || 'full';
+        const offeredDays   = modal.dataset.offeredDays || '';
         const errEl = document.getElementById('wlOfferErr');
         if (!deadline) { errEl.textContent = 'Please set an offer deadline.'; return; }
         const btn = document.getElementById('wlOfferSendBtn');
         btn.disabled = true; btn.textContent = 'Sending…'; errEl.textContent = '';
         try {
-            await updateWaitlistApplication(id, { status: 'offered', offered_at: new Date().toISOString(), offer_deadline: deadline, offer_notes: notes || null });
+            await updateWaitlistApplication(id, {
+                status: 'offered', offered_at: new Date().toISOString(), offer_deadline: deadline, offer_notes: notes || null,
+                offer_type: offerType, offered_days: offeredDays || null,
+            });
             await sendWaitlistOfferEmail({ parentName, parentEmail, childName, offerDeadline: deadline, offerNotes: notes || null, papeworkLinks, procareLink });
             const app = _allWaitlistApps.find(a => a.id === id);
-            if (app) { app.status = 'offered'; app.offered_at = new Date().toISOString(); app.offer_deadline = deadline; app.offer_notes = notes || null; }
+            if (app) { app.status = 'offered'; app.offered_at = new Date().toISOString(); app.offer_deadline = deadline; app.offer_notes = notes || null; app.offer_type = offerType; app.offered_days = offeredDays || null; }
             modal.classList.add('hidden');
             document.getElementById('wlOfferDeadline').value = '';
             document.getElementById('wlOfferNotes').value = '';
-            renderWaitlistQuickList();
-            renderWaitlistAdmin();
+            wlpFlashToast(offerType === 'partial'
+                ? `Partial offer sent to ${parentName}: ${offeredDays} now.`
+                : `Offer sent to ${parentName} for all requested days (${offeredDays}).`);
+            renderWaitlistPlanner();
         } catch (err) {
             errEl.textContent = 'Offer saved, but email failed: ' + err.message + '. Email parent manually at ' + parentEmail;
             btn.disabled = false; btn.textContent = 'Send & Email Parent';
             const app = _allWaitlistApps.find(a => a.id === id);
-            if (app) { app.status = 'offered'; renderWaitlistQuickList(); renderWaitlistAdmin(); }
+            if (app) { app.status = 'offered'; renderWaitlistPlanner(); }
         }
     });
-    document.getElementById('addToWaitlistBtn')?.addEventListener('click', _openAdminWlModal);
     document.getElementById('generateWaitlistBtn')?.addEventListener('click', generateWaitlistReport);
-    document.getElementById('generateWlPlanBtn')?.addEventListener('click', renderWaitlistPlanning);
-    document.getElementById('wlPlanRoomFilter')?.addEventListener('change', () => {
-        // Only re-render if a plan has already been generated once this session.
-        if (document.getElementById('wlPlanContent')?.querySelector('table')) renderWaitlistPlanning();
-    });
     initEnrollmentPlannerSelectors();
 
     // Waitlist import
     document.getElementById('wlImportParseBtn')?.addEventListener('click', previewWaitlistImport);
 
-    // Modal controls
+    // Add/Edit modal controls — backdrop click intentionally does NOT close
+    // this modal (must use Cancel or Save), so unsaved edits are never lost
+    // to a stray click.
     document.getElementById('adminWlCancelBtn')?.addEventListener('click', _closeAdminWlModal);
     document.getElementById('adminWlSubmitBtn')?.addEventListener('click', _submitAdminWlEntry);
-    document.getElementById('adminWlOverlay')?.addEventListener('click', e => {
-        if (e.target === document.getElementById('adminWlOverlay')) _closeAdminWlModal();
-    });
     document.getElementById('adminWlIsUnborn')?.addEventListener('change', e => {
         document.getElementById('adminWlDobRow').classList.toggle('hidden',  e.target.checked);
         document.getElementById('adminWlDueRow').classList.toggle('hidden', !e.target.checked);
@@ -1234,6 +1489,8 @@ function setupWaitlistAdmin() {
     document.getElementById('adminWlHasSibling')?.addEventListener('change', e => {
         document.getElementById('adminWlSibRow').classList.toggle('hidden', !e.target.checked);
     });
+
+    loadWaitlistApplications();
 }
 
 // ============================================================
