@@ -282,12 +282,15 @@
         <!-- ── Tab: Waitlist ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-waitlist">
 
-            <!-- Waitlist (Quick List is primary view) -->
-            <section class="admin-section collapsible-section" id="wlQuickListSection">
-                <h2>⏳ Enrollment Waitlist</h2>
-                <p class="section-desc">Active applications — click a column header to sort. Use <strong>Make Offer</strong> to send a spot offer by email.</p>
+            <!-- Waitlist & Capacity Planner — one shared allocation drives all
+                 three views (Waitlist Queue / Capacity Planner → Grid / Board).
+                 See renderWaitlistPlanner() in js/admin/admin-waitlist.js. -->
+            <div id="wlpRoot" style="margin-bottom:20px;"><p class="empty-hint">Loading…</p></div>
 
-                <div class="admin-wl-row" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+            <!-- Waitlist inquiry link + notify email -->
+            <section class="admin-section collapsible-section" id="wlNotifySection">
+                <h2>📨 Waitlist Inquiries</h2>
+                <div class="admin-wl-row" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;">
                     <label style="font-weight:600;font-size:.88em;">Shareable Inquiry Form Link</label>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
                         <input type="text" id="wlInquiryLink" readonly style="flex:1;min-width:220px;background:#fff;font-size:.85em;">
@@ -300,29 +303,6 @@
                         <button id="wlSaveNotifyEmailBtn" class="btn-secondary" type="button">💾 Save</button>
                         <span id="wlNotifyEmailStatus" class="rates-status"></span>
                     </div>
-                </div>
-
-                <div class="families-dir-controls" style="margin-bottom:12px;">
-                    <button id="addToWaitlistBtn" class="btn-primary">+ Add to Waitlist</button>
-                    <input type="search" id="wlSearchInput" class="family-search-input"
-                           placeholder="Search by name or email…" autocomplete="off" style="min-width:200px">
-                    <select id="wlStatusFilter" class="family-search-input" style="width:auto;">
-                        <option value="active">Active (pending / offered / accepted)</option>
-                        <option value="enrolled">Enrolled</option>
-                        <option value="archived">Archived</option>
-                        <option value="all">All</option>
-                    </select>
-                    <select id="wlRoomFilter" class="family-search-input" style="width:auto;">
-                        <option value="">All Rooms</option>
-                        <!-- populated dynamically from ROOMS by admin-init.js -->
-                        <option value="tbd">TBD / Unborn</option>
-                    </select>
-                    <button id="refreshWaitlistBtn" class="btn-secondary">&#8635; Refresh</button>
-                    <span id="wlCount" class="rates-status"></span>
-                </div>
-
-                <div id="wlQuickListContent">
-                    <p class="empty-hint">Click Refresh to load the waitlist.</p>
                 </div>
             </section>
 
@@ -375,27 +355,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Detailed card view (for archive/restore/accept actions) -->
-            <section class="admin-section collapsible-section" id="waitlistSection" style="display:none">
-                <div id="waitlistAdminContent"></div>
-            </section>
-
-            <!-- Waitlist Planning Panel -->
-            <section class="admin-section collapsible-section" id="wlPlanningSection">
-                <h2>🗓️ Waitlist Planning</h2>
-                <p class="section-desc">Forward-looking capacity per room. Shows average open spots per day for upcoming months, aging-out events (children who will graduate to the next room), and the waitlist queue matched against availability.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateWlPlanBtn" class="btn-secondary">Generate Plan</button>
-                    <select id="wlPlanRoomFilter" class="family-search-input" style="width:auto;">
-                        <option value="">All Rooms</option>
-                        <!-- populated dynamically from ROOMS by admin-init.js -->
-                    </select>
-                </div>
-                <div id="wlPlanContent">
-                    <p class="empty-hint">Click Generate Plan to view availability projections.</p>
-                </div>
-            </section>
 
             <!-- Waitlist Import -->
             <section class="admin-section collapsible-section" id="wlImportSection">

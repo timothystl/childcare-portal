@@ -15,8 +15,6 @@ async function initDashboard() {
     if (mobileNavVersion) mobileNavVersion.textContent = window.__BUILD_VERSION__ || 'dev';
     populateRoomFilter();
     populateRosterRoomFilter();
-    populateWlRoomFilter();
-    populateWlPlanRoomFilter();
     try {
         await Promise.all([
             loadRegistrations(),
@@ -78,32 +76,6 @@ function populateRoomFilter() {
 function populateRosterRoomFilter() {
     const sel = document.getElementById('rosterRoomFilter');
     getSortedRooms().forEach(r => {
-        const opt = document.createElement('option');
-        opt.value       = r.id;
-        opt.textContent = r.label;
-        sel.appendChild(opt);
-    });
-}
-
-function populateWlRoomFilter() {
-    // Insert ROOMS options before the static "TBD / Unborn" option
-    const sel = document.getElementById('wlRoomFilter');
-    if (!sel) return;
-    const tbdOpt = sel.querySelector('option[value="tbd"]');
-    getSortedRooms().forEach(r => {
-        const opt = document.createElement('option');
-        opt.value       = r.id;
-        opt.textContent = r.label + (r.status === 'coming_soon' ? ' (Coming Soon)' : '');
-        sel.insertBefore(opt, tbdOpt);
-    });
-}
-
-// Waitlist Planning panel's own room filter — separate from wlRoomFilter so
-// scoping the planning table to one room doesn't also filter the Quick List.
-function populateWlPlanRoomFilter() {
-    const sel = document.getElementById('wlPlanRoomFilter');
-    if (!sel) return;
-    getSortedRooms().filter(r => r.id !== 'summer').forEach(r => {
         const opt = document.createElement('option');
         opt.value       = r.id;
         opt.textContent = r.label;
