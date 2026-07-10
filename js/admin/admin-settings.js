@@ -420,7 +420,7 @@ function renderRatesTable() {
             <thead>
                 <tr>
                     <th>Room</th>
-                    <th>Age Range (months)<br><small>Min – Max (blank = no limit)</small></th>
+                    <th>Age Range (months)<br><small>Min – age they move out at (blank = no limit)</small></th>
                     <th>Full Day Rate ($)</th>
                     <th>Half Day Rate ($)</th>
                     <th>Weekly Full ($)<br><small>All 5 weekdays full</small></th>
@@ -444,7 +444,7 @@ function renderRatesTable() {
                                 <span>–</span>
                                 <input type="number" class="rate-input" data-field="ageMaxMonths"
                                     value="${room.ageMaxMonths ?? ''}" min="0" step="1" placeholder="∞"
-                                    style="width:58px;" title="Max age in months (blank = no upper limit)">
+                                    style="width:58px;" title="Age in months a child moves OUT of this room at (exclusive) — blank = no upper limit">
                             </div>
                         </td>
                         <td>
@@ -499,14 +499,17 @@ async function onSaveRates() {
                     rates[id][field] = val === '' ? null : parseFloat(val);
                 }
             });
-            // Regenerate the human-readable ages label from the saved range
+            // Regenerate the human-readable ages label from the saved range.
+            // Max age (months) is the exact age a child ages OUT of the room at
+            // (exclusive) — matches getRoomIdFromDob()'s `months < ageMaxMonths`
+            // check, so the label always shows exactly what was typed, no +1.
             const r = rates[id];
             {
                 const min = r.ageMinMonths ?? 0;
                 const max = r.ageMaxMonths ?? null;
                 rates[id].ages = max == null
                     ? (min > 0 ? `${min}+ months` : '')
-                    : `${min} – ${max + 1} months`;
+                    : `${min} – ${max} months`;
             }
         });
 
@@ -620,6 +623,126 @@ async function onSaveCapacity() {
     } finally {
         btn.disabled    = false;
         btn.textContent = '💾 Save Capacity';
+    }
+}
+
+// ============================================================
+// STAFF DIRECTORY (public "Our Staff" section — photos + room assignment)
+// ============================================================
+let _staffDirectory = null; // loaded once, edited in the DOM, synced back before save
+
+async function setupStaffDirectory() {
+    const raw = await fetchSetting('staff_directory');
+    _staffDirectory = Array.isArray(raw) ? raw : [];
+    renderStaffDirectory();
+    document.getElementById('addStaffBtn')?.addEventListener('click', () => {
+        syncStaffDirectoryFromDom();
+        _staffDirectory.push({ id: `staff-${Date.now()}`, name: '', role: 'Lead Teacher', section: 'lead_teacher', roomId: null, photoUrl: null });
+        renderStaffDirectory();
+    });
+    document.getElementById('saveStaffDirectoryBtn')?.addEventListener('click', onSaveStaffDirectory);
+}
+
+// Reads whatever is currently in the row inputs back into _staffDirectory,
+// so in-progress edits in other rows survive an add/remove/upload re-render.
+function syncStaffDirectoryFromDom() {
+    document.querySelectorAll('#staffDirectoryWrap .staff-dir-row').forEach((row, i) => {
+        if (!_staffDirectory[i]) return;
+        const role = row.querySelector('.staff-dir-role').value;
+        _staffDirectory[i].name    = row.querySelector('.staff-dir-name').value.trim();
+        _staffDirectory[i].role    = role;
+        _staffDirectory[i].section = role === 'Lead Teacher' ? 'lead_teacher' : 'leadership';
+        _staffDirectory[i].roomId  = role === 'Lead Teacher' ? (row.querySelector('.staff-dir-room').value || null) : null;
+    });
+}
+
+function renderStaffDirectory() {
+    const wrap = document.getElementById('staffDirectoryWrap');
+    if (!wrap) return;
+    const roomOptions = getSortedRooms().filter(r => r.id !== 'summer')
+        .map(r => `<option value="${r.id}">${escHtml(r.label)}</option>`).join('');
+
+    wrap.innerHTML = _staffDirectory.length ? _staffDirectory.map(s => `
+        <div class="staff-dir-row">
+            <div class="staff-dir-photo">
+                ${s.photoUrl ? `<img src="${escHtml(s.photoUrl)}" alt="">` : '<span class="staff-dir-photo-empty">No photo</span>'}
+                <input type="file" accept="image/jpeg,image/png,image/webp" class="staff-dir-file-input" title="Click to upload a photo">
+            </div>
+            <div class="staff-dir-fields">
+                <input type="text" class="staff-dir-name" placeholder="Name" value="${escHtml(s.name || '')}">
+                <select class="staff-dir-role">
+                    <option value="Director" ${s.role === 'Director' ? 'selected' : ''}>Director</option>
+                    <option value="Assistant Director" ${s.role === 'Assistant Director' ? 'selected' : ''}>Assistant Director</option>
+                    <option value="Lead Teacher" ${s.role === 'Lead Teacher' ? 'selected' : ''}>Lead Teacher</option>
+                </select>
+                <select class="staff-dir-room" ${s.role !== 'Lead Teacher' ? 'disabled' : ''}>
+                    <option value="">— No room —</option>
+                    ${roomOptions}
+                </select>
+            </div>
+            <button type="button" class="staff-dir-remove" title="Remove">✕</button>
+        </div>`).join('') : '<p class="empty-hint">No staff added yet — click "Add Staff Member" below.</p>';
+
+    wrap.querySelectorAll('.staff-dir-row').forEach((row, i) => {
+        const roomSel = row.querySelector('.staff-dir-room');
+        if (roomSel && _staffDirectory[i].roomId) roomSel.value = _staffDirectory[i].roomId;
+
+        row.querySelector('.staff-dir-role').addEventListener('change', (e) => {
+            const isTeacher = e.target.value === 'Lead Teacher';
+            roomSel.disabled = !isTeacher;
+            if (!isTeacher) roomSel.value = '';
+        });
+
+        row.querySelector('.staff-dir-remove').addEventListener('click', () => {
+            syncStaffDirectoryFromDom();
+            _staffDirectory.splice(i, 1);
+            renderStaffDirectory();
+        });
+
+        row.querySelector('.staff-dir-file-input').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            syncStaffDirectoryFromDom();
+            try {
+                const ext      = (file.name.split('.').pop() || 'jpg').toLowerCase();
+                const filename = `${Date.now()}-${i}.${ext}`;
+                const url      = await uploadStaffPhoto(file, filename);
+                _staffDirectory[i].photoUrl = url;
+            } catch (err) {
+                alert('Photo upload failed: ' + err.message);
+            }
+            renderStaffDirectory();
+        });
+    });
+}
+
+async function onSaveStaffDirectory() {
+    const btn      = document.getElementById('saveStaffDirectoryBtn');
+    const statusEl = document.getElementById('staffDirectoryStatus');
+    if (!btn) return;
+    btn.disabled    = true;
+    btn.textContent = 'Saving…';
+    if (statusEl) statusEl.textContent = '';
+
+    try {
+        syncStaffDirectoryFromDom();
+        await upsertSetting('staff_directory', _staffDirectory);
+        await logAdminAction('update', 'staff_directory', null, { count: _staffDirectory.length });
+
+        if (statusEl) {
+            statusEl.textContent = '✓ Saved!';
+            statusEl.style.color = '#2e7d32';
+            setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+    } catch (err) {
+        if (statusEl) {
+            statusEl.textContent = '⚠️ ' + err.message;
+            statusEl.style.color = '#c62828';
+        }
+        console.error('onSaveStaffDirectory:', err);
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = '💾 Save Staff Directory';
     }
 }
 
