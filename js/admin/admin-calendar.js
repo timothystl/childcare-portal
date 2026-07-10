@@ -657,7 +657,7 @@ function renderCapacityOverview() {
         });
     });
 
-    const cards = ROOMS.map(room => {
+    const cards = getSortedRooms().map(room => {
         const used    = counts[room.id] || 0;
         const hasCap  = room.capacity != null && room.capacity > 0;
         const cap     = hasCap ? room.capacity * workingDays : 0;
@@ -757,15 +757,16 @@ async function renderRoomSchedule() {
 
         const counts = _buildShiftCounts(weekDates);
 
-        const roomHeaders = ROOMS.map(r => `<th colspan="2" class="staff-room-header">${r.label}</th>`).join('');
-        const subHeaders  = ROOMS.map(() =>
+        const sortedRoomsForSchedule = getSortedRooms();
+        const roomHeaders = sortedRoomsForSchedule.map(r => `<th colspan="2" class="staff-room-header">${r.label}</th>`).join('');
+        const subHeaders  = sortedRoomsForSchedule.map(() =>
             `<th class="staff-sub-head shift-am-th">AM</th><th class="staff-sub-head shift-pm-th">PM</th>`
         ).join('');
 
         const rows = weekDates.map(d => {
             const dt    = new Date(d + 'T00:00:00');
             const label = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
-            const cells = ROOMS.map(room => {
+            const cells = sortedRoomsForSchedule.map(room => {
                 const c   = counts[d][room.id] || { total: 0, fullDay: 0 };
                 const cap = room.capacity || 0;
 
@@ -837,7 +838,7 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
         });
     });
 
-    const otherRooms = ROOMS.filter(r => r.id !== roomId);
+    const otherRooms = getSortedRooms().filter(r => r.id !== roomId);
     const isFull     = cap > 0 && enrolled.length >= cap;
 
     const bodyEl = document.getElementById('dayDetailBody');

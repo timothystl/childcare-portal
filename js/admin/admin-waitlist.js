@@ -846,7 +846,7 @@ async function renderWaitlistPlanning() {
     const WEEKDAY_INIT = { 1: 'M', 2: 'T', 3: 'W', 4: 'Th', 5: 'F' };
     const DOW_TO_TRENDDAY = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri' };
 
-    const roomRows = ROOMS.filter(r => r.id !== 'summer').map(room => {
+    const roomRows = getSortedRooms().filter(r => r.id !== 'summer').map(room => {
         const monthCells = months.map(({ key }) => {
             const { isFinal, pattern } = _weekdayPatternForMonth(trendMap, room.id, key, today);
 

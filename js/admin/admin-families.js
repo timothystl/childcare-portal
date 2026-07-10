@@ -514,7 +514,7 @@ function renderFamiliesList(families) {
     if (familiesPage >= totalPages) familiesPage = Math.max(0, totalPages - 1);
     const pageStart   = familiesPage * FAMILIES_PAGE_SIZE;
     const pageFamilies = sorted.slice(pageStart, pageStart + FAMILIES_PAGE_SIZE);
-    const roomOptions = ROOMS.map(r =>
+    const roomOptions = getSortedRooms().map(r =>
         `<option value="${r.id}">${r.label}</option>`
     ).join('');
 
@@ -758,7 +758,7 @@ function renderModalChildRows() {
         return;
     }
 
-    const roomOptions = ROOMS.map(r => `<option value="${r.id}">${r.label}</option>`).join('');
+    const roomOptions = getSortedRooms().map(r => `<option value="${r.id}">${r.label}</option>`).join('');
 
     container.innerHTML = familyModalChildren.map((child, i) => {
         const dt = child.discount_type || 'none';
@@ -779,7 +779,7 @@ function renderModalChildRows() {
                         <label>Room</label>
                         <select class="fmc-room">
                             <option value="" ${!selectedRoom ? 'selected' : ''}>Auto (age-based)</option>
-                            ${ROOMS.map(r => `<option value="${r.id}" ${selectedRoom === r.id ? 'selected' : ''}>${r.label}</option>`).join('')}
+                            ${getSortedRooms().map(r => `<option value="${r.id}" ${selectedRoom === r.id ? 'selected' : ''}>${r.label}</option>`).join('')}
                         </select>
                     </div>
                 </div>

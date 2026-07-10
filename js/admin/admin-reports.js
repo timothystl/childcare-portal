@@ -618,7 +618,7 @@ function renderScheduleTables(weekDates, counts, assignments) {
         return html;
     }
 
-    const roomBlocks = ROOMS.map(room => {
+    const roomBlocks = getSortedRooms().map(room => {
         const ratio = room.staffRatio || 10;
         const hasEnrollment = weekDates.some(d => (counts[d]?.[room.id]?.total || 0) > 0);
 
@@ -797,7 +797,7 @@ function renderScheduleTables(weekDates, counts, assignments) {
             const label = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
             return [`${label} AM`, `${label} PM`];
         })];
-        const dataRows = ROOMS.map(r => {
+        const dataRows = getSortedRooms().map(r => {
             const row = [r.label];
             wDates.forEach(d => {
                 row.push((asgn[d]?.[r.id]?.am || []).join(', ') || '—');
@@ -852,7 +852,7 @@ function _printDay(date, weekDates, counts, assignments) {
     const dt       = new Date(date + 'T00:00:00');
     const dayLabel = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(date)}`;
 
-    const roomSections = ROOMS.map(room => {
+    const roomSections = getSortedRooms().map(room => {
         const ratio  = room.staffRatio || 10;
         const c      = currentCounts[date]?.[room.id] || { total: 0, fullDay: 0, halfDay: 0 };
         if (!c.total && !c.fullDay) return '';
@@ -933,7 +933,7 @@ function exportStaffSchedule() {
         const label = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(d)}`;
         return [`${label} AM Kids`, `${label} AM Staff`, `${label} PM Kids`, `${label} PM Staff`];
     })];
-    const dataRows = ROOMS.map(r => {
+    const dataRows = getSortedRooms().map(r => {
         const ratio = r.staffRatio || 10;
         const row   = [r.label];
         weekDates.forEach(d => {
@@ -1669,7 +1669,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             const timeOut = d?.timeOut || '';
             const roomId  = d?.roomId  || '';
 
-            const roomOptsManual = ROOMS.map(r =>
+            const roomOptsManual = getSortedRooms().map(r =>
                 `<option value="${escHtml(r.id)}"${roomId === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
             ).join('');
 
@@ -1677,7 +1677,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 ? validPairs.map(ev => {
                     const tiVal = isoToHHMM(ev.clockIn);
                     const toVal = isoToHHMM(ev.clockOut);
-                    const evRoomOpts = ROOMS.map(r =>
+                    const evRoomOpts = getSortedRooms().map(r =>
                         `<option value="${escHtml(r.id)}"${ev.roomId === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
                     ).join('');
                     return `<div class="payroll-clk-pair" data-event-id="${escHtml(ev.id)}">` +
@@ -2189,7 +2189,7 @@ async function _refreshPayrollDayRow(staffId, workDate) {
                 ? staffEvents.map(ev => {
                     const tiVal = isoToHHMM(ev.clock_in);
                     const toVal = isoToHHMM(ev.clock_out);
-                    const evRoomOpts = ROOMS.map(r =>
+                    const evRoomOpts = getSortedRooms().map(r =>
                         `<option value="${escHtml(r.id)}"${ev.room_id === r.id ? ' selected' : ''}>${escHtml(r.label)}</option>`
                     ).join('');
                     return `<div class="payroll-clk-pair" data-event-id="${escHtml(ev.id)}">` +
@@ -2529,7 +2529,7 @@ async function generateAttendanceRevenue() {
             return;
         }
 
-        const rooms = roomFilter ? ROOMS.filter(r => r.id === roomFilter) : ROOMS;
+        const rooms = roomFilter ? ROOMS.filter(r => r.id === roomFilter) : getSortedRooms();
         const showTotalCol = rooms.length > 1;
 
         // Accumulate totals per room
@@ -2889,7 +2889,7 @@ async function exportAttendanceRevenue() {
     const months = Object.keys(arMap).sort().filter(mo => mo >= fromMo && mo <= toMo);
     if (!months.length) { alert('No data to export.'); return; }
 
-    const rooms = roomFilter ? ROOMS.filter(r => r.id === roomFilter) : ROOMS;
+    const rooms = roomFilter ? ROOMS.filter(r => r.id === roomFilter) : getSortedRooms();
 
     const rows = months.map(mo => {
         const [y, m] = mo.split('-').map(Number);
@@ -3176,7 +3176,7 @@ async function generateEnrollmentFteReport() {
 
         // For each registration: determine its month and whether FD or HD (majority of care dates)
         const MONTH_NAME  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        const activeRooms = ROOMS.filter(r => r.status !== 'coming_soon');
+        const activeRooms = getSortedRooms().filter(r => r.status !== 'coming_soon');
         const ROOM_LABEL  = Object.fromEntries(ROOMS.map(r => [r.id, r.label]));
 
         const byMonth = {}; // 'YYYY-MM' → [{ room_id, type: 'full'|'half' }, ...]
@@ -3412,7 +3412,7 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
         return n;
     }
 
-    const rooms = ROOMS.filter(r => r.status !== 'seasonal');
+    const rooms = getSortedRooms().filter(r => r.status !== 'seasonal');
 
     if (scheduleRows.length === 0) {
         try {
@@ -4025,7 +4025,7 @@ function _renderTrendsTable(trendMap) {
     const facilityAccum = {};
     TREND_DAYS.forEach(d => { facilityAccum[d] = { halfSum: 0, fullSum: 0 }; });
 
-    const roomHtml = ROOMS.map(room => {
+    const roomHtml = getSortedRooms().map(room => {
         // Rooms with half-day option show Half | Full | Total per day; full-day-only rooms show just Total
         const showSplit = !room.fullDayOnly;
 
@@ -4233,7 +4233,7 @@ async function exportEnrollmentTrends() {
         const [y, m] = mo.split('-').map(Number);
         const moLabel = MONTH_NAMES[m - 1] + ' ' + y;
         const isHist  = trendMap[mo]._historical;
-        ROOMS.forEach(room => {
+        getSortedRooms().forEach(room => {
             const row = { Month: moLabel, Room: room.label, Source: isHist ? 'historical' : 'live' };
             let moHalfTotal = 0, moFullTotal = 0;
             TREND_DAYS.forEach(d => {
@@ -4327,7 +4327,7 @@ async function generateWaitlistReport() {
 function initEnrollmentPlannerSelectors() {
     const roomSel = document.getElementById('plannerRoomSel');
     if (!roomSel || roomSel.options.length > 0) return;
-    ROOMS.forEach(r => {
+    getSortedRooms().forEach(r => {
         const opt = document.createElement('option');
         opt.value = r.id;
         opt.textContent = r.label;
