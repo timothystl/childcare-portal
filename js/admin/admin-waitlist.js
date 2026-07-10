@@ -1043,6 +1043,7 @@ function _normDateStr(val) {
 }
 
 function setupWaitlistAdmin() {
+    populateSiblingRoomSelect(document.getElementById('adminWlSibRoom'));
     document.getElementById('refreshWaitlistBtn')?.addEventListener('click', loadWaitlistApplications);
     document.getElementById('wlSearchInput')?.addEventListener('input', renderWaitlistQuickList);
     document.getElementById('wlStatusFilter')?.addEventListener('change', () => { renderWaitlistAdmin(); renderWaitlistQuickList(); });

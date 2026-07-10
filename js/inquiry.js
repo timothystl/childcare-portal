@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const sibFields = document.getElementById('iqSiblingFields');
     const errorEl   = document.getElementById('iqError');
 
+    populateSiblingRoomSelect(document.getElementById('iqSiblingRoom'));
+
     isUnborn.addEventListener('change', () => {
         const unborn = isUnborn.checked;
         dobRow.classList.toggle('hidden', unborn);
