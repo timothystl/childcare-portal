@@ -83,17 +83,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Fetch the independent admin settings in parallel. Using allSettled so a
     // single failed request degrades gracefully instead of aborting the whole
     // init (e.g. a missing room_rates row shouldn't stop the form rendering).
-    const [rateRes, capRes, campRes, overrideRes, closuresRes] = await Promise.allSettled([
+    const [rateRes, capRes, ratioRes, campRes, overrideRes, closuresRes] = await Promise.allSettled([
         loadRateSettings(),
         loadCapacitySettings(),
+        loadRatioSettings(),
         loadSummerCampSetting(),
         fetchSetting('reg_window_override'),
         fetchClosures(),
     ]);
     if (rateRes.status     === 'rejected') console.error('loadRateSettings failed:', rateRes.reason);
     if (capRes.status      === 'rejected') console.error('loadCapacitySettings failed:', capRes.reason);
+    if (ratioRes.status    === 'rejected') console.error('loadRatioSettings failed:', ratioRes.reason);
     if (campRes.status     === 'rejected') console.error('loadSummerCampSetting failed:', campRes.reason);
     if (closuresRes.status === 'rejected') console.error('fetchClosures failed:', closuresRes.reason);
+
+    renderPublicRoomCards();
 
     regWindowOverride = (overrideRes.status === 'fulfilled' ? overrideRes.value : null) || 'auto';
 
@@ -143,6 +147,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupContactModal();
     setupForgotPinModal();
 });
+
+// ============================================================
+// PUBLIC ROOM INFO CARDS (classrooms section on the public page)
+// ============================================================
+// Capacity wording varies by room ("infants" / "toddlers" / "children").
+// Everything else in the card (ages, rates, capacity, ratio) comes straight
+// off ROOMS, which loadRateSettings()/loadCapacitySettings()/loadRatioSettings()
+// merge admin-configured overrides into — so the cards always reflect what's
+// actually saved in Settings, not a snapshot baked into the HTML.
+const ROOM_CAPACITY_NOUNS = { bear: 'infants', bee: 'toddlers' };
+
+function renderPublicRoomCards() {
+    const grid = document.getElementById('roomInfoGrid');
+    if (!grid) return;
+    const rooms = getSortedRooms().filter(r => r.id !== 'summer' && !r.hidden);
+    grid.innerHTML = rooms.map(room => {
+        const spaceIdx = room.label.indexOf(' ');
+        const emoji    = spaceIdx === -1 ? room.label : room.label.slice(0, spaceIdx);
+        const name     = spaceIdx === -1 ? room.label : room.label.slice(spaceIdx + 1);
+        const noun     = ROOM_CAPACITY_NOUNS[room.id] || 'children';
+        const halfDay  = room.halfDayRate != null ? `$${room.halfDayRate}` : '—';
+        return `<div class="room-card"><div class="room-header"><span class="room-emoji">${escHtml(emoji)}</span><div class="room-name">${escHtml(name)}</div><div class="room-ages">${escHtml(room.ages || '')}</div></div><div class="room-body"><div class="room-rate-row"><span>Full Day</span><strong>$${room.fullDayRate}</strong></div><div class="room-rate-row"><span>Half Day</span><strong>${halfDay}</strong></div><div class="room-capacity">Max ${room.capacity ?? '—'} ${noun} · 1:${room.staffRatio ?? '—'} ratio</div></div></div>`;
+    }).join('');
+}
 
 // ============================================================
 // AGE / DOB HELPERS
