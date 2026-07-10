@@ -197,6 +197,7 @@
     .room-rate-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text-muted); }
     .room-rate-row:last-child { border-bottom: none; }
     .room-rate-row strong { color: var(--navy); font-weight: 800; }
+    .room-rate-row.room-rate-note { justify-content: center; font-style: italic; }
     .room-capacity { margin-top: 10px; font-size: 11px; color: var(--text-muted); text-align: center; }
 
     /* HOW IT WORKS */
@@ -270,6 +271,9 @@
     .staff-card-photo { width: 160px; height: 204px; border-radius: 12px; border: 3px solid var(--sun); margin: 0 auto 14px; overflow: hidden; background-color: var(--sun-pale); }
     .staff-card-photo img { display: none; }
     .staff-card--leadership .staff-card-photo { background: var(--green-pale); border-color: var(--green-lt); border-width: 3px; }
+    .staff-card--placeholder { opacity: .8; border-style: dashed; }
+    .staff-card-photo--empty { display: flex; align-items: center; justify-content: center; border-style: dashed; }
+    .staff-card-photo-icon { font-size: 48px; opacity: .45; }
     .staff-card-name { font-family: var(--font-head); font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
     .staff-card-role { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
     .staff-card-room { font-size: 12px; color: var(--green); font-weight: 700; margin-top: 6px; }
@@ -422,9 +426,10 @@
     <p class="section-subtitle">Each classroom is designed for the specific developmental needs of its age group, with dedicated staff and age-appropriate materials.</p>
     <div class="rooms-grid" id="roomInfoGrid"></div>
     <p style="margin-top:24px;font-size:13px;color:var(--text-muted);text-align:center;">Full Day: 8:15 am – 5:00 pm &nbsp;·&nbsp; Half Day: 8:15 am – 1:00 pm &nbsp;·&nbsp; Monday through Friday (year round)</p>
+    <p id="regFeeNote" style="margin-top:6px;font-size:13px;color:var(--text-muted);text-align:center;"></p>
     <div style="margin-top:32px;background:var(--sun-pale);border:1.5px solid var(--sun);border-radius:16px;padding:24px 28px;display:flex;gap:18px;align-items:flex-start;">
       <div style="font-size:2em;line-height:1;">☀️</div>
-      <div><h3 style="margin:0 0 6px;font-size:1.05em;color:var(--navy);">Summer Camp Program</h3><p style="margin:0;color:var(--text-muted);font-size:0.95em;line-height:1.6;">We also offer a separate <strong>Summer Camp</strong> program for children ages <strong>5–10</strong>. Summer camp runs <strong>May 26 – July 31</strong> with fun themed weeks, activities, and field trips. Contact the office for enrollment details and availability.</p></div>
+      <div><h3 style="margin:0 0 6px;font-size:1.05em;color:var(--navy);">Summer Camp Program</h3><p style="margin:0;color:var(--text-muted);font-size:0.95em;line-height:1.6;">We also offer a separate <strong>Summer Camp</strong> program for children ages <strong>5–10</strong>. Summer camp runs <strong>May 26 – July 31</strong><span id="summerDailyFeeNote"></span> with fun themed weeks, activities, and field trips. Contact the office for enrollment details and availability.</p></div>
     </div>
   </div>
 </section>
@@ -447,6 +452,7 @@
       <div class="staff-card"><div class="staff-card-photo"><img src="images/staff/Meagan.jpeg" alt="Meagan"></div><div class="staff-card-name">Meagan</div><div class="staff-card-role">Lead Teacher</div><div class="staff-card-room">🐝 Bee Room · 1-Year-Olds</div></div>
       <div class="staff-card"><div class="staff-card-photo"><img src="images/staff/Sonya.jpeg" alt="Sonya"></div><div class="staff-card-name">Sonya</div><div class="staff-card-role">Lead Teacher</div><div class="staff-card-room">🐢 Turtle Room · 2-Year-Olds</div></div>
       <div class="staff-card"><div class="staff-card-photo"><img src="images/staff/Olivia.jpeg" alt="Olivia"></div><div class="staff-card-name">Olivia</div><div class="staff-card-role">Lead Teacher</div><div class="staff-card-room">🦉 Owl Room · 3-Year-Olds</div></div>
+      <div class="staff-card staff-card--placeholder"><div class="staff-card-photo staff-card-photo--empty"><span class="staff-card-photo-icon">🪿</span></div><div class="staff-card-name">Coming Soon</div><div class="staff-card-role">Lead Teacher</div><div class="staff-card-room">🪿 Goose Room · 2½-Year-Olds</div></div>
     </div>
   </div>
 </section>

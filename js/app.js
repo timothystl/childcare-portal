@@ -83,21 +83,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Fetch the independent admin settings in parallel. Using allSettled so a
     // single failed request degrades gracefully instead of aborting the whole
     // init (e.g. a missing room_rates row shouldn't stop the form rendering).
-    const [rateRes, capRes, ratioRes, campRes, overrideRes, closuresRes] = await Promise.allSettled([
+    const [rateRes, capRes, ratioRes, campRes, overrideRes, closuresRes, regFeeRes] = await Promise.allSettled([
         loadRateSettings(),
         loadCapacitySettings(),
         loadRatioSettings(),
         loadSummerCampSetting(),
         fetchSetting('reg_window_override'),
         fetchClosures(),
+        fetchSetting('registration_fee'),
     ]);
     if (rateRes.status     === 'rejected') console.error('loadRateSettings failed:', rateRes.reason);
     if (capRes.status      === 'rejected') console.error('loadCapacitySettings failed:', capRes.reason);
     if (ratioRes.status    === 'rejected') console.error('loadRatioSettings failed:', ratioRes.reason);
     if (campRes.status     === 'rejected') console.error('loadSummerCampSetting failed:', campRes.reason);
     if (closuresRes.status === 'rejected') console.error('fetchClosures failed:', closuresRes.reason);
+    if (regFeeRes.status   === 'rejected') console.error('fetchSetting(registration_fee) failed:', regFeeRes.reason);
 
     renderPublicRoomCards();
+    renderFeeNotes(regFeeRes.status === 'fulfilled' ? regFeeRes.value : null);
 
     regWindowOverride = (overrideRes.status === 'fulfilled' ? overrideRes.value : null) || 'auto';
 
@@ -167,9 +170,30 @@ function renderPublicRoomCards() {
         const emoji    = spaceIdx === -1 ? room.label : room.label.slice(0, spaceIdx);
         const name     = spaceIdx === -1 ? room.label : room.label.slice(spaceIdx + 1);
         const noun     = ROOM_CAPACITY_NOUNS[room.id] || 'children';
-        const halfDay  = room.halfDayRate != null ? `$${room.halfDayRate}` : '—';
-        return `<div class="room-card"><div class="room-header"><span class="room-emoji">${escHtml(emoji)}</span><div class="room-name">${escHtml(name)}</div><div class="room-ages">${escHtml(room.ages || '')}</div></div><div class="room-body"><div class="room-rate-row"><span>Full Day</span><strong>$${room.fullDayRate}</strong></div><div class="room-rate-row"><span>Half Day</span><strong>${halfDay}</strong></div><div class="room-capacity">Max ${room.capacity ?? '—'} ${noun} · 1:${room.staffRatio ?? '—'} ratio</div></div></div>`;
+        const halfDayRow = (room.fullDayOnly || room.halfDayRate == null)
+            ? `<div class="room-rate-row room-rate-note">Full Day Only</div>`
+            : `<div class="room-rate-row"><span>Half Day</span><strong>$${room.halfDayRate}</strong></div>`;
+        return `<div class="room-card"><div class="room-header"><span class="room-emoji">${escHtml(emoji)}</span><div class="room-name">${escHtml(name)}</div><div class="room-ages">${escHtml(room.ages || '')}</div></div><div class="room-body"><div class="room-rate-row"><span>Full Day</span><strong>$${room.fullDayRate}</strong></div>${halfDayRow}<div class="room-capacity">Max ${room.capacity ?? '—'} ${noun} · 1:${room.staffRatio ?? '—'} ratio</div></div></div>`;
     }).join('');
+}
+
+// Fills in the annual registration fee note under the room cards and the
+// summer camp daily fee mentioned in its promo box, both pulled from
+// Settings so they stay in sync with what admin actually charges.
+function renderFeeNotes(regFeeAmount) {
+    const regEl = document.getElementById('regFeeNote');
+    if (regEl) {
+        regEl.textContent = (typeof regFeeAmount === 'number' && regFeeAmount > 0)
+            ? `A one-time annual registration fee of $${regFeeAmount.toFixed(2)} applies per child.`
+            : '';
+    }
+    const summerEl = document.getElementById('summerDailyFeeNote');
+    if (summerEl) {
+        const summerRoom = ROOMS.find(r => r.id === 'summer');
+        summerEl.innerHTML = summerRoom?.fullDayRate != null
+            ? ` (<strong>$${summerRoom.fullDayRate}/day</strong>)`
+            : '';
+    }
 }
 
 // ============================================================
