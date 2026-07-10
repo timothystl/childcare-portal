@@ -66,7 +66,7 @@ async function initDashboard() {
 
 function populateRoomFilter() {
     const sel = document.getElementById('roomFilter');
-    ROOMS.forEach(r => {
+    getSortedRooms().forEach(r => {
         const opt = document.createElement('option');
         opt.value       = r.id;
         opt.textContent = r.label;
@@ -76,7 +76,7 @@ function populateRoomFilter() {
 
 function populateRosterRoomFilter() {
     const sel = document.getElementById('rosterRoomFilter');
-    ROOMS.forEach(r => {
+    getSortedRooms().forEach(r => {
         const opt = document.createElement('option');
         opt.value       = r.id;
         opt.textContent = r.label;
@@ -89,7 +89,7 @@ function populateWlRoomFilter() {
     const sel = document.getElementById('wlRoomFilter');
     if (!sel) return;
     const tbdOpt = sel.querySelector('option[value="tbd"]');
-    ROOMS.forEach(r => {
+    getSortedRooms().forEach(r => {
         const opt = document.createElement('option');
         opt.value       = r.id;
         opt.textContent = r.label + (r.status === 'coming_soon' ? ' (Coming Soon)' : '');

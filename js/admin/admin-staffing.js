@@ -23,7 +23,7 @@ function renderRatiosTable() {
                 </tr>
             </thead>
             <tbody>
-                ${ROOMS.map(room => `
+                ${getSortedRooms().map(room => `
                     <tr data-room-id="${room.id}">
                         <td class="rates-room-label">
                             <strong>${escHtml(room.label)}</strong>
@@ -108,7 +108,7 @@ function setupStaffRoster() {
     // Populate room picker in the add/edit form
     const sel = document.getElementById('sfRoom');
     if (sel) {
-        ROOMS.forEach(r => {
+        getSortedRooms().forEach(r => {
             const opt = document.createElement('option');
             opt.value = r.id; opt.textContent = r.label;
             sel.appendChild(opt);

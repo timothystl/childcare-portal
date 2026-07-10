@@ -126,7 +126,7 @@ function _buildMonthlyRosterRoomSections(monthVal, roomId) {
         });
     });
 
-    const rooms = (roomId ? ROOMS.filter(r => r.id === roomId) : ROOMS).map(room => ({
+    const rooms = (roomId ? ROOMS.filter(r => r.id === roomId) : getSortedRooms()).map(room => ({
         room,
         days: workingDays.map(({ dateStr, label }) => {
             const children = (childrenByRoomDate[room.id]?.[dateStr] || [])
@@ -374,7 +374,7 @@ const _ROSTER_GRID_AUTOSCALE_SCRIPT = `
 `;
 
 function _rosterGridBlocksHtml(roster, roomId) {
-    const roomsToShow = roomId ? ROOMS.filter(r => r.id === roomId) : ROOMS;
+    const roomsToShow = roomId ? ROOMS.filter(r => r.id === roomId) : getSortedRooms();
     return roomsToShow.map(room => {
         const kids = roster.filter(r => r.roomId === room.id)
             .sort((a, b) => a.childName.localeCompare(b.childName));

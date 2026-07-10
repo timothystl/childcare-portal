@@ -428,7 +428,7 @@ function renderRatesTable() {
                 </tr>
             </thead>
             <tbody>
-                ${ROOMS.map(room => `
+                ${getSortedRooms().map(room => `
                     <tr data-room-id="${room.id}">
                         <td class="rates-room-label">
                             <strong>${escHtml(room.label)}</strong>
@@ -565,7 +565,7 @@ function renderCapacityTable() {
                 </tr>
             </thead>
             <tbody>
-                ${ROOMS.map(room => `
+                ${getSortedRooms().map(room => `
                     <tr data-room-id="${room.id}">
                         <td class="rates-room-label">
                             <strong>${escHtml(room.label)}</strong>

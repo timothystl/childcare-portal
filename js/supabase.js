@@ -117,6 +117,25 @@ const ROOMS = [
     },
 ];
 
+// Returns ROOMS sorted by age (ageMinMonths ascending). Rooms with no
+// ageMinMonths (e.g. Summer Camp) sort last, in their original relative order.
+// Age ranges are admin-editable (Settings → Rates), so display order must be
+// derived at render time rather than assumed from the ROOMS declaration order.
+function getSortedRooms(rooms = ROOMS) {
+    return rooms
+        .map((room, i) => ({ room, i }))
+        .sort((a, b) => {
+            const aMin = a.room.ageMinMonths;
+            const bMin = b.room.ageMinMonths;
+            if (aMin == null && bMin == null) return a.i - b.i;
+            if (aMin == null) return 1;
+            if (bMin == null) return -1;
+            if (aMin !== bMin) return aMin - bMin;
+            return a.i - b.i;
+        })
+        .map(({ room }) => room);
+}
+
 // ============================================================
 // TYPE DEFINITIONS  (JSDoc — no build step required)
 // Provides IDE autocomplete and catches field-name typos at development time.

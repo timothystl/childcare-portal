@@ -613,7 +613,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
         const today = new Date();
         const todayYear  = today.getFullYear();
 
-        const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
+        const activeRooms = getSortedRooms().filter(r => r.status === 'active' || r.status === 'coming_soon');
 
         // Per-room: accumulate half/full days and actual revenue across *complete* months
         // only — the current (partial) month is excluded here rather than prorated, since
@@ -1237,7 +1237,7 @@ async function _generateMonthDetail(year, month, container) {
 
         let totalRev = 0, totalLab = centerLab, totalFull = 0, totalHalf = 0;
         const activeRoomIds = new Set([...Object.keys(roomRevMap), ...Object.keys(moData)]);
-        const roomRows = ROOMS.filter(r => activeRoomIds.has(r.id)).map(r => {
+        const roomRows = getSortedRooms().filter(r => activeRoomIds.has(r.id)).map(r => {
             // Use live billing data when available; fall back to billing_summary for historical months
             const rev  = roomRevMap[r.id]?.revenue  || moData[r.id]?.revenue  || 0;
             const full = roomRevMap[r.id]?.fullDays || 0;
@@ -1685,7 +1685,7 @@ async function _buildRoomModelData() {
         lastN.some(m => (b.month || '').substring(0, 7) === m.key)
     );
 
-    const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
+    const activeRooms = getSortedRooms().filter(r => r.status === 'active' || r.status === 'coming_soon');
     const SCHOOL_DAYS = 21; // avg billable days per month — used when no better data
     const roomData = {};
 
@@ -1755,7 +1755,7 @@ async function renderRoomRateGrid() {
 
     try {
         const { roomData, lastN } = await _buildRoomModelData();
-        const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
+        const activeRooms = getSortedRooms().filter(r => r.status === 'active' || r.status === 'coming_soon');
         const hasHalf     = activeRooms.some(r => !r.fullDayOnly);
 
         const overviewRows = activeRooms.map(r => {
@@ -1877,7 +1877,7 @@ async function runFinanceModel() {
             roomInputs[roomId][type] = parseFloat(inp.value) || 0;
         });
 
-        const activeRooms = ROOMS.filter(r => r.status === 'active' || r.status === 'coming_soon');
+        const activeRooms = getSortedRooms().filter(r => r.status === 'active' || r.status === 'coming_soon');
         const hasHalfAny  = activeRooms.some(r => !r.fullDayOnly);
 
         let totalBaseRev = 0, totalProjRev = 0;
