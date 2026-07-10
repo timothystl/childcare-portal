@@ -65,6 +65,13 @@ function wlInterestTag(app) {
     return `<br><span class="wl-sib-tag" title="Confirmed via reminder email">👍 confirmed ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>`;
 }
 
+// Human-readable "days needed" label — mirrors how an empty/null days_of_week
+// is interpreted everywhere else in the planning logic (defaults to all 5).
+function wlDaysLabel(app) {
+    const days = (app.days_of_week || '').split(',').map(s => s.trim()).filter(Boolean);
+    return days.length ? days.join(', ') : 'Any (M–F)';
+}
+
 function wlDaysWaiting(appliedAt) {
     const ms = Date.now() - new Date(appliedAt).getTime();
     const d  = Math.floor(ms / 86400000);
@@ -206,6 +213,7 @@ function renderWaitlistQuickList() {
             <td class="wl-td-start">${startStr}</td>
             <td class="wl-td-age">${escHtml(ageLabel)}</td>
             <td class="wl-td-room">${escHtml(roomLabel)}</td>
+            <td class="wl-td-days">${escHtml(wlDaysLabel(a))}</td>
             <td class="wl-td-status">${wlStatusBadge(a)}</td>
             <td class="wl-td-tour">${wlTourBadge(a)}${wlInterestTag(a)}</td>
             <td class="wl-td-parent">${escHtml(a.parent_name)}<br>${a.parent_email ? `<a href="mailto:${escHtml(a.parent_email)}" class="wl-email-link">${escHtml(a.parent_email)}</a>` : '<span class="wl-phone">No email on file</span>'}${a.parent_phone ? `<br><span class="wl-phone">${escHtml(a.parent_phone)}</span>` : ''}</td>
@@ -213,6 +221,7 @@ function renderWaitlistQuickList() {
             <td class="wl-td-actions">
                 ${canOffer ? `<button class="btn-wl-offer-quick" data-id="${a.id}" data-name="${escHtml(a.parent_name)}" data-email="${escHtml(a.parent_email)}" data-child="${escHtml(a.child_name)}">Make Offer</button>` : ''}
                 ${tourBtn}
+                <button class="btn-wl-edit-quick" data-id="${a.id}" title="Edit this waitlist entry">✏️ Edit</button>
                 <button class="btn-wl-remove-quick" data-id="${a.id}" data-child="${escHtml(a.child_name)}" title="Permanently remove from the waitlist">🗑 Remove</button>
             </td>
         </tr>`;
@@ -228,11 +237,12 @@ function renderWaitlistQuickList() {
                         <th class="wl-th" data-col="start" style="width:108px">Desired Start${sortArrow('start')}</th>
                         <th class="wl-th" data-col="age"   style="width:90px">Age at Start${sortArrow('age')}</th>
                         <th class="wl-th" data-col="room"  style="width:13%">Room${sortArrow('room')}</th>
+                        <th style="width:120px">Days</th>
                         <th class="wl-th" data-col="status" style="width:88px">Status${sortArrow('status')}</th>
                         <th style="width:100px">Tour</th>
                         <th class="wl-th" data-col="parent">Parent / Contact${sortArrow('parent')}</th>
                         <th class="wl-th" data-col="waiting" style="width:90px">Waiting Since${sortArrow('waiting')}</th>
-                        <th style="width:190px">Actions</th>
+                        <th style="width:230px">Actions</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -270,6 +280,14 @@ function renderWaitlistQuickList() {
                 if (paperwkEl && !paperwkEl.value) paperwkEl.value = (g.paperworkLinks || []).join(', ');
             }).catch(() => {});
             modal.classList.remove('hidden');
+        });
+    });
+
+    // Edit buttons
+    container.querySelectorAll('.btn-wl-edit-quick').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const app = _allWaitlistApps.find(a => a.id === Number(btn.dataset.id));
+            if (app) _openAdminWlModalForEdit(app);
         });
     });
 
@@ -396,8 +414,10 @@ function renderWaitlistAdmin() {
         // Action buttons
         const actionBtns = (() => {
             const id = app.id;
+            const edit = `<button class="btn-ghost wl-action wl-edit" data-id="${id}">✏️ Edit</button>`;
             if (['declined','expired','archived','enrolled'].includes(app.status)) {
-                return `<button class="btn-ghost wl-action wl-unarchive" data-id="${id}">↩ Restore</button>
+                return `${edit}
+                        <button class="btn-ghost wl-action wl-unarchive" data-id="${id}">↩ Restore</button>
                         <button class="btn-danger wl-action wl-delete" data-id="${id}" data-child="${escHtml(app.child_name)}">🗑 Delete</button>`;
             }
             const offer = app.status === 'pending' || offerExpired
@@ -408,7 +428,7 @@ function renderWaitlistAdmin() {
                 : '';
             const archive = `<button class="btn-ghost wl-action wl-archive" data-id="${id}">Archive ▾</button>`;
             const remove  = `<button class="btn-danger wl-action wl-delete" data-id="${id}" data-child="${escHtml(app.child_name)}" title="Permanently remove without archiving">🗑 Remove</button>`;
-            return [offer, accept, archive, remove].filter(Boolean).join(' ');
+            return [edit, offer, accept, archive, remove].filter(Boolean).join(' ');
         })();
 
         // Offer details row
@@ -492,6 +512,12 @@ function renderWaitlistAdmin() {
     container.innerHTML = `<div class="wl-list">${cards}</div>`;
 
     // Wire up all event handlers
+    container.querySelectorAll('.wl-edit').forEach(btn =>
+        btn.addEventListener('click', () => {
+            const app = _allWaitlistApps.find(a => a.id === Number(btn.dataset.id));
+            if (app) _openAdminWlModalForEdit(app);
+        }));
+
     container.querySelectorAll('.wl-offer').forEach(btn =>
         btn.addEventListener('click', () => {
             const id = btn.dataset.id;
@@ -715,51 +741,80 @@ function _buildGraduationIndex() {
     return { gradOut, gradIn };
 }
 
-// For each active waitlist applicant: which month/room they're expected to
-// start in, with their requested weekday/day-type pattern (defaulting to a
-// full 5-day week when a family hasn't specified particular days yet).
-function _buildWaitlistStartIndex() {
-    const idx = {};
+// One priority-ordered admission queue per room — same tier order the Quick
+// List already shows as "position" (siblings first, then applied_at asc.),
+// so "who's next" always agrees between the Quick List and the Planning
+// panel's admission simulation below.
+function _buildWaitlistPriorityQueues() {
+    const byRoom = {};
     (_allWaitlistApps || [])
         .filter(a => ['pending', 'offered', 'accepted'].includes(a.status))
         .forEach(a => {
             if (!a.desired_start_date) return;
             const roomId = wlDeriveRoom(a);
             if (!roomId) return;
-            const moKey  = a.desired_start_date.slice(0, 7);
-            const named  = (a.days_of_week || '').split(',').map(s => s.trim()).filter(Boolean);
-            const days   = named.length ? named : TREND_DAYS;
-            const type   = a.day_type === 'half' ? 'half' : 'full';
+            const named = (a.days_of_week || '').split(',').map(s => s.trim()).filter(Boolean);
+            const days  = named.length ? named : TREND_DAYS;
+            const type  = a.day_type === 'half' ? 'half' : 'full';
             const weekdays = {};
             days.forEach(d => { if (TREND_DAYS.includes(d)) weekdays[d] = type; });
+            if (!Object.keys(weekdays).length) return; // no valid requested days — nothing to simulate
 
-            if (!idx[moKey]) idx[moKey] = {};
-            if (!idx[moKey][roomId]) idx[moKey][roomId] = [];
-            idx[moKey][roomId].push({ childName: a.child_name, weekdays });
+            if (!byRoom[roomId]) byRoom[roomId] = [];
+            byRoom[roomId].push({
+                id: a.id,
+                childName: a.child_name,
+                weekdays,
+                desiredMoKey:     a.desired_start_date.slice(0, 7),
+                desiredStartDate: a.desired_start_date,
+                appliedAt:        a.applied_at,
+                hasSibling:       !!a.has_sibling,
+            });
         });
-    return idx;
+    Object.values(byRoom).forEach(list => list.sort((x, y) => {
+        const sibX = x.hasSibling ? 0 : 1, sibY = y.hasSibling ? 0 : 1;
+        if (sibX !== sibY) return sibX - sibY;
+        return new Date(x.appliedAt) - new Date(y.appliedAt);
+    }));
+    return byRoom;
 }
 
 /**
  * Forecast for a non-final month: start from the last real, locked-in month
  * for this room, then carry it forward month by month through every known
- * graduation (in and out) and waitlist start up to (and including) moKey.
- * This is what "based on the past, plus who's being promoted and who on the
- * waitlist will be starting" means concretely — not a generic statistical
- * blend, which would ignore facts we already have on hand.
+ * graduation (in and out) and waitlist admission up to (and including)
+ * targetMoKey. Graduations apply unconditionally (an aging-out child always
+ * gets a spot in the next room, regardless of that room's capacity — they're
+ * already-enrolled, not new signups). Waitlist admissions are capacity-gated
+ * and priority-ordered: a queued child is admitted in a given cursor month
+ * only if EVERY one of their requested weekdays still has room under
+ * room.capacity that month (no partial-week admission); otherwise they stay
+ * queued and are retried the next cursor month. Once admitted they occupy
+ * capacity in every month from then on, since `pattern` accumulates across
+ * the whole walk without ever un-applying a prior admission.
+ *
+ * Pure function of (trendMap, roomId, targetMoKey, today) — recomputed from
+ * scratch on every call, same contract this forecast has always had.
  */
-function _projectedWeekdayPattern(trendMap, roomId, moKey, today) {
+function _simulateRoomAdmissions(trendMap, roomId, targetMoKey, today) {
     const pattern = {};
     TREND_DAYS.forEach(day => { pattern[day] = { half: 0, full: 0 }; });
 
     const lastFinalMoKey = _lastFinalTrendMonthKey(trendMap, today);
-    if (!lastFinalMoKey) return pattern;
+    if (!lastFinalMoKey) return { pattern, admittedThisMonth: [], stillWaiting: [] };
 
     const base = _trendMonthOwnPattern(trendMap, roomId, lastFinalMoKey);
     TREND_DAYS.forEach(day => { pattern[day] = { half: base[day].half, full: base[day].full }; });
 
     const { gradOut, gradIn } = _buildGraduationIndex();
-    const waitlistStart       = _buildWaitlistStartIndex();
+    const queue = (_buildWaitlistPriorityQueues()[roomId] || []).slice();
+    const room  = getSortedRooms().find(r => r.id === roomId);
+    // A room without a known capacity (e.g. still 'coming_soon') can't admit
+    // anyone — treat missing capacity as zero, not unlimited.
+    const roomCapacity = room && room.capacity != null ? room.capacity : 0;
+
+    const admitted = new Set();
+    let admittedThisMonth = [];
 
     // Start at lastFinalMoKey itself, not the month after: a child who ages out
     // partway through the last real month is still counted for that whole month
@@ -767,7 +822,9 @@ function _projectedWeekdayPattern(trendMap, roomId, moKey, today) {
     // their departure/arrival only actually shows up starting the next month —
     // applying lastFinalMoKey's own events here is what carries that forward.
     let cursor = lastFinalMoKey;
-    while (cursor <= moKey) {
+    while (cursor <= targetMoKey) {
+        admittedThisMonth = []; // only the targetMoKey iteration's value survives
+
         TREND_DAYS.forEach(day => {
             (gradOut[cursor]?.[roomId] || []).forEach(child => {
                 const type = child.weekdays[day];
@@ -777,15 +834,42 @@ function _projectedWeekdayPattern(trendMap, roomId, moKey, today) {
                 const type = child.weekdays[day];
                 if (type) pattern[day][type] += 1;
             });
-            (waitlistStart[cursor]?.[roomId] || []).forEach(child => {
-                const type = child.weekdays[day];
+        });
+
+        // Waitlist admissions: priority order, all-requested-days-or-nothing.
+        queue.forEach(entry => {
+            if (admitted.has(entry.id)) return;
+            if (entry.desiredMoKey > cursor) return; // not eligible before their desired month
+            const fits = TREND_DAYS.every(day => {
+                const type = entry.weekdays[day];
+                if (!type) return true; // day not requested — irrelevant to this child
+                return pattern[day].half + pattern[day].full + 1 <= roomCapacity;
+            });
+            if (!fits) return; // stays queued, retried next cursor month
+
+            TREND_DAYS.forEach(day => {
+                const type = entry.weekdays[day];
                 if (type) pattern[day][type] += 1;
             });
+            admitted.add(entry.id);
+            admittedThisMonth.push(entry);
         });
-        if (cursor === moKey) break;
+
+        if (cursor === targetMoKey) break;
         cursor = _nextMoKey(cursor);
     }
-    return pattern;
+
+    const stillWaiting = queue.filter(e => !admitted.has(e.id) && e.desiredMoKey <= targetMoKey);
+    return { pattern, admittedThisMonth, stillWaiting };
+}
+
+// Thin wrapper preserving the pre-existing contract for admin-reports.js's
+// _weekdayPatternForMonth (shared with Enrollment Trends) — same signature,
+// same return shape as before. Enrollment Trends' projected-month numbers
+// become capacity-gated as a result, which is intentional: capacity is a
+// hard ceiling on projected occupancy, not just a display-time clamp.
+function _projectedWeekdayPattern(trendMap, roomId, moKey, today) {
+    return _simulateRoomAdmissions(trendMap, roomId, moKey, today).pattern;
 }
 
 async function renderWaitlistPlanning() {
@@ -814,12 +898,15 @@ async function renderWaitlistPlanning() {
         return;
     }
 
-    // Who graduates into/out of, and who from the waitlist starts in, each
-    // room each month — the same indexes that feed the projected weekday
-    // pattern (_projectedWeekdayPattern), so these annotations always agree
-    // with what actually moved the projection for that month.
+    // Who graduates into/out of each room each month — the same index that
+    // feeds the projection (_simulateRoomAdmissions), so this annotation
+    // always agrees with what actually moved the projection for that month.
     const { gradOut } = _buildGraduationIndex();
-    const waitlistStart = _buildWaitlistStartIndex();
+    // One priority-ordered admission queue per room (siblings, then applied
+    // date) — same ordering the Quick List calls "position", used both for
+    // the capacity simulation and for the trailing "Waitlisted (next up)"
+    // column so the two never disagree about who's next.
+    const waitlistQueues = _buildWaitlistPriorityQueues();
 
     // Union of weekdays a group of children (each with their own weekdays map)
     // actually affects, in Mon..Fri order — e.g. "Mon, Wed, Fri".
@@ -829,26 +916,25 @@ async function renderWaitlistPlanning() {
         return TREND_DAYS.filter(d => present.has(d)).join(', ');
     }
 
-    // Build the planning grid. Group by the room the applicant themselves is
-    // waiting for (derived from age at their desired start date) — not
-    // sibling_room_id, which only records where an existing sibling is enrolled
-    // and left almost every applicant uncounted (or counted under the wrong room).
-    const waitlistByRoom = {};
-    (_allWaitlistApps || []).filter(a => ['pending','offered','accepted'].includes(a.status)).forEach(a => {
-        const rid = wlDeriveRoom(a) || 'tbd';
-        if (!waitlistByRoom[rid]) waitlistByRoom[rid] = [];
-        waitlistByRoom[rid].push(a);
-    });
-
     // Uses _weekdayPatternForMonth() (admin-reports.js) — the same resolver
     // Enrollment Trends calls — so the two reports can never disagree about
     // whether a month is final, or what its weekday pattern looks like.
     const WEEKDAY_INIT = { 1: 'M', 2: 'T', 3: 'W', 4: 'Th', 5: 'F' };
     const DOW_TO_TRENDDAY = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri' };
 
-    const roomRows = getSortedRooms().filter(r => r.id !== 'summer').map(room => {
+    const roomFilter = document.getElementById('wlPlanRoomFilter')?.value || '';
+
+    const roomRows = getSortedRooms().filter(r => r.id !== 'summer' && (!roomFilter || r.id === roomFilter)).map(room => {
         const monthCells = months.map(({ key }) => {
             const { isFinal, pattern } = _weekdayPatternForMonth(trendMap, room.id, key, today);
+
+            // Only non-final (projected) months need the admission simulation
+            // for their annotations — a final month's real bookings already
+            // reflect whatever actually happened, no simulation needed.
+            let admittedThisMonth = [], stillWaiting = [];
+            if (!isFinal) {
+                ({ admittedThisMonth, stillWaiting } = _simulateRoomAdmissions(trendMap, room.id, key, today));
+            }
 
             const weekdayChips = [1, 2, 3, 4, 5].map(dow => {
                 const day = pattern[DOW_TO_TRENDDAY[dow]];
@@ -870,16 +956,26 @@ async function renderWaitlistPlanning() {
                 </div>`;
             }).join('');
 
-            // Aging-out events this month — which weekdays actually open up
+            // Aging-out events this month — which weekdays actually open up.
+            // On a final month, real bookings can't be split mid-month, so a
+            // graduation dated this month doesn't lower the counts above
+            // until next month's card — call that out explicitly here rather
+            // than leave it ambiguous.
             const outs    = (gradOut[key]?.[room.id] || []);
             const outHtml = outs.length
-                ? `<div style="font-size:.75em;color:#667eea;margin-top:4px">→ ${outs.length} graduate${outs.length > 1 ? 's' : ''} out (${_weekdaySummary(outs)})</div>`
+                ? `<div style="font-size:.75em;color:#667eea;margin-top:4px">→ ${outs.length} graduate${outs.length > 1 ? 's' : ''} out (${_weekdaySummary(outs)})${isFinal ? ' <span style="color:#999">— seat opens next month</span>' : ''}</div>`
                 : '';
 
-            // Waitlist starts this month — which weekdays they fill
-            const ins     = (waitlistStart[key]?.[room.id] || []);
+            // Waitlist admissions this month — only applicants who actually
+            // fit within capacity, in priority order (empty for final months).
+            const ins     = admittedThisMonth;
             const inHtml  = ins.length
-                ? `<div style="font-size:.75em;color:#c05621;margin-top:2px">→ ${ins.length} incoming from waitlist (${_weekdaySummary(ins)})</div>`
+                ? `<div style="font-size:.75em;color:#c05621;margin-top:2px">→ ${ins.length} admitted from waitlist (${_weekdaySummary(ins)})</div>`
+                : '';
+
+            // Applicants for this room who still can't fit as of this month.
+            const waitHtml = (!isFinal && stillWaiting.length)
+                ? `<div style="font-size:.72em;color:#a0aec0;margin-top:2px">⏳ ${stillWaiting.length} still waiting (${stillWaiting.slice(0, 3).map(e => escHtml(e.childName)).join(', ')}${stillWaiting.length > 3 ? '…' : ''})</div>`
                 : '';
 
             const projectedNote = isFinal
@@ -888,13 +984,13 @@ async function renderWaitlistPlanning() {
 
             return `<td style="text-align:center;padding:8px 6px;white-space:nowrap">
                 <div style="display:flex;gap:3px;justify-content:center">${weekdayChips}</div>
-                ${outHtml}${inHtml}${projectedNote}
+                ${outHtml}${inHtml}${waitHtml}${projectedNote}
             </td>`;
         }).join('');
 
-        const wl = (waitlistByRoom[room.id] || []).slice(0,5);
+        const wl = (waitlistQueues[room.id] || []).slice(0, 5);
         const wlHtml = wl.length
-            ? wl.map(a => `<div style="font-size:.8em;color:#555;padding:2px 0">${escHtml(a.child_name)} <span style="color:#aaa">(${a.desired_start_date || '?'})</span></div>`).join('')
+            ? wl.map(e => `<div style="font-size:.8em;color:#555;padding:2px 0">${escHtml(e.childName)} <span style="color:#aaa">(${e.desiredStartDate || '?'})</span></div>`).join('')
             : '<div style="font-size:.8em;color:#aaa">No waitlist</div>';
 
         return `<tr>
@@ -914,7 +1010,7 @@ async function renderWaitlistPlanning() {
             </tr></thead>
             <tbody>${roomRows}</tbody>
         </table></div>
-        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip's big number is the average kids booked for that day (M/T/W/Th/F) — the same number Enrollment Trends shows for that room/month; the small number underneath is open slots (capacity minus booked). Months already finalized (registrations lock in on the 15th of the prior month) show their own actual bookings. Months marked "projected" start from the last finalized month and carry it forward through every known change: kids graduating into or out of the room, and waitlisted families whose desired start date falls in that month — both are listed under the month they take effect, with the specific weekdays affected, and a graduation dated a given month already shows up as lower booked counts (more open slots) starting the following month. → Graduates = children aging out of this room that month, freeing a permanent spot (and, unless it's Owl, filling a spot in the next room up).</p>`;
+        <p style="font-size:.8em;color:#888;margin-top:8px">Each weekday chip's big number is the average kids booked for that day (M/T/W/Th/F) — the same number Enrollment Trends shows for that room/month; the small number underneath is open slots (capacity minus booked), and never goes below zero because "admitted from waitlist" below is capped at capacity. Months already finalized (registrations lock in on the 15th of the prior month) show their own actual bookings. Months marked "projected" start from the last finalized month and carry it forward through every known change: kids graduating into or out of the room (always automatic — an aging-out child never waits on room), and waitlisted families admitted in priority order (siblings first, then who applied earliest) only once every day they need has room — both are listed under the month they take effect, with the specific weekdays affected. A waitlisted family who doesn't fit yet stays queued and shows up under "⏳ still waiting" until a later month's graduations free up enough room to admit them. → Graduates = children aging out of this room that month, freeing a permanent spot (and, unless it's Owl, filling a spot in the next room up).</p>`;
 }
 
 // ============================================================
@@ -1116,6 +1212,10 @@ function setupWaitlistAdmin() {
     document.getElementById('addToWaitlistBtn')?.addEventListener('click', _openAdminWlModal);
     document.getElementById('generateWaitlistBtn')?.addEventListener('click', generateWaitlistReport);
     document.getElementById('generateWlPlanBtn')?.addEventListener('click', renderWaitlistPlanning);
+    document.getElementById('wlPlanRoomFilter')?.addEventListener('change', () => {
+        // Only re-render if a plan has already been generated once this session.
+        if (document.getElementById('wlPlanContent')?.querySelector('table')) renderWaitlistPlanning();
+    });
     initEnrollmentPlannerSelectors();
 
     // Waitlist import
@@ -1181,14 +1281,64 @@ async function setupWaitlistNotifications() {
     });
 }
 
+// Set when the modal is editing an existing entry (rather than adding a new
+// one) — id of the application being edited, or null for the Add flow.
+let _adminWlEditingId = null;
+
 function _openAdminWlModal() {
+    _adminWlEditingId = null;
     document.getElementById('adminWlForm').reset();
     document.getElementById('adminWlDobRow').classList.remove('hidden');
     document.getElementById('adminWlDueRow').classList.add('hidden');
     document.getElementById('adminWlSibRow').classList.add('hidden');
     document.getElementById('adminWlErr').textContent = '';
+    document.getElementById('adminWlModalTitle').textContent = 'Add Child to Waitlist';
     document.getElementById('adminWlSubmitBtn').disabled = false;
     document.getElementById('adminWlSubmitBtn').textContent = 'Add to Waitlist';
+    document.getElementById('adminWlOverlay').classList.remove('hidden');
+    document.getElementById('adminWlParentName').focus();
+}
+
+// Opens the same modal pre-filled with an existing waitlist application's
+// data; _submitAdminWlEntry() detects _adminWlEditingId and updates instead
+// of inserting.
+function _openAdminWlModalForEdit(app) {
+    _adminWlEditingId = app.id;
+    document.getElementById('adminWlForm').reset();
+    document.getElementById('adminWlErr').textContent = '';
+
+    document.getElementById('adminWlParentName').value  = app.parent_name || '';
+    document.getElementById('adminWlParentEmail').value = app.parent_email || '';
+    document.getElementById('adminWlParentPhone').value = app.parent_phone || '';
+    document.getElementById('adminWlChildName').value   = app.child_name || '';
+
+    const unborn = !!app.expected_due_date && !app.child_dob;
+    document.getElementById('adminWlIsUnborn').checked = unborn;
+    document.getElementById('adminWlDobRow').classList.toggle('hidden', unborn);
+    document.getElementById('adminWlDueRow').classList.toggle('hidden', !unborn);
+    document.getElementById('adminWlDob').value     = app.child_dob || '';
+    document.getElementById('adminWlDueDate').value = app.expected_due_date || '';
+
+    document.getElementById('adminWlStartDate').value  = app.desired_start_date || '';
+    document.getElementById('adminWlFlexibility').value = app.start_flexibility || 'within_quarter';
+
+    const namedDays = (app.days_of_week || '').split(',').map(s => s.trim()).filter(Boolean);
+    document.querySelectorAll('#adminWlForm .adminWlDay').forEach(cb => {
+        cb.checked = namedDays.length ? namedDays.includes(cb.value) : true;
+    });
+    const dayTypeRadio = document.querySelector(`#adminWlForm input[name="adminWlDayType"][value="${app.day_type === 'half' ? 'half' : 'full'}"]`);
+    if (dayTypeRadio) dayTypeRadio.checked = true;
+
+    document.getElementById('adminWlHasSibling').checked = !!app.has_sibling;
+    document.getElementById('adminWlSibRow').classList.toggle('hidden', !app.has_sibling);
+    document.getElementById('adminWlSibName').value = app.sibling_child_name || '';
+    document.getElementById('adminWlSibRoom').value = app.sibling_room_id || '';
+
+    document.getElementById('adminWlNotes').value = app.notes || '';
+
+    document.getElementById('adminWlModalTitle').textContent = `Edit Waitlist Entry — ${app.child_name}`;
+    document.getElementById('adminWlSubmitBtn').disabled = false;
+    document.getElementById('adminWlSubmitBtn').textContent = 'Save Changes';
     document.getElementById('adminWlOverlay').classList.remove('hidden');
     document.getElementById('adminWlParentName').focus();
 }
@@ -1201,6 +1351,7 @@ async function _submitAdminWlEntry() {
     const err = document.getElementById('adminWlErr');
     err.textContent = '';
 
+    const isEdit   = !!_adminWlEditingId;
     const unborn   = document.getElementById('adminWlIsUnborn').checked;
     const hasSib   = document.getElementById('adminWlHasSibling').checked;
     const days     = [...document.querySelectorAll('#adminWlForm .adminWlDay:checked')].map(c => c.value);
@@ -1221,8 +1372,10 @@ async function _submitAdminWlEntry() {
         sibling_child_name: hasSib ? (document.getElementById('adminWlSibName').value.trim() || null) : null,
         sibling_room_id:    hasSib ? (document.getElementById('adminWlSibRoom').value || null) : null,
         notes:              document.getElementById('adminWlNotes').value.trim() || null,
-        status:             'pending',
     };
+    // Only a brand-new entry starts as 'pending' — editing must never reset
+    // an in-progress application's status (offered/accepted/etc.) back to it.
+    if (!isEdit) payload.status = 'pending';
 
     if (!payload.parent_name || !payload.parent_email || !payload.child_name || !payload.desired_start_date) {
         err.textContent = 'Please fill in the required fields: parent name, email, child name, and desired start date.';
@@ -1232,12 +1385,17 @@ async function _submitAdminWlEntry() {
     const btn = document.getElementById('adminWlSubmitBtn');
     btn.disabled = true; btn.textContent = 'Saving…';
     try {
-        await submitWaitlistApplication(payload);
+        if (isEdit) {
+            await updateWaitlistApplication(_adminWlEditingId, payload);
+        } else {
+            await submitWaitlistApplication(payload);
+        }
+        _adminWlEditingId = null;
         _closeAdminWlModal();
         await loadWaitlistApplications();
     } catch (e) {
         err.textContent = 'Error: ' + e.message;
-        btn.disabled = false; btn.textContent = 'Add to Waitlist';
+        btn.disabled = false; btn.textContent = isEdit ? 'Save Changes' : 'Add to Waitlist';
     }
 }
 

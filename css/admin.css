@@ -2900,7 +2900,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 /* min-width keeps the fixed per-column widths below from being squeezed below
    legibility on narrow screens — .table-wrapper's overflow-x:auto then lets
    the admin scroll horizontally instead of columns overlapping. */
-.wl-quick-table { width: 100%; min-width: 1020px; table-layout: fixed; border-collapse: collapse; }
+.wl-quick-table { width: 100%; min-width: 1180px; table-layout: fixed; border-collapse: collapse; }
 .wl-quick-table th, .wl-quick-table td { text-align: left; vertical-align: top; padding: 8px 10px; overflow: hidden; }
 .wl-quick-table tbody tr:hover { background: var(--linen); }
 .wl-quick-table .wl-th { white-space: nowrap; user-select: none; overflow: visible; }
@@ -2908,6 +2908,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wl-td-pos    { text-align: center; color: var(--text-muted); font-size: .85em; }
 .wl-td-start,
 .wl-td-age,
+.wl-td-days,
 .wl-td-waiting { font-size: .88em; }
 .wl-td-status { white-space: nowrap; }
 .wl-td-actions { white-space: nowrap; }

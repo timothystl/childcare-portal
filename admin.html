@@ -387,6 +387,10 @@
                 <p class="section-desc">Forward-looking capacity per room. Shows average open spots per day for upcoming months, aging-out events (children who will graduate to the next room), and the waitlist queue matched against availability.</p>
                 <div class="roster-btns" style="margin-bottom:12px">
                     <button id="generateWlPlanBtn" class="btn-secondary">Generate Plan</button>
+                    <select id="wlPlanRoomFilter" class="family-search-input" style="width:auto;">
+                        <option value="">All Rooms</option>
+                        <!-- populated dynamically from ROOMS by admin-init.js -->
+                    </select>
                 </div>
                 <div id="wlPlanContent">
                     <p class="empty-hint">Click Generate Plan to view availability projections.</p>
@@ -476,7 +480,7 @@
             <!-- Manual Entry Modal -->
             <div id="adminWlOverlay" class="admin-wl-overlay hidden">
                 <div class="admin-wl-dialog">
-                    <h3>Add Child to Waitlist</h3>
+                    <h3 id="adminWlModalTitle">Add Child to Waitlist</h3>
                     <p style="color:#666;font-size:.9em;margin:0 0 18px">Use this to add a family who called or stopped by. They will appear on the waitlist just like an online application.</p>
                     <form id="adminWlForm" autocomplete="off">
 

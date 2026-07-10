@@ -16,6 +16,7 @@ async function initDashboard() {
     populateRoomFilter();
     populateRosterRoomFilter();
     populateWlRoomFilter();
+    populateWlPlanRoomFilter();
     try {
         await Promise.all([
             loadRegistrations(),
@@ -94,6 +95,19 @@ function populateWlRoomFilter() {
         opt.value       = r.id;
         opt.textContent = r.label + (r.status === 'coming_soon' ? ' (Coming Soon)' : '');
         sel.insertBefore(opt, tbdOpt);
+    });
+}
+
+// Waitlist Planning panel's own room filter — separate from wlRoomFilter so
+// scoping the planning table to one room doesn't also filter the Quick List.
+function populateWlPlanRoomFilter() {
+    const sel = document.getElementById('wlPlanRoomFilter');
+    if (!sel) return;
+    getSortedRooms().filter(r => r.id !== 'summer').forEach(r => {
+        const opt = document.createElement('option');
+        opt.value       = r.id;
+        opt.textContent = r.label;
+        sel.appendChild(opt);
     });
 }
 
