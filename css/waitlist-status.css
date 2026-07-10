@@ -1,0 +1,272 @@
+/* ============================================================
+   PARENT PORTAL — Waitlist Status (email-only, no PIN)
+   Sunlit Neighborhood — Variation B brand system
+   ============================================================ */
+
+.wls-body {
+    background: var(--warm-gray);
+    min-height: 100vh;
+    padding: 24px 16px;
+    font-family: var(--font-body);
+}
+
+.wls-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding-top: 40px;
+}
+
+.wls-card {
+    width: 100%;
+    max-width: 440px;
+    background: var(--white);
+    border-radius: var(--radius-md);
+    box-shadow: 0 12px 40px rgba(1,41,74,.15);
+    overflow: hidden;
+}
+
+/* -------- Header -------- */
+.wls-header {
+    background: var(--green-pale);
+    padding: 24px 28px 20px;
+    text-align: center;
+    border-bottom: 3px solid var(--sun);
+}
+.wls-header .brand-bar { max-width: 90px; margin: 3px auto 0; }
+.wls-header-label {
+    font-size: 10.5px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--navy);
+    margin-top: 4px;
+}
+
+/* -------- Lookup box -------- */
+.wls-lookup {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+}
+.wls-lookup-label {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+.wls-lookup-hint-top {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-bottom: 10px;
+}
+.wls-lookup-row { display: flex; gap: 8px; }
+.wls-lookup-row input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--text);
+    font-family: var(--font-body);
+}
+.wls-lookup-row .btn-primary {
+    padding: 10px 16px;
+    font-size: 12.5px;
+    white-space: nowrap;
+}
+
+/* -------- Empty state -------- */
+.wls-empty {
+    padding: 32px 28px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+/* -------- Not-found state -------- */
+#wlsNotFound { padding: 28px; text-align: center; }
+.wls-nf-icon {
+    width: 48px; height: 48px;
+    background: var(--tang-pale);
+    color: var(--tang-dark);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    margin: 0 auto 12px;
+}
+.wls-nf-title {
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 15.5px;
+    color: var(--navy);
+    margin-bottom: 6px;
+}
+.wls-nf-sub {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-bottom: 16px;
+}
+
+/* -------- Found state -------- */
+#wlsFound { padding: 22px 28px; }
+.wls-found-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 14px;
+    gap: 10px;
+}
+.wls-child-name {
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--navy);
+}
+.wls-room-label { font-size: 12px; color: var(--text-muted); }
+
+.wls-status-pill {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+.wls-status-pill.wls-status-green {
+    background: var(--green-pale); color: var(--green-dark); border-color: var(--green-lt);
+}
+.wls-status-pill.wls-status-amber {
+    background: var(--sun-pale); color: var(--mustard-dark); border-color: var(--sun-lt);
+}
+
+.wls-position-card {
+    background: var(--linen);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 14px;
+}
+.wls-position-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.wls-position-value {
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--navy);
+}
+.wls-progress-track {
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+.wls-progress-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 4px;
+    width: 0%;
+    transition: width .3s ease;
+}
+.wls-wait-block { text-align: center; }
+.wls-wait-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.wls-wait-value {
+    font-family: var(--font-head);
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--green);
+    margin-top: 2px;
+}
+
+.wls-sibling-note {
+    background: var(--sun-pale);
+    border: 1px solid var(--sun-lt);
+    border-radius: 8px;
+    padding: 11px 14px;
+    font-size: 11.5px;
+    color: var(--mustard-dark);
+    line-height: 1.5;
+    margin-bottom: 14px;
+}
+
+.wls-request-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 8px;
+}
+.wls-request-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+.wls-request-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: var(--text);
+}
+.wls-request-row span { color: var(--text-muted); }
+
+.wls-msg-btn { width: 100%; }
+
+/* -------- Message form -------- */
+#wlsMessageForm {
+    padding: 18px 28px 24px;
+    border-top: 1px solid var(--border);
+}
+.wls-message-label {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 10px;
+}
+#wlsMsgText {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-family: var(--font-body);
+    resize: vertical;
+}
+.wls-message-actions { display: flex; gap: 8px; margin-top: 10px; }
+.wls-message-actions button { flex: 1; }
+
+/* -------- Toast -------- */
+.wls-toast {
+    background: var(--green-pale);
+    color: var(--green-dark);
+    padding: 12px 28px;
+    font-size: 12.5px;
+    font-weight: 700;
+    text-align: center;
+}
+
+/* -------- Footer -------- */
+.wls-footer-links {
+    margin-top: 18px;
+    font-size: .82em;
+    text-align: center;
+}
+.wls-footer-links a { color: var(--text-muted); text-decoration: none; }
+.wls-footer-links a:hover { color: var(--navy); }
+
+/* -------- Responsive -------- */
+@media (max-width: 480px) {
+    .wls-header, .wls-lookup, #wlsFound, #wlsNotFound, #wlsMessageForm { padding-left: 20px; padding-right: 20px; }
+}

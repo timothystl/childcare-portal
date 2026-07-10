@@ -907,6 +907,32 @@ async function lookupFamilyForRegistration(email, pin) {
     }
 }
 
+// Looks up a family's waitlist status by email only (no PIN — see
+// waitlist-status.html). Goes through the waitlist-status edge function
+// (service-role) rather than a direct table query: waitlist_applications RLS
+// blocks anon SELECT entirely, and a raw query would let anyone enumerate
+// every family's status by guessing emails. Returns { found: false } for
+// both "no such email" and "server/config error" so the caller can't tell
+// the two apart either.
+async function lookupWaitlistStatus(email) {
+    if (!sbClient) return { found: false };
+    try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/waitlist-status`, {
+            method:  'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                apikey:          SUPABASE_ANON_KEY,
+                Authorization:  `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ email }),
+        });
+        const data = await res.json().catch(() => null);
+        return data && typeof data === 'object' ? data : { found: false };
+    } catch (_) {
+        return { found: false };
+    }
+}
+
 /**
  * Creates a new family, or updates the existing one if the email already exists.
  * Auto-generates a 4-digit PIN if none is provided. PINs are written via the

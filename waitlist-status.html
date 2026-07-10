@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/logo/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/logo/favicon-16.png">
+  <link rel="apple-touch-icon" href="/images/logo/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#01294A">
+  <!-- Fonts: Sunlit Neighborhood brand system -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waitlist Status — Timothy Lutheran Church MDO</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/waitlist-status.css">
+</head>
+<body class="wls-body">
+
+  <div class="wls-screen">
+    <div class="wls-card">
+
+      <div class="wls-header">
+        <div class="brand-lockup brand-lockup--md brand-lockup--center">
+          <div class="brand-wordmark"><span class="brand-my">my</span><span class="brand-mdo">MDO</span></div>
+          <div class="brand-bar"></div>
+        </div>
+        <div class="wls-header-label">Waitlist Status</div>
+      </div>
+
+      <div class="wls-lookup">
+        <div class="wls-lookup-label">Find your status</div>
+        <p class="wls-lookup-hint-top">Enter the email you applied with — no password needed.</p>
+        <div class="wls-lookup-row">
+          <input type="email" id="wlsEmail" placeholder="you@email.com" autocomplete="email">
+          <button id="wlsCheckBtn" class="btn-primary">Check Status</button>
+        </div>
+      </div>
+
+      <div id="wlsEmpty" class="wls-empty">
+        Enter your email above and click <strong>Check Status</strong> to see where things stand.
+      </div>
+
+      <div id="wlsNotFound" class="hidden">
+        <div class="wls-nf-icon">?</div>
+        <div class="wls-nf-title">We couldn't find that email</div>
+        <p class="wls-nf-sub">Double-check the email you applied with, or reach out and we'll look you up directly.</p>
+        <button type="button" class="btn-secondary wls-msg-btn" data-open-message>💬 Message the Office</button>
+      </div>
+
+      <div id="wlsFound" class="hidden">
+        <div class="wls-found-top">
+          <div>
+            <div id="wlsChildName" class="wls-child-name"></div>
+            <div id="wlsRoomLabel" class="wls-room-label"></div>
+          </div>
+          <span id="wlsStatusPill" class="wls-status-pill"></span>
+        </div>
+
+        <div class="wls-position-card">
+          <div class="wls-position-row">
+            <span>Position in line</span>
+            <span id="wlsPositionLabel" class="wls-position-value"></span>
+          </div>
+          <div class="wls-progress-track"><div id="wlsProgressFill" class="wls-progress-fill"></div></div>
+          <div class="wls-wait-block">
+            <div class="wls-wait-label">Estimated wait</div>
+            <div id="wlsWaitRange" class="wls-wait-value"></div>
+          </div>
+        </div>
+
+        <div id="wlsSiblingNote" class="wls-sibling-note hidden">
+          Families with a sibling already enrolled are matched first — that's factored into the estimate above, so it may move faster than the wait time alone would suggest.
+        </div>
+
+        <div class="wls-request-label">Your request</div>
+        <div class="wls-request-rows">
+          <div class="wls-request-row"><span>Desired start</span><strong id="wlsDesiredStart"></strong></div>
+          <div class="wls-request-row"><span>Days requested</span><strong id="wlsDays"></strong></div>
+          <div class="wls-request-row"><span>Schedule</span><strong id="wlsSchedule"></strong></div>
+        </div>
+
+        <button type="button" class="btn-secondary wls-msg-btn" data-open-message>💬 Message the Office</button>
+      </div>
+
+      <div id="wlsMessageForm" class="hidden">
+        <div class="wls-message-label">Message the office</div>
+        <textarea id="wlsMsgText" rows="3" placeholder="Ask us anything about your spot on the waitlist…"></textarea>
+        <div class="wls-message-actions">
+          <button type="button" id="wlsCancelMsgBtn" class="btn-ghost">Cancel</button>
+          <button type="button" id="wlsSendMsgBtn" class="btn-primary">Send</button>
+        </div>
+      </div>
+
+      <div id="wlsToast" class="wls-toast hidden">✓ Message sent — the office will follow up by email.</div>
+
+    </div>
+
+    <p class="wls-footer-links"><a href="index.html">← Back to Registration</a></p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+  }
+</script>
+    <script src="dist/supabase.min.js"></script>
+    <script src="dist/error-monitor.min.js"></script>
+    <script src="dist/waitlist-status.min.js"></script>
+</body>
+</html>
