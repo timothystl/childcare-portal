@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Fetch the independent admin settings in parallel. Using allSettled so a
     // single failed request degrades gracefully instead of aborting the whole
     // init (e.g. a missing room_rates row shouldn't stop the form rendering).
-    const [rateRes, capRes, ratioRes, campRes, overrideRes, closuresRes, regFeeRes] = await Promise.allSettled([
+    const [rateRes, capRes, ratioRes, campRes, overrideRes, closuresRes, regFeeRes, staffRes] = await Promise.allSettled([
         loadRateSettings(),
         loadCapacitySettings(),
         loadRatioSettings(),
@@ -91,6 +91,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetchSetting('reg_window_override'),
         fetchClosures(),
         fetchSetting('registration_fee'),
+        fetchSetting('staff_directory'),
     ]);
     if (rateRes.status     === 'rejected') console.error('loadRateSettings failed:', rateRes.reason);
     if (capRes.status      === 'rejected') console.error('loadCapacitySettings failed:', capRes.reason);
@@ -98,9 +99,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (campRes.status     === 'rejected') console.error('loadSummerCampSetting failed:', campRes.reason);
     if (closuresRes.status === 'rejected') console.error('fetchClosures failed:', closuresRes.reason);
     if (regFeeRes.status   === 'rejected') console.error('fetchSetting(registration_fee) failed:', regFeeRes.reason);
+    if (staffRes.status    === 'rejected') console.error('fetchSetting(staff_directory) failed:', staffRes.reason);
 
     renderPublicRoomCards();
     renderFeeNotes(regFeeRes.status === 'fulfilled' ? regFeeRes.value : null);
+    renderPublicStaffDirectory(staffRes.status === 'fulfilled' ? staffRes.value : null);
 
     regWindowOverride = (overrideRes.status === 'fulfilled' ? overrideRes.value : null) || 'auto';
 
@@ -196,6 +199,56 @@ function renderFeeNotes(regFeeAmount) {
     }
 }
 
+// Renders the "Our Staff" section from the admin-managed staff_directory
+// setting. Any active, non-hidden room with no assigned Lead Teacher gets
+// an auto-generated "Coming Soon" placeholder card instead of being left
+// out, so the lineup never silently goes stale (e.g. after a reassignment).
+function renderPublicStaffDirectory(staffRaw) {
+    const leadershipGrid = document.getElementById('staffLeadershipGrid');
+    const teachersGrid   = document.getElementById('staffTeachersGrid');
+    if (!leadershipGrid && !teachersGrid) return;
+
+    const staff = Array.isArray(staffRaw) ? staffRaw : [];
+
+    const staffCardHtml = (s, roomTag) => `<div class="staff-card${roomTag ? '' : ' staff-card--leadership'}">
+        <div class="staff-card-photo">${s.photoUrl ? `<img src="${escHtml(s.photoUrl)}" alt="${escHtml(s.name || '')}">` : ''}</div>
+        <div class="staff-card-name">${escHtml(s.name || '')}</div>
+        <div class="staff-card-role">${escHtml(s.role || '')}</div>
+        ${roomTag ? `<div class="staff-card-room">${roomTag}</div>` : ''}
+    </div>`;
+
+    if (leadershipGrid) {
+        leadershipGrid.innerHTML = staff
+            .filter(s => s.section !== 'lead_teacher')
+            .map(s => staffCardHtml(s, null)).join('');
+    }
+
+    if (teachersGrid) {
+        const byRoom = new Map();
+        staff.filter(s => s.section === 'lead_teacher' && s.roomId).forEach(s => {
+            if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
+            byRoom.get(s.roomId).push(s);
+        });
+        const rooms = getSortedRooms().filter(r => r.id !== 'summer' && !r.hidden && r.status !== 'seasonal');
+        teachersGrid.innerHTML = rooms.map(room => {
+            const roomTag = `${escHtml(room.label)} · ${escHtml(room.ages || '')}`;
+            const teachers = byRoom.get(room.id);
+            if (teachers && teachers.length) {
+                return teachers.map(s => staffCardHtml(s, roomTag)).join('');
+            }
+            const emoji = room.label.split(' ')[0] || '👤';
+            return `<div class="staff-card staff-card--placeholder">
+                <div class="staff-card-photo staff-card-photo--empty"><span class="staff-card-photo-icon">${escHtml(emoji)}</span></div>
+                <div class="staff-card-name">Coming Soon</div>
+                <div class="staff-card-role">Lead Teacher</div>
+                <div class="staff-card-room">${roomTag}</div>
+            </div>`;
+        }).join('');
+    }
+
+    positionStaffPhotos();
+}
+
 // ============================================================
 // AGE / DOB HELPERS
 // ============================================================
@@ -211,12 +264,15 @@ function getRoomIdFromDob(dobStr) {
     if (!dobStr) return null;
     const months = calcAgeMonths(dobStr);
     if (months < 0) return null;
-    // Use ROOMS age ranges dynamically — only active rooms with age bounds
+    // Use ROOMS age ranges dynamically — only active rooms with age bounds.
+    // ageMaxMonths is the exact age (months) a child ages OUT at, so the
+    // upper bound is exclusive — a child turning 24 months moves out of a
+    // room with ageMaxMonths:24 and into whichever room starts at 24.
     const ageable = ROOMS
         .filter(r => r.status === 'active' && r.ageMinMonths != null)
         .sort((a, b) => a.ageMinMonths - b.ageMinMonths);
     for (const room of ageable) {
-        if (months >= room.ageMinMonths && (room.ageMaxMonths == null || months <= room.ageMaxMonths)) {
+        if (months >= room.ageMinMonths && (room.ageMaxMonths == null || months < room.ageMaxMonths)) {
             return room.id;
         }
     }
@@ -1101,10 +1157,10 @@ function resetForNextFamily() {
 }
 
 function setupFormListeners() {
-    document.getElementById('registrationForm').addEventListener('submit', handleSubmit);
+    document.getElementById('registrationForm')?.addEventListener('submit', handleSubmit);
 
     // Closing the success modal fully resets for the next family
-    document.getElementById('closeModal').addEventListener('click', resetForNextFamily);
+    document.getElementById('closeModal')?.addEventListener('click', resetForNextFamily);
     document.getElementById('successModal')?.addEventListener('click', e => {
         if (e.target === document.getElementById('successModal')) resetForNextFamily();
     });
