@@ -4702,7 +4702,7 @@ function _resolveRoomForStudent(student) {
     const ageMonths = Math.floor((Date.now() - new Date(dob + 'T00:00:00')) / (1000 * 60 * 60 * 24 * 30.44));
     return ROOMS.find(r =>
         r.ageMinMonths != null && r.ageMaxMonths != null &&
-        ageMonths >= r.ageMinMonths && ageMonths <= r.ageMaxMonths
+        ageMonths >= r.ageMinMonths && ageMonths < r.ageMaxMonths
     ) || null;
 }
 

@@ -28,7 +28,7 @@ const ROOMS = [
         label:          '🐻 Bear Room',
         ages:           'Birth – 12 months',
         ageMinMonths:   0,
-        ageMaxMonths:   11,
+        ageMaxMonths:   12,
         capacity:       8,
         status:         'active',
         fullDayOnly:    true,
@@ -43,7 +43,7 @@ const ROOMS = [
         label:          '🐝 Bee Room',
         ages:           '12 – 24 months',
         ageMinMonths:   12,
-        ageMaxMonths:   23,
+        ageMaxMonths:   24,
         capacity:       16,
         status:         'active',
         fullDayOnly:    false,
@@ -58,7 +58,7 @@ const ROOMS = [
         label:          '🐢 Turtle Room',
         ages:           '24 – 30 months',
         ageMinMonths:   24,
-        ageMaxMonths:   29,
+        ageMaxMonths:   30,
         capacity:       11,
         status:         'active',
         fullDayOnly:    false,
@@ -73,7 +73,7 @@ const ROOMS = [
         label:          '🪿 Goose Room',
         ages:           '30 – 36 months',
         ageMinMonths:   30,
-        ageMaxMonths:   35,
+        ageMaxMonths:   36,
         capacity:       12,
         status:         'active',
         fullDayOnly:    false,
@@ -162,7 +162,7 @@ function populateSiblingRoomSelect(sel) {
  * @property {string}      label          - Display label with emoji
  * @property {string}      ages           - Human-readable age range
  * @property {number|null} ageMinMonths   - Minimum age in months (null = no lower bound)
- * @property {number|null} ageMaxMonths   - Maximum age in months (null = no upper bound)
+ * @property {number|null} ageMaxMonths   - Exact age in months a child ages OUT of this room at (exclusive; null = no upper bound)
  * @property {number}      capacity       - Maximum enrolled children
  * @property {boolean}     fullDayOnly    - Whether half-day option is disabled
  * @property {number}      fullDayRate    - Full-day base rate in dollars
@@ -1402,6 +1402,18 @@ async function deleteEnrollmentFormFile(filename) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient.storage.from('enrollment-forms').remove([filename]);
     if (error) throw error;
+}
+
+// Upload a staff headshot to the staff-photos storage bucket and return its public URL.
+async function uploadStaffPhoto(file, filename) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.storage.from('staff-photos').upload(filename, file, {
+        contentType: file.type || 'image/jpeg',
+        upsert: false,
+    });
+    if (error) throw error;
+    const { data } = sbClient.storage.from('staff-photos').getPublicUrl(filename);
+    return data.publicUrl;
 }
 
 // Load staff-to-child ratios from Supabase and merge into ROOMS array.

@@ -1466,7 +1466,7 @@ function _arResolveRoom(student) {
     if (!dob) return ROOMS.find(r => r.status === 'active') || ROOMS[0];
     const ageMonths = Math.floor((Date.now() - new Date(dob)) / (1000 * 60 * 60 * 24 * 30.44));
     return ROOMS.find(r => r.ageMinMonths != null && r.ageMaxMonths != null
-        && ageMonths >= r.ageMinMonths && ageMonths <= r.ageMaxMonths)
+        && ageMonths >= r.ageMinMonths && ageMonths < r.ageMaxMonths)
         || ROOMS.find(r => r.status === 'active') || ROOMS[0];
 }
 

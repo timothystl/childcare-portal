@@ -51,10 +51,10 @@ function expect(actual) {
 // STUBS — mirror the real ROOMS config from supabase.js
 // ============================================================
 const ROOMS = [
-    { id: 'bear',   ageMinMonths: 0,  ageMaxMonths: 11,  fullDayRate: 80,  halfDayRate: null, weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: true },
-    { id: 'bee',    ageMinMonths: 12, ageMaxMonths: 23,  fullDayRate: 75,  halfDayRate: 55,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
-    { id: 'turtle', ageMinMonths: 24, ageMaxMonths: 29,  fullDayRate: 75,  halfDayRate: 45,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
-    { id: 'goose',  ageMinMonths: 30, ageMaxMonths: 35,  fullDayRate: 75,  halfDayRate: 45,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
+    { id: 'bear',   ageMinMonths: 0,  ageMaxMonths: 12,  fullDayRate: 80,  halfDayRate: null, weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: true },
+    { id: 'bee',    ageMinMonths: 12, ageMaxMonths: 24,  fullDayRate: 75,  halfDayRate: 55,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
+    { id: 'turtle', ageMinMonths: 24, ageMaxMonths: 30,  fullDayRate: 75,  halfDayRate: 45,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
+    { id: 'goose',  ageMinMonths: 30, ageMaxMonths: 36,  fullDayRate: 75,  halfDayRate: 45,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
     { id: 'owl',    ageMinMonths: 36, ageMaxMonths: null, fullDayRate: 75, halfDayRate: 45,   weeklyFullRate: 300, weeklyHalfRate: 180,  fullDayOnly: false },
     { id: 'summer', ageMinMonths: null, ageMaxMonths: null, fullDayRate: 75, halfDayRate: null, weeklyFullRate: null, weeklyHalfRate: null, hidden: false },
 ];
@@ -80,7 +80,7 @@ function getRoomIdFromDob(dobStr, referenceDate) {
         .filter(r => r.id !== 'summer' && r.ageMinMonths != null)
         .sort((a, b) => a.ageMinMonths - b.ageMinMonths);
     for (const room of ageable) {
-        if (months >= room.ageMinMonths && (room.ageMaxMonths == null || months <= room.ageMaxMonths)) {
+        if (months >= room.ageMinMonths && (room.ageMaxMonths == null || months < room.ageMaxMonths)) {
             return room.id;
         }
     }
