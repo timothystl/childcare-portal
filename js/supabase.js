@@ -1414,7 +1414,9 @@ async function loadRatioSettings() {
             .eq('key', 'staff_ratios')
             .maybeSingle();
         if (error || !data) return false;
-        const ratios = data.value;
+        const raw    = data.value;
+        const ratios = typeof raw === 'string' ? parseJsonOr(raw, null) : raw;
+        if (!ratios || typeof ratios !== 'object' || Array.isArray(ratios)) return false;
         ROOMS.forEach(room => {
             if (ratios[room.id] != null) room.staffRatio = ratios[room.id];
         });
