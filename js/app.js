@@ -1578,6 +1578,8 @@ function downloadIcal(sortedDates, parentName) {
     const hasSib    = document.getElementById('wlHasSibling');
     const sibFields = document.getElementById('wlSiblingFields');
 
+    populateSiblingRoomSelect(document.getElementById('wlSiblingRoom'));
+
     if (!openBtn) return; // guard
 
     openBtn.addEventListener('click', () => { modal.style.display = 'flex'; });

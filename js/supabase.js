@@ -136,6 +136,20 @@ function getSortedRooms(rooms = ROOMS) {
         .map(({ room }) => room);
 }
 
+// Populates a "which room is your sibling in" <select> with all non-hidden
+// rooms, age-sorted, keeping any existing placeholder option (e.g. "— Not
+// sure —") already in the markup. Shared by the parent, inquiry, and admin
+// waitlist forms so a new/renamed room never needs a hardcoded HTML update.
+function populateSiblingRoomSelect(sel) {
+    if (!sel) return;
+    getSortedRooms().filter(r => !r.hidden).forEach(r => {
+        const opt = document.createElement('option');
+        opt.value       = r.id;
+        opt.textContent = `${r.label} (${r.ages})`;
+        sel.appendChild(opt);
+    });
+}
+
 // ============================================================
 // TYPE DEFINITIONS  (JSDoc — no build step required)
 // Provides IDE autocomplete and catches field-name typos at development time.
