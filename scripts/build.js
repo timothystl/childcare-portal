@@ -86,6 +86,13 @@ const ENTRIES = [
         },
     },
     {
+        outfile: 'dist/waitlist-status.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/waitlist-status.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         // Admin dashboard: concatenate all modules in dependency order
         outfile: 'dist/admin.min.js',
         stdin: {
@@ -190,6 +197,19 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/confirm-interest.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'waitlist-status.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/waitlist-status\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/error-monitor.min.js"></script>`,
+            `    <script src="dist/waitlist-status.min.js"></script>`,
         ],
     },
 ];
