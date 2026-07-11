@@ -3403,6 +3403,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-avail-green { background: var(--wlp-green-bg); color: var(--wlp-green-fg); }
 .wlp-avail-amber { background: var(--wlp-amber-bg); color: var(--wlp-amber-fg); }
 .wlp-avail-red   { background: var(--wlp-red-bg);   color: var(--wlp-red-fg); }
+.wlp-avail-over  { background: var(--wlp-red-fg);    color: #fff; box-shadow: inset 0 0 0 1.5px #7a1f1f; }
 
 .wlp-match-panel { border-top: 2px solid var(--sun); background: var(--linen); padding: 16px 24px; }
 .wlp-match-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
