@@ -911,6 +911,9 @@ function wlpRenderGrid(alloc) {
                         </div>
                         <div class="wlp-chip-row">${chips}</div>
                         <div class="wlp-match-note">${wlpPriorityLabel(k)} · waiting ${escHtml(wlDaysWaiting(k.appliedAt))} · ${escHtml(seatedNote)}</div>
+                        <div class="wlp-secondary-actions">
+                            <button type="button" class="wlp-btn-offer" data-wlp-match-offer="${k.id}" ${!someFit ? 'disabled' : ''}>${allFit ? '🎉 Offer a Spot' : someFit ? '🎉 Offer Partial Spot' : 'No open days'}</button>
+                        </div>
                     </div>
                 </div>`;
         }).join('');
@@ -952,6 +955,12 @@ function wlpAttachGridListeners() {
         });
     });
     document.getElementById('wlpMatchClose')?.addEventListener('click', () => { _wlp.selCellA = null; renderWaitlistPlanner(); });
+    document.querySelectorAll('[data-wlp-match-offer]').forEach(el => {
+        el.addEventListener('click', e => {
+            e.stopPropagation();
+            wlpOpenOfferModal(Number(el.dataset.wlpMatchOffer), null, _wlp.selCellA?.monthIdx);
+        });
+    });
 }
 
 // ── Capacity Planner — Board view ───────────────────────────
