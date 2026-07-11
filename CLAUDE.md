@@ -44,11 +44,14 @@ Timothy Lutheran MDO (Mother's Day Out) registration portal. Parents register ch
 
 ---
 
-## Project status & outstanding work (updated 2026-06-05)
+## Project status & outstanding work (updated 2026-07-11)
 
-A full code review + a deeper "second sweep" were done. Detailed records live in:
+A full code review + a deeper "second sweep" + a "third sweep" (covering the
+waitlist/inquiry funnel, Waitlist Planner rewrite, Staff Directory, and Finance
+consolidation shipped since the second sweep) were done. Detailed records live in:
 - **`docs/CODE_REVIEW.md`** — all findings, labeled (S/U/V/N/P/Q/C/M for the first
-  review; SS1–SS19 for the correctness/integrity sweep), with `[x]`/`[~]`/`[ ]` status.
+  review; SS1–SS19 for the correctness/integrity sweep; T1–T20 for the third
+  sweep), with `[x]`/`[~]`/`[ ]` status.
 - **`docs/NEXT_STEPS.md`** — the prioritized action plan + an incident log.
 - **`CONTRIBUTING.md`** — branch/deploy rules (read before merging).
 
@@ -68,21 +71,43 @@ A full code review + a deeper "second sweep" were done. Detailed records live in
   (`package.json` + `js/build-version.js`) merge conflicts — those were silently failing
   every auto-merge/deploy when two `claude/**` branches ran at once.
 - **Waitlist Status page** (parent-facing, email-only lookup at `waitlist-status.html` +
-  new `waitlist-status` edge function) shipped 2026-07-10, v1.20.1 — **not yet
-  code-reviewed**. See **`docs/WAITLIST_STATUS.md`** for architecture, security model,
-  and the manual test checklist to run before/during that review.
+  new `waitlist-status` edge function) shipped 2026-07-10, v1.20.1 — reviewed 2026-07-11
+  (third sweep, see below). SS1 (weekly-rate quote/charge divergence) confirmed **fixed**
+  in this same window — preview and submit now both route through `buildBillingBreakdown()`
+  in `js/app.js`.
 
-### Still to do (see NEXT_STEPS.md for the exact steps/sequencing)
+### Third sweep (2026-07-11) — top of the queue, see NEXT_STEPS.md for full sequencing
+- **T1** — `send-schedule-confirmation` has no auth check and trusts client-supplied
+  invoice amounts (High). Also reopens **SS13** (email regex misses `%`/`_` wildcards).
+- **T2** — admin message inbox was deleted (commit `89cb987`) but two live features
+  (Contact Us, new Waitlist Status "Message the Office") still write into `messages`
+  with nobody able to read it (High, needs product decision).
+- **T3** — `waitlist-status` edge fn ignores admin capacity overrides, a `settings.value`
+  text-vs-object bug (High, smallest fix — pattern already proven in commit `6e9977c`).
+- **T4/T5** — admin vs. parent waitlist "position" numbers disagree (global vs. per-room
+  ranking); waitlist room-derivation hard-codes age boundaries that are admin-editable
+  via Settings → Rates (both High).
+- **Migration check** — confirm `add_billing_import_source.sql`,
+  `create_staff_photos_bucket.sql`, `waitlist_inquiry_tour_reminders.sql`, and
+  `waitlist_offer_type.sql` are actually applied in prod — none is documented as
+  deployed, but the frontend on `main` already depends on all four.
+- T6–T20 (ProCare AR dedup, billing preview inconsistencies, CI dist-conflict handling,
+  rate-limiting gaps, misc low-severity cleanup) — see `docs/CODE_REVIEW.md` "Third
+  Sweep" section and `docs/NEXT_STEPS.md` for the full list and order.
+
+### Still to do from earlier sweeps (see NEXT_STEPS.md for the exact steps/sequencing)
 - **SS1** — anon-read PII exposure: the public anon key can still read/modify
   families/students/staff (policies were over-permissive; a blanket tighten broke login
   and was rolled back). Groundwork RPCs are in `ss1_public_read_rpcs.sql`; the staged
   switch + policy drops still need a staging session.
 - **SS5** likely moot (the billing-by-email RPCs aren't deployed in prod — verify).
 - Remaining: SS3/SS9 (atomic registration RPC + capacity), SS11/SS16/SS17/SS18, SS19,
-  S6 (PIN-reset per-IP throttle), S8 (anon-key rotation), and the browser-verified UX/perf
-  items (U3/U4, V2–V6, P1–P3, M1). (S2 ✅, S4 ✅ closed by disabling Supabase signups,
-  S7 reviewed-as-moot.)
-- **`send-schedule-confirmation`** edge fn (SS13) still needs deploying.
+  S6 (PIN-reset per-IP throttle — now also covers `waitlist-status`/T10 and
+  `send-waitlist-confirmation`/T14), S8 (anon-key rotation), and the browser-verified
+  UX/perf items (U3/U4, V2–V6, P1–P3, M1). (S2 ✅, S4 ✅ closed by disabling Supabase
+  signups, S7 reviewed-as-moot.)
+- **`send-schedule-confirmation`** edge fn still needs deploying — and per T1 above,
+  needs an auth-check fix before/alongside that deploy.
 
 ### Hard-won operational notes (don't repeat these)
 - **`supabase/migrations/` is NOT auto-applied** — run migrations by hand in the SQL
