@@ -44,9 +44,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const parentName  = document.getElementById('iqParentName').value.trim();
         const parentEmail = document.getElementById('iqParentEmail').value.trim();
+        const parentPhone = document.getElementById('iqParentPhone').value.trim();
         const childName   = document.getElementById('iqChildName').value.trim();
         const startDate   = document.getElementById('iqStartDate').value;
-        if (!parentName || !parentEmail || !childName || !startDate) {
+        if (!parentName || !parentEmail || !parentPhone || !childName || !startDate) {
             showInquiryError('Please fill in all required fields.');
             return;
         }
@@ -62,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const payload = {
             parent_name:        parentName,
             parent_email:       parentEmail,
-            parent_phone:       document.getElementById('iqParentPhone').value.trim() || null,
+            parent_phone:       parentPhone,
             child_name:         childName,
             child_dob:          childDob,
             expected_due_date:  dueDate,

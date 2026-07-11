@@ -1807,17 +1807,17 @@ function openAdminRegModalForFamily(family) {
 // Skips straight to the calendar step with the matched dates pre-checked —
 // the admin still reviews and clicks Submit, this doesn't book anything by
 // itself.
-function openAdminRegModalForWaitlistKid({ parentName, parentEmail, parentPhone, childName, childDob, room, dates, dayType, waitlistAppId }) {
+function openAdminRegModalForWaitlistKid({ parentName, parentEmail, parentPhone, childName, childDob, room, moKey, waitlistAppId }) {
     _arFamily = { parent_name: parentName, parent_email: parentEmail, parent_phone: parentPhone };
     _arStudent = { child_name: childName, child_dob: childDob, discount_type: null, discount_value: null };
     _arRoom = room;
     _arSelectedFamily = null;
     _arWaitlistAppId = waitlistAppId;
 
-    const first = dates[0] ? new Date(dates[0] + 'T00:00:00') : new Date();
-    _arYear  = first.getFullYear();
-    _arMonth = first.getMonth();
-    _arDates = new Map(dates.map(d => [d, dayType === 'half' ? 'half' : 'full']));
+    const [y, m] = moKey.split('-').map(Number); // m is 1-based
+    _arYear  = y;
+    _arMonth = m - 1;
+    _arDates = new Map(); // no pre-checked days — admin picks dates on the calendar
     _arPickDate = null;
 
     document.getElementById('adminRegError').textContent       = '';
