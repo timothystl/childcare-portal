@@ -104,6 +104,7 @@ const ENTRIES = [
                 'js/admin/admin-calendar.js',
                 'js/admin/admin-classrooms.js',
                 'js/admin/admin-families.js',
+                'js/admin/admin-messages.js',
                 'js/admin/admin-reports.js',
                 'js/admin/admin-finance.js',
                 'js/admin/admin-billing.js',

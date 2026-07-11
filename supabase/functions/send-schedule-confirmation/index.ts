@@ -294,7 +294,10 @@ serve(async (req) => {
             );
         }
 
-        if (typeof parentEmail !== "string" || !/^[^\s,()*@]+@[^\s,()*@]+\.[^\s,()*@]+$/.test(parentEmail)) {
+        // Reject PostgREST .or()/.ilike() metacharacters: `,()*` are the URL-decoded
+        // shorthand PostgREST itself interprets, and `%`/`_` are literal Postgres
+        // ILIKE wildcards that pass straight through regardless of that shorthand.
+        if (typeof parentEmail !== "string" || !/^[^\s,()*%_@]+@[^\s,()*%_@]+\.[^\s,()*%_@]+$/.test(parentEmail)) {
             return new Response(
                 JSON.stringify({ error: "Invalid email" }),
                 { status: 400, headers: { ...ch, "Content-Type": "application/json" } }

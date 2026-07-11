@@ -40,6 +40,7 @@ async function initDashboard() {
     setupMissingCalendarReport();
     setupWindowOverride();
     setupFamilies();
+    setupMessages();
     setupRoomCalendar();
     setupRates();
     setupRegFee();

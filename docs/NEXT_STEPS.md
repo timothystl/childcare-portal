@@ -28,13 +28,30 @@ first time. Full findings: `docs/CODE_REVIEW.md` "Third Sweep" section
    the update via the Supabase dashboard. Recommended (not yet done): run the
    manual capacity-override check from `docs/WAITLIST_STATUS.md` to confirm
    the live behavior, not just that the deploy succeeded.
-3. **T1** — `send-schedule-confirmation` has no auth check and trusts
-   client-supplied invoice amounts. Highest blast radius; also reopens SS13
-   (email-validation regex misses `%`/`_`).
-4. **T2** — admin message inbox was deleted (commit `89cb987`) but two live
-   features (Contact Us, new Waitlist Status "Message the Office") still write
-   into the `messages` table with nobody able to read it. Needs a product
-   decision (restore viewer vs. email-notify) but the bug is unambiguous.
+3. **T1 — ⚠️ PARTIALLY fixed 2026-07-11.** `send-schedule-confirmation`
+   trusted client-supplied invoice amounts with no auth check.
+   - ✅ Fixed: the SS13 wildcard gap (email-validation regex now also excludes
+     `%`/`_`), same fix mirrored in `worker.js`.
+   - ⚠️ NOT fixed: the auth/trust issue itself. The original recommendation
+     ("require admin session") was wrong — this function is called by
+     anonymous parents right after registering (`js/app.js`'s
+     `sendScheduleEmail()`), so gating it behind Supabase Auth would break the
+     confirmation email for every parent. The real fix needs the function to
+     recompute the billed amount server-side from `registrations`/
+     `registration_dates` instead of trusting the request body — deferred
+     pending schema verification + staging smoke-test (see `docs/CODE_REVIEW.md`
+     T1 for the full explanation). **Needs a deploy** for the regex fix that
+     did land (`supabase functions deploy send-schedule-confirmation`), plus
+     redeploy the Cloudflare Worker for the `worker.js` fix.
+4. **T2 — ✅ code fixed 2026-07-11, needs a deploy + build.** Admin message
+   inbox was deleted (commit `89cb987`) but two live features (Contact Us, new
+   Waitlist Status "Message the Office") still wrote into the `messages` table
+   with nobody able to read it. Restored `js/admin/admin-messages.js`, its
+   `js/supabase.js` DB helpers, `admin.html` tab/nav wiring, and its
+   `css/admin.css` styling — all byte-identical to the pre-deletion version,
+   re-integrated into the current (post-redesign) single-nav admin UI.
+   `dist/` rebuilt (`npm run build`). **Needs `git push` + the usual
+   claude/** auto-merge/deploy** to go live — see the branch-push step below.
 5. **T4, T5** — admin vs. parent "position" semantics disagree (global vs.
    per-room ranking); waitlist room-derivation hard-codes age boundaries that
    are admin-editable via Settings → Rates. Fix together — same two files.
