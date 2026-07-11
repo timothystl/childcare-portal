@@ -313,6 +313,7 @@ const TAB_META = {
     waitlist:      { icon: '🗓️', label: 'Planning' },
     families:      { icon: '👨‍👩‍👧', label: 'Families' },
     staffing:      { icon: '👷', label: 'Staffing' },
+    messages:      { icon: '💬', label: 'Messages' },
     finance:       { icon: '💰', label: 'Finance' },
     billing:       { icon: '💳', label: 'Billing' },
     reports:       { icon: '📊', label: 'Billing' },
@@ -348,6 +349,7 @@ function setupTabs() {
 
         if (tab === 'families'  && allFamiliesData.length === 0) loadFamilies();
         if (tab === 'staffing'  && allStaffData.length === 0)    loadStaffList();
+        if (tab === 'messages'  && !_messagesLoaded)             { _messagesLoaded = true; loadMessages(); }
         if (tab === 'billing'   && !_arLoaded)                   { setupBillingDashYear(); }
         if (tab === 'settings')                                  loadGeofenceSettings();
     }

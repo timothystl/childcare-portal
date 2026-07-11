@@ -313,7 +313,9 @@ export default {
         // Validate the email before it goes into the PostgREST .or() filter.
         // encodeURIComponent does NOT escape * ( ) ! ~ ' so a value like "*"
         // would become ilike.* and match every family — reject those here.
-        if (typeof parent_email !== 'string' || !/^[^\s,()*@]+@[^\s,()*@]+\.[^\s,()*@]+$/.test(parent_email)) {
+        // Also reject literal `%`/`_`, the actual Postgres ILIKE wildcards, which
+        // pass straight through independent of PostgREST's own `*` shorthand.
+        if (typeof parent_email !== 'string' || !/^[^\s,()*%_@]+@[^\s,()*%_@]+\.[^\s,()*%_@]+$/.test(parent_email)) {
           return new Response('Invalid parent_email', { status: 400 });
         }
         const famRes = await fetch(

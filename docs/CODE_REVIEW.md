@@ -523,16 +523,32 @@ incomplete** (see T1).
   emailed — as a real-looking invoice with PDF attachment — to `parentEmail`.
   Anyone who knows or guesses a real family's email can POST fabricated
   dates/amounts and have a legitimate-looking "Timothy Lutheran MDO" invoice
-  land in that family's inbox. _Also reopens **SS13**:_ its email-validation
-  regex (`/^[^\s,()*@]+@[^\s,()*@]+\.[^\s,()*@]+$/`) blocks `,()* ` but not
-  `%`/`_`, the actual Postgres `ILIKE` wildcards — `%@a.co` still passes
-  validation and turns the `.or(...ilike...)` filter into a domain-wide
-  enumeration query. Same regex is duplicated in `worker.js`. _Fix:_ require a
-  valid admin session (mirror `send-schedule-change`/`send-waitlist-offer`),
-  recompute amounts server-side instead of trusting the request body, and
-  exclude `%`/`_` from the email-validation regex everywhere it's duplicated.
-  Note CLAUDE.md itself still says this function "needs deploying" — confirm
-  what's actually live before triaging urgency.
+  land in that family's inbox.
+  - _✅ Sub-issue fixed 2026-07-11 — reopens **SS13**:_ its email-validation
+    regex (`/^[^\s,()*@]+@[^\s,()*@]+\.[^\s,()*@]+$/`) blocked `,()* ` but not
+    `%`/`_`, the actual Postgres `ILIKE` wildcards — `%@a.co` still passed
+    validation and turned the `.or(...ilike...)` filter into a domain-wide
+    enumeration query. Same regex was duplicated in `worker.js`. **Fixed** in
+    both files: the regex now also excludes `%`/`_`.
+  - _⚠️ Main issue (auth/trust) — correction to the original recommendation,
+    NOT fixed._ The original "require a valid admin session (mirror
+    `send-schedule-change`)" fix **does not apply**: `send-schedule-confirmation`
+    is called by `js/app.js`'s anonymous, unauthenticated parent registration
+    flow (`sendScheduleEmail()` fires automatically right after a parent
+    submits their own registration, with no PIN/Supabase-Auth session in most
+    cases — new families in particular never establish one). Gating it behind
+    Supabase Auth would break every parent's confirmation email, not just
+    close the hole. Closing this properly requires the function to look up and
+    recompute the actual billed amount server-side from `registrations`/
+    `registration_dates` (tied to a recently-created, matching registration)
+    instead of trusting the request body — the same class of fix `waitlist-status`
+    needed for T3, but here it also needs the billing-breakdown math ported
+    server-side (a real duplication-risk tradeoff, same shape as T11). This
+    needs schema verification and staging smoke-testing (per `CONTRIBUTING.md`
+    §2's own rule for auth/billing changes) that wasn't available in this
+    session — deferred rather than rushed into the confirmation-email critical
+    path. Note CLAUDE.md itself still says this function "needs deploying" —
+    confirm what's actually live before further triaging urgency.
 - **T2 — [High] Admin message inbox deleted; two live features now write into
   a black hole.** [Both] `js/admin/admin-messages.js` was deleted by commit
   `89cb987` (2026-07-01), dropping the admin UI/DB helpers for reading the

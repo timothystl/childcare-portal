@@ -1077,6 +1077,151 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .room-override-select:focus,
 .discount-type-inline:focus { outline: none; border-color: var(--navy); }
 
+/* ============================================================
+   MESSAGES SECTION
+   ============================================================ */
+.messages-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+.unread-badge {
+    background: var(--tang);
+    color: var(--white);
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: .8em;
+    font-weight: 700;
+}
+.messages-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 600px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.message-item {
+    background: var(--white);
+    border-radius: 9px;
+    padding: 14px 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    border-left: 4px solid var(--border);
+}
+.message-unread {
+    border-left-color: var(--navy);
+    background: var(--linen);
+}
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.message-from {
+    font-weight: 700;
+    color: var(--text);
+    font-size: .95em;
+}
+.message-email {
+    color: var(--navy);
+    font-size: .85em;
+    text-decoration: none;
+}
+.message-email:hover { text-decoration: underline; }
+.message-time {
+    color: var(--text-muted);
+    font-size: .78em;
+    margin-left: auto;
+    white-space: nowrap;
+}
+.message-new-badge {
+    background: var(--navy);
+    color: var(--white);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: .72em;
+    font-weight: 700;
+}
+.message-body {
+    color: var(--text);
+    font-size: .9em;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    margin-bottom: 8px;
+}
+.btn-mark-read {
+    background: var(--white);
+    color: var(--navy);
+    border: 1.5px solid var(--navy);
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .78em;
+    font-weight: 600;
+    transition: all .2s;
+}
+.btn-mark-read:hover { background: var(--navy); color: var(--white); }
+
+.message-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+}
+.btn-archive-msg {
+    background: var(--white);
+    color: var(--text-muted);
+    border: 1.5px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .78em;
+    font-weight: 600;
+    transition: all .2s;
+}
+.btn-archive-msg:hover { background: var(--text-muted); color: var(--white); border-color: var(--text-muted); }
+
+.btn-restore-msg {
+    background: var(--white);
+    color: var(--navy);
+    border: 1.5px solid var(--navy);
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .78em;
+    font-weight: 600;
+    transition: all .2s;
+}
+.btn-restore-msg:hover { background: var(--navy); color: var(--white); border-color: var(--navy); }
+
+.btn-delete-msg {
+    background: var(--white);
+    color: var(--tang);
+    border: 1.5px solid var(--tang-soft);
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .78em;
+    font-weight: 600;
+    transition: all .2s;
+}
+.btn-delete-msg:hover { background: var(--tang); color: var(--white); border-color: var(--tang); }
+
+.message-archived { opacity: .65; background: var(--cream) !important; }
+.message-archived-badge {
+    background: var(--text-muted);
+    color: var(--white);
+    font-size: .68em;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: .04em;
+}
+
 /* "Show Archived" active state */
 .btn-active {
     background: var(--navy) !important;
