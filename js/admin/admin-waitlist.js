@@ -1161,11 +1161,20 @@ function wlpEnrollFromWaitlist(kidId, monthIdx) {
     const dates = wlpDatesForMonthAndDays(alloc.months[mi].key, avail);
     if (!dates.length) { alert(`No open calendar dates found for ${k.name} in ${alloc.months[mi].label} — closures may account for the rest.`); return; }
 
+    // The waitlist forms never require a phone number, but `registrations`
+    // does (NOT NULL) — every other path into that table already has one by
+    // the time it gets there, this is the first that doesn't guarantee it.
+    let parentPhone = (k.app.parent_phone || '').trim();
+    if (!parentPhone) {
+        parentPhone = (window.prompt(`No phone number on file for ${k.parentName} — enter one to complete enrollment (required):`) || '').trim();
+        if (!parentPhone) { alert('A phone number is required to create the registration.'); return; }
+    }
+
     if (typeof openAdminRegModalForWaitlistKid !== 'function') { alert('Enroll flow unavailable — reload the page and try again.'); return; }
     openAdminRegModalForWaitlistKid({
         parentName:  k.parentName,
         parentEmail: k.parentEmail,
-        parentPhone: k.app.parent_phone || null,
+        parentPhone,
         childName:   k.name,
         childDob:    k.app.child_dob || null,
         room,
