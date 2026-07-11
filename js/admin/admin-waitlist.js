@@ -211,6 +211,14 @@ function wlpGradEvents(months) {
 // seating — this week's live bookings carried forward through every known
 // graduation (both the room a child leaves, which gains a slot, and the room
 // they move into, which loses one).
+//
+// openDay is intentionally allowed to go NEGATIVE: if graduations moving in
+// push a room's own already-enrolled kids past capacity, that's a real
+// overbooking the admin needs to see and act on (move a kid, bump capacity,
+// etc.) — flooring it at 0 would make "exactly full" and "3 over capacity"
+// look identical. Only the waitlist-matching step downstream (which checks
+// `>= 1` before seating anyone) treats negative the same as 0 — it just
+// won't offer a spot there, which is correct either way.
 function wlpComputeGradGrid(room, gradOutForRoom, gradInForRoom, baseBookedForRoom) {
     const cap = room.capacity ?? 0;
     const booked = { ...baseBookedForRoom };
@@ -219,7 +227,7 @@ function wlpComputeGradGrid(room, gradOutForRoom, gradInForRoom, baseBookedForRo
         (gradOutForRoom[m] || []).forEach(ev => ev.days.forEach(d => { booked[d] = Math.max(0, booked[d] - 1); }));
         (gradInForRoom[m] || []).forEach(ev => ev.days.forEach(d => { booked[d] = booked[d] + 1; }));
         const openDay = {};
-        TREND_DAYS.forEach(d => { openDay[d] = Math.max(0, Math.min(cap, cap - booked[d])); });
+        TREND_DAYS.forEach(d => { openDay[d] = cap - booked[d]; });
         grid.push(openDay);
     }
     return grid;
@@ -266,7 +274,8 @@ function wlpPriorityLabel(k) { return k.sibling ? '👨‍👩‍👧 Sibling pr
 function wlpAvailClass(open, capacity) {
     const cap = capacity || 0;
     const frac = cap > 0 ? open / cap : 0;
-    if (open <= 0) return 'wlp-avail-red';
+    if (open < 0) return 'wlp-avail-over';
+    if (open === 0) return 'wlp-avail-red';
     if (frac < 0.2) return 'wlp-avail-amber';
     return 'wlp-avail-green';
 }
@@ -781,7 +790,10 @@ function wlpRenderGrid(alloc) {
             const isSel = sel && sel.roomId === room.id && sel.monthIdx === mo.idx;
             const chips = TREND_DAYS.map(d => {
                 const open = dayMap[d];
-                return `<div class="wlp-cap-chip ${wlpAvailClass(open, room.capacity)}" title="${open} open seat${open === 1 ? '' : 's'} — ${escHtml(d)}, ${escHtml(mo.label)}"><div class="wlp-cap-chip-day">${d}</div><div class="wlp-cap-chip-open">${open}</div></div>`;
+                const desc = open < 0
+                    ? `${-open} OVER capacity — ${escHtml(d)}, ${escHtml(mo.label)}`
+                    : `${open} open seat${open === 1 ? '' : 's'} — ${escHtml(d)}, ${escHtml(mo.label)}`;
+                return `<div class="wlp-cap-chip ${wlpAvailClass(open, room.capacity)}" title="${desc}"><div class="wlp-cap-chip-day">${d}</div><div class="wlp-cap-chip-open">${open}</div></div>`;
             }).join('');
             return `<td class="wlp-month-cell ${isSel ? 'selected' : ''}" data-wlp-cell="${room.id}:${mo.idx}"><div class="wlp-cap-chip-row">${chips}</div></td>`;
         }).join('');
@@ -832,7 +844,7 @@ function wlpRenderGrid(alloc) {
     return `
         <div class="wlp-grid-panel">
             <div class="wlp-section-label">Open seats per weekday — next 12 months</div>
-            <div class="wlp-section-hint">Number shown = unfilled seats that day, after known graduations and already-matched waitlist admits (not enrolled headcount, not waitlist demand) — click a month to see who fits.</div>
+            <div class="wlp-section-hint">Number shown = unfilled seats that day, after known graduations and already-matched waitlist admits (not enrolled headcount, not waitlist demand). A negative number (dark red) means already-enrolled kids overbook that room that month — before any waitlist offers. Click a month to see who fits.</div>
             <div style="overflow-x:auto;">
                 <table class="wlp-cap-table">
                     <thead><tr><th class="wlp-room-head">Room</th>${monthHeads}</tr></thead>
