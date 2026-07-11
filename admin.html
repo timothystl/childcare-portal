@@ -300,6 +300,13 @@
                     <label style="font-weight:600;font-size:.88em;">Notify This Email on New Inquiries</label>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
                         <input type="email" id="wlNotifyEmail" placeholder="director@timothystl.org" style="flex:1;min-width:220px;">
+                    </div>
+                    <label style="font-weight:600;font-size:.88em;display:block;margin-top:12px;">Weekly Tour / Check-In Reminders</label>
+                    <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer;">
+                        <input type="checkbox" id="wlRemindersEnabled">
+                        Automatically email families still on the waitlist a tour/check-in reminder (Mondays, off by default)
+                    </label>
+                    <div style="margin-top:10px;">
                         <button id="wlSaveNotifyEmailBtn" class="btn-secondary" type="button">💾 Save</button>
                         <span id="wlNotifyEmailStatus" class="rates-status"></span>
                     </div>
