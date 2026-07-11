@@ -297,15 +297,22 @@ function wlpMovementEvents(roomId, alloc) {
             });
         });
         (alloc.incoming[roomId][mo.idx] || []).forEach(k => {
-            out.push({ monthLabel: mo.label, name: k.name, days: k.days, iconCls: 'wlp-event-icon-start', icon: '+', actionLabel: 'starts from the waitlist' });
+            out.push(k.promised
+                ? { monthLabel: mo.label, name: k.name, days: k.days, iconCls: 'wlp-event-icon-promised', icon: '🎯', actionLabel: 'promised a spot (offer accepted)' }
+                : { monthLabel: mo.label, name: k.name, days: k.days, iconCls: 'wlp-event-icon-start', icon: '+', actionLabel: 'starts from the waitlist' });
         });
     });
     return out;
 }
 
+function wlpEventChipClass(iconCls) {
+    if (iconCls === 'wlp-event-icon-grad') return 'wlp-chip-grad';
+    if (iconCls === 'wlp-event-icon-promised') return 'wlp-chip-promised';
+    return 'wlp-chip-start';
+}
 function wlpEventCardHtml(ev) {
     const chips = TREND_DAYS.map(d => ev.days.includes(d)
-        ? `<span class="wlp-chip ${ev.iconCls === 'wlp-event-icon-grad' ? 'wlp-chip-grad' : 'wlp-chip-start'}">${d}</span>`
+        ? `<span class="wlp-chip ${wlpEventChipClass(ev.iconCls)}">${d}</span>`
         : `<span class="wlp-chip wlp-chip-off">${d}</span>`).join('');
     return `
         <div class="wlp-event-card">
@@ -348,26 +355,52 @@ function wlpRunAllocation() {
     });
 
     const activeApps = (_allWaitlistApps || []).filter(a => ['pending', 'offered', 'accepted'].includes(a.status));
-    const kids = activeApps.map(a => ({
-        app: a,
-        id: a.id,
-        name: a.child_name,
-        room: wlDeriveRoom(a),
-        days: wlpAppDays(a),
-        desiredStartM: wlpDesiredMonthIdx(a),
-        sibling: !!a.has_sibling,
-        appliedAt: a.applied_at,
-        dayType: a.day_type === 'half' ? 'half' : 'full',
-        parentName: a.parent_name,
-        parentEmail: a.parent_email,
-    })).filter(k => k.room && roomMeta[k.room]);
+    const kids = activeApps.map(a => {
+        // 'accepted' = admin offered a spot and the family said yes — a real
+        // commitment, not a queue position. Reserve exactly what was offered
+        // (offered_days, for a partial offer) rather than the original full
+        // request, when that's on record.
+        const promised = a.status === 'accepted';
+        const offeredDays = (a.offered_days || '').split(',').map(s => s.trim()).filter(Boolean);
+        return {
+            app: a,
+            id: a.id,
+            name: a.child_name,
+            room: wlDeriveRoom(a),
+            days: (promised && offeredDays.length) ? offeredDays.filter(d => TREND_DAYS.includes(d)) : wlpAppDays(a),
+            desiredStartM: wlpDesiredMonthIdx(a),
+            sibling: !!a.has_sibling,
+            appliedAt: a.applied_at,
+            dayType: a.day_type === 'half' ? 'half' : 'full',
+            parentName: a.parent_name,
+            parentEmail: a.parent_email,
+            promised,
+        };
+    }).filter(k => k.room && roomMeta[k.room]);
 
     const working = {};
     rooms.forEach(r => { working[r.id] = roomMeta[r.id].gradGrid.map(day => ({ ...day })); });
 
+    // Promised kids are seated FIRST and unconditionally — same treatment as
+    // a graduation event, not a queue candidate. A real commitment reserves
+    // its seat regardless of remaining capacity or priority order; if that
+    // pushes a room negative, that's exactly the "we've promised more spots
+    // than we have" signal the grid should surface (see wlpComputeGradGrid).
     const preGridByKid = {}, fitMonthByKid = {};
     rooms.forEach(r => {
-        const roomKids = wlpSortByPriority(kids.filter(k => k.room === r.id));
+        kids.filter(k => k.room === r.id && k.promised).forEach(k => {
+            preGridByKid[k.id] = working[r.id].map(day => ({ ...day }));
+            fitMonthByKid[k.id] = k.desiredStartM;
+            for (let mm = k.desiredStartM; mm < 12; mm++) {
+                k.days.forEach(d => { working[r.id][mm][d] -= 1; });
+            }
+        });
+    });
+
+    // Everyone else (pending / offered-but-not-yet-accepted) still competes
+    // for whatever capacity is left, in priority order, same as before.
+    rooms.forEach(r => {
+        const roomKids = wlpSortByPriority(kids.filter(k => k.room === r.id && !k.promised));
         roomKids.forEach(k => {
             const preGrid = working[r.id].map(day => ({ ...day }));
             preGridByKid[k.id] = preGrid;
@@ -529,7 +562,8 @@ function wlpRenderQueueRow(k, alloc) {
     const fitM = alloc.fitMonthByKid[k.id];
     const fitNow = fitM === k.desiredStartM;
     let fitCls, fitLabel;
-    if (fitM === null) { fitCls = 'wlp-status-red'; fitLabel = 'No fit in 12 mo'; }
+    if (k.promised) { fitCls = 'wlp-status-promised'; fitLabel = '🎯 Promised'; }
+    else if (fitM === null) { fitCls = 'wlp-status-red'; fitLabel = 'No fit in 12 mo'; }
     else if (fitNow) { fitCls = 'wlp-status-green'; fitLabel = 'Fits now'; }
     else { fitCls = 'wlp-status-amber'; fitLabel = `Fits ${alloc.months[fitM].label}`; }
 
@@ -855,7 +889,7 @@ function wlpRenderGrid(alloc) {
         ${matchPanel}
         <div class="wlp-movement-panel">
             <div class="wlp-section-label">Who's moving — next 12 months</div>
-            <div class="wlp-section-hint">↑ graduating up to the next room · + starting from the waitlist</div>
+            <div class="wlp-section-hint">↑ graduating up to the next room · 🎯 promised a spot (offer accepted, reserved regardless of capacity) · + projected to start from the waitlist (simulated, not guaranteed)</div>
             <div class="wlp-movement-grid">${movementHtml || '<div class="wlp-empty-note">No graduations or waitlist starts in the next 12 months.</div>'}</div>
         </div>`;
 }

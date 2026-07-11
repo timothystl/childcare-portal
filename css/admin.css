@@ -3220,6 +3220,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     --wlp-green-bg: #f0fff4; --wlp-green-fg: #276749;
     --wlp-grad-fg:  #667eea; --wlp-grad-bg:  #e5e8fb;
     --wlp-start-fg: #c05621; --wlp-start-bg: #FDEEE8;
+    --wlp-promised-fg: #276749; --wlp-promised-bg: #f0fff4;
 }
 
 .wlp-card {
@@ -3301,6 +3302,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-chip-off  { background: var(--warm-gray); color: #c4bda8; }
 .wlp-chip-grad  { background: var(--wlp-grad-bg);  color: var(--wlp-grad-fg); }
 .wlp-chip-start { background: var(--wlp-start-bg); color: var(--wlp-start-fg); }
+.wlp-chip-promised { background: var(--wlp-promised-bg); color: var(--wlp-promised-fg); }
 .wlp-row-meta { font-size: 11px; color: var(--text-muted); }
 .wlp-status-pill {
     font-size: 11.5px; font-weight: 800; padding: 5px 12px; border-radius: 20px; white-space: nowrap;
@@ -3308,6 +3310,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-status-green { background: var(--green-pale); color: var(--green-dark); }
 .wlp-status-amber { background: var(--sun-pale); color: var(--mustard-dark); }
 .wlp-status-red   { background: var(--wlp-red-bg); color: var(--wlp-red-fg); }
+.wlp-status-promised { background: var(--navy); color: var(--white); font-weight: 800; }
 .wlp-edit-btn {
     background: none; border: 1.5px solid var(--border); color: var(--text-muted);
     border-radius: 6px; padding: 4px 8px; font-size: 11px; cursor: pointer; white-space: nowrap;
@@ -3371,6 +3374,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 }
 .wlp-event-icon-grad  { background: var(--wlp-grad-fg); }
 .wlp-event-icon-start { background: var(--wlp-start-fg); }
+.wlp-event-icon-promised { background: var(--wlp-promised-fg); }
 .wlp-event-body { flex: 1; min-width: 0; }
 .wlp-event-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
 .wlp-event-name { font-weight: 700; font-size: 12.5px; color: var(--text); }
