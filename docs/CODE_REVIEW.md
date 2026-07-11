@@ -702,18 +702,19 @@ incomplete** (see T1).
   actually `require`/exercise the real functions, or at least add cases for the
   new weekly-rate-exclusion behavior.
 
-## Migration deployment status — unconfirmed (verify before/alongside anything above)
+## Migration deployment status — ✅ confirmed 2026-07-11, all four applied
 
 Per this repo's own hard-won lesson (`CONTRIBUTING.md` §2), a committed
-migration is not a deployed one, and this has broken prod twice already. None of
-the four migrations below are mentioned anywhere as applied, yet the live
-frontend on `main` already depends on all of them:
+migration is not a deployed one, and this has broken prod twice already. All
+four migrations that this sweep flagged as undocumented —
 `add_billing_import_source.sql`, `create_staff_photos_bucket.sql`,
-`waitlist_inquiry_tour_reminders.sql`, `waitlist_offer_type.sql`. Confirm each
-column/bucket exists in the live Supabase project
-(`information_schema.columns` / `storage.buckets`) before treating any T-series
-item above as merely theoretical — see `docs/NEXT_STEPS.md` for the exact
-queries and the ready-to-apply checklist.
+`waitlist_inquiry_tour_reminders.sql`, `waitlist_offer_type.sql` — were
+confirmed applied against the live Supabase project on 2026-07-11:
+`storage.buckets` has `staff-photos` (`public = true`), and
+`information_schema.columns` has all 7 expected columns
+(`billing_import_batches.source`; `waitlist_applications.tour_status`/
+`tour_scheduled_at`/`tour_completed_at`/`tour_notes`/`offer_type`/
+`offered_days`). No action needed on this front.
 
 _Checked and cleared (no bug):_ `confirm-waitlist-interest` is correctly scoped
 (unguessable token, CORS-restricted, RLS-blocked from anon reads, no PII
