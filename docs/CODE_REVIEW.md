@@ -485,3 +485,242 @@ _Checked and cleared (no bug):_ the family-session HMAC token **is** verified se
 `getWeekMonday`'s UTC `toISOString` is safe for US-Central; `getRegistrationWindow`/
 `getTargetMonthKey` rollovers are correct; the sibling-discount math is correct; and this
 branch's refactors introduced no regressions or namespace collisions.
+
+---
+
+# Third Sweep — waitlist/inquiry funnel & Q3 diff (2026-07-11)
+
+_Reviewed: 2026-07-11 · App version 1.20.2 · covers `d497c73..HEAD` (128 commits,
+~7,300 insertions / 3,000 deletions since the second sweep above)._ This window
+shipped the entire parent-facing waitlist/inquiry funnel (inquiry form →
+confirm-interest → `waitlist-status.html`), a full rewrite of the admin Waitlist
+& Capacity Planner, the Staff Directory (photos) feature, and the Billing→Finance
+consolidation with ProCare import. None of it had been reviewed —
+`docs/WAITLIST_STATUS.md` (written 2026-07-10) explicitly flagged itself as
+"not yet code-reviewed" and asked the next reviewer to check specific things;
+this sweep answers those and covers the rest of the diff. Labels continue as
+**T1–T12** (High → Low), independent of S/U/V/N/P/Q/C/M and SS1–SS19 above.
+Findings were produced by three parallel focused reviews (edge functions/
+migrations/CI; the waitlist/inquiry funnel; app.js billing + staff directory +
+finance) and the top items were independently re-verified by reading source and
+the relevant commit history rather than taken on trust.
+
+**Carried-over item status:** SS1 is now **fixed** (preview and submit both route
+through the new single `buildBillingBreakdown()`). SS19, SS3, and SS9 are
+**still open, untouched** in this window. SS13 should be **reopened as
+incomplete** (see T1).
+
+## High
+
+- **T1 — [High] `send-schedule-confirmation` has no auth check; trusts fully
+  client-supplied billing data.** [Public] The POST handler
+  (`supabase/functions/send-schedule-confirmation/index.ts`) has no
+  authentication/session check at all — confirmed by grepping the file for
+  `Authorization`/`auth.role`; the only match is the *outbound* Resend API call.
+  It's invoked from the browser with the bare anon key. `parentEmail`,
+  `childNames`, `dates[].amount`, and `grandTotal` are all client-supplied and
+  never cross-checked against real `registrations`/billing rows before being
+  emailed — as a real-looking invoice with PDF attachment — to `parentEmail`.
+  Anyone who knows or guesses a real family's email can POST fabricated
+  dates/amounts and have a legitimate-looking "Timothy Lutheran MDO" invoice
+  land in that family's inbox. _Also reopens **SS13**:_ its email-validation
+  regex (`/^[^\s,()*@]+@[^\s,()*@]+\.[^\s,()*@]+$/`) blocks `,()* ` but not
+  `%`/`_`, the actual Postgres `ILIKE` wildcards — `%@a.co` still passes
+  validation and turns the `.or(...ilike...)` filter into a domain-wide
+  enumeration query. Same regex is duplicated in `worker.js`. _Fix:_ require a
+  valid admin session (mirror `send-schedule-change`/`send-waitlist-offer`),
+  recompute amounts server-side instead of trusting the request body, and
+  exclude `%`/`_` from the email-validation regex everywhere it's duplicated.
+  Note CLAUDE.md itself still says this function "needs deploying" — confirm
+  what's actually live before triaging urgency.
+- **T2 — [High] Admin message inbox deleted; two live features now write into
+  a black hole.** [Both] `js/admin/admin-messages.js` was deleted by commit
+  `89cb987` (2026-07-01), dropping the admin UI/DB helpers for reading the
+  `messages` table (confirmed: `messagesList`/`fetchMessages`/`markMessageRead`/
+  `unreadBadge` no longer exist anywhere in `js/`). The write-only `addMessage()`
+  survives and is still called by the calendar page's "Contact Us" button
+  (pre-existing) **and** the brand-new "Message the Office" button on
+  `waitlist-status.html` (shipped nine days later, 2026-07-10, whose own doc
+  describes reusing "the existing Contact-Us pipeline" without noting the reader
+  is gone). No email/notification trigger exists on `messages` either. Net
+  effect: messages parents send today are saved where no one in the admin
+  dashboard can see them. _Fix:_ restore a minimal admin message viewer, or
+  route `addMessage()` through a staff email notification instead. Looks like an
+  accidental compounding of two unrelated changes — confirm with the product
+  owner, but treat as a bug until confirmed otherwise.
+- **T3 — [High] `waitlist-status` edge function ignores admin capacity
+  overrides.** [Public] `supabase/functions/waitlist-status/index.ts:340-349`
+  gates on `typeof capRes.data.value === 'object'`, but `settings.value` is a
+  TEXT column holding a JSON string, not jsonb — confirmed via commit
+  `6e9977c`'s own message/diff, which fixed this *exact* bug in
+  `send-waitlist-confirmation` and `send-waitlist-reminders` the same day
+  ("the column is actually text... silently never being read") but never
+  touched `waitlist-status/index.ts`, which has the identical pattern. The
+  `typeof === 'object'` check on a string is always false, so `capacities` is
+  always `{}` and the function silently falls back to hard-coded default room
+  capacities. When an admin raises a room's capacity in Settings, the admin
+  Planner reflects it immediately but `waitlist-status.html` keeps computing
+  position/wait-estimate against the stale hard-coded number — exactly the
+  parent-vs-admin discrepancy `docs/WAITLIST_STATUS.md`'s own review checklist
+  asks the reviewer to catch. _Fix:_ apply the same `parseSettingsValue()`
+  helper already written in commit `6e9977c` to this function's `room_capacity`
+  read — smallest fix in this whole sweep, pattern already proven.
+- **T4 — [High] Admin "position" (global/cross-room) vs. parent "position"
+  (per-room) — will disagree.** [Both] Admin's Queue tab
+  (`js/admin/admin-waitlist.js:480-484`) ranks every waitlisted child across
+  *all* rooms combined and shows that as "position." The edge function
+  (`waitlist-status/index.ts:363-367`) ranks within the child's own room only,
+  matching the documented design intent but not what the admin UI displays. A
+  sibling with an early per-room rank in a less-competitive room can show as
+  e.g. `_pos = 4` globally in the admin Queue view while their own parent status
+  page says `#1 of 5` — staff quoting the admin number on the phone will
+  contradict what the parent sees online. _Fix:_ decide the correct semantics
+  (per-room ranking seems more useful and matches capacity accounting) and make
+  both views agree, or clearly label them as different numbers.
+- **T5 — [High] Room derivation hard-codes age boundaries that are
+  admin-editable elsewhere.** [Both] `wlDeriveRoom()`
+  (`js/admin/admin-waitlist.js:10-22`) and `PROMOTION_CHAIN` (`:1080-1086`),
+  duplicated in `waitlist-status/index.ts:40-46,71-82`, hard-code age cutoffs
+  (`months < 12` → bear, etc.) instead of reading the already-admin-editable
+  `ROOMS[].ageMinMonths/ageMaxMonths` the way `js/app.js`'s
+  `getRoomIdFromDob()` correctly does (with a comment explaining why — Settings
+  → Rates lets admins edit these boundaries, and commit `7337a56` actively
+  fixed an off-by-one in exactly this data). An admin editing a room's age
+  ceiling — a supported, documented action — silently leaves the waitlist
+  planner's room routing, priority queue, and graduation forecast on the old
+  boundary, in both the admin tool and the parent page equally. _Fix:_ read
+  `ROOMS[].ageMinMonths/ageMaxMonths` in both the admin file and the
+  edge-function port, mirroring `getRoomIdFromDob()`.
+
+## Medium
+
+- **T6 — [Med] ProCare payment import has no duplicate-protection — silently
+  understates AR.** [Admin] `js/admin/admin-billing.js:738-825`
+  (`_confirmProCareImport`) upserts invoices (idempotent) but payments are
+  plain `INSERT`s via `insertBillingPayment()` with no unique constraint on
+  `billing_payments`. A re-uploaded or overlapping ProCare export double-inserts
+  payment rows, which *reduces* the computed AR balance
+  (`balance = owed - paid`) — a failure mode likely to go unnoticed since it
+  looks like good news, and harder to eyeball now that
+  `_groupProcareArByFamily()` aggregates per-family. Also `insertImportBatch`'s
+  `filename` is hardcoded to `''` at both call sites, discarding the clue that
+  would help an admin recognize a re-import. _Fix:_ dedupe on `(family_id,
+  payment_date, amount, payment_method)` before insert or add a DB constraint;
+  stop hardcoding `filename: ''`.
+- **T7 — [Med] Per-day billing preview doesn't exclude weekly-rate days from
+  sibling-discount math.** [Public] `js/app.js:1050` calls
+  `getChildDayAmounts(dateStr)` without the `excludeStudentIds` argument that
+  `buildBillingBreakdown()` correctly uses. The itemized per-date line a parent
+  sees can show a different amount/discount than what they're actually billed
+  for that date (the grand total is still correct — both derive from
+  `buildBillingBreakdown()` — but the line items won't add up if a parent
+  checks). A narrower recurrence of the same divergent-code-paths shape that
+  caused SS1. _Fix:_ pass the same `excludeStudentIds` (or reuse
+  `buildBillingBreakdown`'s `weeklyDatesByChild`) into the line-1050 call.
+- **T8 — [Med, policy decision needed] Sibling discount silently dropped when
+  both siblings are on the weekly rate.** [Public] Pre-refactor code applied
+  the $10 sibling discount even across two children both qualifying for a
+  room's weekly rate (`js/app.js:960-1005`,
+  `getChildWeeklyWeeks`/`buildBillingBreakdown`); the current refactor prices
+  each child's weekly week fully independently. A real, quantifiable pricing
+  change (two full-time siblings in a weekly-rate room now cost $10/week more)
+  not tracked as a decided policy anywhere. _Fix:_ get business sign-off; if
+  unintended, restore the cross-child discount inside the weekly-rate path.
+- **T9 — [Med] Auto-merge workflow now blind-`--theirs` on conflicting
+  `dist/*.min.js`.** [Both] `.github/workflows/auto-merge-claude.yml`'s
+  conflict-auto-resolve allowlist grew to include `dist/admin.min.js`,
+  `dist/app.min.js`, `dist/lookup.min.js`; on conflict it now takes one
+  branch's pre-built bundle wholesale instead of rebuilding from merged source.
+  Per this doc's own stated invariant (the deploy serves committed `dist/`
+  verbatim, no server-side build), this can silently regress a just-merged
+  feature on the live site until the next branch's build happens to overwrite
+  it correctly — the same incident category CLAUDE.md already warns about
+  (two `claude/**` branches touching shared files), just for compiled output.
+  _Fix:_ on `dist/*` conflict, checkout the source-of-truth branch and re-run
+  `npm run build` instead of picking either raw pre-built blob, or drop
+  `dist/*` from the auto-resolve allowlist and fail the merge for a human
+  rebuild.
+- **T10 — [Med] `waitlist-status` has no rate limiting on an exact-email PII
+  lookup.** [Public] Confirmed no per-IP/per-email throttle exists. Already
+  flagged in `docs/WAITLIST_STATUS.md` and tied to the still-open **S6**
+  (PIN-reset throttle). The function's constant-work-regardless-of-match design
+  avoids a timing side-channel but doesn't stop unlimited retries. _Fix:_ fold
+  into an S6 pass covering both endpoints, per the design doc's own
+  recommendation.
+- **T11 — [Med] `waitlist-status` duplicates `wlpRunAllocation()` by hand —
+  now provably drifting.** [Public] Already flagged as a maintenance risk in
+  `docs/WAITLIST_STATUS.md`; T3 above is direct proof the drift has already
+  happened. Worth deciding now whether to extract a shared, isomorphic
+  allocation module rather than waiting for a third divergence.
+- **T12 — [Med] `_buildGraduationIndex` DOB parsing — off-by-one month for
+  children born on the 1st.** [Both] `js/admin/admin-waitlist.js:1124` and the
+  edge-function port: `new Date(reg.child_dob)` (no `T00:00:00`) parses as UTC
+  midnight, which in America/Chicago reads back as the last day of the
+  *previous* month whenever DOB's day-of-month is 1, shifting
+  graduation/capacity-freeing by one month. The pattern predates this window
+  but now drives the new 12-month Capacity Planner grid and the new
+  parent-facing forecast. `wlDeriveRoom()` two lines away already has the
+  correct pattern (`+ 'T00:00:00'`) to copy.
+
+## Low
+
+- **T13 — [Low]** `${{ github.ref_name }}` interpolated directly into a `run:`
+  shell block in `auto-merge-claude.yml` — GitHub Actions script-injection
+  anti-pattern, one more instance added this window (pre-existing elsewhere in
+  the file). Low practical risk (only trusted sessions push `claude/**`
+  branches); switch to an `env:`-passed variable defensively.
+- **T14 — [Low]** `send-waitlist-confirmation`'s sequential `applicationId` is
+  a mild existence/already-sent enumeration oracle — bounded impact (never
+  redirects mail, idempotent, 30-min window). Fold into the S6/T10 rate-limit
+  fix rather than treating separately.
+- **T15 — [Low]** `send-waitlist-reminders`'s auth check uses substring match
+  (`auth.includes(key)`) instead of exact comparison — tighten to
+  `auth === \`Bearer ${key}\`` for defense-in-depth; only reachable from
+  trusted pg_cron infra today.
+- **T16 — [Low]** `offer_type`/`offered_days` (from `waitlist_offer_type.sql`)
+  are written (`admin-waitlist.js:1455,1459`) but never read anywhere — confirm
+  whether intentionally deferred; if a reader is added later, give it an
+  explicit safe default for `NULL` (pre-migration rows), same class as the old
+  S3 role-fallback bug.
+- **T17 — [Low]** `wlpBaseBooked()` and its edge-function twin don't filter
+  `registrations.status = 'cancelled'` — currently dormant (no live admin flow
+  sets that status; cancellations hard-delete) but would double-count booked
+  seats if a "cancel without delete" flow is ever added.
+- **T18 — [Low]** Staff photo filename is built from unsanitized `file.name`
+  extension (`admin-settings.js`) — low severity (admin-only upload to their
+  own bucket), one-line character whitelist would close it.
+- **T19 — [Low]** Two spots in `admin-classrooms.js`'s new roster views render
+  `roomLabel` without `escHtml()`, inconsistent with the rest of the same
+  functions (S5 convention). Not currently exploitable — room label isn't
+  admin-editable — but worth a one-line fix for consistency.
+- **T20 — [Low, process]** `js/tests/business-logic.test.js` doesn't exercise
+  real `app.js` code — it's a hand-maintained, self-contained reimplementation
+  of the *old* single-schedule billing model, never updated for the new
+  per-child `buildBillingBreakdown()` architecture. It structurally could not
+  have caught SS1 and provides zero coverage of T7/T8 above. Refactor to
+  actually `require`/exercise the real functions, or at least add cases for the
+  new weekly-rate-exclusion behavior.
+
+## Migration deployment status — unconfirmed (verify before/alongside anything above)
+
+Per this repo's own hard-won lesson (`CONTRIBUTING.md` §2), a committed
+migration is not a deployed one, and this has broken prod twice already. None of
+the four migrations below are mentioned anywhere as applied, yet the live
+frontend on `main` already depends on all of them:
+`add_billing_import_source.sql`, `create_staff_photos_bucket.sql`,
+`waitlist_inquiry_tour_reminders.sql`, `waitlist_offer_type.sql`. Confirm each
+column/bucket exists in the live Supabase project
+(`information_schema.columns` / `storage.buckets`) before treating any T-series
+item above as merely theoretical — see `docs/NEXT_STEPS.md` for the exact
+queries and the ready-to-apply checklist.
+
+_Checked and cleared (no bug):_ `confirm-waitlist-interest` is correctly scoped
+(unguessable token, CORS-restricted, RLS-blocked from anon reads, no PII
+over-return); `send-waitlist-confirmation` never lets the caller redirect mail
+to an attacker-chosen address; `send-waitlist-reminders` is service-role-gated
+and fails closed on missing settings; `create_staff_photos_bucket.sql`'s public
+read / admin-only write split is intentional and appropriate for its stated
+purpose (publicly displayed staff headshots); `js/inquiry.js` and
+`js/confirm-interest.js` surface real errors on their state-changing actions
+(no U6 recurrence); the token-gated confirm/decline flow has no
+URL-guessing path to act on another family's offer.
