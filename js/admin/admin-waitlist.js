@@ -420,7 +420,7 @@ function wlpRenderHeader() {
     const sub = isQueue
         ? "Every waitlisted child, ranked by priority — expand any row for their 12-month outlook."
         : (_wlp.capacityView === 'grid'
-            ? 'Open slots (big number) and enrolled/capacity (small number) per room, 12 months out — click a month to see who fits.'
+            ? 'Open slots per room, 12 months out — click a month to see who fits.'
             : 'One month at a time — click an open slot to see who to offer it to.');
     return `
         <div class="wlp-header">
@@ -781,9 +781,7 @@ function wlpRenderGrid(alloc) {
             const isSel = sel && sel.roomId === room.id && sel.monthIdx === mo.idx;
             const chips = TREND_DAYS.map(d => {
                 const open = dayMap[d];
-                const cap = room.capacity ?? 0;
-                const enrolled = Math.max(0, cap - open);
-                return `<div class="wlp-cap-chip ${wlpAvailClass(open, room.capacity)}"><div class="wlp-cap-chip-day">${d}</div><div class="wlp-cap-chip-open">${open}</div><div class="wlp-cap-chip-enrolled">${enrolled}/${room.capacity ?? '—'}</div></div>`;
+                return `<div class="wlp-cap-chip ${wlpAvailClass(open, room.capacity)}" title="${open} open seat${open === 1 ? '' : 's'} — ${escHtml(d)}, ${escHtml(mo.label)}"><div class="wlp-cap-chip-day">${d}</div><div class="wlp-cap-chip-open">${open}</div></div>`;
             }).join('');
             return `<td class="wlp-month-cell ${isSel ? 'selected' : ''}" data-wlp-cell="${room.id}:${mo.idx}"><div class="wlp-cap-chip-row">${chips}</div></td>`;
         }).join('');
@@ -832,18 +830,22 @@ function wlpRenderGrid(alloc) {
     }
 
     return `
+        <div class="wlp-grid-panel">
+            <div class="wlp-section-label">Open seats per weekday — next 12 months</div>
+            <div class="wlp-section-hint">Number shown = unfilled seats that day, after known graduations and already-matched waitlist admits (not enrolled headcount, not waitlist demand) — click a month to see who fits.</div>
+            <div style="overflow-x:auto;">
+                <table class="wlp-cap-table">
+                    <thead><tr><th class="wlp-room-head">Room</th>${monthHeads}</tr></thead>
+                    <tbody>${roomRows}</tbody>
+                </table>
+            </div>
+        </div>
+        ${matchPanel}
         <div class="wlp-movement-panel">
             <div class="wlp-section-label">Who's moving — next 12 months</div>
             <div class="wlp-section-hint">↑ graduating up to the next room · + starting from the waitlist</div>
             <div class="wlp-movement-grid">${movementHtml || '<div class="wlp-empty-note">No graduations or waitlist starts in the next 12 months.</div>'}</div>
-        </div>
-        <div style="overflow-x:auto;">
-            <table class="wlp-cap-table">
-                <thead><tr><th class="wlp-room-head">Room</th>${monthHeads}</tr></thead>
-                <tbody>${roomRows}</tbody>
-            </table>
-        </div>
-        ${matchPanel}`;
+        </div>`;
 }
 
 function wlpAttachGridListeners() {
