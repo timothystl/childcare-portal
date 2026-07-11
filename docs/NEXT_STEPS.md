@@ -95,3 +95,15 @@ U3 (disable-on-submit), U4 (responsive), V2–V6 (design tokens / inline styles)
 ## To unblock the assistant
 - Paste the S1 STEP-1 query output (or give a staging URL) → unblocks SS2 + auth work.
 - Decide the capacity source (table vs hardcode) → unblocks the registration RPC.
+
+## Pending review — Waitlist Status page (shipped 2026-07-10, v1.20.1)
+Not yet code-reviewed. Full architecture, security model, and manual test
+checklist: **`docs/WAITLIST_STATUS.md`**. Short version of what to look at:
+- The edge function (`supabase/functions/waitlist-status/index.ts`) duplicates
+  the admin planner's allocation algorithm (`wlpRunAllocation()` in
+  `admin-waitlist.js`) rather than sharing it — flag whether that's an
+  acceptable maintenance burden.
+- No rate limiting on the lookup — same open gap as S6 (PIN-reset throttle),
+  now on two unauthenticated email-lookup endpoints instead of one.
+- Cross-check position/estimated-wait against the admin Waitlist & Capacity
+  Planner for a few real kids before signing off — the two views must agree.
