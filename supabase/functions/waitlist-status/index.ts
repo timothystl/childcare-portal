@@ -14,6 +14,18 @@ function json(body: unknown, status = 200) {
   })
 }
 
+// settings.value is a TEXT column holding a JSON-encoded string (despite an
+// outdated CREATE TABLE comment elsewhere describing it as jsonb) — parse it
+// the same way send-waitlist-confirmation/index.ts and the client-side
+// loadWaitlistNotifySettings() do.
+function parseSettingsValue(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === 'object') return raw as Record<string, unknown>
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw) } catch { return {} }
+  }
+  return {}
+}
+
 // ============================================================
 // Ported from js/admin/admin-waitlist.js (wlpRunAllocation() and friends).
 // Position and estimated-wait figures MUST agree with the admin Waitlist &
@@ -344,9 +356,8 @@ Deno.serve(async (req) => {
 
     const apps: WaitlistApp[] = appsRes.data || []
     const registrations: Registration[] = regsRes.data || []
-    const capacities: Record<string, number> = (capRes.data?.value && typeof capRes.data.value === 'object' && !Array.isArray(capRes.data.value))
-      ? capRes.data.value
-      : {}
+    const parsedCapacities = parseSettingsValue(capRes.data?.value)
+    const capacities: Record<string, number> = Array.isArray(parsedCapacities) ? {} : (parsedCapacities as Record<string, number>)
 
     const normalizedEmail = email.trim().toLowerCase()
     const activeStatuses = ['pending', 'offered', 'accepted']
