@@ -659,10 +659,16 @@ function wlpRenderQueueExpand(k, alloc) {
         stripDetail = `<div class="wlp-strip-detail"><span class="wlp-strip-detail-label">${escHtml(alloc.months[stripSel.monthIdx].label)}:</span><div class="wlp-chip-row" style="margin:0">${chips}</div></div>`;
     }
 
-    const startDayMap = preGrid[k.desiredStartM];
-    const avail = k.days.filter(d => startDayMap[d] >= 1);
+    // Enroll uses whichever month is selected in the strip above (click a
+    // tile to target that month), falling back to their desired-start month
+    // when nothing's selected — so the button always matches what's visibly
+    // highlighted, instead of silently ignoring a strip selection.
+    const enrollMonthIdx = (stripSel && stripSel.kidId === k.id) ? stripSel.monthIdx : k.desiredStartM;
+    const enrollDayMap = preGrid[enrollMonthIdx];
+    const avail = k.days.filter(d => enrollDayMap[d] >= 1);
     const missing = k.days.filter(d => !avail.includes(d));
     const hasPartial = avail.length > 0 && missing.length > 0;
+    const enrollLabel = avail.length ? `✅ Enroll — ${alloc.months[enrollMonthIdx].label}` : 'Not open yet';
 
     return `
         <div class="wlp-expand">
@@ -672,7 +678,7 @@ function wlpRenderQueueExpand(k, alloc) {
                 <div class="wlp-parent-line">${escHtml(k.parentName)} · ${escHtml(k.parentEmail)}</div>
                 <div class="wlp-offer-actions">
                     ${hasPartial ? `<span class="wlp-parent-line">Only ${avail.length} of ${k.days.length} days open (${escHtml(avail.join(', '))})</span>` : ''}
-                    <button type="button" class="wlp-btn-offer" data-wlp-enroll-full="${k.id}" ${!avail.length ? 'disabled' : ''}>${avail.length ? '✅ Enroll' : 'Not open yet'}</button>
+                    <button type="button" class="wlp-btn-offer" data-wlp-enroll-full="${k.id}" data-wlp-enroll-month="${enrollMonthIdx}" ${!avail.length ? 'disabled' : ''}>${enrollLabel}</button>
                 </div>
             </div>
             ${wlpRenderSecondaryActions(k)}
@@ -763,8 +769,7 @@ function wlpWireQueueRowActions() {
         el.addEventListener('click', e => {
             e.stopPropagation();
             if (el.disabled) return;
-            const k = _wlpAlloc?.kids.find(x => x.id === Number(el.dataset.wlpEnrollFull));
-            wlpEnrollFromWaitlist(Number(el.dataset.wlpEnrollFull), k?.desiredStartM);
+            wlpEnrollFromWaitlist(Number(el.dataset.wlpEnrollFull), Number(el.dataset.wlpEnrollMonth));
         });
     });
     document.querySelectorAll('[data-wlp-tour]').forEach(el => {
