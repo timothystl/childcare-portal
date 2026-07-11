@@ -309,23 +309,27 @@
             <!-- Waitlist inquiry link + notify email -->
             <section class="admin-section collapsible-section" id="wlNotifySection">
                 <h2>📨 Waitlist Inquiries</h2>
-                <div class="admin-wl-row" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;">
-                    <label style="font-weight:600;font-size:.88em;">Shareable Inquiry Form Link</label>
-                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
-                        <input type="text" id="wlInquiryLink" readonly style="flex:1;min-width:220px;background:#fff;font-size:.85em;">
-                        <button id="wlCopyInquiryLinkBtn" class="btn-secondary" type="button">📋 Copy Link</button>
+                <div class="wl-notify-panel">
+                    <div class="wl-notify-field">
+                        <label>Shareable Inquiry Form Link</label>
+                        <div class="wl-notify-inline">
+                            <input type="text" id="wlInquiryLink" readonly>
+                            <button id="wlCopyInquiryLinkBtn" class="btn-secondary" type="button">📋 Copy Link</button>
+                        </div>
+                        <p class="section-desc">Send this link to prospective families to apply themselves — submissions land here automatically, timestamped for first-come, first-served.</p>
                     </div>
-                    <p class="section-desc" style="margin:6px 0 10px;">Send this link to prospective families to apply themselves — submissions land here automatically, timestamped for first-come, first-served.</p>
-                    <label style="font-weight:600;font-size:.88em;">Notify This Email on New Inquiries</label>
-                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
-                        <input type="email" id="wlNotifyEmail" placeholder="director@timothystl.org" style="flex:1;min-width:220px;">
+                    <div class="wl-notify-field">
+                        <label>Notify This Email on New Inquiries</label>
+                        <input type="email" id="wlNotifyEmail" placeholder="director@timothystl.org">
                     </div>
-                    <label style="font-weight:600;font-size:.88em;display:block;margin-top:12px;">Weekly Tour / Check-In Reminders</label>
-                    <label style="font-weight:normal;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer;">
-                        <input type="checkbox" id="wlRemindersEnabled">
-                        Automatically email families still on the waitlist a tour/check-in reminder (Mondays, off by default)
-                    </label>
-                    <div style="margin-top:10px;">
+                    <div class="wl-notify-field">
+                        <label>Weekly Tour / Check-In Reminders</label>
+                        <label class="wl-notify-checkbox">
+                            <input type="checkbox" id="wlRemindersEnabled">
+                            Automatically email families still on the waitlist a tour/check-in reminder (Mondays, off by default)
+                        </label>
+                    </div>
+                    <div class="wl-notify-actions">
                         <button id="wlSaveNotifyEmailBtn" class="btn-secondary" type="button">💾 Save</button>
                         <span id="wlNotifyEmailStatus" class="rates-status"></span>
                     </div>
