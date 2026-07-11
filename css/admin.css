@@ -3351,6 +3351,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 
 /* ── Capacity Planner — Grid view ─────────────────────────── */
 .wlp-movement-panel { border-bottom: 1px solid var(--border); background: var(--white); padding: 16px 24px; }
+.wlp-grid-panel { border-bottom: 1px solid var(--border); background: var(--white); padding: 16px 24px 0; }
 .wlp-section-label {
     font-weight: 800; color: var(--navy); font-size: 13px; text-transform: uppercase;
     letter-spacing: .04em; margin-bottom: 2px;
@@ -3399,7 +3400,6 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-cap-chip { border-radius: 4px; padding: 3px 2px; min-width: 26px; }
 .wlp-cap-chip-day { font-size: 9.5px; font-weight: 700; }
 .wlp-cap-chip-open { font-size: 12px; font-weight: 800; }
-.wlp-cap-chip-enrolled { font-size: 9px; font-weight: 600; opacity: 0.75; }
 .wlp-avail-green { background: var(--wlp-green-bg); color: var(--wlp-green-fg); }
 .wlp-avail-amber { background: var(--wlp-amber-bg); color: var(--wlp-amber-fg); }
 .wlp-avail-red   { background: var(--wlp-red-bg);   color: var(--wlp-red-fg); }
