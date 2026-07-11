@@ -126,6 +126,7 @@ let _wlp = {
     search: '',
     roomFilter: '',
     toastText: null,
+    movementCollapsed: true, // "Who's moving" — collapsed by default, it's long
 };
 let _wlpAlloc = null; // last computed allocation — see wlpRunAllocation()
 
@@ -854,8 +855,9 @@ function wlpWireQueueRowActions() {
 // ── Capacity Planner — Grid view ────────────────────────────
 function wlpRenderGrid(alloc) {
     const movementCols = alloc.rooms.map(room => ({ room, events: wlpMovementEvents(room.id, alloc) })).filter(x => x.events.length);
+    const movementCount = movementCols.reduce((sum, c) => sum + c.events.length, 0);
     const movementHtml = movementCols.map(({ room, events }) => `
-        <div style="min-width:0;">
+        <div class="wlp-movement-col">
             <div class="wlp-movement-col-title">${escHtml(room.label)}</div>
             <div class="wlp-movement-events">${events.map(wlpEventCardHtml).join('')}</div>
         </div>`).join('');
@@ -941,9 +943,15 @@ function wlpRenderGrid(alloc) {
         </div>
         ${matchPanel}
         <div class="wlp-movement-panel">
-            <div class="wlp-section-label">Who's moving — next 12 months</div>
+            <button type="button" class="wlp-collapse-toggle" id="wlpMovementToggle">
+                <div class="wlp-section-label">Who's moving — next 12 months</div>
+                <span class="wlp-collapse-count">${movementCount} move${movementCount === 1 ? '' : 's'}</span>
+                <span class="wlp-collapse-icon">${_wlp.movementCollapsed ? '▸ show' : '▾ hide'}</span>
+            </button>
+            ${_wlp.movementCollapsed ? '' : `
             <div class="wlp-section-hint">↑ graduating up to the next room · 🎯 promised a spot (offer accepted, reserved regardless of capacity) · + projected to start from the waitlist (simulated, not guaranteed)</div>
-            <div class="wlp-movement-grid">${movementHtml || '<div class="wlp-empty-note">No graduations or waitlist starts in the next 12 months.</div>'}</div>
+            <div class="wlp-movement-grid" style="grid-template-columns: repeat(${Math.max(movementCols.length, 1)}, minmax(0, 1fr));">${movementHtml || '<div class="wlp-empty-note">No graduations or waitlist starts in the next 12 months.</div>'}</div>
+            `}
         </div>`;
 }
 
@@ -956,6 +964,10 @@ function wlpAttachGridListeners() {
         });
     });
     document.getElementById('wlpMatchClose')?.addEventListener('click', () => { _wlp.selCellA = null; renderWaitlistPlanner(); });
+    document.getElementById('wlpMovementToggle')?.addEventListener('click', () => {
+        _wlp.movementCollapsed = !_wlp.movementCollapsed;
+        renderWaitlistPlanner();
+    });
     document.querySelectorAll('[data-wlp-match-offer]').forEach(el => {
         el.addEventListener('click', e => {
             e.stopPropagation();
