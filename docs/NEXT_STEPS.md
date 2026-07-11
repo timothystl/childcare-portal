@@ -4,6 +4,22 @@ Branch: `claude/kind-mendel-I79x6`. Full findings: `docs/CODE_REVIEW.md`
 (original S/U/V/N/P/Q/C/M items + second-sweep SS1–SS19 + third-sweep T1–T20,
 2026-07-11).
 
+## Backlog — future features (owner ideas, 2026-07-11, not scheduled)
+
+- **Tax reporting statement for parents.** A year-end (or on-demand)
+  statement summarizing total childcare expenses paid per family per tax
+  year, so parents can claim the dependent-care tax credit / FSA
+  reimbursement. Likely a new admin or parent-facing report pulling from
+  `billing_summary`/`billing_payments` (see `admin-finance.js`/
+  `admin-billing.js` for the existing billing-report patterns to extend).
+  Not scoped or estimated yet.
+- **Payment processor integration.** Explicitly **deferred to next year or
+  later** per the owner — not to be started without a separate go-ahead. Once
+  this exists, revisit **T1** (`docs/CODE_REVIEW.md`) as a blocking fix: today
+  a client-trusted invoice amount can only produce a wrong-looking email, but
+  with real payment processing wired up, the same gap would let a fabricated
+  amount actually change what a family gets charged.
+
 ## Manual verification checklist — 2026-07-11 session (owner to run)
 
 Everything below was code-fixed and pushed this session (auto-merged to
@@ -46,27 +62,22 @@ Cloudflare Pages frontend). Edge functions and the Cloudflare Worker are
 - [ ] From `waitlist-status.html`, use **Message the Office** → confirm it
       shows up too, prefixed `[Waitlist Status]`.
 
-### T1 — email-wildcard regex gap (code fixed, needs edge fn + Worker deploy)
-- [ ] **Deploy required:**
-      `supabase functions deploy send-schedule-confirmation` (or paste-into-
-      dashboard, same as the T3 deploy method).
-- [ ] **Deploy required:** redeploy the Cloudflare Worker (`worker.js`) —
-      whatever your normal `wrangler deploy` / CI path is for that.
-- [ ] **Regression test (do this first — highest-risk change):** submit a
-      normal test registration on the public site and confirm the
-      confirmation email still sends successfully (this function is on the
-      live "after registration" path — a broken deploy here would silently
-      stop all parent confirmation emails).
-- [ ] **Security test (optional, needs `curl`/Postman):** POST directly to
-      the `send-schedule-confirmation` function with
-      `"parentEmail": "%@yourtestdomain.com"` and confirm it now returns
-      `400 Invalid email` instead of proceeding.
-- [ ] **Known residual risk — not fixed this session:** this function still
-      has no auth check and trusts client-supplied invoice amounts; see
-      `docs/CODE_REVIEW.md` T1 for why the obvious fix (require admin auth)
-      doesn't apply here and what the real fix needs (schema verification +
-      staging). Not part of this checklist — flagging so it isn't mistaken
-      for done.
+### T1 — email-wildcard regex gap — ✅ CLOSED (deployed 2026-07-11)
+- [x] **Deployed:** owner pasted the updated function into the Supabase
+      dashboard and deployed `send-schedule-confirmation`.
+- [x] **Worker deploy:** no action needed — `worker.js`'s copy of the fix went
+      live automatically via `.github/workflows/auto-merge-claude.yml`'s
+      `npx wrangler deploy` step when this session's branch auto-merged.
+- [ ] Regression-test the confirmation email on a real registration
+      whenever convenient (not urgent — no report of breakage so far).
+- **Known residual risk — deliberately NOT fixed, owner-accepted 2026-07-11:**
+  this function still has no auth check and trusts client-supplied invoice
+  amounts (full write-up: `docs/CODE_REVIEW.md` T1, now filed under Low).
+  Owner's call: since there's no payment processor wired up, the worst case
+  is a confusing/wrong-looking email, not a real financial loss — not worth
+  the risk of destabilizing the confirmation-email path for a fix right now.
+  **Revisit as a blocking fix if/when payment processing is added** (see
+  Backlog below).
 
 ## Third sweep (2026-07-11) — top of the queue
 
