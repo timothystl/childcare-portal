@@ -1464,9 +1464,8 @@ function _arResolveRoom(student) {
     if (student.room_override) return ROOMS.find(r => r.id === student.room_override) || null;
     const dob = student.child_dob;
     if (!dob) return ROOMS.find(r => r.status === 'active') || ROOMS[0];
-    const ageMonths = Math.floor((Date.now() - new Date(dob)) / (1000 * 60 * 60 * 24 * 30.44));
-    return ROOMS.find(r => r.ageMinMonths != null && r.ageMaxMonths != null
-        && ageMonths >= r.ageMinMonths && ageMonths < r.ageMaxMonths)
+    const roomId = roomIdForAgeMonths(calcAgeMonths(dob), ROOMS.filter(r => r.status === 'active'));
+    return (roomId && ROOMS.find(r => r.id === roomId))
         || ROOMS.find(r => r.status === 'active') || ROOMS[0];
 }
 
@@ -1800,7 +1799,7 @@ async function _arSubmit() {
     try {
         const confirmedDates = [..._arDates.entries()].map(([date, dayType]) => ({ date, dayType }));
         const dob = _arStudent.child_dob || null;
-        const ageMonths = dob ? Math.floor((Date.now() - new Date(dob)) / (1000 * 60 * 60 * 24 * 30.44)) : null;
+        const ageMonths = dob ? calcAgeMonths(dob) : null;
         const newReg = await submitRegistration({
             parent:         { name: _arFamily.parent_name, email: _arFamily.parent_email, phone: _arFamily.parent_phone },
             child:          { name: _arStudent.child_name, ageMonths, dob },

@@ -6,19 +6,19 @@
 // WAITLIST MANAGEMENT (admin)
 // ============================================================
 
-// Derive room from a waitlist application record
+// Derive room from a waitlist application record — age at desired_start_date,
+// bucketed against the live ROOMS age ranges (admin-editable via Settings →
+// Rates) via the shared calcAgeMonths()/roomIdForAgeMonths() in supabase.js,
+// same logic every other room-assignment path in the app uses. Uses
+// wlpRooms() (all non-summer rooms, including 'coming_soon' ones like a not-
+// yet-open Goose Room) rather than getRoomIdFromDob()'s active-only list,
+// since the Planner needs to bucket demand for rooms that aren't open yet.
 function wlDeriveRoom(app) {
     const dobStr = app.child_dob || app.expected_due_date;
     if (!dobStr || !app.desired_start_date) return null;
-    const dob   = new Date(dobStr + 'T00:00:00');
     const start = new Date(app.desired_start_date + 'T00:00:00');
-    const months = (start.getFullYear() - dob.getFullYear()) * 12 +
-                   (start.getMonth() - dob.getMonth());
-    if (months < 12)  return 'bear';
-    if (months < 24)  return 'bee';
-    if (months < 30)  return 'turtle';
-    if (months < 36)  return 'goose';
-    return 'owl';
+    const months = calcAgeMonths(dobStr, start);
+    return roomIdForAgeMonths(months, wlpRooms());
 }
 
 function wlRoomLabel(roomId) {
@@ -420,7 +420,7 @@ function wlpRenderHeader() {
     const sub = isQueue
         ? "Every waitlisted child, ranked by priority — expand any row for their 12-month outlook."
         : (_wlp.capacityView === 'grid'
-            ? 'Open slots per room, 12 months out — click a month to see who fits.'
+            ? 'Open slots (big number) and enrolled/capacity (small number) per room, 12 months out — click a month to see who fits.'
             : 'One month at a time — click an open slot to see who to offer it to.');
     return `
         <div class="wlp-header">
@@ -781,7 +781,9 @@ function wlpRenderGrid(alloc) {
             const isSel = sel && sel.roomId === room.id && sel.monthIdx === mo.idx;
             const chips = TREND_DAYS.map(d => {
                 const open = dayMap[d];
-                return `<div class="wlp-cap-chip ${wlpAvailClass(open, room.capacity)}"><div class="wlp-cap-chip-day">${d}</div><div class="wlp-cap-chip-open">${open}</div></div>`;
+                const cap = room.capacity ?? 0;
+                const enrolled = Math.max(0, cap - open);
+                return `<div class="wlp-cap-chip ${wlpAvailClass(open, room.capacity)}"><div class="wlp-cap-chip-day">${d}</div><div class="wlp-cap-chip-open">${open}</div><div class="wlp-cap-chip-enrolled">${enrolled}/${room.capacity ?? '—'}</div></div>`;
             }).join('');
             return `<td class="wlp-month-cell ${isSel ? 'selected' : ''}" data-wlp-cell="${room.id}:${mo.idx}"><div class="wlp-cap-chip-row">${chips}</div></td>`;
         }).join('');
