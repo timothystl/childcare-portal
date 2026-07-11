@@ -126,7 +126,8 @@ let _wlp = {
     search: '',
     roomFilter: '',
     toastText: null,
-    movementCollapsed: true, // "Who's moving" — collapsed by default, it's long
+    movementCollapsed: true,   // "Who's moving" — collapsed by default, it's long
+    topWaitlistCollapsed: false, // "Top of the waitlist, by room" — compact, shown by default
 };
 let _wlpAlloc = null; // last computed allocation — see wlpRunAllocation()
 
@@ -484,6 +485,7 @@ function renderWaitlistPlanner() {
     root.innerHTML = `
         <div class="wlp-card">
             ${wlpRenderHeader()}
+            ${wlpRenderTopSummary(alloc)}
             ${isCapacity ? wlpRenderToolbar(alloc) : ''}
             ${isQueue ? wlpRenderQueue(alloc) : ''}
             ${isGrid ? wlpRenderGrid(alloc) : ''}
@@ -545,6 +547,14 @@ function wlpAttachHeaderListeners() {
         btn.addEventListener('click', () => { _wlp.capacityView = btn.dataset.wlpView; renderWaitlistPlanner(); });
     });
     document.getElementById('wlpAddBtn')?.addEventListener('click', _openAdminWlModal);
+    document.getElementById('wlpMovementToggle')?.addEventListener('click', () => {
+        _wlp.movementCollapsed = !_wlp.movementCollapsed;
+        renderWaitlistPlanner();
+    });
+    document.getElementById('wlpTopWaitlistToggle')?.addEventListener('click', () => {
+        _wlp.topWaitlistCollapsed = !_wlp.topWaitlistCollapsed;
+        renderWaitlistPlanner();
+    });
     document.getElementById('wlpPrevMonth')?.addEventListener('click', () => {
         _wlp.boardMonthIdx = Math.max(0, _wlp.boardMonthIdx - 1);
         _wlp.selSlotC = null; _wlp.highlightKidC = null;
@@ -852,8 +862,11 @@ function wlpWireQueueRowActions() {
     });
 }
 
-// ── Capacity Planner — Grid view ────────────────────────────
-function wlpRenderGrid(alloc) {
+// ── Persistent top summary — "Who's moving" and "Top of the waitlist"
+// shown above the Queue/Grid/Board toggle regardless of active tab, so
+// they don't disappear when you switch views (previously Grid-only and
+// Board-only, respectively).
+function wlpRenderTopSummary(alloc) {
     const movementCols = alloc.rooms.map(room => ({ room, events: wlpMovementEvents(room.id, alloc) })).filter(x => x.events.length);
     const movementCount = movementCols.reduce((sum, c) => sum + c.events.length, 0);
     const movementHtml = movementCols.map(({ room, events }) => `
@@ -861,6 +874,42 @@ function wlpRenderGrid(alloc) {
             <div class="wlp-movement-col-title">${escHtml(room.label)}</div>
             <div class="wlp-movement-events">${events.map(wlpEventCardHtml).join('')}</div>
         </div>`).join('');
+
+    const topCols = alloc.rooms.map(room => ({
+        room, kids: wlpSortByPriority(alloc.kids.filter(k => k.room === room.id)).slice(0, 3),
+    })).filter(r => r.kids.length);
+    const topHtml = topCols.map(({ room, kids }) => `
+        <div class="wlp-movement-col">
+            <div class="wlp-movement-col-title">${escHtml(room.label)}</div>
+            ${kids.map(wlpTopRowHtml).join('')}
+        </div>`).join('');
+
+    return `
+        <div class="wlp-movement-panel">
+            <button type="button" class="wlp-collapse-toggle" id="wlpMovementToggle">
+                <div class="wlp-section-label">Who's moving — next 12 months</div>
+                <span class="wlp-collapse-count">${movementCount} move${movementCount === 1 ? '' : 's'}</span>
+                <span class="wlp-collapse-icon">${_wlp.movementCollapsed ? '▸ show' : '▾ hide'}</span>
+            </button>
+            ${_wlp.movementCollapsed ? '' : `
+            <div class="wlp-section-hint">↑ graduating up to the next room · 🎯 promised a spot (offer accepted, reserved regardless of capacity) · + projected to start from the waitlist (simulated, not guaranteed)</div>
+            <div class="wlp-movement-grid" style="grid-template-columns: repeat(${Math.max(movementCols.length, 1)}, minmax(0, 1fr));">${movementHtml || '<div class="wlp-empty-note">No graduations or waitlist starts in the next 12 months.</div>'}</div>
+            `}
+        </div>
+        <div class="wlp-movement-panel">
+            <button type="button" class="wlp-collapse-toggle" id="wlpTopWaitlistToggle">
+                <div class="wlp-section-label">Top of the waitlist, by room</div>
+                <span class="wlp-collapse-icon">${_wlp.topWaitlistCollapsed ? '▸ show' : '▾ hide'}</span>
+            </button>
+            ${_wlp.topWaitlistCollapsed ? '' : `
+            <div class="wlp-section-hint">Ranked by sibling priority, then longest wait.</div>
+            <div class="wlp-movement-grid" style="grid-template-columns: repeat(${Math.max(topCols.length, 1)}, minmax(0, 1fr));">${topHtml || '<div class="wlp-empty-note">No one on the waitlist.</div>'}</div>
+            `}
+        </div>`;
+}
+
+// ── Capacity Planner — Grid view ────────────────────────────
+function wlpRenderGrid(alloc) {
 
     const monthHeads = alloc.months.map(m => `<th class="wlp-month-head">${escHtml(m.label)}</th>`).join('');
     const roomRows = alloc.rooms.map(room => {
@@ -941,18 +990,7 @@ function wlpRenderGrid(alloc) {
                 </table>
             </div>
         </div>
-        ${matchPanel}
-        <div class="wlp-movement-panel">
-            <button type="button" class="wlp-collapse-toggle" id="wlpMovementToggle">
-                <div class="wlp-section-label">Who's moving — next 12 months</div>
-                <span class="wlp-collapse-count">${movementCount} move${movementCount === 1 ? '' : 's'}</span>
-                <span class="wlp-collapse-icon">${_wlp.movementCollapsed ? '▸ show' : '▾ hide'}</span>
-            </button>
-            ${_wlp.movementCollapsed ? '' : `
-            <div class="wlp-section-hint">↑ graduating up to the next room · 🎯 promised a spot (offer accepted, reserved regardless of capacity) · + projected to start from the waitlist (simulated, not guaranteed)</div>
-            <div class="wlp-movement-grid" style="grid-template-columns: repeat(${Math.max(movementCols.length, 1)}, minmax(0, 1fr));">${movementHtml || '<div class="wlp-empty-note">No graduations or waitlist starts in the next 12 months.</div>'}</div>
-            `}
-        </div>`;
+        ${matchPanel}`;
 }
 
 function wlpAttachGridListeners() {
@@ -964,10 +1002,6 @@ function wlpAttachGridListeners() {
         });
     });
     document.getElementById('wlpMatchClose')?.addEventListener('click', () => { _wlp.selCellA = null; renderWaitlistPlanner(); });
-    document.getElementById('wlpMovementToggle')?.addEventListener('click', () => {
-        _wlp.movementCollapsed = !_wlp.movementCollapsed;
-        renderWaitlistPlanner();
-    });
     document.querySelectorAll('[data-wlp-match-offer]').forEach(el => {
         el.addEventListener('click', e => {
             e.stopPropagation();
@@ -1070,6 +1104,8 @@ function wlpRenderBoardSidebar(sel, mi, alloc) {
         </div>`;
 }
 
+// "Top of the waitlist, by room" moved to the persistent top summary
+// (wlpRenderTopSummary) — shown above every tab now, not just here.
 function wlpRenderBoardDefaultPanels(mi, alloc) {
     const allRoomsMoving = alloc.rooms.map(room => ({
         room, events: wlpMovementEvents(room.id, alloc).filter(ev => ev.monthLabel === alloc.months[mi].label),
@@ -1080,29 +1116,11 @@ function wlpRenderBoardDefaultPanels(mi, alloc) {
             <div class="wlp-movement-events">${events.map(wlpEventCardHtml).join('')}</div>
         </div>`).join('');
 
-    const allRoomsTop = alloc.rooms.map(room => ({
-        room, kids: wlpSortByPriority(alloc.kids.filter(k => k.room === room.id)).slice(0, 3),
-    })).filter(r => r.kids.length);
-    const topCols = allRoomsTop.map(({ room, kids }) => `
-        <div class="wlp-default-group">
-            <div class="wlp-movement-col-title">${escHtml(room.label)}</div>
-            ${kids.map(wlpTopRowHtml).join('')}
-        </div>`).join('');
-
     return `
         <div class="wlp-default-panels">
-            <div class="wlp-default-cols">
-                <div class="wlp-default-col">
-                    <div class="wlp-section-label" style="margin-bottom:2px">Moving this month, all rooms</div>
-                    <div class="wlp-section-hint">Click a slot above to focus this on one room.</div>
-                    <div class="wlp-default-groups">${movingCols || '<div class="wlp-empty-note">No graduations or waitlist starts land anywhere this month.</div>'}</div>
-                </div>
-                <div class="wlp-default-col">
-                    <div class="wlp-section-label" style="margin-bottom:2px">Top of the waitlist, by room</div>
-                    <div class="wlp-section-hint">Ranked by sibling priority, then longest wait.</div>
-                    <div class="wlp-default-groups">${topCols || '<div class="wlp-empty-note">No one on the waitlist.</div>'}</div>
-                </div>
-            </div>
+            <div class="wlp-section-label" style="margin-bottom:2px">Moving this month, all rooms</div>
+            <div class="wlp-section-hint">Click a slot above to focus this on one room.</div>
+            <div class="wlp-default-groups">${movingCols || '<div class="wlp-empty-note">No graduations or waitlist starts land anywhere this month.</div>'}</div>
         </div>`;
 }
 
