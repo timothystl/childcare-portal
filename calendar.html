@@ -248,7 +248,16 @@
                     </div>
                     <div class="form-group">
                         <label>Days Needed <span class="req">*</span></label>
-                        <div class="wl-days-row">
+                        <div class="wl-days-row" style="margin-bottom:8px">
+                            <label><input type="radio" name="wlDaysMode" value="specific" id="wlDaysModeSpecific" checked> Specific days</label>
+                            <label>
+                                <input type="radio" name="wlDaysMode" value="flexible" id="wlDaysModeFlexible"> Any
+                                <select id="wlFlexCount" disabled style="width:auto;margin:0 4px">
+                                    <option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option>
+                                </select> days/week
+                            </label>
+                        </div>
+                        <div class="wl-days-row" id="wlDaysCheckboxes">
                             <label><input type="checkbox" class="wlDay" value="Mon"> Mon</label>
                             <label><input type="checkbox" class="wlDay" value="Tue"> Tue</label>
                             <label><input type="checkbox" class="wlDay" value="Wed"> Wed</label>

@@ -1682,6 +1682,14 @@ function downloadIcal(sortedDates, parentName) {
         sibFields.classList.toggle('hidden', !hasSib.checked);
     });
 
+    const daysCheckboxes = document.getElementById('wlDaysCheckboxes');
+    const flexCountSel   = document.getElementById('wlFlexCount');
+    document.querySelectorAll('input[name="wlDaysMode"]').forEach(r => r.addEventListener('change', () => {
+        const flexible = document.querySelector('input[name="wlDaysMode"]:checked').value === 'flexible';
+        daysCheckboxes.style.display = flexible ? 'none' : '';
+        flexCountSel.disabled = !flexible;
+    }));
+
     successCl.addEventListener('click', () => { successM.style.display = 'none'; });
 
     form.addEventListener('submit', async e => {
@@ -1689,8 +1697,9 @@ function downloadIcal(sortedDates, parentName) {
         const btn = document.getElementById('wlSubmitBtn');
 
         // Validate days
+        const flexible = document.querySelector('input[name="wlDaysMode"]:checked').value === 'flexible';
         const days = [...document.querySelectorAll('.wlDay:checked')].map(cb => cb.value);
-        if (!days.length) { showToast('Please select at least one day.'); return; }
+        if (!flexible && !days.length) { showToast('Please select at least one day, or choose "Any" days.'); return; }
 
         btn.disabled = true;
         btn.textContent = 'Submitting…';
@@ -1710,7 +1719,9 @@ function downloadIcal(sortedDates, parentName) {
             expected_due_date:  dueDate,
             desired_start_date: startDate,
             start_flexibility:  document.getElementById('wlFlexibility').value,
-            days_of_week:       days.join(','),
+            days_of_week:       flexible ? null : days.join(','),
+            days_flexible:       flexible,
+            days_flexible_count: flexible ? Number(flexCountSel.value) || 3 : null,
             day_type:           dayType,
             has_sibling:        hasSib.checked,
             sibling_child_name: hasSib.checked ? (document.getElementById('wlSiblingName').value.trim() || null) : null,
