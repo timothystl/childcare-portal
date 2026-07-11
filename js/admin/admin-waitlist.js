@@ -1126,45 +1126,21 @@ function wlpOfferDaysForKid(k, monthIdx) {
     return { avail, missing };
 }
 
-// Every date in a given "YYYY-MM" month matching the given weekday names,
-// skipping already-past dates and closures — the same rule the Add
-// Registration calendar itself enforces (see _arRenderCal in
-// admin-calendar.js), so nothing pre-checked here ever gets rejected there.
-function wlpDatesForMonthAndDays(moKey, days) {
-    const [y, m] = moKey.split('-').map(Number); // m is 1-based
-    const dayNum = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5 };
-    const wanted = new Set(days.map(d => dayNum[d]).filter(n => n != null));
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const lastDay = new Date(y, m, 0).getDate();
-    const dates = [];
-    for (let day = 1; day <= lastDay; day++) {
-        const d = new Date(y, m - 1, day);
-        if (!wanted.has(d.getDay()) || d < today) continue;
-        const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        if (allClosureDates.has(dateStr)) continue;
-        dates.push(dateStr);
-    }
-    return dates;
-}
-
 // "Enroll" a waitlisted kid directly — for after you've already talked to
 // the parent and confirmed, so it skips the formal email-offer flow and
 // jumps straight into the real Add Registration flow (admin-calendar.js),
-// pre-filled with this kid's info and the matched days already checked on
-// the calendar for the target month. The admin still reviews and clicks
-// Submit there — this doesn't book anything on its own.
+// pre-filled with this kid's info and opened to the target month. No days
+// are pre-checked — the admin picks the actual dates on the calendar there
+// (which already shows live capacity/closures per day), same as any other
+// registration. This doesn't book anything on its own.
 function wlpEnrollFromWaitlist(kidId, monthIdx) {
     const alloc = _wlpAlloc;
     if (!alloc) return;
     const k = alloc.kids.find(x => x.id === kidId);
     if (!k) return;
     const mi = monthIdx != null ? monthIdx : k.desiredStartM;
-    const { avail } = wlpOfferDaysForKid(k, mi);
-    if (!avail.length) { alert(`${k.name} has no open days in ${alloc.months[mi].label} to enroll into.`); return; }
-
     const room = alloc.roomMeta[k.room].room;
-    const dates = wlpDatesForMonthAndDays(alloc.months[mi].key, avail);
-    if (!dates.length) { alert(`No open calendar dates found for ${k.name} in ${alloc.months[mi].label} — closures may account for the rest.`); return; }
+    const moKey = alloc.months[mi].key;
 
     // The waitlist forms never require a phone number, but `registrations`
     // does (NOT NULL) — every other path into that table already has one by
@@ -1183,8 +1159,7 @@ function wlpEnrollFromWaitlist(kidId, monthIdx) {
         childName:   k.name,
         childDob:    k.app.child_dob || null,
         room,
-        dates,
-        dayType:     k.dayType,
+        moKey,
         waitlistAppId: k.id,
     });
 }
