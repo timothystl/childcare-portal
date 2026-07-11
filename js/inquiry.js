@@ -25,13 +25,22 @@ document.addEventListener('DOMContentLoaded', () => {
         sibFields.classList.toggle('hidden', !hasSib.checked);
     });
 
+    const daysCheckboxes = document.getElementById('iqDaysCheckboxes');
+    const flexCountSel   = document.getElementById('iqFlexCount');
+    document.querySelectorAll('input[name="iqDaysMode"]').forEach(r => r.addEventListener('change', () => {
+        const flexible = document.querySelector('input[name="iqDaysMode"]:checked').value === 'flexible';
+        daysCheckboxes.style.display = flexible ? 'none' : '';
+        flexCountSel.disabled = !flexible;
+    }));
+
     form.addEventListener('submit', async e => {
         e.preventDefault();
         errorEl.classList.add('hidden');
         const btn = document.getElementById('iqSubmitBtn');
 
+        const flexible = document.querySelector('input[name="iqDaysMode"]:checked').value === 'flexible';
         const days = [...document.querySelectorAll('.iqDay:checked')].map(cb => cb.value);
-        if (!days.length) { showInquiryError('Please select at least one day.'); return; }
+        if (!flexible && !days.length) { showInquiryError('Please select at least one day, or choose "Any" days.'); return; }
 
         const parentName  = document.getElementById('iqParentName').value.trim();
         const parentEmail = document.getElementById('iqParentEmail').value.trim();
@@ -59,7 +68,9 @@ document.addEventListener('DOMContentLoaded', () => {
             expected_due_date:  dueDate,
             desired_start_date: startDate,
             start_flexibility:  document.getElementById('iqFlexibility').value,
-            days_of_week:       days.join(','),
+            days_of_week:       flexible ? null : days.join(','),
+            days_flexible:       flexible,
+            days_flexible_count: flexible ? Number(flexCountSel.value) || 3 : null,
             day_type:           dayType,
             has_sibling:        hasSib.checked,
             sibling_child_name: hasSib.checked ? (document.getElementById('iqSiblingName').value.trim() || null) : null,

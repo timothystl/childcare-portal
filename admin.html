@@ -519,12 +519,23 @@
                         </div>
                         <div class="admin-wl-row">
                             <label>Days Needed</label>
-                            <div style="display:flex;gap:8px;flex-wrap:wrap">
-                                <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Mon" checked> Mon</label>
-                                <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Tue" checked> Tue</label>
-                                <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Wed" checked> Wed</label>
-                                <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Thu" checked> Thu</label>
-                                <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Fri" checked> Fri</label>
+                            <div>
+                                <div style="display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap">
+                                    <label style="font-weight:normal;cursor:pointer"><input type="radio" name="adminWlDaysMode" value="specific" id="adminWlDaysModeSpecific" checked> Specific days</label>
+                                    <label style="font-weight:normal;cursor:pointer">
+                                        <input type="radio" name="adminWlDaysMode" value="flexible" id="adminWlDaysModeFlexible"> Any
+                                        <select id="adminWlFlexCount" disabled style="width:auto;margin:0 4px">
+                                            <option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option>
+                                        </select> days/week
+                                    </label>
+                                </div>
+                                <div id="adminWlDaysCheckboxes" style="display:flex;gap:8px;flex-wrap:wrap">
+                                    <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Mon" checked> Mon</label>
+                                    <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Tue" checked> Tue</label>
+                                    <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Wed" checked> Wed</label>
+                                    <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Thu" checked> Thu</label>
+                                    <label class="admin-wl-day-label"><input type="checkbox" class="adminWlDay" value="Fri" checked> Fri</label>
+                                </div>
                             </div>
                         </div>
                         <div class="admin-wl-row">

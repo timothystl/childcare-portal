@@ -68,6 +68,7 @@ function wlInterestTag(app) {
 // Human-readable "days needed" label — mirrors how an empty/null days_of_week
 // is interpreted everywhere else in the planning logic (defaults to all 5).
 function wlDaysLabel(app) {
+    if (app.days_flexible) return `Any ${app.days_flexible_count || 3} days/week`;
     const days = (app.days_of_week || '').split(',').map(s => s.trim()).filter(Boolean);
     return days.length ? days.join(', ') : 'Any (M–F)';
 }
@@ -101,7 +102,7 @@ async function loadWaitlistApplications() {
 // WAITLIST & CAPACITY PLANNER  (Queue / Grid / Board)
 // ============================================================
 // One priority-ordered capacity allocation drives all three views so they can
-// never disagree — see wlpRunAllocation(). Reuses PROMOTION_CHAIN and
+// never disagree — see wlpRunAllocation(). Reuses wlpPromotionChain() and
 // _buildGraduationIndex() below (graduation events are domain knowledge
 // already computed for the Enrollment Trends forecast — not something this
 // tool should derive a second, possibly-divergent way).
@@ -240,6 +241,21 @@ function wlpAppDays(app) {
     return named.length ? named.filter(d => TREND_DAYS.includes(d)) : TREND_DAYS.slice();
 }
 
+// For a flexible-days kid ("any N days a week"): the N weekdays with the
+// most room in a given month, auto-picked so the grid keeps a concrete
+// schedule to reserve/display — or null if fewer than N weekdays have any
+// room at all that month (doesn't fit, same meaning as a specific-days kid
+// failing its every-day check).
+function wlpFlexDaysFor(k, preGrid, month) {
+    const open = TREND_DAYS.filter(d => preGrid[month][d] >= 1);
+    if (open.length < k.flexibleCount) return null;
+    return open
+        .slice()
+        .sort((a, b) => preGrid[month][b] - preGrid[month][a])
+        .slice(0, k.flexibleCount)
+        .sort((a, b) => TREND_DAYS.indexOf(a) - TREND_DAYS.indexOf(b));
+}
+
 // desired_start_date -> month index (0-11) within the planning window,
 // clamped to the window (a past-due or far-future date lands on the nearest
 // edge rather than being excluded).
@@ -285,7 +301,7 @@ function wlpAvailClass(open, capacity) {
 // leaving side is ever narrated as a card (matches the design); the arriving
 // side's capacity is still applied under the hood by wlpComputeGradGrid().
 function wlpMovementEvents(roomId, alloc) {
-    const nextId = PROMOTION_CHAIN[roomId]?.nextRoom;
+    const nextId = wlpPromotionChain()[roomId]?.nextRoom;
     const nextLabel = nextId ? alloc.roomMeta[nextId]?.room.label.replace(/^\S+\s/, '') : null;
     const out = [];
     alloc.months.forEach(mo => {
@@ -331,7 +347,7 @@ function wlpBoardNoteFor(roomId, monthIdx, alloc) {
     const incoming = alloc.incoming[roomId][monthIdx] || [];
     const parts = [];
     if (grads.length) {
-        const nextId = PROMOTION_CHAIN[roomId]?.nextRoom;
+        const nextId = wlpPromotionChain()[roomId]?.nextRoom;
         const nextLabel = nextId ? alloc.roomMeta[nextId]?.room.label.replace(/^\S+\s/, '') : 'graduates the program';
         parts.push(grads.map(g => `↑ ${g.name} → ${nextLabel} (${g.days.join(',')})`).join('; '));
     }
@@ -361,13 +377,20 @@ function wlpRunAllocation() {
         // (offered_days, for a partial offer) rather than the original full
         // request, when that's on record.
         const promised = a.status === 'accepted';
-        const offeredDays = (a.offered_days || '').split(',').map(s => s.trim()).filter(Boolean);
+        const offeredDays = (a.offered_days || '').split(',').map(s => s.trim()).filter(d => TREND_DAYS.includes(d));
+        // days_flexible ("any N days a week") — no specific days requested;
+        // the Planner resolves actual weekdays at match/reservation time
+        // (see wlpFlexDaysFor), same as offered_days does for a promised
+        // partial offer.
+        const flexible = !!a.days_flexible;
         return {
             app: a,
             id: a.id,
             name: a.child_name,
             room: wlDeriveRoom(a),
-            days: (promised && offeredDays.length) ? offeredDays.filter(d => TREND_DAYS.includes(d)) : wlpAppDays(a),
+            days: (promised && offeredDays.length) ? offeredDays : (flexible ? [] : wlpAppDays(a)),
+            flexible,
+            flexibleCount: flexible ? Math.max(1, Math.min(5, a.days_flexible_count || 3)) : null,
             desiredStartM: wlpDesiredMonthIdx(a),
             sibling: !!a.has_sibling,
             appliedAt: a.applied_at,
@@ -391,6 +414,14 @@ function wlpRunAllocation() {
         kids.filter(k => k.room === r.id && k.promised).forEach(k => {
             preGridByKid[k.id] = working[r.id].map(day => ({ ...day }));
             fitMonthByKid[k.id] = k.desiredStartM;
+            if (k.flexible && !k.days.length) {
+                // No offered_days on record for this promised flexible kid —
+                // still a real commitment, so reserve something concrete;
+                // auto-pick the best-available days, falling back to the
+                // first N weekdays if nothing currently fits (may overbook,
+                // which is the correct signal — see wlpComputeGradGrid).
+                k.days = wlpFlexDaysFor(k, working[r.id], k.desiredStartM) || TREND_DAYS.slice(0, k.flexibleCount);
+            }
             for (let mm = k.desiredStartM; mm < 12; mm++) {
                 k.days.forEach(d => { working[r.id][mm][d] -= 1; });
             }
@@ -405,13 +436,20 @@ function wlpRunAllocation() {
             const preGrid = working[r.id].map(day => ({ ...day }));
             preGridByKid[k.id] = preGrid;
             let fitMonth = null;
+            let chosenDays = k.days;
             for (let m = k.desiredStartM; m < 12; m++) {
-                if (k.days.every(d => preGrid[m][d] >= 1)) { fitMonth = m; break; }
+                if (k.flexible) {
+                    const flex = wlpFlexDaysFor(k, preGrid, m);
+                    if (flex) { fitMonth = m; chosenDays = flex; break; }
+                } else if (k.days.every(d => preGrid[m][d] >= 1)) {
+                    fitMonth = m; break;
+                }
             }
             fitMonthByKid[k.id] = fitMonth;
+            if (k.flexible) k.days = fitMonth !== null ? chosenDays : [];
             if (fitMonth !== null) {
                 for (let mm = fitMonth; mm < 12; mm++) {
-                    k.days.forEach(d => { working[r.id][mm][d] = Math.max(0, working[r.id][mm][d] - 1); });
+                    chosenDays.forEach(d => { working[r.id][mm][d] = Math.max(0, working[r.id][mm][d] - 1); });
                 }
             }
         });
@@ -547,7 +585,7 @@ function wlpRenderQueue(alloc) {
                 </select>
                 <span class="rates-status" id="wlpQueueCount">${kids.length} on the waitlist</span>
             </div>
-            <div class="wlp-queue-hint">Day chips show their exact request at desired start: green = open, red = taken, dim = not requested. Click a month in the strip for that month's breakdown.</div>
+            <div class="wlp-queue-hint">Day chips show their exact request at desired start: green = open, red = taken, dim = not requested. 🔀 = flexible ("any N days") — the Planner auto-picks the least-crowded days once they fit. Click a month in the strip for that month's breakdown.</div>
             <div id="wlpQueueRows">${wlpQueueRowsHtml(kids, alloc)}</div>
             ${_wlp.toastText ? `<div class="wlp-toast">${escHtml(_wlp.toastText)}</div>` : ''}
         </div>`;
@@ -568,7 +606,9 @@ function wlpRenderQueueRow(k, alloc) {
     else { fitCls = 'wlp-status-amber'; fitLabel = `Fits ${alloc.months[fitM].label}`; }
 
     const startDayMap = preGrid[k.desiredStartM];
-    const chips = wlpDayChips(k, startDayMap).map(wlpChipHtml).join('');
+    const chips = (k.flexible && !k.days.length)
+        ? `<span class="wlp-chip wlp-chip-off" style="width:auto;padding:2px 8px">any ${k.flexibleCount}/wk — no fit</span>`
+        : wlpDayChips(k, startDayMap).map(wlpChipHtml).join('');
     const expanded = _wlp.expandedKidB === k.id;
     const room = alloc.roomMeta[k.room].room;
 
@@ -579,7 +619,7 @@ function wlpRenderQueueRow(k, alloc) {
                 <div class="wlp-row-body">
                     <div class="wlp-row-name">${escHtml(k.name)}${wlpDayTypeTag(k)} <span class="wlp-row-room">· ${escHtml(room.label.replace(/^\S+\s/, ''))}</span></div>
                     <div class="wlp-chip-row">${chips}</div>
-                    <div class="wlp-row-meta">${k.sibling ? '👨‍👩‍👧 sibling · ' : ''}waiting ${escHtml(wlDaysWaiting(k.appliedAt))} · desired start ${escHtml(alloc.months[k.desiredStartM].label)}</div>
+                    <div class="wlp-row-meta">${k.sibling ? '👨‍👩‍👧 sibling · ' : ''}${k.flexible ? `🔀 any ${k.flexibleCount} days/wk · ` : ''}waiting ${escHtml(wlDaysWaiting(k.appliedAt))} · desired start ${escHtml(alloc.months[k.desiredStartM].label)}</div>
                 </div>
                 <div class="wlp-status-pill ${fitCls}">${fitLabel}</div>
                 <button type="button" class="wlp-edit-btn" data-wlp-edit="${k.id}" title="Edit child">✎ Edit</button>
@@ -597,8 +637,11 @@ function wlpRenderQueueExpand(k, alloc) {
         const before = mo.idx < k.desiredStartM;
         let cls = 'wlp-strip-before', sub = '—';
         if (!before) {
-            const all = k.days.every(d => dayMap[d] >= 1);
-            const some = k.days.some(d => dayMap[d] >= 1);
+            // .length check first — see the matching guard in wlpRenderGrid's
+            // match panel: an unresolved flexible kid's empty days array must
+            // not read as "fits" via a vacuously-true .every().
+            const all = k.days.length > 0 && k.days.every(d => dayMap[d] >= 1);
+            const some = k.days.length > 0 && k.days.some(d => dayMap[d] >= 1);
             if (all) { cls = 'wlp-strip-fits'; sub = 'fits'; }
             else if (some) { cls = 'wlp-strip-partial'; sub = 'partial'; }
             else { cls = 'wlp-strip-full'; sub = 'full'; }
@@ -842,8 +885,12 @@ function wlpRenderGrid(alloc) {
         const ranked = wlpSortByPriority(candidates);
         const matchesHtml = ranked.map((k, i) => {
             const dayMap = alloc.preGridByKid[k.id][monthIdx];
-            const allFit = k.days.every(d => dayMap[d] >= 1);
-            const someFit = k.days.some(d => dayMap[d] >= 1);
+            // .length check first: an unresolved flexible kid (k.days still
+            // empty — never found N open days anywhere in the 12-month
+            // window) must not read as "fits" via a vacuously-true .every()
+            // on an empty array.
+            const allFit = k.days.length > 0 && k.days.every(d => dayMap[d] >= 1);
+            const someFit = k.days.length > 0 && k.days.some(d => dayMap[d] >= 1);
             const status = allFit ? { label: 'Fits now', cls: 'wlp-status-green' }
                 : someFit ? { label: 'Partial fit', cls: 'wlp-status-amber' }
                 : { label: 'No room', cls: 'wlp-status-red' };
@@ -851,7 +898,9 @@ function wlpRenderGrid(alloc) {
             const seatedNote = fm == null ? 'no fit found in the 12-month window'
                 : fm === monthIdx ? 'this is their turn in queue order'
                 : `queue turn: ${alloc.months[fm].label}`;
-            const chips = wlpDayChips(k, dayMap).map(wlpChipHtml).join('');
+            const chips = k.days.length
+                ? wlpDayChips(k, dayMap).map(wlpChipHtml).join('')
+                : `<span class="wlp-chip wlp-chip-off" style="width:auto;padding:2px 8px">any ${k.flexibleCount}/wk — no fit</span>`;
             return `
                 <div class="wlp-match-card">
                     <div class="wlp-match-rank ${allFit ? 'wlp-match-rank-fit' : 'wlp-match-rank-nofit'}">${i + 1}</div>
@@ -1125,15 +1174,22 @@ function wlpFlashToast(text) {
 // ============================================================
 
 // Which room a child moves into when they age out of their current room, and
-// at what age. Owl has no destination — aging out of Owl means leaving the
-// program (e.g. off to kindergarten), not moving to another MDO room.
-const PROMOTION_CHAIN = {
-    bear:   { ageOutMonths: 12, nextRoom: 'bee' },
-    bee:    { ageOutMonths: 24, nextRoom: 'turtle' },
-    turtle: { ageOutMonths: 30, nextRoom: 'goose' },
-    goose:  { ageOutMonths: 36, nextRoom: 'owl' },
-    owl:    { ageOutMonths: 60, nextRoom: null },
-};
+// at what age — derived live from ROOMS' age ranges (admin-editable via
+// Settings → Rates) rather than a second, hand-maintained copy of the same
+// sequence. A hard-coded chain here would silently point the wrong way the
+// next time a room's age range changes (this happened: an edited Goose/Owl
+// range flipped their real order to Turtle → Owl → Goose → graduate, while
+// a hard-coded chain kept assuming Turtle → Goose → Owl). The LAST room in
+// age order has no destination — aging out of it means leaving the program
+// (e.g. off to kindergarten), not moving to another MDO room.
+function wlpPromotionChain() {
+    const chain = {};
+    const ordered = getSortedRooms().filter(r => r.id !== 'summer' && r.ageMinMonths != null);
+    ordered.forEach((room, i) => {
+        chain[room.id] = { ageOutMonths: room.ageMaxMonths, nextRoom: ordered[i + 1]?.id || null };
+    });
+    return chain;
+}
 
 function _nextMoKey(moKey) {
     const [y, m] = moKey.split('-').map(Number);
@@ -1161,8 +1217,9 @@ function _weekdayDayTypeMap(reg) {
 function _buildGraduationIndex() {
     const gradOut = {}, gradIn = {};
     const seen = new Set();
+    const promotionChain = wlpPromotionChain();
     (allRegistrations || []).forEach(reg => {
-        const chain = PROMOTION_CHAIN[reg.room_id];
+        const chain = promotionChain[reg.room_id];
         if (!chain || !reg.child_dob) return;
         const key = `${reg.child_name}:${reg.room_id}`;
         if (seen.has(key)) return;
@@ -1200,18 +1257,25 @@ function _buildWaitlistPriorityQueues() {
             if (!a.desired_start_date) return;
             const roomId = wlDeriveRoom(a);
             if (!roomId) return;
-            const named = (a.days_of_week || '').split(',').map(s => s.trim()).filter(Boolean);
-            const days  = named.length ? named : TREND_DAYS;
+            const flexible = !!a.days_flexible;
+            const flexibleCount = flexible ? Math.max(1, Math.min(5, a.days_flexible_count || 3)) : null;
             const type  = a.day_type === 'half' ? 'half' : 'full';
             const weekdays = {};
-            days.forEach(d => { if (TREND_DAYS.includes(d)) weekdays[d] = type; });
-            if (!Object.keys(weekdays).length) return; // no valid requested days — nothing to simulate
+            if (!flexible) {
+                const named = (a.days_of_week || '').split(',').map(s => s.trim()).filter(Boolean);
+                const days  = named.length ? named : TREND_DAYS;
+                days.forEach(d => { if (TREND_DAYS.includes(d)) weekdays[d] = type; });
+                if (!Object.keys(weekdays).length) return; // no valid requested days — nothing to simulate
+            }
 
             if (!byRoom[roomId]) byRoom[roomId] = [];
             byRoom[roomId].push({
                 id: a.id,
                 childName: a.child_name,
                 weekdays,
+                flexible,
+                flexibleCount,
+                dayType: type,
                 desiredMoKey:     a.desired_start_date.slice(0, 7),
                 desiredStartDate: a.desired_start_date,
                 appliedAt:        a.applied_at,
@@ -1283,10 +1347,27 @@ function _simulateRoomAdmissions(trendMap, roomId, targetMoKey, today) {
             });
         });
 
-        // Waitlist admissions: priority order, all-requested-days-or-nothing.
+        // Waitlist admissions: priority order, all-requested-days-or-nothing —
+        // except flexible ("any N days") entries, which admit as soon as N
+        // weekdays have room, auto-picking the N least-crowded ones (same
+        // approach the Capacity Planner grid uses).
         queue.forEach(entry => {
             if (admitted.has(entry.id)) return;
             if (entry.desiredMoKey > cursor) return; // not eligible before their desired month
+
+            if (entry.flexible) {
+                const openDays = TREND_DAYS.filter(day => pattern[day].half + pattern[day].full + 1 <= roomCapacity);
+                if (openDays.length < entry.flexibleCount) return; // stays queued, retried next cursor month
+                const chosen = openDays
+                    .slice()
+                    .sort((a, b) => (pattern[a].half + pattern[a].full) - (pattern[b].half + pattern[b].full))
+                    .slice(0, entry.flexibleCount);
+                chosen.forEach(day => { pattern[day][entry.dayType] += 1; });
+                admitted.add(entry.id);
+                admittedThisMonth.push(entry);
+                return;
+            }
+
             const fits = TREND_DAYS.every(day => {
                 const type = entry.weekdays[day];
                 if (!type) return true; // day not requested — irrelevant to this child
@@ -1539,6 +1620,9 @@ function setupWaitlistAdmin() {
     document.getElementById('adminWlHasSibling')?.addEventListener('change', e => {
         document.getElementById('adminWlSibRow').classList.toggle('hidden', !e.target.checked);
     });
+    document.querySelectorAll('input[name="adminWlDaysMode"]').forEach(r => {
+        r.addEventListener('change', () => _applyAdminWlDaysMode());
+    });
 
     loadWaitlistApplications();
 }
@@ -1600,12 +1684,21 @@ async function setupWaitlistNotifications() {
 // one) — id of the application being edited, or null for the Add flow.
 let _adminWlEditingId = null;
 
+// Toggles the specific-days checkbox row vs. the flexible-count select to
+// match whichever adminWlDaysMode radio is selected.
+function _applyAdminWlDaysMode() {
+    const flexible = document.querySelector('input[name="adminWlDaysMode"]:checked')?.value === 'flexible';
+    document.getElementById('adminWlDaysCheckboxes').style.display = flexible ? 'none' : '';
+    document.getElementById('adminWlFlexCount').disabled = !flexible;
+}
+
 function _openAdminWlModal() {
     _adminWlEditingId = null;
     document.getElementById('adminWlForm').reset();
     document.getElementById('adminWlDobRow').classList.remove('hidden');
     document.getElementById('adminWlDueRow').classList.add('hidden');
     document.getElementById('adminWlSibRow').classList.add('hidden');
+    _applyAdminWlDaysMode();
     document.getElementById('adminWlErr').textContent = '';
     document.getElementById('adminWlModalTitle').textContent = 'Add Child to Waitlist';
     document.getElementById('adminWlSubmitBtn').disabled = false;
@@ -1641,6 +1734,9 @@ function _openAdminWlModalForEdit(app) {
     document.querySelectorAll('#adminWlForm .adminWlDay').forEach(cb => {
         cb.checked = namedDays.length ? namedDays.includes(cb.value) : true;
     });
+    document.getElementById(app.days_flexible ? 'adminWlDaysModeFlexible' : 'adminWlDaysModeSpecific').checked = true;
+    document.getElementById('adminWlFlexCount').value = String(app.days_flexible_count || 3);
+    _applyAdminWlDaysMode();
     const dayTypeRadio = document.querySelector(`#adminWlForm input[name="adminWlDayType"][value="${app.day_type === 'half' ? 'half' : 'full'}"]`);
     if (dayTypeRadio) dayTypeRadio.checked = true;
 
@@ -1669,8 +1765,12 @@ async function _submitAdminWlEntry() {
     const isEdit   = !!_adminWlEditingId;
     const unborn   = document.getElementById('adminWlIsUnborn').checked;
     const hasSib   = document.getElementById('adminWlHasSibling').checked;
+    const flexible = document.querySelector('input[name="adminWlDaysMode"]:checked')?.value === 'flexible';
     const days     = [...document.querySelectorAll('#adminWlForm .adminWlDay:checked')].map(c => c.value);
+    const flexCount = Number(document.getElementById('adminWlFlexCount').value) || 3;
     const dayType  = document.querySelector('#adminWlForm input[name="adminWlDayType"]:checked')?.value || 'full';
+
+    if (!flexible && !days.length) { err.textContent = 'Please select at least one day, or choose "Any" days.'; return; }
 
     const payload = {
         parent_name:        document.getElementById('adminWlParentName').value.trim(),
@@ -1681,7 +1781,9 @@ async function _submitAdminWlEntry() {
         expected_due_date:  unborn  ? (document.getElementById('adminWlDueDate').value || null) : null,
         desired_start_date: document.getElementById('adminWlStartDate').value,
         start_flexibility:  document.getElementById('adminWlFlexibility').value,
-        days_of_week:       days.length ? days.join(', ') : null,
+        days_of_week:       flexible ? null : (days.length ? days.join(', ') : null),
+        days_flexible:       flexible,
+        days_flexible_count: flexible ? flexCount : null,
         day_type:           dayType,
         has_sibling:        hasSib,
         sibling_child_name: hasSib ? (document.getElementById('adminWlSibName').value.trim() || null) : null,
