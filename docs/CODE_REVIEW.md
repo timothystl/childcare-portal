@@ -548,8 +548,8 @@ incomplete** (see T1).
   route `addMessage()` through a staff email notification instead. Looks like an
   accidental compounding of two unrelated changes — confirm with the product
   owner, but treat as a bug until confirmed otherwise.
-- **T3 — [High] `waitlist-status` edge function ignores admin capacity
-  overrides.** [Public] `supabase/functions/waitlist-status/index.ts:340-349`
+- **T3 — [High] ✅ FIXED (deploy edge fn).** `waitlist-status` edge function
+  ignores admin capacity overrides. [Public] `supabase/functions/waitlist-status/index.ts:340-349`
   gates on `typeof capRes.data.value === 'object'`, but `settings.value` is a
   TEXT column holding a JSON string, not jsonb — confirmed via commit
   `6e9977c`'s own message/diff, which fixed this *exact* bug in
@@ -562,9 +562,10 @@ incomplete** (see T1).
   Planner reflects it immediately but `waitlist-status.html` keeps computing
   position/wait-estimate against the stale hard-coded number — exactly the
   parent-vs-admin discrepancy `docs/WAITLIST_STATUS.md`'s own review checklist
-  asks the reviewer to catch. _Fix:_ apply the same `parseSettingsValue()`
-  helper already written in commit `6e9977c` to this function's `room_capacity`
-  read — smallest fix in this whole sweep, pattern already proven.
+  asks the reviewer to catch. _Fixed:_ added the same `parseSettingsValue()`
+  helper already proven in commit `6e9977c` and applied it to this function's
+  `room_capacity` read. _Still needs `supabase functions deploy
+  waitlist-status` to take effect in prod_ — not auto-deployed by CI.
 - **T4 — [High] Admin "position" (global/cross-room) vs. parent "position"
   (per-room) — will disagree.** [Both] Admin's Queue tab
   (`js/admin/admin-waitlist.js:480-484`) ranks every waitlisted child across
