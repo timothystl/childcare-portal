@@ -67,6 +67,10 @@ A full code review + a deeper "second sweep" were done. Detailed records live in
 - **CI:** `.github/workflows/auto-merge-claude.yml` now auto-resolves version-file
   (`package.json` + `js/build-version.js`) merge conflicts — those were silently failing
   every auto-merge/deploy when two `claude/**` branches ran at once.
+- **Waitlist Status page** (parent-facing, email-only lookup at `waitlist-status.html` +
+  new `waitlist-status` edge function) shipped 2026-07-10, v1.20.1 — **not yet
+  code-reviewed**. See **`docs/WAITLIST_STATUS.md`** for architecture, security model,
+  and the manual test checklist to run before/during that review.
 
 ### Still to do (see NEXT_STEPS.md for the exact steps/sequencing)
 - **SS1** — anon-read PII exposure: the public anon key can still read/modify
