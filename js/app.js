@@ -252,33 +252,8 @@ function renderPublicStaffDirectory(staffRaw) {
 // ============================================================
 // AGE / DOB HELPERS
 // ============================================================
-function calcAgeMonths(dobStr) {
-    if (!dobStr) return null;
-    const today = new Date();
-    const birth = new Date(dobStr + 'T00:00:00');
-    return (today.getFullYear() - birth.getFullYear()) * 12
-         + (today.getMonth() - birth.getMonth());
-}
-
-function getRoomIdFromDob(dobStr) {
-    if (!dobStr) return null;
-    const months = calcAgeMonths(dobStr);
-    if (months < 0) return null;
-    // Use ROOMS age ranges dynamically — only active rooms with age bounds.
-    // ageMaxMonths is the exact age (months) a child ages OUT at, so the
-    // upper bound is exclusive — a child turning 24 months moves out of a
-    // room with ageMaxMonths:24 and into whichever room starts at 24.
-    const ageable = ROOMS
-        .filter(r => r.status === 'active' && r.ageMinMonths != null)
-        .sort((a, b) => a.ageMinMonths - b.ageMinMonths);
-    for (const room of ageable) {
-        if (months >= room.ageMinMonths && (room.ageMaxMonths == null || months < room.ageMaxMonths)) {
-            return room.id;
-        }
-    }
-    return null;
-}
-
+// calcAgeMonths() and getRoomIdFromDob() live in supabase.js (shared —
+// loaded before this file on every page).
 function getRoomFromDob(dobStr) {
     const roomId = getRoomIdFromDob(dobStr);
     return roomId ? (ROOMS.find(r => r.id === roomId) || null) : null;

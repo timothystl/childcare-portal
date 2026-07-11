@@ -68,8 +68,10 @@ function calcAgeMonths(dobStr, referenceDate) {
     if (!dobStr) return null;
     const today = referenceDate || new Date();
     const birth = new Date(dobStr + 'T00:00:00');
-    return (today.getFullYear() - birth.getFullYear()) * 12
-         + (today.getMonth() - birth.getMonth());
+    let months = (today.getFullYear() - birth.getFullYear()) * 12
+               + (today.getMonth() - birth.getMonth());
+    if (today.getDate() < birth.getDate()) months--;
+    return months;
 }
 
 function getRoomIdFromDob(dobStr, referenceDate) {
@@ -210,8 +212,15 @@ describe('calcAgeMonths', () => {
     });
     test('handles month-boundary crossings (e.g., born Oct 31, ref Mar 1)', () => {
         const r = new Date('2026-03-01');
-        // Oct→Nov→Dec→Jan→Feb→Mar = 5 months
-        expect(calcAgeMonths('2025-10-31', r)).toBe(5);
+        // Oct→Nov→Dec→Jan→Feb→Mar = 5 calendar months, but the 1st is still
+        // 30 days short of the 31st-of-the-month mark, so only 4 are complete.
+        expect(calcAgeMonths('2025-10-31', r)).toBe(4);
+    });
+    test('does not round up early when the day-of-month has not been reached yet', () => {
+        // Born Mar 28, 2025; as of Mar 24, 2026 they are 11 months old, not 12 —
+        // their 12-month "birthday" is 4 days away. A year/month-only diff
+        // (ignoring day-of-month) would wrongly report 12 here.
+        expect(calcAgeMonths('2025-03-28', new Date('2026-03-24'))).toBe(11);
     });
 });
 
@@ -256,6 +265,10 @@ describe('getRoomIdFromDob — age-based room assignment', () => {
     });
     test('future DOB (negative age) → null', () => {
         expect(getRoomIdFromDob('2030-01-01', ref)).toBeNull();
+    });
+    test('a few days shy of the 12-month mark stays in bear, not bee', () => {
+        // Turns 12 months on Mar 28, 2026 — still bear as of Mar 24.
+        expect(getRoomIdFromDob('2025-03-28', ref)).toBe('bear');
     });
     test('null/empty DOB → null', () => {
         expect(getRoomIdFromDob(null)).toBeNull();

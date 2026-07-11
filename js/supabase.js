@@ -151,6 +151,51 @@ function populateSiblingRoomSelect(sel) {
 }
 
 // ============================================================
+// AGE / ROOM-ASSIGNMENT HELPERS (shared — loaded before every page script)
+// ============================================================
+// Whole completed calendar months between dobStr and referenceDate (defaults
+// to now). Day-of-month aware: a child born Jan 15 is still "0 months" until
+// Feb 15, not Feb 1 — comparing only year+month (as earlier versions of this
+// app did) rounds a child's age up by as much as ~30 days, which can bump
+// them into the next room's age bracket before they've actually reached it.
+function calcAgeMonths(dobStr, referenceDate) {
+    if (!dobStr) return null;
+    const today = referenceDate || new Date();
+    const birth = new Date(dobStr + 'T00:00:00');
+    let months = (today.getFullYear() - birth.getFullYear()) * 12
+               + (today.getMonth() - birth.getMonth());
+    if (today.getDate() < birth.getDate()) months--;
+    return months;
+}
+
+// Which room a given age (in whole completed months) falls into, from a
+// given list of rooms. ageMaxMonths is the exact age a child ages OUT at, so
+// the upper bound is exclusive — a child turning 24 months moves out of a
+// room with ageMaxMonths:24 and into whichever room starts at 24 (i.e. they
+// stay in the lower room through "24 months minus a day").
+function roomIdForAgeMonths(months, roomList) {
+    if (months == null || months < 0) return null;
+    const ageable = (roomList || [])
+        .filter(r => r.ageMinMonths != null)
+        .sort((a, b) => a.ageMinMonths - b.ageMinMonths);
+    for (const room of ageable) {
+        if (months >= room.ageMinMonths && (room.ageMaxMonths == null || months < room.ageMaxMonths)) {
+            return room.id;
+        }
+    }
+    return null;
+}
+
+// Room assignment for a child by DOB, using only currently-active rooms
+// (matches ROOMS age ranges dynamically — admin-editable via Settings →
+// Rates). Optional referenceDate defaults to today.
+function getRoomIdFromDob(dobStr, referenceDate) {
+    if (!dobStr) return null;
+    const months = calcAgeMonths(dobStr, referenceDate);
+    return roomIdForAgeMonths(months, ROOMS.filter(r => r.status === 'active'));
+}
+
+// ============================================================
 // TYPE DEFINITIONS  (JSDoc — no build step required)
 // Provides IDE autocomplete and catches field-name typos at development time.
 // ============================================================

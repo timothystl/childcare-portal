@@ -4699,11 +4699,8 @@ function _resolveRoomForStudent(student) {
     if (student.room_override) return ROOMS.find(r => r.id === student.room_override) || null;
     const dob = student.child_dob;
     if (!dob) return null;
-    const ageMonths = Math.floor((Date.now() - new Date(dob + 'T00:00:00')) / (1000 * 60 * 60 * 24 * 30.44));
-    return ROOMS.find(r =>
-        r.ageMinMonths != null && r.ageMaxMonths != null &&
-        ageMonths >= r.ageMinMonths && ageMonths < r.ageMaxMonths
-    ) || null;
+    const roomId = roomIdForAgeMonths(calcAgeMonths(dob), ROOMS.filter(r => r.status === 'active'));
+    return roomId ? (ROOMS.find(r => r.id === roomId) || null) : null;
 }
 
 function exportMissingCalendarReport() {
