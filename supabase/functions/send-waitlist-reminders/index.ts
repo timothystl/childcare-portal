@@ -19,6 +19,17 @@ function daysAgo(iso: string | null): number {
     return (Date.now() - new Date(iso).getTime()) / 86400000;
 }
 
+// settings.value is a TEXT column holding a JSON-encoded string (despite an
+// outdated CREATE TABLE comment elsewhere describing it as jsonb) — parse it
+// the same way the client-side loadWaitlistNotifySettings() does.
+function parseSettingsValue(raw: unknown): Record<string, unknown> {
+    if (raw && typeof raw === "object") return raw as Record<string, unknown>;
+    if (typeof raw === "string") {
+        try { return JSON.parse(raw); } catch { return {}; }
+    }
+    return {};
+}
+
 serve(async (req) => {
     // Only allow service role calls (invoked by pg_cron, never by browsers).
     const auth = req.headers.get("Authorization") || "";
@@ -30,6 +41,16 @@ serve(async (req) => {
     try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const sb = createClient(supabaseUrl, serviceRoleKey);
+
+        // Admin-facing on/off switch (Waitlist tab → Waitlist Inquiries →
+        // "Weekly Tour / Check-In Reminders"). Off unless explicitly enabled —
+        // a missing settings row or missing key must never be read as "on".
+        const { data: notifySettingsRow } = await sb
+            .from("settings").select("value").eq("key", "waitlist_notify").maybeSingle();
+        const notifySettings = parseSettingsValue(notifySettingsRow?.value);
+        if (notifySettings.remindersEnabled !== true) {
+            return new Response(JSON.stringify({ skipped: "reminders disabled in settings" }), { status: 200 });
+        }
 
         const { data: apps, error } = await sb
             .from("waitlist_applications")
@@ -127,8 +148,7 @@ serve(async (req) => {
         }
 
         // Weekly digest to the director, if a notify address is configured.
-        const { data: settingsRow } = await sb.from("settings").select("value").eq("key", "waitlist_notify").maybeSingle();
-        const notifyEmail = settingsRow?.value?.notifyEmail;
+        const notifyEmail = notifySettings.notifyEmail as string | undefined;
         if (notifyEmail && apiKey && sentTo.length) {
             const rows = sentTo.map(s => `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;">${escHtml(s.childName)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;">${escHtml(s.parentName)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;">${s.needsTour ? "Tour + check-in" : "Check-in only"}</td></tr>`).join("");
             const digestHtml = `

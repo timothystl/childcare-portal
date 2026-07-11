@@ -1513,10 +1513,15 @@ async function setupWaitlistNotifications() {
         }
     });
 
-    const emailEl = document.getElementById('wlNotifyEmail');
+    const emailEl     = document.getElementById('wlNotifyEmail');
+    const remindersEl = document.getElementById('wlRemindersEnabled');
     try {
         const settings = await loadWaitlistNotifySettings();
         if (emailEl) emailEl.value = settings.notifyEmail || '';
+        // Off unless explicitly turned on — a missing/undefined value must
+        // never be read as "on", since that's the default for every waitlist
+        // row that predates this setting existing at all.
+        if (remindersEl) remindersEl.checked = settings.remindersEnabled === true;
     } catch (_) {}
 
     document.getElementById('wlSaveNotifyEmailBtn')?.addEventListener('click', async () => {
@@ -1524,7 +1529,10 @@ async function setupWaitlistNotifications() {
         const statusEl = document.getElementById('wlNotifyEmailStatus');
         btn.disabled = true; btn.textContent = 'Saving…';
         try {
-            await saveWaitlistNotifySettings({ notifyEmail: emailEl.value.trim() || null });
+            await saveWaitlistNotifySettings({
+                notifyEmail:      emailEl.value.trim() || null,
+                remindersEnabled: !!remindersEl?.checked,
+            });
             if (statusEl) {
                 statusEl.textContent = '✓ Saved!';
                 statusEl.style.color = '#2e7d32';

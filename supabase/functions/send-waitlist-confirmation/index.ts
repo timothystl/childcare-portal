@@ -25,6 +25,17 @@ function friendlyDayType(t: string): string {
     return t === "half" ? "Half Day" : "Full Day";
 }
 
+// settings.value is a TEXT column holding a JSON-encoded string (despite an
+// outdated CREATE TABLE comment elsewhere describing it as jsonb) — parse it
+// the same way the client-side loadWaitlistNotifySettings() does.
+function parseSettingsValue(raw: unknown): Record<string, unknown> {
+    if (raw && typeof raw === "object") return raw as Record<string, unknown>;
+    if (typeof raw === "string") {
+        try { return JSON.parse(raw); } catch { return {}; }
+    }
+    return {};
+}
+
 serve(async (req) => {
     const ch = corsHeaders(req);
 
@@ -176,7 +187,7 @@ serve(async (req) => {
             .select("value")
             .eq("key", "waitlist_notify")
             .maybeSingle();
-        const notifyEmail = settingsRow?.value?.notifyEmail;
+        const notifyEmail = parseSettingsValue(settingsRow?.value).notifyEmail;
 
         if (notifyEmail && typeof notifyEmail === "string") {
             const adminHtml = `
