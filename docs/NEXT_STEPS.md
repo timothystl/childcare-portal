@@ -21,12 +21,13 @@ first time. Full findings: `docs/CODE_REVIEW.md` "Third Sweep" section
      tour_notes/offer_type/offered_days`). No action needed — the frontend
      features that depend on these (ProCare import source tagging, tour
      reminders, waitlist offer-type tracking) are safe in prod.
-2. **T3 — ✅ code fixed 2026-07-11, needs deploy.** `waitlist-status` edge fn
+2. **T3 — ✅ CLOSED (fixed + deployed 2026-07-11).** `waitlist-status` edge fn
    ignored admin capacity overrides (`settings.value` text-vs-object bug) —
    fixed by adding the `parseSettingsValue()` helper already proven in commit
-   `6e9977c` to `supabase/functions/waitlist-status/index.ts`. **Still needs
-   `supabase functions deploy waitlist-status`** — not auto-deployed by CI, and
-   the assistant has no CLI/deploy credentials in this session.
+   `6e9977c` to `supabase/functions/waitlist-status/index.ts`; owner deployed
+   the update via the Supabase dashboard. Recommended (not yet done): run the
+   manual capacity-override check from `docs/WAITLIST_STATUS.md` to confirm
+   the live behavior, not just that the deploy succeeded.
 3. **T1** — `send-schedule-confirmation` has no auth check and trusts
    client-supplied invoice amounts. Highest blast radius; also reopens SS13
    (email-validation regex misses `%`/`_`).
