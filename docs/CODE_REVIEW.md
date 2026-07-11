@@ -512,8 +512,9 @@ incomplete** (see T1).
 
 ## High
 
-- **T1 — [High] `send-schedule-confirmation` has no auth check; trusts fully
-  client-supplied billing data.** [Public] The POST handler
+- **T1 — [Downgraded to Low, accepted risk — owner decision 2026-07-11]
+  `send-schedule-confirmation` has no auth check; trusts fully client-supplied
+  billing data.** [Public] The POST handler
   (`supabase/functions/send-schedule-confirmation/index.ts`) has no
   authentication/session check at all — confirmed by grepping the file for
   `Authorization`/`auth.role`; the only match is the *outbound* Resend API call.
@@ -549,6 +550,17 @@ incomplete** (see T1).
     session — deferred rather than rushed into the confirmation-email critical
     path. Note CLAUDE.md itself still says this function "needs deploying" —
     confirm what's actually live before further triaging urgency.
+  - _Owner risk decision (2026-07-11):_ accepted as low priority. The email
+    this function sends is informational only — parents don't pay directly
+    from it (there's no payment processor integration; billing is handled
+    separately by the office), so the worst case of this gap being exploited
+    is a family receiving a confusing/wrong-looking email, not an actual
+    financial or data-integrity loss. Given that bounded impact, the owner
+    decided the risk of a rushed fix destabilizing the confirmation-email path
+    outweighs the benefit of closing it now. **Revisit this decision if/when
+    a payment processor is integrated** (see the Backlog section below) — at
+    that point client-trusted amounts would have real financial consequences
+    and this would need to become a blocking fix, not a deferred one.
 - **T2 — [High] Admin message inbox deleted; two live features now write into
   a black hole.** [Both] `js/admin/admin-messages.js` was deleted by commit
   `89cb987` (2026-07-01), dropping the admin UI/DB helpers for reading the
@@ -686,6 +698,12 @@ incomplete** (see T1).
 
 ## Low
 
+- **T1 — [Downgraded from High, owner-accepted risk, 2026-07-11]** see full
+  write-up in the High section above — `send-schedule-confirmation` still has
+  no auth check and trusts client-supplied billing amounts, but the owner
+  judged this low-impact since the email is informational only (no payment
+  processor is wired up yet, so a fabricated amount can't cause an actual
+  financial loss). Revisit as blocking if/when payment processing is added.
 - **T13 — [Low]** `${{ github.ref_name }}` interpolated directly into a `run:`
   shell block in `auto-merge-claude.yml` — GitHub Actions script-injection
   anti-pattern, one more instance added this window (pre-existing elsewhere in
