@@ -663,8 +663,6 @@ function wlpRenderQueueExpand(k, alloc) {
     const avail = k.days.filter(d => startDayMap[d] >= 1);
     const missing = k.days.filter(d => !avail.includes(d));
     const hasPartial = avail.length > 0 && missing.length > 0;
-    const fitM = alloc.fitMonthByKid[k.id];
-    const fitNow = fitM === k.desiredStartM;
 
     return `
         <div class="wlp-expand">
@@ -673,8 +671,8 @@ function wlpRenderQueueExpand(k, alloc) {
             <div class="wlp-expand-footer">
                 <div class="wlp-parent-line">${escHtml(k.parentName)} · ${escHtml(k.parentEmail)}</div>
                 <div class="wlp-offer-actions">
-                    ${hasPartial ? `<button type="button" class="wlp-btn-partial-offer" data-wlp-partial-offer="${k.id}">Offer ${avail.length} of ${k.days.length} days (${escHtml(avail.join(', '))})</button>` : ''}
-                    <button type="button" class="wlp-btn-offer" data-wlp-offer="${k.id}" ${!fitNow ? 'disabled' : ''}>${fitNow ? '🎉 Offer a Spot' : 'Not open yet'}</button>
+                    ${hasPartial ? `<span class="wlp-parent-line">Only ${avail.length} of ${k.days.length} days open (${escHtml(avail.join(', '))})</span>` : ''}
+                    <button type="button" class="wlp-btn-offer" data-wlp-enroll-full="${k.id}" ${!avail.length ? 'disabled' : ''}>${avail.length ? '✅ Enroll' : 'Not open yet'}</button>
                 </div>
             </div>
             ${wlpRenderSecondaryActions(k)}
@@ -761,15 +759,13 @@ function wlpWireQueueRowActions() {
             if (app) _openAdminWlModalForEdit(app);
         });
     });
-    document.querySelectorAll('[data-wlp-offer]').forEach(el => {
+    document.querySelectorAll('[data-wlp-enroll-full]').forEach(el => {
         el.addEventListener('click', e => {
             e.stopPropagation();
             if (el.disabled) return;
-            wlpOpenOfferModal(Number(el.dataset.wlpOffer), 'full');
+            const k = _wlpAlloc?.kids.find(x => x.id === Number(el.dataset.wlpEnrollFull));
+            wlpEnrollFromWaitlist(Number(el.dataset.wlpEnrollFull), k?.desiredStartM);
         });
-    });
-    document.querySelectorAll('[data-wlp-partial-offer]').forEach(el => {
-        el.addEventListener('click', e => { e.stopPropagation(); wlpOpenOfferModal(Number(el.dataset.wlpPartialOffer), 'partial'); });
     });
     document.querySelectorAll('[data-wlp-tour]').forEach(el => {
         el.addEventListener('click', e => { e.stopPropagation(); wlpOpenTourModal(Number(el.dataset.wlpTour)); });
@@ -912,7 +908,7 @@ function wlpRenderGrid(alloc) {
                         <div class="wlp-chip-row">${chips}</div>
                         <div class="wlp-match-note">${wlpPriorityLabel(k)} · waiting ${escHtml(wlDaysWaiting(k.appliedAt))} · ${escHtml(seatedNote)}</div>
                         <div class="wlp-secondary-actions">
-                            <button type="button" class="wlp-btn-offer" data-wlp-match-offer="${k.id}" ${!someFit ? 'disabled' : ''}>${allFit ? '🎉 Offer a Spot' : someFit ? '🎉 Offer Partial Spot' : 'No open days'}</button>
+                            <button type="button" class="wlp-btn-offer" data-wlp-match-offer="${k.id}" ${!someFit ? 'disabled' : ''}>${allFit ? '✅ Enroll' : someFit ? '✅ Enroll (partial)' : 'No open days'}</button>
                         </div>
                     </div>
                 </div>`;
@@ -958,7 +954,8 @@ function wlpAttachGridListeners() {
     document.querySelectorAll('[data-wlp-match-offer]').forEach(el => {
         el.addEventListener('click', e => {
             e.stopPropagation();
-            wlpOpenOfferModal(Number(el.dataset.wlpMatchOffer), null, _wlp.selCellA?.monthIdx);
+            if (el.disabled) return;
+            wlpEnrollFromWaitlist(Number(el.dataset.wlpMatchOffer), _wlp.selCellA?.monthIdx);
         });
     });
 }
@@ -1021,7 +1018,7 @@ function wlpRenderBoardSidebar(sel, mi, alloc) {
         const missing = k.days.filter(d => !avail.includes(d));
         const isHl = _wlp.highlightKidC === k.id;
         const chips = wlpDayChips(k, dayMap).map(wlpChipHtml).join('');
-        const offerLabel = missing.length ? `Offer ${avail.length} of ${k.days.length} days` : `Offer all ${k.days.length} days`;
+        const offerLabel = missing.length ? `✅ Enroll (${avail.length} of ${k.days.length} days)` : `✅ Enroll (all ${k.days.length} days)`;
         const offerCls = missing.length ? 'wlp-suggestion-offer-partial' : 'wlp-suggestion-offer-full';
         return `
             <div class="wlp-suggestion-card ${isHl ? 'highlight' : ''}" data-wlp-suggest="${k.id}">
@@ -1111,7 +1108,7 @@ function wlpAttachBoardListeners() {
         });
     });
     document.querySelectorAll('[data-wlp-board-offer]').forEach(el => {
-        el.addEventListener('click', e => { e.stopPropagation(); wlpOpenOfferModal(Number(el.dataset.wlpBoardOffer), null, _wlp.boardMonthIdx); });
+        el.addEventListener('click', e => { e.stopPropagation(); wlpEnrollFromWaitlist(Number(el.dataset.wlpBoardOffer), _wlp.boardMonthIdx); });
     });
 }
 
@@ -1122,6 +1119,60 @@ function wlpOfferDaysForKid(k, monthIdx) {
     const avail = k.days.filter(d => dayMap[d] >= 1);
     const missing = k.days.filter(d => !avail.includes(d));
     return { avail, missing };
+}
+
+// Every date in a given "YYYY-MM" month matching the given weekday names,
+// skipping already-past dates and closures — the same rule the Add
+// Registration calendar itself enforces (see _arRenderCal in
+// admin-calendar.js), so nothing pre-checked here ever gets rejected there.
+function wlpDatesForMonthAndDays(moKey, days) {
+    const [y, m] = moKey.split('-').map(Number); // m is 1-based
+    const dayNum = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5 };
+    const wanted = new Set(days.map(d => dayNum[d]).filter(n => n != null));
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const lastDay = new Date(y, m, 0).getDate();
+    const dates = [];
+    for (let day = 1; day <= lastDay; day++) {
+        const d = new Date(y, m - 1, day);
+        if (!wanted.has(d.getDay()) || d < today) continue;
+        const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        if (allClosureDates.has(dateStr)) continue;
+        dates.push(dateStr);
+    }
+    return dates;
+}
+
+// "Enroll" a waitlisted kid directly — for after you've already talked to
+// the parent and confirmed, so it skips the formal email-offer flow and
+// jumps straight into the real Add Registration flow (admin-calendar.js),
+// pre-filled with this kid's info and the matched days already checked on
+// the calendar for the target month. The admin still reviews and clicks
+// Submit there — this doesn't book anything on its own.
+function wlpEnrollFromWaitlist(kidId, monthIdx) {
+    const alloc = _wlpAlloc;
+    if (!alloc) return;
+    const k = alloc.kids.find(x => x.id === kidId);
+    if (!k) return;
+    const mi = monthIdx != null ? monthIdx : k.desiredStartM;
+    const { avail } = wlpOfferDaysForKid(k, mi);
+    if (!avail.length) { alert(`${k.name} has no open days in ${alloc.months[mi].label} to enroll into.`); return; }
+
+    const room = alloc.roomMeta[k.room].room;
+    const dates = wlpDatesForMonthAndDays(alloc.months[mi].key, avail);
+    if (!dates.length) { alert(`No open calendar dates found for ${k.name} in ${alloc.months[mi].label} — closures may account for the rest.`); return; }
+
+    if (typeof openAdminRegModalForWaitlistKid !== 'function') { alert('Enroll flow unavailable — reload the page and try again.'); return; }
+    openAdminRegModalForWaitlistKid({
+        parentName:  k.parentName,
+        parentEmail: k.parentEmail,
+        parentPhone: k.app.parent_phone || null,
+        childName:   k.name,
+        childDob:    k.app.child_dob || null,
+        room,
+        dates,
+        dayType:     k.dayType,
+        waitlistAppId: k.id,
+    });
 }
 
 function wlpOpenOfferModal(kidId, forceType, monthIdx) {
