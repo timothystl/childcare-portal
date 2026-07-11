@@ -1285,6 +1285,11 @@ let _arYear           = null;
 let _arMonth          = null;   // 0-indexed
 let _arDates          = new Map(); // dateStr → 'full'|'half'
 let _arPickDate       = null;
+// Set only when this modal was opened via wlpEnrollFromWaitlist() — on a
+// successful submit, _arSubmit() also marks this waitlist application
+// 'enrolled' so it drops off the Planner. Reset on every other open/close
+// path so it can never leak into an unrelated registration.
+let _arWaitlistAppId  = null;
 let _arCapacity       = {}; // dateStr → booked count for current month/room
 let _arSelectedFamily = null; // tracks selected family for "Change" nav
 let _arBookedMap      = new Map(); // dateStr → { day_type, reg_id, date_id } for already-booked dates
@@ -1341,6 +1346,7 @@ document.getElementById('adminRegSubmit')?.addEventListener('click', _arSubmit);
 async function _openAdminRegModal() {
     _arFamily = null; _arStudent = null; _arRoom = null;
     _arDates  = new Map(); _arPickDate = null; _arSelectedFamily = null;
+    _arWaitlistAppId = null;
 
     document.getElementById('adminRegSearch').value            = '';
     document.getElementById('adminRegResults').innerHTML       = '';
@@ -1366,6 +1372,7 @@ async function _openAdminRegModal() {
 
 function _closeAdminRegModal() {
     document.getElementById('adminRegModal').classList.add('hidden');
+    _arWaitlistAppId = null;
     const titleEl = document.getElementById('adminRegTitle');
     if (titleEl) titleEl.textContent = 'New Registration';
     const submitBtn = document.getElementById('adminRegSubmit');
@@ -1763,6 +1770,7 @@ function openAdminRegModalForFamily(family) {
     _arFamily = null; _arStudent = null; _arRoom = null;
     _arDates  = new Map(); _arPickDate = null;
     _arSelectedFamily = family;
+    _arWaitlistAppId = null;
 
     document.getElementById('adminRegError').textContent       = '';
     document.getElementById('adminRegDayPicker').style.display = 'none';
@@ -1788,6 +1796,43 @@ function openAdminRegModalForFamily(family) {
     }
 
     document.getElementById('adminRegModal').classList.remove('hidden');
+}
+
+// Opens the Add Registration flow pre-filled from a waitlist application —
+// called from wlpEnrollFromWaitlist() (admin-waitlist.js) for the "this is
+// after I've already talked to the parent" enroll action. A waitlisted
+// family isn't in `families`/`students` yet, so _arFamily/_arStudent are
+// duck-typed with just the fields submitRegistration()/_arRenderCal() read
+// (parent_name/email/phone, child_name/dob) rather than real DB records.
+// Skips straight to the calendar step with the matched dates pre-checked —
+// the admin still reviews and clicks Submit, this doesn't book anything by
+// itself.
+function openAdminRegModalForWaitlistKid({ parentName, parentEmail, parentPhone, childName, childDob, room, dates, dayType, waitlistAppId }) {
+    _arFamily = { parent_name: parentName, parent_email: parentEmail, parent_phone: parentPhone };
+    _arStudent = { child_name: childName, child_dob: childDob, discount_type: null, discount_value: null };
+    _arRoom = room;
+    _arSelectedFamily = null;
+    _arWaitlistAppId = waitlistAppId;
+
+    const first = dates[0] ? new Date(dates[0] + 'T00:00:00') : new Date();
+    _arYear  = first.getFullYear();
+    _arMonth = first.getMonth();
+    _arDates = new Map(dates.map(d => [d, dayType === 'half' ? 'half' : 'full']));
+    _arPickDate = null;
+
+    document.getElementById('adminRegError').textContent       = '';
+    document.getElementById('adminRegDayPicker').style.display = 'none';
+    document.getElementById('adminRegTitle').textContent       = `Enroll from Waitlist — ${childName}`;
+    document.getElementById('adminRegSubmit').textContent      = 'Create Registration';
+    document.getElementById('adminRegChildName').textContent   = childName;
+    document.getElementById('adminRegChildRoom').textContent   = room?.label || '—';
+    document.getElementById('adminRegStep1').style.display     = 'none';
+    document.getElementById('adminRegStep2').style.display     = 'none';
+    document.getElementById('adminRegMain').style.display      = '';
+    document.getElementById('adminRegModal').classList.remove('hidden');
+
+    _arLoadCapacity();
+    _arRenderReview();
 }
 
 async function _arSubmit() {
@@ -1829,6 +1874,12 @@ async function _arSubmit() {
             const monthKey = [..._arDates.keys()][0].substring(0, 7);
             await createInvoiceByEmail(_arFamily.parent_email, monthKey, Math.round(total * 100) / 100);
         } catch (_) { /* non-blocking */ }
+
+        if (_arWaitlistAppId) {
+            try { await updateWaitlistApplication(_arWaitlistAppId, { status: 'enrolled' }); } catch (_) { /* non-blocking — registration is already created */ }
+            _arWaitlistAppId = null;
+            if (typeof loadWaitlistApplications === 'function') loadWaitlistApplications();
+        }
 
         _closeAdminRegModal();
         await loadRegistrations();
