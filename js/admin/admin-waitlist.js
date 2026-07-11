@@ -99,7 +99,7 @@ async function loadWaitlistApplications() {
 }
 
 // ============================================================
-// WAITLIST & CAPACITY PLANNER  (Queue / Grid / Board)
+// WAITLIST & CAPACITY PLANNER  (Queue / Capacity [Grid / Board] / Moving)
 // ============================================================
 // One priority-ordered capacity allocation drives all three views so they can
 // never disagree — see wlpRunAllocation(). Reuses wlpPromotionChain() and
@@ -114,7 +114,7 @@ async function loadWaitlistApplications() {
 // (wlpRerenderQueueRows) so typing doesn't steal focus from the input.
 
 let _wlp = {
-    activeTab: 'queue',       // 'queue' | 'capacity'
+    activeTab: 'queue',       // 'queue' | 'capacity' | 'moving'
     capacityView: 'grid',     // 'grid' | 'board'
     selCellA: null,           // Grid: {roomId, monthIdx}
     expandedKidB: null,       // Queue: waitlist_applications.id
@@ -125,9 +125,9 @@ let _wlp = {
     highlightKidC: null,      // Board: waitlist_applications.id
     search: '',
     roomFilter: '',
+    queueSortMode: 'priority',   // Queue: 'priority'|'days_desc'|'days_asc'|'waiting'|'room' — display order only, never priority badges
+    movingSelectedMonthIdx: 0,   // Moving: 0-11
     toastText: null,
-    movementCollapsed: true,   // "Who's moving" — collapsed by default, it's long
-    topWaitlistCollapsed: false, // "Top of the waitlist, by room" — compact, shown by default
 };
 let _wlpAlloc = null; // last computed allocation — see wlpRunAllocation()
 
@@ -479,32 +479,38 @@ function renderWaitlistPlanner() {
 
     const isQueue = _wlp.activeTab === 'queue';
     const isCapacity = _wlp.activeTab === 'capacity';
+    const isMoving = _wlp.activeTab === 'moving';
     const isGrid = isCapacity && _wlp.capacityView === 'grid';
     const isBoard = isCapacity && _wlp.capacityView === 'board';
 
     root.innerHTML = `
         <div class="wlp-card">
             ${wlpRenderHeader()}
-            ${wlpRenderTopSummary(alloc)}
             ${isCapacity ? wlpRenderToolbar(alloc) : ''}
             ${isQueue ? wlpRenderQueue(alloc) : ''}
             ${isGrid ? wlpRenderGrid(alloc) : ''}
             ${isBoard ? wlpRenderBoard(alloc) : ''}
+            ${isMoving ? wlpRenderMoving(alloc) : ''}
         </div>`;
 
     wlpAttachHeaderListeners();
     if (isQueue) wlpAttachQueueListeners();
     if (isGrid) wlpAttachGridListeners();
     if (isBoard) wlpAttachBoardListeners();
+    if (isMoving) wlpAttachMovingListeners();
 }
 
 function wlpRenderHeader() {
     const isQueue = _wlp.activeTab === 'queue';
+    const isCapacity = _wlp.activeTab === 'capacity';
+    const isMoving = _wlp.activeTab === 'moving';
     const sub = isQueue
         ? "Every waitlisted child, ranked by priority — expand any row for their 12-month outlook."
-        : (_wlp.capacityView === 'grid'
-            ? 'Open slots per room, 12 months out — click a month to see who fits.'
-            : 'One month at a time — click an open slot to see who to offer it to.');
+        : isMoving
+            ? "Who's graduating up, who's promised a spot, and who's projected to start — next 12 months, every room."
+            : (_wlp.capacityView === 'grid'
+                ? 'Open slots per room, 12 months out — click a month to see who fits.'
+                : 'One month at a time — click an open slot to see who to offer it to.');
     return `
         <div class="wlp-header">
             <div>
@@ -514,7 +520,8 @@ function wlpRenderHeader() {
             <div class="wlp-header-actions">
                 <div class="wlp-pill-group">
                     <button type="button" class="wlp-pill-btn ${isQueue ? 'active' : ''}" data-wlp-tab="queue">Waitlist Queue</button>
-                    <button type="button" class="wlp-pill-btn ${!isQueue ? 'active' : ''}" data-wlp-tab="capacity">Capacity Planner</button>
+                    <button type="button" class="wlp-pill-btn ${isCapacity ? 'active' : ''}" data-wlp-tab="capacity">Capacity Planner</button>
+                    <button type="button" class="wlp-pill-btn ${isMoving ? 'active' : ''}" data-wlp-tab="moving">Moving</button>
                 </div>
                 <button type="button" class="btn-secondary" id="wlpAddBtn">+ Add to Waitlist</button>
             </div>
@@ -547,14 +554,6 @@ function wlpAttachHeaderListeners() {
         btn.addEventListener('click', () => { _wlp.capacityView = btn.dataset.wlpView; renderWaitlistPlanner(); });
     });
     document.getElementById('wlpAddBtn')?.addEventListener('click', _openAdminWlModal);
-    document.getElementById('wlpMovementToggle')?.addEventListener('click', () => {
-        _wlp.movementCollapsed = !_wlp.movementCollapsed;
-        renderWaitlistPlanner();
-    });
-    document.getElementById('wlpTopWaitlistToggle')?.addEventListener('click', () => {
-        _wlp.topWaitlistCollapsed = !_wlp.topWaitlistCollapsed;
-        renderWaitlistPlanner();
-    });
     document.getElementById('wlpPrevMonth')?.addEventListener('click', () => {
         _wlp.boardMonthIdx = Math.max(0, _wlp.boardMonthIdx - 1);
         _wlp.selSlotC = null; _wlp.highlightKidC = null;
@@ -568,11 +567,42 @@ function wlpAttachHeaderListeners() {
 }
 
 // ── Queue view ───────────────────────────────────────────────
+// True priority position — assigned once, on the full unfiltered list, so it
+// never changes regardless of Queue's room filter/search/sort-by. Shared with
+// the Grid sidebar's "Top of the waitlist" so both agree on the same numbers.
+function wlpRankedKids(alloc) {
+    const ranked = wlpSortByPriority(alloc.kids);
+    ranked.forEach((k, i) => { k._pos = i + 1; });
+    return ranked;
+}
+
+// "Days needed" for sort purposes — a flexible kid's requested count, or the
+// number of specific days requested.
+function wlpDaysNeeded(k) {
+    return k.flexible ? (k.flexibleCount || 0) : k.days.length;
+}
+
+// Re-orders an already-filtered kid list for display only — never touches
+// k._pos (assigned once in wlpRankedKids, before this runs).
+function wlpApplyQueueSort(kids, alloc) {
+    const mode = _wlp.queueSortMode;
+    if (!mode || mode === 'priority') return kids;
+    const list = kids.slice();
+    if (mode === 'days_desc') list.sort((a, b) => wlpDaysNeeded(b) - wlpDaysNeeded(a));
+    else if (mode === 'days_asc') list.sort((a, b) => wlpDaysNeeded(a) - wlpDaysNeeded(b));
+    else if (mode === 'waiting') list.sort((a, b) => new Date(a.appliedAt) - new Date(b.appliedAt));
+    else if (mode === 'room') {
+        const roomOrder = {};
+        alloc.rooms.forEach((r, i) => { roomOrder[r.id] = i; });
+        list.sort((a, b) => (roomOrder[a.room] - roomOrder[b.room]) || (a._pos - b._pos));
+    }
+    return list;
+}
+
 function wlpQueueFilteredKids(alloc) {
     const search = _wlp.search.toLowerCase().trim();
     const roomFilter = _wlp.roomFilter;
-    let kids = wlpSortByPriority(alloc.kids);
-    kids.forEach((k, i) => { k._pos = i + 1; }); // true priority position, before filtering
+    let kids = wlpRankedKids(alloc); // true priority position, before filtering/sorting
     if (roomFilter) kids = kids.filter(k => k.room === roomFilter);
     if (search) {
         kids = kids.filter(k =>
@@ -580,12 +610,22 @@ function wlpQueueFilteredKids(alloc) {
             (k.parentName || '').toLowerCase().includes(search) ||
             (k.parentEmail || '').toLowerCase().includes(search));
     }
-    return kids;
+    return wlpApplyQueueSort(kids, alloc);
 }
+
+const WLP_QUEUE_SORT_OPTIONS = [
+    ['priority', 'Priority (default)'],
+    ['days_desc', 'Days needed — most first'],
+    ['days_asc', 'Days needed — fewest first'],
+    ['waiting', 'Longest waiting'],
+    ['room', 'Room'],
+];
 
 function wlpRenderQueue(alloc) {
     const kids = wlpQueueFilteredKids(alloc);
     const roomOptions = alloc.rooms.map(r => `<option value="${r.id}" ${_wlp.roomFilter === r.id ? 'selected' : ''}>${escHtml(r.label)}</option>`).join('');
+    const sortOptions = WLP_QUEUE_SORT_OPTIONS.map(([val, label]) =>
+        `<option value="${val}" ${_wlp.queueSortMode === val ? 'selected' : ''}>${escHtml(label)}</option>`).join('');
     return `
         <div>
             <div class="wlp-filter-bar">
@@ -593,6 +633,11 @@ function wlpRenderQueue(alloc) {
                 <select id="wlpRoomFilterSel" class="family-search-input" style="width:auto;">
                     <option value="">All Rooms</option>
                     ${roomOptions}
+                </select>
+                <div class="wlp-sort-divider"></div>
+                <label class="wlp-sort-label" for="wlpSortSel">Sort by</label>
+                <select id="wlpSortSel" class="family-search-input wlp-sort-select" style="width:auto;">
+                    ${sortOptions}
                 </select>
                 <span class="rates-status" id="wlpQueueCount">${kids.length} on the waitlist</span>
             </div>
@@ -602,8 +647,14 @@ function wlpRenderQueue(alloc) {
         </div>`;
 }
 
+// Rows render in a 2-column grid: first half of the (already sorted) list
+// top-to-bottom in column 1, the rest in column 2 — not left-right interleaved.
 function wlpQueueRowsHtml(kids, alloc) {
-    return kids.map(k => wlpRenderQueueRow(k, alloc)).join('') || '<p class="empty-hint">No applications match the current filter.</p>';
+    if (!kids.length) return '<p class="empty-hint">No applications match the current filter.</p>';
+    const half = Math.ceil(kids.length / 2);
+    const col1 = kids.slice(0, half).map(k => wlpRenderQueueRow(k, alloc)).join('');
+    const col2 = kids.slice(half).map(k => wlpRenderQueueRow(k, alloc)).join('');
+    return `<div class="wlp-queue-cols"><div class="wlp-queue-col">${col1}</div><div class="wlp-queue-col">${col2}</div></div>`;
 }
 
 function wlpRenderQueueRow(k, alloc) {
@@ -628,7 +679,7 @@ function wlpRenderQueueRow(k, alloc) {
             <div class="wlp-row-main" data-wlp-toggle="${k.id}">
                 <div class="wlp-pos ${k.sibling ? 'wlp-pos-sib' : 'wlp-pos-std'}">${k._pos}</div>
                 <div class="wlp-row-body">
-                    <div class="wlp-row-name">${escHtml(k.name)}${wlpDayTypeTag(k)} <span class="wlp-row-room">· ${escHtml(room.label.replace(/^\S+\s/, ''))}</span></div>
+                    <div class="wlp-row-name"><span class="wlp-row-name-text">${escHtml(k.name)}</span><span class="wlp-row-room-label">· ${escHtml(room.label.replace(/^\S+\s/, ''))}</span>${wlpDayTypeTag(k)}</div>
                     <div class="wlp-chip-row">${chips}</div>
                     <div class="wlp-row-meta">${k.sibling ? '👨‍👩‍👧 sibling · ' : ''}${k.flexible ? `🔀 any ${k.flexibleCount} days/wk · ` : ''}waiting ${escHtml(wlDaysWaiting(k.appliedAt))} · desired start ${escHtml(alloc.months[k.desiredStartM].label)}</div>
                 </div>
@@ -747,6 +798,7 @@ function wlpAttachQueueListeners() {
     const searchEl = document.getElementById('wlpSearch');
     searchEl?.addEventListener('input', () => { _wlp.search = searchEl.value; wlpRerenderQueueRows(); });
     document.getElementById('wlpRoomFilterSel')?.addEventListener('change', e => { _wlp.roomFilter = e.target.value; wlpRerenderQueueRows(); });
+    document.getElementById('wlpSortSel')?.addEventListener('change', e => { _wlp.queueSortMode = e.target.value; wlpRerenderQueueRows(); });
     wlpWireQueueRowActions();
 }
 
@@ -862,49 +914,37 @@ function wlpWireQueueRowActions() {
     });
 }
 
-// ── Persistent top summary — "Who's moving" and "Top of the waitlist"
-// shown above the Queue/Grid/Board toggle regardless of active tab, so
-// they don't disappear when you switch views (previously Grid-only and
-// Board-only, respectively).
-function wlpRenderTopSummary(alloc) {
-    const movementCols = alloc.rooms.map(room => ({ room, events: wlpMovementEvents(room.id, alloc) })).filter(x => x.events.length);
-    const movementCount = movementCols.reduce((sum, c) => sum + c.events.length, 0);
-    const movementHtml = movementCols.map(({ room, events }) => `
-        <div class="wlp-movement-col">
-            <div class="wlp-movement-col-title">${escHtml(room.label)}</div>
-            <div class="wlp-movement-events">${events.map(wlpEventCardHtml).join('')}</div>
-        </div>`).join('');
-
-    const topCols = alloc.rooms.map(room => ({
-        room, kids: wlpSortByPriority(alloc.kids.filter(k => k.room === room.id)).slice(0, 3),
-    })).filter(r => r.kids.length);
-    const topHtml = topCols.map(({ room, kids }) => `
-        <div class="wlp-movement-col">
-            <div class="wlp-movement-col-title">${escHtml(room.label)}</div>
-            ${kids.map(wlpTopRowHtml).join('')}
-        </div>`).join('');
-
+// ── Capacity Planner — Grid sidebar: "Top of the waitlist" ──
+// Compact, global top-4 by true priority (not affected by Queue's sort-by) —
+// replaces the old standalone "Top of the waitlist, by room" panel with the
+// same underlying ranking, just relocated next to the Grid for context while
+// planning. Reuses the same status-pill logic as the Queue row.
+function wlpTopWaitlistCardHtml(k, alloc) {
+    const room = alloc.roomMeta[k.room]?.room;
+    const fm = alloc.fitMonthByKid[k.id];
+    const fitNow = fm === k.desiredStartM;
+    let fitCls, fitLabel;
+    if (k.promised) { fitCls = 'wlp-status-promised'; fitLabel = '🎯 Promised'; }
+    else if (fm === null) { fitCls = 'wlp-status-red'; fitLabel = 'No fit in 12 mo'; }
+    else if (fitNow) { fitCls = 'wlp-status-green'; fitLabel = 'Fits now'; }
+    else { fitCls = 'wlp-status-amber'; fitLabel = `Fits ${alloc.months[fm].label}`; }
     return `
-        <div class="wlp-movement-panel">
-            <button type="button" class="wlp-collapse-toggle" id="wlpMovementToggle">
-                <div class="wlp-section-label">Who's moving — next 12 months</div>
-                <span class="wlp-collapse-count">${movementCount} move${movementCount === 1 ? '' : 's'}</span>
-                <span class="wlp-collapse-icon">${_wlp.movementCollapsed ? '▸ show' : '▾ hide'}</span>
-            </button>
-            ${_wlp.movementCollapsed ? '' : `
-            <div class="wlp-section-hint">↑ graduating up to the next room · 🎯 promised a spot (offer accepted, reserved regardless of capacity) · + projected to start from the waitlist (simulated, not guaranteed)</div>
-            <div class="wlp-movement-grid" style="grid-template-columns: repeat(${Math.max(movementCols.length, 1)}, minmax(0, 1fr));">${movementHtml || '<div class="wlp-empty-note">No graduations or waitlist starts in the next 12 months.</div>'}</div>
-            `}
-        </div>
-        <div class="wlp-movement-panel">
-            <button type="button" class="wlp-collapse-toggle" id="wlpTopWaitlistToggle">
-                <div class="wlp-section-label">Top of the waitlist, by room</div>
-                <span class="wlp-collapse-icon">${_wlp.topWaitlistCollapsed ? '▸ show' : '▾ hide'}</span>
-            </button>
-            ${_wlp.topWaitlistCollapsed ? '' : `
-            <div class="wlp-section-hint">Ranked by sibling priority, then longest wait.</div>
-            <div class="wlp-movement-grid" style="grid-template-columns: repeat(${Math.max(topCols.length, 1)}, minmax(0, 1fr));">${topHtml || '<div class="wlp-empty-note">No one on the waitlist.</div>'}</div>
-            `}
+        <div class="wlp-topwl-card">
+            <div class="wlp-topwl-top">
+                <span class="wlp-topwl-name">${k._pos}. ${escHtml(k.name)}</span>
+                <span class="wlp-status-pill wlp-topwl-pill ${fitCls}">${fitLabel}</span>
+            </div>
+            <div class="wlp-topwl-room">${escHtml(room ? room.label : '—')}</div>
+        </div>`;
+}
+
+function wlpRenderTopWaitlistSidebar(alloc) {
+    const top = wlpRankedKids(alloc).slice(0, 4);
+    return `
+        <div class="wlp-topwl-sidebar">
+            <div class="wlp-topwl-title">Top of the waitlist</div>
+            <div class="wlp-topwl-hint">Ranked by priority — for context while you plan.</div>
+            <div class="wlp-topwl-list">${top.map(k => wlpTopWaitlistCardHtml(k, alloc)).join('') || '<div class="wlp-empty-note">No one on the waitlist.</div>'}</div>
         </div>`;
 }
 
@@ -980,17 +1020,22 @@ function wlpRenderGrid(alloc) {
     }
 
     return `
-        <div class="wlp-grid-panel">
-            <div class="wlp-section-label">Open seats per weekday — next 12 months</div>
-            <div class="wlp-section-hint">Number shown = unfilled seats that day, after known graduations and already-matched waitlist admits (not enrolled headcount, not waitlist demand). A negative number (dark red) means already-enrolled kids overbook that room that month — before any waitlist offers. Click a month to see who fits.</div>
-            <div style="overflow-x:auto;">
-                <table class="wlp-cap-table">
-                    <thead><tr><th class="wlp-room-head">Room</th>${monthHeads}</tr></thead>
-                    <tbody>${roomRows}</tbody>
-                </table>
+        <div class="wlp-grid-wrap">
+            <div class="wlp-grid-main">
+                <div class="wlp-grid-panel">
+                    <div class="wlp-section-label">Open seats per weekday — next 12 months</div>
+                    <div class="wlp-section-hint">Number shown = unfilled seats that day, after known graduations and already-matched waitlist admits (not enrolled headcount, not waitlist demand). A negative number (dark red) means already-enrolled kids overbook that room that month — before any waitlist offers. Click a month to see who fits.</div>
+                    <div style="overflow-x:auto;">
+                        <table class="wlp-cap-table">
+                            <thead><tr><th class="wlp-room-head">Room</th>${monthHeads}</tr></thead>
+                            <tbody>${roomRows}</tbody>
+                        </table>
+                    </div>
+                </div>
+                ${matchPanel}
             </div>
-        </div>
-        ${matchPanel}`;
+            ${wlpRenderTopWaitlistSidebar(alloc)}
+        </div>`;
 }
 
 function wlpAttachGridListeners() {
@@ -1104,8 +1149,10 @@ function wlpRenderBoardSidebar(sel, mi, alloc) {
         </div>`;
 }
 
-// "Top of the waitlist, by room" moved to the persistent top summary
-// (wlpRenderTopSummary) — shown above every tab now, not just here.
+// "Top of the waitlist, by room" now lives in the Grid tab's sidebar
+// (wlpRenderTopWaitlistSidebar) — Board keeps its own per-room top-4
+// (wlpRenderBoardSidebar, below) since it's scoped to whichever room/day
+// slot is selected.
 function wlpRenderBoardDefaultPanels(mi, alloc) {
     const allRoomsMoving = alloc.rooms.map(room => ({
         room, events: wlpMovementEvents(room.id, alloc).filter(ev => ev.monthLabel === alloc.months[mi].label),
@@ -1144,6 +1191,89 @@ function wlpAttachBoardListeners() {
     });
     document.querySelectorAll('[data-wlp-board-offer]').forEach(el => {
         el.addEventListener('click', e => { e.stopPropagation(); wlpEnrollFromWaitlist(Number(el.dataset.wlpBoardOffer), _wlp.boardMonthIdx); });
+    });
+}
+
+// ── Moving (top-level tab) ───────────────────────────────────
+// Every graduation/promised-spot/waitlist-start event across all rooms, next
+// 12 months — reuses wlpMovementEvents() per room exactly as Grid/Board
+// already do, just fanned out across all rooms instead of one. No new
+// calculation: this is the same event data, only re-arranged into a
+// timeline + drawer + the existing "who's moving" card grid.
+function wlpMovingMonthEvents(monthIdx, alloc) {
+    const label = alloc.months[monthIdx].label;
+    const events = [];
+    alloc.rooms.forEach(room => {
+        wlpMovementEvents(room.id, alloc).forEach(ev => {
+            if (ev.monthLabel === label) events.push({ ...ev, room });
+        });
+    });
+    return events;
+}
+
+function wlpMovingMonthCounts(alloc) {
+    const counts = alloc.months.map(() => 0);
+    alloc.rooms.forEach(room => {
+        wlpMovementEvents(room.id, alloc).forEach(ev => {
+            const idx = alloc.months.findIndex(mo => mo.label === ev.monthLabel);
+            if (idx >= 0) counts[idx]++;
+        });
+    });
+    return counts;
+}
+
+function wlpMovingDrawerCardHtml(ev) {
+    const fg = ev.iconCls === 'wlp-event-icon-grad' ? 'var(--wlp-grad-fg)'
+        : ev.iconCls === 'wlp-event-icon-promised' ? 'var(--wlp-promised-fg)' : 'var(--wlp-start-fg)';
+    return `<div class="wlp-moving-drawer-card"><span style="color:${fg};font-weight:800;">${ev.icon}</span> <b>${escHtml(ev.name)}</b> ${escHtml(ev.actionLabel)}</div>`;
+}
+
+function wlpRenderMoving(alloc) {
+    const selIdx = Math.max(0, Math.min(11, _wlp.movingSelectedMonthIdx));
+    const counts = wlpMovingMonthCounts(alloc);
+
+    const tiles = alloc.months.map((mo, i) => {
+        const isSel = i === selIdx;
+        return `<div class="wlp-moving-tile ${isSel ? 'selected' : ''}" data-wlp-moving-month="${i}">
+            <div class="wlp-moving-tile-label">${mo.label.split(' ')[0]}</div>
+            <div class="wlp-moving-tile-count">${counts[i]}</div>
+        </div>`;
+    }).join('');
+
+    const monthEvents = wlpMovingMonthEvents(selIdx, alloc);
+    const drawerCards = monthEvents.map(wlpMovingDrawerCardHtml).join('');
+
+    const movementCols = alloc.rooms.map(room => ({ room, events: wlpMovementEvents(room.id, alloc) })).filter(x => x.events.length);
+    const movementCount = movementCols.reduce((sum, c) => sum + c.events.length, 0);
+    const movementHtml = movementCols.map(({ room, events }) => `
+        <div class="wlp-movement-col">
+            <div class="wlp-movement-col-title">${escHtml(room.label)}</div>
+            <div class="wlp-movement-events">${events.map(wlpEventCardHtml).join('')}</div>
+        </div>`).join('');
+
+    return `
+        <div class="wlp-moving-panel">
+            <div class="wlp-section-label" style="margin-bottom:2px">Moves timeline — next 12 months, all rooms</div>
+            <div class="wlp-moving-timeline">${tiles}</div>
+            <div class="wlp-moving-drawer">
+                <div class="wlp-moving-drawer-head">${escHtml(alloc.months[selIdx].label)} — ${monthEvents.length} move${monthEvents.length === 1 ? '' : 's'}, all rooms</div>
+                ${monthEvents.length ? `<div class="wlp-moving-drawer-grid">${drawerCards}</div>` : '<div class="wlp-moving-drawer-empty">No moves this month.</div>'}
+            </div>
+        </div>
+        <div class="wlp-moving-allpanel">
+            <div class="wlp-section-label" style="margin-bottom:2px">Who's moving — next 12 months</div>
+            <div class="wlp-collapse-count" style="display:block;margin-bottom:6px;">${movementCount} move${movementCount === 1 ? '' : 's'}</div>
+            <div class="wlp-section-hint">↑ graduating up to the next room · 🎯 promised a spot (offer accepted, reserved regardless of capacity) · + projected to start from the waitlist (simulated, not guaranteed)</div>
+            <div class="wlp-movement-grid" style="grid-template-columns: repeat(${Math.max(movementCols.length, 1)}, minmax(0, 1fr));">${movementHtml || '<div class="wlp-empty-note">No graduations or waitlist starts in the next 12 months.</div>'}</div>
+        </div>`;
+}
+
+function wlpAttachMovingListeners() {
+    document.querySelectorAll('[data-wlp-moving-month]').forEach(el => {
+        el.addEventListener('click', () => {
+            _wlp.movingSelectedMonthIdx = Number(el.dataset.wlpMovingMonth);
+            renderWaitlistPlanner();
+        });
     });
 }
 
