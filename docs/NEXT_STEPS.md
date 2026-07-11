@@ -11,29 +11,29 @@ Finance consolidation (128 commits, v1.15.8 → v1.20.2) was reviewed for the
 first time. Full findings: `docs/CODE_REVIEW.md` "Third Sweep" section
 (T1–T20). Recommended order:
 
-1. **Migration check (blocks nothing else, do first) — ⚠️ STILL NEEDS A HUMAN
-   TO RUN.** Confirm `add_billing_import_source.sql`,
-   `create_staff_photos_bucket.sql`, `waitlist_inquiry_tour_reminders.sql`, and
-   `waitlist_offer_type.sql` are all actually applied in the live Supabase
-   project — the frontend on `main` already depends on all four and none is
-   documented as deployed. The assistant's Supabase MCP connection isn't
-   authorized in this session, so this couldn't be verified automatically; run
-   in the SQL Editor:
-   ```sql
-   SELECT table_name, column_name FROM information_schema.columns
-    WHERE (table_name, column_name) IN (
-      ('billing_import_batches', 'source'),
-      ('waitlist_applications', 'tour_status'),
-      ('waitlist_applications', 'tour_scheduled_at'),
-      ('waitlist_applications', 'tour_completed_at'),
-      ('waitlist_applications', 'tour_notes'),
-      ('waitlist_applications', 'offer_type'),
-      ('waitlist_applications', 'offered_days')
-    );
-   SELECT id, public FROM storage.buckets WHERE id = 'staff-photos';
-   ```
-   Apply any missing migration from `supabase/migrations/` before relying on
-   the corresponding feature.
+1. **Migration check (blocks nothing else, do first) — partially confirmed
+   2026-07-11.**
+   - ✅ `create_staff_photos_bucket.sql` — **confirmed applied.**
+     `storage.buckets` shows `staff-photos` with `public = true`, matching the
+     migration's intended design (public read for staff headshots).
+   - ⚠️ `add_billing_import_source.sql`, `waitlist_inquiry_tour_reminders.sql`,
+     `waitlist_offer_type.sql` — **still unconfirmed.** Run in the SQL Editor:
+     ```sql
+     SELECT table_name, column_name FROM information_schema.columns
+      WHERE (table_name, column_name) IN (
+        ('billing_import_batches', 'source'),
+        ('waitlist_applications', 'tour_status'),
+        ('waitlist_applications', 'tour_scheduled_at'),
+        ('waitlist_applications', 'tour_completed_at'),
+        ('waitlist_applications', 'tour_notes'),
+        ('waitlist_applications', 'offer_type'),
+        ('waitlist_applications', 'offered_days')
+      );
+     ```
+     All 7 rows should come back. Apply any missing migration from
+     `supabase/migrations/` before relying on the corresponding feature
+     (ProCare import source tagging / tour reminders / waitlist offer-type
+     tracking, respectively).
 2. **T3 — ✅ code fixed 2026-07-11, needs deploy.** `waitlist-status` edge fn
    ignored admin capacity overrides (`settings.value` text-vs-object bug) —
    fixed by adding the `parseSettingsValue()` helper already proven in commit
