@@ -568,8 +568,7 @@ function wlpAttachHeaderListeners() {
 
 // ── Queue view ───────────────────────────────────────────────
 // True priority position — assigned once, on the full unfiltered list, so it
-// never changes regardless of Queue's room filter/search/sort-by. Shared with
-// the Grid sidebar's "Top of the waitlist" so both agree on the same numbers.
+// never changes regardless of Queue's room filter/search/sort-by.
 function wlpRankedKids(alloc) {
     const ranked = wlpSortByPriority(alloc.kids);
     ranked.forEach((k, i) => { k._pos = i + 1; });
@@ -647,14 +646,13 @@ function wlpRenderQueue(alloc) {
         </div>`;
 }
 
-// Rows render in a 2-column grid: first half of the (already sorted) list
-// top-to-bottom in column 1, the rest in column 2 — not left-right interleaved.
+// Rows render as direct children of a 2-column CSS grid, in sorted order, so
+// placement is row-major — 1st/2nd kid share row 1 (col 1/col 2), 3rd/4th
+// share row 2, etc. — and every row's height stays matched across both
+// columns (a true grid, not two independently-flowing column divs).
 function wlpQueueRowsHtml(kids, alloc) {
     if (!kids.length) return '<p class="empty-hint">No applications match the current filter.</p>';
-    const half = Math.ceil(kids.length / 2);
-    const col1 = kids.slice(0, half).map(k => wlpRenderQueueRow(k, alloc)).join('');
-    const col2 = kids.slice(half).map(k => wlpRenderQueueRow(k, alloc)).join('');
-    return `<div class="wlp-queue-cols"><div class="wlp-queue-col">${col1}</div><div class="wlp-queue-col">${col2}</div></div>`;
+    return `<div class="wlp-queue-cols">${kids.map(k => wlpRenderQueueRow(k, alloc)).join('')}</div>`;
 }
 
 function wlpRenderQueueRow(k, alloc) {
@@ -914,43 +912,58 @@ function wlpWireQueueRowActions() {
     });
 }
 
-// ── Capacity Planner — Grid sidebar: "Top of the waitlist" ──
-// Compact, global top-4 by true priority (not affected by Queue's sort-by) —
-// replaces the old standalone "Top of the waitlist, by room" panel with the
-// same underlying ranking, just relocated next to the Grid for context while
-// planning. Reuses the same status-pill logic as the Queue row.
-function wlpTopWaitlistCardHtml(k, alloc) {
-    const room = alloc.roomMeta[k.room]?.room;
-    const fm = alloc.fitMonthByKid[k.id];
-    const fitNow = fm === k.desiredStartM;
-    let fitCls, fitLabel;
-    if (k.promised) { fitCls = 'wlp-status-promised'; fitLabel = '🎯 Promised'; }
-    else if (fm === null) { fitCls = 'wlp-status-red'; fitLabel = 'No fit in 12 mo'; }
-    else if (fitNow) { fitCls = 'wlp-status-green'; fitLabel = 'Fits now'; }
-    else { fitCls = 'wlp-status-amber'; fitLabel = `Fits ${alloc.months[fm].label}`; }
-    return `
-        <div class="wlp-topwl-card">
-            <div class="wlp-topwl-top">
-                <span class="wlp-topwl-name">${k._pos}. ${escHtml(k.name)}</span>
-                <span class="wlp-status-pill wlp-topwl-pill ${fitCls}">${fitLabel}</span>
-            </div>
-            <div class="wlp-topwl-room">${escHtml(room ? room.label : '—')}</div>
-        </div>`;
-}
-
-function wlpRenderTopWaitlistSidebar(alloc) {
-    const top = wlpRankedKids(alloc).slice(0, 4);
-    return `
-        <div class="wlp-topwl-sidebar">
-            <div class="wlp-topwl-title">Top of the waitlist</div>
-            <div class="wlp-topwl-hint">Ranked by priority — for context while you plan.</div>
-            <div class="wlp-topwl-list">${top.map(k => wlpTopWaitlistCardHtml(k, alloc)).join('') || '<div class="wlp-empty-note">No one on the waitlist.</div>'}</div>
-        </div>`;
-}
-
 // ── Capacity Planner — Grid view ────────────────────────────
-function wlpRenderGrid(alloc) {
+// Grid's "who fits" sidebar reuses the same right-hand-sidebar look as
+// Board's slot sidebar (wlpRenderBoardSidebar, below) — suggestion cards
+// with a big Enroll button, plus "Moving this month" for the selected room —
+// just scoped to a whole month (Grid's selection is room+month) instead of a
+// single day (Board's is room+day).
+function wlpRenderGridSidebar(sel, alloc) {
+    const { roomId, monthIdx } = sel;
+    const room = alloc.roomMeta[roomId].room;
+    const candidates = alloc.kids.filter(k => k.room === roomId && k.desiredStartM <= monthIdx);
+    const ranked = wlpSortByPriority(candidates);
+    const suggestionsHtml = ranked.map(k => {
+        const dayMap = alloc.preGridByKid[k.id][monthIdx];
+        // .length check first: an unresolved flexible kid (k.days still
+        // empty — never found N open days anywhere in the 12-month window)
+        // must not read as "fits" via a vacuously-true .every() on an
+        // empty array.
+        const someFit = k.days.length > 0 && k.days.some(d => dayMap[d] >= 1);
+        const avail = k.days.filter(d => dayMap[d] >= 1);
+        const missing = k.days.filter(d => !avail.includes(d));
+        const chips = k.days.length
+            ? wlpDayChips(k, dayMap).map(wlpChipHtml).join('')
+            : `<span class="wlp-chip wlp-chip-off" style="width:auto;padding:2px 8px">any ${k.flexibleCount}/wk — no fit</span>`;
+        const offerLabel = !someFit ? 'No open days' : missing.length ? `✅ Enroll (${avail.length} of ${k.days.length} days)` : `✅ Enroll (all ${k.days.length} days)`;
+        const offerCls = missing.length ? 'wlp-suggestion-offer-partial' : 'wlp-suggestion-offer-full';
+        return `
+            <div class="wlp-suggestion-card">
+                <div class="wlp-suggestion-top"><span class="wlp-suggestion-name">${escHtml(k.name)}${wlpDayTypeTag(k)}</span><span class="wlp-suggestion-waiting">${escHtml(wlDaysWaiting(k.appliedAt))}</span></div>
+                <div class="wlp-suggestion-priority">${wlpPriorityLabel(k)}</div>
+                <div class="wlp-chip-row">${chips}</div>
+                <button type="button" class="wlp-suggestion-offer ${offerCls}" data-wlp-match-offer="${k.id}" ${!someFit ? 'disabled' : ''}>${offerLabel}</button>
+            </div>`;
+    }).join('');
 
+    const roomLabel = room.label.replace(/^\S+\s/, '');
+    const roomMoving = wlpMovementEvents(roomId, alloc).filter(ev => ev.monthLabel === alloc.months[monthIdx].label);
+    const movingHtml = roomMoving.length ? roomMoving.map(wlpMovingCardHtml).join('') : '<div class="wlp-empty-note" style="margin-bottom:18px">No graduations or waitlist starts land here this month.</div>';
+
+    return `
+        <div class="wlp-sidebar">
+            <div class="wlp-sidebar-head">
+                <div class="wlp-sidebar-title">${escHtml(room.label)} · ${escHtml(alloc.months[monthIdx].label)}</div>
+                <button type="button" class="wlp-sidebar-close" id="wlpGridSidebarClose">✕</button>
+            </div>
+            <div class="wlp-sidebar-hint">Suggested, best fit first — who's asking for this room:</div>
+            <div style="margin-bottom:18px">${suggestionsHtml || '<div class="wlp-empty-note">No one on the waitlist is asking for this room.</div>'}</div>
+            <div class="wlp-section-label" style="margin-bottom:8px">Moving this month — ${escHtml(roomLabel)}</div>
+            ${movingHtml}
+        </div>`;
+}
+
+function wlpRenderGrid(alloc) {
     const monthHeads = alloc.months.map(m => `<th class="wlp-month-head">${escHtml(m.label)}</th>`).join('');
     const roomRows = alloc.rooms.map(room => {
         const cells = alloc.months.map(mo => {
@@ -969,56 +982,7 @@ function wlpRenderGrid(alloc) {
         return `<tr><td class="wlp-room-cell">${escHtml(room.label)}<br><span class="wlp-room-cell-cap">Cap ${room.capacity ?? '—'}/day</span></td>${cells}</tr>`;
     }).join('');
 
-    let matchPanel = '';
-    if (_wlp.selCellA) {
-        const { roomId, monthIdx } = _wlp.selCellA;
-        const room = alloc.roomMeta[roomId].room;
-        const candidates = alloc.kids.filter(k => k.room === roomId && k.desiredStartM <= monthIdx);
-        const ranked = wlpSortByPriority(candidates);
-        const matchesHtml = ranked.map((k, i) => {
-            const dayMap = alloc.preGridByKid[k.id][monthIdx];
-            // .length check first: an unresolved flexible kid (k.days still
-            // empty — never found N open days anywhere in the 12-month
-            // window) must not read as "fits" via a vacuously-true .every()
-            // on an empty array.
-            const allFit = k.days.length > 0 && k.days.every(d => dayMap[d] >= 1);
-            const someFit = k.days.length > 0 && k.days.some(d => dayMap[d] >= 1);
-            const status = allFit ? { label: 'Fits now', cls: 'wlp-status-green' }
-                : someFit ? { label: 'Partial fit', cls: 'wlp-status-amber' }
-                : { label: 'No room', cls: 'wlp-status-red' };
-            const fm = alloc.fitMonthByKid[k.id];
-            const seatedNote = fm == null ? 'no fit found in the 12-month window'
-                : fm === monthIdx ? 'this is their turn in queue order'
-                : `queue turn: ${alloc.months[fm].label}`;
-            const chips = k.days.length
-                ? wlpDayChips(k, dayMap).map(wlpChipHtml).join('')
-                : `<span class="wlp-chip wlp-chip-off" style="width:auto;padding:2px 8px">any ${k.flexibleCount}/wk — no fit</span>`;
-            return `
-                <div class="wlp-match-card">
-                    <div class="wlp-match-rank ${allFit ? 'wlp-match-rank-fit' : 'wlp-match-rank-nofit'}">${i + 1}</div>
-                    <div class="wlp-match-body">
-                        <div class="wlp-match-top">
-                            <span class="wlp-match-name">${escHtml(k.name)}${wlpDayTypeTag(k)}</span>
-                            <span class="wlp-status-pill ${status.cls}">${status.label}</span>
-                        </div>
-                        <div class="wlp-chip-row">${chips}</div>
-                        <div class="wlp-match-note">${wlpPriorityLabel(k)} · waiting ${escHtml(wlDaysWaiting(k.appliedAt))} · ${escHtml(seatedNote)}</div>
-                        <div class="wlp-secondary-actions">
-                            <button type="button" class="wlp-btn-offer" data-wlp-match-offer="${k.id}" ${!someFit ? 'disabled' : ''}>${allFit ? '✅ Enroll' : someFit ? '✅ Enroll (partial)' : 'No open days'}</button>
-                        </div>
-                    </div>
-                </div>`;
-        }).join('');
-        matchPanel = `
-            <div class="wlp-match-panel">
-                <div class="wlp-match-head">
-                    <div class="wlp-match-title">${escHtml(room.label)} · ${escHtml(alloc.months[monthIdx].label)} — who fits?</div>
-                    <button type="button" class="wlp-match-close" id="wlpMatchClose">✕ close</button>
-                </div>
-                ${ranked.length ? `<div class="wlp-match-list">${matchesHtml}</div>` : '<div class="wlp-empty-note">No one on the waitlist is asking for this room.</div>'}
-            </div>`;
-    }
-
+    const sel = _wlp.selCellA;
     return `
         <div class="wlp-grid-wrap">
             <div class="wlp-grid-main">
@@ -1032,9 +996,8 @@ function wlpRenderGrid(alloc) {
                         </table>
                     </div>
                 </div>
-                ${matchPanel}
             </div>
-            ${wlpRenderTopWaitlistSidebar(alloc)}
+            ${sel ? wlpRenderGridSidebar(sel, alloc) : ''}
         </div>`;
 }
 
@@ -1046,7 +1009,7 @@ function wlpAttachGridListeners() {
             renderWaitlistPlanner();
         });
     });
-    document.getElementById('wlpMatchClose')?.addEventListener('click', () => { _wlp.selCellA = null; renderWaitlistPlanner(); });
+    document.getElementById('wlpGridSidebarClose')?.addEventListener('click', () => { _wlp.selCellA = null; renderWaitlistPlanner(); });
     document.querySelectorAll('[data-wlp-match-offer]').forEach(el => {
         el.addEventListener('click', e => {
             e.stopPropagation();
@@ -1100,9 +1063,6 @@ function wlpMovingCardHtml(ev) {
             <div style="font-size:11.5px;line-height:1.4;"><strong>${escHtml(ev.name)}</strong><br><span style="color:var(--text-muted);font-size:10.5px;">${escHtml(ev.actionLabel)} (${escHtml(ev.days.join(', '))})</span></div>
         </div>`;
 }
-function wlpTopRowHtml(k) {
-    return `<div class="wlp-top-row"><strong>${escHtml(k.name)}</strong><span style="color:var(--text-muted)">${escHtml(wlDaysWaiting(k.appliedAt))}</span></div>`;
-}
 
 function wlpRenderBoardSidebar(sel, mi, alloc) {
     const room = alloc.roomMeta[sel.roomId].room;
@@ -1126,11 +1086,12 @@ function wlpRenderBoardSidebar(sel, mi, alloc) {
     }).join('');
 
     const roomLabel = room.label.replace(/^\S+\s/, '');
+    // "Top of the waitlist" is deliberately NOT repeated here — this room's
+    // top-ranked kids are already the ones showing up in "Moving this month"
+    // right below (they're next in line), so a separate ranked list would
+    // just re-list the same names.
     const roomMoving = wlpMovementEvents(sel.roomId, alloc).filter(ev => ev.monthLabel === alloc.months[mi].label);
     const movingHtml = roomMoving.length ? roomMoving.map(wlpMovingCardHtml).join('') : '<div class="wlp-empty-note" style="margin-bottom:18px">No graduations or waitlist starts land here this month.</div>';
-
-    const topWl = wlpSortByPriority(alloc.kids.filter(k => k.room === sel.roomId)).slice(0, 4);
-    const topHtml = topWl.length ? topWl.map(wlpTopRowHtml).join('') : '<div class="wlp-empty-note">No one waiting for this room.</div>';
 
     return `
         <div class="wlp-sidebar">
@@ -1142,17 +1103,10 @@ function wlpRenderBoardSidebar(sel, mi, alloc) {
             <div style="margin-bottom:18px">${suggestionsHtml || '<div class="wlp-empty-note">No one waiting needs this day.</div>'}</div>
             <div class="wlp-section-label" style="margin-bottom:8px">Moving this month — ${escHtml(roomLabel)}</div>
             ${movingHtml}
-            <div class="wlp-section-label" style="margin-bottom:4px">Top of the waitlist — ${escHtml(roomLabel)}</div>
-            <div class="wlp-section-hint">Ranked by sibling priority, then longest wait — regardless of whether this room has an opening yet.</div>
-            ${topHtml}
             ${_wlp.toastText ? `<div class="wlp-toast" style="margin-top:14px;border-radius:7px;">${escHtml(_wlp.toastText)}</div>` : ''}
         </div>`;
 }
 
-// "Top of the waitlist, by room" now lives in the Grid tab's sidebar
-// (wlpRenderTopWaitlistSidebar) — Board keeps its own per-room top-4
-// (wlpRenderBoardSidebar, below) since it's scoped to whichever room/day
-// slot is selected.
 function wlpRenderBoardDefaultPanels(mi, alloc) {
     const allRoomsMoving = alloc.rooms.map(room => ({
         room, events: wlpMovementEvents(room.id, alloc).filter(ev => ev.monthLabel === alloc.months[mi].label),
@@ -1225,7 +1179,14 @@ function wlpMovingMonthCounts(alloc) {
 function wlpMovingDrawerCardHtml(ev) {
     const fg = ev.iconCls === 'wlp-event-icon-grad' ? 'var(--wlp-grad-fg)'
         : ev.iconCls === 'wlp-event-icon-promised' ? 'var(--wlp-promised-fg)' : 'var(--wlp-start-fg)';
-    return `<div class="wlp-moving-drawer-card"><span style="color:${fg};font-weight:800;">${ev.icon}</span> <b>${escHtml(ev.name)}</b> ${escHtml(ev.actionLabel)}</div>`;
+    const chips = TREND_DAYS.map(d => ev.days.includes(d)
+        ? `<span class="wlp-chip ${wlpEventChipClass(ev.iconCls)}">${d}</span>`
+        : `<span class="wlp-chip wlp-chip-off">${d}</span>`).join('');
+    return `
+        <div class="wlp-moving-drawer-card">
+            <div><span style="color:${fg};font-weight:800;">${ev.icon}</span> <b>${escHtml(ev.name)}</b> ${escHtml(ev.actionLabel)}</div>
+            <div class="wlp-chip-row" style="margin:5px 0 0">${chips}</div>
+        </div>`;
 }
 
 function wlpRenderMoving(alloc) {
