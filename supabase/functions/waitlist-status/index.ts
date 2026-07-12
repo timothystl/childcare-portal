@@ -27,35 +27,38 @@ function parseSettingsValue(raw: unknown): Record<string, unknown> {
 }
 
 // ============================================================
-// Ported from js/admin/admin-waitlist.js (wlpRunAllocation() and friends).
-// Position and estimated-wait figures MUST agree with the admin Waitlist &
-// Capacity Planner — this is a deliberate duplication, not drift. If the
-// planner's algorithm changes, mirror the change here too.
+// Ported from js/admin/admin-waitlist.js (wlpRunAllocation() and friends) and
+// js/supabase.js (room age helpers). Position and estimated-wait figures MUST
+// agree with the admin Waitlist & Capacity Planner — this is a deliberate
+// duplication, not drift. If the planner's algorithm changes, mirror it here.
+//
+// Age ranges + capacities are read live from the `settings` table (keys
+// 'room_rates' and 'room_capacity') and merged over the defaults below, exactly
+// like loadRateSettings()/getSortedRooms() do client-side — the parent numbers
+// must not fall behind an admin edit. In particular, when two rooms share an
+// age window (e.g. Turtle and Owl both 24–36mo) they are pooled and demand
+// overflows from the earlier-sorted room into its twin, matching wlpRoomGroups.
 // ============================================================
 
 const TREND_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']
 
-// Base ROOMS config (js/supabase.js) — capacity is overridden below from the
-// `settings` table (key 'room_capacity') to match the live admin figures.
-const BASE_ROOMS: Record<string, { label: string; capacity: number }> = {
-  bear:   { label: '🐻 Bear Room',   capacity: 8 },
-  bee:    { label: '🐝 Bee Room',    capacity: 16 },
-  turtle: { label: '🐢 Turtle Room', capacity: 11 },
-  goose:  { label: '🪿 Goose Room',  capacity: 12 },
-  owl:    { label: '🦉 Owl Room',    capacity: 11 },
+// Base ROOMS config (js/supabase.js) — label, default capacity, default age
+// window. Live 'room_rates'/'room_capacity' settings override the ages and
+// capacities at request time (see buildRooms). Declaration order here is the
+// tiebreak for two rooms that end up sharing a minimum age, matching the ROOMS
+// array order getSortedRooms() falls back to.
+const BASE_ROOMS: Record<string, { label: string; capacity: number; ageMinMonths: number | null; ageMaxMonths: number | null }> = {
+  bear:   { label: '🐻 Bear Room',   capacity: 8,  ageMinMonths: 0,  ageMaxMonths: 12 },
+  bee:    { label: '🐝 Bee Room',    capacity: 16, ageMinMonths: 12, ageMaxMonths: 24 },
+  turtle: { label: '🐢 Turtle Room', capacity: 11, ageMinMonths: 24, ageMaxMonths: 30 },
+  goose:  { label: '🪿 Goose Room',  capacity: 12, ageMinMonths: 30, ageMaxMonths: 36 },
+  owl:    { label: '🦉 Owl Room',    capacity: 11, ageMinMonths: 36, ageMaxMonths: null },
 }
-// Age-ascending order, same as getSortedRooms() with 'summer' excluded.
-const ROOM_ORDER = ['bear', 'bee', 'turtle', 'goose', 'owl']
+const ROOM_DECL_ORDER = ['bear', 'bee', 'turtle', 'goose', 'owl']
 
-const PROMOTION_CHAIN: Record<string, { ageOutMonths: number; nextRoom: string | null }> = {
-  bear:   { ageOutMonths: 12, nextRoom: 'bee' },
-  bee:    { ageOutMonths: 24, nextRoom: 'turtle' },
-  turtle: { ageOutMonths: 30, nextRoom: 'goose' },
-  goose:  { ageOutMonths: 36, nextRoom: 'owl' },
-  owl:    { ageOutMonths: 60, nextRoom: null },
-}
+type RoomCfg = { id: string; label: string; capacity: number; ageMinMonths: number | null; ageMaxMonths: number | null }
 
 type WaitlistApp = {
   id: number
@@ -79,18 +82,96 @@ type Registration = {
   registration_dates: RegDate[] | null
 }
 
-// Derive room from a waitlist application record — mirrors wlDeriveRoom().
-function wlDeriveRoom(app: WaitlistApp): string | null {
+type Kid = {
+  id: number
+  room: string | null
+  days: string[]
+  desiredStartM: number
+  sibling: boolean
+  appliedAt: string
+}
+
+// Merge live age ranges + capacities over the defaults, then return the rooms
+// age-sorted (getSortedRooms(): ageMinMonths ascending, declaration order as
+// tiebreak, null-age rooms last). 'summer' is excluded — same as wlpRooms().
+function buildRooms(capacities: Record<string, unknown>, rates: Record<string, unknown>): RoomCfg[] {
+  const rooms: RoomCfg[] = ROOM_DECL_ORDER.map(id => {
+    const base = BASE_ROOMS[id]
+    const r = (rates[id] && typeof rates[id] === 'object') ? rates[id] as Record<string, unknown> : {}
+    return {
+      id,
+      label: base.label,
+      capacity: typeof capacities[id] === 'number' ? capacities[id] as number : base.capacity,
+      ageMinMonths: ('ageMinMonths' in r) ? (r.ageMinMonths as number | null) : base.ageMinMonths,
+      ageMaxMonths: ('ageMaxMonths' in r) ? (r.ageMaxMonths as number | null) : base.ageMaxMonths,
+    }
+  })
+  return rooms
+    .map((room, i) => ({ room, i }))
+    .sort((a, b) => {
+      const aMin = a.room.ageMinMonths, bMin = b.room.ageMinMonths
+      if (aMin == null && bMin == null) return a.i - b.i
+      if (aMin == null) return 1
+      if (bMin == null) return -1
+      if (aMin !== bMin) return aMin - bMin
+      return a.i - b.i
+    })
+    .map(x => x.room)
+}
+
+// Mirrors calcAgeMonths() — whole completed months, day-of-month aware (a child
+// born the 15th is still N months until the 15th, not the 1st).
+function calcAgeMonths(dobStr: string, ref: Date): number {
+  const birth = new Date(dobStr + 'T00:00:00')
+  let months = (ref.getFullYear() - birth.getFullYear()) * 12 + (ref.getMonth() - birth.getMonth())
+  if (ref.getDate() < birth.getDate()) months--
+  return months
+}
+
+// Mirrors roomIdForAgeMonths() — first room (age-ascending) whose window holds
+// the age; ageMaxMonths is exclusive. Stable over an already age-sorted list,
+// so two rooms sharing a minimum age resolve to the earlier-declared one.
+function roomIdForAgeMonths(months: number | null, orderedRooms: RoomCfg[]): string | null {
+  if (months == null || months < 0) return null
+  for (const room of orderedRooms) {
+    if (room.ageMinMonths == null) continue
+    if (months >= room.ageMinMonths && (room.ageMaxMonths == null || months < room.ageMaxMonths)) return room.id
+  }
+  return null
+}
+
+// Mirrors wlDeriveRoom() — age at desired_start_date, bucketed against the live
+// (admin-editable) age ranges.
+function wlDeriveRoom(app: WaitlistApp, orderedRooms: RoomCfg[]): string | null {
   const dobStr = app.child_dob || app.expected_due_date
   if (!dobStr || !app.desired_start_date) return null
-  const dob = new Date(dobStr + 'T00:00:00')
   const start = new Date(app.desired_start_date + 'T00:00:00')
-  const months = (start.getFullYear() - dob.getFullYear()) * 12 + (start.getMonth() - dob.getMonth())
-  if (months < 12) return 'bear'
-  if (months < 24) return 'bee'
-  if (months < 30) return 'turtle'
-  if (months < 36) return 'goose'
-  return 'owl'
+  return roomIdForAgeMonths(calcAgeMonths(dobStr, start), orderedRooms)
+}
+
+// Mirrors wlpRoomGroups() — rooms sharing an identical age window are co-equal
+// (kids overflow between them); a unique window is a group of one. Order is
+// preserved so overflow fills the earlier-sorted room first.
+function roomGroupsFor(orderedRooms: RoomCfg[]): RoomCfg[][] {
+  const byKey = new Map<string, RoomCfg[]>()
+  orderedRooms.forEach(r => {
+    const key = `${r.ageMinMonths}:${r.ageMaxMonths}`
+    if (!byKey.has(key)) byKey.set(key, [])
+    byKey.get(key)!.push(r)
+  })
+  return [...byKey.values()]
+}
+
+// Mirrors wlpPromotionChain() — derived from the live age order, never
+// hardcoded (an edited age range must re-point graduations automatically). The
+// last room in age order has no destination (aging out = leaving the program).
+function buildPromotionChain(orderedRooms: RoomCfg[]): Record<string, { ageOutMonths: number | null; nextRoom: string | null }> {
+  const chain: Record<string, { ageOutMonths: number | null; nextRoom: string | null }> = {}
+  const ordered = orderedRooms.filter(r => r.ageMinMonths != null)
+  ordered.forEach((room, i) => {
+    chain[room.id] = { ageOutMonths: room.ageMaxMonths, nextRoom: ordered[i + 1]?.id || null }
+  })
+  return chain
 }
 
 // Mirrors wlpAppDays().
@@ -137,13 +218,13 @@ function wlpCurrentWeekDates(today: Date): Record<string, string> {
 }
 
 // Mirrors wlpBaseBooked() — this week's live Mon-Fri bookings per room/day.
-function wlpBaseBooked(registrations: Registration[], today: Date): Record<string, Record<string, number>> {
+function wlpBaseBooked(registrations: Registration[], rooms: RoomCfg[], today: Date): Record<string, Record<string, number>> {
   const weekDates = wlpCurrentWeekDates(today)
   const dateToDay: Record<string, string> = {}
   Object.entries(weekDates).forEach(([day, date]) => { dateToDay[date] = day })
 
   const booked: Record<string, Record<string, number>> = {}
-  ROOM_ORDER.forEach(id => { booked[id] = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 } })
+  rooms.forEach(r => { booked[r.id] = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 } })
 
   registrations.forEach(reg => {
     if (!booked[reg.room_id]) return
@@ -171,14 +252,14 @@ function weekdayDayTypeMap(reg: Registration): Record<string, string> {
   return map
 }
 
-// Mirrors _buildGraduationIndex().
-function buildGraduationIndex(registrations: Registration[]) {
+// Mirrors _buildGraduationIndex(), using the live-derived promotion chain.
+function buildGraduationIndex(registrations: Registration[], promotionChain: Record<string, { ageOutMonths: number | null; nextRoom: string | null }>) {
   const gradOut: Record<string, Record<string, { childName: string; weekdays: Record<string, string> }[]>> = {}
   const gradIn: Record<string, Record<string, { childName: string; weekdays: Record<string, string> }[]>> = {}
   const seen = new Set<string>()
 
   registrations.forEach(reg => {
-    const chain = PROMOTION_CHAIN[reg.room_id]
+    const chain = promotionChain[reg.room_id]
     if (!chain || !reg.child_dob) return
     const key = `${reg.child_name}:${reg.room_id}`
     if (seen.has(key)) return
@@ -188,7 +269,10 @@ function buildGraduationIndex(registrations: Registration[]) {
     if (!Object.keys(weekdays).length) return
 
     const dob = new Date(reg.child_dob)
-    const graduates = new Date(dob.getFullYear(), dob.getMonth() + chain.ageOutMonths, 1)
+    // ageOutMonths is null for the last room in age order; matching the client,
+    // that lands the graduation in the birth month (a past key that the
+    // 12-month window drops) — i.e. the final room never graduates in-window.
+    const graduates = new Date(dob.getFullYear(), dob.getMonth() + (chain.ageOutMonths ?? 0), 1)
     const moKey = `${graduates.getFullYear()}-${String(graduates.getMonth() + 1).padStart(2, '0')}`
 
     if (!gradOut[moKey]) gradOut[moKey] = {}
@@ -206,14 +290,14 @@ function buildGraduationIndex(registrations: Registration[]) {
 
 // Mirrors wlpGradEvents() — reshapes the 'YYYY-MM'-keyed graduation index
 // into { [roomId]: { [monthIdx]: [{days}] } } for the 12-month window.
-function wlpGradEvents(registrations: Registration[], months: { idx: number; key: string }[]) {
-  const { gradOut, gradIn } = buildGraduationIndex(registrations)
+function wlpGradEvents(registrations: Registration[], rooms: RoomCfg[], promotionChain: Record<string, { ageOutMonths: number | null; nextRoom: string | null }>, months: { idx: number; key: string }[]) {
+  const { gradOut, gradIn } = buildGraduationIndex(registrations, promotionChain)
   const keyToIdx: Record<string, number> = {}
   months.forEach(m => { keyToIdx[m.key] = m.idx })
 
   const out: Record<string, Record<number, { days: string[] }[]>> = {}
   const into: Record<string, Record<number, { days: string[] }[]>> = {}
-  ROOM_ORDER.forEach(id => { out[id] = {}; into[id] = {} })
+  rooms.forEach(r => { out[r.id] = {}; into[r.id] = {} })
 
   Object.entries(gradOut).forEach(([moKey, byRoom]) => {
     const idx = keyToIdx[moKey]
@@ -253,48 +337,62 @@ function wlpComputeGradGrid(
   return grid
 }
 
+// Earliest fitting month for a kid across a pooled room group: try each
+// co-equal room in order (fill the first, overflow to the next), and within a
+// room the earliest month all requested weekdays are open. Mirrors the pooled
+// competitive seating in wlpRunAllocation().
+function seatKidInGroup(group: RoomCfg[], working: Record<string, Record<string, number>[]>, k: Kid): { fitMonth: number | null; seatRoomId: string | null } {
+  for (const r of group) {
+    for (let m = k.desiredStartM; m < 12; m++) {
+      if (k.days.every(d => working[r.id][m][d] >= 1)) return { fitMonth: m, seatRoomId: r.id }
+    }
+  }
+  return { fitMonth: null, seatRoomId: null }
+}
+
 // Mirrors wlpRunAllocation() — the single source of truth the admin planner
-// uses for "position" and "fit month". Returns fitMonthByKid + per-room
-// priority-sorted queues so the caller can find this one family's numbers.
-function runAllocation(apps: WaitlistApp[], registrations: Registration[], capacities: Record<string, number>, today: Date) {
+// uses for "position" and "fit month". Seats kids by priority within each
+// pooled age-window group, overflowing between co-equal rooms. Returns
+// fitMonthByKid plus, for every room, the shared priority-ordered queue of its
+// whole pool (so a family's position reflects the combined line for their age,
+// not just one of two identical rooms).
+function runAllocation(apps: WaitlistApp[], registrations: Registration[], rooms: RoomCfg[], promotionChain: Record<string, { ageOutMonths: number | null; nextRoom: string | null }>, today: Date) {
   const months = wlpMonths(today)
-  const baseBooked = wlpBaseBooked(registrations, today)
-  const { gradOut, gradIn } = wlpGradEvents(registrations, months)
+  const baseBooked = wlpBaseBooked(registrations, rooms, today)
+  const { gradOut, gradIn } = wlpGradEvents(registrations, rooms, promotionChain, months)
 
   const gradGridByRoom: Record<string, Record<string, number>[]> = {}
-  ROOM_ORDER.forEach(id => {
-    const cap = capacities[id] ?? BASE_ROOMS[id].capacity
-    gradGridByRoom[id] = wlpComputeGradGrid(cap, gradOut[id], gradIn[id], baseBooked[id])
+  rooms.forEach(r => {
+    gradGridByRoom[r.id] = wlpComputeGradGrid(r.capacity, gradOut[r.id], gradIn[r.id], baseBooked[r.id])
   })
 
   const activeApps = apps.filter(a => ['pending', 'offered', 'accepted'].includes(a.status))
-  const kids = activeApps.map(a => ({
+  const kids: Kid[] = activeApps.map(a => ({
     id: a.id,
-    room: wlDeriveRoom(a),
+    room: wlDeriveRoom(a, rooms),
     days: wlpAppDays(a),
     desiredStartM: wlpDesiredMonthIdx(a, today),
     sibling: !!a.has_sibling,
     appliedAt: a.applied_at,
-  })).filter(k => k.room && gradGridByRoom[k.room])
+  })).filter(k => k.room && gradGridByRoom[k.room!])
 
   const working: Record<string, Record<string, number>[]> = {}
-  ROOM_ORDER.forEach(id => { working[id] = gradGridByRoom[id].map(day => ({ ...day })) })
+  rooms.forEach(r => { working[r.id] = gradGridByRoom[r.id].map(day => ({ ...day })) })
 
   const fitMonthByKid: Record<number, number | null> = {}
-  const queueByRoom: Record<string, typeof kids> = {}
-  ROOM_ORDER.forEach(id => {
-    const roomKids = wlpSortByPriority(kids.filter(k => k.room === id))
-    queueByRoom[id] = roomKids
-    roomKids.forEach(k => {
-      const preGrid = working[id]
-      let fitMonth: number | null = null
-      for (let m = k.desiredStartM; m < 12; m++) {
-        if (k.days.every(d => preGrid[m][d] >= 1)) { fitMonth = m; break }
-      }
+  const queueByRoom: Record<string, Kid[]> = {}
+
+  roomGroupsFor(rooms).forEach(group => {
+    const groupKids = wlpSortByPriority(kids.filter(k => group.some(r => r.id === k.room)))
+    // Every room in the pool shares this one queue — the family's position is
+    // their rank in the whole age group, regardless of which twin they derive.
+    group.forEach(r => { queueByRoom[r.id] = groupKids })
+    groupKids.forEach(k => {
+      const { fitMonth, seatRoomId } = seatKidInGroup(group, working, k)
       fitMonthByKid[k.id] = fitMonth
-      if (fitMonth !== null) {
+      if (fitMonth !== null && seatRoomId) {
         for (let mm = fitMonth; mm < 12; mm++) {
-          k.days.forEach(d => { working[id][mm][d] = Math.max(0, working[id][mm][d] - 1) })
+          k.days.forEach(d => { working[seatRoomId][mm][d] = Math.max(0, working[seatRoomId][mm][d] - 1) })
         }
       }
     })
@@ -324,6 +422,19 @@ function formatDays(daysOfWeek: string | null): string {
   return named.join(', ')
 }
 
+// Label for a pooled age group — a single room's label, or the co-equal rooms
+// joined ("🐢 Turtle / 🦉 Owl Room") so the family sees both rooms they're in
+// line for rather than an arbitrary one of two identical rooms.
+function groupLabelFor(roomId: string, rooms: RoomCfg[]): string {
+  const room = rooms.find(r => r.id === roomId)
+  if (!room) return BASE_ROOMS[roomId]?.label ?? roomId
+  const group = rooms.filter(r => r.ageMinMonths === room.ageMinMonths && r.ageMaxMonths === room.ageMaxMonths)
+  if (group.length <= 1) return room.label
+  // "🐢 Turtle / 🦉 Owl Room" — keep each emoji+name, drop the repeated "Room".
+  const names = group.map(r => r.label.replace(/\s+Room$/, ''))
+  return `${names.join(' / ')} Room`
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -342,7 +453,7 @@ Deno.serve(async (req) => {
     // anything, so a "not found" response costs the same DB work/time as a
     // "found" one — the shape and timing must not leak whether an email
     // exists in the system (see design-handoff security note).
-    const [appsRes, regsRes, capRes] = await Promise.all([
+    const [appsRes, regsRes, capRes, ratesRes] = await Promise.all([
       supabase.from('waitlist_applications').select(
         'id, status, parent_email, child_name, child_dob, expected_due_date, desired_start_date, days_of_week, day_type, has_sibling, applied_at',
       ),
@@ -350,6 +461,7 @@ Deno.serve(async (req) => {
         'child_name, child_dob, room_id, registration_dates ( care_date, waitlisted, day_type )',
       ),
       supabase.from('settings').select('value').eq('key', 'room_capacity').maybeSingle(),
+      supabase.from('settings').select('value').eq('key', 'room_rates').maybeSingle(),
     ])
 
     if (appsRes.error || regsRes.error) return json({ found: false })
@@ -357,18 +469,23 @@ Deno.serve(async (req) => {
     const apps: WaitlistApp[] = appsRes.data || []
     const registrations: Registration[] = regsRes.data || []
     const parsedCapacities = parseSettingsValue(capRes.data?.value)
-    const capacities: Record<string, number> = Array.isArray(parsedCapacities) ? {} : (parsedCapacities as Record<string, number>)
+    const capacities: Record<string, unknown> = Array.isArray(parsedCapacities) ? {} : parsedCapacities
+    const parsedRates = parseSettingsValue(ratesRes.data?.value)
+    const rates: Record<string, unknown> = Array.isArray(parsedRates) ? {} : parsedRates
+
+    const rooms = buildRooms(capacities, rates)
+    const promotionChain = buildPromotionChain(rooms)
 
     const normalizedEmail = email.trim().toLowerCase()
     const activeStatuses = ['pending', 'offered', 'accepted']
     const match = apps.find(a => (a.parent_email || '').trim().toLowerCase() === normalizedEmail && activeStatuses.includes(a.status))
 
     const today = new Date()
-    const { fitMonthByKid, queueByRoom } = runAllocation(apps, registrations, capacities, today)
+    const { fitMonthByKid, queueByRoom } = runAllocation(apps, registrations, rooms, promotionChain, today)
 
     if (!match) return json({ found: false })
 
-    const roomId = wlDeriveRoom(match)
+    const roomId = wlDeriveRoom(match, rooms)
     if (!roomId) return json({ found: false })
 
     const queue = queueByRoom[roomId] || []
@@ -381,7 +498,7 @@ Deno.serve(async (req) => {
     return json({
       found: true,
       childName: match.child_name,
-      roomLabel: BASE_ROOMS[roomId].label,
+      roomLabel: groupLabelFor(roomId, rooms),
       position,
       totalInLine,
       waitRange: waitRangeLabel(fitMonth),
