@@ -1047,6 +1047,23 @@ function wlpRenderGridSidebar(sel, alloc) {
         </div>`;
 }
 
+// How many pending (not-yet-accepted) waitlist families want (roomId, day) but
+// aren't seated as of month mi — real unmet demand pressing on that day. A kid
+// counts once their desired start month has arrived (desiredStartM <= mi) and
+// they're still unseated there (never fit anywhere, or only fit a later month).
+// Surfaced as a "+N waiting" badge on full/over days so demand that can't be
+// booked stays visible WITHOUT turning the slot number negative — a negative is
+// reserved for already-enrolled overbooking (see wlpComputeGradGrid).
+function wlpWaitingCount(alloc, roomId, mi, day) {
+    return alloc.kids.filter(k =>
+        !k.promised &&
+        k.room === roomId &&
+        k.desiredStartM <= mi &&
+        k.days.includes(day) &&
+        (alloc.fitMonthByKid[k.id] == null || alloc.fitMonthByKid[k.id] > mi)
+    ).length;
+}
+
 function wlpRenderGrid(alloc) {
     const monthHeads = alloc.months.map(m => `<th class="wlp-month-head">${escHtml(m.label)}</th>`).join('');
     const roomRows = alloc.rooms.map(room => {
@@ -1056,10 +1073,12 @@ function wlpRenderGrid(alloc) {
             const isSel = sel && sel.roomId === room.id && sel.monthIdx === mo.idx;
             const chips = TREND_DAYS.map(d => {
                 const open = dayMap[d];
-                const desc = open < 0
+                const waiting = open <= 0 ? wlpWaitingCount(alloc, room.id, mo.idx, d) : 0;
+                const desc = (open < 0
                     ? `${-open} OVER capacity — ${escHtml(d)}, ${escHtml(mo.label)}`
-                    : `${open} open seat${open === 1 ? '' : 's'} — ${escHtml(d)}, ${escHtml(mo.label)}`;
-                return `<div class="wlp-cap-chip ${wlpAvailClass(open, room.capacity)}" title="${desc}"><div class="wlp-cap-chip-day">${d}</div><div class="wlp-cap-chip-open">${open}</div></div>`;
+                    : `${open} open seat${open === 1 ? '' : 's'} — ${escHtml(d)}, ${escHtml(mo.label)}`)
+                    + (waiting > 0 ? ` · +${waiting} waitlist ${waiting === 1 ? 'family waiting' : 'families waiting'}` : '');
+                return `<div class="wlp-cap-chip ${wlpAvailClass(open, room.capacity)}" title="${desc}"><div class="wlp-cap-chip-day">${d}</div><div class="wlp-cap-chip-open">${open}</div>${waiting > 0 ? `<div class="wlp-cap-chip-wait">+${waiting}</div>` : ''}</div>`;
             }).join('');
             return `<td class="wlp-month-cell ${isSel ? 'selected' : ''}" data-wlp-cell="${room.id}:${mo.idx}"><div class="wlp-cap-chip-row">${chips}</div></td>`;
         }).join('');
@@ -1114,11 +1133,13 @@ function wlpRenderBoard(alloc) {
         const slots = TREND_DAYS.map(d => {
             const open = alloc.finalGrid[room.id][mi][d];
             const availCls = wlpAvailClass(open, room.capacity);
+            const waiting = open <= 0 ? wlpWaitingCount(alloc, room.id, mi, d) : 0;
             const isSel = sel && sel.roomId === room.id && sel.day === d;
             const isHl = hlKid && hlKid.room === room.id && hlKid.days.includes(d);
             return `<div class="wlp-slot ${availCls} ${isSel ? 'selected' : ''} ${isHl && !isSel ? 'highlight' : ''}" data-wlp-slot="${room.id}:${d}">
                 <div class="wlp-slot-day">${d}</div>
                 <div class="wlp-slot-open">${open}</div>
+                ${waiting > 0 ? `<div class="wlp-slot-wait" title="${waiting} waitlist ${waiting === 1 ? 'family wants' : 'families want'} this day but can't be seated">+${waiting} waiting</div>` : ''}
             </div>`;
         }).join('');
         return `

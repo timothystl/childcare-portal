@@ -3448,6 +3448,9 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-cap-chip { border-radius: 4px; padding: 3px 2px; min-width: 28px; }
 .wlp-cap-chip-day { font-size: 12px; font-weight: 700; }
 .wlp-cap-chip-open { font-size: 14.5px; font-weight: 800; }
+/* "+N waiting" demand badge — its own amber pill so it stays legible on both
+   the light-red (full) and dark-red (over) cell backgrounds. */
+.wlp-cap-chip-wait { font-size: 8.5px; font-weight: 800; color: #7c2d12; background: var(--sun); border-radius: 6px; padding: 0 3px; margin-top: 1px; display: inline-block; line-height: 1.35; }
 .wlp-avail-green { background: var(--wlp-green-bg); color: var(--wlp-green-fg); }
 .wlp-avail-amber { background: var(--wlp-amber-bg); color: var(--wlp-amber-fg); }
 .wlp-avail-red   { background: var(--wlp-red-bg);   color: var(--wlp-red-fg); }
@@ -3478,6 +3481,9 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-slot.highlight { box-shadow: inset 0 0 0 2px var(--sun); }
 .wlp-slot-day { font-size: 13px; font-weight: 700; }
 .wlp-slot-open { font-size: 18.5px; font-weight: 800; margin-top: 2px; }
+/* "+N waiting" demand badge — amber pill, legible on any slot background
+   (including the selected navy state). */
+.wlp-slot-wait { font-size: 10px; font-weight: 800; color: #7c2d12; background: var(--sun); border-radius: 8px; padding: 1px 6px; margin-top: 4px; display: inline-block; line-height: 1.4; }
 .wlp-board-note { font-size: 13px; margin-top: 5px; }
 
 .wlp-sidebar { width: 360px; border-left: 1px solid var(--border); background: var(--linen); padding: 18px 20px; flex-shrink: 0; }
