@@ -168,8 +168,15 @@ function roomGroupsFor(orderedRooms: RoomCfg[]): RoomCfg[][] {
 function buildPromotionChain(orderedRooms: RoomCfg[]): Record<string, { ageOutMonths: number | null; nextRoom: string | null }> {
   const chain: Record<string, { ageOutMonths: number | null; nextRoom: string | null }> = {}
   const ordered = orderedRooms.filter(r => r.ageMinMonths != null)
-  ordered.forEach((room, i) => {
-    chain[room.id] = { ageOutMonths: room.ageMaxMonths, nextRoom: ordered[i + 1]?.id || null }
+  ordered.forEach(room => {
+    // Graduate into the next AGE BRACKET (first room starting at/after this
+    // room's age-out), not merely the next room in sort order — co-equal rooms
+    // sharing an age window are peers, so a child ages UP past both rather than
+    // sideways into its twin. Mirrors wlpPromotionChain().
+    const next = room.ageMaxMonths == null
+      ? null
+      : ordered.find(r => r.ageMinMonths != null && r.ageMinMonths >= room.ageMaxMonths!)
+    chain[room.id] = { ageOutMonths: room.ageMaxMonths, nextRoom: next ? next.id : null }
   })
   return chain
 }
