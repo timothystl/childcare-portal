@@ -215,6 +215,34 @@ function wlpBaseBooked() {
     return booked;
 }
 
+// The named counterpart of wlpBaseBooked(): { [roomId]: [{ name, days }] } —
+// this week's actually-enrolled children per room, with the weekdays each is
+// booked. Same source of truth and same per-registration counting as
+// wlpBaseBooked (one seat per child per weekday), so a room/day's roster length
+// always reconciles with its open-slot count. The Board's day roster
+// (wlpDayRoster) carries this baseline forward through graduations + waitlist
+// starts.
+function wlpBaseRosterByRoom() {
+    const weekDates = wlpCurrentWeekDates();
+    const dateToDay = {};
+    Object.entries(weekDates).forEach(([day, date]) => { dateToDay[date] = day; });
+
+    const roster = {};
+    wlpRooms().forEach(r => { roster[r.id] = []; });
+
+    (allRegistrations || []).forEach(reg => {
+        if (!roster[reg.room_id]) return;
+        const days = [];
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date) return;
+            const day = dateToDay[d.care_date];
+            if (day && !days.includes(day)) days.push(day);
+        });
+        if (days.length) roster[reg.room_id].push({ name: reg.child_name, days });
+    });
+    return roster;
+}
+
 // Reuses _buildGraduationIndex() (below) as-is, reshaping its 'YYYY-MM'-keyed
 // output into { [roomId]: { [monthIdx]: [{name, days}] } } for the 12-month
 // window this tool plans against.
@@ -518,7 +546,7 @@ function wlpRunAllocation() {
         }
     });
 
-    return { rooms, months, roomMeta, finalGrid: working, kids, preGridByKid, fitMonthByKid, incoming, gradOut, gradIn };
+    return { rooms, months, roomMeta, finalGrid: working, kids, preGridByKid, fitMonthByKid, incoming, gradOut, gradIn, baseRoster: wlpBaseRosterByRoom() };
 }
 
 // ── Top-level render ─────────────────────────────────────────
@@ -1115,6 +1143,60 @@ function wlpMovingCardHtml(ev) {
         </div>`;
 }
 
+// Occupants of (roomId, day) as of month index mi: this week's real roster
+// (alloc.baseRoster) carried forward through the SAME events that drive the
+// open-slot count — graduations out (a seat freed), graduations in (a seat
+// taken), and projected waitlist starts (incoming, seated at their fit month) —
+// so the listed names always reconcile with the number the slot shows. Each
+// occupant is tagged by how they hold the seat, so anything past this week's
+// real bookings reads as a projection rather than a confirmed enrollment.
+function wlpDayRoster(roomId, day, mi, alloc) {
+    const list = (alloc.baseRoster[roomId] || [])
+        .filter(o => o.days.includes(day))
+        .map(o => ({ name: o.name, kind: 'enrolled' }));
+    for (let m = 0; m <= mi; m++) {
+        (alloc.gradOut[roomId][m] || []).forEach(ev => {
+            if (!ev.days.includes(day)) return;
+            const i = list.findIndex(o => o.name === ev.name);
+            if (i >= 0) list.splice(i, 1); // aged out — seat freed
+        });
+        (alloc.gradIn[roomId][m] || []).forEach(ev => {
+            if (ev.days.includes(day)) list.push({ name: ev.name, kind: 'promoted' });
+        });
+        (alloc.incoming[roomId][m] || []).forEach(k => {
+            if (k.days.includes(day)) list.push({ name: k.name, kind: k.promised ? 'accepted' : 'waitlist' });
+        });
+    }
+    return list;
+}
+
+// Small muted label for a projected roster occupant (blank for a currently-
+// enrolled child, who needs no qualifier).
+function wlpRosterTag(kind) {
+    if (kind === 'promoted') return '<span class="wlp-row-room">↑ moving up</span>';
+    if (kind === 'accepted') return '<span class="wlp-row-room">🎯 offer accepted</span>';
+    if (kind === 'waitlist') return '<span class="wlp-row-room">＋ from waitlist</span>';
+    return '';
+}
+
+// The "who's in this room on this day" roster block for the Board sidebar —
+// exact for the current month (this week's real bookings), a labeled forecast
+// for later months.
+function wlpRosterSectionHtml(sel, mi, alloc, cap) {
+    const roster = wlpDayRoster(sel.roomId, sel.day, mi, alloc);
+    const isCurrent = mi === 0;
+    const rows = roster.length
+        ? roster.map(o => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);${o.kind === 'enrolled' ? '' : 'opacity:.8;'}"><span style="font-size:12px;">${escHtml(o.name)}</span>${wlpRosterTag(o.kind)}</div>`).join('')
+        : `<div class="wlp-empty-note">No children booked here on ${escHtml(sel.day)}.</div>`;
+    const subhint = isCurrent
+        ? `${roster.length} of ${cap ?? '—'} seats filled this week.`
+        : `${roster.length} of ${cap ?? '—'} seats — projected; greyed rows aren't enrolled yet.`;
+    return `
+        <div class="wlp-section-label" style="margin-bottom:6px">In the room · ${escHtml(sel.day)}${isCurrent ? '' : ' · projected'}</div>
+        <div class="wlp-sidebar-hint">${subhint}</div>
+        <div style="margin-bottom:18px">${rows}</div>`;
+}
+
 function wlpRenderBoardSidebar(sel, mi, alloc) {
     const room = alloc.roomMeta[sel.roomId].room;
     const candidates = alloc.kids.filter(k => k.room === sel.roomId && k.days.includes(sel.day) && k.desiredStartM <= mi);
@@ -1150,6 +1232,8 @@ function wlpRenderBoardSidebar(sel, mi, alloc) {
                 <div class="wlp-sidebar-title">${escHtml(room.label)} · ${sel.day} · ${escHtml(alloc.months[mi].label)}</div>
                 <button type="button" class="wlp-sidebar-close" id="wlpSlotClose">✕</button>
             </div>
+            ${wlpRosterSectionHtml(sel, mi, alloc, room.capacity)}
+            <div class="wlp-section-label" style="margin-bottom:8px">Fill this day</div>
             <div class="wlp-sidebar-hint">Suggested, best fit first — click a card to see their full pattern on the board:</div>
             <div style="margin-bottom:18px">${suggestionsHtml || '<div class="wlp-empty-note">No one waiting needs this day.</div>'}</div>
             <div class="wlp-section-label" style="margin-bottom:8px">Moving this month — ${escHtml(roomLabel)}</div>
