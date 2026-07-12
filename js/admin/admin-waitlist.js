@@ -1002,49 +1002,6 @@ function wlpWireQueueRowActions() {
 // with a big Enroll button, plus "Moving this month" for the selected room —
 // just scoped to a whole month (Grid's selection is room+month) instead of a
 // single day (Board's is room+day).
-// Month-scoped counterpart of wlpDayRoster(): everyone in `roomId` during month
-// `mi`, each with the weekdays they attend. Same carry-forward through the
-// events that drive the grid's open counts (graduations out/in, projected
-// waitlist starts), so the roster stays consistent with the numbers in the
-// cells. A distinct-children count, not a per-day seat count — part-time kids
-// mean the head-count can exceed a single day's capacity.
-function wlpMonthRoster(roomId, mi, alloc) {
-    const list = (alloc.baseRoster[roomId] || []).map(o => ({ name: o.name, days: o.days.slice(), kind: 'enrolled' }));
-    for (let m = 0; m <= mi; m++) {
-        (alloc.gradOut[roomId][m] || []).forEach(ev => {
-            const i = list.findIndex(o => o.name === ev.name);
-            if (i >= 0) list.splice(i, 1); // aged out of the room entirely
-        });
-        (alloc.gradIn[roomId][m] || []).forEach(ev => {
-            list.push({ name: ev.name, days: ev.days.slice(), kind: 'promoted' });
-        });
-        (alloc.incoming[roomId][m] || []).forEach(k => {
-            list.push({ name: k.name, days: k.days.slice(), kind: k.promised ? 'accepted' : 'waitlist' });
-        });
-    }
-    return list;
-}
-
-// The "who's in this room this month" roster block for the Grid sidebar — exact
-// for the current month (this week's real bookings), a labeled forecast beyond.
-function wlpMonthRosterSectionHtml(roomId, mi, alloc) {
-    const roster = wlpMonthRoster(roomId, mi, alloc);
-    const isCurrent = mi === 0;
-    const rows = roster.length
-        ? roster.map(o => {
-            const dayStr = TREND_DAYS.filter(d => o.days.includes(d)).join(' ');
-            return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);${o.kind === 'enrolled' ? '' : 'opacity:.8;'}"><span style="font-size:12px;">${escHtml(o.name)}${dayStr ? ` <span class="wlp-row-room">${dayStr}</span>` : ''}</span>${wlpRosterTag(o.kind)}</div>`;
-        }).join('')
-        : `<div class="wlp-empty-note">No children booked in this room ${isCurrent ? 'this week' : 'this month'}.</div>`;
-    const subhint = isCurrent
-        ? `${roster.length} enrolled this week.`
-        : `${roster.length} projected — greyed rows aren't enrolled yet.`;
-    return `
-        <div class="wlp-section-label" style="margin-bottom:6px">In the room${isCurrent ? '' : ' · projected'}</div>
-        <div class="wlp-sidebar-hint">${subhint}</div>
-        <div style="margin-bottom:18px">${rows}</div>`;
-}
-
 function wlpRenderGridSidebar(sel, alloc) {
     const { roomId, monthIdx } = sel;
     const room = alloc.roomMeta[roomId].room;
@@ -1083,8 +1040,6 @@ function wlpRenderGridSidebar(sel, alloc) {
                 <div class="wlp-sidebar-title">${escHtml(room.label)} · ${escHtml(alloc.months[monthIdx].label)}</div>
                 <button type="button" class="wlp-sidebar-close" id="wlpGridSidebarClose">✕</button>
             </div>
-            ${wlpMonthRosterSectionHtml(roomId, monthIdx, alloc)}
-            <div class="wlp-section-label" style="margin-bottom:8px">Fill this month</div>
             <div class="wlp-sidebar-hint">Suggested, best fit first — who's asking for this room:</div>
             <div style="margin-bottom:18px">${suggestionsHtml || '<div class="wlp-empty-note">No one on the waitlist is asking for this room.</div>'}</div>
             <div class="wlp-section-label" style="margin-bottom:8px">Moving this month — ${escHtml(roomLabel)}</div>
