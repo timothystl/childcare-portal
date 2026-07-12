@@ -1,0 +1,28 @@
+-- ============================================================
+-- FS5 — revoke anon access to the balance-enumeration RPC
+-- ============================================================
+-- get_outstanding_balance_by_email(email) is SECURITY DEFINER and was granted
+-- to anon, so anyone with the public anon key could ask "does <any email> owe
+-- money, and how much?" — a financial-PII enumeration oracle.
+--
+-- It has no frontend caller (verified 2026-07-12: the JS wrapper
+-- getOutstandingBalanceByEmail exists but is never invoked; admin balance
+-- views compute directly from billing_invoices/billing_payments under an
+-- authenticated session). So anon execute can be revoked with no UI impact.
+--
+-- NOTE — residual FS5 scope (tracked, not closed here): create_/add_day_ ...
+-- _by_email remain anon-executable because the anonymous parent registration
+-- flow calls them to build the draft invoice. FS3 (additive + amount clamped
+-- to >= 0) removes the "zero out / lower a victim's invoice" vector; the
+-- remaining exposure is an attacker INFLATING a known family's draft invoice.
+-- That is bounded (no payment processor is wired up, per the T1 owner
+-- decision) and self-healing — the admin "Generate Invoices" recompute resets
+-- the amount from real registration data. Fully closing it needs the invoice
+-- amount computed server-side from registrations instead of trusted from the
+-- client (same rework as T1/T11).
+-- ============================================================
+
+-- Revoke from PUBLIC as well: Postgres grants function EXECUTE to PUBLIC by
+-- default, and anon/authenticated inherit it through PUBLIC, so revoking only
+-- from anon leaves the access intact.
+REVOKE EXECUTE ON FUNCTION get_outstanding_balance_by_email(TEXT) FROM PUBLIC, anon, authenticated;

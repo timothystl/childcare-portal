@@ -473,7 +473,11 @@ async function finalizeCycle(cycleId) {
 // ============================================================
 // PAYMENT MODAL (used from AR tab)
 // ============================================================
-function openRecordPaymentModal(familyId, invoiceId, familyName, invoiceFinalAmount) {
+function openRecordPaymentModal(familyId, invoiceId, invoiceFinalAmount) {
+    // Derive the display name from loaded data rather than trusting a value
+    // interpolated into the inline onclick (see FS4: names could break out of
+    // the JS-string context and inject script).
+    const familyName = _arData.find(r => r.familyId === familyId)?.familyName || 'Family';
     _paymentModalContext = { familyId, invoiceId, familyName, finalAmount: invoiceFinalAmount };
 
     const nameEl    = document.getElementById('bpmFamilyName');
@@ -1592,8 +1596,8 @@ function renderArTable(data) {
 
     const rows = filtered.map(r => {
         const lockBtn = r.isLocked
-            ? `<button class="btn-xs btn-warn" onclick="doSetFamilyLockWithReason('${escHtml(r.familyId)}', false, null, '${escHtml(r.familyName)}')">Unlock</button>`
-            : `<button class="btn-xs btn-danger" onclick="openLockWithReasonModal('${escHtml(r.familyId)}', '${escHtml(r.familyName)}')">Lock</button>`;
+            ? `<button class="btn-xs btn-warn" onclick="doSetFamilyLockWithReason('${escHtml(r.familyId)}', false, null)">Unlock</button>`
+            : `<button class="btn-xs btn-danger" onclick="openLockWithReasonModal('${escHtml(r.familyId)}')">Lock</button>`;
 
         // Billed cell: editable input when no invoice; clickable value when invoice exists
         const billedCell = r.billed > 0
@@ -1615,8 +1619,8 @@ function renderArTable(data) {
             <td>
                 <button class="btn-xs" onclick="toggleArRowDetail('${escHtml(r.familyId)}')">▸ Details</button>
                 ${r.invoiceId
-                    ? `<button class="btn-xs" onclick="openRecordPaymentModal('${escHtml(r.familyId)}','${escHtml(String(r.invoiceId))}','${escHtml(r.familyName)}',${r.billed})">💳 Payment</button>`
-                    : `<button class="btn-xs" onclick="openRecordPaymentModal('${escHtml(r.familyId)}',null,'${escHtml(r.familyName)}',null)">💳 Payment</button>`
+                    ? `<button class="btn-xs" onclick="openRecordPaymentModal('${escHtml(r.familyId)}','${escHtml(String(r.invoiceId))}',${r.billed})">💳 Payment</button>`
+                    : `<button class="btn-xs" onclick="openRecordPaymentModal('${escHtml(r.familyId)}',null,null)">💳 Payment</button>`
                 }
                 ${lockBtn}
             </td>
@@ -1754,7 +1758,6 @@ async function toggleArRowDetail(familyId) {
                 <button class="btn-xs" onclick="openRecordPaymentModal(
                     '${escHtml(familyId)}',
                     '${topInvoice ? escHtml(String(topInvoice)) : ''}',
-                    '${escHtml(arRow?.familyName || '')}',
                     ${topFinalAmt != null ? topFinalAmt : 'null'}
                 )">💳 Record Payment</button>
             </div>`;
@@ -1774,7 +1777,9 @@ async function toggleArRowDetail(familyId) {
     }
 }
 
-function openLockWithReasonModal(familyId, familyName) {
+function openLockWithReasonModal(familyId) {
+    // Name derived from loaded data, not from the inline onclick (FS4).
+    const familyName = _arData.find(r => r.familyId === familyId)?.familyName || 'Family';
     _lockModalContext = { familyId, familyName, isLocking: true };
 
     const nameEl   = document.getElementById('blmFamilyName');
@@ -1813,7 +1818,9 @@ async function _doLockModalConfirm() {
     }
 }
 
-async function doSetFamilyLockWithReason(familyId, locked, reason, familyName) {
+async function doSetFamilyLockWithReason(familyId, locked, reason) {
+    // Name derived from loaded data, not from the inline onclick (FS4).
+    const familyName = _arData.find(r => r.familyId === familyId)?.familyName || '';
     await setFamilyRegistrationLock(familyId, locked, reason || null);
     await logAdminAction(
         locked ? 'lock_family' : 'unlock_family',

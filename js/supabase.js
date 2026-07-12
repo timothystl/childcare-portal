@@ -465,6 +465,16 @@ async function deleteClosure(closeDate) {
 async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates = [], status = 'confirmed', submittedBy = 'parent1' }) {
     if (!sbClient) throw new Error('Supabase is not configured yet.');
 
+    // FS1: stamp month_key ('YYYY-MM' of the earliest care date) at insert time
+    // so the registrations_child_month_unique partial index can enforce one
+    // confirmed registration per child+month. Without this the column stays NULL
+    // and the index (NULLs are distinct) catches nothing.
+    const _regDates = [...confirmedDates, ...waitlistDates]
+        .map(d => d && d.date)
+        .filter(Boolean)
+        .sort();
+    const monthKey = _regDates.length ? _regDates[0].slice(0, 7) : null;
+
     const { data: reg, error: regError } = await sbClient
         .from('registrations')
         .insert({
@@ -477,6 +487,7 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
             room_id:      roomId,
             status:       status,
             submitted_by: submittedBy,
+            month_key:    monthKey,
         })
         .select()
         .single();
