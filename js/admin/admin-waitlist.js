@@ -135,6 +135,41 @@ function wlpRooms() {
     return getSortedRooms().filter(r => r.id !== 'summer');
 }
 
+// Groups the given rooms by identical age window (ageMinMonths/ageMaxMonths).
+// Rooms that share a window are co-equal — a child in that bracket can be
+// seated in any of them — so the allocation pools their capacity and overflows
+// a kid into the next one once the first is full (see wlpRunAllocation),
+// instead of piling all the demand onto whichever room sorts first and leaving
+// its twin looking empty. A room with a unique window is a group of one, so
+// this is a no-op for every non-overlapping room. Order is preserved within and
+// across groups, so overflow fills the earlier-sorted room first — the same
+// room wlDeriveRoom() hands a kid.
+function wlpRoomGroups(rooms) {
+    const byKey = new Map();
+    rooms.forEach(r => {
+        const key = `${r.ageMinMonths}:${r.ageMaxMonths}`;
+        if (!byKey.has(key)) byKey.set(key, []);
+        byKey.get(key).push(r);
+    });
+    return [...byKey.values()];
+}
+
+// The first room in a co-equal group that can seat kid k at month `month` (all
+// requested weekdays open, or — for a flexible kid — enough open days), or null
+// if none can. Lets promised demand spread across rooms that share an age
+// window instead of stacking on the first one.
+function wlpChooseRoom(group, working, k, month) {
+    for (const r of group) {
+        const grid = working[r.id];
+        if (k.flexible) {
+            if (wlpFlexDaysFor(k, grid, month)) return r;
+        } else if (k.days.every(d => grid[month][d] >= 1)) {
+            return r;
+        }
+    }
+    return null;
+}
+
 function wlpMonths() {
     const today = new Date();
     return Array.from({ length: 12 }, (_, i) => {
@@ -406,15 +441,25 @@ function wlpRunAllocation() {
     const working = {};
     rooms.forEach(r => { working[r.id] = roomMeta[r.id].gradGrid.map(day => ({ ...day })); });
 
+    // Rooms sharing an age window are pooled (see wlpRoomGroups): a kid fills
+    // the earlier-sorted room first and overflows into its co-equal twin once
+    // that's full. A unique-age room is a group of one, so this is identical to
+    // the old per-room seating for every non-overlapping room.
+    const groups = wlpRoomGroups(rooms);
+    const preGridByKid = {}, fitMonthByKid = {};
+
     // Promised kids are seated FIRST and unconditionally — same treatment as
     // a graduation event, not a queue candidate. A real commitment reserves
     // its seat regardless of remaining capacity or priority order; if that
     // pushes a room negative, that's exactly the "we've promised more spots
     // than we have" signal the grid should surface (see wlpComputeGradGrid).
-    const preGridByKid = {}, fitMonthByKid = {};
-    rooms.forEach(r => {
-        kids.filter(k => k.room === r.id && k.promised).forEach(k => {
-            preGridByKid[k.id] = working[r.id].map(day => ({ ...day }));
+    // Within a pooled group we still prefer a room that can actually seat them
+    // (highest-priority first) so promised demand spreads rather than stacking.
+    groups.forEach(group => {
+        wlpSortByPriority(kids.filter(k => group.some(r => r.id === k.room) && k.promised)).forEach(k => {
+            const target = wlpChooseRoom(group, working, k, k.desiredStartM) || group[0];
+            k.room = target.id;
+            preGridByKid[k.id] = working[target.id].map(day => ({ ...day }));
             fitMonthByKid[k.id] = k.desiredStartM;
             if (k.flexible && !k.days.length) {
                 // No offered_days on record for this promised flexible kid —
@@ -422,36 +467,42 @@ function wlpRunAllocation() {
                 // auto-pick the best-available days, falling back to the
                 // first N weekdays if nothing currently fits (may overbook,
                 // which is the correct signal — see wlpComputeGradGrid).
-                k.days = wlpFlexDaysFor(k, working[r.id], k.desiredStartM) || TREND_DAYS.slice(0, k.flexibleCount);
+                k.days = wlpFlexDaysFor(k, working[target.id], k.desiredStartM) || TREND_DAYS.slice(0, k.flexibleCount);
             }
             for (let mm = k.desiredStartM; mm < 12; mm++) {
-                k.days.forEach(d => { working[r.id][mm][d] -= 1; });
+                k.days.forEach(d => { working[target.id][mm][d] -= 1; });
             }
         });
     });
 
-    // Everyone else (pending / offered-but-not-yet-accepted) still competes
-    // for whatever capacity is left, in priority order, same as before.
-    rooms.forEach(r => {
-        const roomKids = wlpSortByPriority(kids.filter(k => k.room === r.id && !k.promised));
-        roomKids.forEach(k => {
-            const preGrid = working[r.id].map(day => ({ ...day }));
-            preGridByKid[k.id] = preGrid;
-            let fitMonth = null;
-            let chosenDays = k.days;
-            for (let m = k.desiredStartM; m < 12; m++) {
-                if (k.flexible) {
-                    const flex = wlpFlexDaysFor(k, preGrid, m);
-                    if (flex) { fitMonth = m; chosenDays = flex; break; }
-                } else if (k.days.every(d => preGrid[m][d] >= 1)) {
-                    fitMonth = m; break;
+    // Everyone else (pending / offered-but-not-yet-accepted) competes for
+    // whatever capacity is left, in priority order across the whole pooled
+    // group: each kid takes the earliest month they fit in the first co-equal
+    // room with room for them, overflowing to the next only when the earlier
+    // one can't seat them at all.
+    groups.forEach(group => {
+        wlpSortByPriority(kids.filter(k => group.some(r => r.id === k.room) && !k.promised)).forEach(k => {
+            let seated = null; // { room, month, days }
+            for (const r of group) {
+                const grid = working[r.id];
+                for (let m = k.desiredStartM; m < 12; m++) {
+                    if (k.flexible) {
+                        const flex = wlpFlexDaysFor(k, grid, m);
+                        if (flex) { seated = { room: r, month: m, days: flex }; break; }
+                    } else if (k.days.every(d => grid[m][d] >= 1)) {
+                        seated = { room: r, month: m, days: k.days }; break;
+                    }
                 }
+                if (seated) break;
             }
-            fitMonthByKid[k.id] = fitMonth;
-            if (k.flexible) k.days = fitMonth !== null ? chosenDays : [];
-            if (fitMonth !== null) {
-                for (let mm = fitMonth; mm < 12; mm++) {
-                    chosenDays.forEach(d => { working[r.id][mm][d] = Math.max(0, working[r.id][mm][d] - 1); });
+            const target = seated ? seated.room : (group.find(r => r.id === k.room) || group[0]);
+            preGridByKid[k.id] = working[target.id].map(day => ({ ...day }));
+            k.room = target.id;
+            fitMonthByKid[k.id] = seated ? seated.month : null;
+            if (k.flexible) k.days = seated ? seated.days : [];
+            if (seated) {
+                for (let mm = seated.month; mm < 12; mm++) {
+                    seated.days.forEach(d => { working[seated.room.id][mm][d] = Math.max(0, working[seated.room.id][mm][d] - 1); });
                 }
             }
         });
