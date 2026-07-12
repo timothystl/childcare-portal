@@ -44,14 +44,13 @@ Timothy Lutheran MDO (Mother's Day Out) registration portal. Parents register ch
 
 ---
 
-## Project status & outstanding work (updated 2026-07-11)
+## Project status & outstanding work (updated 2026-07-12)
 
-A full code review + a deeper "second sweep" + a "third sweep" (covering the
-waitlist/inquiry funnel, Waitlist Planner rewrite, Staff Directory, and Finance
-consolidation shipped since the second sweep) were done. Detailed records live in:
+A full code review + a deeper "second sweep" + a "third sweep" + a whole-codebase
+"fourth sweep" (2026-07-12) were done. Detailed records live in:
 - **`docs/CODE_REVIEW.md`** — all findings, labeled (S/U/V/N/P/Q/C/M for the first
   review; SS1–SS19 for the correctness/integrity sweep; T1–T20 for the third
-  sweep), with `[x]`/`[~]`/`[ ]` status.
+  sweep; **FS1–FS30 for the fourth sweep**), with `[x]`/`[~]`/`[ ]` status.
 - **`docs/NEXT_STEPS.md`** — the prioritized action plan + an incident log.
 - **`CONTRIBUTING.md`** — branch/deploy rules (read before merging).
 
@@ -94,6 +93,55 @@ consolidation shipped since the second sweep) were done. Detailed records live i
 - T6–T20 (ProCare AR dedup, billing preview inconsistencies, CI dist-conflict handling,
   rate-limiting gaps, misc low-severity cleanup) — see `docs/CODE_REVIEW.md` "Third
   Sweep" section and `docs/NEXT_STEPS.md` for the full list and order.
+
+### Fourth sweep (2026-07-12) — NEW, not yet triaged (full write-ups in `docs/CODE_REVIEW.md`)
+Whole-codebase pass (six parallel focused reviews + live-prod verification via the
+Supabase catalog). **Nothing here is fixed yet** — these are logged for triage.
+
+- **High**
+  - **FS1** — registration duplicate-prevention isn't enforced: `add_registration_month_key.sql`
+    is **not applied in prod** (column + unique index absent, catalog-verified) and
+    `submitRegistration()` never sets `month_key` anyway. Apply the migration **and**
+    populate `month_key` on insert.
+  - **FS2** — admin "Add New Days"/"Edit Calendar" inserts a **duplicate** `registrations`
+    row instead of appending (double-counts child + double-invoices). Backstopped by FS1.
+  - **FS3** — a family's second same-month registration **overwrites** their draft invoice
+    (the `*_by_email` RPC replaces `final_amount`, doesn't accumulate) → silent underbilling.
+  - **FS4** — **stored XSS** via parent/child name interpolated into inline `onclick`
+    handlers in `admin-billing.js` (`escHtml` doesn't cover the JS-string/attribute context).
+  - **FS5** — the `create/add_day/get_outstanding …_by_email` billing RPCs are
+    **`anon`-executable in prod** (catalog-verified) → invoice tampering + balance
+    enumeration with only the public anon key. **Reopens SS5** (had been assumed not deployed).
+- **Medium** — FS6 `notify-geofence` client-supplied-recipient email relay;
+  FS7 recurring days auto-booked/billed on closed/full/past dates & un-removable;
+  FS8 cross-parent duplicate check hard-blocks unrelated families sharing a child name;
+  FS9 `lookup.js` rejects valid 5–8 digit PINs (login impossible there);
+  FS10 `admin-users` fails **open** when `admin_roles` is empty;
+  FS11 email edge fns need only a session (not admin role) + don't validate recipient;
+  FS12 generic CSV import shifts payment dates −1 day / to today;
+  FS13 salaried YTD assumes employment since Jan 1;
+  FS14 `restricted` role leaves Families/Billing/Reports/Messages tabs visible;
+  FS15 `capacitySection` never restored on role switch;
+  FS16 enrolling an email-less imported waitlist child → blank-email reg + no invoice;
+  FS17 Planner floors seat consumption at 0, hiding later-month overbooking;
+  FS18 formal email-offer flow is unreachable dead code;
+  FS19 capacity baseline counts only the current ISO week;
+  FS20 in-modal edits re-render the reg table unfiltered/unsorted;
+  FS21 recurring days dropped when **creating** a family;
+  FS22 CSV exports allow spreadsheet formula injection.
+- **Low** — FS23 `.ilike()` `%`/`_` wildcard over-match (new SS13/T1-class sites +
+  `request-pin-reset`); FS24 anon UPDATE on `staff_clock_events` allows same-day
+  cross-staff tampering; FS25 waitlist "Message the Office" shows success toast on
+  failure; FS26 graduation index merges distinct same-name children; FS27 admin-reg
+  calendar keeps days across month nav (only first month invoiced); FS28 add-a-day
+  billing failure swallowed while date is written; FS29 AR CSV "Days Since Invoice"
+  always blank; FS30 Reports tab mislabeled "Billing".
+
+_Prod-verified this sweep:_ `month_key`/its unique index **absent** (FS1); the anon
+billing RPCs **deployed + anon-executable** (FS5, `search_path` correctly pinned);
+`notify-geofence` deployed with `verify_jwt=true` (FS6 still reachable via the public
+anon key). The old "billing-by-email RPCs probably not deployed / SS5 likely moot"
+note is now **disproven** — they are live.
 
 ### Still to do from earlier sweeps (see NEXT_STEPS.md for the exact steps/sequencing)
 - **SS1** — anon-read PII exposure: the public anon key can still read/modify

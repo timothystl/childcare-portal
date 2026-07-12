@@ -765,3 +765,328 @@ purpose (publicly displayed staff headshots); `js/inquiry.js` and
 `js/confirm-interest.js` surface real errors on their state-changing actions
 (no U6 recurrence); the token-gated confirm/decline flow has no
 URL-guessing path to act on another family's offer.
+
+---
+
+# Fourth Sweep — full-codebase review (2026-07-12)
+
+_Reviewed: 2026-07-12 · App version 1.20.24 · covers `d497c73..0b0847d`
+(~108 commits since the third sweep). This sweep is a broad correctness /
+data-integrity / security pass over the whole `js/` tree, all edge functions,
+and the SQL migrations, driven by six parallel focused reviews (parent
+registration + billing core; waitlist/inquiry funnel; admin billing/finance/
+reports; admin calendar/families/classrooms; admin staffing/settings/misc
+frontend; edge functions + SQL). Labels continue as **FS1–FS30**, independent
+of the S/U/V/N/P/Q/C/M, SS1–SS19, and T1–T20 items above._
+
+**Live-prod verification (via Supabase read-only SQL/catalog + edge-function
+list, 2026-07-12):**
+- `registrations.month_key` **does not exist in prod** and neither does the
+  `registrations_child_month_unique` index → **FS1 confirmed** (the SS-era
+  TOCTOU duplicate guard is absent, not just bypassed).
+- `create_billing_invoice_by_email` / `add_day_to_invoice_by_email` /
+  `get_outstanding_balance_by_email` **are deployed, `SECURITY DEFINER`, and
+  `EXECUTE`-able by `anon`** → **FS5 confirmed live** (this **reopens SS5**,
+  which had assumed these weren't deployed). Their `search_path` is correctly
+  pinned to `public`, so that sub-concern is clear.
+- `notify-geofence` is deployed with `verify_jwt=true` → **FS6** still stands
+  (the anon key that satisfies `verify_jwt` ships in the browser), but a fully
+  token-less call is blocked; treat as Medium, not critical.
+
+## High
+
+- **FS1 — [High · verified in prod] Registration duplicate-prevention is not
+  actually enforced.** [Both] `add_registration_month_key.sql` (adds a
+  `month_key` column + a partial unique index
+  `registrations_child_month_unique ON (lower(child_name), month_key) WHERE
+  status='confirmed'`) is **committed but never applied** — a prod catalog
+  check confirms neither the column nor the index exists. On top of that,
+  `submitRegistration()` (`js/supabase.js:465`) never sets `month_key` on
+  insert and there is no trigger to populate it, so even once the migration is
+  applied the index would sit over an all-`NULL` column and still catch
+  nothing (NULLs are distinct in a unique index). Net: the only duplicate
+  protection is the JS pre-checks (`checkExistingRegistration*`), which have a
+  TOCTOU race the migration was written specifically to close.
+  _Fix:_ apply the migration **and** populate `month_key` on every insert
+  (client-side in `submitRegistration`, or via a `BEFORE INSERT` trigger
+  deriving it from the earliest `care_date`). Verify with `information_schema`
+  after applying, per this repo's own migration-drift rule.
+- **FS2 — [High] Admin "Add New Days"/"Edit Calendar" flow inserts a second
+  registration row for the same child+month instead of appending.** [Admin]
+  In "Edit Calendar" mode (`openAdminRegModalForFamily` / `_arSelectChild`,
+  which set the title to "Edit Calendar" and the button to "Add New Days",
+  `js/admin/admin-calendar.js:1497-1500`), `_arSubmit` (`:1848`)
+  unconditionally calls `submitRegistration()`, which always INSERTs a brand-new
+  `registrations` row. Newly-clicked days spawn a duplicate registration for
+  the same child/month; `calcRegistrationBill`, capacity counts, and roster
+  views then double-count the child, and a second invoice is created via
+  `createInvoiceByEmail`. The DB guard that should stop this is FS1 (absent).
+  _Fix:_ when a confirmed registration for this child+month already exists,
+  append new dates via `addRegistrationDate(existingReg.id, …)` instead of
+  calling `submitRegistration`; reserve `submitRegistration` for true new
+  registrations. (Fixing FS1 also backstops this.)
+- **FS3 — [High] A family's second same-month registration OVERWRITES their
+  draft invoice, silently underbilling.** [Public] After submit,
+  `js/app.js:1431` calls
+  `createInvoiceByEmail(email, monthKey, thisSessionGrandTotal)`. The RPC
+  (`add_billing_rpc.sql`) upserts on `(cycle_id, family_id)` with
+  `DO UPDATE SET base_amount = EXCLUDED.base_amount, final_amount =
+  EXCLUDED.final_amount WHERE status='draft'` — it **replaces**, not
+  accumulates. A family that registers child A today ($300 draft) then child B
+  next week in a separate session ($250) ends up with a $250 July invoice;
+  child A's charge vanishes. Both registrations still exist, so the child is
+  enrolled but unbilled. _Fix:_ make the draft-invoice RPC additive
+  (`final_amount = billing_invoices.final_amount + EXCLUDED.final_amount`), or
+  recompute the family's full month total across all their registrations
+  client-side before calling.
+- **FS4 — [High] Stored XSS via parent/child name interpolated into inline
+  `onclick` JS-string context.** [Admin] `renderArTable`
+  (`js/admin/admin-billing.js:1594-1600`, also `toggleArRowDetail` `:1754-1759`,
+  and the `openRecordPaymentModal` / `startEditBilledAmount` buttons) builds
+  handlers like
+  `onclick="openLockWithReasonModal('${escHtml(r.familyId)}', '${escHtml(r.familyName)}')"`.
+  `escHtml` (`js/supabase.js`) only maps `& < > " '` → entities; inside a
+  double-quoted `onclick` attribute the browser HTML-decodes `&#39;` back to
+  `'` **before** the JS parser runs, so a `'` in `parent_name` breaks out of
+  the string literal. Because `(`, `)`, `;` are not escaped, the breakout is
+  scriptable. A name like `x'); <payload>; ('` runs arbitrary JS in the
+  authenticated admin page when an admin clicks that row's button; a benign
+  `O'Brien` just silently breaks the button. _Fix:_ stop interpolating user
+  text into inline handlers — use `addEventListener` reading `data-` attributes
+  (safe with `escHtml`), or pass only the UUID and look the record up from
+  `_arData` in the handler.
+- **FS5 — [High · verified live · reopens SS5] `*_by_email` billing RPCs are
+  `anon`-executable, enabling invoice tampering and balance enumeration.**
+  [Public/backend] `create_billing_invoice_by_email`,
+  `add_day_to_invoice_by_email`, and `get_outstanding_balance_by_email`
+  (`add_billing_rpc.sql`) are `SECURITY DEFINER`, `GRANT EXECUTE … TO anon`,
+  and — confirmed against prod — actually deployed and anon-executable. With
+  only the public anon key an attacker can call
+  `create_billing_invoice_by_email('victim@x.com','2026-08',0)` to zero a
+  family's draft invoice, `add_day_to_invoice_by_email(…)` to inflate it, or
+  `get_outstanding_balance_by_email('victim@x.com')` to learn whether/how much
+  any email owes (financial-PII disclosure + email enumeration). _Fix:_ revoke
+  `anon` execute and route invoice writes through an authenticated path (the
+  family-login token, or an admin/service context), validating amounts
+  server-side rather than trusting the client. Ties into the still-open SS1
+  anon-read hardening.
+
+## Medium
+
+- **FS6 — [Med · verified deployed] `notify-geofence` trusts a client-supplied
+  recipient → branded-email relay.** [backend]
+  `supabase/functions/notify-geofence/index.ts:27-40,120-130` reads
+  `notifyEmail` from the request body and sends a branded "Timothy Lutheran
+  MDO" email to it, unlike the sibling `check-missed-clocks`, which loads
+  `notify_email` from `settings` server-side. `verify_jwt=true` blocks
+  token-less calls but the anon key (public, in the browser) satisfies it, so
+  anyone can drive the org's Resend domain to email an arbitrary address with
+  attacker-influenced `staffName`. _Fix:_ derive `notifyEmail` from the
+  `geofence` settings row server-side; add a service-role/shared-secret check
+  like `check-missed-clocks`.
+- **FS7 — [Med] Recurring days are auto-booked and billed on closed / full /
+  past dates and can't be removed.** [Public] `onChildrenChanged`
+  (`js/app.js:527`) pre-populates every matching weekday with
+  `sched.set(dateStr, { dayType:'full', locked:true })` with no check against
+  `closureMap`, capacity (`getDateStatus`/`spotsLeft`), or `today`. Locked days
+  can't be removed (`handleDayClick`, `:751`) and are submitted + billed. A
+  recurring Monday that falls on a holiday closure (or an already-full date) is
+  force-booked and charged, and can overcommit the room. _Fix:_ when
+  pre-populating, skip closed/past/full dates — only auto-add bookable days.
+- **FS8 — [Med] Cross-parent duplicate check hard-blocks unrelated families
+  who share a child's name.** [Public] `handleSubmit`
+  (`js/app.js:1337`) treats `checkExistingRegistrationByChild(month, child.name)`
+  as a hard block, and that helper (`js/supabase.js:770`) matches **any**
+  registration with the same `child_name` that month regardless of family. Two
+  unrelated "Emma Johnson"s can't both register for July; the second is blocked
+  with "already registered… contact the office" and cannot self-serve. _Fix:_
+  scope the check to the same family/student id, or downgrade the name-only
+  match to the existing non-blocking warning.
+- **FS9 — [Med] Lookup page rejects valid 5–8 digit family PINs.** [Public]
+  `js/lookup.js:61` validates with `/^\d{4}$/` (exactly 4), but the whole rest
+  of the system uses `/^\d{4,8}$/` (`js/supabase.js:884`, `reset-pin.js:40`,
+  `admin-families.js:902-903`, the `family-lookup` edge fn, `set_family_pin`
+  SQL). A parent who set a 6-digit PIN logs in fine on `index.html` but is told
+  "enter your 4-digit PIN" on `lookup.html` and can never view their schedule
+  there. _Fix:_ change the regex to `/^\d{4,8}$/` and fix the label/placeholder
+  text.
+- **FS10 — [Med] `admin-users` edge fn fails OPEN when `admin_roles` is
+  empty.** [backend] `supabase/functions/admin-users/index.ts:58` guards with
+  `if (Object.keys(roles).length > 0 && roles[callerEmail] !== 'full')`. If the
+  `admin_roles` setting is ever absent/`{}` (fresh setup, accidental clear),
+  the length check is false and any authenticated session reaches the Auth
+  Admin API (list/create/delete users). _Fix:_ fail closed — empty roles or a
+  caller not explicitly `'full'` → 403.
+- **FS11 — [Med] Email edge fns require only a session, not an admin role, and
+  don't validate the recipient.** [backend] `send-schedule-change`
+  (`:64-92`, takes `parentEmail` from the body with no `families` lookup),
+  `send-staff-schedule`, and `send-waitlist-offer` gate on
+  `auth.getUser()` only. Since roles are enforced client-side (S2), any
+  authenticated account — including a nominally low-privilege `staff`/
+  `restricted` user — can send branded MDO email to any address. _Fix:_ enforce
+  the `full` role server-side (as `admin-users` does) and validate recipients
+  against `families`/`staff`.
+- **FS12 — [Med] Generic CSV import shifts payment dates one day early (or
+  resets to today).** [Admin] `_normalizeImportDate`
+  (`js/admin/admin-billing.js:2336`) does `new Date(raw)` first: an ISO
+  `2026-01-15` parses as UTC midnight and reads back as `2026-01-14` in Central
+  time, and a bare Excel serial (`"46037"`) is Invalid → silently falls back to
+  `_todayStr()`. Imported `billing_payments.payment_date` values land in the
+  wrong month for AR/dashboard grouping. _Fix:_ parse date-only strings as
+  local (`new Date(raw + 'T00:00:00')` when `^\d{4}-\d{2}-\d{2}$`) and handle
+  Excel serials explicitly.
+- **FS13 — [Med] Salaried YTD gross pay assumes employment since Jan 1.**
+  [Admin] `js/admin/admin-reports.js:1637` (render) & `:2288` (export), via
+  `_calcYtdPeriods` (`:1562`): YTD = `salary_biweekly × ytdPeriods` where
+  `ytdPeriods` counts every 14-day period from Jan 1, ignoring the staffer's
+  actual start date. A teacher hired in June shows a full-year YTD, inflating
+  `totYtdPay`. _Fix:_ gate accrual on a `hire_date`/`start_date`, or label the
+  column an estimate.
+- **FS14 — [Med] `restricted` role leaves whole tabs and several Settings
+  sections accessible.** [Admin] `applyRoleRestrictions()`
+  (`js/admin/admin-settings.js:837`) hides only the Finance tab plus some
+  staffing/settings sections for `restricted`. It does **not** hide the
+  Families (full PII/PINs/discounts), Billing, Reports, or Messages tabs, nor
+  the `staffDirectorySection` / `geofenceSection` / `enrollmentFormsSection` /
+  `enrollmentCapacitySection` sub-sections — contradicting the documented
+  "schedule-planner-only" scope. (Distinct from S2's "it's client-side" point:
+  the client rule set itself omits these surfaces.) _Fix:_ hide the non-planner
+  tabs and add the missing section ids to the restricted hide list.
+- **FS15 — [Med] `capacitySection` never restored on role switch.** [Admin]
+  The `restricted` branch hides `capacitySection`
+  (`admin-settings.js:837`) but `_resetRoleRestrictions()`
+  (`js/admin/admin-core.js:135`) omits it from the re-show list. If a restricted
+  admin logs in then a full admin logs in on the same page load (dashboard init
+  is guarded and won't re-run), the full admin's Settings tab is silently
+  missing the Classroom Capacity editor until a hard refresh. _Fix:_ add
+  `'capacitySection'` to the `_resetRoleRestrictions` id array.
+- **FS16 — [Med] Enrolling an email-less (imported) waitlist child creates a
+  blank-email registration with no invoice, silently.** [Admin]
+  `wlpEnrollFromWaitlist()` (`js/admin/admin-waitlist.js:1269`) prompts for a
+  missing phone (NOT NULL column) but never checks `parentEmail`; CSV-imported
+  waitlist rows allow an empty email. The `''` flows to
+  `submitRegistration({parent:{email:''}})` and `createInvoiceByEmail('', …)`,
+  which throws but is swallowed by `catch(_)`. Result: an enrolled child not
+  lookup-able by the family portal and no billing invoice, with no admin
+  warning. _Fix:_ validate `parentEmail` (prompt/abort) like phone, or block
+  enroll with a clear "email required" message.
+- **FS17 — [Med] Waitlist Planner floors non-promised seat consumption at 0,
+  hiding later-month overbooking.** [Admin] The Planner intentionally lets open
+  counts go negative to surface overbooking (comment `:216-224`; promised path
+  `:428` subtracts unfloored), but the non-promised seating uses
+  `Math.max(0, working[r.id][mm][d] - 1)` (`:454`). A waitlist child matched in
+  month N whose room is later pushed past capacity by graduations-in shows
+  "exactly full" in month N+k instead of over-capacity. _Fix:_ drop the
+  `Math.max(0, …)` so it matches the promised path and `wlpComputeGradGrid`.
+- **FS18 — [Med] Formal email-offer flow is unreachable dead code.** [Admin]
+  `wlpOpenOfferModal()` (`:1288`), `wlpOfferDaysForKid`, the `#wlOfferModal`
+  send handler (`:1736`), `sendWaitlistOfferEmail`, and the
+  `offered_days`/`offer_type` reservation logic are never invoked (the "enroll
+  replaces offer-a-spot" rework left them orphaned). Since `status` can only
+  become `'offered'` through that dead handler, the "✓ Mark Accepted" action
+  (gated on `status==='offered'`, `:770`) is unreachable, as is the offer
+  email. _Fix:_ either wire an "Offer a spot" button to `wlpOpenOfferModal`, or
+  delete the dead modal/handler/helpers and the stale comment.
+- **FS19 — [Med] Capacity baseline counts only the current ISO week's
+  bookings.** [Admin] `wlpBaseBooked()` (`js/admin/admin-waitlist.js:172`)
+  builds the 12-month allocation baseline by matching `care_date` against only
+  `wlpCurrentWeekDates()` (this Mon–Fri). An enrolled child whose current-month
+  dates don't fall in this calendar week contributes 0, so late in the month
+  rooms look emptier than they are — and the forecasting path
+  (`_simulateRoomAdmissions`) uses a whole-month pattern, so the two capacity
+  models diverge. _Fix:_ derive the baseline from each registration's
+  actual current-month weekday pattern, not literal current-week date matches.
+- **FS20 — [Med] In-modal edits re-render the registration table with the full
+  unfiltered/unsorted list.** [Admin] After add/remove-day or save-bill, the
+  code calls `renderTable(allRegistrations)` directly
+  (`js/admin/admin-calendar.js:306,431,472,552,568`); `renderTable` doesn't
+  apply the active room/month/search filter or sort (those live in
+  `applyFilters()`/`sortRegistrations()`). An admin filtered to "Owl / July,
+  sorted by name" who edits one child suddenly sees every registration in raw
+  fetch order, while the filter dropdowns still show their old values. _Fix:_
+  call `applyFilters()` instead of `renderTable(allRegistrations)`.
+- **FS21 — [Med] Recurring days silently dropped when CREATING a family.**
+  [Admin] `saveFamilyModal`'s create branch (`js/admin/admin-families.js:920`)
+  calls `addStudent({…})` without `recurringDays`, though the checkboxes were
+  read and `addStudent` accepts it; the update branch (`:967-976`) does pass it.
+  A child created with Mon/Wed/Fri checked gets `recurring_days = NULL`, and the
+  Bear-room reminder later reports "no recurring days set." _Fix:_ pass
+  `recurringDays` in the create branch too.
+- **FS22 — [Med] CSV exports are vulnerable to spreadsheet formula
+  injection.** [Admin] `csvCell` (`js/admin/admin-core.js:160`) quotes only
+  values containing `,`/`"`/newline; it does not neutralize a leading `=`,
+  `+`, `-`, or `@`. `exportCSV` (`admin-calendar.js:1984`) and the AR export
+  write parent/child names, emails, phones (all registrant-supplied) straight
+  in. A child named `=HYPERLINK(…)` / `=WEBSERVICE(…)` executes when an admin
+  opens the export in Excel/Sheets. _Fix:_ in `csvCell`, prefix values starting
+  with `= + - @` (or tab/CR) with a `'`.
+
+## Low
+
+- **FS23 — [Low] Unescaped `%`/`_` in `.ilike()` email/name lookups
+  over-match (new instances of the SS13/T1 class).** [Both] Distinct, still-live
+  sites: `checkExistingRegistration` (`js/supabase.js:738-739`),
+  `checkExistingRegistrationByChild` (`:776`), `checkDateConflicts`
+  (`:704-705`), and `request-pin-reset/index.ts:69,84`. Because `_`/`%` are SQL
+  `LIKE` wildcards, an email like `a_c@x.com` matches `abc@x.com` etc., causing
+  spurious duplicate-blocks; `request-pin-reset` with `{email:"%"}` matches an
+  arbitrary family and burns its reset cooldown. Over-matching only (never
+  under-matches). _Fix:_ escape `%`/`_`/`\` before `.ilike()`, or use `.eq()`
+  with server-side case handling / an exact-match RPC.
+- **FS24 — [Low] Anon UPDATE policy on `staff_clock_events` allows same-day
+  cross-staff tampering.** [backend] `fix_clock_events_rls.sql:25-29`'s "anon
+  update clock events today only" policy scopes on `work_date = CURRENT_DATE`
+  but not to the staff member acting, so an anon-key holder can rewrite any
+  staffer's `clock_in`/`clock_out` for today. The migration comment claims it
+  fixes payroll fraud, but only past-date fraud is blocked. _Fix:_ move clock
+  mutations behind a PIN-keyed `SECURITY DEFINER` RPC, or row-scope the update
+  to the authenticated staff record.
+- **FS25 — [Low] Waitlist "Message the Office" shows a success toast even when
+  the send fails.** [Public] `sendMessage()` (`js/waitlist-status.js:105`)
+  runs `closeMessageForm()` + shows `wlsToast` unconditionally after the
+  try/catch, so a failed `addMessage()` still shows "sent" (while the `mailto:`
+  fallback also opens). The parent assumes it went through and never sends the
+  mailto. Compounds T2 (nothing reads `messages`). _Fix:_ show the success
+  toast only on the success path; on failure show a distinct "we've opened your
+  email app instead" message.
+- **FS26 — [Low] `_buildGraduationIndex` collapses two distinct same-name
+  children in the same room.** [Admin] `js/admin/admin-waitlist.js:1394` dedups
+  on `` `${reg.child_name}:${reg.room_id}` `` to merge a child's monthly rows,
+  but that also merges two different children with the same name in one room —
+  only one is counted as moving / freeing a seat. _Fix:_ key the dedup on a
+  stable per-child id (student id / dob).
+- **FS27 — [Low] Admin-reg calendar keeps selected days across month
+  navigation → cross-month registration billed for only the first month.**
+  [Admin] `adminRegCalPrev/Next` (`js/admin/admin-calendar.js:1322-1333`) change
+  the month but don't clear `_arDates`; on submit all dates go into one
+  registration but the invoice month is derived from only the first date
+  (`[..._arDates.keys()][0].substring(0,7)`, `:1874`). Selecting late-July then
+  Aug dates bills only July. _Fix:_ scope `_arDates` per month, or split
+  submission/invoice per care-date month.
+- **FS28 — [Low] Add-a-day invoice/change-fee failure is swallowed while the
+  care date is still written.** [Admin] In `_aadConfirm`
+  (`js/admin/admin-calendar.js:1038-1043`), after `addRegistrationDate`
+  succeeds the `addDayToInvoiceByEmail(…, dayRate, changeFee)` call is wrapped
+  in `try{}catch(_){}`. If billing fails, the child is added to the day/roster
+  but never billed for it or the $5 change fee, with no warning. _Fix:_ surface
+  the invoice-write failure so the admin can retry.
+- **FS29 — [Low] AR CSV export "Days Since Invoice" column is always blank.**
+  [Admin] `exportArCsv` (`js/admin/admin-billing.js:1870`) emits `r.daysSince`,
+  but `loadArView` (`:1546-1572`) never sets it, so every row exports empty.
+  _Fix:_ compute `daysSince` in `loadArView`, or drop the column.
+- **FS30 — [Low] `reports` tab is mislabeled "Billing" in `TAB_META`.** [Admin]
+  `js/admin/admin-settings.js:319`: `reports: { icon:'📊', label:'Billing' }`
+  — the mobile current-tab chip shows "📊 Billing" for Reports, indistinguishable
+  from the Billing tab. Copy/paste error. _Fix:_ set the label to "Reports"
+  (or "Payroll").
+
+_Checked and cleared (no new bug):_ payroll math (hourly rate × hours, the
+10-minute clock floor, manual/clock dedup on `staff_id|work_date`, salary `/10`
+daily proration, historical-vs-clock tiering guarded by `histCoveredDates`) and
+the revenue-aggregation paths (`_buildFamilyBillingData` vs `_buildArDataMap`
+sibling-discount parity) reconcile; `family_login` (SS2 text PIN) and the
+pin-reset/consume flow verify correctly in prod (bcrypt verify, pinned
+`search_path`, `FOR UPDATE` single-use token, lockout reset on success);
+`confirm-waitlist-interest` and the token-gated confirm/decline flow remain
+correctly scoped. The per-day billing-preview weekly-rate display mismatch that
+two reviewers surfaced is the already-logged **T7**, not a new item.
