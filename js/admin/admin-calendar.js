@@ -1845,21 +1845,46 @@ async function _arSubmit() {
         const confirmedDates = [..._arDates.entries()].map(([date, dayType]) => ({ date, dayType }));
         const dob = _arStudent.child_dob || null;
         const ageMonths = dob ? calcAgeMonths(dob) : null;
-        const newReg = await submitRegistration({
-            parent:         { name: _arFamily.parent_name, email: _arFamily.parent_email, phone: _arFamily.parent_phone },
-            child:          { name: _arStudent.child_name, ageMonths, dob },
-            roomId:         _arRoom?.id,
-            confirmedDates,
-            status:         'confirmed',
-            submittedBy:    window._adminSession?.user?.email ? `admin:${window._adminSession.user.email}` : 'admin',
-        });
-        await logAdminAction('create', 'registration', String(newReg.id), {
-            child_name:   _arStudent.child_name,
-            parent_name:  _arFamily.parent_name,
-            parent_email: _arFamily.parent_email,
-            room_id:      _arRoom?.id,
-            dates:        confirmedDates.map(d => d.date),
-        });
+
+        // FS2: if this child already has a confirmed registration for the month
+        // shown in the modal, append the newly-selected days to that existing
+        // registration instead of inserting a second registrations row (which
+        // double-counts the child in rosters/capacity/billing). Only a genuinely
+        // new child+month combination creates a fresh registration.
+        const monthPrefix = `${_arYear}-${String(_arMonth + 1).padStart(2, '0')}`;
+        let existingRegId = null;
+        for (const [dateStr, info] of _arBookedMap.entries()) {
+            if (dateStr.startsWith(monthPrefix) && info && info.reg_id) { existingRegId = info.reg_id; break; }
+        }
+
+        let newReg;
+        if (existingRegId) {
+            for (const { date, dayType } of confirmedDates) {
+                await addRegistrationDate(existingRegId, _arRoom?.id, date, dayType, false);
+            }
+            newReg = { id: existingRegId };
+            await logAdminAction('update', 'registration', String(existingRegId), {
+                child_name:   _arStudent.child_name,
+                parent_email: _arFamily.parent_email,
+                added_dates:  confirmedDates.map(d => d.date),
+            });
+        } else {
+            newReg = await submitRegistration({
+                parent:         { name: _arFamily.parent_name, email: _arFamily.parent_email, phone: _arFamily.parent_phone },
+                child:          { name: _arStudent.child_name, ageMonths, dob },
+                roomId:         _arRoom?.id,
+                confirmedDates,
+                status:         'confirmed',
+                submittedBy:    window._adminSession?.user?.email ? `admin:${window._adminSession.user.email}` : 'admin',
+            });
+            await logAdminAction('create', 'registration', String(newReg.id), {
+                child_name:   _arStudent.child_name,
+                parent_name:  _arFamily.parent_name,
+                parent_email: _arFamily.parent_email,
+                room_id:      _arRoom?.id,
+                dates:        confirmedDates.map(d => d.date),
+            });
+        }
 
         // Create billing invoice — same calculation as the review panel
         try {

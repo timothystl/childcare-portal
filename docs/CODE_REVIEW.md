@@ -795,6 +795,30 @@ list, 2026-07-12):**
 
 ## High
 
+> **Fix status — 2026-07-12 (all five High items addressed this session):**
+> - **FS1 — [~] partially fixed.** `month_key` column added + backfilled in prod
+>   (519 confirmed rows stamped; 8 date-less rows left NULL), and
+>   `submitRegistration()` now stamps `month_key` on every insert
+>   (`fs1_registration_month_key_backfill.sql`). The **unique index is
+>   deferred** — prod has ~38 groups of pre-existing duplicate confirmed
+>   (child, month) rows that block `CREATE UNIQUE INDEX`. Run
+>   `fs1_registration_month_key_index.sql` **after** those are reconciled (owner
+>   decision — which rows to keep/merge).
+> - **FS2 — [x] fixed.** `_arSubmit` now appends new days to the existing
+>   child+month registration instead of inserting a duplicate row.
+> - **FS3 — [x] fixed + deployed.** `create_billing_invoice_by_email` now ADDS
+>   to the draft invoice (was replacing) and clamps the amount to `>= 0`
+>   (`fs3_billing_invoice_additive.sql`, applied to prod).
+> - **FS4 — [x] fixed.** All admin-billing inline `onclick` handlers no longer
+>   interpolate user names; the display name is looked up from `_arData` by id.
+> - **FS5 — [~] mostly closed + deployed.** `get_outstanding_balance_by_email`
+>   execute revoked from `PUBLIC`/`anon`/`authenticated` (enumeration oracle
+>   closed, verified); the FS3 additive+clamp change neutralizes the "zero
+>   out/lower a victim's invoice" vector. Residual: an attacker can still
+>   *inflate* a known family's draft via the anon-callable create/add_day RPCs —
+>   bounded (no payment processor) and self-healing (admin "Generate Invoices"
+>   recompute); full close needs server-side amount computation (T1/T11 rework).
+
 - **FS1 — [High · verified in prod] Registration duplicate-prevention is not
   actually enforced.** [Both] `add_registration_month_key.sql` (adds a
   `month_key` column + a partial unique index

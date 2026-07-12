@@ -94,24 +94,29 @@ A full code review + a deeper "second sweep" + a "third sweep" + a whole-codebas
   rate-limiting gaps, misc low-severity cleanup) — see `docs/CODE_REVIEW.md` "Third
   Sweep" section and `docs/NEXT_STEPS.md` for the full list and order.
 
-### Fourth sweep (2026-07-12) — NEW, not yet triaged (full write-ups in `docs/CODE_REVIEW.md`)
+### Fourth sweep (2026-07-12) — full write-ups + fix status in `docs/CODE_REVIEW.md`
 Whole-codebase pass (six parallel focused reviews + live-prod verification via the
-Supabase catalog). **Nothing here is fixed yet** — these are logged for triage.
+Supabase catalog). **The five High items (FS1–FS5) were fixed this session**; FS6–FS30
+remain to triage.
 
-- **High**
-  - **FS1** — registration duplicate-prevention isn't enforced: `add_registration_month_key.sql`
-    is **not applied in prod** (column + unique index absent, catalog-verified) and
-    `submitRegistration()` never sets `month_key` anyway. Apply the migration **and**
-    populate `month_key` on insert.
-  - **FS2** — admin "Add New Days"/"Edit Calendar" inserts a **duplicate** `registrations`
-    row instead of appending (double-counts child + double-invoices). Backstopped by FS1.
-  - **FS3** — a family's second same-month registration **overwrites** their draft invoice
-    (the `*_by_email` RPC replaces `final_amount`, doesn't accumulate) → silent underbilling.
-  - **FS4** — **stored XSS** via parent/child name interpolated into inline `onclick`
-    handlers in `admin-billing.js` (`escHtml` doesn't cover the JS-string/attribute context).
-  - **FS5** — the `create/add_day/get_outstanding …_by_email` billing RPCs are
-    **`anon`-executable in prod** (catalog-verified) → invoice tampering + balance
-    enumeration with only the public anon key. **Reopens SS5** (had been assumed not deployed).
+- **High — ADDRESSED 2026-07-12**
+  - **FS1 [~]** — registration duplicate-prevention wasn't enforced (`month_key` column +
+    index absent in prod; `submitRegistration()` never set it). **Fixed:** column added +
+    backfilled in prod, `submitRegistration()` now stamps `month_key`. **Unique index
+    deferred** — ~38 pre-existing duplicate confirmed (child, month) groups block it; run
+    `fs1_registration_month_key_index.sql` after dedup (owner decides which rows to keep).
+  - **FS2 [x]** — admin "Add New Days"/"Edit Calendar" inserted a **duplicate** registration
+    row. **Fixed:** `_arSubmit` now appends new days to the existing child+month registration.
+  - **FS3 [x]** — a family's second same-month registration **overwrote** their draft invoice.
+    **Fixed + deployed:** `create_billing_invoice_by_email` is now additive + clamps amount `>= 0`.
+  - **FS4 [x]** — **stored XSS** via names in inline `onclick` in `admin-billing.js`.
+    **Fixed:** handlers look the name up from `_arData` by id; no user text in any `onclick`.
+  - **FS5 [~]** — billing `*_by_email` RPCs `anon`-executable (reopened SS5). **Mostly closed +
+    deployed:** `get_outstanding_balance_by_email` revoked from PUBLIC/anon/authenticated
+    (enumeration oracle closed, verified); FS3's additive+clamp kills the invoice
+    zero-out/lower vector. Residual (tracked): anon can still *inflate* a known family's draft —
+    bounded (no payment processor) + self-healing via admin regenerate; full fix = server-side
+    amounts (T1/T11).
 - **Medium** — FS6 `notify-geofence` client-supplied-recipient email relay;
   FS7 recurring days auto-booked/billed on closed/full/past dates & un-removable;
   FS8 cross-parent duplicate check hard-blocks unrelated families sharing a child name;
