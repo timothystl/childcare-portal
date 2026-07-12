@@ -337,15 +337,21 @@ function wlpComputeGradGrid(
   return grid
 }
 
-// Earliest fitting month for a kid across a pooled room group: try each
-// co-equal room in order (fill the first, overflow to the next), and within a
-// room the earliest month all requested weekdays are open. Mirrors the pooled
-// competitive seating in wlpRunAllocation().
+// Seat a kid in a pooled room group: the EARLIEST month they fit anywhere in
+// the group, and at that month the emptiest co-equal room (most headroom on
+// their tightest requested weekday, ties to the earlier-sorted room) — so
+// demand balances across rooms that share an age window rather than packing the
+// first one full. Mirrors wlpBalancedRoom()/the pooled seating in
+// wlpRunAllocation().
 function seatKidInGroup(group: RoomCfg[], working: Record<string, Record<string, number>[]>, k: Kid): { fitMonth: number | null; seatRoomId: string | null } {
-  for (const r of group) {
-    for (let m = k.desiredStartM; m < 12; m++) {
-      if (k.days.every(d => working[r.id][m][d] >= 1)) return { fitMonth: m, seatRoomId: r.id }
+  for (let m = k.desiredStartM; m < 12; m++) {
+    let best: RoomCfg | null = null, bestSlack = -Infinity
+    for (const r of group) {
+      if (!k.days.every(d => working[r.id][m][d] >= 1)) continue
+      const slack = Math.min(...k.days.map(d => working[r.id][m][d]))
+      if (slack > bestSlack) { bestSlack = slack; best = r }
     }
+    if (best) return { fitMonth: m, seatRoomId: best.id }
   }
   return { fitMonth: null, seatRoomId: null }
 }

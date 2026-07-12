@@ -154,20 +154,29 @@ function wlpRoomGroups(rooms) {
     return [...byKey.values()];
 }
 
-// The first room in a co-equal group that can seat kid k at month `month` (all
-// requested weekdays open, or — for a flexible kid — enough open days), or null
-// if none can. Lets promised demand spread across rooms that share an age
-// window instead of stacking on the first one.
-function wlpChooseRoom(group, working, k, month) {
+// Among the co-equal rooms that can seat kid k at month `month`, the emptiest —
+// the room with the most headroom on the kid's tightest requested weekday (for
+// a flexible kid, the most open days). Ties go to the earlier-sorted room.
+// Returns null if none can seat them at `month`. This BALANCES demand across
+// rooms that share an age window (each kid lands in whichever twin currently
+// has more room) rather than packing the first one full before touching the
+// second.
+function wlpBalancedRoom(group, working, k, month) {
+    let best = null, bestSlack = -Infinity;
     for (const r of group) {
-        const grid = working[r.id];
+        const grid = working[r.id][month];
+        let slack;
         if (k.flexible) {
-            if (wlpFlexDaysFor(k, grid, month)) return r;
-        } else if (k.days.every(d => grid[month][d] >= 1)) {
-            return r;
+            const openDays = TREND_DAYS.filter(d => grid[d] >= 1);
+            if (openDays.length < k.flexibleCount) continue;
+            slack = openDays.length;
+        } else {
+            if (!k.days.every(d => grid[d] >= 1)) continue;
+            slack = Math.min(...k.days.map(d => grid[d]));
         }
+        if (slack > bestSlack) { bestSlack = slack; best = r; }
     }
-    return null;
+    return best;
 }
 
 function wlpMonths() {
@@ -485,7 +494,7 @@ function wlpRunAllocation() {
     // (highest-priority first) so promised demand spreads rather than stacking.
     groups.forEach(group => {
         wlpSortByPriority(kids.filter(k => group.some(r => r.id === k.room) && k.promised)).forEach(k => {
-            const target = wlpChooseRoom(group, working, k, k.desiredStartM) || group[0];
+            const target = wlpBalancedRoom(group, working, k, k.desiredStartM) || group[0];
             k.room = target.id;
             preGridByKid[k.id] = working[target.id].map(day => ({ ...day }));
             fitMonthByKid[k.id] = k.desiredStartM;
@@ -505,23 +514,19 @@ function wlpRunAllocation() {
 
     // Everyone else (pending / offered-but-not-yet-accepted) competes for
     // whatever capacity is left, in priority order across the whole pooled
-    // group: each kid takes the earliest month they fit in the first co-equal
-    // room with room for them, overflowing to the next only when the earlier
-    // one can't seat them at all.
+    // group: each kid takes the EARLIEST month they fit anywhere in the group,
+    // and at that month lands in whichever co-equal room is emptiest
+    // (wlpBalancedRoom) — balancing the twins rather than filling one first.
     groups.forEach(group => {
         wlpSortByPriority(kids.filter(k => group.some(r => r.id === k.room) && !k.promised)).forEach(k => {
             let seated = null; // { room, month, days }
-            for (const r of group) {
-                const grid = working[r.id];
-                for (let m = k.desiredStartM; m < 12; m++) {
-                    if (k.flexible) {
-                        const flex = wlpFlexDaysFor(k, grid, m);
-                        if (flex) { seated = { room: r, month: m, days: flex }; break; }
-                    } else if (k.days.every(d => grid[m][d] >= 1)) {
-                        seated = { room: r, month: m, days: k.days }; break;
-                    }
+            for (let m = k.desiredStartM; m < 12; m++) {
+                const r = wlpBalancedRoom(group, working, k, m);
+                if (r) {
+                    const days = k.flexible ? wlpFlexDaysFor(k, working[r.id], m) : k.days;
+                    seated = { room: r, month: m, days };
+                    break;
                 }
-                if (seated) break;
             }
             const target = seated ? seated.room : (group.find(r => r.id === k.room) || group[0]);
             preGridByKid[k.id] = working[target.id].map(day => ({ ...day }));
