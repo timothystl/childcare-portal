@@ -4078,19 +4078,50 @@ function fmtAvg(v) {
     return v % 1 === 0 ? String(v) : v.toFixed(1);
 }
 
+// "Average day across the month": mean children on a typical operating weekday.
+// Averages only over the weekdays that actually had bookings (total > 0) so a
+// weekday the center never operates (e.g. an MDO room closed Mondays) doesn't
+// drag the figure down. Takes a { Mon:{half,full}, Tue:{...}, ... } map and
+// returns { half, full } averaged across operating weekdays.
+function _avgOperatingDay(dayVals) {
+    const op = TREND_DAYS.filter(d => ((dayVals[d]?.half || 0) + (dayVals[d]?.full || 0)) > 0);
+    const n = op.length;
+    return {
+        half: n ? op.reduce((s, d) => s + (dayVals[d].half || 0), 0) / n : 0,
+        full: n ? op.reduce((s, d) => s + (dayVals[d].full || 0), 0) / n : 0,
+    };
+}
+
 function _renderTrendsTable(trendMap) {
     const months = Object.keys(trendMap).sort();
     if (!months.length) return '<p class="empty-hint">No enrollment data found.</p>';
     const today = new Date();
 
-    // facilityAccum: accumulates per-room avg across all months, then sums across rooms
-    // shape: { day: { halfSum, fullSum } } — summed room averages (already averaged per month)
-    const facilityAccum = {};
-    TREND_DAYS.forEach(d => { facilityAccum[d] = { halfSum: 0, fullSum: 0 }; });
+    // Facility totals accumulate each room's avg-across-months, summed across
+    // rooms. Seasonal rooms (Summer Camp) are kept OUT of the year-round center
+    // average and broken out on their own row, so a few weeks of camp don't
+    // distort the school-year picture. shape: { day: { halfSum, fullSum } }.
+    const yearRoundAccum = {};
+    TREND_DAYS.forEach(d => { yearRoundAccum[d] = { halfSum: 0, fullSum: 0 }; });
+    // seasonalAccums: roomId → { label, accum: { day: { halfSum, fullSum } } }
+    const seasonalAccums = {};
 
     const roomHtml = getSortedRooms().map(room => {
         // Rooms with half-day option show Half | Full | Total per day; full-day-only rooms show just Total
         const showSplit = !room.fullDayOnly;
+        // Seasonal rooms (Summer Camp) feed a separate facility row, not the
+        // year-round center average.
+        const isSeasonal = room.status === 'seasonal';
+        let facTarget;
+        if (isSeasonal) {
+            if (!seasonalAccums[room.id]) {
+                seasonalAccums[room.id] = { label: room.label, accum: {} };
+                TREND_DAYS.forEach(d => { seasonalAccums[room.id].accum[d] = { halfSum: 0, fullSum: 0 }; });
+            }
+            facTarget = seasonalAccums[room.id].accum;
+        } else {
+            facTarget = yearRoundAccum;
+        }
 
         const dayHeaders = TREND_DAYS.map(d =>
             showSplit
@@ -4098,12 +4129,23 @@ function _renderTrendsTable(trendMap) {
                 : `<th style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
         ).join('');
 
+        // "Avg Day" = average children on a typical operating weekday that month
+        const avgDayHeader = showSplit
+            ? `<th colspan="3" style="text-align:center;border-left:2px solid #ddd;background:#eef2ff">Avg Day</th>`
+            : `<th style="text-align:center;border-left:2px solid #ddd;background:#eef2ff">Avg Day</th>`;
+
         const daySubHeaders = showSplit
             ? TREND_DAYS.map(() =>
                 `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>` +
                 `<th style="text-align:right;font-weight:normal">Full</th>` +
                 `<th style="text-align:right;font-weight:normal">Total</th>`
               ).join('')
+            : null;
+
+        const avgDaySubHeaders = showSplit
+            ? `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal;background:#eef2ff">Half</th>` +
+              `<th style="text-align:right;font-weight:normal;background:#eef2ff">Full</th>` +
+              `<th style="text-align:right;font-weight:normal;background:#eef2ff">Total</th>`
             : null;
 
         // roomAccum: accumulates monthly averages for this room to compute an "avg across months" row
@@ -4143,11 +4185,20 @@ function _renderTrendsTable(trendMap) {
                     : `<td class="report-num" style="border-left:2px solid #ddd">${fmtAvg(avgHalf + avgFull)}</td>`;
             }).join('');
 
+            // Average day across this month (mean over operating weekdays)
+            const moAd = _avgOperatingDay(pattern);
+            const avgDayCells = showSplit
+                ? `<td class="report-num" style="border-left:2px solid #ddd;background:#f7f9ff">${fmtAvg(moAd.half)}</td>` +
+                  `<td class="report-num" style="background:#f7f9ff">${fmtAvg(moAd.full)}</td>` +
+                  `<td class="report-num" style="background:#f7f9ff"><strong>${fmtAvg(moAd.half + moAd.full)}</strong></td>`
+                : `<td class="report-num" style="border-left:2px solid #ddd;background:#f7f9ff"><strong>${fmtAvg(moAd.half + moAd.full)}</strong></td>`;
+
             const moTotal = moHalfTotal + moFullTotal;
             if (showSplit) {
                 return `<tr>
                     <td class="staff-date-cell">${label}${src}</td>
                     ${dayCells}
+                    ${avgDayCells}
                     <td class="report-num" style="border-left:2px solid #ddd">${moHalfTotal || '—'}</td>
                     <td class="report-num">${moFullTotal || '—'}</td>
                     <td class="report-num"><strong>${moTotal || '—'}</strong></td>
@@ -4156,6 +4207,7 @@ function _renderTrendsTable(trendMap) {
             return `<tr>
                 <td class="staff-date-cell">${label}${src}</td>
                 ${dayCells}
+                ${avgDayCells}
                 <td class="report-num" style="border-left:2px solid #ddd"><strong>${moTotal || '—'}</strong></td>
             </tr>`;
         }).join('');
@@ -4172,15 +4224,29 @@ function _renderTrendsTable(trendMap) {
             }
             const avgH = halfSum / count;
             const avgF = fullSum / count;
-            // Accumulate into facility totals
-            facilityAccum[d].halfSum += avgH;
-            facilityAccum[d].fullSum += avgF;
+            // Accumulate into facility totals (year-round or seasonal bucket)
+            facTarget[d].halfSum += avgH;
+            facTarget[d].fullSum += avgF;
             return showSplit
                 ? `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff;font-weight:600">${fmtAvg(avgH)}</td>` +
                   `<td class="report-num" style="background:#f0f4ff;font-weight:600">${fmtAvg(avgF)}</td>` +
                   `<td class="report-num" style="background:#f0f4ff;font-weight:600">${fmtAvg(avgH + avgF)}</td>`
                 : `<td class="report-num" style="border-left:2px solid #ddd;background:#f0f4ff;font-weight:600">${fmtAvg(avgH + avgF)}</td>`;
         }).join('');
+
+        // Avg-day cell for the "Avg across months" row: mean over operating
+        // weekdays of each weekday's cross-month average.
+        const roomAvgByDay = {};
+        TREND_DAYS.forEach(d => {
+            const { halfSum, fullSum, count } = roomAccum[d];
+            roomAvgByDay[d] = { half: count ? halfSum / count : 0, full: count ? fullSum / count : 0 };
+        });
+        const amAd = _avgOperatingDay(roomAvgByDay);
+        const avgRowAvgDay = showSplit
+            ? `<td class="report-num" style="border-left:2px solid #ddd;background:#dfe6ff;font-weight:700">${fmtAvg(amAd.half)}</td>` +
+              `<td class="report-num" style="background:#dfe6ff;font-weight:700">${fmtAvg(amAd.full)}</td>` +
+              `<td class="report-num" style="background:#dfe6ff;font-weight:700">${fmtAvg(amAd.half + amAd.full)}</td>`
+            : `<td class="report-num" style="border-left:2px solid #ddd;background:#dfe6ff;font-weight:700">${fmtAvg(amAd.half + amAd.full)}</td>`;
 
         const avgRowTrailer = showSplit
             ? `<td colspan="3" style="border-left:2px solid #ddd;background:#f0f4ff"></td>`
@@ -4189,6 +4255,7 @@ function _renderTrendsTable(trendMap) {
         const avgRow = `<tr style="background:#f0f4ff;border-top:2px solid #c0c8e0">
             <td class="staff-date-cell" style="font-weight:700;font-style:italic">Avg across months</td>
             ${avgCells}
+            ${avgRowAvgDay}
             ${avgRowTrailer}
         </tr>`;
 
@@ -4198,7 +4265,7 @@ function _renderTrendsTable(trendMap) {
               `<th style="border-left:none">All Days</th>`
             : `<th style="text-align:center;border-left:2px solid #ddd">Month Total</th>`;
         const subHeaderRow = showSplit
-            ? `<tr>${daySubHeaders}` +
+            ? `<tr>${daySubHeaders}${avgDaySubHeaders}` +
               `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>` +
               `<th style="text-align:right;font-weight:normal">Full</th>` +
               `<th style="text-align:right;font-weight:normal">Total</th>` +
@@ -4216,6 +4283,7 @@ function _renderTrendsTable(trendMap) {
                         <tr>
                             ${monthHeader}
                             ${dayHeaders}
+                            ${avgDayHeader}
                             ${monthTotalHeader}
                         </tr>
                         ${subHeaderRow}
@@ -4225,27 +4293,57 @@ function _renderTrendsTable(trendMap) {
             </div>`;
     }).join('');
 
-    // Facility totals table — sum of all room averages per day of week, with Half/Full/Total split
+    // Facility totals table — sum of all room averages per day of week, with
+    // Half/Full/Total split, plus an "Avg Day" (typical operating weekday) column.
+    // Summer Camp (seasonal) is broken out onto its own row rather than folded
+    // into the year-round center average.
     const facilityDayHeaders = TREND_DAYS.map(d =>
         `<th colspan="3" style="text-align:center;border-left:2px solid #ddd">Avg ${d}</th>`
-    ).join('');
+    ).join('') +
+        `<th colspan="3" style="text-align:center;border-left:2px solid #ddd;background:#eef2ff">Avg Day</th>`;
 
     const facilitySubHeaders = TREND_DAYS.map(() =>
         `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal">Half</th>` +
         `<th style="text-align:right;font-weight:normal">Full</th>` +
         `<th style="text-align:right;font-weight:normal">Total</th>`
-    ).join('');
+    ).join('') +
+        `<th style="text-align:right;border-left:2px solid #ddd;font-weight:normal;background:#eef2ff">Half</th>` +
+        `<th style="text-align:right;font-weight:normal;background:#eef2ff">Full</th>` +
+        `<th style="text-align:right;font-weight:normal;background:#eef2ff">Total</th>`;
 
-    const facilityCells = TREND_DAYS.map(d => {
-        const { halfSum, fullSum } = facilityAccum[d];
-        return `<td class="report-num" style="border-left:2px solid #ddd;font-weight:600">${fmtAvg(halfSum)}</td>` +
-               `<td class="report-num" style="font-weight:600">${fmtAvg(fullSum)}</td>` +
-               `<td class="report-num" style="font-weight:600">${fmtAvg(halfSum + fullSum)}</td>`;
+    // Build one row per scope: the year-round center total, then each seasonal
+    // room (Summer Camp) that has data. A seasonal room with no bookings in the
+    // window is skipped rather than shown as an all-dashes row.
+    const seasonalRows = getSortedRooms()
+        .filter(r => r.status === 'seasonal' && seasonalAccums[r.id])
+        .map(r => ({ label: r.label, accum: seasonalAccums[r.id].accum }))
+        .filter(({ accum }) => TREND_DAYS.some(d => (accum[d].halfSum + accum[d].fullSum) > 0));
+
+    const facRows = [
+        { label: seasonalRows.length ? 'All Rooms (excl. Summer Camp)' : 'All Rooms', accum: yearRoundAccum },
+        ...seasonalRows,
+    ];
+
+    const facilityBody = facRows.map(({ label, accum }) => {
+        const cells = TREND_DAYS.map(d => {
+            const { halfSum, fullSum } = accum[d];
+            return `<td class="report-num" style="border-left:2px solid #ddd;font-weight:600">${fmtAvg(halfSum)}</td>` +
+                   `<td class="report-num" style="font-weight:600">${fmtAvg(fullSum)}</td>` +
+                   `<td class="report-num" style="font-weight:600">${fmtAvg(halfSum + fullSum)}</td>`;
+        }).join('');
+        const byDay = {};
+        TREND_DAYS.forEach(d => { byDay[d] = { half: accum[d].halfSum, full: accum[d].fullSum }; });
+        const ad = _avgOperatingDay(byDay);
+        const avgDayCell =
+            `<td class="report-num" style="border-left:2px solid #ddd;background:#eef2ff;font-weight:700">${fmtAvg(ad.half)}</td>` +
+            `<td class="report-num" style="background:#eef2ff;font-weight:700">${fmtAvg(ad.full)}</td>` +
+            `<td class="report-num" style="background:#eef2ff;font-weight:700">${fmtAvg(ad.half + ad.full)}</td>`;
+        return `<tr><td class="staff-date-cell" style="font-weight:700">${escHtml(label)}</td>${cells}${avgDayCell}</tr>`;
     }).join('');
 
     const facilityHtml = `
         <h4 style="margin:28px 0 4px;font-size:1em;border-top:2px solid #c0c8e0;padding-top:14px">Facility Total Averages</h4>
-        <p style="font-size:.8em;color:#666;margin:0 0 8px">Average children per day of week across all rooms combined (sum of room averages).</p>
+        <p style="font-size:.8em;color:#666;margin:0 0 8px">Average children per day of week across all rooms combined (sum of room averages). <strong>Avg Day</strong> = children on a typical operating weekday (averaged over the weekdays that had bookings). Summer Camp is shown separately so its seasonal weeks don't skew the year-round center average.</p>
         <div class="table-wrapper report-table-wrap">
             <table class="report-table" style="font-size:.85rem">
                 <thead>
@@ -4256,10 +4354,7 @@ function _renderTrendsTable(trendMap) {
                     <tr>${facilitySubHeaders}</tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td class="staff-date-cell" style="font-weight:700">All Rooms</td>
-                        ${facilityCells}
-                    </tr>
+                    ${facilityBody}
                 </tbody>
             </table>
         </div>`;
@@ -4299,19 +4394,32 @@ async function exportEnrollmentTrends() {
         getSortedRooms().forEach(room => {
             const row = { Month: moLabel, Room: room.label, Source: isHist ? 'historical' : 'live' };
             let moHalfTotal = 0, moFullTotal = 0;
+            const byDay = {};
             TREND_DAYS.forEach(d => {
                 const c = _trendCell(trendMap[mo], room.id, d);
                 const count = c.dates.size;
+                const avgHalf = count ? c.halfSum / count : 0;
+                const avgFull = count ? c.fullSum / count : 0;
+                byDay[d] = { half: avgHalf, full: avgFull };
                 if (room.fullDayOnly) {
-                    row[`Avg ${d}`] = count ? +((c.halfSum + c.fullSum) / count).toFixed(2) : 0;
+                    row[`Avg ${d}`] = +(avgHalf + avgFull).toFixed(2);
                 } else {
-                    row[`Avg ${d} Half`] = count ? +(c.halfSum / count).toFixed(2) : 0;
-                    row[`Avg ${d} Full`] = count ? +(c.fullSum / count).toFixed(2) : 0;
-                    row[`Avg ${d} Total`] = count ? +((c.halfSum + c.fullSum) / count).toFixed(2) : 0;
+                    row[`Avg ${d} Half`] = +avgHalf.toFixed(2);
+                    row[`Avg ${d} Full`] = +avgFull.toFixed(2);
+                    row[`Avg ${d} Total`] = +(avgHalf + avgFull).toFixed(2);
                 }
                 moHalfTotal += c.halfSum;
                 moFullTotal += c.fullSum;
             });
+            // Avg Day = children on a typical operating weekday that month
+            const ad = _avgOperatingDay(byDay);
+            if (room.fullDayOnly) {
+                row['Avg Day'] = +(ad.half + ad.full).toFixed(2);
+            } else {
+                row['Avg Day Half'] = +ad.half.toFixed(2);
+                row['Avg Day Full'] = +ad.full.toFixed(2);
+                row['Avg Day Total'] = +(ad.half + ad.full).toFixed(2);
+            }
             if (room.fullDayOnly) {
                 row['Month Total'] = moHalfTotal + moFullTotal;
             } else {
