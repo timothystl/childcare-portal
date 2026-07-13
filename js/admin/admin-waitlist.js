@@ -665,6 +665,21 @@ function wlpDaysNeeded(k) {
     return k.flexible ? (k.flexibleCount || 0) : k.days.length;
 }
 
+// "Best fit" — how many of a kid's requested days we could actually seat right
+// now, at their desired start month, against the availability they saw
+// (preGridByKid). A flexible "any N days" kid can take up to N of whatever days
+// are open; a specific-days kid gets however many of their days have an open
+// seat. This is what surfaces partial offers — a 2–3-day kid we can give 2 to.
+function wlpBestFitDays(k, alloc) {
+    const grid = alloc.preGridByKid[k.id] && alloc.preGridByKid[k.id][k.desiredStartM];
+    if (!grid) return 0;
+    if (k.flexible) {
+        const openDays = TREND_DAYS.filter(d => grid[d] >= 1).length;
+        return Math.min(k.flexibleCount || 0, openDays);
+    }
+    return k.days.filter(d => grid[d] >= 1).length;
+}
+
 // Re-orders an already-filtered kid list for display only — never touches
 // k._pos (assigned once in wlpRankedKids, before this runs).
 function wlpApplyQueueSort(kids, alloc) {
@@ -673,6 +688,13 @@ function wlpApplyQueueSort(kids, alloc) {
     const list = kids.slice();
     if (mode === 'days_desc') list.sort((a, b) => wlpDaysNeeded(b) - wlpDaysNeeded(a));
     else if (mode === 'days_asc') list.sort((a, b) => wlpDaysNeeded(a) - wlpDaysNeeded(b));
+    else if (mode === 'best_fit') list.sort((a, b) => {
+        const fa = wlpBestFitDays(a, alloc), fb = wlpBestFitDays(b, alloc);
+        if (fb !== fa) return fb - fa;                               // most seatable days first
+        const pa = fa / (wlpDaysNeeded(a) || 1), pb = fb / (wlpDaysNeeded(b) || 1);
+        if (pb !== pa) return pb - pa;                              // then the most-complete fit
+        return a._pos - b._pos;                                     // then priority order
+    });
     else if (mode === 'waiting') list.sort((a, b) => new Date(a.appliedAt) - new Date(b.appliedAt));
     else if (mode === 'room') {
         const roomOrder = {};
@@ -698,6 +720,7 @@ function wlpQueueFilteredKids(alloc) {
 
 const WLP_QUEUE_SORT_OPTIONS = [
     ['priority', 'Priority (default)'],
+    ['best_fit', 'Best fit — most days seatable now'],
     ['days_desc', 'Days needed — most first'],
     ['days_asc', 'Days needed — fewest first'],
     ['waiting', 'Longest waiting'],
@@ -756,6 +779,16 @@ function wlpRenderQueueRow(k, alloc) {
     const expanded = _wlp.expandedKidB === k.id;
     const room = alloc.roomMeta[k.room].room;
 
+    // "can seat N of M days now" — surfaces a partial-offer opportunity (e.g. a
+    // 2–3-day kid we can currently give 2 to). Shown only when they don't
+    // already fully fit now (that's what the green "Fits now" pill is for) and
+    // they actually requested a countable number of days.
+    const wantDays = wlpDaysNeeded(k);
+    const bestFit = wlpBestFitDays(k, alloc);
+    const bestFitNote = (!k.promised && wantDays > 0 && bestFit < wantDays)
+        ? ` · <span class="wlp-bestfit">can seat ${bestFit} of ${wantDays} day${wantDays === 1 ? '' : 's'} now</span>`
+        : '';
+
     return `
         <div class="wlp-row" data-kid-id="${k.id}">
             <div class="wlp-row-main" data-wlp-toggle="${k.id}">
@@ -763,7 +796,7 @@ function wlpRenderQueueRow(k, alloc) {
                 <div class="wlp-row-body">
                     <div class="wlp-row-name"><span class="wlp-row-name-text">${escHtml(k.name)}</span><span class="wlp-row-room-label">· ${escHtml(room.label.replace(/^\S+\s/, ''))}</span>${wlpDayTypeTag(k)}</div>
                     <div class="wlp-chip-row">${chips}</div>
-                    <div class="wlp-row-meta">${k.sibling ? '👨‍👩‍👧 sibling · ' : ''}${k.flexible ? `🔀 any ${k.flexibleCount} days/wk · ` : ''}waiting ${escHtml(wlDaysWaiting(k.appliedAt))} · desired start ${escHtml(alloc.months[k.desiredStartM].label)}</div>
+                    <div class="wlp-row-meta">${k.sibling ? '👨‍👩‍👧 sibling · ' : ''}${k.flexible ? `🔀 any ${k.flexibleCount} days/wk · ` : ''}waiting ${escHtml(wlDaysWaiting(k.appliedAt))} · desired start ${escHtml(alloc.months[k.desiredStartM].label)}${bestFitNote}</div>
                 </div>
                 <div class="wlp-status-pill ${fitCls}">${fitLabel}</div>
                 <button type="button" class="wlp-edit-btn" data-wlp-edit="${k.id}" title="Edit child">✎ Edit</button>
