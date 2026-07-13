@@ -72,6 +72,8 @@ type WaitlistApp = {
   day_type: string | null
   has_sibling: boolean | null
   applied_at: string
+  days_flexible: boolean | null
+  days_flexible_count: number | null
 }
 
 type RegDate = { care_date: string; waitlisted: boolean; day_type: string | null }
@@ -86,6 +88,8 @@ type Kid = {
   id: number
   room: string | null
   days: string[]
+  flexible: boolean
+  flexibleCount: number
   desiredStartM: number
   sibling: boolean
   appliedAt: string
@@ -344,23 +348,46 @@ function wlpComputeGradGrid(
   return grid
 }
 
+// For a flexible ("any N days") kid, the N least-crowded open weekdays in a
+// room-month, or null if fewer than N have any room — mirrors wlpFlexDaysFor().
+function flexDaysFor(k: Kid, roomGrid: Record<string, number>[], month: number): string[] | null {
+  const open = TREND_DAYS.filter(d => roomGrid[month][d] >= 1)
+  if (open.length < k.flexibleCount) return null
+  return open.slice()
+    .sort((a, b) => roomGrid[month][b] - roomGrid[month][a])
+    .slice(0, k.flexibleCount)
+    .sort((a, b) => TREND_DAYS.indexOf(a) - TREND_DAYS.indexOf(b))
+}
+
 // Seat a kid in a pooled room group: the EARLIEST month they fit anywhere in
 // the group, and at that month the emptiest co-equal room (most headroom on
 // their tightest requested weekday, ties to the earlier-sorted room) — so
 // demand balances across rooms that share an age window rather than packing the
-// first one full. Mirrors wlpBalancedRoom()/the pooled seating in
-// wlpRunAllocation().
-function seatKidInGroup(group: RoomCfg[], working: Record<string, Record<string, number>[]>, k: Kid): { fitMonth: number | null; seatRoomId: string | null } {
+// first one full. A flexible kid takes the N least-crowded open days (needs at
+// least N free); a specific-days kid needs every requested day open. Returns
+// the concrete days actually reserved so the caller decrements the right ones.
+// Mirrors wlpBalancedRoom()/the pooled seating in wlpRunAllocation().
+function seatKidInGroup(group: RoomCfg[], working: Record<string, Record<string, number>[]>, k: Kid): { fitMonth: number | null; seatRoomId: string | null; days: string[] | null } {
   for (let m = k.desiredStartM; m < 12; m++) {
-    let best: RoomCfg | null = null, bestSlack = -Infinity
+    let best: RoomCfg | null = null, bestSlack = -Infinity, bestDays: string[] | null = null
     for (const r of group) {
-      if (!k.days.every(d => working[r.id][m][d] >= 1)) continue
-      const slack = Math.min(...k.days.map(d => working[r.id][m][d]))
-      if (slack > bestSlack) { bestSlack = slack; best = r }
+      const grid = working[r.id]
+      let days: string[], slack: number
+      if (k.flexible) {
+        const flex = flexDaysFor(k, grid, m)
+        if (!flex) continue
+        days = flex
+        slack = TREND_DAYS.filter(d => grid[m][d] >= 1).length
+      } else {
+        if (!k.days.every(d => grid[m][d] >= 1)) continue
+        days = k.days
+        slack = Math.min(...k.days.map(d => grid[m][d]))
+      }
+      if (slack > bestSlack) { bestSlack = slack; best = r; bestDays = days }
     }
-    if (best) return { fitMonth: m, seatRoomId: best.id }
+    if (best) return { fitMonth: m, seatRoomId: best.id, days: bestDays }
   }
-  return { fitMonth: null, seatRoomId: null }
+  return { fitMonth: null, seatRoomId: null, days: null }
 }
 
 // Mirrors wlpRunAllocation() — the single source of truth the admin planner
@@ -380,14 +407,21 @@ function runAllocation(apps: WaitlistApp[], registrations: Registration[], rooms
   })
 
   const activeApps = apps.filter(a => ['pending', 'offered', 'accepted'].includes(a.status))
-  const kids: Kid[] = activeApps.map(a => ({
-    id: a.id,
-    room: wlDeriveRoom(a, rooms),
-    days: wlpAppDays(a),
-    desiredStartM: wlpDesiredMonthIdx(a, today),
-    sibling: !!a.has_sibling,
-    appliedAt: a.applied_at,
-  })).filter(k => k.room && gradGridByRoom[k.room!])
+  const kids: Kid[] = activeApps.map(a => {
+    const flexible = !!a.days_flexible
+    return {
+      id: a.id,
+      room: wlDeriveRoom(a, rooms),
+      flexible,
+      // "any N days a week" — the specific weekdays are resolved at seating time
+      // (flexDaysFor), same as the admin planner; clamp to 1–5 like it does.
+      flexibleCount: flexible ? Math.max(1, Math.min(5, a.days_flexible_count || 3)) : 0,
+      days: flexible ? [] : wlpAppDays(a),
+      desiredStartM: wlpDesiredMonthIdx(a, today),
+      sibling: !!a.has_sibling,
+      appliedAt: a.applied_at,
+    }
+  }).filter(k => k.room && gradGridByRoom[k.room!])
 
   const working: Record<string, Record<string, number>[]> = {}
   rooms.forEach(r => { working[r.id] = gradGridByRoom[r.id].map(day => ({ ...day })) })
@@ -401,11 +435,11 @@ function runAllocation(apps: WaitlistApp[], registrations: Registration[], rooms
     // their rank in the whole age group, regardless of which twin they derive.
     group.forEach(r => { queueByRoom[r.id] = groupKids })
     groupKids.forEach(k => {
-      const { fitMonth, seatRoomId } = seatKidInGroup(group, working, k)
+      const { fitMonth, seatRoomId, days } = seatKidInGroup(group, working, k)
       fitMonthByKid[k.id] = fitMonth
-      if (fitMonth !== null && seatRoomId) {
+      if (fitMonth !== null && seatRoomId && days) {
         for (let mm = fitMonth; mm < 12; mm++) {
-          k.days.forEach(d => { working[seatRoomId][mm][d] = Math.max(0, working[seatRoomId][mm][d] - 1) })
+          days.forEach(d => { working[seatRoomId][mm][d] = Math.max(0, working[seatRoomId][mm][d] - 1) })
         }
       }
     })
@@ -468,7 +502,7 @@ Deno.serve(async (req) => {
     // exists in the system (see design-handoff security note).
     const [appsRes, regsRes, capRes, ratesRes] = await Promise.all([
       supabase.from('waitlist_applications').select(
-        'id, status, parent_email, child_name, child_dob, expected_due_date, desired_start_date, days_of_week, day_type, has_sibling, applied_at',
+        'id, status, parent_email, child_name, child_dob, expected_due_date, desired_start_date, days_of_week, day_type, has_sibling, applied_at, days_flexible, days_flexible_count',
       ),
       supabase.from('registrations').select(
         'child_name, child_dob, room_id, registration_dates ( care_date, waitlisted, day_type )',
@@ -517,7 +551,9 @@ Deno.serve(async (req) => {
       waitRange: waitRangeLabel(fitMonth),
       hasSibling: !!match.has_sibling,
       desiredStart: formatDesiredStart(match.desired_start_date),
-      days: formatDays(match.days_of_week),
+      days: match.days_flexible
+        ? `Any ${Math.max(1, Math.min(5, match.days_flexible_count || 3))} days/week`
+        : formatDays(match.days_of_week),
       schedule: match.day_type === 'half' ? 'Half day' : 'Full day',
     })
   } catch (err) {
