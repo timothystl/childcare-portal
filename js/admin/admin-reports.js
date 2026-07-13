@@ -2926,9 +2926,21 @@ async function generatePromotionsReport() {
     document.getElementById('exportPromotionsBtn').style.display = 'none';
     document.getElementById('printPromotionsBtn').style.display = 'none';
     try {
-        // Age ceilings (months) per room and where each room transitions to
-        const ROOM_CEILINGS  = { bear: 12, bee: 24, turtle: 30, goose: 36 };
-        const ROOM_NEXT      = { bear: 'bee', bee: 'turtle', turtle: 'goose', goose: 'owl' };
+        // Age ceilings (months) per room and where each room transitions to —
+        // derived LIVE from the room age ranges (admin-editable via Settings →
+        // Rates), never hardcoded. A room graduates into the next AGE BRACKET
+        // (first room starting at/after its age-out), so co-equal rooms sharing
+        // a window (e.g. Turtle & Owl both 24–36mo) both age up past each other
+        // into the older bracket rather than sideways into a twin. Mirrors
+        // wlpPromotionChain() in the Capacity Planner so the two never disagree.
+        const _orderedRooms  = getSortedRooms().filter(r => r.id !== 'summer' && r.ageMinMonths != null);
+        const ROOM_CEILINGS  = {};
+        const ROOM_NEXT      = {};
+        _orderedRooms.forEach(room => {
+            ROOM_CEILINGS[room.id] = room.ageMaxMonths;
+            const nx = room.ageMaxMonths == null ? null : _orderedRooms.find(r => r.ageMinMonths >= room.ageMaxMonths);
+            ROOM_NEXT[room.id] = nx ? nx.id : null;
+        });
         const ROOM_LABEL     = Object.fromEntries(ROOMS.map(r => [r.id, r.label]));
 
         const allRegs = await fetchAllRegistrations();
@@ -3022,10 +3034,8 @@ async function generatePromotionsReport() {
         html += `<h4 style="margin:2rem 0 .5rem;font-size:1rem">Days Opening Up (by Room)</h4>
             <p style="font-size:.85em;color:#6b7280;margin-bottom:1rem">Spots that will become available when a child ages out of each room.</p>`;
 
-        Object.keys(byFromRoom).sort((a, b) => {
-            const order = ['bear','bee','turtle','goose'];
-            return order.indexOf(a) - order.indexOf(b);
-        }).forEach(room => {
+        const _roomAgeOrder = getSortedRooms().map(r => r.id);
+        Object.keys(byFromRoom).sort((a, b) => _roomAgeOrder.indexOf(a) - _roomAgeOrder.indexOf(b)).forEach(room => {
             html += `<div style="margin-bottom:1.25rem">
                 <div style="font-weight:600;margin-bottom:.35rem">${escHtml(ROOM_LABEL[room] || room)}</div>
                 <div style="overflow-x:auto"><table class="report-table"><thead><tr>
@@ -3057,10 +3067,7 @@ async function generatePromotionsReport() {
         html += `<h4 style="margin:2rem 0 .5rem;font-size:1rem">Rooms Gaining Children (by Room)</h4>
             <p style="font-size:.85em;color:#6b7280;margin-bottom:1rem">Rooms that will need to accommodate an incoming child.</p>`;
 
-        Object.keys(byToRoom).sort((a, b) => {
-            const order = ['bee','turtle','goose','owl'];
-            return order.indexOf(a) - order.indexOf(b);
-        }).forEach(room => {
+        Object.keys(byToRoom).sort((a, b) => _roomAgeOrder.indexOf(a) - _roomAgeOrder.indexOf(b)).forEach(room => {
             html += `<div style="margin-bottom:1.25rem">
                 <div style="font-weight:600;margin-bottom:.35rem">${escHtml(ROOM_LABEL[room] || room)}</div>
                 <div style="overflow-x:auto"><table class="report-table"><thead><tr>
