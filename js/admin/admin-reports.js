@@ -2998,40 +2998,17 @@ async function generatePromotionsReport() {
             return;
         }
 
-        // Group by month
-        const byMonth = {};
-        promotions.forEach(p => { (byMonth[p.moKey] = byMonth[p.moKey] || []).push(p); });
+        _promotionsData = promotions;
+        _promotionsSort = { col: 'month', dir: 1 };
+
+        const MONTH_NAME = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
         let html = `
             <p style="font-size:.85em;color:#6b7280;margin-bottom:1rem">
                 Dates are when each child reaches the age ceiling for their current room.
                 "Typical Days" shows weekdays the child attended in at least half their enrolled months. "varies" means no consistent pattern.
-            </p>
-            <div style="overflow-x:auto">
-            <table class="report-table">
-                <thead><tr>
-                    <th>Month</th><th>Child</th><th>Birthday</th>
-                    <th>From Room</th><th>To Room</th><th>Typical Days</th>
-                </tr></thead><tbody>`;
-
-        const MONTH_NAME = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        Object.keys(byMonth).sort().forEach(mk => {
-            const kids = byMonth[mk];
-            const [y, m] = mk.split('-').map(Number);
-            kids.forEach((p, i) => {
-                const dobStr = `${MONTH_NAME[p.dob.getMonth()].slice(0, 3)} ${p.dob.getDate()}, ${p.dob.getFullYear()}`;
-                html += `<tr>
-                    ${i === 0 ? `<td rowspan="${kids.length}" style="font-weight:600;vertical-align:top">${escHtml(MONTH_NAME[m - 1] + ' ' + y)}</td>` : ''}
-                    <td>${escHtml(p.child_name)}</td>
-                    <td style="color:#6b7280">${dobStr}</td>
-                    <td>${escHtml(ROOM_LABEL[p.fromRoom] || p.fromRoom)}</td>
-                    <td style="color:#16a34a">${escHtml(ROOM_LABEL[p.toRoom] || p.toRoom || '—')}</td>
-                    <td style="color:#6b7280">${p.dayList.length ? escHtml(p.dayList.join(', ')) : '<span style="color:#d1d5db">varies</span>'}</td>
-                </tr>`;
-            });
-        });
-
-        html += `</tbody></table></div>`;
+                <br><em>Click any column header to sort.</em>
+            </p>` + _promotionsMainTableHtml();
 
         // ---- Subsection: Days opening up (by source room) ----
         // Group promotions by fromRoom, then by month
@@ -3104,6 +3081,7 @@ async function generatePromotionsReport() {
         });
 
         container.innerHTML = html;
+        _attachPromotionsSort();
         _promotionsData = promotions;
         document.getElementById('exportPromotionsBtn').style.display = '';
         document.getElementById('printPromotionsBtn').style.display = '';
@@ -3113,6 +3091,84 @@ async function generatePromotionsReport() {
 }
 
 let _promotionsData = [];
+let _promotionsSort = { col: 'month', dir: 1 };
+
+const _PROMO_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const _PROMO_COLS = [['month','Month'],['child','Child'],['dob','Birthday'],['from','From Room'],['to','To Room'],['days','Typical Days']];
+
+function _promoRoomLabel(id) {
+    const r = ROOMS.find(x => x.id === id);
+    return r ? r.label : (id || '—');
+}
+
+function _promoSortVal(p, col) {
+    switch (col) {
+        case 'child': return (p.child_name || '').toLowerCase();
+        case 'dob':   return p.dob.getTime();
+        case 'from':  return _promoRoomLabel(p.fromRoom).toLowerCase();
+        case 'to':    return _promoRoomLabel(p.toRoom).toLowerCase();
+        case 'days':  return p.dayList.length;
+        case 'month':
+        default:      return p.promoteDate.getTime();
+    }
+}
+
+function _sortedPromotions() {
+    const { col, dir } = _promotionsSort;
+    return _promotionsData.slice().sort((a, b) => {
+        const av = _promoSortVal(a, col), bv = _promoSortVal(b, col);
+        if (av < bv) return -dir;
+        if (av > bv) return dir;
+        if (a.promoteDate - b.promoteDate) return a.promoteDate - b.promoteDate; // stable tiebreak
+        return (a.child_name || '').localeCompare(b.child_name || '');
+    });
+}
+
+function _promotionsHeadHtml() {
+    return '<tr>' + _PROMO_COLS.map(([key, label]) => {
+        const active = _promotionsSort.col === key;
+        const arrow = active ? (_promotionsSort.dir === 1 ? ' ▲' : ' ▼') : '';
+        return `<th class="promo-sort-th${active ? ' promo-sort-active' : ''}" data-promo-sort="${key}" style="cursor:pointer;user-select:none;white-space:nowrap">${escHtml(label)}${arrow}</th>`;
+    }).join('') + '</tr>';
+}
+
+function _promotionRowHtml(p) {
+    const [y, m] = p.moKey.split('-').map(Number);
+    const dobStr = `${_PROMO_MONTHS[p.dob.getMonth()].slice(0, 3)} ${p.dob.getDate()}, ${p.dob.getFullYear()}`;
+    return `<tr>
+        <td style="font-weight:600;white-space:nowrap">${escHtml(_PROMO_MONTHS[m - 1] + ' ' + y)}</td>
+        <td>${escHtml(p.child_name)}</td>
+        <td style="color:#6b7280;white-space:nowrap">${dobStr}</td>
+        <td>${escHtml(_promoRoomLabel(p.fromRoom))}</td>
+        <td style="color:#16a34a">${escHtml(_promoRoomLabel(p.toRoom))}</td>
+        <td style="color:#6b7280">${p.dayList.length ? escHtml(p.dayList.join(', ')) : '<span style="color:#d1d5db">varies</span>'}</td>
+    </tr>`;
+}
+
+function _promotionsMainTableHtml() {
+    return `<div style="overflow-x:auto"><table class="report-table" id="promotionsMainTable">
+        <thead id="promotionsMainHead">${_promotionsHeadHtml()}</thead>
+        <tbody id="promotionsMainTbody">${_sortedPromotions().map(_promotionRowHtml).join('')}</tbody>
+    </table></div>`;
+}
+
+// Delegated on the (stable) table element, so re-rendering the head/tbody
+// innerHTML on each sort doesn't drop the listener.
+function _attachPromotionsSort() {
+    const table = document.getElementById('promotionsMainTable');
+    if (!table) return;
+    table.addEventListener('click', e => {
+        const th = e.target.closest('[data-promo-sort]');
+        if (!th) return;
+        const col = th.dataset.promoSort;
+        if (_promotionsSort.col === col) _promotionsSort.dir *= -1;
+        else _promotionsSort = { col, dir: col === 'days' ? -1 : 1 }; // Typical Days defaults to most-first
+        const head = document.getElementById('promotionsMainHead');
+        const body = document.getElementById('promotionsMainTbody');
+        if (head) head.innerHTML = _promotionsHeadHtml();
+        if (body) body.innerHTML = _sortedPromotions().map(_promotionRowHtml).join('');
+    });
+}
 
 function exportPromotionsReport() {
     if (!_promotionsData.length) return;

@@ -599,6 +599,8 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     border-bottom: 2px solid var(--sun);
 }
 .report-table thead th:not(:first-child) { text-align: right; }
+.report-table thead th.promo-sort-th:hover { text-decoration: underline; }
+.report-table thead th.promo-sort-active { color: var(--sun); }
 .report-table tbody tr { border-bottom: 1px solid var(--warm-gray); }
 .report-table tbody tr:hover { background: var(--linen); }
 .report-table tbody td { padding: 10px 14px; }
@@ -3340,6 +3342,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-chip-start { background: var(--wlp-start-bg); color: var(--wlp-start-fg); }
 .wlp-chip-promised { background: var(--wlp-promised-bg); color: var(--wlp-promised-fg); }
 .wlp-row-meta { font-size: 13.5px; color: var(--text-muted); }
+.wlp-bestfit { color: var(--wlp-amber-fg); font-weight: 600; }
 .wlp-status-pill {
     font-size: 14px; font-weight: 800; padding: 5px 12px; border-radius: 20px; white-space: nowrap;
 }
