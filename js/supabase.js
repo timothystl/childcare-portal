@@ -3127,3 +3127,53 @@ async function fetchCacfpIncomeThresholds() {
 async function saveCacfpIncomeThresholds(thresholds) {
     await upsertSetting('cacfp_income_thresholds', thresholds);
 }
+
+// ============================================================
+// MARKET ANALYSIS
+// ============================================================
+const MARKET_PROVIDER_TYPES = [
+    { id: 'tlc',     label: 'This Program' },
+    { id: 'church',  label: 'Church / Nonprofit' },
+    { id: 'profit',  label: 'For-Profit' },
+    { id: 'public',  label: 'Public / District' },
+];
+
+async function fetchMarketProviders(includeInactive = false) {
+    if (!sbClient) return [];
+    let query = sbClient.from('market_providers').select('*').order('sort_order');
+    if (!includeInactive) query = query.eq('active', true);
+    const { data, error } = await query;
+    if (error) { console.error('fetchMarketProviders:', error); return []; }
+    return data || [];
+}
+
+async function insertMarketProvider(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('market_providers').insert(row);
+    if (error) throw error;
+}
+
+async function updateMarketProvider(id, fields) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('market_providers')
+        .update({ ...fields, updated_at: new Date().toISOString() })
+        .eq('id', id);
+    if (error) throw error;
+}
+
+/** Soft-delete (archive) rather than hard delete, so a mis-entered provider can be restored. */
+async function archiveMarketProvider(id, active) {
+    return updateMarketProvider(id, { active });
+}
+
+async function fetchMarketContext() {
+    return (await fetchSetting('market_analysis_context')) || {
+        heroStats: [], infantCost: {}, wageLadder: [], minWage: 15,
+        wageSource: '', positioningNote: '', recommendations: [], footerNote: '',
+    };
+}
+
+async function saveMarketContext(context) {
+    await upsertSetting('market_analysis_context', context);
+}
