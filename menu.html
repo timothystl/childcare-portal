@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/logo/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/logo/favicon-16.png">
+  <link rel="apple-touch-icon" href="/images/logo/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#01294A">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly Menu — Timothy Lutheran Church MDO</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/lookup.css">
+    <link rel="stylesheet" href="css/menu.css">
+</head>
+<body class="lookup-body">
+
+    <div class="menu-page-wrap">
+        <div class="menu-page-header">
+            <img src="/images/logo/myMDO_primary_logo_light.png" alt="myMDO" style="height:56px;display:block;">
+            <div>
+                <h1>Weekly Menu</h1>
+                <p class="lookup-sub">CACFP meals served at Timothy Lutheran MDO — posted a week ahead.</p>
+            </div>
+        </div>
+
+        <div id="menuContent"><p class="empty-hint">Loading…</p></div>
+
+        <div class="lookup-footer-links">
+            <a href="index.html">← Back to Registration</a>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+  }
+</script>
+    <script src="dist/supabase.min.js"></script>
+    <script src="dist/error-monitor.min.js"></script>
+    <script src="dist/menu.min.js"></script>
+</body>
+</html>

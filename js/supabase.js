@@ -2895,3 +2895,235 @@ async function getOutstandingBalanceByEmail(email) {
     if (error) throw error;
     return data || [];
 }
+
+// ============================================================
+// CACFP (Child and Adult Care Food Program)
+// ============================================================
+const CACFP_MEAL_TYPES = [
+    { id: 'breakfast', label: 'Breakfast' },
+    { id: 'am_snack',  label: 'AM Snack'  },
+    { id: 'lunch',     label: 'Lunch'     },
+    { id: 'pm_snack',  label: 'PM Snack'  },
+];
+const CACFP_TIERS = [
+    { id: 'free',    label: 'Free'    },
+    { id: 'reduced', label: 'Reduced' },
+    { id: 'paid',    label: 'Paid'    },
+];
+const CACFP_MEAL_STATUSES = [
+    { id: 'served',      label: 'Served'          },
+    { id: 'brought_own', label: 'Brought Own'     },
+    { id: 'absent',      label: 'Absent'          },
+];
+
+/** Lightweight family list (id + names + emails) for pickers and email-matching. */
+async function fetchFamiliesLite() {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('families')
+        .select('id, parent_name, parent_email, parent2_name, parent2_email, active')
+        .order('parent_name');
+    if (error) { console.error('fetchFamiliesLite:', error); return []; }
+    return data || [];
+}
+
+/** Finds the family whose parent1 or parent2 email matches (case-insensitive). */
+function matchFamilyByEmail(families, email) {
+    if (!email) return null;
+    const needle = email.toLowerCase().trim();
+    return families.find(f =>
+        (f.parent_email || '').toLowerCase().trim() === needle ||
+        (f.parent2_email || '').toLowerCase().trim() === needle
+    ) || null;
+}
+
+// ---------- Income applications ----------
+
+async function fetchCacfpIncomeApplications() {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('cacfp_income_applications')
+        .select('*')
+        .order('effective_date', { ascending: false });
+    if (error) { console.error('fetchCacfpIncomeApplications:', error); return []; }
+    return data || [];
+}
+
+async function insertCacfpIncomeApplication(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('cacfp_income_applications').insert(row);
+    if (error) throw error;
+}
+
+/**
+ * Resolves a family's tier as of a given date from a list of applications
+ * (as returned by fetchCacfpIncomeApplications). Defaults to 'paid' when no
+ * application is on file as of that date — matches the CACFP requirement
+ * that a child without a current application is billed at the paid rate.
+ */
+function cacfpTierAsOf(applications, familyId, asOfDate) {
+    if (!familyId) return 'paid';
+    const current = applications
+        .filter(a => a.family_id === familyId && a.effective_date <= asOfDate)
+        .sort((a, b) => b.effective_date.localeCompare(a.effective_date))[0];
+    return current ? current.tier : 'paid';
+}
+
+// ---------- Meal / snack point-of-service records ----------
+
+async function fetchCacfpMealRecords(dateFrom, dateTo) {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('cacfp_meal_records')
+        .select('*')
+        .gte('care_date', dateFrom)
+        .lte('care_date', dateTo);
+    if (error) { console.error('fetchCacfpMealRecords:', error); return []; }
+    return data || [];
+}
+
+/** Batch upsert for the meal-count screen — one call for the whole day's roster. */
+async function upsertCacfpMealRecordsBatch(records) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    if (!records.length) return;
+    const { error } = await sbClient
+        .from('cacfp_meal_records')
+        .upsert(records, { onConflict: 'registration_id,care_date,meal_type' });
+    if (error) throw error;
+}
+
+// ---------- Menus ----------
+
+async function fetchCacfpMenus(dateFrom, dateTo) {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('cacfp_menus')
+        .select('*')
+        .gte('menu_date', dateFrom)
+        .lte('menu_date', dateTo)
+        .order('menu_date');
+    if (error) { console.error('fetchCacfpMenus:', error); return []; }
+    return data || [];
+}
+
+async function upsertCacfpMenu(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('cacfp_menus')
+        .upsert(row, { onConflict: 'menu_date,meal_type' });
+    if (error) throw error;
+}
+
+async function setCacfpMenuWeekStatus(weekDates, status) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('cacfp_menus')
+        .update({ status, updated_at: new Date().toISOString() })
+        .in('menu_date', weekDates);
+    if (error) throw error;
+}
+
+// ---------- Reimbursement rates ----------
+
+async function fetchCacfpReimbursementRates() {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('cacfp_reimbursement_rates')
+        .select('*')
+        .order('effective_date', { ascending: false });
+    if (error) { console.error('fetchCacfpReimbursementRates:', error); return []; }
+    return data || [];
+}
+
+/** Upsert (not insert) so re-saving the same effective date corrects a typo instead of conflicting. */
+async function insertCacfpReimbursementRate(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('cacfp_reimbursement_rates')
+        .upsert(row, { onConflict: 'effective_date,meal_type,tier' });
+    if (error) throw error;
+}
+
+/** Resolves the rate in force for a meal type/tier as of a given date. */
+function cacfpRateAsOf(rates, mealType, tier, asOfDate) {
+    const current = rates
+        .filter(r => r.meal_type === mealType && r.tier === tier && r.effective_date <= asOfDate)
+        .sort((a, b) => b.effective_date.localeCompare(a.effective_date))[0];
+    return current ? Number(current.rate) : 0;
+}
+
+// ---------- Monthly claims ----------
+
+/** Fetches the claim period for a given month (YYYY-MM-01), if one exists. */
+async function fetchCacfpClaimPeriod(monthDate) {
+    if (!sbClient) return null;
+    const { data, error } = await sbClient
+        .from('cacfp_claim_periods')
+        .select('*')
+        .eq('month', monthDate)
+        .maybeSingle();
+    if (error) { console.error('fetchCacfpClaimPeriod:', error); return null; }
+    return data;
+}
+
+/** Ensures a (still-open) claim period row exists for the month and returns it. */
+async function ensureCacfpClaimPeriod(monthDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const existing = await fetchCacfpClaimPeriod(monthDate);
+    if (existing) return existing;
+    const { data, error } = await sbClient
+        .from('cacfp_claim_periods')
+        .insert({ month: monthDate })
+        .select('*')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function fetchCacfpClaimLines(claimPeriodId) {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('cacfp_claim_lines')
+        .select('*')
+        .eq('claim_period_id', claimPeriodId);
+    if (error) { console.error('fetchCacfpClaimLines:', error); return []; }
+    return data || [];
+}
+
+/** Replaces all claim lines for a period — used when (re)generating an open claim. */
+async function saveCacfpClaimLines(claimPeriodId, lines) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error: delErr } = await sbClient
+        .from('cacfp_claim_lines')
+        .delete()
+        .eq('claim_period_id', claimPeriodId);
+    if (delErr) throw delErr;
+    if (!lines.length) return;
+    const { error: insErr } = await sbClient
+        .from('cacfp_claim_lines')
+        .insert(lines.map(l => ({ ...l, claim_period_id: claimPeriodId })));
+    if (insErr) throw insErr;
+}
+
+async function finalizeCacfpClaimPeriod(claimPeriodId, finalizedBy) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('cacfp_claim_periods')
+        .update({ status: 'finalized', finalized_at: new Date().toISOString(), finalized_by: finalizedBy })
+        .eq('id', claimPeriodId);
+    if (error) throw error;
+}
+
+// ---------- Income eligibility thresholds (settings-backed) ----------
+// Small, infrequently-changing lookup table (household size -> income cutoffs)
+// used only to help staff pick a tier at intake — the resulting tier is what's
+// persisted on the application row, so this doesn't need its own history the
+// way reimbursement rates do. Follows the existing settings key/value pattern.
+
+async function fetchCacfpIncomeThresholds() {
+    return (await fetchSetting('cacfp_income_thresholds')) || { effectiveDate: '', sizes: [] };
+}
+
+async function saveCacfpIncomeThresholds(thresholds) {
+    await upsertSetting('cacfp_income_thresholds', thresholds);
+}

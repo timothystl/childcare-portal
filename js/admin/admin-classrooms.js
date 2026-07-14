@@ -70,6 +70,7 @@ function getRosterForDate(date, roomId) {
         const room = ROOMS.find(r => r.id === effectiveRoomId);
         const rate = d.day_type === 'half' ? room?.halfDayRate : room?.fullDayRate;
         results.push({
+            registrationId: reg.id,
             roomLabel:   room?.label || effectiveRoomId,
             roomId:      effectiveRoomId,
             childName:   reg.child_name,

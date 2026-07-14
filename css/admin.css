@@ -4299,3 +4299,61 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 @media (max-width: 600px) {
     .geofence-grid { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   CACFP TAB
+   ============================================================ */
+.cacfp-status-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.cacfp-status-btn {
+    border: 1.5px solid var(--border);
+    background: var(--white);
+    color: var(--text-muted);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: .82em;
+    font-weight: 600;
+    cursor: pointer;
+}
+.cacfp-status-btn:hover { border-color: var(--sun); }
+.cacfp-status-btn.active[data-status="served"]      { background: var(--green-pale); border-color: var(--green-lt); color: var(--green-dark); }
+.cacfp-status-btn.active[data-status="brought_own"] { background: var(--sun-pale); border-color: var(--sun-lt); color: var(--amber-dark); }
+.cacfp-status-btn.active[data-status="absent"]      { background: var(--tang-pale); border-color: var(--tang-soft); color: var(--tang-dark); }
+
+.cacfp-menu-grid-wrap { overflow-x: auto; }
+.cacfp-menu-table { min-width: 780px; }
+.cacfp-menu-cell { cursor: pointer; font-size: .85em; min-width: 110px; vertical-align: top; }
+.cacfp-menu-cell:hover { background: var(--warm-gray); }
+.cacfp-components { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; }
+.cacfp-chip {
+    display: inline-block;
+    font-size: .72em;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--green-pale);
+    color: var(--green-dark);
+    border: 1px solid var(--green-lt);
+}
+
+.cacfp-tier-tag {
+    display: inline-block;
+    font-size: .82em;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 10px;
+}
+.cacfp-tier-free    { background: var(--green-pale); color: var(--green-dark); border: 1px solid var(--green-lt); }
+.cacfp-tier-reduced { background: var(--sun-pale);   color: var(--amber-dark); border: 1px solid var(--sun-lt); }
+.cacfp-tier-paid    { background: var(--warm-gray);  color: var(--text-muted); border: 1px solid var(--border); }
+
+.cacfp-missing-row td:first-child { border-left: 3px solid var(--tang); padding-left: 8px; }
+
+.tag-published, .tag-draft {
+    display: inline-block;
+    font-size: .78em;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 10px;
+}
+.tag-published { background: var(--green-pale); color: var(--green-dark); border: 1px solid var(--green-lt); }
+.tag-draft     { background: var(--warm-gray);  color: var(--text-muted); border: 1px solid var(--border); }
