@@ -81,6 +81,7 @@
 
                     <div class="mobile-nav-group-label">Admin</div>
                     <button class="mobile-nav-item" data-tab="waitlist"><span class="mni-icon">🗓️</span><span>Planning</span></button>
+                    <button class="mobile-nav-item" data-tab="cacfp"><span class="mni-icon">🍎</span><span>CACFP</span></button>
                     <button class="mobile-nav-item" data-tab="finance"><span class="mni-icon">💰</span><span>Finance</span></button>
                     <button class="mobile-nav-item" data-tab="reports"><span class="mni-icon">📊</span><span>Billing</span></button>
                     <button class="mobile-nav-item" data-tab="settings"><span class="mni-icon">⚙️</span><span>Settings</span></button>
@@ -587,6 +588,95 @@
             </div>
 
         </div><!-- /#tab-waitlist -->
+
+        <!-- ── Tab: CACFP ─────────────────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-cacfp">
+
+            <!-- Daily Meal Counts -->
+            <section class="admin-section collapsible-section" id="cacfpMealSection">
+                <h2>🍽️ Daily Meal Counts</h2>
+                <p class="section-desc">Point-of-service meal counts for CACFP reimbursement. One tap per child — Served, Brought Own, or Absent — then save the whole day at once.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="cacfpMealDate">Date</label>
+                        <input type="date" id="cacfpMealDate">
+                    </div>
+                    <div class="roster-field">
+                        <label for="cacfpMealRoom">Room</label>
+                        <select id="cacfpMealRoom"><option value="">All Rooms</option></select>
+                    </div>
+                    <div class="roster-field">
+                        <label for="cacfpMealType">Meal</label>
+                        <select id="cacfpMealType">
+                            <option value="breakfast">Breakfast</option>
+                            <option value="am_snack">AM Snack</option>
+                            <option value="lunch" selected>Lunch</option>
+                            <option value="pm_snack">PM Snack</option>
+                        </select>
+                    </div>
+                    <div class="roster-btns">
+                        <button id="cacfpMealLoadBtn" class="btn-secondary">Load Roster</button>
+                        <button id="cacfpMealSaveBtn" class="btn-primary">💾 Save All</button>
+                    </div>
+                </div>
+                <div id="cacfpMealContent"><p class="empty-hint">Select a date, room, and meal, then click Load Roster.</p></div>
+            </section>
+
+            <!-- Menu Planner -->
+            <section class="admin-section collapsible-section" id="cacfpMenuSection">
+                <h2>📋 Menu Planner</h2>
+                <p class="section-desc">Plan menus a week at a time — most weeks repeat, so copy the previous week and edit what changed. Publish a week to show it on the public menu page.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="cacfpMenuWeekOf">Week of (Monday)</label>
+                        <input type="date" id="cacfpMenuWeekOf">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="cacfpMenuLoadBtn" class="btn-secondary">Load Week</button>
+                        <button id="cacfpMenuCopyBtn" class="btn-secondary">⧉ Copy Previous Week</button>
+                        <button id="cacfpMenuPublishBtn" class="btn-primary">Publish Week</button>
+                        <button id="cacfpMenuUnpublishBtn" class="btn-ghost">Unpublish</button>
+                    </div>
+                </div>
+                <div id="cacfpMenuContent"><p class="empty-hint">Select a week and click Load Week.</p></div>
+            </section>
+
+            <!-- Income Eligibility -->
+            <section class="admin-section collapsible-section" id="cacfpIncomeSection">
+                <h2>💵 Income Eligibility</h2>
+                <p class="section-desc">Household income applications determine each family's free / reduced / paid tier. A family with no current-year application on file defaults to paid.</p>
+                <div class="families-dir-controls">
+                    <button id="cacfpAddApplicationBtn" class="btn-primary">+ New Application</button>
+                    <button id="cacfpThresholdsBtn" class="btn-ghost">Edit Income Thresholds</button>
+                    <button id="cacfpIncomeRefreshBtn" class="btn-secondary">&#8635; Refresh</button>
+                </div>
+                <div id="cacfpIncomeContent"><p class="empty-hint">Loading…</p></div>
+            </section>
+
+            <!-- Monthly Claim -->
+            <section class="admin-section collapsible-section" id="cacfpClaimsSection">
+                <h2>🧾 Monthly Claim</h2>
+                <p class="section-desc">Generates the monthly reimbursement claim from meal counts and each child's income tier, applying the reimbursement rate in force that month. Finalize to lock the numbers for submission.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="cacfpClaimMonth">Month</label>
+                        <input type="month" id="cacfpClaimMonth">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="cacfpGenerateClaimBtn" class="btn-secondary">Generate / Refresh</button>
+                        <button id="cacfpExportClaimCsvBtn" class="btn-secondary">&#8595; Export CSV</button>
+                        <button id="cacfpPrintClaimBtn" class="btn-secondary">🖨️ Print</button>
+                        <button id="cacfpFinalizeClaimBtn" class="btn-primary">🔒 Finalize</button>
+                    </div>
+                </div>
+                <div id="cacfpClaimContent"><p class="empty-hint">Select a month and click Generate.</p></div>
+
+                <div class="section-desc" style="margin-top:24px;font-weight:600;color:var(--text)">Reimbursement Rates</div>
+                <div id="cacfpRatesContent"></div>
+                <button id="cacfpAddRateBtn" class="btn-ghost" style="margin-top:10px">+ Add New Rate (effective date)</button>
+            </section>
+
+        </div><!-- /#tab-cacfp -->
 
         <!-- ── Tab: Settings ──────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-settings">
@@ -1804,6 +1894,146 @@
             <div class="fm-dialog-footer">
                 <button id="bimCancelBtn" class="btn-ghost">Cancel</button>
                 <button id="bimPreviewBtn" class="btn-primary">Preview Matches ›</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CACFP: New Income Application Modal -->
+    <div id="cacfpIncomeModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog" style="max-width:480px">
+            <div class="fm-dialog-header">
+                <h3>New Income Application</h3>
+                <button id="cimCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+                <div class="fm-section">
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="cimFamily">Family *</label>
+                            <select id="cimFamily"><option value="">— select family —</option></select>
+                        </div>
+                    </div>
+                    <div class="fm-row">
+                        <div class="fm-field">
+                            <label for="cimHouseholdSize">Household size *</label>
+                            <input type="number" id="cimHouseholdSize" min="1" step="1">
+                        </div>
+                        <div class="fm-field fm-field-grow">
+                            <label for="cimAnnualIncome">Annual income ($) *</label>
+                            <input type="number" id="cimAnnualIncome" min="0" step="1">
+                        </div>
+                    </div>
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="cimTier">Resulting tier *</label>
+                            <select id="cimTier">
+                                <option value="free">Free</option>
+                                <option value="reduced">Reduced</option>
+                                <option value="paid">Paid</option>
+                            </select>
+                        </div>
+                        <div class="fm-field">
+                            <label for="cimEffectiveDate">Effective date *</label>
+                            <input type="date" id="cimEffectiveDate">
+                        </div>
+                    </div>
+                    <p id="cimSuggestedTier" class="empty-hint" style="margin:0"></p>
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="cimNotes">Notes</label>
+                            <input type="text" id="cimNotes" placeholder="Optional">
+                        </div>
+                    </div>
+                </div>
+                <p id="cimErr" class="import-error" style="margin:10px 0 0;min-height:1em"></p>
+            </div>
+            <div class="fm-dialog-footer">
+                <button id="cimCancelBtn" class="btn-ghost">Cancel</button>
+                <button id="cimSaveBtn" class="btn-primary">Save Application</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CACFP: Income Thresholds Modal -->
+    <div id="cacfpThresholdsModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog" style="max-width:560px">
+            <div class="fm-dialog-header">
+                <h3>Income Eligibility Thresholds</h3>
+                <button id="ctmCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+                <p style="font-size:.88em;color:var(--text-muted);margin:0 0 14px">Used to suggest a tier on the application form above. Update once a year when USDA revises the income eligibility guidelines (typically each July) — this doesn't change any tier already saved on an application.</p>
+                <div class="fm-row">
+                    <div class="fm-field">
+                        <label for="ctmEffectiveDate">Effective date</label>
+                        <input type="date" id="ctmEffectiveDate">
+                    </div>
+                </div>
+                <div id="ctmSizesTable"></div>
+                <button type="button" id="ctmAddSizeBtn" class="btn-secondary" style="margin-top:10px">+ Add Household Size</button>
+            </div>
+            <div class="fm-dialog-footer">
+                <button id="ctmCancelBtn" class="btn-ghost">Cancel</button>
+                <button id="ctmSaveBtn" class="btn-primary">Save Thresholds</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CACFP: Add Reimbursement Rate Modal -->
+    <div id="cacfpRateModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog" style="max-width:420px">
+            <div class="fm-dialog-header">
+                <h3>New Reimbursement Rate</h3>
+                <button id="crmCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+                <div class="fm-section">
+                    <div class="fm-row">
+                        <div class="fm-field">
+                            <label for="crmEffectiveDate">Effective date *</label>
+                            <input type="date" id="crmEffectiveDate">
+                        </div>
+                    </div>
+                    <p style="font-size:.85em;color:var(--text-muted);margin:0 0 10px">Enter the per-meal rate for each meal type and tier. Leave a field blank to skip it.</p>
+                    <div id="crmRatesGrid"></div>
+                </div>
+                <p id="crmErr" class="import-error" style="margin:10px 0 0;min-height:1em"></p>
+            </div>
+            <div class="fm-dialog-footer">
+                <button id="crmCancelBtn" class="btn-ghost">Cancel</button>
+                <button id="crmSaveBtn" class="btn-primary">Save Rates</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CACFP: Edit Menu Day/Meal Modal -->
+    <div id="cacfpMenuDayModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog" style="max-width:480px">
+            <div class="fm-dialog-header">
+                <h3 id="cmdTitle">Edit Menu</h3>
+                <button id="cmdCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+                <div class="fm-section">
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="cmdFoodItems">Food items</label>
+                            <textarea id="cmdFoodItems" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:.9em;resize:vertical"></textarea>
+                        </div>
+                    </div>
+                    <div class="fm-section-label">Meal components covered</div>
+                    <div class="fm-radio-row">
+                        <label class="fm-radio-label"><input type="checkbox" id="cmdMilk"> Milk</label>
+                        <label class="fm-radio-label"><input type="checkbox" id="cmdMeatAlt"> Meat/Meat Alt.</label>
+                        <label class="fm-radio-label"><input type="checkbox" id="cmdVegetable"> Vegetable</label>
+                        <label class="fm-radio-label"><input type="checkbox" id="cmdFruit"> Fruit</label>
+                        <label class="fm-radio-label"><input type="checkbox" id="cmdGrain"> Grain</label>
+                    </div>
+                </div>
+            </div>
+            <div class="fm-dialog-footer">
+                <button id="cmdCancelBtn" class="btn-ghost">Cancel</button>
+                <button id="cmdSaveBtn" class="btn-primary">Save</button>
             </div>
         </div>
     </div>

@@ -311,6 +311,7 @@ const TAB_META = {
     daily:         { icon: '🏫', label: 'Classrooms' },
     registrations: { icon: '📅', label: 'Care Calendar' },
     waitlist:      { icon: '🗓️', label: 'Planning' },
+    cacfp:         { icon: '🍎', label: 'CACFP' },
     families:      { icon: '👨‍👩‍👧', label: 'Families' },
     staffing:      { icon: '👷', label: 'Staffing' },
     messages:      { icon: '💬', label: 'Messages' },
@@ -352,6 +353,7 @@ function setupTabs() {
         if (tab === 'messages'  && !_messagesLoaded)             { _messagesLoaded = true; loadMessages(); }
         if (tab === 'billing'   && !_arLoaded)                   { setupBillingDashYear(); }
         if (tab === 'settings')                                  loadGeofenceSettings();
+        if (tab === 'cacfp'     && !_cacfpLoaded)                { _cacfpLoaded = true; initCacfpTab(); }
     }
 
     navItems.forEach(item => item.addEventListener('click', () => activate(item.dataset.tab)));
@@ -824,8 +826,9 @@ function _hide(id) {
 function applyRoleRestrictions() {
     if (currentAdminRole === 'full') return;
 
-    // Finance tab is full-access only
+    // Finance and CACFP tabs (financial/PII data) are full-access only
     document.querySelectorAll('[data-tab="finance"]').forEach(el => { el.style.display = 'none'; });
+    document.querySelectorAll('[data-tab="cacfp"]').forEach(el => { el.style.display = 'none'; });
 
     if (currentAdminRole === 'restricted') {
         // Staffing tab: hide everything except the schedule planner

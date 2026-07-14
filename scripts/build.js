@@ -93,6 +93,13 @@ const ENTRIES = [
         },
     },
     {
+        outfile: 'dist/menu.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/menu.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         // Admin dashboard: concatenate all modules in dependency order
         outfile: 'dist/admin.min.js',
         stdin: {
@@ -111,6 +118,7 @@ const ENTRIES = [
                 'js/admin/admin-staffing.js',
                 'js/admin/admin-settings.js',
                 'js/admin/admin-waitlist.js',
+                'js/admin/admin-cacfp.js',
             ].map((f, i) => i === 0 ? f : fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
         },
@@ -140,6 +148,7 @@ const HTML_PATCHES = [
             /<script src="js\/admin\/admin-waitlist\.js"><\/script>\n/,
             /<script src="js\/admin\/admin-finance\.js"><\/script>\n/,
             /<script src="js\/admin\/admin-billing\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-cacfp\.js"><\/script>\n/,
         ],
         // Insert bundles before </body>
         insert: [
@@ -211,6 +220,19 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/waitlist-status.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'menu.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/menu\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/error-monitor.min.js"></script>`,
+            `    <script src="dist/menu.min.js"></script>`,
         ],
     },
 ];
