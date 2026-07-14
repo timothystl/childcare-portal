@@ -897,10 +897,13 @@ function childrenScheduledOn(dateStr, children = selectedChildren) {
 /**
  * Per-day billing breakdown for one calendar date, applying both discount layers:
  *   1. Each child's individual discount (staff = free, custom = % off).
- *   2. Sibling discount — among children billed on this date (excluding any whose
- *      day is already covered by their own weekly rate — see buildBillingBreakdown),
- *      sorted highest-rate first, every child after the first gets $10 off (capped
- *      at their own rate so it never goes negative).
+ *   2. Sibling discount — $10/day off one child, but individual and sibling
+ *      discounts never stack on the same child. A child with their own staff/
+ *      custom discount is never also given the sibling discount; it instead
+ *      goes to whichever sibling(s) without one of their own would otherwise
+ *      pay the most (excluding any whose day is already covered by their own
+ *      weekly rate — see buildBillingBreakdown). If every child present has an
+ *      individual discount, no sibling discount applies to anyone that day.
  * @param {string} dateStr
  * @param {Array} [children=selectedChildren]
  * @param {Set<string>} [excludeStudentIds] — children already billed via weekly rate this date
@@ -912,16 +915,32 @@ function getChildDayAmounts(dateStr, children = selectedChildren, excludeStudent
         const entry = childSchedules.get(c.studentId).get(dateStr);
         const effectiveDayType = c.room.fullDayOnly ? 'full' : entry.dayType;
         const base = effectiveDayType === 'half' ? (c.room.halfDayRate || 0) : (c.room.fullDayRate || 0);
-        return { child: c, dayType: entry.dayType, eff: effectiveRate(base, c.discountType, c.discountValue) };
-    }).sort((a, b) => b.eff - a.eff);   // highest payer first
+        const hasIndividualDiscount = c.discountType === 'staff' || (c.discountType === 'custom' && c.discountValue > 0);
+        return { child: c, dayType: entry.dayType, eff: effectiveRate(base, c.discountType, c.discountValue), hasIndividualDiscount };
+    });
 
-    return entries.map((entry, i) => ({
-        child:         entry.child,
-        dayType:       entry.dayType,
-        preMulti:      entry.eff,               // rate after individual discount
-        multiDiscount: i > 0 ? Math.min(10, entry.eff) : 0,
-        finalAmount:   Math.max(0, entry.eff - (i > 0 ? 10 : 0)),
-    }));
+    // Sibling discount only ever comes out of the pool of children WITHOUT their
+    // own individual discount, ranked highest-rate first; the top payer in that
+    // pool gets nothing (or the lone member gets it, since a sibling — even an
+    // individually-discounted one — is present), everyone else in the pool gets
+    // $10 off. Requires at least 2 children present at all.
+    const eligible = entries.filter(e => !e.hasIndividualDiscount).sort((a, b) => b.eff - a.eff);
+    const discountedIds = new Set(
+        dayChildren.length < 2 ? [] :
+        eligible.length === 1 ? [eligible[0].child.studentId] :
+        eligible.slice(1).map(e => e.child.studentId)
+    );
+
+    return entries.map(entry => {
+        const gets = discountedIds.has(entry.child.studentId);
+        return {
+            child:         entry.child,
+            dayType:       entry.dayType,
+            preMulti:      entry.eff,               // rate after individual discount
+            multiDiscount: gets ? Math.min(10, entry.eff) : 0,
+            finalAmount:   Math.max(0, entry.eff - (gets ? 10 : 0)),
+        };
+    });
 }
 
 /**
