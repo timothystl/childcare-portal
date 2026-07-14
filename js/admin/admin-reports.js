@@ -157,16 +157,18 @@ function _buildFamilyBillingData(monthVal, overridesMap = new Map()) {
             });
         });
 
-        // For each shared date, the $10 sibling discount goes to the lowest-rate child
-        // among those WITHOUT their own individual discount — individual and sibling
-        // discounts never stack on the same child. If exactly one child present has no
-        // individual discount, that child gets it (a sibling is present either way).
+        // The $10 sibling discount is a family-level "you have a sibling in care"
+        // perk, not per-child — if anyone present that day already has their own
+        // individual discount, the family already has a discount that day, so the
+        // sibling discount doesn't also apply to anyone in the group. It only
+        // applies among a group where nobody present has an individual discount.
         // Key: `${childName}:${care_date}` → discount amount
         const siblingDiscMap = new Map();
         for (const [date, children] of dateChildMap) {
             if (children.length < 2) continue;
-            const eligible = children.filter(c => !c.hasIndividualDiscount).sort((a, b) => b.effRate - a.effRate);
-            const winners  = eligible.length === 1 ? eligible : eligible.slice(1);
+            if (children.some(c => c.hasIndividualDiscount)) continue;
+            const ranked  = [...children].sort((a, b) => b.effRate - a.effRate);
+            const winners = ranked.slice(1);
             winners.forEach(c => {
                 const k = `${c.childName}:${date}`;
                 siblingDiscMap.set(k, (siblingDiscMap.get(k) || 0) + Math.min(10, c.effRate));
@@ -2425,15 +2427,17 @@ async function _buildArDataMap(fromDate, toDate, { skipHistoricalOverride = fals
             });
         });
 
-        // Resolve per-date sibling discounts for each month — individual and sibling
-        // discounts never stack on the same child (mirrors _buildFamilyBillingData).
+        // Resolve per-date sibling discounts for each month — a family-level perk
+        // that doesn't apply at all if anyone present that day already has their
+        // own individual discount (mirrors _buildFamilyBillingData).
         const moSibDiscMap = new Map(); // mo → Map(`childName:date` → discount)
         for (const [mo, dateMap] of moDateChildMap) {
             const sibMap = new Map();
             for (const [date, children] of dateMap) {
                 if (children.length < 2) continue;
-                const eligible = children.filter(c => !c.hasIndividualDiscount).sort((a, b) => b.effRate - a.effRate);
-                const winners  = eligible.length === 1 ? eligible : eligible.slice(1);
+                if (children.some(c => c.hasIndividualDiscount)) continue;
+                const ranked  = [...children].sort((a, b) => b.effRate - a.effRate);
+                const winners = ranked.slice(1);
                 winners.forEach(c => {
                     const k = `${c.childName}:${date}`;
                     sibMap.set(k, (sibMap.get(k) || 0) + Math.min(10, c.effRate));
