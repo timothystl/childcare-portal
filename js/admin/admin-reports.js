@@ -144,29 +144,32 @@ function _buildFamilyBillingData(monthVal, overridesMap = new Map()) {
     for (const fam of familyMap.values()) {
         const { regs } = fam;
 
-        // Build map: care_date → array of { childName, effRate }
+        // Build map: care_date → array of { childName, effRate, hasIndividualDiscount }
         // used to figure out which days have multiple siblings
         const dateChildMap = new Map();
         regs.forEach(({ reg, room, disc, dates }) => {
+            const hasIndividualDiscount = disc.type === 'staff' || (disc.type === 'custom' && disc.value > 0);
             dates.forEach(d => {
                 const base    = d.day_type === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
                 const effRate = effectiveAdminRate(base, disc.type, disc.value);
                 if (!dateChildMap.has(d.care_date)) dateChildMap.set(d.care_date, []);
-                dateChildMap.get(d.care_date).push({ childName: reg.child_name, effRate });
+                dateChildMap.get(d.care_date).push({ childName: reg.child_name, effRate, hasIndividualDiscount });
             });
         });
 
-        // For each shared date, identify which child (lowest rate) gets the $10 sibling discount
+        // For each shared date, the $10 sibling discount goes to the lowest-rate child
+        // among those WITHOUT their own individual discount — individual and sibling
+        // discounts never stack on the same child. If exactly one child present has no
+        // individual discount, that child gets it (a sibling is present either way).
         // Key: `${childName}:${care_date}` → discount amount
         const siblingDiscMap = new Map();
         for (const [date, children] of dateChildMap) {
             if (children.length < 2) continue;
-            const sorted = [...children].sort((a, b) => b.effRate - a.effRate);
-            sorted.forEach((c, i) => {
-                if (i > 0) {
-                    const k = `${c.childName}:${date}`;
-                    siblingDiscMap.set(k, (siblingDiscMap.get(k) || 0) + Math.min(10, c.effRate));
-                }
+            const eligible = children.filter(c => !c.hasIndividualDiscount).sort((a, b) => b.effRate - a.effRate);
+            const winners  = eligible.length === 1 ? eligible : eligible.slice(1);
+            winners.forEach(c => {
+                const k = `${c.childName}:${date}`;
+                siblingDiscMap.set(k, (siblingDiscMap.get(k) || 0) + Math.min(10, c.effRate));
             });
         }
 
@@ -2408,8 +2411,9 @@ async function _buildArDataMap(fromDate, toDate, { skipHistoricalOverride = fals
         // ── Sibling discount: same per-date logic as _buildFamilyBillingData ──
         // Build dateChildMap per month, then resolve a per-date siblingDiscMap.
         // Key: `childName:date` → discount amount (mirrors _buildFamilyBillingData exactly).
-        const moDateChildMap = new Map(); // mo → Map(date → [{childName, effRate}])
+        const moDateChildMap = new Map(); // mo → Map(date → [{childName, effRate, hasIndividualDiscount}])
         regs.forEach(({ reg, room, disc, dates }) => {
+            const hasIndividualDiscount = disc.type === 'staff' || (disc.type === 'custom' && disc.value > 0);
             dates.forEach(d => {
                 const mo   = d.care_date.substring(0, 7);
                 const base = d.day_type === 'half' ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
@@ -2417,21 +2421,22 @@ async function _buildArDataMap(fromDate, toDate, { skipHistoricalOverride = fals
                 if (!moDateChildMap.has(mo)) moDateChildMap.set(mo, new Map());
                 const dateMap = moDateChildMap.get(mo);
                 if (!dateMap.has(d.care_date)) dateMap.set(d.care_date, []);
-                dateMap.get(d.care_date).push({ childName: reg.child_name, effRate: eff });
+                dateMap.get(d.care_date).push({ childName: reg.child_name, effRate: eff, hasIndividualDiscount });
             });
         });
 
-        // Resolve per-date sibling discounts for each month
+        // Resolve per-date sibling discounts for each month — individual and sibling
+        // discounts never stack on the same child (mirrors _buildFamilyBillingData).
         const moSibDiscMap = new Map(); // mo → Map(`childName:date` → discount)
         for (const [mo, dateMap] of moDateChildMap) {
             const sibMap = new Map();
             for (const [date, children] of dateMap) {
                 if (children.length < 2) continue;
-                [...children].sort((a, b) => b.effRate - a.effRate).forEach((c, i) => {
-                    if (i > 0) {
-                        const k = `${c.childName}:${date}`;
-                        sibMap.set(k, (sibMap.get(k) || 0) + Math.min(10, c.effRate));
-                    }
+                const eligible = children.filter(c => !c.hasIndividualDiscount).sort((a, b) => b.effRate - a.effRate);
+                const winners  = eligible.length === 1 ? eligible : eligible.slice(1);
+                winners.forEach(c => {
+                    const k = `${c.childName}:${date}`;
+                    sibMap.set(k, (sibMap.get(k) || 0) + Math.min(10, c.effRate));
                 });
             }
             moSibDiscMap.set(mo, sibMap);
