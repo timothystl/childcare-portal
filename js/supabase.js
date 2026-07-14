@@ -3170,7 +3170,7 @@ async function archiveMarketProvider(id, active) {
 async function fetchMarketContext() {
     return (await fetchSetting('market_analysis_context')) || {
         heroStats: [], infantCost: {}, wageLadder: [], minWage: 15,
-        wageSource: '', positioningNote: '', recommendations: [], footerNote: '',
+        wageSource: '', positioningNote: '',
     };
 }
 

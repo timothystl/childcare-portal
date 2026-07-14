@@ -21,7 +21,6 @@ const MARKET_ACCENT = '#E97D55'; // --tang — reference lines/callouts only, ne
 
 let _marketEditHeroStats = [];
 let _marketEditWageRows  = [];
-let _marketEditRecs      = [];
 
 async function initMarketTab() {
     _wireMarketProviders();
@@ -66,11 +65,10 @@ async function _reloadMarketData() {
     _renderMarketInfantCostChart();
     _renderMarketWageChart();
     _renderMarketProvidersTable();
-    _renderMarketRecs();
 }
 
 // ============================================================
-// HERO STATS / LEGEND / RECOMMENDATIONS (read-only render)
+// HERO STATS / LEGEND (read-only render)
 // ============================================================
 function _renderMarketHeroStats() {
     const el = document.getElementById('marketHeroStats');
@@ -90,18 +88,6 @@ function _renderMarketTypeLegend() {
     el.innerHTML = MARKET_PROVIDER_TYPES.map(t => `
         <span><span class="swatch" style="background:${MARKET_COLORS[t.id]}"></span>${escHtml(t.label)}</span>
     `).join('');
-}
-
-function _renderMarketRecs() {
-    const el = document.getElementById('marketRecsList');
-    if (!el) return;
-    const recs = _marketContext.recommendations || [];
-    el.innerHTML = recs.map(r => `
-        <div class="rec-card">
-            <h4>${escHtml(r.title)}</h4>
-            <p>${escHtml(r.body)}</p>
-        </div>`).join('');
-    document.getElementById('marketFooterNote').textContent = _marketContext.footerNote || '';
 }
 
 // ============================================================
@@ -448,10 +434,6 @@ function _wireMarketContext() {
         _marketEditWageRows.push({ role: '', low: '', high: '' });
         _renderMcmWageRows();
     });
-    document.getElementById('mcmAddRecBtn')?.addEventListener('click', () => {
-        _marketEditRecs.push({ title: '', body: '' });
-        _renderMcmRecsRows();
-    });
 }
 
 function _wireMcmRowRemoval(wrap, arr, rerender) {
@@ -488,19 +470,6 @@ function _renderMcmWageRows() {
     _wireMcmRowRemoval(wrap, _marketEditWageRows, _renderMcmWageRows);
 }
 
-function _renderMcmRecsRows() {
-    const wrap = document.getElementById('mcmRecsRows');
-    wrap.innerHTML = _marketEditRecs.map((r, i) => `
-        <div class="fm-row" data-idx="${i}" style="flex-direction:column;align-items:stretch;gap:6px">
-            <div style="display:flex;gap:8px">
-                <input type="text" class="mcm-rec-title" placeholder="Title" value="${escHtml(r.title || '')}" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:.9em">
-                <button type="button" class="btn-ghost mcm-remove-row">&#10005;</button>
-            </div>
-            <textarea class="mcm-rec-body" rows="2" placeholder="Body" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:.85em;resize:vertical">${escHtml(r.body || '')}</textarea>
-        </div>`).join('');
-    _wireMcmRowRemoval(wrap, _marketEditRecs, _renderMcmRecsRows);
-}
-
 function _openMarketContextModal() {
     document.getElementById('mcmPositioningNote').value  = _marketContext.positioningNote || '';
     document.getElementById('mcmInfantAnnual').value     = _marketContext.infantCost?.infantAnnual ?? '';
@@ -508,14 +477,11 @@ function _openMarketContextModal() {
     document.getElementById('mcmInfantCostSource').value = _marketContext.infantCost?.source || '';
     document.getElementById('mcmMinWage').value           = _marketContext.minWage ?? '';
     document.getElementById('mcmWageSource').value        = _marketContext.wageSource || '';
-    document.getElementById('mcmFooterNote').value        = _marketContext.footerNote || '';
 
     _marketEditHeroStats = JSON.parse(JSON.stringify(_marketContext.heroStats || []));
     _marketEditWageRows  = JSON.parse(JSON.stringify(_marketContext.wageLadder || []));
-    _marketEditRecs      = JSON.parse(JSON.stringify(_marketContext.recommendations || []));
     _renderMcmHeroStatsRows();
     _renderMcmWageRows();
-    _renderMcmRecsRows();
     document.getElementById('marketContextModal').classList.remove('hidden');
 }
 
@@ -532,11 +498,6 @@ async function _saveMarketContext() {
         high: Number(row.querySelector('.mcm-wage-high').value) || 0,
     })).filter(r => r.role);
 
-    const recommendations = Array.from(document.querySelectorAll('#mcmRecsRows .fm-row')).map(row => ({
-        title: row.querySelector('.mcm-rec-title').value.trim(),
-        body:  row.querySelector('.mcm-rec-body').value.trim(),
-    })).filter(r => r.title || r.body);
-
     const context = {
         heroStats,
         positioningNote: document.getElementById('mcmPositioningNote').value.trim(),
@@ -548,8 +509,6 @@ async function _saveMarketContext() {
         wageLadder,
         minWage:     Number(document.getElementById('mcmMinWage').value) || 0,
         wageSource:  document.getElementById('mcmWageSource').value.trim(),
-        recommendations,
-        footerNote:  document.getElementById('mcmFooterNote').value.trim(),
     };
 
     const btn = document.getElementById('mcmSaveBtn');
@@ -563,7 +522,6 @@ async function _saveMarketContext() {
         _renderMarketPositionChart();
         _renderMarketInfantCostChart();
         _renderMarketWageChart();
-        _renderMarketRecs();
     } catch (err) {
         alert('Error saving: ' + err.message);
     } finally {

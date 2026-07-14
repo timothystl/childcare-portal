@@ -311,7 +311,7 @@ const TAB_META = {
     daily:         { icon: '🏫', label: 'Classrooms' },
     registrations: { icon: '📅', label: 'Care Calendar' },
     waitlist:      { icon: '🗓️', label: 'Planning' },
-    cacfp:         { icon: '🍎', label: 'CACFP' },
+    cacfp:         { icon: '🍎', label: 'Food Program' },
     market:        { icon: '📈', label: 'Market Analysis' },
     families:      { icon: '👨‍👩‍👧', label: 'Families' },
     staffing:      { icon: '👷', label: 'Staffing' },
