@@ -2,7 +2,62 @@
 
 Branch: `claude/kind-mendel-I79x6`. Full findings: `docs/CODE_REVIEW.md`
 (original S/U/V/N/P/Q/C/M items + second-sweep SS1–SS19 + third-sweep T1–T20,
-2026-07-11).
+2026-07-11 + fourth-sweep FS1–FS30, 2026-07-12).
+
+## Incident log — 2026-07-14 — FS1 duplicate-registration cleanup (DONE)
+
+Closing FS1 required reconciling 38 groups of pre-existing duplicate confirmed
+`(child_name, month_key)` registrations in prod before
+`registrations_child_month_unique` could be created (a partial unique index
+can't be added over existing collisions). Worked through with the owner in
+four passes, all owner-confirmed before running:
+
+1. **7 safe deletes** — exact duplicates / strict subsets (no unique dates on
+   the removed row). Simple `DELETE`.
+2. **18 disjoint-date merges** — same child+month split across two rows with
+   non-overlapping dates (the FS2 admin "Add New Days" pattern, pre-fix).
+   `UPDATE registration_dates SET registration_id = <keep>` then delete the
+   emptied row. Room changes mid-month are fine — `registration_dates` carries
+   its own `room_id` per date, independent of the parent registration's room.
+3. **12 cross-month splits (FS27)** — a second registration's dates spanned
+   two calendar months under one `month_key` (the admin-reg calendar-nav bug
+   that didn't clear selected days across months, pre-fix). Moved the earlier
+   month's day(s) onto the clean registration for that month, then repurposed
+   (or merged into an existing) registration for the later month. Also found
+   and fixed **4 more standalone cross-month registrations** (Ayla Smith,
+   Daphne Marsh, Kezia Gasama, Rory Visintine) that weren't flagged as
+   collisions (never duplicated) but had the same underlying date-range bug —
+   same split treatment. Daphne Marsh's case included one **owner-confirmed
+   dedup of a genuinely double-booked past date** (07-09, booked by both
+   parents under separate registrations) — deleted with the owner's OK since
+   the date had passed and wouldn't be rebilled.
+4. **4 owner-decision cases:**
+   - **Patrick Baker (Aug)** — two parents (Megan/Daniel Baker, same phone,
+     same DOB, identical 17-date schedule) had each registered him separately.
+     Owner confirmed same child; **kept reg 613** (admin-entered, Daniel
+     Baker's email), deleted 593.
+   - **Josephine & Scarlett Ricketts (Aug)** — same parent (Amy Ricketts),
+     disjoint dates split across two admin-entered rows each. Owner confirmed
+     **combine**; merged.
+   - **Willow French (Jul)** — parent registered her in Goose on Fridays,
+     admin later added Summer on Wednesdays — two different rooms, two
+     different weekdays, same parent/child. Owner confirmed **this is
+     intentional, not a dup** ("fine how it is... director can move her on
+     the day if needed"). Since a lasting duplicate would permanently block
+     the unique index, merged the two registration rows into **one** (dates
+     keep their own per-date `room_id`, so the actual Goose-Fri/Summer-Wed
+     schedule is unchanged) — resolves the index conflict without changing
+     her care schedule.
+
+Result: 38 → 0 collision groups. `registrations_child_month_unique` created
+and verified live via `pg_indexes` (2026-07-14). **Ran without a `NEXT_STEPS.md`
+regenerate-invoices reminder being executed by the owner yet** — billing note
+below.
+
+**Follow-up still needed:** run admin → Billing → **Generate Invoices** for
+May, June, July, and August 2026 — several of the above merges/splits moved
+care dates across month boundaries (the FS27 cross-month splits especially),
+which changes which month's invoice those days should bill against.
 
 ## Backlog — future features (owner ideas, 2026-07-11, not scheduled)
 
