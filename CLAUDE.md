@@ -99,12 +99,14 @@ Whole-codebase pass (six parallel focused reviews + live-prod verification via t
 Supabase catalog). **The five High items (FS1–FS5) were fixed this session**; FS6–FS30
 remain to triage.
 
-- **High — ADDRESSED 2026-07-12**
-  - **FS1 [~]** — registration duplicate-prevention wasn't enforced (`month_key` column +
-    index absent in prod; `submitRegistration()` never set it). **Fixed:** column added +
-    backfilled in prod, `submitRegistration()` now stamps `month_key`. **Unique index
-    deferred** — ~38 pre-existing duplicate confirmed (child, month) groups block it; run
-    `fs1_registration_month_key_index.sql` after dedup (owner decides which rows to keep).
+- **High — ADDRESSED 2026-07-12, FS1 fully closed 2026-07-14**
+  - **FS1 [x]** — registration duplicate-prevention wasn't enforced (`month_key` column +
+    index absent in prod; `submitRegistration()` never set it). **Fully fixed:** column
+    added + backfilled, `submitRegistration()` stamps `month_key` on every insert, all 38
+    pre-existing duplicate (child, month) groups in prod were manually reconciled with the
+    owner (2026-07-14 — see `NEXT_STEPS.md` incident log), and
+    `registrations_child_month_unique` is now **live in prod**. Duplicate confirmed
+    registrations for the same child+month are rejected at the DB level.
   - **FS2 [x]** — admin "Add New Days"/"Edit Calendar" inserted a **duplicate** registration
     row. **Fixed:** `_arSubmit` now appends new days to the existing child+month registration.
   - **FS3 [x]** — a family's second same-month registration **overwrote** their draft invoice.

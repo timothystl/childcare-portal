@@ -796,14 +796,16 @@ list, 2026-07-12):**
 ## High
 
 > **Fix status — 2026-07-12 (all five High items addressed this session):**
-> - **FS1 — [~] partially fixed.** `month_key` column added + backfilled in prod
->   (519 confirmed rows stamped; 8 date-less rows left NULL), and
->   `submitRegistration()` now stamps `month_key` on every insert
->   (`fs1_registration_month_key_backfill.sql`). The **unique index is
->   deferred** — prod has ~38 groups of pre-existing duplicate confirmed
->   (child, month) rows that block `CREATE UNIQUE INDEX`. Run
->   `fs1_registration_month_key_index.sql` **after** those are reconciled (owner
->   decision — which rows to keep/merge).
+> - **FS1 — [x] fully fixed + deployed (2026-07-14).** `month_key` column added +
+>   backfilled in prod, and `submitRegistration()` stamps `month_key` on every
+>   insert (`fs1_registration_month_key_backfill.sql`). All 38 pre-existing
+>   duplicate (child, month) groups were manually reconciled with the owner
+>   (safe deletes, disjoint-date merges, cross-month splits, and three
+>   owner-confirmed judgment calls — see the incident log in `NEXT_STEPS.md`),
+>   then `registrations_child_month_unique` was created
+>   (`fs1_registration_month_key_index.sql`) and is now **live in prod** —
+>   verified via `pg_indexes`. Duplicate confirmed registrations for the same
+>   child+month are now rejected at the database level.
 > - **FS2 — [x] fixed.** `_arSubmit` now appends new days to the existing
 >   child+month registration instead of inserting a duplicate row.
 > - **FS3 — [x] fixed + deployed.** `create_billing_invoice_by_email` now ADDS
