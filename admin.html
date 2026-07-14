@@ -82,6 +82,7 @@
                     <div class="mobile-nav-group-label">Admin</div>
                     <button class="mobile-nav-item" data-tab="waitlist"><span class="mni-icon">🗓️</span><span>Planning</span></button>
                     <button class="mobile-nav-item" data-tab="cacfp"><span class="mni-icon">🍎</span><span>CACFP</span></button>
+                    <button class="mobile-nav-item" data-tab="market"><span class="mni-icon">📈</span><span>Market Analysis</span></button>
                     <button class="mobile-nav-item" data-tab="finance"><span class="mni-icon">💰</span><span>Finance</span></button>
                     <button class="mobile-nav-item" data-tab="reports"><span class="mni-icon">📊</span><span>Billing</span></button>
                     <button class="mobile-nav-item" data-tab="settings"><span class="mni-icon">⚙️</span><span>Settings</span></button>
@@ -677,6 +678,79 @@
             </section>
 
         </div><!-- /#tab-cacfp -->
+
+        <!-- ── Tab: Market Analysis ───────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-market">
+
+            <section class="admin-section collapsible-section" id="marketOverviewSection">
+                <h2>📈 Market Position</h2>
+                <p class="section-desc">Where every provider actually sits — flexibility vs. age range served. Positioning scores are an illustrative index, not a provider-reported metric.</p>
+                <div class="families-dir-controls">
+                    <button id="marketEditContextBtn" class="btn-ghost">Edit Stats &amp; Figures</button>
+                    <button id="marketRefreshBtn" class="btn-secondary">&#8635; Refresh</button>
+                </div>
+                <div id="marketHeroStats" class="market-hero-stats"></div>
+                <div id="marketTypeLegend" class="market-type-legend"></div>
+                <div class="chart-box" style="height:420px;position:relative;margin-top:16px">
+                    <canvas id="marketPositionChart"></canvas>
+                </div>
+                <p id="marketPositioningNote" class="chart-note"></p>
+            </section>
+
+            <section class="admin-section collapsible-section" id="marketPricingSection">
+                <h2>💲 Pricing Landscape</h2>
+                <p class="section-desc">Weekly-equivalent rates and registration fees across comparable providers — drawn live from the table below.</p>
+                <div class="two-col">
+                    <div>
+                        <div class="chart-box" style="height:420px;position:relative">
+                            <canvas id="marketRateChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="chart-box" style="height:420px;position:relative">
+                            <canvas id="marketRegFeeChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="admin-section collapsible-section" id="marketCostSection">
+                <h2>💵 Cost &amp; Wage Context</h2>
+                <p class="section-desc">Why infant care and staff pay are priced the way they are.</p>
+                <div class="two-col">
+                    <div>
+                        <div class="chart-box" style="height:260px;position:relative">
+                            <canvas id="marketInfantCostChart"></canvas>
+                        </div>
+                        <p id="marketInfantCostSource" class="chart-note"></p>
+                    </div>
+                    <div>
+                        <div class="chart-box" style="height:260px;position:relative">
+                            <canvas id="marketWageChart"></canvas>
+                        </div>
+                        <p id="marketWageSource" class="chart-note"></p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="admin-section collapsible-section" id="marketProvidersSection">
+                <h2>🏫 Comparable Providers</h2>
+                <p class="section-desc">The full comparable set. Edit any row, or add a new provider as you learn about one.</p>
+                <div class="families-dir-controls">
+                    <button id="marketAddProviderBtn" class="btn-primary">+ Add Provider</button>
+                    <button id="marketToggleInactiveBtn" class="btn-ghost">Show Archived</button>
+                </div>
+                <div id="marketProvidersTableWrap" style="overflow-x:auto;margin-top:12px"></div>
+            </section>
+
+            <section class="admin-section collapsible-section" id="marketRecsSection">
+                <h2>🎯 Board Recommendations</h2>
+                <p class="section-desc">Talking points for the board — edited from the same modal as the stats above.</p>
+                <div id="marketRecsList" class="recs"></div>
+                <p id="marketFooterNote" class="chart-note" style="margin-top:16px"></p>
+            </section>
+
+        </div><!-- /#tab-market -->
 
         <!-- ── Tab: Settings ──────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-settings">
@@ -2034,6 +2108,136 @@
             <div class="fm-dialog-footer">
                 <button id="cmdCancelBtn" class="btn-ghost">Cancel</button>
                 <button id="cmdSaveBtn" class="btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Market Analysis: Add/Edit Provider Modal -->
+    <div id="marketProviderModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog" style="max-width:560px">
+            <div class="fm-dialog-header">
+                <h3 id="mpmTitle">Add Provider</h3>
+                <button id="mpmCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+                <div class="fm-section">
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="mpmName">Provider name *</label>
+                            <input type="text" id="mpmName" placeholder="e.g. HopeMark Preschool">
+                        </div>
+                        <div class="fm-field">
+                            <label for="mpmType">Type *</label>
+                            <select id="mpmType">
+                                <option value="church">Church / Nonprofit</option>
+                                <option value="profit">For-Profit</option>
+                                <option value="public">Public / District</option>
+                                <option value="tlc">This Program</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="mpmAges">Ages served</label>
+                            <input type="text" id="mpmAges" placeholder="e.g. 6 wks – 5 yrs">
+                        </div>
+                        <div class="fm-field fm-field-grow">
+                            <label for="mpmFlexibleText">Flexibility (display text)</label>
+                            <input type="text" id="mpmFlexibleText" placeholder="e.g. Partial (choose days)">
+                        </div>
+                    </div>
+                    <div class="fm-row">
+                        <div class="fm-field">
+                            <label for="mpmFlexScore">Flexibility score (0–11)</label>
+                            <input type="number" id="mpmFlexScore" min="0" max="11" step="0.1">
+                        </div>
+                        <div class="fm-field">
+                            <label for="mpmAgeScore">Age-range score (0–11)</label>
+                            <input type="number" id="mpmAgeScore" min="0" max="11" step="0.1">
+                        </div>
+                    </div>
+                    <div class="fm-section-label">Registration Fee ($)</div>
+                    <div class="fm-row">
+                        <div class="fm-field"><label for="mpmRegFeeLow">Low</label><input type="number" id="mpmRegFeeLow" min="0" step="1"></div>
+                        <div class="fm-field"><label for="mpmRegFeeHigh">High</label><input type="number" id="mpmRegFeeHigh" min="0" step="1"></div>
+                    </div>
+                    <div class="fm-section-label">Weekly-Equivalent Rate ($)</div>
+                    <div class="fm-row">
+                        <div class="fm-field"><label for="mpmRateLow">Low</label><input type="number" id="mpmRateLow" min="0" step="1"></div>
+                        <div class="fm-field"><label for="mpmRateHigh">High</label><input type="number" id="mpmRateHigh" min="0" step="1"></div>
+                    </div>
+                    <div class="fm-row">
+                        <div class="fm-field fm-field-grow">
+                            <label for="mpmNotes">Notes</label>
+                            <textarea id="mpmNotes" rows="2" placeholder="Source details, unpublished rate caveats, etc." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:.9em;resize:vertical"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="fm-dialog-footer">
+                <button id="mpmArchiveBtn" class="btn-warning hidden">Archive</button>
+                <span style="flex:1"></span>
+                <button id="mpmCancelBtn" class="btn-ghost">Cancel</button>
+                <button id="mpmSaveBtn" class="btn-primary">Save Provider</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Market Analysis: Edit Stats & Figures Modal -->
+    <div id="marketContextModal" class="fm-overlay hidden" role="dialog" aria-modal="true">
+        <div class="fm-dialog" style="max-width:680px">
+            <div class="fm-dialog-header">
+                <h3>Edit Stats &amp; Figures</h3>
+                <button id="mcmCloseBtn" class="rcal-close-btn" title="Close">&#10005; Close</button>
+            </div>
+            <div class="fm-dialog-body">
+                <div class="fm-section">
+                    <div class="fm-section-label">Hero Stats</div>
+                    <div id="mcmHeroStatsRows"></div>
+                    <button type="button" id="mcmAddHeroStatBtn" class="btn-secondary" style="margin-top:8px">+ Add Stat</button>
+                </div>
+
+                <div class="fm-section">
+                    <div class="fm-section-label">Positioning Chart Note</div>
+                    <textarea id="mcmPositioningNote" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:.9em;resize:vertical"></textarea>
+                </div>
+
+                <div class="fm-section">
+                    <div class="fm-section-label">Infant vs. Preschool Annual Cost ($)</div>
+                    <div class="fm-row">
+                        <div class="fm-field"><label for="mcmInfantAnnual">Infant</label><input type="number" id="mcmInfantAnnual" min="0" step="1"></div>
+                        <div class="fm-field"><label for="mcmPreschoolAnnual">Preschool</label><input type="number" id="mcmPreschoolAnnual" min="0" step="1"></div>
+                    </div>
+                    <div class="fm-field fm-field-grow">
+                        <label for="mcmInfantCostSource">Source note</label>
+                        <input type="text" id="mcmInfantCostSource">
+                    </div>
+                </div>
+
+                <div class="fm-section">
+                    <div class="fm-section-label">Wage Ladder</div>
+                    <div id="mcmWageRows"></div>
+                    <button type="button" id="mcmAddWageBtn" class="btn-secondary" style="margin-top:8px">+ Add Role</button>
+                    <div class="fm-row" style="margin-top:10px">
+                        <div class="fm-field"><label for="mcmMinWage">MO minimum wage ($/hr)</label><input type="number" id="mcmMinWage" min="0" step="0.01"></div>
+                        <div class="fm-field fm-field-grow"><label for="mcmWageSource">Source note</label><input type="text" id="mcmWageSource"></div>
+                    </div>
+                </div>
+
+                <div class="fm-section">
+                    <div class="fm-section-label">Board Recommendations</div>
+                    <div id="mcmRecsRows"></div>
+                    <button type="button" id="mcmAddRecBtn" class="btn-secondary" style="margin-top:8px">+ Add Recommendation</button>
+                </div>
+
+                <div class="fm-section">
+                    <div class="fm-section-label">Footer Note</div>
+                    <textarea id="mcmFooterNote" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:.9em;resize:vertical"></textarea>
+                </div>
+            </div>
+            <div class="fm-dialog-footer">
+                <button id="mcmCancelBtn" class="btn-ghost">Cancel</button>
+                <button id="mcmSaveBtn" class="btn-primary">Save</button>
             </div>
         </div>
     </div>

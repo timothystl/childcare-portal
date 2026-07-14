@@ -312,6 +312,7 @@ const TAB_META = {
     registrations: { icon: '📅', label: 'Care Calendar' },
     waitlist:      { icon: '🗓️', label: 'Planning' },
     cacfp:         { icon: '🍎', label: 'CACFP' },
+    market:        { icon: '📈', label: 'Market Analysis' },
     families:      { icon: '👨‍👩‍👧', label: 'Families' },
     staffing:      { icon: '👷', label: 'Staffing' },
     messages:      { icon: '💬', label: 'Messages' },
@@ -354,6 +355,7 @@ function setupTabs() {
         if (tab === 'billing'   && !_arLoaded)                   { setupBillingDashYear(); }
         if (tab === 'settings')                                  loadGeofenceSettings();
         if (tab === 'cacfp'     && !_cacfpLoaded)                { _cacfpLoaded = true; initCacfpTab(); }
+        if (tab === 'market'    && !_marketLoaded)               { _marketLoaded = true; initMarketTab(); }
     }
 
     navItems.forEach(item => item.addEventListener('click', () => activate(item.dataset.tab)));
@@ -826,9 +828,10 @@ function _hide(id) {
 function applyRoleRestrictions() {
     if (currentAdminRole === 'full') return;
 
-    // Finance and CACFP tabs (financial/PII data) are full-access only
+    // Finance, CACFP, and Market Analysis tabs (financial/PII/competitive data) are full-access only
     document.querySelectorAll('[data-tab="finance"]').forEach(el => { el.style.display = 'none'; });
     document.querySelectorAll('[data-tab="cacfp"]').forEach(el => { el.style.display = 'none'; });
+    document.querySelectorAll('[data-tab="market"]').forEach(el => { el.style.display = 'none'; });
 
     if (currentAdminRole === 'restricted') {
         // Staffing tab: hide everything except the schedule planner
