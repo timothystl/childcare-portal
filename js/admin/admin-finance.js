@@ -16,6 +16,7 @@ function setupFinanceDashboard() {
 
     setupExpenseLines();
     setupModelingTool();
+    setupFinanceApiTester();
 
     // Populate year selector: current year ± 2
     const sel = document.getElementById('financeYear');
@@ -31,6 +32,48 @@ function setupFinanceDashboard() {
     }
 
     setupBudget();
+}
+
+// ── ChMS Finance API Tester ─────────────────────────────────────
+// Calls the finance-summary edge function directly (through the same-origin
+// /sb proxy, like the other fetch()-based edge function calls in
+// js/supabase.js) so an admin can confirm the FINANCE_API_KEY secret and the
+// deployed function actually agree, without needing curl/Postman.
+function setupFinanceApiTester() {
+    document.getElementById('financeApiTestBtn')?.addEventListener('click', testFinanceApiConnection);
+}
+
+async function testFinanceApiConnection() {
+    const btn    = document.getElementById('financeApiTestBtn');
+    const status = document.getElementById('financeApiTestStatus');
+    const output = document.getElementById('financeApiTestOutput');
+    const key    = document.getElementById('financeApiTestKey')?.value.trim();
+
+    if (!key) {
+        if (status) status.textContent = 'Paste the API key first.';
+        return;
+    }
+
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Testing…';
+    if (output) { output.classList.add('hidden'); output.textContent = ''; }
+
+    try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/finance-summary`, {
+            headers: { 'X-Api-Key': key },
+        });
+        const text = await res.text();
+        let pretty = text;
+        try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch { /* not JSON */ }
+
+        if (status) status.textContent = res.ok ? `✅ ${res.status} OK` : `❌ ${res.status} ${res.statusText}`;
+        if (output) { output.textContent = pretty; output.classList.remove('hidden'); }
+    } catch (err) {
+        if (status) status.textContent = '❌ Request failed';
+        if (output) { output.textContent = String(err?.message || err); output.classList.remove('hidden'); }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 function _destroyChart(key) {
