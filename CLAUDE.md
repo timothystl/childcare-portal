@@ -251,6 +251,7 @@ supabase/
     send-schedule-confirmation/
     send-schedule-change/
     send-waitlist-offer/
+    finance-summary/     GET endpoint for the church ChMS finance integration (see below)
 
 scripts/
   build.js          esbuild bundler config
@@ -342,6 +343,20 @@ Set as Cloudflare Pages environment variables and Supabase Edge Function secrets
 - `SUPABASE_URL` / `SUPABASE_ANON_KEY` — injected into HTML at build time or via `_headers`
 - `SUPABASE_SERVICE_ROLE_KEY` — used by edge functions only (never exposed to browser)
 - Push notification VAPID keys — set as edge function secrets
+- `FINANCE_API_KEY` — shared secret for the `finance-summary` edge function (see below); same value must be set as `DAYCARE_API_KEY` on the ChMS side
+
+---
+
+## Finance summary API (for the church ChMS finance integration)
+
+`supabase/functions/finance-summary/index.ts` — `GET`, header `X-Api-Key: <FINANCE_API_KEY>`, returns 401 if missing/wrong. Returns `{ updated_at, accounts: [], budget: [...] }` for the current month + 12 prior (13 months, oldest first). Deploy like any other edge function (paste into the Supabase dashboard editor or `supabase functions deploy finance-summary`) and set the `FINANCE_API_KEY` secret — neither is automatic.
+
+- **`accounts` is always `[]`** — this app has no bank/operating-account balance data anywhere (no table, no settings key); that stays manual on the ChMS side.
+- **`budget` rows**, per month × category × `type` (`actual`|`budget`), `amount_cents` integer:
+  - `Tuition Income` — actual = live `SUM(billing_invoices.final_amount)` grouped by `billing_cycles.month`; budget = `settings.annual_budget_{year}.income / 12`.
+  - `Payroll` — actual = live computed from `staff_hours`/`staff_clock_events` (manual entry takes precedence over clock events per staff/day) plus a flat biweekly-equivalent for active salaried staff; budget = `.wages / 12`.
+  - `Payroll Taxes` / `Workers Comp` / `Other Payroll Expenses` / `Other Expenses` — both actual and budget come straight from the annual budget's `actual*`/plain fields, divided by 12 (no monthly-granular source exists for these).
+- Known limitation: the Payroll actual calculation is a portfolio-wide trend approximation, not a payroll register — there's no staff termination date tracked (only `active`), so someone who left mid-window simply drops out of every month rather than just the months after they left.
 
 ---
 
