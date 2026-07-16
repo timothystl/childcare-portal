@@ -14,3 +14,10 @@ verify_jwt = false
 # JWT verification adds nothing.
 [functions.request-pin-reset]
 verify_jwt = false
+
+# `finance-summary` is called server-to-server by the church's ChMS finance
+# integration, authenticated by a static X-Api-Key shared secret
+# (FINANCE_API_KEY) rather than a Supabase session — there's no user JWT for
+# a server-to-server caller to hold.
+[functions.finance-summary]
+verify_jwt = false
