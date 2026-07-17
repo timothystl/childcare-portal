@@ -519,8 +519,16 @@ function wlpRunAllocation() {
             fitMonthByKid[k.id] = seated ? seated.month : null;
             if (k.flexible) k.days = seated ? seated.days : [];
             if (seated) {
+                // Not floored at 0 — same rule as the promised-kid seating
+                // above (see wlpComputeGradGrid): a room genuinely can go
+                // negative here too, e.g. a kid fits on Thursday alone but
+                // their other requested days are already past capacity from
+                // a DIFFERENT commitment that landed after this kid was
+                // matched. Clamping this step at 0 was hiding that real
+                // overbooking and made the grid/board disagree with the
+                // roster panel's own unclamped headcount for the same day.
                 for (let mm = seated.month; mm < 12; mm++) {
-                    seated.days.forEach(d => { working[seated.room.id][mm][d] = Math.max(0, working[seated.room.id][mm][d] - 1); });
+                    seated.days.forEach(d => { working[seated.room.id][mm][d] -= 1; });
                 }
             }
         });
