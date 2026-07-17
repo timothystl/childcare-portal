@@ -1073,6 +1073,8 @@ function wlpRenderGridSidebar(sel, alloc) {
                 <div class="wlp-sidebar-title">${escHtml(room.label)} · ${escHtml(alloc.months[monthIdx].label)}</div>
                 <button type="button" class="wlp-sidebar-close" id="wlpGridSidebarClose">✕</button>
             </div>
+            ${wlpGridRosterSectionHtml(sel, alloc)}
+            <div class="wlp-section-label" style="margin-bottom:8px">Fill open seats</div>
             <div class="wlp-sidebar-hint">Suggested, best fit first — who's asking for this room:</div>
             <div style="margin-bottom:18px">${suggestionsHtml || '<div class="wlp-empty-note">No one on the waitlist is asking for this room.</div>'}</div>
             <div class="wlp-section-label" style="margin-bottom:8px">Moving this month — ${escHtml(roomLabel)}</div>
@@ -1254,6 +1256,37 @@ function wlpRosterSectionHtml(sel, mi, alloc, cap) {
         <div class="wlp-section-label" style="margin-bottom:6px">In the room · ${escHtml(sel.day)}${isCurrent ? '' : ' · projected'}</div>
         <div class="wlp-sidebar-hint">${subhint}</div>
         <div style="margin-bottom:18px">${rows}</div>`;
+}
+
+// The "who's enrolled" roster block for the Grid sidebar — same per-day roster
+// Board already shows (wlpDayRoster/wlpRosterTag), just fanned out across all
+// 5 weekdays since Grid's selection is room+month rather than room+day. This
+// is what answers "who's actually in this room" for the selected month: this
+// week's real bookings for month 0, carried forward through the same known
+// graduations/waitlist-starts that drive the open-seat count for later months
+// — not a separate historical-attendance calculation (this app doesn't track
+// day-by-day attendance history, only registered/booked days).
+function wlpGridRosterSectionHtml(sel, alloc) {
+    const { roomId, monthIdx } = sel;
+    const isCurrent = monthIdx === 0;
+    const dayBlocks = TREND_DAYS.map(day => {
+        const roster = wlpDayRoster(roomId, day, monthIdx, alloc);
+        const rows = roster.length
+            ? roster.map(o => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);${o.kind === 'enrolled' ? '' : 'opacity:.8;'}"><span style="font-size:12px;">${escHtml(o.name)}</span>${wlpRosterTag(o.kind)}</div>`).join('')
+            : `<div class="wlp-empty-note" style="padding:4px 0;">No children booked ${escHtml(day)}.</div>`;
+        return `
+            <div style="margin-bottom:10px">
+                <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px;">${escHtml(day)} · ${roster.length} seat${roster.length === 1 ? '' : 's'}</div>
+                ${rows}
+            </div>`;
+    }).join('');
+    const subhint = isCurrent
+        ? "Who's actually scheduled this week, by weekday."
+        : "Projected forward from this week's real bookings through known graduations and waitlist starts — greyed rows aren't enrolled yet.";
+    return `
+        <div class="wlp-section-label" style="margin-bottom:6px">Who's enrolled${isCurrent ? '' : ' · projected'}</div>
+        <div class="wlp-sidebar-hint">${subhint}</div>
+        <div style="margin-bottom:18px">${dayBlocks}</div>`;
 }
 
 function wlpRenderBoardSidebar(sel, mi, alloc) {
