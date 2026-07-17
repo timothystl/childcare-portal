@@ -1269,24 +1269,24 @@ function wlpRosterSectionHtml(sel, mi, alloc, cap) {
 function wlpGridRosterSectionHtml(sel, alloc) {
     const { roomId, monthIdx } = sel;
     const isCurrent = monthIdx === 0;
-    const dayBlocks = TREND_DAYS.map(day => {
+    const dayCols = TREND_DAYS.map(day => {
         const roster = wlpDayRoster(roomId, day, monthIdx, alloc);
-        const rows = roster.length
-            ? roster.map(o => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);${o.kind === 'enrolled' ? '' : 'opacity:.8;'}"><span style="font-size:12px;">${escHtml(o.name)}</span>${wlpRosterTag(o.kind)}</div>`).join('')
-            : `<div class="wlp-empty-note" style="padding:4px 0;">No children booked ${escHtml(day)}.</div>`;
+        const names = roster.length
+            ? roster.map(o => `<div style="padding:3px 0;${o.kind === 'enrolled' ? '' : 'opacity:.75;'}"><div style="font-size:11.5px;line-height:1.3;">${escHtml(o.name)}</div>${o.kind !== 'enrolled' ? `<div style="font-size:9.5px;color:var(--text-muted);line-height:1.2;">${wlpRosterTag(o.kind).replace(/<[^>]+>/g, '')}</div>` : ''}</div>`).join('')
+            : `<div class="wlp-empty-note" style="padding:3px 0;font-size:10.5px;">—</div>`;
         return `
-            <div style="margin-bottom:10px">
-                <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px;">${escHtml(day)} · ${roster.length} seat${roster.length === 1 ? '' : 's'}</div>
-                ${rows}
+            <div style="min-width:0;">
+                <div style="font-size:10.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.02em;margin-bottom:4px;padding-bottom:4px;border-bottom:2px solid var(--border);">${escHtml(day)}</div>
+                ${names}
             </div>`;
     }).join('');
     const subhint = isCurrent
         ? "Who's actually scheduled this week, by weekday."
-        : "Projected forward from this week's real bookings through known graduations and waitlist starts — greyed rows aren't enrolled yet.";
+        : "Projected forward from this week's real bookings through known graduations and waitlist starts — faded names aren't enrolled yet.";
     return `
         <div class="wlp-section-label" style="margin-bottom:6px">Who's enrolled${isCurrent ? '' : ' · projected'}</div>
         <div class="wlp-sidebar-hint">${subhint}</div>
-        <div style="margin-bottom:18px">${dayBlocks}</div>`;
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:18px;">${dayCols}</div>`;
 }
 
 function wlpRenderBoardSidebar(sel, mi, alloc) {
