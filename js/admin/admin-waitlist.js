@@ -1118,10 +1118,10 @@ function wlpRenderGrid(alloc) {
                         </table>
                     </div>
                 </div>
+                ${sel ? wlpGridRosterBlockHtml(sel, alloc) : ''}
             </div>
             ${sel ? wlpRenderGridSidebar(sel, alloc) : ''}
-        </div>
-        ${sel ? wlpGridRosterBlockHtml(sel, alloc) : ''}`;
+        </div>`;
 }
 
 function wlpAttachGridListeners() {
@@ -1261,7 +1261,17 @@ function wlpGridRosterBlockHtml(sel, alloc) {
     const dayCols = TREND_DAYS.map(day => {
         const roster = wlpDayRoster(roomId, day, monthIdx, alloc);
         const names = roster.length
-            ? roster.map(o => `<div style="padding:3px 0;${o.kind === 'enrolled' ? '' : 'opacity:.75;'}"><div style="font-size:11.5px;line-height:1.3;">${escHtml(o.name)}</div>${o.kind !== 'enrolled' ? `<div style="font-size:9.5px;color:var(--text-muted);line-height:1.2;">${wlpRosterTag(o.kind).replace(/<[^>]+>/g, '')}</div>` : ''}</div>`).join('')
+            ? roster.map((o, i) => {
+                const overCap = (i + 1) > (room.capacity ?? Infinity);
+                const bg = overCap ? '#fff5f5' : (o.kind === 'enrolled' ? '#EAF5EF' : '#FFF8E1');
+                const border = overCap ? '#f5b0b0' : (o.kind === 'enrolled' ? '#C9E6DC' : '#F5B731');
+                const fg = overCap ? '#9b2c2c' : (o.kind === 'enrolled' ? '#1a5c3e' : '#7a5a00');
+                const tag = overCap ? 'over room limit' : (o.kind !== 'enrolled' ? wlpRosterTag(o.kind).replace(/<[^>]+>/g, '') : '');
+                return `<div style="margin-bottom:4px;padding:5px 7px;border-radius:6px;background:${bg};border:1px solid ${border};">
+                    <div style="font-size:11.5px;font-weight:700;line-height:1.3;color:${fg};">${escHtml(o.name)}</div>
+                    ${tag ? `<div style="font-size:9.5px;font-weight:600;line-height:1.2;color:${fg};opacity:.85;">${tag}</div>` : ''}
+                </div>`;
+            }).join('')
             : `<div class="wlp-empty-note" style="padding:3px 0;font-size:10.5px;">—</div>`;
         return `
             <div style="min-width:0;">
@@ -1279,6 +1289,11 @@ function wlpGridRosterBlockHtml(sel, alloc) {
                 <button type="button" class="wlp-sidebar-close" id="wlpGridRosterClose">✕</button>
             </div>
             <div class="wlp-sidebar-hint">${subhint}</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+                <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-muted);"><span style="width:12px;height:12px;border-radius:3px;background:#EAF5EF;border:1px solid #C9E6DC;display:inline-block;"></span>Currently enrolled</div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-muted);"><span style="width:12px;height:12px;border-radius:3px;background:#FFF8E1;border:1px solid #F5B731;display:inline-block;"></span>Waitlist, to be added</div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-muted);"><span style="width:12px;height:12px;border-radius:3px;background:#fff5f5;border:1px solid #f5b0b0;display:inline-block;"></span>Would put room over limit</div>
+            </div>
             <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">${dayCols}</div>
         </div>`;
 }
