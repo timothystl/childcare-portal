@@ -1073,7 +1073,6 @@ function wlpRenderGridSidebar(sel, alloc) {
                 <div class="wlp-sidebar-title">${escHtml(room.label)} · ${escHtml(alloc.months[monthIdx].label)}</div>
                 <button type="button" class="wlp-sidebar-close" id="wlpGridSidebarClose">✕</button>
             </div>
-            ${wlpGridRosterSectionHtml(sel, alloc)}
             <div class="wlp-section-label" style="margin-bottom:8px">Fill open seats</div>
             <div class="wlp-sidebar-hint">Suggested, best fit first — who's asking for this room:</div>
             <div style="margin-bottom:18px">${suggestionsHtml || '<div class="wlp-empty-note">No one on the waitlist is asking for this room.</div>'}</div>
@@ -1136,7 +1135,8 @@ function wlpRenderGrid(alloc) {
                 </div>
             </div>
             ${sel ? wlpRenderGridSidebar(sel, alloc) : ''}
-        </div>`;
+        </div>
+        ${sel ? wlpGridRosterBlockHtml(sel, alloc) : ''}`;
 }
 
 function wlpAttachGridListeners() {
@@ -1148,6 +1148,7 @@ function wlpAttachGridListeners() {
         });
     });
     document.getElementById('wlpGridSidebarClose')?.addEventListener('click', () => { _wlp.selCellA = null; renderWaitlistPlanner(); });
+    document.getElementById('wlpGridRosterClose')?.addEventListener('click', () => { _wlp.selCellA = null; renderWaitlistPlanner(); });
     document.querySelectorAll('[data-wlp-match-offer]').forEach(el => {
         el.addEventListener('click', e => {
             e.stopPropagation();
@@ -1258,16 +1259,21 @@ function wlpRosterSectionHtml(sel, mi, alloc, cap) {
         <div style="margin-bottom:18px">${rows}</div>`;
 }
 
-// The "who's enrolled" roster block for the Grid sidebar — same per-day roster
-// Board already shows (wlpDayRoster/wlpRosterTag), just fanned out across all
-// 5 weekdays since Grid's selection is room+month rather than room+day. This
-// is what answers "who's actually in this room" for the selected month: this
-// week's real bookings for month 0, carried forward through the same known
+// The "who's enrolled" roster panel — same per-day roster Board already shows
+// (wlpDayRoster/wlpRosterTag), just fanned out across all 5 weekdays since
+// Grid's selection is room+month rather than room+day. This is what answers
+// "who's actually in this room" for the selected month: this week's real
+// bookings for month 0, carried forward through the same known
 // graduations/waitlist-starts that drive the open-seat count for later months
 // — not a separate historical-attendance calculation (this app doesn't track
 // day-by-day attendance history, only registered/booked days).
-function wlpGridRosterSectionHtml(sel, alloc) {
+// Rendered as its own full-width panel BELOW the grid table + sidebar row
+// (not inside the narrow sidebar) so the 5 day columns get real room to
+// breathe; carries its own title/close since it's no longer nested under the
+// sidebar's header.
+function wlpGridRosterBlockHtml(sel, alloc) {
     const { roomId, monthIdx } = sel;
+    const room = alloc.roomMeta[roomId].room;
     const isCurrent = monthIdx === 0;
     const dayCols = TREND_DAYS.map(day => {
         const roster = wlpDayRoster(roomId, day, monthIdx, alloc);
@@ -1284,9 +1290,14 @@ function wlpGridRosterSectionHtml(sel, alloc) {
         ? "Who's actually scheduled this week, by weekday."
         : "Projected forward from this week's real bookings through known graduations and waitlist starts — faded names aren't enrolled yet.";
     return `
-        <div class="wlp-section-label" style="margin-bottom:6px">Who's enrolled${isCurrent ? '' : ' · projected'}</div>
-        <div class="wlp-sidebar-hint">${subhint}</div>
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:18px;">${dayCols}</div>`;
+        <div class="wlp-grid-panel" style="padding-bottom:20px;">
+            <div class="wlp-sidebar-head" style="margin-bottom:6px;">
+                <div class="wlp-sidebar-title">${escHtml(room.label)} · ${escHtml(alloc.months[monthIdx].label)} — Who's enrolled${isCurrent ? '' : ' · projected'}</div>
+                <button type="button" class="wlp-sidebar-close" id="wlpGridRosterClose">✕</button>
+            </div>
+            <div class="wlp-sidebar-hint">${subhint}</div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">${dayCols}</div>
+        </div>`;
 }
 
 function wlpRenderBoardSidebar(sel, mi, alloc) {
