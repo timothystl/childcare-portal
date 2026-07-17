@@ -415,21 +415,6 @@ function wlpEventCardHtml(ev) {
         </div>`;
 }
 
-// Compact one-line note (Board view — not the card format Grid uses).
-function wlpBoardNoteFor(roomId, monthIdx, alloc) {
-    const grads = alloc.gradOut[roomId][monthIdx] || [];
-    const incoming = alloc.incoming[roomId][monthIdx] || [];
-    const parts = [];
-    if (grads.length) {
-        const nextId = wlpPromotionChain()[roomId]?.nextRoom;
-        const nextLabel = nextId ? alloc.roomMeta[nextId]?.room.label.replace(/^\S+\s/, '') : 'graduates the program';
-        parts.push(grads.map(g => `↑ ${g.name} → ${nextLabel} (${g.days.join(',')})`).join('; '));
-    }
-    if (incoming.length) parts.push(incoming.map(k => `+ ${k.name} starts (${k.days.join(',')})`).join('; '));
-    if (!parts.length) return null;
-    return { text: parts.join(' · '), color: grads.length ? 'var(--wlp-grad-fg)' : 'var(--wlp-start-fg)' };
-}
-
 // ── Core allocation ──────────────────────────────────────────
 // Recomputed from scratch on every render — see the header comment above for
 // why (cheap, and guarantees the three views can never disagree).
@@ -1165,7 +1150,6 @@ function wlpRenderBoard(alloc) {
     const hlKid = _wlp.highlightKidC != null ? alloc.kids.find(k => k.id === _wlp.highlightKidC) : null;
 
     const roomsHtml = alloc.rooms.map(room => {
-        const note = wlpBoardNoteFor(room.id, mi, alloc);
         const slots = TREND_DAYS.map(d => {
             const open = alloc.finalGrid[room.id][mi][d];
             const availCls = wlpAvailClass(open, room.capacity);
@@ -1182,7 +1166,6 @@ function wlpRenderBoard(alloc) {
             <div class="wlp-board-room">
                 <div class="wlp-board-room-title">${escHtml(room.label)} <span class="wlp-board-room-cap">Cap ${room.capacity ?? '—'}/day</span></div>
                 <div class="wlp-board-slots">${slots}</div>
-                ${note ? `<div class="wlp-board-note" style="color:${note.color}">${escHtml(note.text)}</div>` : ''}
             </div>`;
     }).join('');
 

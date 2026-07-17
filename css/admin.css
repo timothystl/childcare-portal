@@ -3487,7 +3487,6 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 /* "+N waiting" demand badge — amber pill, legible on any slot background
    (including the selected navy state). */
 .wlp-slot-wait { font-size: 10px; font-weight: 800; color: #7c2d12; background: var(--sun); border-radius: 8px; padding: 1px 6px; margin-top: 4px; display: inline-block; line-height: 1.4; }
-.wlp-board-note { font-size: 13px; margin-top: 5px; }
 
 .wlp-sidebar { width: 360px; border-left: 1px solid var(--border); background: var(--linen); padding: 18px 20px; flex-shrink: 0; }
 .wlp-sidebar-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
