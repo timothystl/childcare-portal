@@ -1274,7 +1274,13 @@ function wlpGridRosterBlockHtml(sel, alloc) {
                 const bg = overCap ? '#fff5f5' : (o.kind === 'enrolled' ? '#EAF5EF' : '#FFF8E1');
                 const border = overCap ? '#f5b0b0' : (o.kind === 'enrolled' ? '#C9E6DC' : '#F5B731');
                 const fg = overCap ? '#9b2c2c' : (o.kind === 'enrolled' ? '#1a5c3e' : '#7a5a00');
-                const tag = overCap ? 'over room limit' : (o.kind !== 'enrolled' ? wlpRosterTag(o.kind).replace(/<[^>]+>/g, '') : '');
+                // Over-cap chips keep their underlying kind label (enrolled vs.
+                // moving up vs. from waitlist) alongside the warning — without
+                // it there's no way to tell a real already-enrolled overbook
+                // apart from a low-priority waitlist match the allocator tried
+                // to squeeze in anyway.
+                const kindLabel = o.kind === 'enrolled' ? 'Enrolled' : wlpRosterTag(o.kind).replace(/<[^>]+>/g, '');
+                const tag = overCap ? `${kindLabel} · over room limit` : (o.kind !== 'enrolled' ? kindLabel : '');
                 return `<div style="margin-bottom:4px;padding:5px 7px;border-radius:6px;background:${bg};border:1px solid ${border};">
                     <div style="font-size:11.5px;font-weight:700;line-height:1.3;color:${fg};">${escHtml(o.name)}</div>
                     ${tag ? `<div style="font-size:9.5px;font-weight:600;line-height:1.2;color:${fg};opacity:.85;">${tag}</div>` : ''}
@@ -1300,7 +1306,7 @@ function wlpGridRosterBlockHtml(sel, alloc) {
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
                 <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-muted);"><span style="width:12px;height:12px;border-radius:3px;background:#EAF5EF;border:1px solid #C9E6DC;display:inline-block;"></span>Currently enrolled</div>
                 <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-muted);"><span style="width:12px;height:12px;border-radius:3px;background:#FFF8E1;border:1px solid #F5B731;display:inline-block;"></span>Waitlist, to be added</div>
-                <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-muted);"><span style="width:12px;height:12px;border-radius:3px;background:#fff5f5;border:1px solid #f5b0b0;display:inline-block;"></span>Would put room over limit</div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-muted);"><span style="width:12px;height:12px;border-radius:3px;background:#fff5f5;border:1px solid #f5b0b0;display:inline-block;"></span>Over the room's daily capacity (enrolled or waitlist)</div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">${dayCols}</div>
         </div>`;
