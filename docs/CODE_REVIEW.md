@@ -1013,15 +1013,25 @@ list, 2026-07-12):**
   (gated on `status==='offered'`, `:770`) is unreachable, as is the offer
   email. _Fix:_ either wire an "Offer a spot" button to `wlpOpenOfferModal`, or
   delete the dead modal/handler/helpers and the stale comment.
-- **FS19 — [Med] Capacity baseline counts only the current ISO week's
-  bookings.** [Admin] `wlpBaseBooked()` (`js/admin/admin-waitlist.js:172`)
-  builds the 12-month allocation baseline by matching `care_date` against only
+- **FS19 [x] — [Med] Capacity baseline counts only the current ISO week's
+  bookings.** [Admin] `wlpBaseBooked()` (`js/admin/admin-waitlist.js`)
+  built the 12-month allocation baseline by matching `care_date` against only
   `wlpCurrentWeekDates()` (this Mon–Fri). An enrolled child whose current-month
-  dates don't fall in this calendar week contributes 0, so late in the month
-  rooms look emptier than they are — and the forecasting path
-  (`_simulateRoomAdmissions`) uses a whole-month pattern, so the two capacity
-  models diverge. _Fix:_ derive the baseline from each registration's
-  actual current-month weekday pattern, not literal current-week date matches.
+  dates don't fall in this calendar week contributed 0, so late in the month
+  rooms looked emptier than they were — and the forecasting path
+  (`_simulateRoomAdmissions`) used a whole-month pattern, so the two capacity
+  models diverged. Reported concretely 2026-07-20: a child already registered
+  for a future month (no dates in the literal current week) didn't show up
+  anywhere in the Planner for that month at all. **Fixed:** replaced the
+  "this week" baseline with `wlpRealAnchorIdx()`/`wlpRealMonthlyByRoom()`/
+  `wlpRealMonthPattern()`, reusing `_isTrendMonthComplete`'s existing
+  completeness rule (the same one `_simulateRoomAdmissions` already used —
+  its own comment claimed this was meant to be "a single source of truth
+  used by BOTH Enrollment Trends and Waitlist Planning," but the Planner
+  never actually called it). Every month at or before the real-data anchor
+  now uses actual DB-confirmed registration data directly; only months
+  beyond it project forward via graduations/waitlist matching. Verified in
+  an isolated Node harness against the exact reported scenario.
 - **FS20 — [Med] In-modal edits re-render the registration table with the full
   unfiltered/unsorted list.** [Admin] After add/remove-day or save-bill, the
   code calls `renderTable(allRegistrations)` directly

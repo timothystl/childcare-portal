@@ -187,69 +187,82 @@ function wlpMonths() {
     });
 }
 
-// This week's Mon–Fri dates (YYYY-MM-DD) — the "today's real bookings"
-// baseline for month 0 of the allocation.
-function wlpCurrentWeekDates() {
-    const today = new Date();
-    const diffToMon = (today.getDay() + 6) % 7; // 0=Sun..6=Sat -> days since Monday
-    const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - diffToMon);
-    const out = {};
-    TREND_DAYS.forEach((day, i) => {
-        const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
-        out[day] = d.toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
-    });
-    return out;
+// Whether a 'YYYY-MM' month's registrations can be trusted as complete —
+// same rule Enrollment Trends already uses (_isTrendMonthComplete, defined
+// in admin-reports.js — both files are bundled together, so it's already a
+// shared global here, same as how _projectedWeekdayPattern below this file
+// is in turn called FROM admin-reports.js): families submit a month's
+// schedule by the 15th of the month before it starts, with a few days'
+// buffer, so a month isn't "final" until we're 20+ days into the month
+// before it. The CURRENT month is always final under this rule — its own
+// prior month has necessarily already fully elapsed by the time you're IN
+// the current month — so this only ever excludes FUTURE months the
+// registration window hasn't caught up to yet.
+function wlpMonthIsFinal(moKey, today) {
+    return _isTrendMonthComplete(moKey, false, today);
 }
 
-// { [roomId]: { Mon:count, ... } } — live bookings for this week, straight
-// from the already-loaded allRegistrations (same source of truth
-// _buildTrendMap() uses) — no separate query. Rooms grouped by the parent
-// registration's room_id, matching _buildTrendMap()'s convention.
-function wlpBaseBooked() {
-    const weekDates = wlpCurrentWeekDates();
-    const dateToDay = {};
-    Object.entries(weekDates).forEach(([day, date]) => { dateToDay[date] = day; });
-
-    const booked = {};
-    wlpRooms().forEach(r => { booked[r.id] = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 }; });
-
+// Real, DB-confirmed weekday booking + roster for ONE room in ONE specific
+// calendar month, straight from allRegistrations — not a projection. Same
+// one-seat-per-child-per-weekday convention the old "this week only"
+// baseline used, just scoped to any month instead of only the current
+// calendar week — a family who already registered a child for a FUTURE
+// month (very common; the whole point of the registration window is to
+// sign up ahead) previously never showed up anywhere in the Planner for
+// that month at all, since the old baseline only ever looked at the literal
+// current Mon–Fri (see FS19 in docs/CODE_REVIEW.md).
+function wlpRealMonthPattern(roomId, moKey) {
+    const booked = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 };
+    const roster = [];
     (allRegistrations || []).forEach(reg => {
-        if (!booked[reg.room_id]) return;
-        (reg.registration_dates || []).forEach(d => {
-            if (d.waitlisted || !d.care_date) return;
-            const day = dateToDay[d.care_date];
-            if (day) booked[reg.room_id][day]++;
-        });
-    });
-    return booked;
-}
-
-// The named counterpart of wlpBaseBooked(): { [roomId]: [{ name, days }] } —
-// this week's actually-enrolled children per room, with the weekdays each is
-// booked. Same source of truth and same per-registration counting as
-// wlpBaseBooked (one seat per child per weekday), so a room/day's roster length
-// always reconciles with its open-slot count. The Board's day roster
-// (wlpDayRoster) carries this baseline forward through graduations + waitlist
-// starts.
-function wlpBaseRosterByRoom() {
-    const weekDates = wlpCurrentWeekDates();
-    const dateToDay = {};
-    Object.entries(weekDates).forEach(([day, date]) => { dateToDay[date] = day; });
-
-    const roster = {};
-    wlpRooms().forEach(r => { roster[r.id] = []; });
-
-    (allRegistrations || []).forEach(reg => {
-        if (!roster[reg.room_id]) return;
+        if (reg.room_id !== roomId) return;
         const days = [];
         (reg.registration_dates || []).forEach(d => {
-            if (d.waitlisted || !d.care_date) return;
-            const day = dateToDay[d.care_date];
+            if (d.waitlisted || !d.care_date || d.care_date.slice(0, 7) !== moKey) return;
+            const day = _trendDayName(d.care_date);
             if (day && !days.includes(day)) days.push(day);
         });
-        if (days.length) roster[reg.room_id].push({ name: reg.child_name, days });
+        if (days.length) {
+            days.forEach(d => { booked[d]++; });
+            roster.push({ name: reg.child_name, days });
+        }
     });
-    return roster;
+    return { booked, roster };
+}
+
+// The single index (0-11) of the last month in the 12-month window whose
+// registrations are final — the "anchor" real data is used through, before
+// projection (graduations/waitlist) takes over. This is a BLANKET
+// date-based cutoff (wlpMonthIsFinal doesn't look at any room's actual
+// data), so it's the same cutoff for every room, and — since the
+// completeness threshold only gets earlier as moKey gets earlier —
+// finality is monotonic: if month M is final, every earlier month
+// necessarily is too. Final months are therefore always a contiguous
+// prefix starting at month 0 (always final — see wlpMonthIsFinal), never a
+// gapped set, so a single global anchor index is all that's needed.
+function wlpRealAnchorIdx(months) {
+    const today = new Date();
+    let anchorIdx = -1;
+    for (const mo of months) {
+        if (!wlpMonthIsFinal(mo.key, today)) break;
+        anchorIdx = mo.idx;
+    }
+    return anchorIdx;
+}
+
+// Real per-room, per-month data for every month from 0 through anchorIdx —
+// the ground truth the Grid/Board's capacity math and roster panel use
+// directly for those months, with projection (graduations + waitlist
+// matching) only ever extending FORWARD from the anchor for the months
+// beyond it.
+function wlpRealMonthlyByRoom(rooms, months, anchorIdx) {
+    const byRoom = {};
+    rooms.forEach(r => {
+        const monthly = [];
+        for (let m = 0; m <= anchorIdx; m++) monthly[m] = wlpRealMonthPattern(r.id, months[m].key);
+        byRoom[r.id] = monthly;
+    });
+    return byRoom;
 }
 
 // Reuses _buildGraduationIndex() (below) as-is, reshaping its 'YYYY-MM'-keyed
@@ -319,29 +332,38 @@ function wlpGradEvents(months) {
 // is a real, unconditional commitment (not gated on capacity), so if EVERY
 // room in a group is already full, the least-bad (highest, possibly still
 // negative) option still gets picked and the overbooking shows for real.
-function wlpComputeGradGridsPooled(rooms, gradOut, gradIn, baseBooked) {
+function wlpComputeGradGridsPooled(rooms, gradOut, gradIn, realMonthly, anchorIdx) {
     const groups = wlpRoomGroups(rooms);
+    const zero = () => ({ Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0 });
     const booked = {};
-    rooms.forEach(r => { booked[r.id] = { ...baseBooked[r.id] }; });
+    rooms.forEach(r => { booked[r.id] = { ...(realMonthly[r.id][anchorIdx]?.booked || zero()) }; });
     const grids = {};
     rooms.forEach(r => { grids[r.id] = []; });
 
     for (let m = 0; m < 12; m++) {
-        rooms.forEach(r => {
-            (gradOut[r.id][m] || []).forEach(ev => ev.days.forEach(d => { booked[r.id][d] = Math.max(0, booked[r.id][d] - 1); }));
-        });
-        groups.forEach(group => {
-            const arrivals = [];
-            group.forEach(r => (gradIn[r.id]?.[m] || []).forEach(ev => arrivals.push(ev)));
-            arrivals.forEach(ev => {
-                let best = group[0], bestSlack = -Infinity;
-                group.forEach(r => {
-                    const slack = Math.min(...ev.days.map(d => (r.capacity ?? 0) - booked[r.id][d]));
-                    if (slack > bestSlack) { bestSlack = slack; best = r; }
-                });
-                ev.days.forEach(d => { booked[best.id][d] += 1; });
+        if (m <= anchorIdx) {
+            // Final month — real, DB-confirmed booking counts, no synthetic
+            // graduation/waitlist overlay. Whatever's actually registered
+            // already reflects reality, including any room move the office
+            // has already processed.
+            rooms.forEach(r => { booked[r.id] = { ...(realMonthly[r.id][m]?.booked || zero()) }; });
+        } else {
+            rooms.forEach(r => {
+                (gradOut[r.id][m] || []).forEach(ev => ev.days.forEach(d => { booked[r.id][d] = Math.max(0, booked[r.id][d] - 1); }));
             });
-        });
+            groups.forEach(group => {
+                const arrivals = [];
+                group.forEach(r => (gradIn[r.id]?.[m] || []).forEach(ev => arrivals.push(ev)));
+                arrivals.forEach(ev => {
+                    let best = group[0], bestSlack = -Infinity;
+                    group.forEach(r => {
+                        const slack = Math.min(...ev.days.map(d => (r.capacity ?? 0) - booked[r.id][d]));
+                        if (slack > bestSlack) { bestSlack = slack; best = r; }
+                    });
+                    ev.days.forEach(d => { booked[best.id][d] += 1; });
+                });
+            });
+        }
         rooms.forEach(r => {
             const openDay = {};
             TREND_DAYS.forEach(d => { openDay[d] = (r.capacity ?? 0) - booked[r.id][d]; });
@@ -506,11 +528,12 @@ function wlpEventCardHtml(ev) {
 function wlpRunAllocation() {
     const rooms = wlpRooms();
     const months = wlpMonths();
-    const baseBooked = wlpBaseBooked();
     const { gradOut, gradIn } = wlpGradEvents(months);
+    const anchorIdx = wlpRealAnchorIdx(months);
+    const realMonthly = wlpRealMonthlyByRoom(rooms, months, anchorIdx);
 
     const roomMeta = {};
-    const gradGrids = wlpComputeGradGridsPooled(rooms, gradOut, gradIn, baseBooked);
+    const gradGrids = wlpComputeGradGridsPooled(rooms, gradOut, gradIn, realMonthly, anchorIdx);
     rooms.forEach(r => {
         roomMeta[r.id] = { room: r, gradGrid: gradGrids[r.id] };
     });
@@ -664,7 +687,7 @@ function wlpRunAllocation() {
         }
     });
 
-    return { rooms, months, roomMeta, finalGrid: working, kids, preGridByKid, fitMonthByKid, incoming, gradOut, gradIn, baseRoster: wlpBaseRosterByRoom() };
+    return { rooms, months, roomMeta, finalGrid: working, kids, preGridByKid, fitMonthByKid, incoming, gradOut, gradIn, realMonthly, anchorIdx };
 }
 
 // ── Top-level render ─────────────────────────────────────────
@@ -1355,46 +1378,63 @@ function wlpMovingCardHtml(ev) {
         </div>`;
 }
 
-// Occupants of (roomId, day) as of month index mi: this week's real roster
-// (alloc.baseRoster) carried forward through the SAME events that drive the
+// Occupants of (roomId, day) as of month index mi: any month at or before
+// the real-data anchor (alloc.anchorIdx) uses its own real registered
+// roster directly (alloc.realMonthly); months beyond that carry the anchor
+// month's real roster forward through the SAME events that drive the
 // open-slot count — graduations out (a seat freed), graduations in (a seat
 // taken), and projected waitlist starts (incoming, seated at their fit month) —
 // so the listed names always reconcile with the number the slot shows. Each
-// occupant is tagged by how they hold the seat, so anything past this week's
-// real bookings reads as a projection rather than a confirmed enrollment.
+// occupant is tagged by how they hold the seat, so anything past the anchor
+// reads as a projection rather than a confirmed enrollment.
 function wlpDayRoster(roomId, day, mi, alloc) {
-    const list = (alloc.baseRoster[roomId] || [])
+    // A month at or before the real-data anchor (see wlpRealAnchorIdx) has
+    // its own actual registered roster — use it directly, no projection
+    // layering. This is what fixes a child already registered for a real
+    // FUTURE month (e.g. next month, already submitted) not appearing
+    // anywhere in that month's roster — the old baseline only ever looked
+    // at the literal current calendar week (see FS19 in
+    // docs/CODE_REVIEW.md).
+    if (mi <= alloc.anchorIdx) {
+        return (alloc.realMonthly[roomId][mi]?.roster || [])
+            .filter(o => o.days.includes(day))
+            .map(o => ({ name: o.name, kind: 'enrolled' }));
+    }
+
+    // Beyond the anchor: start from the anchor month's real roster, then
+    // project forward through every graduation/waitlist event for the
+    // months AFTER the anchor, up through mi — built in three passes across
+    // that range, not interleaved month-by-month, so the final list is
+    // strictly priority-ordered: enrolled > promoted (graduating up,
+    // unconditional) > accepted (a real offer commitment) > waitlist
+    // (still-pending admission) — regardless of which specific month each
+    // event happens to land in. Interleaving by month could put an EARLIER
+    // month's pending waitlist admission ahead of a LATER month's
+    // graduation, which would misread as the waitlist kid taking priority
+    // once the "over room limit" chip coloring (position vs room.capacity —
+    // see wlpGridRosterBlockHtml) kicks in. A graduating/moving-up child
+    // always outranks a new waitlist admission, matching the capacity math
+    // in wlpRunAllocation itself (graduations are baked into the baseline
+    // BEFORE any waitlist kid — promised or pending — ever competes for
+    // what's left); this just makes the DISPLAY order agree with that.
+    const list = (alloc.realMonthly[roomId][alloc.anchorIdx]?.roster || [])
         .filter(o => o.days.includes(day))
         .map(o => ({ name: o.name, kind: 'enrolled' }));
 
-    // Built in three passes across the WHOLE month range (0..mi), not
-    // interleaved month-by-month, so the final list is strictly
-    // priority-ordered: enrolled > promoted (graduating up, unconditional)
-    // > accepted (a real offer commitment) > waitlist (still-pending
-    // admission) — regardless of which specific month each event happens to
-    // land in. Interleaving by month could put an EARLIER month's pending
-    // waitlist admission ahead of a LATER month's graduation, which would
-    // misread as the waitlist kid taking priority once the "over room
-    // limit" chip coloring (position vs room.capacity — see
-    // wlpGridRosterBlockHtml) kicks in. A graduating/moving-up child always
-    // outranks a new waitlist admission, matching the capacity math in
-    // wlpRunAllocation itself (graduations are baked into the baseline
-    // BEFORE any waitlist kid — promised or pending — ever competes for
-    // what's left); this just makes the DISPLAY order agree with that.
-    for (let m = 0; m <= mi; m++) {
+    for (let m = alloc.anchorIdx + 1; m <= mi; m++) {
         (alloc.gradOut[roomId][m] || []).forEach(ev => {
             if (!ev.days.includes(day)) return;
             const i = list.findIndex(o => o.name === ev.name);
             if (i >= 0) list.splice(i, 1); // aged out — seat freed
         });
     }
-    for (let m = 0; m <= mi; m++) {
+    for (let m = alloc.anchorIdx + 1; m <= mi; m++) {
         (alloc.gradIn[roomId][m] || []).forEach(ev => {
             if (ev.days.includes(day)) list.push({ name: ev.name, kind: 'promoted' });
         });
     }
     const incomingHere = [];
-    for (let m = 0; m <= mi; m++) {
+    for (let m = alloc.anchorIdx + 1; m <= mi; m++) {
         (alloc.incoming[roomId][m] || []).forEach(k => {
             // A split-matched kid (see wlpRunAllocation) is attributed to
             // more than one room this month — gate on dayRoom, not just
@@ -1425,16 +1465,17 @@ function wlpRosterTag(kind, split) {
 }
 
 // The "who's in this room on this day" roster block for the Board sidebar —
-// exact for the current month (this week's real bookings), a labeled forecast
-// for later months.
+// exact (real, DB-confirmed registrations) for any month at or before the
+// real-data anchor (alloc.anchorIdx — see wlpRealAnchorIdx), a labeled
+// forecast for months beyond it.
 function wlpRosterSectionHtml(sel, mi, alloc, cap) {
     const roster = wlpDayRoster(sel.roomId, sel.day, mi, alloc);
-    const isCurrent = mi === 0;
+    const isCurrent = mi <= alloc.anchorIdx;
     const rows = roster.length
         ? roster.map(o => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);${o.kind === 'enrolled' ? '' : 'opacity:.8;'}"><span style="font-size:12px;">${escHtml(o.name)}</span>${wlpRosterTag(o.kind, o.split)}</div>`).join('')
         : `<div class="wlp-empty-note">No children booked here on ${escHtml(sel.day)}.</div>`;
     const subhint = isCurrent
-        ? `${roster.length} of ${cap ?? '—'} seats filled this week.`
+        ? `${roster.length} of ${cap ?? '—'} seats filled — real, registered bookings.`
         : `${roster.length} of ${cap ?? '—'} seats — projected; greyed rows aren't enrolled yet.`;
     return `
         <div class="wlp-section-label" style="margin-bottom:6px">In the room · ${escHtml(sel.day)}${isCurrent ? '' : ' · projected'}</div>
@@ -1445,11 +1486,12 @@ function wlpRosterSectionHtml(sel, mi, alloc, cap) {
 // The "who's enrolled" roster panel — same per-day roster Board already shows
 // (wlpDayRoster/wlpRosterTag), just fanned out across all 5 weekdays since
 // Grid's selection is room+month rather than room+day. This is what answers
-// "who's actually in this room" for the selected month: this week's real
-// bookings for month 0, carried forward through the same known
-// graduations/waitlist-starts that drive the open-seat count for later months
-// — not a separate historical-attendance calculation (this app doesn't track
-// day-by-day attendance history, only registered/booked days).
+// "who's actually in this room" for the selected month: real, DB-confirmed
+// registrations for any month at or before the real-data anchor (see
+// wlpRealAnchorIdx), carried forward through the same known
+// graduations/waitlist-starts that drive the open-seat count for months
+// beyond it — not a separate historical-attendance calculation (this app
+// doesn't track day-by-day attendance history, only registered/booked days).
 // Rendered as its own full-width panel BELOW the grid table + sidebar row
 // (not inside the narrow sidebar) so the 5 day columns get real room to
 // breathe; carries its own title/close since it's no longer nested under the
@@ -1457,7 +1499,7 @@ function wlpRosterSectionHtml(sel, mi, alloc, cap) {
 function wlpGridRosterBlockHtml(sel, alloc) {
     const { roomId, monthIdx } = sel;
     const room = alloc.roomMeta[roomId].room;
-    const isCurrent = monthIdx === 0;
+    const isCurrent = monthIdx <= alloc.anchorIdx;
     const dayCols = TREND_DAYS.map(day => {
         const roster = wlpDayRoster(roomId, day, monthIdx, alloc);
         const names = roster.length
@@ -1486,8 +1528,8 @@ function wlpGridRosterBlockHtml(sel, alloc) {
             </div>`;
     }).join('');
     const subhint = isCurrent
-        ? "Who's actually scheduled this week, by weekday."
-        : "Projected forward from this week's real bookings through known graduations and waitlist starts — faded names aren't enrolled yet.";
+        ? "Who's actually scheduled this month, by weekday — real, registered bookings."
+        : "Projected forward from the last fully-registered month through known graduations and waitlist starts — faded names aren't enrolled yet.";
     return `
         <div class="wlp-grid-panel" style="padding-bottom:20px;">
             <div class="wlp-sidebar-head" style="margin-bottom:6px;">
