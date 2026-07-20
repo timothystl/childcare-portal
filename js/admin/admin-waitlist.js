@@ -1651,7 +1651,18 @@ function _buildGraduationIndex() {
     (allRegistrations || []).forEach(reg => {
         const chain = promotionChain[reg.room_id];
         if (!chain || !reg.child_dob) return;
-        const key = `${reg.child_name}:${reg.room_id}`;
+        // Keyed on child_dob, NOT child_name: registrations aren't linked to a
+        // stable students.id (child_name is freeform text re-typed on every
+        // monthly submission), so the same real child re-typed with a stray
+        // space/capitalization/nickname across different months' registration
+        // rows was being treated as several different children — each
+        // producing its own graduation event, which showed up as the same
+        // kid appearing multiple times "moving up" into the next room. DOB is
+        // far more stable across submissions (picked from a date field, not
+        // freeform). This also fixes the reverse case a name-only key had
+        // (two genuinely different same-named children in one room getting
+        // merged into a single event — see docs/CODE_REVIEW.md FS26).
+        const key = `${reg.child_dob}:${reg.room_id}`;
         if (seen.has(key)) return;
         seen.add(key);
 
