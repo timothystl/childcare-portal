@@ -1649,25 +1649,34 @@ function _buildGraduationIndex() {
     const seen = new Set();
     const promotionChain = wlpPromotionChain();
     // allRegistrations is EVERY registration a child has ever had — every
-    // room, every month — not just their current one, and it's fetched
-    // newest-first (fetchAllRegistrations orders by created_at desc). Keying
-    // dedup on (parent_email, child_name) alone — NOT room_id, and NOT
-    // child_dob — and taking the first (= most recent) row per key means we
-    // only ever project a graduation forward from a child's CURRENT room.
-    // Earlier this was keyed per (name, room_id) then (dob, room_id), which
-    // meant every room a child had ever been in — including ones they'd
-    // already actually graduated out of for real — generated its own "moving
-    // up" prediction: a child now genuinely enrolled in Goose still had their
-    // old Turtle registration row computing its own "ages out of Turtle into
-    // Goose" event, showing the same real kid duplicated (once for their
-    // real current placement, again per stale historical room). Email+name is
-    // the same practical per-child identity checkExistingRegistration() etc.
-    // already use elsewhere in this app (no students.id link exists here).
+    // room, every month, under whichever parent submitted it — not just
+    // their current one, and it's fetched newest-first
+    // (fetchAllRegistrations orders by created_at desc). Keying dedup on
+    // child_name ALONE — not room_id, not child_dob, and NOT parent_email —
+    // and taking the first (= most recent) row per key means we only ever
+    // project a graduation forward from a child's single most recent
+    // registration, regardless of which room or which parent it was
+    // submitted under.
+    //
+    // This has gone through two earlier, insufficient attempts:
+    //   1. (name, room_id) → merged two different same-named kids in one
+    //      room, AND let every room a child had ever been in generate its
+    //      own "moving up" prediction (a child now really in Goose still had
+    //      their old Turtle row projecting a second "into Goose" event).
+    //   2. (parent_email, name) → fixed the single-parent case, but a child
+    //      whose registration rows were submitted under DIFFERENT parent
+    //      emails (co-parents alternating, or an email changing) still split
+    //      into two identities, reopening the same duplicate-roster bug.
+    // Confirmed against a real duplicate case where the child_name strings
+    // were byte-for-byte identical — so name alone, without email, is both
+    // necessary and sufficient here. A same-named different child in the
+    // same room (the FS26 edge case this reopens) is rarer than a family
+    // registering from two different emails.
     (allRegistrations || []).forEach(reg => {
         const chain = promotionChain[reg.room_id];
         if (!chain || !reg.child_dob) return;
-        const key = `${(reg.parent_email || '').trim().toLowerCase()}:${(reg.child_name || '').trim().toLowerCase()}`;
-        if (seen.has(key)) return;
+        const key = (reg.child_name || '').trim().toLowerCase();
+        if (!key || seen.has(key)) return;
         seen.add(key);
 
         const weekdays = _weekdayDayTypeMap(reg);
