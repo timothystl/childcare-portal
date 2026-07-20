@@ -586,21 +586,32 @@ function wlpRunAllocation() {
     // than we have" signal the grid should surface (see wlpComputeGradGridsPooled).
     // Within a pooled group we still prefer a room that can actually seat them
     // (highest-priority first) so promised demand spreads rather than stacking.
+    //
+    // Never seat anyone (promised or pending, below) into a month at or
+    // before the real-data anchor: those months' numbers ARE the real,
+    // DB-confirmed registrations (see wlpRealAnchorIdx) — decrementing them
+    // for a kid who hasn't actually been registered yet would silently
+    // desync the grid's open-seat count from the roster panel, which only
+    // ever shows the real roster for a final month (no incoming/matched-
+    // waitlist layering there). A promise/match that hasn't cleared into a
+    // real registration by the time its month goes final is a real gap the
+    // office needs to see and act on, not something to paper over here.
     groups.forEach(group => {
         wlpSortByPriority(kids.filter(k => group.some(r => r.id === k.room) && k.promised)).forEach(k => {
-            const target = wlpBalancedRoom(group, working, k, k.desiredStartM) || group[0];
+            const seatMonth = Math.max(k.desiredStartM, anchorIdx + 1);
+            const target = wlpBalancedRoom(group, working, k, seatMonth) || group[0];
             k.room = target.id;
             preGridByKid[k.id] = working[target.id].map(day => ({ ...day }));
-            fitMonthByKid[k.id] = k.desiredStartM;
+            fitMonthByKid[k.id] = seatMonth;
             if (k.flexible && !k.days.length) {
                 // No offered_days on record for this promised flexible kid —
                 // still a real commitment, so reserve something concrete;
                 // auto-pick the best-available days, falling back to the
                 // first N weekdays if nothing currently fits (may overbook,
                 // which is the correct signal — see wlpComputeGradGridsPooled).
-                k.days = wlpFlexDaysFor(k, working[target.id], k.desiredStartM) || TREND_DAYS.slice(0, k.flexibleCount);
+                k.days = wlpFlexDaysFor(k, working[target.id], seatMonth) || TREND_DAYS.slice(0, k.flexibleCount);
             }
-            for (let mm = k.desiredStartM; mm < 12; mm++) {
+            for (let mm = seatMonth; mm < 12; mm++) {
                 k.days.forEach(d => { working[target.id][mm][d] -= 1; });
             }
         });
@@ -608,20 +619,24 @@ function wlpRunAllocation() {
 
     // Everyone else (pending / offered-but-not-yet-accepted) competes for
     // whatever capacity is left, in priority order across the whole pooled
-    // group: each kid takes the EARLIEST month they fit anywhere in the group.
-    // At that month, a single co-equal room is tried first (wlpBalancedRoom —
-    // whichever twin is emptiest, so a simple one-room schedule is preferred
-    // when one's available). Only if NO single pooled room can hold their
-    // whole week does a real day-to-day split get tried — e.g. Turtle
-    // Mon/Wed + Owl Tue/Thu/Fri — since kids in a shared age bracket can
-    // actually attend either room (see wlpRoomGroups). A split still needs
-    // EVERY requested day to have room SOMEWHERE in the pool; a day that's
-    // full in every pooled room blocks the whole match, same as before, and
-    // the kid tries the next month.
+    // group: each kid takes the EARLIEST month they fit anywhere in the group,
+    // starting the search no earlier than the month right after the
+    // real-data anchor (see the promised-kid loop above for why — the same
+    // "never algorithmically touch an already-final month" rule applies
+    // here too). At that month, a single co-equal room is tried first
+    // (wlpBalancedRoom — whichever twin is emptiest, so a simple one-room
+    // schedule is preferred when one's available). Only if NO single pooled
+    // room can hold their whole week does a real day-to-day split get tried
+    // — e.g. Turtle Mon/Wed + Owl Tue/Thu/Fri — since kids in a shared age
+    // bracket can actually attend either room (see wlpRoomGroups). A split
+    // still needs EVERY requested day to have room SOMEWHERE in the pool; a
+    // day that's full in every pooled room blocks the whole match, same as
+    // before, and the kid tries the next month.
     groups.forEach(group => {
         wlpSortByPriority(kids.filter(k => group.some(r => r.id === k.room) && !k.promised)).forEach(k => {
             let seated = null; // { room: Room|null, month, days, dayRoom: {day: Room} }
-            for (let m = k.desiredStartM; m < 12; m++) {
+            const startMonth = Math.max(k.desiredStartM, anchorIdx + 1);
+            for (let m = startMonth; m < 12; m++) {
                 const r = wlpBalancedRoom(group, working, k, m);
                 if (r) {
                     const days = k.flexible ? wlpFlexDaysFor(k, working[r.id], m) : k.days;
