@@ -330,6 +330,41 @@ function wlpFlexDaysFor(k, preGrid, month) {
         .sort((a, b) => TREND_DAYS.indexOf(a) - TREND_DAYS.indexOf(b));
 }
 
+// Same as wlpFlexDaysFor, but for the split-across-the-pool fallback below:
+// a day counts as "open" if ANY room in the group has room that day (not
+// just one specific room), since a flexible kid who can't fit their whole
+// week in a single pooled room may still be seatable a day at a time across
+// the twins.
+function wlpPooledFlexDaysFor(k, group, working, month) {
+    const open = TREND_DAYS.filter(d => group.some(r => working[r.id][month][d] >= 1));
+    if (open.length < k.flexibleCount) return null;
+    return open
+        .slice()
+        .sort((a, b) => Math.max(...group.map(r => working[r.id][month][b])) - Math.max(...group.map(r => working[r.id][month][a])))
+        .slice(0, k.flexibleCount)
+        .sort((a, b) => TREND_DAYS.indexOf(a) - TREND_DAYS.indexOf(b));
+}
+
+// For a kid's requested days, the best single-room-per-day assignment across
+// a pooled age-bracket group — each day independently goes to whichever
+// pooled room has the most slack that day (same tie-break room sorting
+// wlpBalancedRoom uses for a whole-week fit). Returns null if ANY requested
+// day has no room in ANY pooled room — a split can't rescue a day that's
+// full everywhere, same as a whole-week fit can't.
+function wlpSplitRoomsForDays(group, working, days, month) {
+    const dayRoom = {};
+    for (const d of days) {
+        let best = null, bestOpen = -Infinity;
+        for (const r of group) {
+            const open = working[r.id][month][d];
+            if (open >= 1 && open > bestOpen) { bestOpen = open; best = r; }
+        }
+        if (!best) return null;
+        dayRoom[d] = best;
+    }
+    return dayRoom;
+}
+
 // desired_start_date -> month index (0-11) within the planning window,
 // clamped to the window (a past-due or far-future date lands on the nearest
 // edge rather than being excluded).
@@ -387,9 +422,16 @@ function wlpMovementEvents(roomId, alloc) {
             });
         });
         (alloc.incoming[roomId][mo.idx] || []).forEach(k => {
+            // A split-matched kid is attributed to more than one room this
+            // month (see wlpRunAllocation) — only narrate the days that
+            // actually belong to THIS room, not their whole requested week.
+            const daysHere = k.dayRoom && Object.keys(k.dayRoom).length
+                ? k.days.filter(d => k.dayRoom[d] === roomId)
+                : k.days;
+            const splitNote = k.split ? ' (split week)' : '';
             out.push(k.promised
-                ? { monthLabel: mo.label, name: k.name, days: k.days, iconCls: 'wlp-event-icon-promised', icon: '🎯', actionLabel: 'promised a spot (offer accepted)' }
-                : { monthLabel: mo.label, name: k.name, days: k.days, iconCls: 'wlp-event-icon-start', icon: '+', actionLabel: 'starts from the waitlist' });
+                ? { monthLabel: mo.label, name: k.name, days: daysHere, iconCls: 'wlp-event-icon-promised', icon: '🎯', actionLabel: `promised a spot (offer accepted)${splitNote}` }
+                : { monthLabel: mo.label, name: k.name, days: daysHere, iconCls: 'wlp-event-icon-start', icon: '+', actionLabel: `starts from the waitlist${splitNote}` });
         });
     });
     return out;
@@ -499,25 +541,49 @@ function wlpRunAllocation() {
 
     // Everyone else (pending / offered-but-not-yet-accepted) competes for
     // whatever capacity is left, in priority order across the whole pooled
-    // group: each kid takes the EARLIEST month they fit anywhere in the group,
-    // and at that month lands in whichever co-equal room is emptiest
-    // (wlpBalancedRoom) — balancing the twins rather than filling one first.
+    // group: each kid takes the EARLIEST month they fit anywhere in the group.
+    // At that month, a single co-equal room is tried first (wlpBalancedRoom —
+    // whichever twin is emptiest, so a simple one-room schedule is preferred
+    // when one's available). Only if NO single pooled room can hold their
+    // whole week does a real day-to-day split get tried — e.g. Turtle
+    // Mon/Wed + Owl Tue/Thu/Fri — since kids in a shared age bracket can
+    // actually attend either room (see wlpRoomGroups). A split still needs
+    // EVERY requested day to have room SOMEWHERE in the pool; a day that's
+    // full in every pooled room blocks the whole match, same as before, and
+    // the kid tries the next month.
     groups.forEach(group => {
         wlpSortByPriority(kids.filter(k => group.some(r => r.id === k.room) && !k.promised)).forEach(k => {
-            let seated = null; // { room, month, days }
+            let seated = null; // { room: Room|null, month, days, dayRoom: {day: Room} }
             for (let m = k.desiredStartM; m < 12; m++) {
                 const r = wlpBalancedRoom(group, working, k, m);
                 if (r) {
                     const days = k.flexible ? wlpFlexDaysFor(k, working[r.id], m) : k.days;
-                    seated = { room: r, month: m, days };
+                    const dayRoom = {}; days.forEach(d => { dayRoom[d] = r; });
+                    seated = { room: r, month: m, days, dayRoom };
                     break;
                 }
+                if (group.length > 1) {
+                    const days = k.flexible ? wlpPooledFlexDaysFor(k, group, working, m) : k.days;
+                    const dayRoom = days ? wlpSplitRoomsForDays(group, working, days, m) : null;
+                    if (dayRoom) { seated = { room: null, month: m, days, dayRoom }; break; }
+                }
             }
-            const target = seated ? seated.room : (group.find(r => r.id === k.room) || group[0]);
+            const target = seated
+                ? (seated.room || group.find(r => r.id === k.room) || group[0])
+                : (group.find(r => r.id === k.room) || group[0]);
+            // preGridByKid stays scoped to ONE room (the primary target, not
+            // pooled) — this is what the interactive "Fill open seats" chips
+            // and Enroll button read, and Enroll only ever reserves days in
+            // the specific room its card is shown under. Showing pooled
+            // availability there would risk the admin clicking Enroll for a
+            // day that's only actually open in the OTHER room. wlpNoFitReason
+            // (below) is where pool-wide availability gets surfaced instead.
             preGridByKid[k.id] = working[target.id].map(day => ({ ...day }));
             k.room = target.id;
+            k.split = !!(seated && !seated.room);
             fitMonthByKid[k.id] = seated ? seated.month : null;
             if (k.flexible) k.days = seated ? seated.days : [];
+            k.dayRoom = {};
             if (seated) {
                 // Not floored at 0 — same rule as the promised-kid seating
                 // above (see wlpComputeGradGrid): a room genuinely can go
@@ -528,8 +594,9 @@ function wlpRunAllocation() {
                 // overbooking and made the grid/board disagree with the
                 // roster panel's own unclamped headcount for the same day.
                 for (let mm = seated.month; mm < 12; mm++) {
-                    seated.days.forEach(d => { working[seated.room.id][mm][d] -= 1; });
+                    Object.entries(seated.dayRoom).forEach(([d, r]) => { working[r.id][mm][d] -= 1; });
                 }
+                Object.entries(seated.dayRoom).forEach(([d, r]) => { k.dayRoom[d] = r.id; });
             }
         });
     });
@@ -539,8 +606,17 @@ function wlpRunAllocation() {
     kids.forEach(k => {
         const fm = fitMonthByKid[k.id];
         if (fm != null) {
-            if (!incoming[k.room][fm]) incoming[k.room][fm] = [];
-            incoming[k.room][fm].push(k);
+            // A split kid occupies more than one room — attribute them to
+            // EVERY room they actually attend that month, not just their
+            // primary k.room, so each room's "moving this month"/roster
+            // narrative only ever shows the days that really belong to it
+            // (wlpDayRoster below gates on dayRoom per day for this reason).
+            const roomIds = [...new Set(Object.values(k.dayRoom || {}))];
+            (roomIds.length ? roomIds : [k.room]).forEach(rid => {
+                if (!incoming[rid]) return;
+                if (!incoming[rid][fm]) incoming[rid][fm] = [];
+                incoming[rid][fm].push(k);
+            });
         }
     });
 
@@ -1051,6 +1127,26 @@ function wlpRenderGridSidebar(sel, alloc) {
     const candidates = alloc.kids.filter(k => k.room === roomId && k.desiredStartM <= monthIdx);
     const ranked = wlpSortByPriority(candidates);
     const suggestionsHtml = ranked.map(k => {
+        // A split-matched kid (see wlpRunAllocation) already has a real seat
+        // this month, but it's spread across more than one pooled room —
+        // this card is scoped to ONE room's own availability, which would
+        // otherwise show their twin-room days as "missing"/full and imply
+        // they still need action. Show the actual split instead of computing
+        // a misleading partial/no-fit from this room's grid alone.
+        const seatedHere = alloc.fitMonthByKid[k.id] != null && alloc.fitMonthByKid[k.id] <= monthIdx;
+        if (seatedHere && k.split) {
+            const hereDays = k.days.filter(d => k.dayRoom[d] === roomId);
+            const elsewhereDays = k.days.filter(d => k.dayRoom[d] !== roomId);
+            const elsewhereRoomId = elsewhereDays[0] && k.dayRoom[elsewhereDays[0]];
+            const elsewhereLabel = elsewhereRoomId ? (alloc.roomMeta[elsewhereRoomId]?.room.label.replace(/^\S+\s/, '') || '') : '';
+            return `
+                <div class="wlp-suggestion-card">
+                    <div class="wlp-suggestion-top"><span class="wlp-suggestion-name">${escHtml(k.name)}${wlpDayTypeTag(k)}</span><span class="wlp-suggestion-waiting">${escHtml(wlDaysWaiting(k.appliedAt))}</span></div>
+                    <div class="wlp-suggestion-priority">${wlpPriorityLabel(k)}</div>
+                    <div class="wlp-sidebar-hint" style="margin:4px 0 0;">🔀 Split week — ${hereDays.join(', ') || 'none'} here${elsewhereDays.length ? `, ${elsewhereDays.join(', ')} in ${escHtml(elsewhereLabel)}` : ''}.</div>
+                    <div class="wlp-suggestion-offer wlp-suggestion-offer-full" style="text-align:center;opacity:.85;cursor:default;">✅ Already matched (split)</div>
+                </div>`;
+        }
         const dayMap = alloc.preGridByKid[k.id][monthIdx];
         // .length check first: an unresolved flexible kid (k.days still
         // empty — never found N open days anywhere in the 12-month window)
@@ -1236,18 +1332,27 @@ function wlpDayRoster(roomId, day, mi, alloc) {
             if (ev.days.includes(day)) list.push({ name: ev.name, kind: 'promoted' });
         });
         (alloc.incoming[roomId][m] || []).forEach(k => {
-            if (k.days.includes(day)) list.push({ name: k.name, kind: k.promised ? 'accepted' : 'waitlist' });
+            // A split-matched kid (see wlpRunAllocation) is attributed to
+            // more than one room this month — gate on dayRoom, not just
+            // k.days, so they only show up in the room that ACTUALLY covers
+            // this specific day, not in every room they attend all week.
+            const dayHere = k.dayRoom && Object.keys(k.dayRoom).length ? k.dayRoom[day] === roomId : k.days.includes(day);
+            if (dayHere) list.push({ name: k.name, kind: k.promised ? 'accepted' : 'waitlist', split: !!k.split });
         });
     }
     return list;
 }
 
 // Small muted label for a projected roster occupant (blank for a currently-
-// enrolled child, who needs no qualifier).
-function wlpRosterTag(kind) {
+// enrolled child, who needs no qualifier). split=true appends a marker for a
+// waitlist kid whose week is matched across more than one pooled room (e.g.
+// Turtle Mon/Wed + Owl Tue/Thu/Fri) — see wlpRunAllocation — so this room's
+// roster only shows the days that belong to it, but still flags that the
+// child's full week isn't entirely in this one room.
+function wlpRosterTag(kind, split) {
     if (kind === 'promoted') return '<span class="wlp-row-room">↑ moving up</span>';
     if (kind === 'accepted') return '<span class="wlp-row-room">🎯 offer accepted</span>';
-    if (kind === 'waitlist') return '<span class="wlp-row-room">＋ from waitlist</span>';
+    if (kind === 'waitlist') return `<span class="wlp-row-room">＋ from waitlist${split ? ' · split week' : ''}</span>`;
     return '';
 }
 
@@ -1258,7 +1363,7 @@ function wlpRosterSectionHtml(sel, mi, alloc, cap) {
     const roster = wlpDayRoster(sel.roomId, sel.day, mi, alloc);
     const isCurrent = mi === 0;
     const rows = roster.length
-        ? roster.map(o => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);${o.kind === 'enrolled' ? '' : 'opacity:.8;'}"><span style="font-size:12px;">${escHtml(o.name)}</span>${wlpRosterTag(o.kind)}</div>`).join('')
+        ? roster.map(o => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);${o.kind === 'enrolled' ? '' : 'opacity:.8;'}"><span style="font-size:12px;">${escHtml(o.name)}</span>${wlpRosterTag(o.kind, o.split)}</div>`).join('')
         : `<div class="wlp-empty-note">No children booked here on ${escHtml(sel.day)}.</div>`;
     const subhint = isCurrent
         ? `${roster.length} of ${cap ?? '—'} seats filled this week.`
@@ -1298,7 +1403,7 @@ function wlpGridRosterBlockHtml(sel, alloc) {
                 // it there's no way to tell a real already-enrolled overbook
                 // apart from a low-priority waitlist match the allocator tried
                 // to squeeze in anyway.
-                const kindLabel = o.kind === 'enrolled' ? 'Enrolled' : wlpRosterTag(o.kind).replace(/<[^>]+>/g, '');
+                const kindLabel = o.kind === 'enrolled' ? 'Enrolled' : wlpRosterTag(o.kind, o.split).replace(/<[^>]+>/g, '');
                 const tag = overCap ? `${kindLabel} · over room limit` : (o.kind !== 'enrolled' ? kindLabel : '');
                 return `<div style="margin-bottom:4px;padding:5px 7px;border-radius:6px;background:${bg};border:1px solid ${border};">
                     <div style="font-size:11.5px;font-weight:700;line-height:1.3;color:${fg};">${escHtml(o.name)}</div>
@@ -1333,13 +1438,42 @@ function wlpGridRosterBlockHtml(sel, alloc) {
 
 function wlpRenderBoardSidebar(sel, mi, alloc) {
     const room = alloc.roomMeta[sel.roomId].room;
-    const candidates = alloc.kids.filter(k => k.room === sel.roomId && k.days.includes(sel.day) && k.desiredStartM <= mi);
+    const candidates = alloc.kids.filter(k => {
+        if (k.desiredStartM > mi || !k.days.includes(sel.day)) return false;
+        // A seated kid (dayRoom populated — whole-room or split) only
+        // belongs to THIS room+day slot if dayRoom actually says so; a
+        // split-matched kid's Tuesday might be in the twin room even though
+        // their k.room (primary) is this one. An unseated kid has no
+        // dayRoom yet, so fall back to their derived/primary room as before.
+        if (k.dayRoom && Object.keys(k.dayRoom).length) return k.dayRoom[sel.day] === sel.roomId;
+        return k.room === sel.roomId;
+    });
     const ranked = wlpSortByPriority(candidates);
     const suggestionsHtml = ranked.map(k => {
+        const isHl = _wlp.highlightKidC === k.id;
+        // Already matched via a day-to-day split across the pool (see
+        // wlpRunAllocation) — this slot's day genuinely belongs to this
+        // room, but their OTHER days may not, and Enroll always opens the
+        // modal for k.room (their primary room), which could be the wrong
+        // one for a split kid. Show the split plainly instead of an Enroll
+        // button that might prefill the wrong room.
+        const seatedHere = alloc.fitMonthByKid[k.id] != null && alloc.fitMonthByKid[k.id] <= mi;
+        if (seatedHere && k.split) {
+            const hereDays = k.days.filter(d => k.dayRoom[d] === sel.roomId);
+            const elsewhereDays = k.days.filter(d => k.dayRoom[d] !== sel.roomId);
+            const elsewhereRoomId = elsewhereDays[0] && k.dayRoom[elsewhereDays[0]];
+            const elsewhereLabel = elsewhereRoomId ? (alloc.roomMeta[elsewhereRoomId]?.room.label.replace(/^\S+\s/, '') || '') : '';
+            return `
+                <div class="wlp-suggestion-card ${isHl ? 'highlight' : ''}" data-wlp-suggest="${k.id}">
+                    <div class="wlp-suggestion-top"><span class="wlp-suggestion-name">${escHtml(k.name)}${wlpDayTypeTag(k)}</span><span class="wlp-suggestion-waiting">${escHtml(wlDaysWaiting(k.appliedAt))}</span></div>
+                    <div class="wlp-suggestion-priority">${wlpPriorityLabel(k)}</div>
+                    <div class="wlp-sidebar-hint" style="margin:4px 0 0;">🔀 Split week — ${hereDays.join(', ') || 'none'} here${elsewhereDays.length ? `, ${elsewhereDays.join(', ')} in ${escHtml(elsewhereLabel)}` : ''}.</div>
+                    <div class="wlp-suggestion-offer wlp-suggestion-offer-full" style="text-align:center;opacity:.85;cursor:default;">✅ Already matched (split)</div>
+                </div>`;
+        }
         const dayMap = alloc.preGridByKid[k.id][mi];
         const avail = k.days.filter(d => dayMap[d] >= 1);
         const missing = k.days.filter(d => !avail.includes(d));
-        const isHl = _wlp.highlightKidC === k.id;
         const chips = wlpDayChips(k, dayMap).map(wlpChipHtml).join('');
         const offerLabel = missing.length ? `✅ Enroll (${avail.length} of ${k.days.length} days)` : `✅ Enroll (all ${k.days.length} days)`;
         const offerCls = missing.length ? 'wlp-suggestion-offer-partial' : 'wlp-suggestion-offer-full';
