@@ -339,6 +339,16 @@ function wlpComputeGradGridsPooled(rooms, gradOut, gradIn, realMonthly, anchorId
     rooms.forEach(r => { booked[r.id] = { ...(realMonthly[r.id][anchorIdx]?.booked || zero()) }; });
     const grids = {};
     rooms.forEach(r => { grids[r.id] = []; });
+    // Which room a gradIn event actually landed in, re-keyed from the raw
+    // gradIn's single "representative" room (see _buildGraduationIndex /
+    // wlpPromotionChain) to wherever the pooled balancing above actually
+    // placed it. Without this, the capacity numbers correctly reflect a
+    // pooled arrival landing in the twin room, but the roster panel and
+    // "Moving this month" cards — which read gradIn directly — would still
+    // show 100% of arrivals under the original representative room,
+    // disagreeing with the grid.
+    const placedGradIn = {};
+    rooms.forEach(r => { placedGradIn[r.id] = {}; });
 
     for (let m = 0; m < 12; m++) {
         if (m <= anchorIdx) {
@@ -361,6 +371,8 @@ function wlpComputeGradGridsPooled(rooms, gradOut, gradIn, realMonthly, anchorId
                         if (slack > bestSlack) { bestSlack = slack; best = r; }
                     });
                     ev.days.forEach(d => { booked[best.id][d] += 1; });
+                    if (!placedGradIn[best.id][m]) placedGradIn[best.id][m] = [];
+                    placedGradIn[best.id][m].push(ev);
                 });
             });
         }
@@ -370,7 +382,7 @@ function wlpComputeGradGridsPooled(rooms, gradOut, gradIn, realMonthly, anchorId
             grids[r.id].push(openDay);
         });
     }
-    return grids;
+    return { grids, placedGradIn };
 }
 
 // Requested weekdays for a waitlist row — empty days_of_week defaults to all
@@ -528,15 +540,23 @@ function wlpEventCardHtml(ev) {
 function wlpRunAllocation() {
     const rooms = wlpRooms();
     const months = wlpMonths();
-    const { gradOut, gradIn } = wlpGradEvents(months);
+    const gradEvents = wlpGradEvents(months);
+    const gradOut = gradEvents.gradOut;
+    let gradIn = gradEvents.gradIn;
     const anchorIdx = wlpRealAnchorIdx(months);
     const realMonthly = wlpRealMonthlyByRoom(rooms, months, anchorIdx);
 
     const roomMeta = {};
-    const gradGrids = wlpComputeGradGridsPooled(rooms, gradOut, gradIn, realMonthly, anchorIdx);
+    const { grids: gradGrids, placedGradIn } = wlpComputeGradGridsPooled(rooms, gradOut, gradIn, realMonthly, anchorIdx);
     rooms.forEach(r => {
         roomMeta[r.id] = { room: r, gradGrid: gradGrids[r.id] };
     });
+    // From here on, gradIn means "which room a graduation arrival actually
+    // landed in after pooled balancing" — not the raw single-representative-
+    // room bucketing _buildGraduationIndex produced — so the roster panel,
+    // "Moving this month" cards, and incoming[] (below) all agree with the
+    // capacity numbers above.
+    gradIn = placedGradIn;
 
     const activeApps = (_allWaitlistApps || []).filter(a => ['pending', 'offered', 'accepted'].includes(a.status));
     const kids = activeApps.map(a => {
