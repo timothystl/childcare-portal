@@ -1075,12 +1075,21 @@ list, 2026-07-12):**
   mailto. Compounds T2 (nothing reads `messages`). _Fix:_ show the success
   toast only on the success path; on failure show a distinct "we've opened your
   email app instead" message.
-- **FS26 — [Low] `_buildGraduationIndex` collapses two distinct same-name
-  children in the same room.** [Admin] `js/admin/admin-waitlist.js:1394` dedups
+- **FS26 [x] — [Low] `_buildGraduationIndex` collapses two distinct same-name
+  children in the same room.** [Admin] `js/admin/admin-waitlist.js` dedups
   on `` `${reg.child_name}:${reg.room_id}` `` to merge a child's monthly rows,
   but that also merges two different children with the same name in one room —
-  only one is counted as moving / freeing a seat. _Fix:_ key the dedup on a
-  stable per-child id (student id / dob).
+  only one is counted as moving / freeing a seat. Also had the mirror-image
+  bug, reported 2026-07-17: since `child_name` is freeform text re-typed on
+  every monthly registration (no `students.id` link), the *same* real child
+  re-typed slightly differently across months (stray space, capitalization,
+  nickname) was treated as *several* children, each producing its own
+  graduation event — showing the same kid duplicated "moving up" into the
+  next room in the Waitlist Planner's roster panel. **Fixed:** dedup key
+  changed to `` `${reg.child_dob}:${reg.room_id}` `` — DOB is stable across
+  submissions (date-field input, not freeform text), so this both stops the
+  false-duplicate case and keeps genuinely different same-named children
+  (different DOBs) separate.
 - **FS27 — [Low] Admin-reg calendar keeps selected days across month
   navigation → cross-month registration billed for only the first month.**
   [Admin] `adminRegCalPrev/Next` (`js/admin/admin-calendar.js:1322-1333`) change
