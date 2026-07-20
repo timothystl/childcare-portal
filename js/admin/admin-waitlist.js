@@ -1366,24 +1366,48 @@ function wlpDayRoster(roomId, day, mi, alloc) {
     const list = (alloc.baseRoster[roomId] || [])
         .filter(o => o.days.includes(day))
         .map(o => ({ name: o.name, kind: 'enrolled' }));
+
+    // Built in three passes across the WHOLE month range (0..mi), not
+    // interleaved month-by-month, so the final list is strictly
+    // priority-ordered: enrolled > promoted (graduating up, unconditional)
+    // > accepted (a real offer commitment) > waitlist (still-pending
+    // admission) — regardless of which specific month each event happens to
+    // land in. Interleaving by month could put an EARLIER month's pending
+    // waitlist admission ahead of a LATER month's graduation, which would
+    // misread as the waitlist kid taking priority once the "over room
+    // limit" chip coloring (position vs room.capacity — see
+    // wlpGridRosterBlockHtml) kicks in. A graduating/moving-up child always
+    // outranks a new waitlist admission, matching the capacity math in
+    // wlpRunAllocation itself (graduations are baked into the baseline
+    // BEFORE any waitlist kid — promised or pending — ever competes for
+    // what's left); this just makes the DISPLAY order agree with that.
     for (let m = 0; m <= mi; m++) {
         (alloc.gradOut[roomId][m] || []).forEach(ev => {
             if (!ev.days.includes(day)) return;
             const i = list.findIndex(o => o.name === ev.name);
             if (i >= 0) list.splice(i, 1); // aged out — seat freed
         });
+    }
+    for (let m = 0; m <= mi; m++) {
         (alloc.gradIn[roomId][m] || []).forEach(ev => {
             if (ev.days.includes(day)) list.push({ name: ev.name, kind: 'promoted' });
         });
+    }
+    const incomingHere = [];
+    for (let m = 0; m <= mi; m++) {
         (alloc.incoming[roomId][m] || []).forEach(k => {
             // A split-matched kid (see wlpRunAllocation) is attributed to
             // more than one room this month — gate on dayRoom, not just
             // k.days, so they only show up in the room that ACTUALLY covers
             // this specific day, not in every room they attend all week.
             const dayHere = k.dayRoom && Object.keys(k.dayRoom).length ? k.dayRoom[day] === roomId : k.days.includes(day);
-            if (dayHere) list.push({ name: k.name, kind: k.promised ? 'accepted' : 'waitlist', split: !!k.split });
+            if (dayHere) incomingHere.push({ name: k.name, promised: k.promised, split: !!k.split });
         });
     }
+    // Accepted offers (a real commitment) before still-pending admissions.
+    incomingHere.sort((a, b) => (a.promised === b.promised) ? 0 : (a.promised ? -1 : 1));
+    incomingHere.forEach(o => list.push({ name: o.name, kind: o.promised ? 'accepted' : 'waitlist', split: o.split }));
+
     return list;
 }
 
