@@ -1081,25 +1081,30 @@ list, 2026-07-12):**
   monthly rows, but that also merged two different children with the same
   name in one room — only one counted as moving / freeing a seat. Reported
   2026-07-17 as the mirror-image symptom (a real child duplicated, not
-  merged) — root cause needed two fixes:
-  1. A first pass rekeyed on `` `${reg.child_dob}:${reg.room_id}` `` (DOB is
-     stable across a family's re-typed monthly `child_name` text; there's no
-     `students.id` link on registrations). This alone wasn't enough —
-  2. **the real cause**: `allRegistrations` holds every registration a child
-     has EVER had, across every room they've ever been in, not just their
-     current one. A child now genuinely enrolled in Goose still has an old
-     Turtle registration row sitting in that data, and that stale row
+  merged) — root cause needed three passes:
+  1. Rekeyed on `` `${reg.child_dob}:${reg.room_id}` `` (DOB assumed more
+     stable than `child_name` across submissions). Not enough —
+  2. **the deeper cause**: `allRegistrations` holds every registration a
+     child has EVER had, across every room they've ever been in, not just
+     their current one. A child now genuinely enrolled in Goose still has an
+     old Turtle registration row sitting in that data, and that stale row
      independently computed its own "ages out of Turtle into Goose"
-     prediction — showing the same real kid duplicated in the roster (once
-     for their actual current placement, again per stale historical room).
-  **Fixed:** dedup key changed to `` `${parent_email}:${child_name}` ``
-  (normalized, room_id and dob dropped from the key entirely) combined with
-  `allRegistrations`' existing newest-first fetch order (`fetchAllRegistrations`
-  already orders by `created_at desc`) — first-seen-per-key now means
-  "this child's single most recent registration," so graduation is only ever
-  projected forward from where they currently are, never from a room they've
-  already actually left. Email+name is the same practical per-child identity
-  `checkExistingRegistration()` already uses elsewhere in this app.
+     prediction — showing the same real kid duplicated (once for their
+     actual current placement, again per stale historical room). Rekeyed on
+     `` `${parent_email}:${child_name}` `` (dropping room_id and dob) plus
+     `allRegistrations`' existing newest-first order (`fetchAllRegistrations`
+     orders by `created_at desc`), so first-seen-per-key = "this child's most
+     recent registration." Still not enough —
+  3. **confirmed 2026-07-20 against a real case with byte-for-byte identical
+     `child_name` strings**: a child's registration rows can be submitted
+     under DIFFERENT parent emails (co-parents alternating, or an email
+     changing over time), so keying on email+name still split one real child
+     into two identities. **Fixed:** dedup key is now `child_name` alone
+     (normalized), dropping `parent_email` too — still combined with the
+     newest-first fetch order. A same-named-but-different child sharing a
+     room (the original FS26 case) is rarer in practice than the same child
+     being registered from two different emails, so this direction was
+     chosen deliberately.
 - **FS27 — [Low] Admin-reg calendar keeps selected days across month
   navigation → cross-month registration billed for only the first month.**
   [Admin] `adminRegCalPrev/Next` (`js/admin/admin-calendar.js:1322-1333`) change
