@@ -294,18 +294,61 @@ function wlpGradEvents(months) {
 // look identical. Only the waitlist-matching step downstream (which checks
 // `>= 1` before seating anyone) treats negative the same as 0 — it just
 // won't offer a spot there, which is correct either way.
-function wlpComputeGradGrid(room, gradOutForRoom, gradInForRoom, baseBookedForRoom) {
-    const cap = room.capacity ?? 0;
-    const booked = { ...baseBookedForRoom };
-    const grid = [];
+// Per-room, 12-month grid of open slots per weekday for EVERY room together
+// (not one room in isolation) — needed so graduation ARRIVALS (gradIn) can be
+// balanced across a co-equal destination group (e.g. Turtle & Owl sharing an
+// identical age window — see wlpRoomGroups) instead of every child aging out
+// of a feeder room being pinned to whichever pool member wlpPromotionChain
+// happens to sort first. That was the actual cause of a pooled room's
+// negative/overbooked numbers climbing every month while its twin stayed
+// comparatively empty — graduation inflow (unconditional, not
+// capacity-gated) never had a way to reach the twin at all, only pending
+// waitlist demand did (see the split-matching added to the pending-kid loop
+// below).
+//
+// _buildGraduationIndex still buckets each gradIn event under ONE fixed
+// "representative" room per wlpPromotionChain's nextRoom — that's fine as a
+// raw index of WHO graduates WHEN; here, for each co-equal group, every
+// event bucketed under ANY member of that group is gathered together and
+// placed into whichever member has the most room for that child's whole day
+// pattern that month, mirroring wlpBalancedRoom's logic for waitlist kids.
+// Ties go to the earlier-sorted room, same convention used everywhere else
+// in this file. A room with no co-equal peer is a group of one, so this is
+// identical to the old per-room walk for every non-pooled room. Like the old
+// function, openDay is intentionally allowed to go NEGATIVE — a graduation
+// is a real, unconditional commitment (not gated on capacity), so if EVERY
+// room in a group is already full, the least-bad (highest, possibly still
+// negative) option still gets picked and the overbooking shows for real.
+function wlpComputeGradGridsPooled(rooms, gradOut, gradIn, baseBooked) {
+    const groups = wlpRoomGroups(rooms);
+    const booked = {};
+    rooms.forEach(r => { booked[r.id] = { ...baseBooked[r.id] }; });
+    const grids = {};
+    rooms.forEach(r => { grids[r.id] = []; });
+
     for (let m = 0; m < 12; m++) {
-        (gradOutForRoom[m] || []).forEach(ev => ev.days.forEach(d => { booked[d] = Math.max(0, booked[d] - 1); }));
-        (gradInForRoom[m] || []).forEach(ev => ev.days.forEach(d => { booked[d] = booked[d] + 1; }));
-        const openDay = {};
-        TREND_DAYS.forEach(d => { openDay[d] = cap - booked[d]; });
-        grid.push(openDay);
+        rooms.forEach(r => {
+            (gradOut[r.id][m] || []).forEach(ev => ev.days.forEach(d => { booked[r.id][d] = Math.max(0, booked[r.id][d] - 1); }));
+        });
+        groups.forEach(group => {
+            const arrivals = [];
+            group.forEach(r => (gradIn[r.id]?.[m] || []).forEach(ev => arrivals.push(ev)));
+            arrivals.forEach(ev => {
+                let best = group[0], bestSlack = -Infinity;
+                group.forEach(r => {
+                    const slack = Math.min(...ev.days.map(d => (r.capacity ?? 0) - booked[r.id][d]));
+                    if (slack > bestSlack) { bestSlack = slack; best = r; }
+                });
+                ev.days.forEach(d => { booked[best.id][d] += 1; });
+            });
+        });
+        rooms.forEach(r => {
+            const openDay = {};
+            TREND_DAYS.forEach(d => { openDay[d] = (r.capacity ?? 0) - booked[r.id][d]; });
+            grids[r.id].push(openDay);
+        });
     }
-    return grid;
+    return grids;
 }
 
 // Requested weekdays for a waitlist row — empty days_of_week defaults to all
@@ -408,7 +451,7 @@ function wlpAvailClass(open, capacity) {
 // Every graduation-out and waitlist-start event for one room across the
 // 12-month window, in month order — the "who's moving" narrative. Only the
 // leaving side is ever narrated as a card (matches the design); the arriving
-// side's capacity is still applied under the hood by wlpComputeGradGrid().
+// side's capacity is still applied under the hood by wlpComputeGradGridsPooled().
 function wlpMovementEvents(roomId, alloc) {
     const nextId = wlpPromotionChain()[roomId]?.nextRoom;
     const nextLabel = nextId ? alloc.roomMeta[nextId]?.room.label.replace(/^\S+\s/, '') : null;
@@ -467,8 +510,9 @@ function wlpRunAllocation() {
     const { gradOut, gradIn } = wlpGradEvents(months);
 
     const roomMeta = {};
+    const gradGrids = wlpComputeGradGridsPooled(rooms, gradOut, gradIn, baseBooked);
     rooms.forEach(r => {
-        roomMeta[r.id] = { room: r, gradGrid: wlpComputeGradGrid(r, gradOut[r.id], gradIn[r.id], baseBooked[r.id]) };
+        roomMeta[r.id] = { room: r, gradGrid: gradGrids[r.id] };
     });
 
     const activeApps = (_allWaitlistApps || []).filter(a => ['pending', 'offered', 'accepted'].includes(a.status));
@@ -516,7 +560,7 @@ function wlpRunAllocation() {
     // a graduation event, not a queue candidate. A real commitment reserves
     // its seat regardless of remaining capacity or priority order; if that
     // pushes a room negative, that's exactly the "we've promised more spots
-    // than we have" signal the grid should surface (see wlpComputeGradGrid).
+    // than we have" signal the grid should surface (see wlpComputeGradGridsPooled).
     // Within a pooled group we still prefer a room that can actually seat them
     // (highest-priority first) so promised demand spreads rather than stacking.
     groups.forEach(group => {
@@ -530,7 +574,7 @@ function wlpRunAllocation() {
                 // still a real commitment, so reserve something concrete;
                 // auto-pick the best-available days, falling back to the
                 // first N weekdays if nothing currently fits (may overbook,
-                // which is the correct signal — see wlpComputeGradGrid).
+                // which is the correct signal — see wlpComputeGradGridsPooled).
                 k.days = wlpFlexDaysFor(k, working[target.id], k.desiredStartM) || TREND_DAYS.slice(0, k.flexibleCount);
             }
             for (let mm = k.desiredStartM; mm < 12; mm++) {
@@ -586,7 +630,7 @@ function wlpRunAllocation() {
             k.dayRoom = {};
             if (seated) {
                 // Not floored at 0 — same rule as the promised-kid seating
-                // above (see wlpComputeGradGrid): a room genuinely can go
+                // above (see wlpComputeGradGridsPooled): a room genuinely can go
                 // negative here too, e.g. a kid fits on Thursday alone but
                 // their other requested days are already past capacity from
                 // a DIFFERENT commitment that landed after this kid was
@@ -1195,7 +1239,7 @@ function wlpRenderGridSidebar(sel, alloc) {
 // they're still unseated there (never fit anywhere, or only fit a later month).
 // Surfaced as a "+N waiting" badge on full/over days so demand that can't be
 // booked stays visible WITHOUT turning the slot number negative — a negative is
-// reserved for already-enrolled overbooking (see wlpComputeGradGrid).
+// reserved for already-enrolled overbooking (see wlpComputeGradGridsPooled).
 function wlpWaitingCount(alloc, roomId, mi, day) {
     return alloc.kids.filter(k =>
         !k.promised &&
