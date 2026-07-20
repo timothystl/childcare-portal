@@ -1076,20 +1076,30 @@ list, 2026-07-12):**
   toast only on the success path; on failure show a distinct "we've opened your
   email app instead" message.
 - **FS26 [x] — [Low] `_buildGraduationIndex` collapses two distinct same-name
-  children in the same room.** [Admin] `js/admin/admin-waitlist.js` dedups
-  on `` `${reg.child_name}:${reg.room_id}` `` to merge a child's monthly rows,
-  but that also merges two different children with the same name in one room —
-  only one is counted as moving / freeing a seat. Also had the mirror-image
-  bug, reported 2026-07-17: since `child_name` is freeform text re-typed on
-  every monthly registration (no `students.id` link), the *same* real child
-  re-typed slightly differently across months (stray space, capitalization,
-  nickname) was treated as *several* children, each producing its own
-  graduation event — showing the same kid duplicated "moving up" into the
-  next room in the Waitlist Planner's roster panel. **Fixed:** dedup key
-  changed to `` `${reg.child_dob}:${reg.room_id}` `` — DOB is stable across
-  submissions (date-field input, not freeform text), so this both stops the
-  false-duplicate case and keeps genuinely different same-named children
-  (different DOBs) separate.
+  children in the same room.** [Admin] `js/admin/admin-waitlist.js` originally
+  deduped on `` `${reg.child_name}:${reg.room_id}` `` to merge a child's
+  monthly rows, but that also merged two different children with the same
+  name in one room — only one counted as moving / freeing a seat. Reported
+  2026-07-17 as the mirror-image symptom (a real child duplicated, not
+  merged) — root cause needed two fixes:
+  1. A first pass rekeyed on `` `${reg.child_dob}:${reg.room_id}` `` (DOB is
+     stable across a family's re-typed monthly `child_name` text; there's no
+     `students.id` link on registrations). This alone wasn't enough —
+  2. **the real cause**: `allRegistrations` holds every registration a child
+     has EVER had, across every room they've ever been in, not just their
+     current one. A child now genuinely enrolled in Goose still has an old
+     Turtle registration row sitting in that data, and that stale row
+     independently computed its own "ages out of Turtle into Goose"
+     prediction — showing the same real kid duplicated in the roster (once
+     for their actual current placement, again per stale historical room).
+  **Fixed:** dedup key changed to `` `${parent_email}:${child_name}` ``
+  (normalized, room_id and dob dropped from the key entirely) combined with
+  `allRegistrations`' existing newest-first fetch order (`fetchAllRegistrations`
+  already orders by `created_at desc`) — first-seen-per-key now means
+  "this child's single most recent registration," so graduation is only ever
+  projected forward from where they currently are, never from a room they've
+  already actually left. Email+name is the same practical per-child identity
+  `checkExistingRegistration()` already uses elsewhere in this app.
 - **FS27 — [Low] Admin-reg calendar keeps selected days across month
   navigation → cross-month registration billed for only the first month.**
   [Admin] `adminRegCalPrev/Next` (`js/admin/admin-calendar.js:1322-1333`) change

@@ -1648,21 +1648,25 @@ function _buildGraduationIndex() {
     const gradOut = {}, gradIn = {};
     const seen = new Set();
     const promotionChain = wlpPromotionChain();
+    // allRegistrations is EVERY registration a child has ever had — every
+    // room, every month — not just their current one, and it's fetched
+    // newest-first (fetchAllRegistrations orders by created_at desc). Keying
+    // dedup on (parent_email, child_name) alone — NOT room_id, and NOT
+    // child_dob — and taking the first (= most recent) row per key means we
+    // only ever project a graduation forward from a child's CURRENT room.
+    // Earlier this was keyed per (name, room_id) then (dob, room_id), which
+    // meant every room a child had ever been in — including ones they'd
+    // already actually graduated out of for real — generated its own "moving
+    // up" prediction: a child now genuinely enrolled in Goose still had their
+    // old Turtle registration row computing its own "ages out of Turtle into
+    // Goose" event, showing the same real kid duplicated (once for their
+    // real current placement, again per stale historical room). Email+name is
+    // the same practical per-child identity checkExistingRegistration() etc.
+    // already use elsewhere in this app (no students.id link exists here).
     (allRegistrations || []).forEach(reg => {
         const chain = promotionChain[reg.room_id];
         if (!chain || !reg.child_dob) return;
-        // Keyed on child_dob, NOT child_name: registrations aren't linked to a
-        // stable students.id (child_name is freeform text re-typed on every
-        // monthly submission), so the same real child re-typed with a stray
-        // space/capitalization/nickname across different months' registration
-        // rows was being treated as several different children — each
-        // producing its own graduation event, which showed up as the same
-        // kid appearing multiple times "moving up" into the next room. DOB is
-        // far more stable across submissions (picked from a date field, not
-        // freeform). This also fixes the reverse case a name-only key had
-        // (two genuinely different same-named children in one room getting
-        // merged into a single event — see docs/CODE_REVIEW.md FS26).
-        const key = `${reg.child_dob}:${reg.room_id}`;
+        const key = `${(reg.parent_email || '').trim().toLowerCase()}:${(reg.child_name || '').trim().toLowerCase()}`;
         if (seen.has(key)) return;
         seen.add(key);
 
