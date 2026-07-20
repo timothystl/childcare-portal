@@ -1022,6 +1022,23 @@ function wlpWireQueueRowActions() {
     });
 }
 
+// Explains why a kid can't be seated anywhere in their room's age-bracket
+// pool this month (someFit is false) — surfaces the actual bottleneck day(s)
+// instead of leaving "+N waiting" as an unexplained number. wlpBalancedRoom
+// only pools a kid into a twin room if EVERY requested day is open there
+// (no partial-week offers) — so a twin having room on ONE day doesn't help
+// if a DIFFERENT requested day is full in every pooled room too.
+function wlpNoFitReason(alloc, roomId, monthIdx, kidDays) {
+    if (!kidDays.length) return null;
+    const group = wlpRoomGroups(alloc.rooms).find(g => g.some(r => r.id === roomId)) || [];
+    const roomNames = group.map(r => r.label.replace(/^\S+\s/, '')).join('/');
+    if (group.length < 2) return `Full on every requested day — no twin room to pool with.`;
+    const blocked = kidDays.filter(d => group.every(r => (alloc.finalGrid[r.id]?.[monthIdx]?.[d] ?? 0) < 1));
+    return blocked.length
+        ? `Full in every ${roomNames} room on ${blocked.join(', ')} — no seat anywhere in this age bracket that day.`
+        : `Has room somewhere in ${roomNames} on each requested day, just never all on the same day — no partial-week offers.`;
+}
+
 // ── Capacity Planner — Grid view ────────────────────────────
 // Grid's "who fits" sidebar reuses the same right-hand-sidebar look as
 // Board's slot sidebar (wlpRenderBoardSidebar, below) — suggestion cards
@@ -1047,11 +1064,13 @@ function wlpRenderGridSidebar(sel, alloc) {
             : `<span class="wlp-chip wlp-chip-off" style="width:auto;padding:2px 8px">any ${k.flexibleCount}/wk — no fit</span>`;
         const offerLabel = !someFit ? 'No open days' : missing.length ? `✅ Enroll (${avail.length} of ${k.days.length} days)` : `✅ Enroll (all ${k.days.length} days)`;
         const offerCls = missing.length ? 'wlp-suggestion-offer-partial' : 'wlp-suggestion-offer-full';
+        const noFitReason = !someFit ? wlpNoFitReason(alloc, roomId, monthIdx, k.days) : null;
         return `
             <div class="wlp-suggestion-card">
                 <div class="wlp-suggestion-top"><span class="wlp-suggestion-name">${escHtml(k.name)}${wlpDayTypeTag(k)}</span><span class="wlp-suggestion-waiting">${escHtml(wlDaysWaiting(k.appliedAt))}</span></div>
                 <div class="wlp-suggestion-priority">${wlpPriorityLabel(k)}</div>
                 <div class="wlp-chip-row">${chips}</div>
+                ${noFitReason ? `<div class="wlp-sidebar-hint" style="margin:4px 0 0;font-size:11px;">${escHtml(noFitReason)}</div>` : ''}
                 <button type="button" class="wlp-suggestion-offer ${offerCls}" data-wlp-match-offer="${k.id}" ${!someFit ? 'disabled' : ''}>${offerLabel}</button>
             </div>`;
     }).join('');
