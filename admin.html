@@ -1093,6 +1093,11 @@
                             <input type="text" id="sfPin" maxlength="4" placeholder="e.g. 1234"
                                 class="rate-input" style="width:90px" inputmode="numeric" pattern="\d{4}">
                         </div>
+                        <div class="fm-field">
+                            <label>PTO Starting Balance (hrs)</label>
+                            <input type="number" id="sfPtoStartingBalance" min="0" step="0.01" placeholder="0.00"
+                                class="rate-input" style="width:90px">
+                        </div>
                     </div>
                     <div class="staff-form-row">
                         <div class="fm-field">
@@ -1169,6 +1174,12 @@
                         style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
                 </label>
                 <p style="margin:.4rem 0 .75rem 0;font-size:.85rem;color:#555;">Example: 0.04 ≈ 1 hour of PTO earned per 25 hours worked.</p>
+                <label style="display:flex;align-items:center;gap:.75rem;font-weight:600;color:#1e3a5f;margin-top:.6rem;">
+                    Balance As-Of Date
+                    <input type="date" id="ptoBalanceCutoffDate"
+                        style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
+                </label>
+                <p style="margin:.4rem 0 .75rem 0;font-size:.85rem;color:#555;">Only needed if you've imported starting PTO balances (per staff member, on their Staff Roster entry) from an outside system. Set this to the date those balances are accurate as of — PTO accrual/usage in this app only counts from that date forward, so hours already reflected in the imported balance aren't double-counted. Leave blank if you're not importing balances.</p>
                 <button id="savePtoRateBtn" class="btn-primary">💾 Save Rate</button>
                 <span id="ptoRateStatus" style="margin-left:.75rem;font-size:.85rem;"></span>
             </section>
