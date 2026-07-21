@@ -1265,14 +1265,17 @@ function setupPayrollReport() {
 
 async function _buildPayrollData(startVal, endVal) {
     const ytdStart = `${endVal.substring(0, 4)}-01-01`;
-    const [allStaff, periodHrs, ytdHrs, periodClockEvents, ytdClockEvents, periodPtoRaw] = await Promise.all([
+    const [allStaff, periodHrs, ytdHrs, periodClockEvents, ytdClockEvents, periodPtoRaw, ytdPtoRaw, ptoRateSetting] = await Promise.all([
         fetchAllStaff({ includeInactive: true }),
         fetchStaffHours(startVal, endVal),
         fetchStaffHours(ytdStart, endVal),
         fetchClockEventsForRange(startVal, endVal),
         fetchClockEventsForRange(ytdStart, endVal),
         fetchStaffPtoEntries(startVal),
+        fetchStaffPtoUsedSince(ytdStart),
+        fetchSetting('pto_accrual_rate'),
     ]);
+    const ptoAccrualRate = parseFloat(ptoRateSetting) || 0;
 
     // Build a set of (staff_id, work_date) keys that already have a manual hours entry
     function manualKey(staffId, workDate) { return `${staffId}|${workDate}`; }
@@ -1348,18 +1351,25 @@ async function _buildPayrollData(startVal, endVal) {
     periodDetailMap.forEach(entries => entries.sort((a, b) => a.work_date.localeCompare(b.work_date)));
 
     // Build PTO map and add PTO hours to periodMap for gross calc
-    const periodPtoMap = new Map(); // staff_id -> { used, earned }
+    const periodPtoMap = new Map(); // staff_id -> { used }
     periodPtoRaw.forEach(p => {
-        const used   = parseFloat(p.pto_hours_used)   || 0;
-        const earned = parseFloat(p.pto_hours_earned) || 0;
-        periodPtoMap.set(p.staff_id, { used, earned });
+        const used = parseFloat(p.pto_hours_used) || 0;
+        periodPtoMap.set(p.staff_id, { used });
         if (used > 0) periodMap.set(p.staff_id, (periodMap.get(p.staff_id) || 0) + used);
+    });
+
+    // Running PTO balance (accrued − used, year to date): accrual is earned on hours actually
+    // worked (ytdMap excludes PTO-used hours), at the global settings.pto_accrual_rate.
+    const ytdPtoUsedMap = new Map(); // staff_id -> total PTO hours used this year (across all periods)
+    ytdPtoRaw.forEach(p => {
+        const used = parseFloat(p.pto_hours_used) || 0;
+        ytdPtoUsedMap.set(p.staff_id, (ytdPtoUsedMap.get(p.staff_id) || 0) + used);
     });
 
     // Include active staff + anyone with hours in the period
     const staff = allStaff.filter(s => s.active || periodMap.has(s.id));
     staff.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    return { staff, periodMap, ytdMap, periodDetailMap, periodPtoMap };
+    return { staff, periodMap, ytdMap, periodDetailMap, periodPtoMap, ytdPtoUsedMap, ptoAccrualRate };
 }
 
 async function generatePayrollReport() {
@@ -1370,8 +1380,8 @@ async function generatePayrollReport() {
     const container = document.getElementById('payrollContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
-        const { staff, periodMap, ytdMap, periodDetailMap, periodPtoMap } = await _buildPayrollData(startVal, endVal);
-        renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap, periodPtoMap);
+        const { staff, periodMap, ytdMap, periodDetailMap, periodPtoMap, ytdPtoUsedMap, ptoAccrualRate } = await _buildPayrollData(startVal, endVal);
+        renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap, periodPtoMap, ytdPtoUsedMap, ptoAccrualRate);
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
     }
@@ -1392,10 +1402,12 @@ let _ptoPendingTimers = {};
 function _schedulePtoSaveUnified(container, staffId, periodStart) {
     clearTimeout(_ptoPendingTimers[staffId]);
     _ptoPendingTimers[staffId] = setTimeout(async () => {
-        const usedInput   = container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="used"]`);
-        const earnedInput = container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="earned"]`);
-        const used   = parseFloat(usedInput?.value)   || 0;
-        const earned = parseFloat(earnedInput?.value) || 0;
+        const usedInput = container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="used"]`);
+        const used = parseFloat(usedInput?.value) || 0;
+        // "Earned" is computed live (hours worked this period × the global accrual rate) rather
+        // than typed in — read it straight off the display span _recalcPayrollStaff keeps in sync.
+        const earnedDisplay = container.querySelector(`.payroll-pto-earned-display[data-staff-id="${staffId}"]`);
+        const earned = parseFloat(earnedDisplay?.textContent) || 0;
         try {
             await upsertStaffPtoEntry(staffId, periodStart, used, earned);
             const tick = container.querySelector(`.payroll-pto-save-tick[data-sid="${staffId}"]`);
@@ -1521,7 +1533,24 @@ function _recalcPayrollStaff(container, staffId) {
             }
         }
     });
-    sumHrs += parseFloat(container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="used"]`)?.value) || 0;
+    const ptoUsedNow = parseFloat(container.querySelector(`.payroll-pto-input[data-sid="${staffId}"][data-field="used"]`)?.value) || 0;
+    sumHrs += ptoUsedNow;
+
+    const ptoRate = parseFloat(summaryRow.dataset.ptoRate) || 0;
+    const workedHrsNow = Math.max(0, sumHrs - ptoUsedNow);
+    const earnedNow = Math.round(workedHrsNow * ptoRate * 100) / 100;
+    const earnedDisplay = container.querySelector(`.payroll-pto-earned-display[data-staff-id="${staffId}"]`);
+    if (earnedDisplay) earnedDisplay.textContent = `${earnedNow.toFixed(2)} hrs`;
+
+    const ptoUsedInitial  = parseFloat(summaryRow.dataset.ptoUsedInitial) || 0;
+    const ytdAccrued      = parseFloat(summaryRow.dataset.ytdAccrued) || 0;
+    const ytdPtoUsedSaved = parseFloat(summaryRow.dataset.ytdPtoUsedSaved) || 0;
+    const liveBalance = Math.round((ytdAccrued - (ytdPtoUsedSaved - ptoUsedInitial + ptoUsedNow)) * 100) / 100;
+    const balanceBadge = container.querySelector(`.payroll-pto-balance-badge[data-staff-id="${staffId}"]`);
+    if (balanceBadge) {
+        balanceBadge.textContent = `PTO Balance: ${liveBalance.toFixed(2)} hrs`;
+        balanceBadge.classList.toggle('payroll-pto-balance-negative', liveBalance < 0);
+    }
 
     const hrsCell = container.querySelector(`.payroll-period-hrs-cell[data-staff-id="${staffId}"]`);
     const payCell = container.querySelector(`.payroll-period-pay-cell[data-staff-id="${staffId}"]`);
@@ -1573,7 +1602,7 @@ function _calcYtdPeriods(startVal, endVal) {
     return Math.max(1, Math.ceil(days / 14));
 }
 
-function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap = new Map(), periodPtoMap = new Map()) {
+function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap = new Map(), periodPtoMap = new Map(), ytdPtoUsedMap = new Map(), ptoAccrualRate = 0) {
     const container = document.getElementById('payrollContent');
     if (!staff.length) {
         container.innerHTML = '<p class="empty-hint">No staff data found.</p>';
@@ -1611,10 +1640,18 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         const inactive  = !s.active ? ' <span class="chip-waitlist status-chip" style="font-size:.75em">Inactive</span>' : '';
 
         const pHrsTotal = periodMap.get(s.id) || 0;
-        const ptoUsed   = (periodPtoMap.get(s.id) || {}).used   || 0;
-        const ptoEarned = (periodPtoMap.get(s.id) || {}).earned || 0;
+        const ptoUsed   = (periodPtoMap.get(s.id) || {}).used || 0;
         const yHrs      = ytdMap.get(s.id) || 0;
         const rate      = isSalary ? 0 : (s.hourly_rate || 0);
+
+        // PTO: earned this period is computed live from hours actually worked (excludes PTO-used
+        // hours already folded into pHrsTotal) × the global accrual rate; balance is YTD accrued
+        // minus YTD used (both computed the same way, across all periods to date).
+        const workedHrsThisPeriod = Math.max(0, pHrsTotal - ptoUsed);
+        const ptoEarnedThisPeriod = Math.round(workedHrsThisPeriod * ptoAccrualRate * 100) / 100;
+        const ytdAccrued       = Math.round(yHrs * ptoAccrualRate * 100) / 100;
+        const ytdPtoUsedSaved  = ytdPtoUsedMap.get(s.id) || 0;
+        const ptoBalance       = Math.round((ytdAccrued - ytdPtoUsedSaved) * 100) / 100;
 
         const detailByDate = new Map();
         (periodDetailMap.get(s.id) || []).forEach(d => detailByDate.set(d.work_date, d));
@@ -1757,22 +1794,32 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
             <tr class="payroll-pto-row">
                 <td colspan="5" style="padding:0">
                     <div class="payroll-pto-bar">
-                        <span class="payroll-pto-label">PTO Used:</span>
-                        <input type="number" class="payroll-pto-input rate-input" min="0" step="0.25" style="width:68px"
-                            data-sid="${escHtml(s.id)}" data-field="used" value="${ptoUsed || ''}">
-                        <span class="payroll-pto-unit">hrs</span>
-                        <span class="payroll-pto-label" style="margin-left:14px">PTO Earned:</span>
-                        <input type="number" class="payroll-pto-input rate-input" min="0" step="0.25" style="width:68px"
-                            data-sid="${escHtml(s.id)}" data-field="earned" value="${ptoEarned || ''}">
-                        <span class="payroll-pto-unit">hrs</span>
+                        <span class="payroll-pto-label">PTO Accrued This Period:</span>
+                        <span class="payroll-pto-earned-display" data-staff-id="${escHtml(s.id)}">${ptoEarnedThisPeriod.toFixed(2)} hrs</span>
+                        ${ptoAccrualRate > 0 ? `<span class="payroll-pto-rate-note">(at ${ptoAccrualRate} hr per hr worked)</span>` : `<span class="payroll-pto-rate-note">(no accrual rate set — see Settings)</span>`}
                         <span class="payroll-pto-save-tick" data-sid="${escHtml(s.id)}" style="display:none;color:#166534;font-size:.78em;margin-left:8px">✓ Saved</span>
                     </div>
                 </td>
             </tr>` : '';
 
+        const ptoCell = isSalary ? '<td class="payroll-pto-main-cell report-num">—</td>' : `
+                <td class="payroll-pto-main-cell">
+                    <div class="payroll-pto-requested">
+                        <label class="payroll-pto-label">PTO Requested</label>
+                        <input type="number" class="payroll-pto-input rate-input" min="0" step="0.25" style="width:60px"
+                            data-sid="${escHtml(s.id)}" data-field="used" value="${ptoUsed || ''}">
+                        <span class="payroll-pto-unit">hrs</span>
+                    </div>
+                    <span class="payroll-pto-balance-badge${ptoBalance < 0 ? ' payroll-pto-balance-negative' : ''}" data-staff-id="${escHtml(s.id)}">
+                        PTO Balance: ${ptoBalance.toFixed(2)} hrs
+                    </span>
+                </td>`;
+
         return `
             <tr class="payroll-staff-row payroll-expandable" data-staff-id="${escHtml(s.id)}"
-                data-rate="${rate}" data-pay-type="${s.pay_type || 'hourly'}">
+                data-rate="${rate}" data-pay-type="${s.pay_type || 'hourly'}"
+                data-pto-rate="${ptoAccrualRate}" data-pto-used-initial="${ptoUsed}"
+                data-ytd-accrued="${ytdAccrued}" data-ytd-pto-used-saved="${ytdPtoUsedSaved}">
                 <td class="payroll-staff-name-cell">
                     <span class="payroll-expand-icon" style="margin-right:6px;color:#8C8070;font-size:11px;user-select:none">▶</span><span style="font-size:14px;font-weight:700;color:var(--navy)">${escHtml(s.name)}${inactive}</span>
                     <div class="rates-ages" style="margin-left:17px">${escHtml(s.role || '')} · ${escHtml(roomLabel)}</div>
@@ -1781,6 +1828,8 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 <td class="report-num payroll-period-hrs-cell" data-staff-id="${escHtml(s.id)}">${periodHrsStr}</td>
                 <td class="report-num report-revenue payroll-period-pay-cell" data-staff-id="${escHtml(s.id)}">${periodPayStr}</td>
                 <td class="report-num payroll-ytd-cell">${ytdHrsStr}</td>
+                <td class="report-num report-revenue payroll-ytd-pay-cell">${ytdPayStr}</td>
+                ${ptoCell}
                 <td class="payroll-completion-cell">
                     <span class="payroll-completion-pill" data-staff-id="${escHtml(s.id)}"
                         style="background:${pillBg};color:${pillColor};border:1px solid ${pillBdr}">
@@ -1789,7 +1838,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 </td>
             </tr>
             <tr class="payroll-detail-panel" data-staff-id="${escHtml(s.id)}" style="display:none">
-                <td colspan="6" class="payroll-panel-cell">
+                <td colspan="7" class="payroll-panel-cell">
                     <table class="payroll-day-table">
                         <colgroup>
                             <col style="width:85px">
@@ -1836,6 +1885,8 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                         <th class="payroll-rate-header">Rate</th>
                         <th colspan="2" class="staff-room-header payroll-period-header">This Period</th>
                         <th colspan="2" class="staff-room-header payroll-period-header">Year to Date (${ey})</th>
+                        <th class="payroll-pto-header">PTO</th>
+                        <th></th>
                     </tr>
                     <tr class="payroll-outer-head-2">
                         <th></th>
@@ -1844,6 +1895,8 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                         <th class="staff-sub-head">Gross Pay</th>
                         <th class="staff-sub-head">Hours</th>
                         <th class="staff-sub-head">Gross Pay</th>
+                        <th></th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -1854,6 +1907,8 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                         <td class="report-num">—</td>
                         <td class="report-num report-revenue"><strong>$${totPeriodPay.toFixed(2)}</strong></td>
                         <td class="report-num">—</td>
+                        <td class="report-num report-revenue"><strong>$${totYtdPay.toFixed(2)}</strong></td>
+                        <td></td>
                         <td></td>
                     </tr>
                 </tfoot>

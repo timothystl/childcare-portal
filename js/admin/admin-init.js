@@ -44,6 +44,7 @@ async function initDashboard() {
     setupRoomCalendar();
     setupRates();
     setupRegFee();
+    setupPtoSettings();
     setupRatios();
     setupCapacity();
     setupStaffDirectory();

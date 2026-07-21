@@ -2083,6 +2083,17 @@ async function upsertStaffPtoEntry(staffId, periodStart, ptoUsed, ptoEarned) {
     if (error) throw error;
 }
 
+// Every PTO entry from `sinceDate` forward (YTD), for computing each staff member's running PTO balance.
+async function fetchStaffPtoUsedSince(sinceDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_pto_entries')
+        .select('staff_id, pto_hours_used')
+        .gte('period_start', sinceDate);
+    if (error) throw error;
+    return data || [];
+}
+
 // ============================================================
 // STAFF AVAILABILITY  (stored in settings table as JSON blob)
 // ============================================================
