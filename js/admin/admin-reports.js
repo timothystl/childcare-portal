@@ -1338,12 +1338,17 @@ async function _buildPayrollData(startVal, endVal) {
     // this date forward, so it doesn't double-count hours already reflected
     // in someone's imported starting balance. Falls back to ytdStart (old
     // behavior) when unset.
-    const [ptoRateSetting, ptoCutoffSetting] = await Promise.all([
-        fetchSetting('pto_accrual_rate'),
+    const [ptoRateHistory, ptoCutoffSetting] = await Promise.all([
+        fetchPtoRateHistory(),
         fetchSetting('pto_balance_cutoff_date'),
     ]);
-    const ptoAccrualRate = parseFloat(ptoRateSetting) || 0;
-    const ptoCutoffDate  = /^\d{4}-\d{2}-\d{2}$/.test(ptoCutoffSetting) ? ptoCutoffSetting : ytdStart;
+    const ptoCutoffDate = /^\d{4}-\d{2}-\d{2}$/.test(ptoCutoffSetting) ? ptoCutoffSetting : ytdStart;
+    // Single "current" rate (as of the period end date) — used only for the
+    // period's informational "PTO Accrued This Period" display and its live
+    // preview as PTO Requested is edited. The persisted running PTO Balance
+    // below is fully date-aware instead, valuing each day worked at whatever
+    // rate was in effect that day.
+    const ptoCurrentRate = ptoRateForDate(ptoRateHistory, endVal);
 
     const [allStaff, periodHrs, ytdHrs, cutoffHrs, periodClockEvents, ytdClockEvents, cutoffClockEvents, periodPtoRaw, cutoffPtoRaw] = await Promise.all([
         fetchAllStaff({ includeInactive: true }),
@@ -1375,11 +1380,18 @@ async function _buildPayrollData(startVal, endVal) {
     periodHrs.forEach(h => periodMap.set(h.staff_id, (periodMap.get(h.staff_id) || 0) + parseFloat(h.hours_worked)));
     const ytdMap = new Map();
     ytdHrs.forEach(h => ytdMap.set(h.staff_id, (ytdMap.get(h.staff_id) || 0) + parseFloat(h.hours_worked)));
-    // Hours worked since the PTO balance cutoff — feeds PTO accrual only, kept
-    // separate from ytdMap (which stays calendar-year-based for the report's
-    // "Year to Date" column).
-    const cutoffMap = new Map();
-    cutoffHrs.forEach(h => cutoffMap.set(h.staff_id, (cutoffMap.get(h.staff_id) || 0) + parseFloat(h.hours_worked)));
+    // Hours worked since the PTO balance cutoff, per staff PER DAY — feeds PTO
+    // accrual only, kept separate from ytdMap (which stays calendar-year-based
+    // for the report's "Year to Date" column). Day-level granularity (rather
+    // than a flat sum) is required so each day's hours can be valued at
+    // whatever accrual rate was in effect on that specific date.
+    const cutoffDailyMap = new Map(); // staffId -> Map(work_date -> hours)
+    function addCutoffDaily(staffId, workDate, hrs) {
+        if (!cutoffDailyMap.has(staffId)) cutoffDailyMap.set(staffId, new Map());
+        const m = cutoffDailyMap.get(staffId);
+        m.set(workDate, (m.get(workDate) || 0) + hrs);
+    }
+    cutoffHrs.forEach(h => addCutoffDaily(h.staff_id, h.work_date, parseFloat(h.hours_worked)));
 
     // Add clock-calculated hours for any day without a manual entry
     periodClockEvents.forEach(ev => {
@@ -1395,7 +1407,15 @@ async function _buildPayrollData(startVal, endVal) {
     cutoffClockEvents.forEach(ev => {
         if (manualCutoffKeys.has(manualKey(ev.staff_id, ev.work_date))) return;
         const hrs = calcClockHrs(ev);
-        if (hrs > 0) cutoffMap.set(ev.staff_id, (cutoffMap.get(ev.staff_id) || 0) + hrs);
+        if (hrs > 0) addCutoffDaily(ev.staff_id, ev.work_date, hrs);
+    });
+
+    // Each staff member's total PTO accrued since cutoff, date-aware.
+    const cutoffAccruedMap = new Map(); // staffId -> accrued hours
+    cutoffDailyMap.forEach((dailyHours, staffId) => {
+        let accrued = 0;
+        dailyHours.forEach((hrs, workDate) => { accrued += hrs * ptoRateForDate(ptoRateHistory, workDate); });
+        cutoffAccruedMap.set(staffId, Math.round(accrued * 100) / 100);
     });
 
     // Build per-day detail for each staff member (used by click-to-expand in the report)
@@ -1450,8 +1470,8 @@ async function _buildPayrollData(startVal, endVal) {
     });
 
     // Running PTO balance (starting balance + accrued − used, since the cutoff date):
-    // accrual is earned on hours actually worked (cutoffMap excludes PTO-used hours),
-    // at the global settings.pto_accrual_rate.
+    // accrual is earned on hours actually worked (cutoffAccruedMap excludes
+    // PTO-used hours), valued at whichever rate was in effect on each work date.
     const cutoffPtoUsedMap = new Map(); // staff_id -> total PTO hours used since cutoff (across all periods)
     cutoffPtoRaw.forEach(p => {
         const used = parseFloat(p.pto_hours_used) || 0;
@@ -1461,7 +1481,7 @@ async function _buildPayrollData(startVal, endVal) {
     // Include active staff + anyone with hours in the period
     const staff = allStaff.filter(s => s.active || periodMap.has(s.id));
     staff.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    return { staff, periodMap, ytdMap, cutoffMap, periodDetailMap, periodPtoMap, cutoffPtoUsedMap, ptoAccrualRate };
+    return { staff, periodMap, ytdMap, cutoffAccruedMap, periodDetailMap, periodPtoMap, cutoffPtoUsedMap, ptoCurrentRate };
 }
 
 async function generatePayrollReport() {
@@ -1472,8 +1492,8 @@ async function generatePayrollReport() {
     const container = document.getElementById('payrollContent');
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
-        const { staff, periodMap, ytdMap, cutoffMap, periodDetailMap, periodPtoMap, cutoffPtoUsedMap, ptoAccrualRate } = await _buildPayrollData(startVal, endVal);
-        renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap, periodPtoMap, cutoffMap, cutoffPtoUsedMap, ptoAccrualRate);
+        const { staff, periodMap, ytdMap, cutoffAccruedMap, periodDetailMap, periodPtoMap, cutoffPtoUsedMap, ptoCurrentRate } = await _buildPayrollData(startVal, endVal);
+        renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap, periodPtoMap, cutoffAccruedMap, cutoffPtoUsedMap, ptoCurrentRate);
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
     }
@@ -1695,7 +1715,7 @@ function _calcYtdPeriods(startVal, endVal) {
     return Math.max(1, Math.ceil(days / 14));
 }
 
-function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap = new Map(), periodPtoMap = new Map(), cutoffMap = new Map(), cutoffPtoUsedMap = new Map(), ptoAccrualRate = 0) {
+function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap = new Map(), periodPtoMap = new Map(), cutoffAccruedMap = new Map(), cutoffPtoUsedMap = new Map(), ptoCurrentRate = 0) {
     const container = document.getElementById('payrollContent');
     if (!staff.length) {
         container.innerHTML = '<p class="empty-hint">No staff data found.</p>';
@@ -1738,14 +1758,16 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         const rate      = isSalary ? 0 : (s.hourly_rate || 0);
 
         // PTO: earned this period is computed live from hours actually worked (excludes PTO-used
-        // hours already folded into pHrsTotal) × the global accrual rate. Balance is an imported
-        // starting balance (0 if never set) plus accrued-since-cutoff minus used-since-cutoff —
-        // "cutoff" being settings.pto_balance_cutoff_date, so imported hours aren't double-counted.
+        // hours already folded into pHrsTotal), valued at the rate in effect as of the period's
+        // end date — an informational display only. Balance is an imported starting balance
+        // (0 if never set) plus accrued-since-cutoff minus used-since-cutoff — "cutoff" being
+        // settings.pto_balance_cutoff_date — and IS fully rate-history-aware: cutoffAccruedMap
+        // already valued each day worked at whatever rate applied on that specific date, so a
+        // scheduled future rate change never retroactively changes past accrual.
         const workedHrsThisPeriod = Math.max(0, pHrsTotal - ptoUsed);
-        const ptoEarnedThisPeriod = Math.round(workedHrsThisPeriod * ptoAccrualRate * 100) / 100;
+        const ptoEarnedThisPeriod = Math.round(workedHrsThisPeriod * ptoCurrentRate * 100) / 100;
         const ptoStartingBalance  = s.pto_starting_balance || 0;
-        const cutoffHrsWorked     = cutoffMap.get(s.id) || 0;
-        const cutoffAccrued       = Math.round(cutoffHrsWorked * ptoAccrualRate * 100) / 100;
+        const cutoffAccrued       = cutoffAccruedMap.get(s.id) || 0;
         const cutoffPtoUsedSaved  = cutoffPtoUsedMap.get(s.id) || 0;
         const ptoBalance          = Math.round((ptoStartingBalance + cutoffAccrued - cutoffPtoUsedSaved) * 100) / 100;
 
@@ -1892,7 +1914,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                     <div class="payroll-pto-bar">
                         <span class="payroll-pto-label">PTO Accrued This Period:</span>
                         <span class="payroll-pto-earned-display" data-staff-id="${escHtml(s.id)}">${ptoEarnedThisPeriod.toFixed(2)} hrs</span>
-                        ${ptoAccrualRate > 0 ? `<span class="payroll-pto-rate-note">(at ${ptoAccrualRate} hr per hr worked)</span>` : `<span class="payroll-pto-rate-note">(no accrual rate set — see Settings)</span>`}
+                        ${ptoCurrentRate > 0 ? `<span class="payroll-pto-rate-note">(at ${ptoCurrentRate} hr per hr worked)</span>` : `<span class="payroll-pto-rate-note">(no accrual rate set — see Settings)</span>`}
                         <span class="payroll-pto-save-tick" data-sid="${escHtml(s.id)}" style="display:none;color:#166534;font-size:.78em;margin-left:8px">✓ Saved</span>
                     </div>
                 </td>
@@ -1914,7 +1936,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
         return `
             <tr class="payroll-staff-row payroll-expandable" data-staff-id="${escHtml(s.id)}"
                 data-rate="${rate}" data-pay-type="${s.pay_type || 'hourly'}"
-                data-pto-rate="${ptoAccrualRate}" data-pto-used-initial="${ptoUsed}"
+                data-pto-rate="${ptoCurrentRate}" data-pto-used-initial="${ptoUsed}"
                 data-pto-starting-balance="${ptoStartingBalance}"
                 data-cutoff-accrued="${cutoffAccrued}" data-cutoff-pto-used-saved="${cutoffPtoUsedSaved}">
                 <td class="payroll-staff-name-cell">

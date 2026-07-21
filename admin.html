@@ -1167,15 +1167,23 @@
             <!-- PTO Settings -->
             <section class="admin-section collapsible-section" id="ptoSection">
                 <h2>🏖️ PTO Settings</h2>
-                <p class="section-desc">Set the global rate at which hourly staff accrue paid time off. Applied automatically in the Payroll report — each staff member's "PTO Accrued" and running PTO balance are computed from hours actually worked, at this rate. Salaried staff don't accrue PTO here.</p>
-                <label style="display:flex;align-items:center;gap:.75rem;font-weight:600;color:#1e3a5f;">
-                    PTO Accrual Rate (hours earned per hour worked)
-                    <input type="number" id="ptoAccrualRateInput" min="0" step="0.001" placeholder="0.00"
-                        style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
-                </label>
-                <p style="margin:.4rem 0 .75rem 0;font-size:.85rem;color:#555;">Example: 0.04 ≈ 1 hour of PTO earned per 25 hours worked.</p>
-                <button id="savePtoRateBtn" class="btn-primary">💾 Save Rate</button>
-                <span id="ptoRateStatus" style="margin-left:.75rem;font-size:.85rem;"></span>
+                <p class="section-desc">The rate at which hourly staff accrue paid time off (hours earned per hour worked — e.g. 0.04 ≈ 1 hour of PTO earned per 25 hours worked). Applied automatically in the Payroll report. Salaried staff don't accrue PTO here.</p>
+                <p class="section-desc" style="margin-top:-.5rem">Scheduling a new rate never changes the past — hours already worked keep accruing at whatever rate was in effect when they were worked. Past rates are locked and can't be edited; you can only remove a rate that hasn't taken effect yet.</p>
+                <div id="ptoRateHistoryWrap" style="margin-bottom:1rem"></div>
+                <div style="display:flex;align-items:flex-end;gap:.75rem;flex-wrap:wrap">
+                    <label style="font-weight:600;color:#1e3a5f;font-size:.9rem">
+                        Rate<br>
+                        <input type="number" id="newPtoRateInput" min="0" step="0.001" placeholder="0.00"
+                            style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;margin-top:4px">
+                    </label>
+                    <label style="font-weight:600;color:#1e3a5f;font-size:.9rem">
+                        Effective Date<br>
+                        <input type="date" id="newPtoRateDate"
+                            style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;margin-top:4px">
+                    </label>
+                    <button id="addPtoRateBtn" class="btn-primary">➕ Add Rate</button>
+                    <span id="ptoRateStatus" style="font-size:.85rem;"></span>
+                </div>
             </section>
 
             <!-- Staff Directory -->
