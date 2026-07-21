@@ -139,30 +139,30 @@ function _buildMonthlyRosterRoomSections(monthVal, roomId) {
     return { monthLabel, workingDays, rooms };
 }
 
-// Sun-Sat grid of a calendar month, with null placeholders for the
+// Mon-Fri grid of a calendar month, with null placeholders for the
 // leading/trailing blanks needed to complete each week's row.
 function _buildMonthCalendarWeeks(y, m) {
     const daysInMonth = new Date(y, m, 0).getDate();
-    const firstDow    = new Date(y, m - 1, 1).getDay();
 
     const cells = [];
-    for (let i = 0; i < firstDow; i++) cells.push(null);
     for (let day = 1; day <= daysInMonth; day++) {
         const dow = new Date(y, m - 1, day).getDay();
-        cells.push({
-            day, dow,
-            dateStr: `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
-            isWeekend: dow === 0 || dow === 6,
-        });
+        if (dow === 0 || dow === 6) continue;
+        cells.push({ day, dateStr: `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}` });
     }
-    while (cells.length % 7 !== 0) cells.push(null);
+    if (!cells.length) return [];
+
+    const mondayIndex = dow => (dow + 6) % 7; // Mon=0 … Fri=4
+    const leading = mondayIndex(new Date(y, m - 1, cells[0].day).getDay());
+    const padded  = [...Array(leading).fill(null), ...cells];
+    while (padded.length % 5 !== 0) padded.push(null);
 
     const weeks = [];
-    for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+    for (let i = 0; i < padded.length; i += 5) weeks.push(padded.slice(i, i + 5));
     return weeks;
 }
 
-const _CAL_DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const _CAL_DOW_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
 function _renderMonthlyRosterCalendarHtml(rooms, monthVal, monthLabel) {
     const [y, m] = monthVal.split('-').map(Number);
@@ -176,12 +176,6 @@ function _renderMonthlyRosterCalendarHtml(rooms, monthVal, monthLabel) {
             <div class="cal-week">
                 ${week.map(cell => {
                     if (!cell) return '<div class="cal-cell cal-cell-blank"></div>';
-                    if (cell.isWeekend) {
-                        return `
-                            <div class="cal-cell cal-cell-closed">
-                                <span class="cal-day-num">${cell.day}</span>
-                            </div>`;
-                    }
                     const info = byDate[cell.dateStr];
                     if (!info) {
                         return `
@@ -193,7 +187,7 @@ function _renderMonthlyRosterCalendarHtml(rooms, monthVal, monthLabel) {
                     const fullFlag = count >= cap ? ' cal-cell-full' : count >= cap * .8 ? ' cal-cell-near' : '';
                     const childList = children.length
                         ? children.map(c =>
-                            `<span class="cal-child${c.dayType === 'half' ? ' cal-child-half' : ''}">${escHtml(c.name)}${c.dayType === 'half' ? ' ½' : ''}</span>`
+                            `<span class="cal-child${c.dayType === 'half' ? ' cal-child-half' : ''}">${c.dayType === 'half' ? '½ ' : ''}${escHtml(c.name)}</span>`
                           ).join('')
                         : '<span class="cal-empty">—</span>';
                     return `
@@ -562,7 +556,7 @@ function _printMonthRoster(monthVal, roomId) {
   .roster-room-meta { font-size: .8em; color: #ccc; }
 
   .cal-grid { border: 1px solid #ccc; border-top: none; }
-  .cal-week { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-week { display: grid; grid-template-columns: repeat(5, 1fr); }
   .cal-dow-row { background: #f0f0f0; border-bottom: 2px solid #ccc; }
   .cal-dow {
     padding: 5px 6px; text-align: center; font-size: .72em; font-weight: 700;
@@ -580,16 +574,11 @@ function _printMonthRoster(monthVal, roomId) {
   }
   .cal-day-num { font-weight: 700; font-size: .82em; }
   .cal-count { font-size: .68em; color: #666; font-weight: 600; }
-  .cal-cell-full { background: #fde2e1; }
-  .cal-cell-full .cal-count { color: #b91c1c; }
-  .cal-cell-near { background: #fef3c7; }
-  .cal-cell-near .cal-count { color: #92400e; }
   .cal-children { flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); align-content: start; gap: 1px 4px; }
   .cal-child {
     display: block; background: #f0f0f0; color: #222; font-size: .64em; font-weight: 600;
     padding: 0 4px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .cal-child.cal-child-half { background: #fef3c7; color: #92400e; }
   .cal-empty { color: #ccc; font-style: italic; font-size: .68em; }
 
   @media print {
