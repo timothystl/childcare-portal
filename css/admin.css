@@ -3597,57 +3597,6 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     color: rgba(255,255,255,.7);
 }
 
-.roster-day-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: .88em;
-    border: 1px solid var(--border);
-    border-top: none;
-}
-.roster-day-table th {
-    background: var(--linen);
-    padding: 7px 10px;
-    text-align: left;
-    font-size: .8em;
-    color: var(--text-muted);
-    font-weight: 700;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    border-bottom: 2px solid var(--border);
-}
-.roster-th-date  { width: 70px; }
-.roster-th-count { width: 60px; text-align: center; }
-.roster-day-row  { border-bottom: 1px solid var(--warm-gray); }
-.roster-day-row:hover { background: var(--cream); }
-.roster-date-cell  { padding: 5px 10px; font-weight: 600; color: var(--navy-lt); white-space: nowrap; }
-.roster-count-cell { padding: 5px 10px; text-align: center; font-size: .82em; color: var(--text-muted); }
-.roster-names-cell { padding: 5px 10px; line-height: 1.8; }
-
-.roster-day-full   { background: var(--tang-pale); }
-.roster-day-full .roster-count-cell { color: var(--tang); font-weight: 700; }
-.roster-day-near   { background: var(--sun-pale); }
-.roster-day-near .roster-count-cell { color: var(--mustard-dark); font-weight: 600; }
-
-.roster-child {
-    display: inline-block;
-    background: var(--linen);
-    color: var(--navy);
-    font-size: .82em;
-    font-weight: 600;
-    padding: 1px 8px;
-    border-radius: 12px;
-    margin: 2px 3px 2px 0;
-}
-.roster-child.roster-half {
-    background: var(--sun-pale);
-    color: var(--mustard-dark);
-}
-.roster-empty-day {
-    color: var(--border);
-    font-style: italic;
-    font-size: .85em;
-}
-
 .roster-week-day {
     margin-bottom: 28px;
     padding-bottom: 20px;
@@ -3682,13 +3631,12 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     color: var(--text-muted);
 }
 .cal-cell {
-    height: 130px;
+    min-height: 130px;
     border: 1px solid var(--warm-gray);
     margin: -1px 0 0 -1px;
     padding: 6px 8px;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
 }
 .cal-cell-blank {
     background: var(--linen);
@@ -3730,14 +3678,13 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 }
 .cal-children {
     flex: 1;
-    display: flex;
-    flex-wrap: wrap;
-    align-content: flex-start;
-    gap: 2px;
-    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    align-content: start;
+    gap: 2px 6px;
 }
 .cal-child {
-    display: inline-block;
+    display: block;
     background: var(--white);
     border: 1px solid var(--border);
     color: var(--navy);
@@ -3746,6 +3693,8 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     padding: 1px 6px;
     border-radius: 10px;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .cal-child.cal-child-half {
     background: var(--sun-pale);
