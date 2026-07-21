@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Fetch the independent admin settings in parallel. Using allSettled so a
     // single failed request degrades gracefully instead of aborting the whole
     // init (e.g. a missing room_rates row shouldn't stop the form rendering).
-    const [rateRes, capRes, ratioRes, campRes, overrideRes, closuresRes, regFeeRes, staffRes] = await Promise.allSettled([
+    const [rateRes, capRes, ratioRes, campRes, overrideRes, closuresRes, regFeeRes, newFamilyFeeRes, staffRes] = await Promise.allSettled([
         loadRateSettings(),
         loadCapacitySettings(),
         loadRatioSettings(),
@@ -91,6 +91,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetchSetting('reg_window_override'),
         fetchClosures(),
         fetchSetting('registration_fee'),
+        fetchSetting('new_family_fee'),
         fetchSetting('staff_directory'),
     ]);
     if (rateRes.status     === 'rejected') console.error('loadRateSettings failed:', rateRes.reason);
@@ -99,10 +100,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (campRes.status     === 'rejected') console.error('loadSummerCampSetting failed:', campRes.reason);
     if (closuresRes.status === 'rejected') console.error('fetchClosures failed:', closuresRes.reason);
     if (regFeeRes.status   === 'rejected') console.error('fetchSetting(registration_fee) failed:', regFeeRes.reason);
+    if (newFamilyFeeRes.status === 'rejected') console.error('fetchSetting(new_family_fee) failed:', newFamilyFeeRes.reason);
     if (staffRes.status    === 'rejected') console.error('fetchSetting(staff_directory) failed:', staffRes.reason);
 
     renderPublicRoomCards();
-    renderFeeNotes(regFeeRes.status === 'fulfilled' ? regFeeRes.value : null);
+    renderFeeNotes(
+        regFeeRes.status === 'fulfilled' ? regFeeRes.value : null,
+        newFamilyFeeRes.status === 'fulfilled' ? newFamilyFeeRes.value : null
+    );
     renderPublicStaffDirectory(staffRes.status === 'fulfilled' ? staffRes.value : null);
 
     regWindowOverride = (overrideRes.status === 'fulfilled' ? overrideRes.value : null) || 'auto';
@@ -183,12 +188,17 @@ function renderPublicRoomCards() {
 // Fills in the annual registration fee note under the room cards and the
 // summer camp daily fee mentioned in its promo box, both pulled from
 // Settings so they stay in sync with what admin actually charges.
-function renderFeeNotes(regFeeAmount) {
+function renderFeeNotes(regFeeAmount, newFamilyFeeAmount) {
     const regEl = document.getElementById('regFeeNote');
     if (regEl) {
-        regEl.textContent = (typeof regFeeAmount === 'number' && regFeeAmount > 0)
-            ? `A one-time annual registration fee of $${regFeeAmount.toFixed(2)} applies per child.`
-            : '';
+        const parts = [];
+        if (typeof newFamilyFeeAmount === 'number' && newFamilyFeeAmount > 0) {
+            parts.push(`a one-time new family fee of $${newFamilyFeeAmount.toFixed(2)}`);
+        }
+        if (typeof regFeeAmount === 'number' && regFeeAmount > 0) {
+            parts.push(`an annual supply fee of $${regFeeAmount.toFixed(2)} per child`);
+        }
+        regEl.textContent = parts.length ? `Registration includes ${parts.join(' and ')}.` : '';
     }
     const summerEl = document.getElementById('summerDailyFeeNote');
     if (summerEl) {

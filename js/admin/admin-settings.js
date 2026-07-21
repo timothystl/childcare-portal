@@ -761,6 +761,16 @@ async function loadRegFeeSetting() {
     const inp = document.getElementById('regFeeInput');
     if (inp) inp.value = window._regFeeAmount > 0 ? window._regFeeAmount.toFixed(2) : '';
 
+    const newFamilyVal = await fetchSetting('new_family_fee');
+    window._newFamilyFee = (typeof newFamilyVal === 'number' && newFamilyVal >= 0) ? newFamilyVal : 0;
+    const newFamilyInp = document.getElementById('newFamilyFeeInput');
+    if (newFamilyInp) newFamilyInp.value = window._newFamilyFee > 0 ? window._newFamilyFee.toFixed(2) : '';
+
+    const familyMaxVal = await fetchSetting('supply_fee_family_max');
+    window._supplyFeeFamilyMax = (typeof familyMaxVal === 'number' && familyMaxVal >= 0) ? familyMaxVal : 0;
+    const familyMaxInp = document.getElementById('supplyFeeFamilyMaxInput');
+    if (familyMaxInp) familyMaxInp.value = window._supplyFeeFamilyMax > 0 ? window._supplyFeeFamilyMax.toFixed(2) : '';
+
     const renewalMD = await fetchSetting('registration_fee_renewal_date');
     window._regFeeRenewalDate = /^\d{2}-\d{2}$/.test(renewalMD) ? renewalMD : '01-01';
     const dateInp = document.getElementById('regFeeRenewalDate');
@@ -773,10 +783,12 @@ async function loadRegFeeSetting() {
 async function setupRegFee() {
     await loadRegFeeSetting();
     document.getElementById('saveRegFeeBtn')?.addEventListener('click', async () => {
-        const btn      = document.getElementById('saveRegFeeBtn');
-        const statusEl = document.getElementById('regFeeStatus');
-        const inp      = document.getElementById('regFeeInput');
-        const dateInp  = document.getElementById('regFeeRenewalDate');
+        const btn           = document.getElementById('saveRegFeeBtn');
+        const statusEl      = document.getElementById('regFeeStatus');
+        const inp           = document.getElementById('regFeeInput');
+        const newFamilyInp  = document.getElementById('newFamilyFeeInput');
+        const familyMaxInp  = document.getElementById('supplyFeeFamilyMaxInput');
+        const dateInp       = document.getElementById('regFeeRenewalDate');
         if (!btn || !inp) return;
         btn.disabled    = true;
         btn.textContent = 'Saving…';
@@ -785,6 +797,14 @@ async function setupRegFee() {
             const fee = parseFloat(inp.value) || 0;
             await upsertSetting('registration_fee', fee);
             window._regFeeAmount = fee;
+
+            const newFamilyFee = parseFloat(newFamilyInp?.value) || 0;
+            await upsertSetting('new_family_fee', newFamilyFee);
+            window._newFamilyFee = newFamilyFee;
+
+            const familyMax = parseFloat(familyMaxInp?.value) || 0;
+            await upsertSetting('supply_fee_family_max', familyMax);
+            window._supplyFeeFamilyMax = familyMax;
 
             const renewalMD = (dateInp?.value || '').slice(5); // "YYYY-MM-DD" → "MM-DD"
             if (/^\d{2}-\d{2}$/.test(renewalMD)) {
@@ -804,7 +824,7 @@ async function setupRegFee() {
             }
         } finally {
             btn.disabled    = false;
-            btn.textContent = '💾 Save Fee';
+            btn.textContent = '💾 Save Fees';
         }
     });
 }
