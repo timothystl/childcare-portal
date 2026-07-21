@@ -2114,6 +2114,41 @@ async function fetchStaffPtoUsedSince(sinceDate) {
 }
 
 // ============================================================
+// PTO ACCRUAL RATE HISTORY
+// ============================================================
+// A rate change only applies to hours worked from its effective date
+// forward — past hours keep accruing at whatever rate was in effect when
+// they were worked. Sorted ascending by effective_date.
+// Shape: [{ rate: number, effective_date: 'YYYY-MM-DD' }, ...]
+async function fetchPtoRateHistory() {
+    const history = await fetchSetting('pto_accrual_rate_history');
+    if (Array.isArray(history) && history.length) {
+        return history
+            .filter(e => e && typeof e.rate === 'number' && e.rate >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(e.effective_date))
+            .sort((a, b) => a.effective_date.localeCompare(b.effective_date));
+    }
+    // Migrate the old single-rate setting into a one-entry history, treated
+    // as having always applied.
+    const legacyRate = await fetchSetting('pto_accrual_rate');
+    const rate = (typeof legacyRate === 'number' && legacyRate >= 0) ? legacyRate : 0;
+    return rate > 0 ? [{ rate, effective_date: '2000-01-01' }] : [];
+}
+
+async function savePtoRateHistory(history) {
+    await upsertSetting('pto_accrual_rate_history', history);
+}
+
+// The rate in effect on a given date, given a history sorted ascending by effective_date.
+function ptoRateForDate(history, dateStr) {
+    let rate = 0;
+    for (const entry of history) {
+        if (entry.effective_date <= dateStr) rate = entry.rate;
+        else break;
+    }
+    return rate;
+}
+
+// ============================================================
 // STAFF AVAILABILITY  (stored in settings table as JSON blob)
 // ============================================================
 // Shape: { "<staff_id>": { days: ["Mon","Tue","Wed","Thu","Fri"], maxHours: 40 }, ... }

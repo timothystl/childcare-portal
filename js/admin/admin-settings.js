@@ -830,46 +830,104 @@ async function setupRegFee() {
 }
 
 // ============================================================
-// PTO ACCRUAL RATE  (global setting — used by the Payroll report
+// PTO ACCRUAL RATE HISTORY  (global setting — used by the Payroll report
 // to auto-compute "PTO Accrued" and each staff member's running balance)
 // ============================================================
-async function loadPtoRateSetting() {
-    const val = await fetchSetting('pto_accrual_rate');
-    window._ptoAccrualRate = (typeof val === 'number' && val >= 0) ? val : 0;
-    const inp = document.getElementById('ptoAccrualRateInput');
-    if (inp) inp.value = window._ptoAccrualRate > 0 ? window._ptoAccrualRate : '';
+let _ptoRateHistory = [];
 
-    const cutoff = await fetchSetting('pto_balance_cutoff_date');
-    window._ptoBalanceCutoffDate = /^\d{4}-\d{2}-\d{2}$/.test(cutoff) ? cutoff : '';
-    const cutoffInp = document.getElementById('ptoBalanceCutoffDate');
-    if (cutoffInp) cutoffInp.value = window._ptoBalanceCutoffDate;
+function _renderPtoRateHistory() {
+    const wrap = document.getElementById('ptoRateHistoryWrap');
+    if (!wrap) return;
+    if (!_ptoRateHistory.length) {
+        wrap.innerHTML = '<p class="empty-hint">No rate set yet — add one below.</p>';
+        return;
+    }
+    const today = _todayStr();
+    wrap.innerHTML = `
+        <table style="width:100%;max-width:480px;border-collapse:collapse;font-size:.88rem">
+            <thead>
+                <tr style="text-align:left;font-size:.78rem;color:#6b7280;text-transform:uppercase;letter-spacing:.03em">
+                    <th style="padding:4px 8px 4px 0">Effective Date</th>
+                    <th style="padding:4px 8px">Rate</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${_ptoRateHistory.map((e, i) => {
+                    const isFuture  = e.effective_date > today;
+                    const isCurrent = !isFuture && (i === _ptoRateHistory.length - 1 || _ptoRateHistory[i + 1].effective_date > today);
+                    return `<tr style="border-top:1px solid #e5e7eb">
+                        <td style="padding:5px 8px 5px 0">${escHtml(e.effective_date)}</td>
+                        <td style="padding:5px 8px">${e.rate}</td>
+                        <td style="padding:5px 8px">${
+                            isCurrent ? '<span style="color:#2e7d32;font-weight:600;font-size:.8rem">current</span>' :
+                            isFuture  ? `<span style="color:#9a6800;font-size:.8rem">scheduled</span> <button type="button" class="btn-ghost pto-rate-remove-btn" data-idx="${i}" style="color:#c62828;font-size:.8rem;padding:0 0 0 6px">Remove</button>` :
+                            ''
+                        }</td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>`;
+    wrap.querySelectorAll('.pto-rate-remove-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const idx = parseInt(btn.dataset.idx, 10);
+            const removed = _ptoRateHistory[idx];
+            if (!confirm(`Remove the scheduled ${removed.rate} rate effective ${removed.effective_date}?`)) return;
+            const prevHistory = _ptoRateHistory;
+            _ptoRateHistory = _ptoRateHistory.filter((_, i) => i !== idx);
+            try {
+                await savePtoRateHistory(_ptoRateHistory);
+                _renderPtoRateHistory();
+            } catch (err) {
+                _ptoRateHistory = prevHistory;
+                alert('Failed to remove: ' + err.message);
+            }
+        });
+    });
+}
+
+async function loadPtoRateSetting() {
+    _ptoRateHistory = await fetchPtoRateHistory();
+    _renderPtoRateHistory();
 }
 
 async function setupPtoSettings() {
     await loadPtoRateSetting();
-    document.getElementById('savePtoRateBtn')?.addEventListener('click', async () => {
-        const btn        = document.getElementById('savePtoRateBtn');
-        const statusEl    = document.getElementById('ptoRateStatus');
-        const inp         = document.getElementById('ptoAccrualRateInput');
-        const cutoffInp   = document.getElementById('ptoBalanceCutoffDate');
-        if (!btn || !inp) return;
+    document.getElementById('addPtoRateBtn')?.addEventListener('click', async () => {
+        const btn      = document.getElementById('addPtoRateBtn');
+        const statusEl = document.getElementById('ptoRateStatus');
+        const rateInp  = document.getElementById('newPtoRateInput');
+        const dateInp  = document.getElementById('newPtoRateDate');
+        if (!btn || !rateInp || !dateInp) return;
+
+        const rate = parseFloat(rateInp.value);
+        const date = dateInp.value;
+        if (!(rate >= 0) || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) {
+            alert('Enter a valid rate and effective date.');
+            return;
+        }
+        // Past rates are locked once any rate has ever been set — a new entry can only
+        // schedule a change from today forward. The one exception is first-time setup
+        // (empty history), where a past effective date just backfills "this rate has
+        // always applied."
+        const today = _todayStr();
+        if (_ptoRateHistory.length > 0 && date < today) {
+            alert('Effective date must be today or in the future — past rates are locked and can\'t be edited.');
+            return;
+        }
+
         btn.disabled    = true;
         btn.textContent = 'Saving…';
         if (statusEl) statusEl.textContent = '';
         try {
-            const rate = parseFloat(inp.value) || 0;
-            await upsertSetting('pto_accrual_rate', rate);
-            window._ptoAccrualRate = rate;
-
-            // Balance As-Of Date has no UI control (removed so it can't be changed by
-            // accident and silently corrupt everyone's PTO balance) — only touch the
-            // setting if that input somehow exists again in the future.
-            if (cutoffInp) {
-                const cutoffDate = cutoffInp.value || '';
-                await upsertSetting('pto_balance_cutoff_date', cutoffDate);
-                window._ptoBalanceCutoffDate = cutoffDate;
-            }
-
+            const idx = _ptoRateHistory.findIndex(e => e.effective_date === date);
+            const nextHistory = [...(idx >= 0 ? _ptoRateHistory.slice(0, idx).concat(_ptoRateHistory.slice(idx + 1)) : _ptoRateHistory), { rate, effective_date: date }]
+                .sort((a, b) => a.effective_date.localeCompare(b.effective_date));
+            await savePtoRateHistory(nextHistory);
+            _ptoRateHistory = nextHistory;
+            _renderPtoRateHistory();
+            rateInp.value = '';
+            dateInp.value = '';
             if (statusEl) {
                 statusEl.textContent = '✓ Saved!';
                 statusEl.style.color = '#2e7d32';
@@ -882,7 +940,7 @@ async function setupPtoSettings() {
             }
         } finally {
             btn.disabled    = false;
-            btn.textContent = '💾 Save Rate';
+            btn.textContent = '➕ Add Rate';
         }
     });
 }
