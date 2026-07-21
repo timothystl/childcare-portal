@@ -139,6 +139,90 @@ function _buildMonthlyRosterRoomSections(monthVal, roomId) {
     return { monthLabel, workingDays, rooms };
 }
 
+// Sun-Sat grid of a calendar month, with null placeholders for the
+// leading/trailing blanks needed to complete each week's row.
+function _buildMonthCalendarWeeks(y, m) {
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const firstDow    = new Date(y, m - 1, 1).getDay();
+
+    const cells = [];
+    for (let i = 0; i < firstDow; i++) cells.push(null);
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dow = new Date(y, m - 1, day).getDay();
+        cells.push({
+            day, dow,
+            dateStr: `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+            isWeekend: dow === 0 || dow === 6,
+        });
+    }
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const weeks = [];
+    for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+    return weeks;
+}
+
+const _CAL_DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function _renderMonthlyRosterCalendarHtml(rooms, monthVal, monthLabel) {
+    const [y, m] = monthVal.split('-').map(Number);
+    const weeks  = _buildMonthCalendarWeeks(y, m);
+
+    return rooms.map(({ room, days }) => {
+        const byDate = {};
+        days.forEach(d => { byDate[d.dateStr] = d; });
+
+        const weeksHtml = weeks.map(week => `
+            <div class="cal-week">
+                ${week.map(cell => {
+                    if (!cell) return '<div class="cal-cell cal-cell-blank"></div>';
+                    if (cell.isWeekend) {
+                        return `
+                            <div class="cal-cell cal-cell-closed">
+                                <span class="cal-day-num">${cell.day}</span>
+                            </div>`;
+                    }
+                    const info = byDate[cell.dateStr];
+                    if (!info) {
+                        return `
+                            <div class="cal-cell cal-cell-closed">
+                                <span class="cal-day-num">${cell.day}</span>
+                            </div>`;
+                    }
+                    const { count, cap, children } = info;
+                    const fullFlag = count >= cap ? ' cal-cell-full' : count >= cap * .8 ? ' cal-cell-near' : '';
+                    const childList = children.length
+                        ? children.map(c =>
+                            `<span class="cal-child${c.dayType === 'half' ? ' cal-child-half' : ''}">${escHtml(c.name)}${c.dayType === 'half' ? ' ½' : ''}</span>`
+                          ).join('')
+                        : '<span class="cal-empty">—</span>';
+                    return `
+                        <div class="cal-cell${fullFlag}">
+                            <div class="cal-cell-head">
+                                <span class="cal-day-num">${cell.day}</span>
+                                <span class="cal-count">${count}/${cap}</span>
+                            </div>
+                            <div class="cal-children">${childList}</div>
+                        </div>`;
+                }).join('')}
+            </div>`).join('');
+
+        return `
+            <div class="roster-room-block">
+                <div class="roster-room-header">
+                    <span class="roster-room-title">${escHtml(room.label)}</span>
+                    <span class="roster-room-meta">${monthLabel} &nbsp;·&nbsp; Max ${room.capacity}/day</span>
+                </div>
+                <div class="cal-grid">
+                    <div class="cal-week cal-dow-row">
+                        ${_CAL_DOW_LABELS.map(d => `<div class="cal-dow">${d}</div>`).join('')}
+                    </div>
+                    ${weeksHtml}
+                </div>
+            </div>`;
+    }).join('');
+}
+
 function _renderMonthlyRosterRoomsHtml(rooms, monthLabel) {
     return rooms.map(({ room, days }) => {
         const dayRows = days.map(({ label, children, count, cap }) => {
@@ -267,7 +351,7 @@ function _viewMonthRoster(monthVal, roomId) {
                 <strong>Timothy Lutheran MDO</strong> — ${escHtml(monthLabel)} Classroom Roster
                 <span style="float:right;font-size:.85em;color:#888;">Generated ${new Date().toLocaleDateString()}</span>
             </div>
-            ${_renderMonthlyRosterRoomsHtml(rooms, monthLabel)}
+            ${_renderMonthlyRosterCalendarHtml(rooms, monthVal, monthLabel)}
         </div>`;
 }
 
