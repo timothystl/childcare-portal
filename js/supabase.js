@@ -1678,7 +1678,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('staff')
-        .select('id, name, email, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at')
+        .select('id, name, email, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at, pto_starting_balance')
         .order('name');
     if (!includeInactive) query = query.eq('active', true);
     const { data, error } = await query;
@@ -1686,7 +1686,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     return data || [];
 }
 
-async function upsertStaffMember({ id = null, name, email, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin }) {
+async function upsertStaffMember({ id = null, name, email, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin, ptoStartingBalance }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const record = {
         name,
@@ -1697,6 +1697,7 @@ async function upsertStaffMember({ id = null, name, email, role, payType, hourly
         salary_biweekly:  payType === 'salary' ? (salaryBiweekly || 0) : 0,
         room_id:          roomId || null,
         hire_date:        hireDate || null,
+        pto_starting_balance: ptoStartingBalance || 0,
     };
     let staffId = id;
     if (id) {

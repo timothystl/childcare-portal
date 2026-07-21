@@ -233,6 +233,7 @@ function openStaffForm(staff = null) {
     document.getElementById('sfRole').value      = staff?.role || '';
     document.getElementById('sfRoom').value      = staff?.room_id || '';
     document.getElementById('sfHireDate').value  = staff?.hire_date || '';
+    document.getElementById('sfPtoStartingBalance').value = staff?.pto_starting_balance || '';
     const pinEl = document.getElementById('sfPin');
     pinEl.value       = '';
     pinEl.placeholder = 'Set 4-digit PIN';
@@ -333,6 +334,7 @@ async function onSaveStaffMember() {
             roomId:          document.getElementById('sfRoom').value || null,
             hireDate:        document.getElementById('sfHireDate').value || null,
             staffPin:        pinVal || null,
+            ptoStartingBalance: parseFloat(document.getElementById('sfPtoStartingBalance').value) || 0,
         });
 
         // Close immediately — don't make the user wait for the list to reload

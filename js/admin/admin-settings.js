@@ -838,14 +838,20 @@ async function loadPtoRateSetting() {
     window._ptoAccrualRate = (typeof val === 'number' && val >= 0) ? val : 0;
     const inp = document.getElementById('ptoAccrualRateInput');
     if (inp) inp.value = window._ptoAccrualRate > 0 ? window._ptoAccrualRate : '';
+
+    const cutoff = await fetchSetting('pto_balance_cutoff_date');
+    window._ptoBalanceCutoffDate = /^\d{4}-\d{2}-\d{2}$/.test(cutoff) ? cutoff : '';
+    const cutoffInp = document.getElementById('ptoBalanceCutoffDate');
+    if (cutoffInp) cutoffInp.value = window._ptoBalanceCutoffDate;
 }
 
 async function setupPtoSettings() {
     await loadPtoRateSetting();
     document.getElementById('savePtoRateBtn')?.addEventListener('click', async () => {
-        const btn      = document.getElementById('savePtoRateBtn');
-        const statusEl = document.getElementById('ptoRateStatus');
-        const inp      = document.getElementById('ptoAccrualRateInput');
+        const btn        = document.getElementById('savePtoRateBtn');
+        const statusEl    = document.getElementById('ptoRateStatus');
+        const inp         = document.getElementById('ptoAccrualRateInput');
+        const cutoffInp   = document.getElementById('ptoBalanceCutoffDate');
         if (!btn || !inp) return;
         btn.disabled    = true;
         btn.textContent = 'Saving…';
@@ -854,6 +860,11 @@ async function setupPtoSettings() {
             const rate = parseFloat(inp.value) || 0;
             await upsertSetting('pto_accrual_rate', rate);
             window._ptoAccrualRate = rate;
+
+            const cutoffDate = cutoffInp?.value || '';
+            await upsertSetting('pto_balance_cutoff_date', cutoffDate);
+            window._ptoBalanceCutoffDate = cutoffDate;
+
             if (statusEl) {
                 statusEl.textContent = '✓ Saved!';
                 statusEl.style.color = '#2e7d32';
