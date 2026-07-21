@@ -1315,6 +1315,14 @@ async function addMessage({ parentName, parentEmail, message }) {
         .from('messages')
         .insert({ parent_name: parentName, parent_email: parentEmail, message });
     if (error) throw error;
+
+    // Best-effort email alert to the office — the message is already saved above,
+    // so a notify failure (missing secret, Resend outage) must not surface to the parent.
+    try {
+        await sbClient.functions.invoke('notify-new-message', {
+            body: { parentName, parentEmail, message },
+        });
+    } catch (_) { /* swallow — message row is the source of truth */ }
 }
 
 async function fetchMessages(showArchived = false) {
