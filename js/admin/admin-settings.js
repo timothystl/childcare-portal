@@ -810,6 +810,48 @@ async function setupRegFee() {
 }
 
 // ============================================================
+// PTO ACCRUAL RATE  (global setting — used by the Payroll report
+// to auto-compute "PTO Accrued" and each staff member's running balance)
+// ============================================================
+async function loadPtoRateSetting() {
+    const val = await fetchSetting('pto_accrual_rate');
+    window._ptoAccrualRate = (typeof val === 'number' && val >= 0) ? val : 0;
+    const inp = document.getElementById('ptoAccrualRateInput');
+    if (inp) inp.value = window._ptoAccrualRate > 0 ? window._ptoAccrualRate : '';
+}
+
+async function setupPtoSettings() {
+    await loadPtoRateSetting();
+    document.getElementById('savePtoRateBtn')?.addEventListener('click', async () => {
+        const btn      = document.getElementById('savePtoRateBtn');
+        const statusEl = document.getElementById('ptoRateStatus');
+        const inp      = document.getElementById('ptoAccrualRateInput');
+        if (!btn || !inp) return;
+        btn.disabled    = true;
+        btn.textContent = 'Saving…';
+        if (statusEl) statusEl.textContent = '';
+        try {
+            const rate = parseFloat(inp.value) || 0;
+            await upsertSetting('pto_accrual_rate', rate);
+            window._ptoAccrualRate = rate;
+            if (statusEl) {
+                statusEl.textContent = '✓ Saved!';
+                statusEl.style.color = '#2e7d32';
+                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+        } catch (err) {
+            if (statusEl) {
+                statusEl.textContent = '⚠️ ' + err.message;
+                statusEl.style.color = '#c62828';
+            }
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = '💾 Save Rate';
+        }
+    });
+}
+
+// ============================================================
 
 // ADMIN ROLES  (access control)
 // ============================================================
