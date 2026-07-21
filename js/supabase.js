@@ -1101,7 +1101,7 @@ async function fetchAllFamilies({ includeArchived = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, created_at, active, group, registration_locked, registration_lock_reason, login_locked, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
+        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, created_at, active, group, registration_locked, registration_lock_reason, login_locked, new_family_fee_charged, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
         .order('parent_name');
     if (!includeArchived) query = query.eq('active', true);
     const { data, error } = await query;
@@ -1253,6 +1253,16 @@ async function updateStudentRegFee(studentId, paidYear) {
         .from('students')
         .update({ reg_fee_paid_year: paidYear })
         .eq('id', studentId);
+    if (error) throw error;
+}
+
+// One-time "new family" fee — stamped so it's never charged again for this family.
+async function markNewFamilyFeeCharged(familyId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('families')
+        .update({ new_family_fee_charged: true })
+        .eq('id', familyId);
     if (error) throw error;
 }
 

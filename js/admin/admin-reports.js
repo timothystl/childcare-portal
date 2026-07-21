@@ -262,13 +262,29 @@ async function generateFamilyBillingReport() {
             .catch(e => console.warn('Could not load students:', e)),
     ]);
 
-    // Reg fee amount from settings (cached on window by setupRegFee; fall back to DB fetch)
+    // Fee amounts from settings (cached on window by setupRegFee; fall back to DB fetch)
     let regFeeAmount = window._regFeeAmount ?? 0;
     if (!regFeeAmount) {
         try {
             const val = await fetchSetting('registration_fee');
             regFeeAmount = (typeof val === 'number' && val >= 0) ? val : 0;
             window._regFeeAmount = regFeeAmount;
+        } catch (e) { /* ignore */ }
+    }
+    let newFamilyFeeAmount = window._newFamilyFee ?? 0;
+    if (!newFamilyFeeAmount) {
+        try {
+            const val = await fetchSetting('new_family_fee');
+            newFamilyFeeAmount = (typeof val === 'number' && val >= 0) ? val : 0;
+            window._newFamilyFee = newFamilyFeeAmount;
+        } catch (e) { /* ignore */ }
+    }
+    let supplyFeeFamilyMax = window._supplyFeeFamilyMax ?? 0;
+    if (!supplyFeeFamilyMax) {
+        try {
+            const val = await fetchSetting('supply_fee_family_max');
+            supplyFeeFamilyMax = (typeof val === 'number' && val >= 0) ? val : 0;
+            window._supplyFeeFamilyMax = supplyFeeFamilyMax;
         } catch (e) { /* ignore */ }
     }
 
@@ -278,6 +294,13 @@ async function generateFamilyBillingReport() {
     allStudents.forEach(s => {
         const k = (s.child_name || '').toLowerCase().trim();
         if (!studentByName.has(k)) studentByName.set(k, s);
+    });
+
+    // Family lookup by email, for the one-time new-family fee's charged flag
+    const familyByEmail = new Map();
+    (allFamiliesData || []).forEach(f => {
+        const k = (f.parent_email || '').toLowerCase().trim();
+        if (k && !familyByEmail.has(k)) familyByEmail.set(k, f);
     });
 
     // Load any manual billing overrides for this month
@@ -320,13 +343,42 @@ async function generateFamilyBillingReport() {
             updateStudentRegFee(id, currentYear).catch(e => console.warn('updateStudentRegFee failed for', id, e))));
     }
 
+    // One-time new-family fee: owed whenever the family record exists and hasn't
+    // been stamped yet. Charged and stamped the moment their billing report is
+    // generated, same "no manual step" pattern as the supply fee above.
+    const newFamilyFeeOwedByEmail = new Map(); // parentEmail → owed boolean
+    const newFamilyFeeChargeIds = [];
+    families.forEach(fam => {
+        const key = (fam.parentEmail || '').toLowerCase().trim();
+        if (newFamilyFeeOwedByEmail.has(key)) return;
+        const family = familyByEmail.get(key);
+        const owed = newFamilyFeeAmount > 0 && !!family && !family.new_family_fee_charged;
+        newFamilyFeeOwedByEmail.set(key, owed);
+        if (owed) newFamilyFeeChargeIds.push(family.id);
+    });
+    if (newFamilyFeeChargeIds.length) {
+        await Promise.all(newFamilyFeeChargeIds.map(id =>
+            markNewFamilyFeeCharged(id).catch(e => console.warn('markNewFamilyFeeCharged failed for', id, e))));
+    }
+
     let grandTotal = 0;
     const rows = families.map(fam => {
+        // Supply fee: sum what each owing child would cost, then cap the family's
+        // total at the family max (if one's set) — capped families aren't billed
+        // more, and every owing child is still stamped paid for this cycle since
+        // nothing further is owed by anyone in the family until the next cycle.
+        const owedChildren = fam.children.filter(c =>
+            regFeeOwedByChild.get((c.childName || '').toLowerCase().trim())?.owed);
+        const rawSupplyFeeTotal = owedChildren.length * regFeeAmount;
+        const supplyFeeCapped   = supplyFeeFamilyMax > 0 && rawSupplyFeeTotal > supplyFeeFamilyMax;
+        const supplyFeeCharged  = supplyFeeCapped ? supplyFeeFamilyMax : rawSupplyFeeTotal;
+
+        const newFamilyFeeOwed = newFamilyFeeOwedByEmail.get((fam.parentEmail || '').toLowerCase().trim());
+
         const familyTotal = fam.children.reduce((s, c) => {
             const billed = c.hasOverride ? c.overrideAmount : c.subtotal;
-            const { owed: regFeeOwed } = regFeeOwedByChild.get((c.childName || '').toLowerCase().trim());
-            return s + billed + (c.changeFees || 0) + (regFeeOwed ? regFeeAmount : 0);
-        }, 0);
+            return s + billed + (c.changeFees || 0);
+        }, 0) + supplyFeeCharged + (newFamilyFeeOwed ? newFamilyFeeAmount : 0);
         grandTotal += familyTotal;
 
         const childRows = fam.children.map(c => {
@@ -351,9 +403,11 @@ async function generateFamilyBillingReport() {
                     <td class="report-num report-revenue" style="color:#166534">−$${c.sibDiscount.toFixed(2)}</td>
                    </tr>`
                 : '';
-            const regFeeRow = regFeeOwed
+            // Shown per-child only when the family's supply fee isn't capped —
+            // once capped, a single family-level row (below) covers the total instead.
+            const regFeeRow = (regFeeOwed && !supplyFeeCapped)
                 ? `<tr class="billing-child-row" style="background:#f0fdf4">
-                    <td class="billing-indent" style="color:#166534;font-size:.85em" colspan="4">↳ Annual enrollment fee</td>
+                    <td class="billing-indent" style="color:#166534;font-size:.85em" colspan="4">↳ Annual supply fee</td>
                     <td class="report-num" style="color:#166534">—</td>
                     <td class="report-num report-revenue" style="color:#166534">+$${regFeeAmount.toFixed(2)}</td>
                    </tr>`
@@ -388,6 +442,19 @@ async function generateFamilyBillingReport() {
             </tr>${sibRow}${feeRow}${regFeeRow}`;
         }).join('');
 
+        const newFamilyFeeRow = newFamilyFeeOwed
+            ? `<tr class="billing-child-row" style="background:#f0fdf4">
+                <td style="color:#166534;font-size:.85em;padding-left:12px" colspan="5">New family fee</td>
+                <td class="report-num report-revenue" style="color:#166534">+$${newFamilyFeeAmount.toFixed(2)}</td>
+               </tr>`
+            : '';
+        const supplyFeeFamilyRow = supplyFeeCapped
+            ? `<tr class="billing-child-row" style="background:#f0fdf4">
+                <td style="color:#166534;font-size:.85em;padding-left:12px" colspan="5">Annual supply fee — ${owedChildren.length} child${owedChildren.length !== 1 ? 'ren' : ''} (capped at family max)</td>
+                <td class="report-num report-revenue" style="color:#166534">+$${supplyFeeCharged.toFixed(2)}</td>
+               </tr>`
+            : '';
+
         return `
             <tr class="billing-family-row">
                 <td colspan="5">
@@ -396,7 +463,7 @@ async function generateFamilyBillingReport() {
                 </td>
                 <td class="report-num report-revenue billing-family-total"><strong>$${familyTotal.toFixed(2)}</strong></td>
             </tr>
-            ${childRows}`;
+            ${newFamilyFeeRow}${supplyFeeFamilyRow}${childRows}`;
     }).join('');
 
     container.innerHTML = `
