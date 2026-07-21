@@ -351,9 +351,9 @@ function setupTabs() {
 
         if (tab === 'families'  && allFamiliesData.length === 0) loadFamilies();
         if (tab === 'staffing'  && allStaffData.length === 0)    loadStaffList();
+        if (tab === 'staffing')                                  loadGeofenceSettings();
         if (tab === 'messages'  && !_messagesLoaded)             { _messagesLoaded = true; loadMessages(); }
         if (tab === 'billing'   && !_arLoaded)                   { setupBillingDashYear(); }
-        if (tab === 'settings')                                  loadGeofenceSettings();
         if (tab === 'cacfp'     && !_cacfpLoaded)                { _cacfpLoaded = true; initCacfpTab(); }
         if (tab === 'market'    && !_marketLoaded)               { _marketLoaded = true; initMarketTab(); }
     }
@@ -641,7 +641,7 @@ async function setupStaffDirectory() {
     const raw = await fetchSetting('staff_directory');
     _staffDirectory = Array.isArray(raw) ? raw : [];
     renderStaffDirectory();
-    document.getElementById('addStaffBtn')?.addEventListener('click', () => {
+    document.getElementById('addStaffDirectoryBtn')?.addEventListener('click', () => {
         syncStaffDirectoryFromDom();
         _staffDirectory.push({ id: `staff-${Date.now()}`, name: '', role: 'Lead Teacher', section: 'lead_teacher', roomId: null, photoUrl: null });
         renderStaffDirectory();
