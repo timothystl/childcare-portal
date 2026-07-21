@@ -861,9 +861,14 @@ async function setupPtoSettings() {
             await upsertSetting('pto_accrual_rate', rate);
             window._ptoAccrualRate = rate;
 
-            const cutoffDate = cutoffInp?.value || '';
-            await upsertSetting('pto_balance_cutoff_date', cutoffDate);
-            window._ptoBalanceCutoffDate = cutoffDate;
+            // Balance As-Of Date has no UI control (removed so it can't be changed by
+            // accident and silently corrupt everyone's PTO balance) — only touch the
+            // setting if that input somehow exists again in the future.
+            if (cutoffInp) {
+                const cutoffDate = cutoffInp.value || '';
+                await upsertSetting('pto_balance_cutoff_date', cutoffDate);
+                window._ptoBalanceCutoffDate = cutoffDate;
+            }
 
             if (statusEl) {
                 statusEl.textContent = '✓ Saved!';
