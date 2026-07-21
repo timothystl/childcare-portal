@@ -223,43 +223,6 @@ function _renderMonthlyRosterCalendarHtml(rooms, monthVal, monthLabel) {
     }).join('');
 }
 
-function _renderMonthlyRosterRoomsHtml(rooms, monthLabel) {
-    return rooms.map(({ room, days }) => {
-        const dayRows = days.map(({ label, children, count, cap }) => {
-            const fullFlag = count >= cap ? ' roster-day-full' : count >= cap * .8 ? ' roster-day-near' : '';
-            const childList = children.length
-                ? children.map(c =>
-                    `<span class="roster-child${c.dayType === 'half' ? ' roster-half' : ''}">${escHtml(c.name)}${c.dayType === 'half' ? ' ½' : ''}</span>`
-                  ).join('')
-                : '<span class="roster-empty-day">—</span>';
-            return `
-                <tr class="roster-day-row${fullFlag}">
-                    <td class="roster-date-cell">${label}</td>
-                    <td class="roster-count-cell">${count}/${cap}</td>
-                    <td class="roster-names-cell">${childList}</td>
-                </tr>`;
-        }).join('');
-
-        return `
-            <div class="roster-room-block">
-                <div class="roster-room-header">
-                    <span class="roster-room-title">${escHtml(room.label)}</span>
-                    <span class="roster-room-meta">${monthLabel} &nbsp;·&nbsp; Max ${room.capacity}/day</span>
-                </div>
-                <table class="roster-day-table">
-                    <thead>
-                        <tr>
-                            <th class="roster-th-date">Date</th>
-                            <th class="roster-th-count">Count</th>
-                            <th class="roster-th-names">Enrolled Children</th>
-                        </tr>
-                    </thead>
-                    <tbody>${dayRows}</tbody>
-                </table>
-            </div>`;
-    }).join('');
-}
-
 // ROSTER — ON-SCREEN VIEW
 // ============================================================
 function viewRoster() {
@@ -576,15 +539,15 @@ function _printMonthRoster(monthVal, roomId) {
 <title>Monthly Roster — ${escHtml(monthLabel)}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, Helvetica, sans-serif; padding: 30px 40px; color: #222; }
+  body { font-family: Arial, Helvetica, sans-serif; padding: 20px 24px; color: #222; }
   .roster-report-header {
     font-size: 1.1em;
     border-bottom: 3px solid #333;
     padding-bottom: 10px;
-    margin-bottom: 24px;
+    margin-bottom: 18px;
   }
   .roster-report-header .printed { float: right; font-size: .7em; color: #888; font-weight: 400; }
-  .roster-room-block { margin-bottom: 28px; page-break-inside: avoid; }
+  .roster-room-block { margin-bottom: 24px; page-break-inside: avoid; }
   .roster-room-header {
     display: flex;
     justify-content: space-between;
@@ -597,27 +560,40 @@ function _printMonthRoster(monthVal, roomId) {
   }
   .roster-room-title { font-size: 1.05em; font-weight: 700; }
   .roster-room-meta { font-size: .8em; color: #ccc; }
-  .roster-day-table { width: 100%; border-collapse: collapse; font-size: .85em; border: 1px solid #ddd; border-top: none; }
-  .roster-day-table th {
-    background: #f0f0f0; padding: 6px 10px; text-align: left; font-size: .78em;
-    color: #666; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; border-bottom: 2px solid #ddd;
+
+  .cal-grid { border: 1px solid #ccc; border-top: none; }
+  .cal-week { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-dow-row { background: #f0f0f0; border-bottom: 2px solid #ccc; }
+  .cal-dow {
+    padding: 5px 6px; text-align: center; font-size: .72em; font-weight: 700;
+    letter-spacing: .03em; text-transform: uppercase; color: #666;
   }
-  .roster-th-date  { width: 70px; }
-  .roster-th-count { width: 60px; text-align: center; }
-  .roster-day-row  { border-bottom: 1px solid #eee; }
-  .roster-date-cell  { padding: 4px 10px; font-weight: 600; white-space: nowrap; }
-  .roster-count-cell { padding: 4px 10px; text-align: center; font-size: .82em; color: #666; }
-  .roster-names-cell { padding: 4px 10px; line-height: 1.7; }
-  .roster-day-full  { background: #fde2e1; }
-  .roster-day-near  { background: #fef3c7; }
-  .roster-child {
-    display: inline-block; background: #f0f0f0; color: #222; font-size: .82em; font-weight: 600;
-    padding: 1px 8px; border-radius: 12px; margin: 2px 3px 2px 0;
+  .cal-cell {
+    min-height: 78px; border: 1px solid #ddd; margin: -1px 0 0 -1px;
+    padding: 4px 6px; display: flex; flex-direction: column;
   }
-  .roster-child.roster-half { background: #fef3c7; color: #92400e; }
-  .roster-empty-day { color: #bbb; font-style: italic; font-size: .85em; }
+  .cal-cell-blank, .cal-cell-closed { background: #f7f7f7; }
+  .cal-cell-closed .cal-day-num { color: #ccc; }
+  .cal-cell-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 3px; flex-shrink: 0;
+  }
+  .cal-day-num { font-weight: 700; font-size: .82em; }
+  .cal-count { font-size: .68em; color: #666; font-weight: 600; }
+  .cal-cell-full { background: #fde2e1; }
+  .cal-cell-full .cal-count { color: #b91c1c; }
+  .cal-cell-near { background: #fef3c7; }
+  .cal-cell-near .cal-count { color: #92400e; }
+  .cal-children { flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); align-content: start; gap: 1px 4px; }
+  .cal-child {
+    display: block; background: #f0f0f0; color: #222; font-size: .64em; font-weight: 600;
+    padding: 0 4px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cal-child.cal-child-half { background: #fef3c7; color: #92400e; }
+  .cal-empty { color: #ccc; font-style: italic; font-size: .68em; }
+
   @media print {
-    @page { margin: 0.6in; }
+    @page { size: landscape; margin: 0.4in; }
     .roster-room-block:not(:first-child) { page-break-before: always; }
   }
 </style>
@@ -627,7 +603,7 @@ function _printMonthRoster(monthVal, roomId) {
     <strong>Timothy Lutheran MDO</strong> — ${escHtml(monthLabel)} Classroom Roster
     <span class="printed">Printed ${new Date().toLocaleString('en-US')}</span>
   </div>
-  ${_renderMonthlyRosterRoomsHtml(rooms, monthLabel)}
+  ${_renderMonthlyRosterCalendarHtml(rooms, monthVal, monthLabel)}
   <script>
     window.addEventListener('load', function() { window.print(); });
   <\/script>
