@@ -732,14 +732,14 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             });
         } catch(e) {}
 
-        // Fallback: if billing_summary had no room_id data, a non-seasonal room's set will
-        // only contain the months seen so far this year. In that case, assume the room
-        // operates all 12 months (the school restricts via Summer Camp status, not room data).
-        // Seasonal rooms keep only the months confirmed by actual data.
+        // Fallback: assume every room here operates all 12 months. `activeRooms` above
+        // already excludes `seasonal` rooms (Summer Camp), so anything reaching this
+        // point runs year-round regardless of how many months of current-year data
+        // happen to exist yet — gating on `size <= 6` used to make this silently stop
+        // applying once more than half the year had elapsed (e.g. every month from
+        // July on), leaving future months un-projected.
         activeRooms.forEach(r => {
-            if (r.status !== 'seasonal' && roomOpMonths[r.id].size <= 6) {
-                for (let m = 1; m <= 12; m++) roomOpMonths[r.id].add(m);
-            }
+            for (let m = 1; m <= 12; m++) roomOpMonths[r.id].add(m);
         });
 
         // ── Closure scaling: count weekday closures per future month ──
