@@ -656,20 +656,26 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
         const today = new Date();
         const todayYear  = today.getFullYear();
 
-        const activeRooms = getSortedRooms().filter(r => r.status === 'active' || r.status === 'coming_soon');
+        // Includes `seasonal` rooms (Summer Camp) — they used to be excluded here entirely,
+        // which meant nothing was ever projected for whatever part of their season(s)
+        // (summer / spring break / winter break) hadn't happened yet this year. Their
+        // operating months and per-month revenue come from history (see roomOpMonths and
+        // the seasonalHistoricalAvg fallback below) rather than the "assume year-round"
+        // logic used for regular rooms.
+        const projRooms = getSortedRooms().filter(r => r.status === 'active' || r.status === 'coming_soon' || r.status === 'seasonal');
 
         // Per-room: accumulate half/full days and actual revenue across *complete* months
         // only — the current (partial) month is excluded here rather than prorated, since
         // it's used to compute a "typical complete month" average for projecting future
         // months; including a partial month (even scaled down) would still skew that average.
         const roomStats = {};
-        activeRooms.forEach(r => { roomStats[r.id] = { halfTotal: 0, fullTotal: 0, revTotal: 0, moCount: 0 }; });
+        projRooms.forEach(r => { roomStats[r.id] = { halfTotal: 0, fullTotal: 0, revTotal: 0, moCount: 0 }; });
 
         allMoList.forEach(mo => {
             if (mo === currentMoKey) return;
             const dayData = daysByRoomMo[mo] || {};
             const revData = revByRoomMo[mo] || {};
-            activeRooms.forEach(r => {
+            projRooms.forEach(r => {
                 const d = dayData[r.id];
                 if (!d || (d.half === 0 && d.full === 0)) return;
                 roomStats[r.id].halfTotal += d.half;
@@ -679,22 +685,64 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
             });
         });
 
-        // Build per-room projection rows (only rooms with data)
+        // Seasonal rooms (Summer Camp) often have zero complete months of *current-year*
+        // data yet (their season hasn't started, or is only partway through the current,
+        // still-excluded month) — fall back to a per-room average built from prior years'
+        // billing_summary so a room like this still gets a sane monthly estimate.
+        const seasonalHistoricalAvg = {}; // roomId → { revPerMonth, halfPerMonth, fullPerMonth }
+        let allBsForAvg = [];
+        try {
+            allBsForAvg = await fetchBillingSummary();
+            const histByRoom = {};
+            allBsForAvg.forEach(row => {
+                if (!row.room_id) return;
+                const rowYear = parseInt((row.month || '').split('-')[0]);
+                if (rowYear === year) return; // only prior years — current year is handled by roomStats
+                if (!histByRoom[row.room_id]) histByRoom[row.room_id] = { rev: 0, half: 0, full: 0, moCount: 0 };
+                const h = histByRoom[row.room_id];
+                h.rev  += parseFloat(row.net_billed) || 0;
+                h.half += row.half_days || 0;
+                h.full += row.full_days || 0;
+                h.moCount++;
+            });
+            Object.entries(histByRoom).forEach(([roomId, h]) => {
+                if (h.moCount === 0) return;
+                seasonalHistoricalAvg[roomId] = {
+                    revPerMonth:  h.rev / h.moCount,
+                    halfPerMonth: h.half / h.moCount,
+                    fullPerMonth: h.full / h.moCount,
+                };
+            });
+        } catch(e) {}
+
+        // Build per-room projection rows (only rooms with current-year or historical data)
         // projMonthly uses actual average revenue (includes discounts for staff kids etc.)
         // If actual revenue data isn't available per-room, fall back to days × rate.
-        const roomProj = activeRooms.map(r => {
+        const roomProj = projRooms.map(r => {
             const st = roomStats[r.id];
-            if (st.moCount === 0) return null;
-            const avgHalf = st.halfTotal / st.moCount;
-            const avgFull = st.fullTotal / st.moCount;
+            const hist = seasonalHistoricalAvg[r.id];
+            if (st.moCount === 0 && !hist) return null;
             const halfRate = r.halfDayRate || 0;
             const fullRate = r.fullDayRate || 0;
+            let avgHalf, avgFull, projMonthly, moCount;
+            if (st.moCount > 0) {
+                avgHalf = st.halfTotal / st.moCount;
+                avgFull = st.fullTotal / st.moCount;
+                // Use actual billed revenue average when available; fall back to rate × days
+                projMonthly = st.revTotal > 0
+                    ? st.revTotal / st.moCount
+                    : avgHalf * halfRate + avgFull * fullRate;
+                moCount = st.moCount;
+            } else {
+                avgHalf = hist.halfPerMonth;
+                avgFull = hist.fullPerMonth;
+                projMonthly = hist.revPerMonth > 0
+                    ? hist.revPerMonth
+                    : avgHalf * halfRate + avgFull * fullRate;
+                moCount = 0;
+            }
             const avgTotalDays = avgHalf + avgFull;
-            // Use actual billed revenue average when available; fall back to rate × days
-            const projMonthly = st.revTotal > 0
-                ? st.revTotal / st.moCount
-                : avgHalf * halfRate + avgFull * fullRate;
-            return { id: r.id, label: r.label, avgHalf, avgFull, avgTotalDays, halfRate, fullRate, projMonthly, moCount: st.moCount };
+            return { id: r.id, label: r.label, avgHalf, avgFull, avgTotalDays, halfRate, fullRate, projMonthly, moCount };
         }).filter(Boolean);
 
         if (!roomProj.length) { el.innerHTML = ''; return; }
@@ -708,37 +756,37 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
         const laborCostPerChildDay = totalChildDaysPerMo > 0 ? (totalLab / moCount) / totalChildDaysPerMo : 0;
 
         // ── Determine operational months per room from all-years billing_summary ──
-        // This prevents seasonal rooms (Summer Camp) from being projected year-round.
         const roomOpMonths = {}; // roomId → Set<1..12>
-        activeRooms.forEach(r => { roomOpMonths[r.id] = new Set(); });
+        projRooms.forEach(r => { roomOpMonths[r.id] = new Set(); });
         // Seed with current-year live data months
         allMoList.forEach(mo => {
             const moNum = parseInt(mo.split('-')[1]);
             const dayData = daysByRoomMo[mo] || {};
-            activeRooms.forEach(r => {
+            projRooms.forEach(r => {
                 const d = dayData[r.id];
                 if (d && (d.half > 0 || d.full > 0)) roomOpMonths[r.id].add(moNum);
             });
         });
-        // Supplement with prior years' billing_summary (provides room_id if the column exists)
-        try {
-            const allBs = await fetchBillingSummary();
-            allBs.forEach(row => {
-                if (!row.room_id || (!row.full_days && !row.half_days)) return;
-                const moNum = parseInt((row.month || '').split('-')[1]);
-                if (moNum >= 1 && moNum <= 12 && roomOpMonths[row.room_id]) {
-                    roomOpMonths[row.room_id].add(moNum);
-                }
-            });
-        } catch(e) {}
+        // Supplement with prior years' billing_summary (provides room_id if the column exists) —
+        // this is how a seasonal room like Summer Camp picks up "runs in June/July/August" or
+        // "runs over winter break in December" from history, instead of guessing.
+        allBsForAvg.forEach(row => {
+            if (!row.room_id || (!row.full_days && !row.half_days)) return;
+            const moNum = parseInt((row.month || '').split('-')[1]);
+            if (moNum >= 1 && moNum <= 12 && roomOpMonths[row.room_id]) {
+                roomOpMonths[row.room_id].add(moNum);
+            }
+        });
 
-        // Fallback: assume every room here operates all 12 months. `activeRooms` above
-        // already excludes `seasonal` rooms (Summer Camp), so anything reaching this
-        // point runs year-round regardless of how many months of current-year data
-        // happen to exist yet — gating on `size <= 6` used to make this silently stop
-        // applying once more than half the year had elapsed (e.g. every month from
-        // July on), leaving future months un-projected.
-        activeRooms.forEach(r => {
+        // Fallback: assume non-seasonal rooms operate all 12 months, regardless of how many
+        // months of current-year data happen to exist yet — gating on a current-year data
+        // count used to make this silently stop applying once more than half the year had
+        // elapsed (e.g. every month from July on), leaving future months un-projected.
+        // Seasonal rooms (Summer Camp) are excluded from this — their operating months come
+        // only from actual history (seeded above), since there's no sane "operates all year"
+        // assumption for a room that only runs during specific breaks.
+        projRooms.forEach(r => {
+            if (r.status === 'seasonal') return;
             for (let m = 1; m <= 12; m++) roomOpMonths[r.id].add(m);
         });
 
@@ -749,7 +797,7 @@ async function _renderAttendanceProjection(el, { year, allMoList, daysByRoomMo, 
         let lastDataMoNum = 0;
         allMoList.forEach(mo => {
             const dayData = daysByRoomMo[mo] || {};
-            const hasData = activeRooms.some(r => { const d = dayData[r.id]; return d && (d.half > 0 || d.full > 0); });
+            const hasData = projRooms.some(r => { const d = dayData[r.id]; return d && (d.half > 0 || d.full > 0); });
             if (hasData) { const n = parseInt(mo.split('-')[1]); if (n > lastDataMoNum) lastDataMoNum = n; }
         });
         const futureMonthNums = (year === todayYear && lastDataMoNum > 0 && lastDataMoNum < 12)
