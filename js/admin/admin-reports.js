@@ -3535,6 +3535,177 @@ async function generateEnrollmentFteReport() {
 }
 
 // ============================================================
+// SEAT-DAY CAPACITY MODEL
+// ============================================================
+// State-approved hard ceiling on total enrolled children, independent of the
+// seat-day math below (a physical/licensing limit, not a scheduling one).
+const APPROVED_CHILD_CAPACITY = 46;
+// Recommended operating band for average occupied seats per weekday.
+const SEAT_BAND_MIN = 34;
+const SEAT_BAND_MAX = 40;
+
+let _reportCharts = {};
+function _destroyReportChart(key) {
+    if (_reportCharts[key]) { _reportCharts[key].destroy(); delete _reportCharts[key]; }
+}
+
+function _weekdaysInMonth(year, month /* 1-12 */) {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    let count = 0;
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dow = new Date(year, month - 1, d).getDay();
+        if (dow !== 0 && dow !== 6) count++;
+    }
+    return count;
+}
+
+async function generateSeatDayCapacityReport() {
+    const container = document.getElementById('seatDayCapacityContent');
+    if (!container) return;
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const allRegs  = await fetchAllRegistrations();
+        const confirmed = allRegs.filter(r => r.status === 'confirmed');
+        const MONTH_NAME = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+        // byMonth: 'YYYY-MM' → [{ childDays }] — one entry per child registered that month
+        const byMonth = {};
+        confirmed.forEach(reg => {
+            const dates = (reg.registration_dates || []).filter(d => !d.waitlisted);
+            if (!dates.length) return;
+            const moKey = dates.map(d => d.care_date.slice(0, 7)).sort()[0];
+            (byMonth[moKey] = byMonth[moKey] || []).push({ childDays: dates.length });
+        });
+
+        const months = Object.keys(byMonth).sort().reverse().slice(0, 18).reverse();
+        if (!months.length) {
+            container.innerHTML = '<p class="empty-hint">No confirmed enrollment data found.</p>';
+            return;
+        }
+
+        const stats = months.map(mo => {
+            const [y, m]        = mo.split('-').map(Number);
+            const entries       = byMonth[mo] || [];
+            const totalChildDays = entries.reduce((s, e) => s + e.childDays, 0);
+            const distinctChildren = entries.length;
+            const weekdays       = _weekdaysInMonth(y, m);
+            const avgSeatsPerDay = weekdays ? totalChildDays / weekdays : 0;
+            const avgDaysPerChild = distinctChildren ? totalChildDays / distinctChildren : 0;
+            return { mo, label: `${MONTH_NAME[m - 1]} ${y}`, avgSeatsPerDay, avgDaysPerChild, distinctChildren };
+        });
+
+        const cur = stats[stats.length - 1];
+
+        // Total seat capacity across active (enrollable) rooms, current settings.
+        const totalCapacity = getSortedRooms().filter(r => r.status !== 'coming_soon')
+            .reduce((s, r) => s + (r.capacity || 0), 0);
+
+        const scenario = seats => cur.avgDaysPerChild
+            ? Math.min(APPROVED_CHILD_CAPACITY, Math.round(seats * 5 / cur.avgDaysPerChild))
+            : null;
+
+        container.innerHTML = `
+            <div class="fin-kpi-row" style="margin-bottom:1.25rem">
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Avg occupied seats/day (${cur.label})</span>
+                    <span class="fin-kpi-value fin-positive">${cur.avgSeatsPerDay.toFixed(1)}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Avg booked days/child</span>
+                    <span class="fin-kpi-value">${cur.avgDaysPerChild.toFixed(2)}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Enrolled children</span>
+                    <span class="fin-kpi-value">${cur.distinctChildren}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Total seat capacity</span>
+                    <span class="fin-kpi-value">${totalCapacity}</span>
+                </div>
+            </div>
+            <div class="fin-chart-wrap" style="margin-bottom:1.25rem">
+                <h4 class="fin-chart-title">Average Occupied Seats/Day vs. Operating Band</h4>
+                <canvas id="chartSeatDayCapacity"></canvas>
+            </div>
+            <div style="overflow-x:auto">
+            <table class="report-table">
+                <thead><tr>
+                    <th>Scenario</th>
+                    <th class="report-num">Avg occupied seats/day</th>
+                    <th class="report-num">&divide; avg booked days/child (${cur.avgDaysPerChild.toFixed(2)}) &times; 5</th>
+                    <th class="report-num">Max active children</th>
+                </tr></thead>
+                <tbody>
+                    <tr>
+                        <td>Band floor</td>
+                        <td class="report-num">${SEAT_BAND_MIN}</td>
+                        <td class="report-num">&mdash;</td>
+                        <td class="report-num"><strong>${scenario(SEAT_BAND_MIN) ?? '—'}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Band ceiling</td>
+                        <td class="report-num">${SEAT_BAND_MAX}</td>
+                        <td class="report-num">&mdash;</td>
+                        <td class="report-num"><strong>${scenario(SEAT_BAND_MAX) ?? '—'}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Full physical capacity (all seats filled)</td>
+                        <td class="report-num">${totalCapacity}</td>
+                        <td class="report-num">&mdash;</td>
+                        <td class="report-num"><strong>${scenario(totalCapacity) ?? '—'}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+            </div>
+            <p style="font-size:.8em;color:#6b7280;margin:.5rem 0 0">
+                Avg occupied seats/day = confirmed child-days &divide; weekdays in month.
+                Avg booked days/child = confirmed child-days &divide; distinct children with a confirmed registration that month.
+                Max active children is capped at the approved ${APPROVED_CHILD_CAPACITY}-child capacity regardless of the seat-day math.
+                Shows last ${months.length} months.
+            </p>`;
+
+        _destroyReportChart('seatDayCapacity');
+        const canvas = document.getElementById('chartSeatDayCapacity');
+        _reportCharts.seatDayCapacity = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: stats.map(s => s.label),
+                datasets: [
+                    {
+                        label: 'Avg occupied seats/day',
+                        data: stats.map(s => Math.round(s.avgSeatsPerDay * 10) / 10),
+                        borderColor: 'rgb(99,102,241)', backgroundColor: 'rgba(99,102,241,.12)',
+                        tension: 0.3, fill: true, pointBackgroundColor: 'rgb(99,102,241)',
+                    },
+                    {
+                        label: `Band ceiling (${SEAT_BAND_MAX})`,
+                        data: stats.map(() => SEAT_BAND_MAX),
+                        borderColor: 'rgba(22,163,74,.6)', borderDash: [6, 3], pointRadius: 0, fill: false,
+                    },
+                    {
+                        label: `Band floor (${SEAT_BAND_MIN})`,
+                        data: stats.map(() => SEAT_BAND_MIN),
+                        borderColor: 'rgba(245,158,11,.6)', borderDash: [6, 3], pointRadius: 0, fill: false,
+                    },
+                    {
+                        label: `Total seat capacity (${totalCapacity})`,
+                        data: stats.map(() => totalCapacity),
+                        borderColor: 'rgba(239,68,68,.6)', borderDash: [3, 3], pointRadius: 0, fill: false,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'top' } },
+                scales: { y: { beginAtZero: true } },
+            },
+        });
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+// ============================================================
 function setupExtraReports() {
     document.getElementById('generateTrendsBtn')?.addEventListener('click', generateEnrollmentTrends);
     document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
@@ -3544,6 +3715,7 @@ function setupExtraReports() {
     document.getElementById('exportPromotionsBtn')?.addEventListener('click', exportPromotionsReport);
     document.getElementById('printPromotionsBtn')?.addEventListener('click', printPromotionsReport);
     document.getElementById('generateFteBtn')?.addEventListener('click', generateEnrollmentFteReport);
+    document.getElementById('generateSeatDayBtn')?.addEventListener('click', generateSeatDayCapacityReport);
     document.getElementById('generateDiscountPricingBtn')?.addEventListener('click', generateDiscountPricingReport);
     document.getElementById('exportDiscountPricingBtn')?.addEventListener('click', exportDiscountPricingReport);
     document.getElementById('printDiscountPricingBtn')?.addEventListener('click', printDiscountPricingReport);
