@@ -3559,21 +3559,37 @@ function _weekdaysInMonth(year, month /* 1-12 */) {
     return count;
 }
 
+function initSeatDayRoomSelector() {
+    const sel = document.getElementById('seatDayRoomSel');
+    if (!sel || sel.options.length > 1) return;
+    getSortedRooms().forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.id;
+        opt.textContent = r.label;
+        sel.appendChild(opt);
+    });
+}
+
 async function generateSeatDayCapacityReport() {
+    initSeatDayRoomSelector();
     const container = document.getElementById('seatDayCapacityContent');
     if (!container) return;
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
+        const roomId = document.getElementById('seatDayRoomSel')?.value || 'all';
+        const room   = roomId === 'all' ? null : ROOMS.find(r => r.id === roomId);
+        const scopeLabel = roomId === 'all' ? 'Full Center (excl. Summer Camp)' : room?.label || roomId;
+
         const allRegs  = await fetchAllRegistrations();
         const confirmed = allRegs.filter(r => r.status === 'confirmed');
         const MONTH_NAME = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
         // byMonth: 'YYYY-MM' → [{ childDays }] — one entry per child registered that month.
-        // Summer Camp is a separate seasonal program (different ages, different
-        // capacity question) and is excluded from the main-program seat-day model.
+        // Full Center excludes Summer Camp (separate seasonal program, different
+        // ages, different capacity question); a specific room shows that room only.
         const byMonth = {};
         confirmed.forEach(reg => {
-            if (reg.room_id === 'summer') return;
+            if (roomId === 'all' ? reg.room_id === 'summer' : reg.room_id !== roomId) return;
             const dates = (reg.registration_dates || []).filter(d => !d.waitlisted);
             if (!dates.length) return;
             const moKey = dates.map(d => d.care_date.slice(0, 7)).sort()[0];
@@ -3582,7 +3598,7 @@ async function generateSeatDayCapacityReport() {
 
         const months = Object.keys(byMonth).sort().reverse().slice(0, 18).reverse();
         if (!months.length) {
-            container.innerHTML = '<p class="empty-hint">No confirmed enrollment data found.</p>';
+            container.innerHTML = `<p class="empty-hint">No confirmed enrollment data found for ${escHtml(scopeLabel)}.</p>`;
             return;
         }
 
@@ -3606,22 +3622,29 @@ async function generateSeatDayCapacityReport() {
 
         const cur = stats[stats.length - 1];
 
-        // Total seat capacity: every room actually holding a confirmed child this
-        // month (regardless of its static status flag — a room can be occupied
-        // before its config catches up) union'd with any room currently marked
-        // 'active', so a fully-empty active room still counts toward capacity.
-        const roomsInUseThisMonth = new Set((byMonth[cur.mo] || []).map(e => e.room_id));
-        const activeRoomIds = new Set(getSortedRooms().filter(r => r.status === 'active').map(r => r.id));
-        const capacityRoomIds = new Set([...activeRoomIds, ...roomsInUseThisMonth]);
-        const totalCapacity = getSortedRooms()
-            .filter(r => capacityRoomIds.has(r.id))
-            .reduce((s, r) => s + (r.capacity || 0), 0);
+        // Total seat capacity. Full Center: every room actually holding a confirmed
+        // child this month (regardless of its static status flag — a room can be
+        // occupied before its config catches up) union'd with any room currently
+        // marked 'active', so a fully-empty active room still counts. A specific
+        // room: just that room's own capacity.
+        let totalCapacity;
+        if (roomId === 'all') {
+            const roomsInUseThisMonth = new Set((byMonth[cur.mo] || []).map(e => e.room_id));
+            const activeRoomIds = new Set(getSortedRooms().filter(r => r.status === 'active').map(r => r.id));
+            const capacityRoomIds = new Set([...activeRoomIds, ...roomsInUseThisMonth]);
+            totalCapacity = getSortedRooms()
+                .filter(r => capacityRoomIds.has(r.id))
+                .reduce((s, r) => s + (r.capacity || 0), 0);
+        } else {
+            totalCapacity = room?.capacity || 0;
+        }
 
         const scenario = seats => cur.avgDaysPerChildPerWeek
             ? Math.min(APPROVED_CHILD_CAPACITY, Math.round(seats * 5 / cur.avgDaysPerChildPerWeek))
             : null;
 
         container.innerHTML = `
+            <p style="font-weight:600;color:#374151;margin:0 0 10px">${escHtml(scopeLabel)}</p>
             <div class="fin-kpi-row" style="margin-bottom:1.25rem">
                 <div class="fin-kpi">
                     <span class="fin-kpi-label">Avg occupied seats/day (${cur.label})</span>
@@ -3632,16 +3655,16 @@ async function generateSeatDayCapacityReport() {
                     <span class="fin-kpi-value">${cur.avgDaysPerChildPerWeek.toFixed(2)}</span>
                 </div>
                 <div class="fin-kpi">
-                    <span class="fin-kpi-label">Enrolled children (excl. Summer Camp)</span>
+                    <span class="fin-kpi-label">Enrolled children</span>
                     <span class="fin-kpi-value">${cur.distinctChildren}</span>
                 </div>
                 <div class="fin-kpi">
-                    <span class="fin-kpi-label">Total seat capacity (excl. Summer Camp)</span>
-                    <span class="fin-kpi-value">${totalCapacity}</span>
+                    <span class="fin-kpi-label">Total seat capacity</span>
+                    <span class="fin-kpi-value">${totalCapacity || '—'}</span>
                 </div>
             </div>
             <div class="fin-chart-wrap" style="margin-bottom:1.25rem">
-                <h4 class="fin-chart-title">Average Occupied Seats/Day vs. Operating Band</h4>
+                <h4 class="fin-chart-title">Average Occupied Seats/Day vs. Operating Band — ${escHtml(scopeLabel)}</h4>
                 <canvas id="chartSeatDayCapacity"></canvas>
             </div>
             <div style="overflow-x:auto">
@@ -3664,8 +3687,8 @@ async function generateSeatDayCapacityReport() {
                     </tr>
                     <tr>
                         <td>Full physical capacity (all seats filled)</td>
-                        <td class="report-num">${totalCapacity}</td>
-                        <td class="report-num"><strong>${scenario(totalCapacity) ?? '—'}</strong></td>
+                        <td class="report-num">${totalCapacity || '—'}</td>
+                        <td class="report-num"><strong>${totalCapacity ? (scenario(totalCapacity) ?? '—') : '—'}</strong></td>
                     </tr>
                 </tbody>
             </table>
@@ -3674,9 +3697,9 @@ async function generateSeatDayCapacityReport() {
                 Avg occupied seats/day = confirmed child-days &divide; weekdays in month.
                 Avg booked days/child (per week) = confirmed child-days &divide; distinct children &divide; weeks in the month
                 (currently ${cur.avgDaysPerChildPerWeek.toFixed(2)}). Max active children = seats/day &times; 5 &divide; avg booked days/child per week,
-                capped at the approved ${APPROVED_CHILD_CAPACITY}-child capacity. Summer Camp is excluded throughout (separate seasonal
-                program, different age range). Shows last ${months.length} months. This is a planning display only — it does not affect
-                what enrollment allows.
+                capped at the approved ${APPROVED_CHILD_CAPACITY}-child center-wide capacity.
+                ${roomId === 'all' ? 'Summer Camp is excluded (separate seasonal program, different age range). ' : ''}
+                Shows last ${months.length} months. This is a planning display only — it does not affect what enrollment allows.
             </p>`;
 
         _destroyReportChart('seatDayCapacity');
@@ -3702,11 +3725,11 @@ async function generateSeatDayCapacityReport() {
                         data: stats.map(() => SEAT_BAND_MIN),
                         borderColor: 'rgba(245,158,11,.6)', borderDash: [6, 3], pointRadius: 0, fill: false,
                     },
-                    {
+                    ...(totalCapacity ? [{
                         label: `Total seat capacity (${totalCapacity})`,
                         data: stats.map(() => totalCapacity),
                         borderColor: 'rgba(239,68,68,.6)', borderDash: [3, 3], pointRadius: 0, fill: false,
-                    },
+                    }] : []),
                 ],
             },
             options: {
@@ -3731,6 +3754,7 @@ function setupExtraReports() {
     document.getElementById('printPromotionsBtn')?.addEventListener('click', printPromotionsReport);
     document.getElementById('generateFteBtn')?.addEventListener('click', generateEnrollmentFteReport);
     document.getElementById('generateSeatDayBtn')?.addEventListener('click', generateSeatDayCapacityReport);
+    document.getElementById('seatDayRoomSel')?.addEventListener('change', generateSeatDayCapacityReport);
     document.getElementById('generateDiscountPricingBtn')?.addEventListener('click', generateDiscountPricingReport);
     document.getElementById('exportDiscountPricingBtn')?.addEventListener('click', exportDiscountPricingReport);
     document.getElementById('printDiscountPricingBtn')?.addEventListener('click', printDiscountPricingReport);
