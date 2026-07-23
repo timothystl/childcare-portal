@@ -3632,26 +3632,22 @@ async function generateSeatDayCapacityReport() {
                 <thead><tr>
                     <th>Scenario</th>
                     <th class="report-num">Avg occupied seats/day</th>
-                    <th class="report-num">&divide; avg booked days/child (${cur.avgDaysPerChild.toFixed(2)}) &times; 5</th>
                     <th class="report-num">Max active children</th>
                 </tr></thead>
                 <tbody>
                     <tr>
-                        <td>Band floor</td>
+                        <td>Min recommended (band floor)</td>
                         <td class="report-num">${SEAT_BAND_MIN}</td>
-                        <td class="report-num">&mdash;</td>
                         <td class="report-num"><strong>${scenario(SEAT_BAND_MIN) ?? '—'}</strong></td>
                     </tr>
                     <tr>
-                        <td>Band ceiling</td>
+                        <td>Max recommended (band ceiling)</td>
                         <td class="report-num">${SEAT_BAND_MAX}</td>
-                        <td class="report-num">&mdash;</td>
                         <td class="report-num"><strong>${scenario(SEAT_BAND_MAX) ?? '—'}</strong></td>
                     </tr>
                     <tr>
                         <td>Full physical capacity (all seats filled)</td>
                         <td class="report-num">${totalCapacity}</td>
-                        <td class="report-num">&mdash;</td>
                         <td class="report-num"><strong>${scenario(totalCapacity) ?? '—'}</strong></td>
                     </tr>
                 </tbody>
@@ -3659,9 +3655,10 @@ async function generateSeatDayCapacityReport() {
             </div>
             <p style="font-size:.8em;color:#6b7280;margin:.5rem 0 0">
                 Avg occupied seats/day = confirmed child-days &divide; weekdays in month.
-                Avg booked days/child = confirmed child-days &divide; distinct children with a confirmed registration that month.
-                Max active children is capped at the approved ${APPROVED_CHILD_CAPACITY}-child capacity regardless of the seat-day math.
-                Shows last ${months.length} months.
+                Avg booked days/child = confirmed child-days &divide; distinct children with a confirmed registration that month
+                (currently ${cur.avgDaysPerChild.toFixed(2)}). Max active children = seats/day &times; 5 &divide; avg booked days/child,
+                capped at the approved ${APPROVED_CHILD_CAPACITY}-child capacity. Shows last ${months.length} months.
+                This is a planning display only — it does not affect what enrollment allows.
             </p>`;
 
         _destroyReportChart('seatDayCapacity');
