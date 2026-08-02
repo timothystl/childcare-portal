@@ -6,7 +6,44 @@ on:
       - 'claude/**'
 
 jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Quality gate (R7/R8). This workflow previously merged straight to main and
+  # deployed with no test, no build check and no review — on a live system
+  # holding children's records. `merge-to-main` now depends on this job, so a
+  # red gate means nothing merges and nothing deploys.
+  #
+  # The dist check matters especially here: the deploy has NO build step
+  # (Cloudflare Workers serves the committed files), so a dist/ bundle that
+  # doesn't match js/ means the live site silently runs stale code.
+  # ──────────────────────────────────────────────────────────────────────────
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Verify dist/ is rebuilt and committed
+        run: |
+          npm run build
+          if ! git diff --exit-code -- dist; then
+            echo "::error::dist/ is out of sync with js/. Run 'npm run build' and commit the result."
+            echo "The deploy has no build step, so the live site would keep serving the old bundle."
+            exit 1
+          fi
+
   merge-to-main:
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: write

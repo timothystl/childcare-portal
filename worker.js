@@ -402,12 +402,36 @@ export default {
       'Content-Security-Policy',
       "default-src 'self'; " +
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; " +
-      "style-src 'self' 'unsafe-inline'; " +
+      // R25: style-src/font-src previously omitted the Google Fonts hosts that
+      // every page links (Lora, Nunito, Dancing Script). This header is set on
+      // the static-asset response and so overrides _headers — which *does* list
+      // them — meaning the brand typography was being blocked in production and
+      // silently falling back to Georgia / system-ui. Kept in sync with _headers.
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com; " +
       "img-src 'self' data:; " +
-      "font-src 'self' data:"
+      "font-src 'self' data: https://fonts.gstatic.com"
     );
-    newHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    // Cache-Control (R9). Previously every asset was `no-store`, so each page
+    // view re-downloaded the whole stack — dist/admin.min.js alone is ~600 KB.
+    //
+    // The bundle filenames are NOT content-hashed (the HTML references
+    // dist/admin.min.js literally, and the deploy has no build step), so they
+    // must never be cached immutably — a deploy would keep serving stale JS.
+    // `no-cache` is the correct middle ground: the browser still revalidates on
+    // every request, but a matching ETag returns an empty 304 instead of the
+    // full body. Correctness is identical to `no-store`; the bytes are not.
+    //
+    // Truly immutable media (images, fonts, favicon) is content-stable and can
+    // be cached hard. HTML stays `no-store` so a deploy is picked up instantly.
+    const p = url.pathname;
+    if (/\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|eot)$/i.test(p)) {
+      newHeaders.set('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (/^\/(dist|css|img|images)\//i.test(p) || p === '/manifest.json') {
+      newHeaders.set('Cache-Control', 'no-cache');
+    } else {
+      newHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    }
 
     // Ensure service worker can claim full scope
     if (url.pathname === '/sw.js') {

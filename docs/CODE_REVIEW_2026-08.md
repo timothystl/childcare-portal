@@ -40,9 +40,21 @@ R1–R5 should be treated as an active incident, not a backlog item.
 | Severity | Count | Items |
 |---|---|---|
 | Critical | 5 | R1–R5 |
-| High | 3 | R6–R8 |
-| Medium | 8 | R9–R16 |
+| High | 4 | R6–R8, **R24** |
+| Medium | 9 | R9–R16, **R25** |
 | Low | 7 | R17–R23 |
+
+### Status as of 2026-08-02
+
+| | |
+|---|---|
+| **Fixed in production** | R2, R3 (verified — anon now gets `permission denied` on both paths) |
+| **Fixed in code** | R6, R7, R8, R9, R10 (partial), R14, R15, R16, R17, R19, R22, R23, R25 |
+| **Open** | **R1, R4, R5, R24**, R11, R12, R13, R18, R20, R21 |
+
+R10 is partial: `defer` was added, but **SRI hashes could not be generated** — the
+review environment has no egress to `cdn.jsdelivr.net`. The exact command to produce
+them is recorded in a comment above the tags in `admin.html`.
 
 ---
 
@@ -244,6 +256,49 @@ suite runs only when someone remembers to type `node js/tests/business-logic.tes
 Effective automated coverage of production code is **zero**. The tests have real
 value as executable specification — the fix is to export the real functions and
 import them, then wire `npm test` into R7's workflow.
+
+---
+
+### R24 — The registration window is not enforced server-side *(found during migration reconciliation)*
+
+CLAUDE.md documented the registration window as trigger-enforced:
+
+> "Enforced by a Postgres trigger (`enforce_registration_window.sql`) … Attempting to
+> submit outside the window raises a `P0001` error caught in `app.js`."
+
+`enforce_registration_window.sql` was **never applied**. Neither the
+`check_registration_window()` function nor the `enforce_registration_window` trigger
+exists in production:
+
+```sql
+select routine_name from information_schema.routines
+ where routine_schema='public' and routine_name='check_registration_window';   -- 0 rows
+select trigger_name from information_schema.triggers
+ where trigger_schema='public' and trigger_name='enforce_registration_window'; -- 0 rows
+```
+
+`app.js:1383` carries a handler for a `P0001` that can never fire. Because `anon`
+holds INSERT on `registrations` and `registration_dates` (R1/R4), the window is
+enforced **only by client-side JavaScript** — anyone posting directly to the REST API
+can create a registration for a closed month, which then flows into billing and
+capacity planning as though it were legitimate.
+
+Same root cause as R5: a committed migration that was never run. Applying it is
+low-risk but not zero — confirm the `registration_window` setting is correctly shaped
+first, or the trigger will reject legitimate submissions.
+
+### R25 — Google Fonts are blocked by the worker's CSP in production
+
+`_headers` permits `fonts.googleapis.com` / `fonts.gstatic.com`, but `worker.js` sets
+its own Content-Security-Policy on the static-asset response, and that one omitted
+both hosts. The worker's header is the one that reaches the browser, so every page's
+`<link href="https://fonts.googleapis.com/css2?family=Dancing+Script…">` was being
+blocked — meaning the brand typography (Lora, Nunito, Dancing Script) has been
+silently falling back to Georgia / system-ui in production while rendering correctly
+in local dev, where `_headers` applies.
+
+Fixed by bringing the worker CSP in sync with `_headers`. Worth a visual check after
+deploy: the site may look noticeably different once the intended fonts actually load.
 
 ---
 

@@ -1,12 +1,13 @@
 {
   "name": "childcare-portal",
-  "version": "2.3.20",
+  "version": "2.3.21",
   "private": true,
   "description": "Timothy Lutheran MDO Registration Portal — build tooling",
   "scripts": {
     "bump": "node scripts/bump-patch.js",
     "build": "node scripts/build.js",
-    "build:watch": "node scripts/build.js --watch"
+    "build:watch": "node scripts/build.js --watch",
+    "test": "node js/tests/business-logic.test.js"
   },
   "devDependencies": {
     "esbuild": "^0.24.2"

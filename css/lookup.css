@@ -89,7 +89,7 @@
     margin-top: 6px;
     margin-bottom: 16px;
 }
-.lookup-hint a { color: var(--green); text-decoration: none; }
+.lookup-hint a { color: var(--green-text); text-decoration: none; }
 .lookup-hint a:hover { text-decoration: underline; }
 
 .lookup-btn { width: 100%; margin-top: 8px; }

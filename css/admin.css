@@ -69,7 +69,7 @@
     vertical-align: middle;
     letter-spacing: .02em;
 }
-.sub-label        { color: var(--green); font-size: .88em; margin-top: 2px; font-weight: 600; }
+.sub-label        { color: var(--green-text); font-size: .88em; margin-top: 2px; font-weight: 600; }
 
 /* Logo + title group on left side of admin header */
 .admin-header-left {
@@ -4458,7 +4458,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 }
 .market-hero-stat { border-left: 2px solid var(--sun); padding-left: 12px; }
 .market-hero-num { font-family: var(--font-head); font-size: 1.8em; font-weight: 700; color: var(--navy); line-height: 1; }
-.market-hero-num span { color: var(--green); font-size: .6em; margin-left: 2px; }
+.market-hero-num span { color: var(--green-text); font-size: .6em; margin-left: 2px; }
 .market-hero-label { font-size: .78em; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
 
 .market-type-legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 0; font-size: .82em; color: var(--text-muted); }
@@ -4471,3 +4471,24 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .tag.tlc    { background: var(--navy);       color: var(--white); }
 
 .highlight-row td { background: var(--sun-pale) !important; font-weight: 600; }
+
+/* ============================================================
+   R16 — KEYBOARD FOCUS VISIBILITY
+   ------------------------------------------------------------
+   css/styles.css defines :focus-visible rings for the parent-facing pages, but
+   this file — the entire staff-facing surface — had none, and several rules
+   above set `outline: none` on :focus (which fires for keyboard users too).
+   That left admins navigating by keyboard with no visible focus indicator.
+
+   Scoping to #dashboard / #loginScreen gives these rules an id's specificity so
+   they win over the existing `.filters select:focus { outline: none }`-style
+   declarations, while :focus-visible keeps the ring off mouse clicks.
+   --navy is used rather than --sun: #01294A measures 8.26:1 on white, clearing
+   the 3:1 WCAG 1.4.11 bar for non-text contrast, where --sun manages only 1.79:1.
+   ============================================================ */
+#dashboard   :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible,
+#loginScreen :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 3px solid var(--navy);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
