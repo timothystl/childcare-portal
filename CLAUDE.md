@@ -44,7 +44,46 @@ Timothy Lutheran MDO (Mother's Day Out) registration portal. Parents register ch
 
 ---
 
-## Project status & outstanding work (updated 2026-07-12)
+## ⚠️ Current open queue — start here (updated 2026-08-02, v2.3.20)
+
+A fifth sweep (whole codebase + **live production verification**) was done 2026-08-02.
+Findings R1–R25 with full write-ups and a staged remediation order live in
+**`docs/CODE_REVIEW_2026-08.md`**. That file supersedes the per-sweep history below
+for anything still open.
+
+**Fixed and verified in production 2026-08-02:**
+- **R2** — `set_family_pin` / `set_staff_pin` were anon-executable `SECURITY DEFINER`
+  with no auth and no old-PIN check (total account takeover in two calls).
+  `EXECUTE` revoked from `anon`/`PUBLIC`; `authenticated` retains it.
+- **R3** — `pin_hash` / `parent2_pin_hash` were readable via the public anon key.
+  anon's table-level SELECT on `families` replaced with an explicit column grant
+  that excludes both. Verified: anon now gets `permission denied` on either column.
+
+**Still open and serious — see the review doc:**
+- **R1** — the anon key can still read all of `families` / `students` / `registrations`
+  (118 families, 145 children). This is SS1. Staged fix required; a blanket tighten
+  broke parent login once already.
+- **R4** — `anon` holds `DELETE` on `students` and `UPDATE` on `families`/`students`.
+- **R5** — **the admin audit log has never existed.** `add_audit_log.sql` was never
+  applied; `logAdminAction()` swallows the failure at 26 call sites.
+- **R24** — the registration window is **not** enforced server-side (see below).
+- **R20** — `restricted`/`staff` admin roles are enforced only in the browser.
+
+**Migration reconciliation (2026-08-02).** All 55 files in `supabase/migrations/`
+were diffed against the live catalog. Exactly three are unapplied:
+`add_audit_log.sql` (R5), `enforce_registration_window.sql` (R24), and
+`ss1_public_read_rpcs.sql` (known staged groundwork). Everything else is applied.
+
+---
+
+## Project status & outstanding work (older sweeps — updated 2026-07-12)
+
+> **Note:** the section below is historical and drifted. Known stale points: it cites
+> `v1.17.6` as a version example (the app is past v2.3); it lists **T2** as open, but
+> `js/admin/admin-messages.js` exists and renders the inbox correctly; and it says
+> **SS5** is "likely moot" because the billing-by-email RPCs aren't deployed — they
+> *are* deployed, as a later paragraph in the same section says. Treat
+> `docs/CODE_REVIEW_2026-08.md` as authoritative for open work.
 
 A full code review + a deeper "second sweep" + a "third sweep" + a whole-codebase
 "fourth sweep" (2026-07-12) were done. Detailed records live in:
@@ -186,9 +225,19 @@ python3 serve.py   # simple local server on :8000
 
 ### Building for production
 ```bash
+npm install          # REQUIRED once per clone — build.js needs esbuild,
+                     # otherwise `npm run build` dies with MODULE_NOT_FOUND
 npm run build        # one-shot — outputs to dist/
 npm run build:watch  # watch mode
+npm test             # business-logic unit tests + source-drift guard
 ```
+
+`npm test` runs `js/tests/business-logic.test.js`. Note that the pure functions in
+that file are **copies** of production code (the `js/` files are browser globals with
+top-level side effects and can't be `require`d). A source-drift guard at the bottom of
+the suite re-reads `js/app.js` / `js/supabase.js` and fails if a copy no longer matches
+its source, so divergence can't happen silently — if it fires, re-sync the copy. CI
+runs `npm test` plus a `dist/` freshness check before any `claude/**` branch merges.
 `scripts/build.js` bundles all JS into minified `dist/` files and patches the HTML to reference them (the HTML loads `dist/*.min.js`, not the `js/` source).
 
 > ⚠️ **The deploy has NO build step.** Cloudflare Workers (`wrangler.jsonc` →
@@ -266,7 +315,7 @@ scripts/
 | `bear` | 🐻 Bear Room | Birth–12 mo | active |
 | `bee` | 🐝 Bee Room | 12–24 mo | active |
 | `turtle` | 🐢 Turtle Room | 24–30 mo | active |
-| `goose` | 🪿 Goose Room | 30–36 mo | coming_soon |
+| `goose` | 🪿 Goose Room | 30–36 mo | active |
 | `owl` | 🦉 Owl Room | 36+ mo | active |
 | `summer` | ☀️ Summer Camp | 4–9 years | seasonal |
 
@@ -333,7 +382,16 @@ All search fields check **child name first**, then parent name(s), then email. F
 Staff can be `hourly` (rate × hours) or `salary` (fixed biweekly amount). The payroll report handles both. Clock events are ignored for salary staff.
 
 ### Registration window
-Enforced by a Postgres trigger (`enforce_registration_window.sql`). The window is defined by the `registration_window` setting. Attempting to submit outside the window raises a `P0001` error caught in `app.js`.
+The window is defined by the `registration_window` setting. `app.js` gates the UI on it
+and has a handler for the `P0001` error a database trigger would raise.
+
+> **⚠️ NOT ACTUALLY ENFORCED SERVER-SIDE (R24, found 2026-08-02).**
+> `enforce_registration_window.sql` was **never applied to production** — neither
+> `check_registration_window()` nor the `enforce_registration_window` trigger exists
+> in the live database (verified against `information_schema`). The `P0001` handler in
+> `app.js:1383` can never fire. Since `anon` holds INSERT on `registrations`, the window
+> is enforced **only by client-side JavaScript** and can be bypassed by anyone posting
+> directly to the API. Apply the migration to make the documented behaviour real.
 
 ---
 

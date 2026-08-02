@@ -50,13 +50,16 @@ function expect(actual) {
 // ============================================================
 // STUBS — mirror the real ROOMS config from supabase.js
 // ============================================================
+// `status` mirrors js/supabase.js — getRoomIdFromDob filters on status==='active',
+// NOT on room id, so the fixture has to carry it or the room-assignment tests are
+// exercising different logic than production.
 const ROOMS = [
-    { id: 'bear',   ageMinMonths: 0,  ageMaxMonths: 12,  fullDayRate: 80,  halfDayRate: null, weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: true },
-    { id: 'bee',    ageMinMonths: 12, ageMaxMonths: 24,  fullDayRate: 75,  halfDayRate: 55,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
-    { id: 'turtle', ageMinMonths: 24, ageMaxMonths: 30,  fullDayRate: 75,  halfDayRate: 45,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
-    { id: 'goose',  ageMinMonths: 30, ageMaxMonths: 36,  fullDayRate: 75,  halfDayRate: 45,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
-    { id: 'owl',    ageMinMonths: 36, ageMaxMonths: null, fullDayRate: 75, halfDayRate: 45,   weeklyFullRate: 300, weeklyHalfRate: 180,  fullDayOnly: false },
-    { id: 'summer', ageMinMonths: null, ageMaxMonths: null, fullDayRate: 75, halfDayRate: null, weeklyFullRate: null, weeklyHalfRate: null, hidden: false },
+    { id: 'bear',   status: 'active',   ageMinMonths: 0,  ageMaxMonths: 12,  fullDayRate: 80,  halfDayRate: null, weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: true },
+    { id: 'bee',    status: 'active',   ageMinMonths: 12, ageMaxMonths: 24,  fullDayRate: 75,  halfDayRate: 55,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
+    { id: 'turtle', status: 'active',   ageMinMonths: 24, ageMaxMonths: 30,  fullDayRate: 75,  halfDayRate: 45,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
+    { id: 'goose',  status: 'active',   ageMinMonths: 30, ageMaxMonths: 36,  fullDayRate: 75,  halfDayRate: 45,   weeklyFullRate: null, weeklyHalfRate: null, fullDayOnly: false },
+    { id: 'owl',    status: 'active',   ageMinMonths: 36, ageMaxMonths: null, fullDayRate: 75, halfDayRate: 45,   weeklyFullRate: 300, weeklyHalfRate: 180,  fullDayOnly: false },
+    { id: 'summer', status: 'seasonal', ageMinMonths: null, ageMaxMonths: null, fullDayRate: 75, halfDayRate: null, weeklyFullRate: null, weeklyHalfRate: null, hidden: false },
 ];
 
 // ============================================================
@@ -74,12 +77,10 @@ function calcAgeMonths(dobStr, referenceDate) {
     return months;
 }
 
-function getRoomIdFromDob(dobStr, referenceDate) {
-    if (!dobStr) return null;
-    const months = calcAgeMonths(dobStr, referenceDate);
-    if (months < 0) return null;
-    const ageable = ROOMS
-        .filter(r => r.id !== 'summer' && r.ageMinMonths != null)
+function roomIdForAgeMonths(months, roomList) {
+    if (months == null || months < 0) return null;
+    const ageable = (roomList || [])
+        .filter(r => r.ageMinMonths != null)
         .sort((a, b) => a.ageMinMonths - b.ageMinMonths);
     for (const room of ageable) {
         if (months >= room.ageMinMonths && (room.ageMaxMonths == null || months < room.ageMaxMonths)) {
@@ -87,6 +88,12 @@ function getRoomIdFromDob(dobStr, referenceDate) {
         }
     }
     return null;
+}
+
+function getRoomIdFromDob(dobStr, referenceDate) {
+    if (!dobStr) return null;
+    const months = calcAgeMonths(dobStr, referenceDate);
+    return roomIdForAgeMonths(months, ROOMS.filter(r => r.status === 'active'));
 }
 
 function effectiveRate(baseRate, discountType, discountValue) {
@@ -456,6 +463,86 @@ describe('escHtml — XSS sanitization', () => {
     });
 });
 
+// ============================================================
+// SOURCE-DRIFT GUARD
+// ------------------------------------------------------------
+// The functions above are copies of production code, because js/*.js are plain
+// browser globals with top-level side effects and cannot be require()d from
+// Node. That makes every test above vacuous on its own: change effectiveRate()
+// in js/app.js and all of these still pass.
+//
+// This guard closes that gap. It reads the real source, extracts the named
+// function by brace-matching, normalises whitespace/comments, and compares it to
+// the copy in this file. If production changes and the copy is not re-synced,
+// the suite goes red and names the function.
+//
+// It is not a substitute for importing the real code — the proper fix is to
+// extract these pure functions into a side-effect-free module both the browser
+// and Node can load — but it does mean divergence can no longer happen silently.
+// (It caught a real one: getRoomIdFromDob had already been refactored in
+// supabase.js to filter on status==='active' while this file still filtered on
+// id !== 'summer'.)
+// ============================================================
+const fs   = require('fs');
+const path = require('path');
+
+function extractFunction(sourceText, name) {
+    const start = sourceText.search(new RegExp(`^function\\s+${name}\\s*\\(`, 'm'));
+    if (start === -1) return null;
+    const open = sourceText.indexOf('{', start);
+    let depth = 0, i = open;
+    for (; i < sourceText.length; i++) {
+        const c = sourceText[i];
+        if (c === '{') depth++;
+        else if (c === '}') { depth--; if (depth === 0) { i++; break; } }
+    }
+    return sourceText.slice(start, i);
+}
+
+// Strip comments and collapse whitespace so formatting-only edits don't trip it.
+function normalise(fnText) {
+    return fnText
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/[^\n]*/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+describe('source-drift guard — copies must match js/ source', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const selfText = fs.readFileSync(__filename, 'utf8');
+
+    const GUARDED = [
+        ['calcAgeMonths',      'js/supabase.js'],
+        ['roomIdForAgeMonths', 'js/supabase.js'],
+        ['getRoomIdFromDob',   'js/supabase.js'],
+        ['effectiveRate',      'js/app.js'],
+        ['getWeekMonday',      'js/app.js'],
+    ];
+
+    for (const [fnName, relPath] of GUARDED) {
+        test(`${fnName} matches ${relPath}`, () => {
+            const srcText = fs.readFileSync(path.join(repoRoot, relPath), 'utf8');
+            const fromSource = extractFunction(srcText, fnName);
+            const fromTest   = extractFunction(selfText, fnName);
+
+            if (!fromSource) throw new Error(`${fnName} not found in ${relPath} — was it renamed or removed?`);
+            if (!fromTest)   throw new Error(`${fnName} not found in this test file`);
+
+            if (normalise(fromSource) !== normalise(fromTest)) {
+                throw new Error(
+                    `${fnName} has drifted from ${relPath}.\n` +
+                    `      The tests above are therefore testing code that is no longer in production.\n` +
+                    `      Re-sync the copy in js/tests/business-logic.test.js with the source.\n` +
+                    `      --- ${relPath} ---\n      ${normalise(fromSource)}\n` +
+                    `      --- test copy ---\n      ${normalise(fromTest)}`
+                );
+            }
+        });
+    }
+});
+
 // ---- Summary ----
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
+if (_failed > 0) process.exitCode = 1;
 if (_failed > 0) process.exit(1);

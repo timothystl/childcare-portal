@@ -1915,8 +1915,21 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <!-- R10: xlsx (~900 KB) and chart.js (~200 KB) are only ever touched inside
+         functions the admin triggers later (exports, chart tabs) — never at parse
+         time — so `defer` takes them off the critical rendering path without
+         changing behaviour. They still execute before DOMContentLoaded, which is
+         what every consumer here waits on.
+         supabase-js is deliberately NOT deferred: dist/supabase.min.js calls
+         window.supabase.createClient() at top level during parsing.
+         TODO: these tags still have no Subresource Integrity hash, and
+         supabase-js@2 is an unpinned floating major. Pin exact versions and add
+         integrity="sha384-..." (generate with:
+           curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A
+         ). The CSP allows cdn.jsdelivr.net with unsafe-inline and unsafe-eval,
+         so a substituted CDN asset would run with full admin-session access. -->
+    <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
                                                                 <!-- v2 — added no-cache headers, care month filter, cascade delete -->
 
     <!-- ── BILLING MODALS ─────────────────────────────────── -->

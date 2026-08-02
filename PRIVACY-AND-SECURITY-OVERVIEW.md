@@ -27,7 +27,9 @@ The CCPA grants California residents specific rights over their personal data, i
 ---
 
 ### Missouri Child Care Licensing Requirements (State)
-Missouri licensing standards for childcare programs require that facilities maintain accurate enrollment records and protect the privacy of children and families in their care. While there is no specific Missouri law governing web portals, the spirit of these requirements is met through controlled data access, role-based staff permissions, and a complete audit trail of all administrative actions.
+Missouri licensing standards for childcare programs require that facilities maintain accurate enrollment records and protect the privacy of children and families in their care. While there is no specific Missouri law governing web portals, the portal addresses the spirit of these requirements through controlled data access and role-based staff permissions.
+
+> **Note (2026-08-02):** this paragraph previously also cited "a complete audit trail of all administrative actions." See §3.6 — the audit log was never actually operating. Two further qualifications on access control: the read restrictions are narrower than intended (§3.3), and the role-based permissions described in §3.5 are currently enforced in the staff member's browser rather than in the database, so they separate duties in normal use but are not a hard barrier. All three are tracked in `docs/CODE_REVIEW_2026-08.md`.
 
 ---
 
@@ -69,12 +71,24 @@ All data traveling between a parent's browser and the server is encrypted using 
 ### 3.2 Family PINs Are Never Readable — Even by Staff
 When a family sets their 4-digit PIN, it is immediately scrambled using a process called "bcrypt hashing" before being saved to the database. The original PIN is discarded and never stored anywhere. When a parent enters their PIN to log in, the system scrambles their input the same way and compares the two scrambled versions — it never compares against the real PIN, because the real PIN no longer exists in any form.
 
-**Practical implication:** If an MDO staff member, a database administrator, or an unauthorized person ever viewed the raw database, they would see thousands of strings like `$2a$12$XK9mQ...` rather than any actual PIN. These scrambled values are mathematically impossible to reverse.
+**Practical implication:** If an MDO staff member, a database administrator, or an unauthorized person ever viewed the raw database, they would see thousands of strings like `$2a$12$XK9mQ...` rather than any actual PIN. These scrambled values cannot be reversed directly.
+
+> **Note (2026-08-02):** an earlier version of this section said the scrambled values were "mathematically impossible to reverse." That overstates the protection. Bcrypt cannot be reversed, but a 4-digit PIN has only 10,000 possible values, so anyone holding a copy of the scrambled value could work through all of them offline until one matched. Until 2026-08-02 those scrambled values were readable through the site's public API key; **that access has now been withdrawn** and they are reachable only by an authenticated staff session. The protection is real, but it rests on keeping the scrambled values private — not on the scrambling alone.
 
 ---
 
 ### 3.3 Database Access Controls (Row-Level Security)
-The database uses PostgreSQL Row-Level Security (RLS) policies. This means the database itself enforces who can see what — it is not just the application checking permissions and deciding what to display. A family logged in to their account cannot see any other family's records even if they tried to access them directly. Staff cannot see records they are not authorized to see. These restrictions are enforced at the lowest level of the system.
+The database uses PostgreSQL Row-Level Security (RLS) policies, which means access rules are enforced by the database itself rather than only by the application deciding what to display. RLS is enabled on every table.
+
+> **⚠️ Known gap — under active remediation (opened 2026-08-02).** The RLS policies currently in force are broader than this section previously described. An earlier version of this document stated that "a family logged in to their account cannot see any other family's records." **That is not accurate today.** The portal's public API key — which is necessarily embedded in every visitor's browser — is currently permitted to read the family and student tables. Family and child records are therefore readable by someone who inspects the site's network traffic, without logging in.
+>
+> **What has already been fixed (2026-08-02):**
+> - Family and staff PIN *hashes* are no longer readable through the public key.
+> - The PIN-setting routines can no longer be called without an authenticated staff login. Previously they could be invoked anonymously, which allowed a parent or staff account's PIN to be overwritten by an outsider.
+>
+> **What remains open:** narrowing the read policies so that a family can retrieve only its own record. This is a staged change — an earlier attempt at a blanket tightening broke parent login and had to be reversed — so it is being done behind server-side functions and smoke-tested before the broad policies are withdrawn. Tracked as R1 in `docs/CODE_REVIEW_2026-08.md`.
+>
+> This notice will be removed, and the section rewritten, once the remediation is complete and verified. It is stated plainly here rather than omitted because a security overview that overstates its protections is worse than one that names its gaps.
 
 ---
 
@@ -92,7 +106,9 @@ Not all staff see the same information. The system supports multiple access role
 - **Restricted Admin** — Can manage registrations and rosters but cannot see payroll, billing, or system configuration.
 - **Staff** — Limited access appropriate for classroom staff.
 
-This "least privilege" approach means a classroom aide cannot accidentally (or intentionally) access billing information or family financial data they have no business reason to see.
+This "least privilege" approach means a classroom aide does not see billing information or family financial data they have no business reason to see.
+
+> **Note (2026-08-02):** these role restrictions are applied by the dashboard in the staff member's browser, not by the database. In normal use they separate duties as described, but a staff-level account that deliberately used browser developer tools could reach data outside its role. Closing this requires enforcing the roles in the database itself; tracked as R20 in `docs/CODE_REVIEW_2026-08.md`.
 
 ---
 
@@ -104,7 +120,13 @@ Every significant action taken by any admin user is automatically recorded in a 
 - The exact date and time it occurred
 - The before and after values for any changed fields
 
-**Why this matters legally and operationally:** If a registration is missing, a billing amount appears incorrect, or a staff member is accused of inappropriate access, the audit log provides an authoritative, tamper-evident record of exactly what happened and when.
+**Why this matters legally and operationally:** If a registration is missing, a billing amount appears incorrect, or a staff member is accused of inappropriate access, an audit log provides an authoritative record of exactly what happened and when.
+
+> **⚠️ Correction (2026-08-02): the audit log is not currently operating, and never has been.** The application code calls an audit-recording routine from 26 places, but the database table that routine writes to was never created in the live system — the setup script for it was written and committed but never run. Because the recording call was deliberately written to fail quietly (so that an audit problem could never block a staff member mid-task), the failure produced no error and went unnoticed.
+>
+> **Practical implication: no administrative action taken to date has been recorded, and that history cannot be reconstructed.** This section previously described the log as "permanent" and "tamper-evident"; neither was true in practice.
+>
+> Creating the table restores logging from that point forward. It is a small change, but it is deliberately not being made in the same step as the access-control work above, so that each can be verified on its own. Tracked as R5 in `docs/CODE_REVIEW_2026-08.md`.
 
 ---
 
@@ -192,9 +214,9 @@ The policy is written in plain English and is accessible without logging in.
 | CCPA — Right to deletion | Compliant | In-portal deletion request form + email option |
 | CCPA — No sale of personal data | Compliant | Data not sold; disclosed in privacy policy |
 | Secure transmission | Compliant | HTTPS enforced at Cloudflare edge |
-| Secure credential storage | Compliant | PINs hashed with bcrypt; admin passwords via Supabase Auth |
-| Access controls | Compliant | RLS in database + role-based admin permissions |
-| Activity audit trail | Compliant | All admin actions logged with timestamp and detail |
+| Secure credential storage | Compliant | PINs hashed with bcrypt; admin passwords via Supabase Auth. Hash values were readable via the public API key until 2026-08-02; that access is now withdrawn. |
+| Access controls | **Gap — remediation in progress** | RLS enabled on every table, but the public API key can still read family/student records. PIN hashes and PIN-setting routines were closed 2026-08-02. See §3.3 and R1 in `docs/CODE_REVIEW_2026-08.md`. |
+| Activity audit trail | **Not operating** | The audit table was never created in the live system, so no admin action has been recorded to date. See §3.6 and R5 in `docs/CODE_REVIEW_2026-08.md`. |
 | No advertising tracking | Compliant | No ad cookies or tracking pixels on parent pages |
 
 ---

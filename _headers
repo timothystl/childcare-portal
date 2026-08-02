@@ -4,3 +4,29 @@
   Expires: 0
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com
+
+# Bundles and stylesheets are versioned but NOT content-hashed, so they must
+# still revalidate on every request — `no-cache` allows an empty 304 response
+# instead of re-sending the full body (dist/admin.min.js is ~600 KB).
+# NOTE: worker.js sets these headers too and takes precedence in the Workers
+# Assets deploy; both are kept in sync so the behaviour is the same either way.
+/dist/*
+  Cache-Control: no-cache
+  Pragma:
+  Expires:
+
+/css/*
+  Cache-Control: no-cache
+  Pragma:
+  Expires:
+
+# Content-stable media can be cached hard.
+/img/*
+  Cache-Control: public, max-age=31536000, immutable
+  Pragma:
+  Expires:
+
+/images/*
+  Cache-Control: public, max-age=31536000, immutable
+  Pragma:
+  Expires:

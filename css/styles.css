@@ -11,9 +11,16 @@
   --sun:        #F5B731;   /* primary accent — CTA buttons, nav border, key highlights */
   --sun-lt:     #FDE598;   /* hover state on sun buttons */
   --sun-pale:   #FFF8E1;   /* badge backgrounds, calendar available states, callout fills */
-  --green:      #5BAD8B;   /* secondary accent — section labels, links, staff accents */
+  --green:      #5BAD8B;   /* secondary accent — SURFACES ONLY: borders, fills, tints */
+  --green-text: #3A7B60;   /* text/icon green — use this whenever green is FOREGROUND */
   --green-lt:   #C9E6DC;   /* green surface tints */
   --green-pale: #EAF5EF;   /* green card backgrounds */
+  /* R14: --green (#5BAD8B) measures 2.69:1 on white and 2.58:1 on --cream, so it
+     fails WCAG AA (4.5:1) for text and even the 3:1 bar for icons. It is fine as a
+     border or fill, where contrast rules don't apply. --green-text (#3A7B60) is
+     the same hue darkened to 5.02:1 on white / 4.81:1 on --cream / 4.68:1 on
+     --linen. Use --green-text for any `color:` declaration; keep --green for
+     `background`/`border`. */
   --tang:       #E97D55;   /* pop accent — third accent slot, alerts, event tags */
   --tang-pale:  #FDEEE8;   /* tangerine surface tints */
   --cream:      #FDFAF0;   /* primary page background, hero */
@@ -61,7 +68,7 @@ body {
     color: var(--text);
 }
 
-a { color: var(--green); }
+a { color: var(--green-text); }
 
 .calendar-body { background: var(--navy); }
 
@@ -571,7 +578,7 @@ button:focus-visible,
 .room-rate {
     margin-top: 8px;
     font-size: .8em;
-    color: var(--green);
+    color: var(--green-text);
     font-weight: 600;
 }
 
@@ -1062,7 +1069,7 @@ button:focus-visible,
     border-radius: var(--radius-sm);
     flex-wrap: wrap;
 }
-.family-selected-icon { color: var(--green); font-size: 1.1em; }
+.family-selected-icon { color: var(--green-text); font-size: 1.1em; }
 .family-selected-name { font-weight: 600; color: var(--green-dark); flex: 1; }
 .fam-pin-badge {
     background: var(--green);
@@ -1265,7 +1272,7 @@ input.prefilled {
 /* Inline discount note shown after a rate, e.g. "$0 (staff)" */
 .disc-note {
     font-size: .82em;
-    color: var(--green);
+    color: var(--green-text);
     font-style: italic;
 }
 
@@ -1634,3 +1641,22 @@ input.prefilled {
 .push-prompt-text { flex: 1; font-size: .9rem; }
 .push-prompt-btns { display: flex; gap: .5rem; flex-shrink: 0; }
 .btn-sm { padding: .35rem .8rem; font-size: .85rem; }
+
+/* ============================================================
+   R16 — REDUCED MOTION
+   ------------------------------------------------------------
+   No prefers-reduced-motion handling existed anywhere in the codebase. Users
+   who have asked their OS to reduce motion (vestibular disorders, migraine
+   triggers) were still served every transition and animation.
+
+   Durations are collapsed rather than set to `none` so that transitionend /
+   animationend listeners still fire and no JS that awaits them can hang.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

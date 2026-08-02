@@ -13,3 +13,7 @@ dist/*.map
 !.env.example
 supabase/.temp/
 .claude/worktrees/
+
+# macOS Finder metadata
+.DS_Store
+**/.DS_Store
