@@ -319,7 +319,8 @@ const TAB_META = {
     finance:       { icon: '💰', label: 'Finance' },
     billing:       { icon: '💳', label: 'Billing' },
     reports:       { icon: '📊', label: 'Billing' },
-    settings:      { icon: '⚙️', label: 'Settings' }
+    settings:      { icon: '⚙️', label: 'Settings' },
+    audit:         { icon: '🧾', label: 'Audit Log' }
 };
 
 function setupTabs() {
@@ -356,6 +357,7 @@ function setupTabs() {
         if (tab === 'billing'   && !_arLoaded)                   { setupBillingDashYear(); }
         if (tab === 'cacfp'     && !_cacfpLoaded)                { _cacfpLoaded = true; initCacfpTab(); }
         if (tab === 'market'    && !_marketLoaded)               { _marketLoaded = true; initMarketTab(); }
+        if (tab === 'audit')                                     loadAuditLogTab();
     }
 
     navItems.forEach(item => item.addEventListener('click', () => activate(item.dataset.tab)));
@@ -368,6 +370,76 @@ function setupTabs() {
 
     const saved = localStorage.getItem('adminActiveTab') || 'daily';
     activate(saved);
+}
+
+// ============================================================
+// AUDIT LOG  (R5 — read-only viewer for admin_audit_log_recent)
+// ============================================================
+let _auditLogEntries = [];
+
+function setupAuditLog() {
+    document.getElementById('auditLogRefreshBtn')?.addEventListener('click', loadAuditLogTab);
+    document.getElementById('auditLogSearch')?.addEventListener('input', e => {
+        const q = e.target.value.toLowerCase().trim();
+        renderAuditLogTable(!q ? _auditLogEntries : _auditLogEntries.filter(entry =>
+            (entry.admin_email || '').toLowerCase().includes(q) ||
+            (entry.action      || '').toLowerCase().includes(q) ||
+            (entry.entity      || '').toLowerCase().includes(q)
+        ));
+    });
+}
+
+// Reloads on every visit to the tab (not just once) — an admin switching back
+// after taking an action elsewhere should see it show up, and the query is a
+// single capped SELECT, cheap enough to not need a "loaded once" guard.
+async function loadAuditLogTab() {
+    const tbody = document.getElementById('auditLogTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">Loading…</td></tr>';
+    try {
+        _auditLogEntries = await fetchAuditLog();
+        const searchEl = document.getElementById('auditLogSearch');
+        if (searchEl) searchEl.value = '';
+        renderAuditLogTable(_auditLogEntries);
+    } catch (err) {
+        console.error('loadAuditLogTab:', err);
+        tbody.innerHTML = `<tr><td colspan="5" class="loading-cell error">Failed to load — ${escHtml(err.message || 'unknown error')}</td></tr>`;
+    }
+}
+
+function renderAuditLogTable(entries) {
+    const tbody = document.getElementById('auditLogTbody');
+    if (!tbody) return;
+    if (!entries.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No matching entries.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = entries.map(entry => {
+        // entry.ts is a full timestamp, not a calendar date — format directly
+        // from the Date object (not via friendlyShort, which assumes a plain
+        // YYYY-MM-DD and reconstructs local midnight; feeding it a UTC-derived
+        // date string here could display the wrong calendar day near midnight).
+        const when = new Date(entry.ts).toLocaleString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit'
+        });
+        const idBadge = entry.entity_id
+            ? ` <span style="color:var(--text-muted);font-size:.85em">#${escHtml(String(entry.entity_id))}</span>`
+            : '';
+        // details is arbitrary admin-supplied JSON (e.g. { child_name, oldRate,
+        // newRate }) — never render it as anything but escaped text.
+        let detailsText = '';
+        if (entry.details != null) {
+            try { detailsText = JSON.stringify(entry.details); }
+            catch { detailsText = String(entry.details); }
+        }
+        return `<tr>
+            <td style="white-space:nowrap;">${escHtml(when)}</td>
+            <td>${escHtml(entry.admin_email || '')}</td>
+            <td>${escHtml(entry.action || '')}</td>
+            <td>${escHtml(entry.entity || '')}${idBadge}</td>
+            <td style="max-width:360px;font-size:.85em;color:var(--text-muted);word-break:break-word;">${escHtml(detailsText)}</td>
+        </tr>`;
+    }).join('');
 }
 
 // ============================================================
@@ -964,10 +1036,14 @@ function _hide(id) {
 function applyRoleRestrictions() {
     if (currentAdminRole === 'full') return;
 
-    // Finance, CACFP, and Market Analysis tabs (financial/PII/competitive data) are full-access only
+    // Finance, CACFP, Market Analysis, and Audit Log are full-access only —
+    // the audit log records every admin's actions across every tab (rate
+    // changes, PIN resets, lock/unlock), which is account-oversight material,
+    // not something a restricted or classroom-staff account should browse.
     document.querySelectorAll('[data-tab="finance"]').forEach(el => { el.style.display = 'none'; });
     document.querySelectorAll('[data-tab="cacfp"]').forEach(el => { el.style.display = 'none'; });
     document.querySelectorAll('[data-tab="market"]').forEach(el => { el.style.display = 'none'; });
+    document.querySelectorAll('[data-tab="audit"]').forEach(el => { el.style.display = 'none'; });
 
     if (currentAdminRole === 'restricted') {
         // Staffing tab: hide everything except the schedule planner

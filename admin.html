@@ -9,7 +9,7 @@
   <!-- Fonts: Sunlit Neighborhood brand system -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:wght@400;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <meta charset="UTF-8">
     <meta name="robots" content="noindex, nofollow">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -86,6 +86,7 @@
                     <button class="mobile-nav-item" data-tab="finance"><span class="mni-icon">💰</span><span>Finance</span></button>
                     <button class="mobile-nav-item" data-tab="reports"><span class="mni-icon">📊</span><span>Billing</span></button>
                     <button class="mobile-nav-item" data-tab="settings"><span class="mni-icon">⚙️</span><span>Settings</span></button>
+                    <button class="mobile-nav-item" data-tab="audit"><span class="mni-icon">🧾</span><span>Audit Log</span></button>
                 </div>
                 <div class="mobile-nav-footer">
                     <span class="mnf-version" id="mobileNavVersion"></span>
@@ -961,6 +962,43 @@
             </section>
 
         </div><!-- /#tab-settings -->
+
+        <!-- ── Tab: Audit Log ─────────────────────────────────── -->
+        <div class="tab-pane hidden" id="tab-audit">
+            <section class="admin-section">
+                <h2>🧾 Admin Audit Log</h2>
+                <p class="section-desc">
+                    Every significant admin action — creating or deleting a registration, changing a rate,
+                    locking a family, setting a PIN — is recorded here automatically with who did it and when.
+                    Entries cannot be edited or deleted by any admin account, including Full Access. Showing the
+                    most recent 500 entries.
+                </p>
+                <p class="section-desc" style="margin-top:-8px;color:var(--text-muted);font-size:.85em;">
+                    Recording started 2026-08-03 — nothing before that date exists to show.
+                </p>
+                <div class="rates-controls" style="margin-bottom:14px;">
+                    <input type="text" id="auditLogSearch" class="family-search-input"
+                           placeholder="Filter by admin, action, or entity…" style="max-width:320px">
+                    <button id="auditLogRefreshBtn" type="button" class="btn-secondary">🔄 Refresh</button>
+                </div>
+                <div id="auditLogTableWrap" style="overflow-x:auto;">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>When</th>
+                                <th>Admin</th>
+                                <th>Action</th>
+                                <th>Entity</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditLogTbody">
+                            <tr><td colspan="5" class="loading-cell">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div><!-- /#tab-audit -->
 
         <!-- ── Tab: Reports ───────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-reports">
