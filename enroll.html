@@ -221,11 +221,20 @@
     </div>
   </div>
   <div class="footer-base">
-    <p>© 2026 Timothy Lutheran Church · Mother's Day Out · <script>document.write(window.__BUILD_VERSION__||'v1.15.24')</script></p>
+    <p>© 2026 Timothy Lutheran Church · Mother's Day Out · <span id="footer-version"></span></p>
     <p><a href="/privacy">Privacy Policy</a></p>
   </div>
 </footer>
 
+<!-- This page loads no dist/*.min.js bundle (everything here is inline, hand-
+     written JS hitting Supabase directly) — window.__BUILD_VERSION__ is
+     normally only set by the build step inlining it into a bundle, so
+     without this tag it would never be set at all on this page, and the
+     badge above would show nothing regardless of what's actually deployed. -->
+<script src="js/build-version.js"></script>
+<script>
+  document.getElementById('footer-version').textContent = window.__BUILD_VERSION__ || 'dev';
+</script>
 <script>
   // Nav dropdown
   var navMenuBtn = document.getElementById('navMenuBtn');
