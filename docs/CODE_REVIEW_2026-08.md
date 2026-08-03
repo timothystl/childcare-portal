@@ -44,11 +44,54 @@ R1–R5 should be treated as an active incident, not a backlog item.
 | Medium | 9 | R9–R16, **R25** |
 | Low | 7 | R17–R23 |
 
-### Status as of 2026-08-02
+### Exposure check — was the PIN-hash data ever accessed? (2026-08-03)
+
+Supabase's API logs were not reachable from the review environment, but
+`pg_stat_statements` turned out to be stronger evidence. It records every distinct
+query *shape* executed against the database, and on this project:
+
+- statistics run continuously from **2026-03-10**;
+- `pg_stat_statements_info.dealloc` = **0**, with 1,004 of 5,000 slots used — so
+  **nothing has ever been evicted**. It is a complete record of shapes, not a sample;
+- the bcrypt migrations themselves appear in that record, which means the hash columns
+  were created *after* the window opened. **The full lifetime of `pin_hash` is covered.**
+
+| Check | Result |
+|---|---|
+| PostgREST queries reading `families.pin_hash` | **0** |
+| PostgREST queries reading `families.parent2_pin_hash` | **0** |
+| PostgREST `select *` on `families` (would expand to include both) | **0** |
+| PostgREST queries reading `staff.staff_pin_hash` | **0** |
+| Distinct read shapes against `families` | 39 — all explicit column lists, none with a hash |
+| Legacy plaintext `staff.staff_pin` still populated | 0 of 34 rows |
+
+Reading a hash column would have required a query shape that has never existed.
+**No evidence the PIN hashes were ever accessed.**
+
+Two limits, stated plainly:
+1. This is shapes, not requests. It cannot attribute calls to a caller or IP — only
+   establish that nobody ever asked for those columns.
+2. **It does not clear R1.** The app itself legitimately reads names, emails and phone
+   numbers, so an outsider harvesting those would have used an identical query shape
+   and would be invisible here. The hash question is answerable from this data; the
+   broader read-exposure question is not.
+
+### R26 — Staff wages and PIN hashes were readable via the public key *(fixed 2026-08-03)*
+
+Found while running the above. `anon` held table-level SELECT on `staff`, exposing
+`staff_pin_hash`, `hourly_rate`, `salary_biweekly` and `pto_starting_balance` — the
+same exposure class as R3, missed because R3 was scoped to `families`.
+
+Fixed in `phase1_narrow_anon_staff_columns.sql`. Verified beforehand from five
+independent angles that no anon-reachable path reads the table (the kiosk uses the
+`lookup_staff_by_pin` SECURITY DEFINER RPC, not the table), and smoke-tested both the
+kiosk RPC as `anon` and the admin roster query as `authenticated` afterwards.
+
+### Status as of 2026-08-03
 
 | | |
 |---|---|
-| **Fixed in production** | R2, R3 (verified — anon now gets `permission denied` on both paths) |
+| **Fixed in production** | R2, R3, **R26** (all verified — anon now gets `permission denied` on each path) |
 | **Fixed in code** | R6, R7, R8, R9, R10 (partial), R14, R15, R16, R17, R19, R22, R23, R25 |
 | **Open** | **R1, R4, R5, R24**, R11, R12, R13, R18, R20, R21 |
 
@@ -520,6 +563,65 @@ at `2.3.15` against a `package.json` of `2.3.19` — five bumps behind. Harmless
 today (the lock's dependency tree is what matters, and that is correct), but it
 makes the lock a misleading record of what shipped. Add the lock to the bump
 script's atomic write.
+
+---
+
+## R1 remediation plan — four phases
+
+The principle: **anon should be able to write what a stranger legitimately submits** —
+a registration, a waitlist application, a message — **and read almost nothing
+directly.** Everything a logged-in parent sees should come back through a function
+that first establishes who they are.
+
+Three things already exist that make this far less daunting than it looks:
+
+- **`family_login` already returns the family and all its children in one payload**
+  (SECURITY DEFINER). Post-login the parent portal largely shouldn't need direct table
+  reads at all — it simply doesn't use what it has already been handed.
+- **A family session token already exists.** `worker.js` mints and verifies an HMAC
+  token (`verifyFamilyToken`, `FAMILY_SESSION_SECRET`) for push subscriptions. The hard
+  part of scoped access is built and currently unused for this purpose.
+- **`ss1_public_read_rpcs.sql`** has groundwork written (`capacity_counts`,
+  `registration_conflict`) — never applied.
+
+And `pg_stat_statements` supplies the exact set of queries the app has ever issued.
+The 2026-07 attempt failed because it was a blind tighten; the allowlist is now
+derivable from evidence.
+
+### Phase 1 — narrow columns, not rows *(in progress)*
+Replace anon's table-level SELECT with an explicit column grant per table. No row
+becomes newly hidden, so login and registration cannot break; the sensitive columns
+simply stop being served.
+
+- `families` — **done** (R3): `pin_hash`, `parent2_pin_hash` revoked.
+- `staff` — **done** (R26): wages, `staff_pin_hash`, legacy `staff_pin` revoked.
+- `students`, `registrations`, `registration_dates`, `staff_clock_events` —
+  **not yet, and deliberately so.** These are read constantly by the parent portal and
+  kiosk under the anon key, so each needs the same five-angle verification `staff` got
+  before a single column is withdrawn. Two specific hazards to clear first:
+  1. `pg_stat_statements` shows **4 `select *` shapes against `students`**. PostgREST
+     expands `*` to every column, so revoking *any* column breaks those callers
+     outright. The source of those shapes must be identified and pinned to explicit
+     column lists **before** narrowing `students`.
+  2. Column privileges are required for filter and order columns too, not just the
+     select list — so the allowlist must be derived from the whole query text, not
+     from `.select()` calls alone.
+
+### Phase 2 — remove the destructive verbs (R4)
+Drop `anon delete students`, `anon update students`, `anon update families`,
+`anon update clock events`. Requires tracing which anon-context writes are genuine
+first — the parent portal may legitimately update a child record during registration.
+
+### Phase 3 — move parent reads behind the session token *(the only risky phase)*
+Add SECURITY DEFINER RPCs that verify the family session token and return only that
+family's rows. Cut the frontend over one page at a time — lookup, then calendar, then
+registration — each shipped and confirmed before the next. The anon policies stay open
+throughout, so nothing breaks while this lands.
+
+### Phase 4 — close the door
+Drop the anon SELECT policies on `families` / `students` / `registrations`. By then
+nothing is calling them, so this is a formality rather than a leap — which is exactly
+what went wrong in 2026-07, when this step was attempted *first* instead of last.
 
 ---
 
