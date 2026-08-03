@@ -14,7 +14,7 @@
   <!-- Fonts: myMDO brand system -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:wght@400;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
       --navy:      #01294A;
@@ -240,7 +240,9 @@
     .highlight-card-accent:nth-child(4) { border-top-color: var(--navy); }
 
     /* ENROLL — navy stays here for contrast */
-    .enroll-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 48px; }
+    /* auto-fit rather than a fixed 2-column grid, so a third card (the
+       waitlist option) wraps cleanly instead of sitting alone on its own row */
+    .enroll-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 28px; margin-top: 48px; }
     .enroll-card { background: rgba(255,255,255,.07); border-radius: var(--radius-md); padding: 32px 30px; border: 1.5px solid rgba(255,255,255,.14); }
     .enroll-card h3 { font-family: var(--font-head); font-size: 20px; font-weight: 700; color: var(--white); margin-bottom: 10px; }
     .enroll-card p { font-size: 14px; color: rgba(255,255,255,.68); line-height: 1.75; margin-bottom: 20px; }
@@ -512,6 +514,12 @@
         <p>Already enrolled? Head straight to the care day portal to select your dates for the upcoming month. You can book any open dates, mix full and half days, and see live availability.</p>
         <ul><li>Real-time spot availability</li><li>Full day or half day per date</li><li>Instant confirmation</li><li>4-digit family PIN required to access</li></ul>
         <a href="/calendar" class="btn btn-secondary">📅 Open the Care Day Portal</a>
+      </div>
+      <div class="enroll-card">
+        <h3>Not Yet Enrolled — Join the Waitlist</h3>
+        <p>Interested in a future spot for your child? Tell us a bit about your family and preferred start date, and we'll reach out as soon as an opening matches.</p>
+        <ul><li>No enrollment required to apply</li><li>We'll contact you when a spot opens</li><li>Check your status anytime by email</li></ul>
+        <a href="/inquiry" class="btn btn-secondary">⏳ Join the Waitlist</a>
       </div>
     </div>
     <p style="margin-top:32px;text-align:center;font-size:14px;color:rgba(255,255,255,.5);">Questions? Contact the MDO office at the church:<br><a href="mailto:mdo@timothystl.org" style="color:rgba(255,255,255,.65);">mdo@timothystl.org</a> &nbsp;·&nbsp; 314-783-0523 &nbsp;·&nbsp; 6704 Fyler Ave, St. Louis, MO 63139</p>

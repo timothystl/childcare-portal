@@ -262,20 +262,80 @@ function renderPublicStaffDirectory(staffRaw) {
 // ============================================================
 // AGE / DOB HELPERS
 // ============================================================
-// calcAgeMonths() and getRoomIdFromDob() live in supabase.js (shared —
-// loaded before this file on every page).
+// calcAgeMonths(), getRoomIdFromDob(), getRoomsFromDob(),
+// fetchMostRecentRoomForChild() and fetchRoomFillForMonth() live in
+// supabase.js (shared — loaded before this file on every page).
 function getRoomFromDob(dobStr) {
     const roomId = getRoomIdFromDob(dobStr);
     return roomId ? (ROOMS.find(r => r.id === roomId) || null) : null;
 }
 
-// Returns room: checks admin-set override first, falls back to age-based
+// Synchronous room lookup: admin override first, else the single active room
+// whose age range matches. When Settings → Rates puts more than one active
+// room in the same age band (Turtle and Owl currently both cover 24–36mo),
+// this returns only the first by ageMinMonths — same behaviour as before this
+// function existed. Callers that need the overlap actually split between the
+// two rooms must use the async resolveRoomForStudent() below instead. This
+// synchronous version stays for call sites that only need a fast/offline
+// fallback (see resolveRoomForStudent's catch block).
 function getRoomForStudent(student) {
     if (student.room_override) {
         const room = ROOMS.find(r => r.id === student.room_override);
         if (room) return room;
     }
-    return getRoomFromDob(student.child_dob || student.dob || null);
+    const candidates = getRoomsFromDob(student.child_dob || student.dob || null);
+    return candidates[0] || null;
+}
+
+// Room assignment used at registration time. Identical to getRoomForStudent()
+// except when a child's age matches MORE THAN ONE active room — currently
+// only Turtle/Owl, which share a 24–36mo band in Settings → Rates. In that
+// case it splits the two rooms by:
+//   1. Continuity — if this child (matched by name, same convention as
+//      checkExistingRegistrationByChild) was most recently enrolled in one of
+//      the candidate rooms, keep them there. A returning child or a sibling
+//      who's already settled into Turtle shouldn't bounce to Owl next month
+//      just because Owl happens to have more open seats that month.
+//   2. Balance — if there's no history in either room (first time in this age
+//      band), assign to whichever candidate has more open seats — measured as
+//      distinct enrolled children vs. capacity — for `monthKey`, so the two
+//      rooms fill up roughly evenly over time rather than one saturating
+//      while the other sits empty.
+// `monthKey` is 'YYYY-MM' for the month being registered — pass the current
+// registration window's target month.
+// A lookup failure (network, RLS, anything) falls back to the synchronous
+// single-match result — the split is a nice-to-have; it must never be able to
+// block a registration from going through.
+async function resolveRoomForStudent(student, monthKey) {
+    if (student.room_override) {
+        const room = ROOMS.find(r => r.id === student.room_override);
+        if (room) return room;
+    }
+    const candidates = getRoomsFromDob(student.child_dob || student.dob || null);
+    if (candidates.length <= 1) return candidates[0] || null;
+
+    try {
+        const childName = student.child_name || student.name || '';
+        const candidateIds = candidates.map(r => r.id);
+
+        const priorRoomId = await fetchMostRecentRoomForChild(childName, candidateIds);
+        if (priorRoomId) {
+            const prior = candidates.find(r => r.id === priorRoomId);
+            if (prior) return prior;
+        }
+
+        const fill = await fetchRoomFillForMonth(candidateIds, monthKey);
+        let best = candidates[0], bestRatio = Infinity;
+        for (const room of candidates) {
+            const used  = fill[room.id] || 0;
+            const ratio = room.capacity ? used / room.capacity : used;
+            if (ratio < bestRatio) { bestRatio = ratio; best = room; }
+        }
+        return best;
+    } catch (err) {
+        console.warn('resolveRoomForStudent: overlap resolution failed, using default match —', err.message);
+        return candidates[0];
+    }
 }
 
 
@@ -411,7 +471,7 @@ function clearPrefilled(id) {
 // ============================================================
 // CHILD SECTION  (existing family children only, with room override)
 // ============================================================
-function renderChildSection() {
+async function renderChildSection() {
     const section = document.getElementById('childSection');
     if (!section) return;
 
@@ -432,10 +492,26 @@ function renderChildSection() {
         });
     });
 
+    // Resolve each student's room up front. resolveRoomForStudent() is only
+    // actually async for the rare Turtle/Owl-style overlap case (a DB lookup
+    // to decide between them) — every other student resolves instantly. Doing
+    // this here, once, keeps the checkbox handler below fully synchronous.
+    const { targetDate } = getRegistrationWindow();
+    const monthKey = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`;
+    await Promise.all(students.map(async s => {
+        const room = await resolveRoomForStudent(
+            { child_dob: s.child_dob, room_override: s.room_override, child_name: s.child_name },
+            monthKey
+        );
+        const sd = studentDataMap.get(String(s.id)) || {};
+        sd.resolvedRoom = room;
+        studentDataMap.set(String(s.id), sd);
+    }));
+
     section.innerHTML = `
         <div class="child-cards-row">
             ${students.map(s => {
-                const room       = getRoomForStudent(s);
+                const room       = studentDataMap.get(String(s.id))?.resolvedRoom || getRoomForStudent(s);
                 const isSelected = selectedChildren.some(c => c.studentId === s.id);
                 const recurDays = Array.isArray(s.recurring_days) ? s.recurring_days.join(',') : '';
                 return `<label class="child-card-label${isSelected ? ' selected' : ''}" data-student-id="${s.id}">
@@ -445,6 +521,7 @@ function renderChildSection() {
                            data-recurring-days="${escHtml(recurDays)}"
                            ${isSelected ? 'checked' : ''}>
                     <span class="child-card-name">${escHtml(s.child_name.split(' ')[0])}</span>
+                    ${room ? `<span class="child-card-room">${escHtml(room.label)}</span>` : ''}
                     ${recurDays ? `<span class="child-card-recurring" title="Recurring days: ${escHtml(recurDays.replace(/,/g,', '))}">🔁 ${escHtml(recurDays.replace(/,/g,', '))}</span>` : ''}
                 </label>`;
             }).join('')}
@@ -457,7 +534,12 @@ function renderChildSection() {
             const sd           = studentDataMap.get(studentId) || {};
             const childDob     = sd.dob || '';
             const roomOverride = sd.roomOverride || null;
-            const room = getRoomForStudent({ child_dob: childDob, room_override: roomOverride });
+            // Use the room already resolved in the precompute pass above (this
+            // is what actually applies the Turtle/Owl continuity-then-balance
+            // split) — fall back to the synchronous single-match lookup only
+            // if the precompute is somehow missing (e.g. the map was cleared
+            // between render and click).
+            const room = sd.resolvedRoom || getRoomForStudent({ child_dob: childDob, room_override: roomOverride });
             if (!room) {
                 cb.checked = false;
                 showToast(`Could not assign a room for ${childName} — please check their date of birth.`);

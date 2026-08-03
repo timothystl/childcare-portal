@@ -195,6 +195,77 @@ function getRoomIdFromDob(dobStr, referenceDate) {
     return roomIdForAgeMonths(months, ROOMS.filter(r => r.status === 'active'));
 }
 
+// Same eligibility test as roomIdForAgeMonths, but returns EVERY active room
+// whose age range contains `months`, not just the first. Admin-editable ages
+// (Settings → Rates) can put two rooms in the same band — Turtle and Owl
+// currently both cover 24–36mo — and roomIdForAgeMonths would silently always
+// pick whichever comes first in ROOMS, making the other room unreachable by
+// age. resolveRoomForStudent() in app.js uses this list to detect that
+// overlap and split it deliberately instead.
+function getAllRoomsForAgeMonths(months, roomList) {
+    if (months == null || months < 0) return [];
+    return (roomList || [])
+        .filter(r => r.ageMinMonths != null && months >= r.ageMinMonths
+                   && (r.ageMaxMonths == null || months < r.ageMaxMonths))
+        .sort((a, b) => a.ageMinMonths - b.ageMinMonths);
+}
+
+function getRoomsFromDob(dobStr, referenceDate) {
+    if (!dobStr) return [];
+    const months = calcAgeMonths(dobStr, referenceDate);
+    return getAllRoomsForAgeMonths(months, ROOMS.filter(r => r.status === 'active'));
+}
+
+// The room this child was most recently registered into, restricted to
+// `candidateRoomIds` — used to keep a returning child in whichever of two
+// age-overlapping rooms (e.g. Turtle/Owl) they're already established in,
+// rather than bouncing them based on that month's fill level. Matches by
+// child_name, same convention as checkExistingRegistrationByChild() — there
+// is no student_id column on `registrations` to join on directly.
+async function fetchMostRecentRoomForChild(childName, candidateRoomIds) {
+    if (!sbClient || !childName || !candidateRoomIds?.length) return null;
+    const { data, error } = await sbClient
+        .from('registrations')
+        .select('room_id, created_at')
+        .ilike('child_name', childName)
+        .in('room_id', candidateRoomIds)
+        .order('created_at', { ascending: false })
+        .limit(1);
+    if (error || !data || !data.length) return null;
+    return data[0].room_id;
+}
+
+// Distinct-child seat count per room, for `monthKey` ('YYYY-MM'), restricted
+// to `roomIds` — a fill proxy used to balance an age-overlapping room pair
+// when a child has no prior room history. Counts distinct (room, registration)
+// pairs so a child with several care days in the month is only counted once.
+async function fetchRoomFillForMonth(roomIds, monthKey) {
+    const result = {};
+    (roomIds || []).forEach(id => { result[id] = 0; });
+    if (!sbClient || !monthKey || !roomIds?.length) return result;
+    const [yr, mo] = monthKey.split('-').map(Number);
+    const start = `${monthKey}-01`;
+    const next  = mo === 12 ? `${yr + 1}-01-01` : `${yr}-${String(mo + 1).padStart(2, '0')}-01`;
+
+    const { data, error } = await sbClient
+        .from('registration_dates')
+        .select('room_id, registration_id')
+        .in('room_id', roomIds)
+        .gte('care_date', start)
+        .lt('care_date', next)
+        .eq('waitlisted', false);
+    if (error || !data) return result;
+
+    const seen = new Set();
+    data.forEach(d => {
+        const key = `${d.room_id}:${d.registration_id}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        result[d.room_id] = (result[d.room_id] || 0) + 1;
+    });
+    return result;
+}
+
 // ============================================================
 // TYPE DEFINITIONS  (JSDoc — no build step required)
 // Provides IDE autocomplete and catches field-name typos at development time.

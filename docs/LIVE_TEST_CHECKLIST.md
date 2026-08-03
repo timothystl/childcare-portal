@@ -1,10 +1,14 @@
 # Live Test Checklist — after the 2026-08-02/03 security remediation
 
-Covers everything changed at `v2.3.19 → v2.3.23`. Every item below is either
+Covers everything changed at `v2.3.19 → v2.3.25`. Every item below is either
 something a change could plausibly have broken, something newly visible, or a
 question that cannot be answered from the code.
 
 **Roughly 30–40 minutes.** Test 1 first — it is the only genuine unknown.
+
+**Update (v2.3.25):** four feature items added below — the Turtle/Owl room
+split, the homepage waitlist link, the new Audit Log tab, and the font trim.
+Original Parts 1–4 are unchanged and still apply if you haven't done them yet.
 
 ## Before you start
 
@@ -182,6 +186,63 @@ say which item number and what you saw, and I'll revert that specific change rat
 than unpicking the whole set.
 
 ---
+
+## PART 6 — New this round (v2.3.25)
+
+### ☐ 16. Turtle/Owl room split
+Your live Settings → Rates currently has Turtle and Owl both covering 24–36
+months (Goose covers 36–60). That's what you confirmed you want, so the app
+now splits registrations between them: a returning child stays in whichever
+of the two they were most recently enrolled in; a child with no history in
+either goes to whichever room has more open seats that month.
+
+1. Log in as a parent with a child aged 24–36 months who has **no prior
+   registration**. Check their box on the registration screen.
+2. A small room badge should now appear on their card — confirm it shows
+   **Turtle or Owl**, not blank.
+3. If you have a second such family available, register that child too —
+   confirm the badge tends toward whichever room has fewer kids so far that
+   month (not always the same room every time).
+4. Register a child who **was** in Turtle or Owl last month — confirm the
+   badge matches last month's room, not whatever the fill count would
+   otherwise suggest.
+
+**Bad:** no room badge appears, the badge is blank, or "Could not assign a
+room" shows for a 24–36-month-old.
+
+If you'd actually rather Turtle/Owl/Goose go back to non-overlapping bands
+(24–30 / 30–36 / 36+) instead of splitting, say so — the split logic just
+won't run in that case, no cleanup needed.
+
+### ☐ 17. Homepage waitlist link
+1. Log out, visit the homepage.
+2. Scroll to (or click "Get Started" in the nav to jump to) the **Ready to
+   join us?** section.
+3. Confirm there are now **three** cards — Enroll, Request Days, and a new
+   **"Not Yet Enrolled — Join the Waitlist"** card.
+4. Click it, confirm it opens the waitlist form (`/inquiry`).
+
+### ☐ 18. Audit Log tab
+1. Log in as a **full-access** admin. Confirm a new **🧾 Audit Log** item
+   appears in the admin nav.
+2. Open it — confirm you see entries with a timestamp, your email, an
+   action, and an entity (your two rate-setting saves from testing earlier
+   should be there).
+3. Type something in the filter box (e.g. your own email) — confirm the list
+   narrows. Clear it, confirm it returns to the full list.
+4. Click **Refresh** — confirm it reloads without error.
+5. If you have a **restricted** or **staff**-level admin account, log in as
+   that role and confirm the Audit Log tab is **not visible** to them.
+
+**Bad:** the tab doesn't appear at all, it errors on load, or a
+restricted/staff account can see it.
+
+### ☐ 19. Fonts, second pass
+The font set changed again (10 files → 7). This should look **identical** to
+what you confirmed in item 11 — the two files removed were confirmed unused
+anywhere in the site's CSS. If anything about text weight or a small italic
+label (there's one, on the calendar page's registration-month heading) looks
+different from before, tell me — it would mean I missed a usage.
 
 ## Not on this list — decisions, not tests
 
