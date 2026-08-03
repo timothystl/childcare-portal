@@ -2713,18 +2713,39 @@ function parseJsonOr(str, fallback) {
 //   await logAdminAction('delete', 'registration', reg.id, { child_name: 'Alice' });
 //   await logAdminAction('update', 'rate_settings', null, { room: 'bee', newRate: 75 });
 // ============================================================
+// Set once if the audit RPC ever fails, so the warning is loud the first time
+// but doesn't spam the console on every subsequent admin action.
+let _auditLogBroken = false;
+
 async function logAdminAction(action, entity, entityId = null, details = null) {
     if (!sbClient) return;
     try {
-        await sbClient.rpc('log_admin_action', {
+        // NOTE: supabase-js .rpc() RESOLVES with { data, error } — it does not
+        // throw on a database error. The previous version only had a try/catch,
+        // so an RPC failure was never even inspected. That is how R5 stayed
+        // invisible: log_admin_action() did not exist in the database for the
+        // app's entire life, every one of the 26 call sites failed, and nothing
+        // was ever printed. Check `error` explicitly.
+        const { error } = await sbClient.rpc('log_admin_action', {
             p_action:    action,
             p_entity:    entity,
             p_entity_id: entityId != null ? String(entityId) : null,
             p_details:   details,
         });
+        if (error) throw error;
+        _auditLogBroken = false;
     } catch (err) {
-        // Non-fatal: log to console but never let audit failure break the UI action
-        console.warn('logAdminAction failed:', err.message);
+        // Still non-fatal — an audit failure must never block the admin's action.
+        // But it is now reported at error level, once, so a broken audit trail
+        // surfaces instead of silently persisting.
+        if (!_auditLogBroken) {
+            _auditLogBroken = true;
+            console.error(
+                '[AUDIT] logAdminAction failed — admin actions are NOT being recorded. ' +
+                'Check that log_admin_action() exists in the database. Error:',
+                err?.message || err
+            );
+        }
     }
 }
 

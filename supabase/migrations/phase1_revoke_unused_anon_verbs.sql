@@ -1,0 +1,41 @@
+-- ============================================================
+-- Phase 1 (R1 remediation) — revoke anon privileges nothing uses.
+-- APPLIED IN PRODUCTION 2026-08-03.
+--
+-- Each revoke removes a verb NO anon-reachable code path exercises. Traced
+-- function-by-function through js/supabase.js (loaded on every page, so
+-- table-level greps are misleading) out to actual callers:
+--
+--   messages   — anon needs INSERT only. addMessage() is called from js/app.js
+--                (Contact Us) and js/waitlist-status.js (Message the Office),
+--                and does a BARE .insert() with no .select() chain, so it does
+--                not need SELECT. fetchMessages/markMessageRead/archiveMessage/
+--                deleteMessage are admin-only.
+--                => anon could read every parent contact message (name, email,
+--                   body) via the public key. Closed.
+--
+--   closures   — anon needs SELECT only. fetchClosures() is called from
+--                js/app.js to grey out closed days on the registration
+--                calendar. addClosure()/deleteClosure() are admin-only.
+--                => anon could INSERT a closure date and suppress registration
+--                   days on the parent calendar. Closed.
+--
+--   settings   — anon needs SELECT only. fetchSetting() is called from
+--                js/app.js; every write path (upsertSetting + the 10
+--                save*Settings helpers) is admin-only.
+--
+-- UPDATE/DELETE/TRUNCATE revoked alongside where present. Those were already
+-- blocked by RLS (no permissive anon policy), so that part is defence-in-depth:
+-- it removes the standing grant so a future permissive policy cannot silently
+-- re-open them.
+--
+-- NOT touched: waitlist_applications. submitWaitlistApplication() chains
+-- .insert().select(), and RETURNING requires a SELECT policy under RLS, so that
+-- path needs a live test submission before anything near it changes.
+--
+-- `authenticated` unaffected throughout. Smoke-tested after applying: anon can
+-- still read closures (12 rows) and settings (22 rows).
+-- ============================================================
+REVOKE SELECT, UPDATE, DELETE, TRUNCATE ON public.messages FROM anon;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.closures FROM anon;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.settings FROM anon;
