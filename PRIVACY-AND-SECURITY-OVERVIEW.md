@@ -122,11 +122,13 @@ Every significant action taken by any admin user is automatically recorded in a 
 
 **Why this matters legally and operationally:** If a registration is missing, a billing amount appears incorrect, or a staff member is accused of inappropriate access, an audit log provides an authoritative record of exactly what happened and when.
 
-> **⚠️ Correction (2026-08-02): the audit log is not currently operating, and never has been.** The application code calls an audit-recording routine from 26 places, but the database table that routine writes to was never created in the live system — the setup script for it was written and committed but never run. Because the recording call was deliberately written to fail quietly (so that an audit problem could never block a staff member mid-task), the failure produced no error and went unnoticed.
+> **⚠️ Correction (2026-08-02), resolved (2026-08-03).** The audit log was **not operating, and never had been**, from launch until 3 August 2026. The application called an audit-recording routine from 26 places, but the database table it writes to was never created — the setup script was written and committed but never run. The recording call was also written to fail quietly, so that an audit problem could never block a staff member mid-task; the failure therefore produced no visible error and went unnoticed.
 >
-> **Practical implication: no administrative action taken to date has been recorded, and that history cannot be reconstructed.** This section previously described the log as "permanent" and "tamper-evident"; neither was true in practice.
+> **Practical implication: no administrative action taken before 3 August 2026 was recorded, and that history cannot be reconstructed.** This section previously described the log as "permanent" and "tamper-evident"; neither was true in practice for that period.
 >
-> Creating the table restores logging from that point forward. It is a small change, but it is deliberately not being made in the same step as the access-control work above, so that each can be verified on its own. Tracked as R5 in `docs/CODE_REVIEW_2026-08.md`.
+> **As of 3 August 2026 the audit log is live and recording.** It was also hardened beyond the original design: the log is readable only by an authenticated staff account and by nobody else, entries are written exclusively by a server-side routine that stamps the staff member's email itself (so it cannot be forged from a browser), and **no staff account — at any access level — can edit or delete an entry once written.** That last point is what makes "tamper-evident" an accurate description rather than an aspiration.
+>
+> The quiet-failure behaviour has also been changed: an audit failure still never blocks a staff member's work, but it now reports itself loudly, so a broken audit trail cannot go unnoticed again. Tracked as R5 in `docs/CODE_REVIEW_2026-08.md`.
 
 ---
 
@@ -215,8 +217,8 @@ The policy is written in plain English and is accessible without logging in.
 | CCPA — No sale of personal data | Compliant | Data not sold; disclosed in privacy policy |
 | Secure transmission | Compliant | HTTPS enforced at Cloudflare edge |
 | Secure credential storage | Compliant | PINs hashed with bcrypt; admin passwords via Supabase Auth. Hash values were readable via the public API key until 2026-08-02; that access is now withdrawn. |
-| Access controls | **Gap — remediation in progress** | RLS enabled on every table, but the public API key can still read family/student records. PIN hashes and PIN-setting routines were closed 2026-08-02. See §3.3 and R1 in `docs/CODE_REVIEW_2026-08.md`. |
-| Activity audit trail | **Not operating** | The audit table was never created in the live system, so no admin action has been recorded to date. See §3.6 and R5 in `docs/CODE_REVIEW_2026-08.md`. |
+| Access controls | **Gap — remediation in progress** | RLS enabled on every table, but the public API key can still read family/student records. Closed so far: PIN hashes and PIN-setting routines (2026-08-02); staff wages/PIN hashes, and parent contact messages (2026-08-03). See §3.3 and R1 in `docs/CODE_REVIEW_2026-08.md`. |
+| Activity audit trail | Compliant **from 2026-08-03** | The audit table was never created until 3 Aug 2026, so nothing before that date was recorded. Now live, staff-read-only, and not editable or deletable by any staff account. See §3.6. |
 | No advertising tracking | Compliant | No ad cookies or tracking pixels on parent pages |
 
 ---

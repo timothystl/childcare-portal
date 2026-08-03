@@ -1,3 +1,10 @@
+-- ⚠️ SUPERSEDED — DO NOT RUN THIS FILE.
+-- Never applied. Replaced by add_audit_log_hardened.sql, which is what is
+-- live in production as of 2026-08-03. This version would have created the
+-- view without security_invoker and relied on Supabase's default privileges,
+-- which grant new objects to `anon` — i.e. it would have produced an
+-- anon-readable audit log that bypassed RLS. Kept for history only.
+
 -- ============================================================
 -- ADMIN AUDIT LOG
 -- ============================================================

@@ -91,9 +91,49 @@ kiosk RPC as `anon` and the admin roster query as `authenticated` afterwards.
 
 | | |
 |---|---|
-| **Fixed in production** | R2, R3, **R26** (all verified — anon now gets `permission denied` on each path) |
+| **Fixed in production** | R2, R3, **R5**, **R26**, **R27** (all verified against the live catalog) |
 | **Fixed in code** | R6, R7, R8, R9, R10 (partial), R14, R15, R16, R17, R19, R22, R23, R25 |
-| **Open** | **R1, R4, R5, R24**, R11, R12, R13, R18, R20, R21 |
+| **Open** | **R1, R4, R24**, R11, R12, R13, R18, R20, R21 |
+
+**R5 closed 2026-08-03.** `add_audit_log_hardened.sql` applied — the audit log is live
+and recording. Three hardening changes were made versus the committed migration, which
+would otherwise have created an **anon-readable audit log**: the view now carries
+`security_invoker = true` (a default Postgres view runs as its owner and bypasses RLS),
+privileges are granted explicitly rather than inheriting Supabase's defaults (which
+grant new objects to `anon`), and `authenticated` gets SELECT only — so no staff
+account at any level can edit or delete an entry once written.
+
+A second bug surfaced while fixing it: `logAdminAction()` used only a `try/catch`, but
+supabase-js `.rpc()` **resolves** with `{data, error}` rather than throwing. The error
+was never inspected at all — which is why 26 failing call sites produced not one
+console line for the app's entire life. It now checks `error` explicitly and reports
+once at error level.
+
+### R27 — Parent contact messages and config were anon-writable/readable *(fixed 2026-08-03)*
+
+Traced function-by-function out to real callers, then revoked what nothing uses:
+
+| Table | anon actually needs | was also granted | now |
+|---|---|---|---|
+| `messages` | INSERT (Contact Us, Message the Office) | **SELECT** | revoked |
+| `closures` | SELECT (grey out closed days) | **INSERT** | revoked |
+| `settings` | SELECT (room rates) | **INSERT** | revoked |
+
+`messages` is the notable one: every parent contact message — name, email, and body —
+was readable through the public key. Parents write medical and family circumstances
+into that form. `closures` mattered for integrity rather than privacy: anyone could
+insert a school closure date and suppress registration days on the parent calendar.
+
+Safe because `addMessage()` does a bare `.insert()` with no `.select()` chain, so it
+never needed SELECT. Smoke-tested after applying: anon still reads closures (12 rows)
+and settings (22 rows).
+
+**Deliberately not touched: `waitlist_applications`.** `submitWaitlistApplication()`
+chains `.insert().select()`, and under RLS a `RETURNING` clause requires a SELECT
+policy — which anon does not have. Either that path is failing today or something
+else is carrying it; the most recent application is dated 2026-07-11, which is
+suggestive but not conclusive. **This needs a live test submission through the public
+waitlist form to settle** — it cannot be resolved from the code or catalog alone.
 
 R10 is partial: `defer` was added, but **SRI hashes could not be generated** — the
 review environment has no egress to `cdn.jsdelivr.net`. The exact command to produce

