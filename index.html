@@ -610,8 +610,17 @@
 </footer>
 
 <script>
-  const fv = document.getElementById('footer-version');
-  if (fv) fv.textContent = window.__BUILD_VERSION__ || 'v1.15.25';
+  // window.__BUILD_VERSION__ is set inside dist/app.min.js, which this page
+  // loads FURTHER DOWN the document (see the <script src="dist/app.min.js">
+  // tag below) — this snippet used to run before that, so it always fell
+  // through to the hardcoded fallback and never actually showed the live
+  // version. DOMContentLoaded fires only after every blocking script in the
+  // document has executed (parsing can't finish until they have), so by then
+  // the bundle has already set the real value.
+  document.addEventListener('DOMContentLoaded', () => {
+    const fv = document.getElementById('footer-version');
+    if (fv) fv.textContent = window.__BUILD_VERSION__ || 'dev';
+  });
 </script>
 <script>
   // Staff card portrait positioning — also called from app.js after the
