@@ -536,8 +536,10 @@ function renderFamiliesList(families) {
             <button class="btn-secondary families-next-btn" ${familiesPage >= totalPages - 1 ? 'disabled' : ''}>Next &#8594;</button>
         </div>` : '';
 
+    const totalKids = sorted.reduce((sum, f) => sum + (f.students || []).length, 0);
+
     container.innerHTML = `
-        <p class="families-count">Showing ${pageStart + 1}–${pageEnd} of ${totalCount} famil${totalCount !== 1 ? 'ies' : 'y'}${showArchivedFamilies ? ' (including archived)' : ''}</p>
+        <p class="families-count">Showing ${pageStart + 1}–${pageEnd} of ${totalCount} famil${totalCount !== 1 ? 'ies' : 'y'}${showArchivedFamilies ? ' (including archived)' : ''} &middot; ${totalKids} child${totalKids !== 1 ? 'ren' : ''} total</p>
         ${paginationHtml}
         <ul class="families-list">
             ${pageFamilies.map(f => {
