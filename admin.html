@@ -86,7 +86,6 @@
                     <button class="mobile-nav-item" data-tab="finance"><span class="mni-icon">💰</span><span>Finance</span></button>
                     <button class="mobile-nav-item" data-tab="reports"><span class="mni-icon">📊</span><span>Billing</span></button>
                     <button class="mobile-nav-item" data-tab="settings"><span class="mni-icon">⚙️</span><span>Settings</span></button>
-                    <button class="mobile-nav-item" data-tab="audit"><span class="mni-icon">🧾</span><span>Audit Log</span></button>
                 </div>
                 <div class="mobile-nav-footer">
                     <span class="mnf-version" id="mobileNavVersion"></span>
@@ -961,11 +960,10 @@
                 <span id="adminRolesStatus" class="rates-status" style="display:block;margin-top:6px"></span>
             </section>
 
-        </div><!-- /#tab-settings -->
-
-        <!-- ── Tab: Audit Log ─────────────────────────────────── -->
-        <div class="tab-pane hidden" id="tab-audit">
-            <section class="admin-section">
+            <!-- Admin Audit Log — lives here rather than its own tab: it's an
+                 oversight tool for the same "who can do what" concern as Admin
+                 Access above, not a daily-use working tab like Billing/Finance. -->
+            <section class="admin-section collapsible-section" id="auditLogSection">
                 <h2>🧾 Admin Audit Log</h2>
                 <p class="section-desc">
                     Every significant admin action — creating or deleting a registration, changing a rate,
@@ -998,7 +996,8 @@
                     </table>
                 </div>
             </section>
-        </div><!-- /#tab-audit -->
+
+        </div><!-- /#tab-settings -->
 
         <!-- ── Tab: Reports ───────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-reports">

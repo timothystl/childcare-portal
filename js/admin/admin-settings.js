@@ -319,8 +319,7 @@ const TAB_META = {
     finance:       { icon: '💰', label: 'Finance' },
     billing:       { icon: '💳', label: 'Billing' },
     reports:       { icon: '📊', label: 'Billing' },
-    settings:      { icon: '⚙️', label: 'Settings' },
-    audit:         { icon: '🧾', label: 'Audit Log' }
+    settings:      { icon: '⚙️', label: 'Settings' }
 };
 
 function setupTabs() {
@@ -357,7 +356,11 @@ function setupTabs() {
         if (tab === 'billing'   && !_arLoaded)                   { setupBillingDashYear(); }
         if (tab === 'cacfp'     && !_cacfpLoaded)                { _cacfpLoaded = true; initCacfpTab(); }
         if (tab === 'market'    && !_marketLoaded)               { _marketLoaded = true; initMarketTab(); }
-        if (tab === 'audit')                                     loadAuditLogTab();
+        // Audit Log lives inside Settings (see #auditLogSection) rather than
+        // its own tab — reload on every visit to Settings, not just once, so
+        // an admin who takes an action elsewhere and comes back sees it.
+        // Cheap, capped query; the Refresh button covers staying on the tab.
+        if (tab === 'settings')                                  loadAuditLogTab();
     }
 
     navItems.forEach(item => item.addEventListener('click', () => activate(item.dataset.tab)));
@@ -1036,14 +1039,16 @@ function _hide(id) {
 function applyRoleRestrictions() {
     if (currentAdminRole === 'full') return;
 
-    // Finance, CACFP, Market Analysis, and Audit Log are full-access only —
-    // the audit log records every admin's actions across every tab (rate
-    // changes, PIN resets, lock/unlock), which is account-oversight material,
-    // not something a restricted or classroom-staff account should browse.
+    // Finance, CACFP, and Market Analysis tabs (financial/PII/competitive data) are full-access only
     document.querySelectorAll('[data-tab="finance"]').forEach(el => { el.style.display = 'none'; });
     document.querySelectorAll('[data-tab="cacfp"]').forEach(el => { el.style.display = 'none'; });
     document.querySelectorAll('[data-tab="market"]').forEach(el => { el.style.display = 'none'; });
-    document.querySelectorAll('[data-tab="audit"]').forEach(el => { el.style.display = 'none'; });
+    // Audit Log lives inside Settings (#auditLogSection) — it records every
+    // admin's actions across every tab (rate changes, PIN resets, lock/
+    // unlock), which is account-oversight material, not something a
+    // restricted or classroom-staff account should browse. Same treatment as
+    // adminRolesSection just below.
+    _hide('auditLogSection');
 
     if (currentAdminRole === 'restricted') {
         // Staffing tab: hide everything except the schedule planner
