@@ -51,6 +51,22 @@ Findings R1–R25 with full write-ups and a staged remediation order live in
 **`docs/CODE_REVIEW_2026-08.md`**. That file supersedes the per-sweep history below
 for anything still open.
 
+**Exposure check (2026-08-03):** `pg_stat_statements` is complete since 2026-03-10
+with **zero evictions**, and the bcrypt migrations appear in it — so it covers the
+entire lifetime of the hash columns. **Zero** API queries have ever read
+`families.pin_hash`, `families.parent2_pin_hash` or `staff.staff_pin_hash`, and there
+has never been a `select *` on `families`. No evidence the hashes were accessed. This
+does **not** clear R1: the app legitimately reads names/emails, so a harvester would
+have used an identical query shape and be invisible.
+
+**Fixed and verified in production 2026-08-03:**
+- **R26** — `anon` could read `staff.staff_pin_hash`, `hourly_rate`, `salary_biweekly`
+  and `pto_starting_balance` (staff wages + PIN hashes) via the public key. Same class
+  as R3, missed because R3 was scoped to `families`. Narrowed to display columns in
+  `phase1_narrow_anon_staff_columns.sql`. Verified no anon path reads the table (the
+  kiosk uses the `lookup_staff_by_pin` SECURITY DEFINER RPC); smoke-tested the kiosk
+  RPC as `anon` and the admin roster as `authenticated` after applying.
+
 **Fixed and verified in production 2026-08-02:**
 - **R2** — `set_family_pin` / `set_staff_pin` were anon-executable `SECURITY DEFINER`
   with no auth and no old-PIN check (total account takeover in two calls).
