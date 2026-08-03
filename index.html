@@ -609,18 +609,22 @@
   </div>
 </footer>
 
+<!-- Correction to a fix made minutes ago: the previous version of this block
+     assumed window.__BUILD_VERSION__ gets set inside dist/app.min.js and
+     "fixed" a load-order problem with DOMContentLoaded. That assumption was
+     wrong — checked scripts/build.js directly: ONLY dist/admin.min.js has the
+     version inlined into it (see the ENTRIES array — admin.min.js prepends
+     `window.__BUILD_VERSION__ = ...`; every other bundle, app.min.js
+     included, is just the raw source file with nothing added). The variable
+     was never being set on this page at all, at any point, regardless of
+     script order — it was correctly falling through to the fallback both
+     before and after that edit, which is why it still read as a stale/wrong
+     value afterward. Loading the plain js/build-version.js file directly
+     (same fix already applied to enroll.html) actually sets it. -->
+<script src="js/build-version.js"></script>
 <script>
-  // window.__BUILD_VERSION__ is set inside dist/app.min.js, which this page
-  // loads FURTHER DOWN the document (see the <script src="dist/app.min.js">
-  // tag below) — this snippet used to run before that, so it always fell
-  // through to the hardcoded fallback and never actually showed the live
-  // version. DOMContentLoaded fires only after every blocking script in the
-  // document has executed (parsing can't finish until they have), so by then
-  // the bundle has already set the real value.
-  document.addEventListener('DOMContentLoaded', () => {
-    const fv = document.getElementById('footer-version');
-    if (fv) fv.textContent = window.__BUILD_VERSION__ || 'dev';
-  });
+  const fv = document.getElementById('footer-version');
+  if (fv) fv.textContent = window.__BUILD_VERSION__ || 'dev';
 </script>
 <script>
   // Staff card portrait positioning — also called from app.js after the
