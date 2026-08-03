@@ -78,8 +78,11 @@
     .section-subtitle--light { color: rgba(255,255,255,.72); }
 
     /* NAV */
-    .nav { position: sticky; top: 0; z-index: 100; background: var(--green-lt); padding: 0 28px; border-bottom: 3px solid var(--sun); }
-    .nav-inner { max-width: 1080px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 64px; }
+    .nav { position: sticky; top: 0; z-index: 100; background: var(--green-lt); padding: 10px 28px; border-bottom: 3px solid var(--sun); }
+    /* min-height + wrap rather than a fixed height: every nav item lives here
+       now (nothing tucked behind a dropdown), so on a narrow screen the row
+       wraps onto a second line instead of anything being hidden or cut off. */
+    .nav-inner { max-width: 1080px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; row-gap: 8px; min-height: 44px; }
     .nav-brand { display: flex; align-items: center; text-decoration: none; }
     .nav-brand img { display: block; }
     .brand-lockup { display: inline-block; line-height: 1; }
@@ -94,20 +97,11 @@
     .brand-lockup--md .brand-sub { font-size: 10px; }
     .brand-lockup--dark .brand-mdo { color: #fff; }
     .brand-lockup--dark .brand-sub { color: rgba(255,255,255,.6); }
-    .nav-right { display: flex; align-items: center; gap: 8px; }
+    .nav-right { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
     .nav-link { font-size: 13px; font-weight: 700; color: rgba(1,41,74,.8); text-decoration: none; padding: 6px 12px; border-radius: var(--radius-sm); transition: background .15s, color .15s; white-space: nowrap; }
     .nav-link:hover { background: rgba(1,41,74,.1); color: var(--navy); }
     .nav-cta-btn { display: inline-flex; align-items: center; font-size: 13px; font-weight: 800; color: var(--navy); background: var(--sun); padding: 7px 16px; border-radius: var(--radius-sm); text-decoration: none; white-space: nowrap; transition: background .15s; }
     .nav-cta-btn:hover { background: var(--sun-lt); color: var(--navy); }
-    .nav-menu-wrap { position: relative; }
-    .nav-menu-btn { display: flex; align-items: center; justify-content: center; background: none; border: 1.5px solid rgba(1,41,74,.2); border-radius: var(--radius-sm); cursor: pointer; padding: 6px 10px; color: var(--navy); font-size: 18px; line-height: 1; transition: background .15s, border-color .15s; }
-    .nav-menu-btn:hover { background: rgba(1,41,74,.08); border-color: rgba(1,41,74,.4); }
-    .nav-dropdown { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lift); list-style: none; min-width: 210px; padding: 6px 0; z-index: 200; }
-    .nav-dropdown.open { display: block; }
-    .nav-dropdown li a { display: block; font-size: 14px; font-weight: 700; color: var(--navy); text-decoration: none; padding: 10px 18px; transition: background .12s; }
-    .nav-dropdown li a:hover { background: var(--linen); }
-    .nav-dropdown li + li { border-top: 1px solid var(--border); }
-    @media(max-width:500px) { .nav-link { display: none; } }
 
     /* HERO — light cream, no dark background */
     .hero { background: var(--linen); padding: 72px 28px 80px; position: relative; overflow: hidden; border-bottom: 3px solid var(--border); }
@@ -321,26 +315,19 @@
     <a href="/" class="nav-brand" aria-label="myMDO — Timothy Lutheran Church">
       <img src="/images/logo/myMDO_alternate_playful_logo.png" alt="myMDO" height="40">
     </a>
+    <!-- Everything that used to live behind the "☰ More pages" dropdown is
+         now a direct link here — nothing hidden behind an extra click. The
+         nav wraps onto a second line on narrow screens (see .nav-inner /
+         .nav-right above) rather than hiding any of these. -->
     <div class="nav-right">
       <a href="#how-it-works" class="nav-link">Care Portal</a>
-      <a href="#contact" class="nav-link">Contact Us</a>
-      <!-- Promoted from the "More pages" dropdown into the visible nav so it's
-           reachable without an extra click on desktop. Left in place in the
-           dropdown below too (unchanged) — .nav-link hides under 500px
-           (@media rule above), so that's still the only way to reach it on a
-           phone. -->
       <a href="https://www.timothystl.org" class="nav-link">Timothy Lutheran Church</a>
+      <a href="#contact" class="nav-link">Contact Us</a>
+      <a href="#classrooms" class="nav-link">Classrooms &amp; Rates</a>
+      <a href="#our-staff" class="nav-link">Our Staff</a>
+      <a href="#photos" class="nav-link">Gallery</a>
+      <a href="#faq" class="nav-link">FAQ</a>
       <a href="#enroll" class="nav-cta-btn">Get Started</a>
-      <div class="nav-menu-wrap">
-        <button class="nav-menu-btn" id="navMenuBtn" aria-label="More pages">☰</button>
-        <ul class="nav-dropdown" id="navDropdown">
-          <li><a href="#classrooms">Classrooms &amp; Rates</a></li>
-          <li><a href="#our-staff">Our Staff</a></li>
-          <li><a href="#photos">Gallery</a></li>
-          <li><a href="#faq">FAQ</a></li>
-          <li><a href="https://www.timothystl.org">Timothy Lutheran Church</a></li>
-        </ul>
-      </div>
     </div>
   </div>
 </nav>
@@ -625,18 +612,6 @@
 <script>
   const fv = document.getElementById('footer-version');
   if (fv) fv.textContent = window.__BUILD_VERSION__ || 'v1.15.25';
-  const navMenuBtn = document.getElementById('navMenuBtn');
-  const navDropdown = document.getElementById('navDropdown');
-  navMenuBtn.addEventListener('click', function(e) {
-    e.stopPropagation();
-    navDropdown.classList.toggle('open');
-  });
-  document.addEventListener('click', function() {
-    navDropdown.classList.remove('open');
-  });
-  navDropdown.querySelectorAll('a').forEach(function(a) {
-    a.addEventListener('click', function() { navDropdown.classList.remove('open'); });
-  });
 </script>
 <script>
   // Staff card portrait positioning — also called from app.js after the
