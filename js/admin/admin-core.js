@@ -41,6 +41,31 @@ async function attemptLogin() {
     }
 }
 
+document.getElementById('forgotPasswordLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email    = document.getElementById('adminEmail').value.trim();
+    const statusEl = document.getElementById('forgotPasswordStatus');
+    const linkEl   = document.getElementById('forgotPasswordLink');
+
+    statusEl.classList.remove('hidden');
+    statusEl.style.color = '#c62828';
+
+    if (!email || !email.includes('@')) {
+        statusEl.textContent = 'Enter your email above first, then click "Forgot password?" again.';
+        return;
+    }
+
+    linkEl.style.pointerEvents = 'none';
+    statusEl.style.color = '#01294A';
+    statusEl.textContent = 'Sending…';
+    try {
+        await sendPasswordReset(email);
+    } catch (_) { /* fall through to the same message below regardless */ }
+    statusEl.style.color = '#2e7d32';
+    statusEl.textContent = 'If that email has an admin account, a reset link is on its way.';
+    linkEl.style.pointerEvents = '';
+});
+
 document.getElementById('logoutBtn').addEventListener('click', async () => {
     stopInactivityTimer();
     await logoutAdmin();
