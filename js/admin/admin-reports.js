@@ -3537,25 +3537,25 @@ async function generateEnrollmentFteReport() {
 // ============================================================
 // SEAT-DAY CAPACITY MODEL
 // ============================================================
-// State-approved hard ceiling on total enrolled children, independent of the
-// seat-day math below (a physical/licensing limit, not a scheduling one).
-const APPROVED_CHILD_CAPACITY = 46;
-// Recommended operating band for average occupied seats/weekday, center-wide
-// (calibrated against APPROVED_CHILD_CAPACITY). Fixed absolute numbers only
-// make sense at that center-wide scale — a single room's band is scaled from
-// these as a fraction of that room's own capacity (see _seatBandFor below).
-const SEAT_BAND_MIN = 34;
-const SEAT_BAND_MAX = 40;
-const SEAT_BAND_MIN_RATIO = SEAT_BAND_MIN / APPROVED_CHILD_CAPACITY;
-const SEAT_BAND_MAX_RATIO = SEAT_BAND_MAX / APPROVED_CHILD_CAPACITY;
+// Seat capacity is always DERIVED from the per-room capacities configured in
+// Settings → Rates & Settings (the `room_capacity` setting, merged into ROOMS
+// by loadCapacitySettings() at admin load). Nothing here is hardcoded: adding a
+// room, or raising a room's capacity, lifts the center-wide ceiling
+// automatically. See the totalCapacity calculation in
+// generateSeatDayCapacityReport() for how the center-wide figure is summed.
+//
+// Recommended operating band for average occupied seats/weekday, held as a
+// fraction of whatever capacity applies to the current scope. The ratios below
+// preserve the intent of the original fixed 34–40 band, which was calibrated
+// against a 46-child center — keeping them as ratios means the absolute band
+// tracks real capacity instead of drifting out of date as rooms change.
+const SEAT_BAND_MIN_RATIO = 34 / 46;   // ≈ 74% of capacity
+const SEAT_BAND_MAX_RATIO = 40 / 46;   // ≈ 87% of capacity
 
-// Operating band for a given scope. Full Center uses the fixed center-wide
-// numbers; a single room scales them by that room's share of the approved
-// center-wide capacity, so a 9-seat room isn't measured against a 34-40 band
-// sized for the whole center.
-function _seatBandFor(isFullCenter, roomCapacity) {
-    if (isFullCenter) return { min: SEAT_BAND_MIN, max: SEAT_BAND_MAX };
-    const cap = roomCapacity || 0;
+// Operating band for a given seat capacity. The same proportional rule applies
+// whether `capacity` is the center-wide total or a single room's own seats.
+function _seatBandFor(capacity) {
+    const cap = capacity || 0;
     return {
         min: Math.round(cap * SEAT_BAND_MIN_RATIO * 10) / 10,
         max: Math.round(cap * SEAT_BAND_MAX_RATIO * 10) / 10,
@@ -3658,10 +3658,10 @@ async function generateSeatDayCapacityReport() {
         }
 
         const isFullCenter = roomId === 'all';
-        const band = _seatBandFor(isFullCenter, totalCapacity);
-        // Full Center caps at the licensed 46-child limit; a single room can never
-        // exceed its own seat capacity, so cap there instead.
-        const scenarioCap = isFullCenter ? APPROVED_CHILD_CAPACITY : (totalCapacity || Infinity);
+        const band = _seatBandFor(totalCapacity);
+        // No scope can hold more children than it has seats — for Full Center that
+        // is the summed room capacities, for a single room its own capacity.
+        const scenarioCap = totalCapacity || Infinity;
         const scenario = seats => cur.avgDaysPerChildPerWeek
             ? Math.min(scenarioCap, Math.round(seats * 5 / cur.avgDaysPerChildPerWeek))
             : null;
@@ -3720,10 +3720,11 @@ async function generateSeatDayCapacityReport() {
                 Avg occupied seats/day = confirmed child-days &divide; weekdays in month.
                 Avg booked days/child (per week) = confirmed child-days &divide; distinct children &divide; weeks in the month
                 (currently ${cur.avgDaysPerChildPerWeek.toFixed(2)}). Max active children = seats/day &times; 5 &divide; avg booked days/child per week,
-                capped at ${isFullCenter ? `the approved ${APPROVED_CHILD_CAPACITY}-child center-wide capacity` : `this room's ${totalCapacity || '—'}-seat capacity`}.
+                capped at ${isFullCenter ? `the ${totalCapacity || '—'}-seat center-wide capacity` : `this room's ${totalCapacity || '—'}-seat capacity`}.
+                The operating band is ${(SEAT_BAND_MIN_RATIO * 100).toFixed(0)}&ndash;${(SEAT_BAND_MAX_RATIO * 100).toFixed(0)}% of ${isFullCenter ? 'total' : `this room's`} seat capacity (${band.min}&ndash;${band.max} seats).
                 ${isFullCenter
-                    ? `The 34&ndash;40 operating band is center-wide. Summer Camp is excluded (separate seasonal program, different age range).`
-                    : `The operating band here is scaled to this room's own capacity (${(SEAT_BAND_MIN_RATIO * 100).toFixed(0)}&ndash;${(SEAT_BAND_MAX_RATIO * 100).toFixed(0)}% of ${totalCapacity || '—'} seats) — the center-wide 34&ndash;40 band doesn't apply to a single room.`}
+                    ? `Capacity is summed from the per-room capacities set in Settings &rarr; Rates &amp; Settings, so it rises automatically when a room is added or resized. Summer Camp is excluded (separate seasonal program, different age range).`
+                    : ``}
                 Shows last ${months.length} months. This is a planning display only — it does not affect what enrollment allows.
             </p>`;
 
