@@ -318,42 +318,90 @@ We collect **~76 payments/month averaging $519** (~$39K/month) through Tuition E
 We are already paying processing fees; the question is not whether to start paying them,
 but whether moving to Stripe would lower them. **At our payment size, it would not.**
 
-The decisive detail is that **Tuition Express prices ACH as a flat per-transaction fee
-while Stripe prices it as a percentage.** Reported Tuition Express rates are ACH **$1.25
-flat** and card **2.75% + $1** (some centers publish 3.5% for card; rates are set per
-center and are quote-based).
+The decisive detail is that **Procare prices ACH as a flat per-transaction fee while Stripe
+prices it as a percentage.**
 
-| Rail | Rate | Per $519 payment | Per month (76) | Per year |
+**Our actual contracted rates (quoted at signup, 2024):**
+- **$79/month, month-to-month, no contract**
+- **2.7% + $0.30** per credit card transaction
+- **$1.00** per ACH transaction
+
+| Rail | Rate | Per $519 payment | Per month (76) | Per year (912) |
 |---|---|---|---|---|
-| **ACH — Tuition Express (today)** | **$1.25 flat** | **$1.25** | **$95** | **$1,140** |
+| **ACH — Procare (our rate)** | **$1.00 flat** | **$1.00** | **$76** | **$912** |
 | ACH — Stripe | 0.8%, capped $5 | $4.15 | $315 | **$3,785** |
-| Card — Tuition Express | 2.75% + $1 | $15.27 | $1,161 | $13,927 |
+| Card — Procare (our rate) | 2.7% + $0.30 | $14.31 | $1,088 | $13,051 |
 | Card — Stripe standard | 2.9% + $0.30 | $15.35 | $1,167 | $14,000 |
 | Card — Stripe nonprofit | 2.2% + $0.30 | $11.72 | $891 | $10,689 |
+| Subscription — Procare | $79/mo | — | $79 | **$948** |
+
+**The ACH/card mix decides this completely.** Total annual cost of the payment rail:
+
+| Mix | Stay on Procare (fees + $948 sub) | Move to Stripe (nonprofit rate) | Winner |
+|---|---|---|---|
+| 100% ACH | **$1,860** | $3,785 | **Procare, by $1,925** |
+| 75% ACH / 25% card | **$4,825** | $5,511 | **Procare, by $686** |
+| 50/50 | **$7,930** | $7,237 | Stripe, by $693 |
+| 100% card | $13,999 | **$10,689** | **Stripe, by $3,310** |
+
+Break-even sits near a **60/40 ACH/card split.** Above that ACH share, Procare's flat $1 is
+the cheaper rail *even after paying $948/yr for the subscription we would otherwise drop*.
+Below it, Stripe's nonprofit card rate wins.
+
+**This one number — what fraction of your 912 annual payments are ACH — decides the entire
+payment question.** It is on your Procare statements.
 
 **Corrections to the earlier draft:**
 
-1. **Moving ACH to Stripe would cost us roughly $2,600/year more, not less.** A flat $1.25
-   beats 0.8% on every payment above **$156**, and our average is $519. The earlier
-   "default to ACH and save $12K/yr" conclusion was arithmetic against a $0 baseline that
-   does not exist. Against the real baseline, ACH-on-Stripe is a **downgrade**.
-2. **On card, Stripe's nonprofit rate is genuinely better** — ~$3.55 per transaction, or
-   ~$3,200/yr if every payment were card. That is the only place Stripe wins, and it only
-   matters in proportion to how much of our volume is card rather than ACH.
-3. **The reported ACH batch fee and per-account fee are the unknown.** Reviews consistently
-   mention both, amounts unspecified. They could erase the ACH advantage above.
-
-**Action before any of this is decided: pull the last three Procare statements** and read
-the actual effective rate — total fees ÷ total collected — plus the ACH/card split and any
-monthly account or batch fees. That single number settles §6 and §7, and we already have
-it sitting in our own records. Everything in this table is public-rate inference until then.
-
-**Second question worth asking:** does Timothy absorb these fees, or pass them to families?
-Several centers using Tuition Express publish the ACH/card fee as a parent-paid service
-charge. If we already pass it through, processing cost is not our cost at all and drops out
-of the comparison entirely.
+1. **Moving ACH to Stripe would cost more, not less.** A flat $1.00 beats 0.8% on every
+   payment above **$125**, and our average is $519. The original "default to ACH and save
+   $12K/yr" was arithmetic against a $0 baseline that does not exist.
+2. **On card, Stripe's nonprofit rate wins** by ~$2.59/transaction. That is the only place
+   Stripe is cheaper, and it only matters in proportion to card volume.
+3. **The $79/mo subscription is not the expensive part.** It is $948/yr — less than the
+   labor cost of the double entry it forces (§6a). Chasing the subscription is chasing the
+   small number.
 
 ---
+
+## 6a. The double-entry problem — the real cost of the current arrangement
+
+The operational reality, stated by the director:
+
+> Bills are generated in our app, then **manually re-keyed into Procare**. Procare
+> **refuses API access** to push them in. Aging accounts are **hard to reconcile**.
+
+This is the actual cost of the current split, and it does not appear on any invoice:
+
+| Cost | Estimate |
+|---|---|
+| Re-keying ~95 invoices/month into Procare @ 90–180 sec each | 2.4–4.75 hrs/month |
+| Annualized | **29–57 hrs/year** |
+| At ~$25/hr loaded admin cost | **$710–$1,425/year** |
+| Aging reconciliation, done by hand across two systems | +2–4 hrs/month, call it **$600–1,200/yr** |
+| **Total hidden labor cost** | **~$1,300–2,600/year** |
+
+That is **more than the $948 subscription**, and it is recurring, error-prone, and lands on
+one person. It also explains the aging problem directly: with charges in Procare and
+invoices in our app, neither system holds the whole truth, and our own ledger has
+**0 of 453 payments matched to an invoice**.
+
+**Three ways out, cheapest first:**
+
+1. **Ask Procare specifically about a bulk *charge/transaction* import** — not an API.
+   Procare Online documents a bulk student upload (xls/csv, capped at 100 rows), and the
+   desktop product has a Family Data & Accounting import utility. A refusal to open the API
+   is not necessarily a refusal to accept a CSV. **If a charge import exists, it kills the
+   double entry for a few hours of export work and changes nothing else.** Ask before
+   building anything.
+2. **Fix our own reconciliation** (6–12 hrs, §3 Phase 5). Even staying exactly as we are:
+   run the payment import monthly instead of once, and match payments to invoices. That
+   alone fixes aging on our side, which is half the stated pain.
+3. **Take payments ourselves** and drop Procare entirely — the only option that fully
+   eliminates the double entry, and the most expensive by far. See §9–§11.
+
+**Option 1 is a phone call. Option 2 is a day of work. Option 3 is a quarter of work plus
+a permanent compliance obligation.** Do them in that order.
 
 ## 7. Build vs. buy — reframed
 
@@ -460,6 +508,283 @@ constraint.
 
 ---
 
+---
+
+## 9. Security model — what a one-app build actually requires
+
+Verified against the live database on 2026-08-10 (`pg_policies`, `role_table_grants`).
+
+### 9a. The foundational problem: the database does not know who is calling
+
+This is the single biggest issue, and everything else follows from it. We have **three
+different identity models, none of which produces a session the database can key on**:
+
+| Who | How they authenticate today | What Postgres sees |
+|---|---|---|
+| Parents | email + PIN via the `family-lookup` edge function | `anon` — the public key baked into every page |
+| Staff | integer PIN on a shared kiosk via `lookup_staff_by_pin` | `anon` |
+| Admins | Supabase Auth (real JWT) | `authenticated` |
+
+Because parents and teachers both arrive as `anon`, **no RLS policy can express "this
+parent sees only their own child" or "this teacher sees only their room."** The only way to
+let the parent portal work at all was to write policies with `qual = true`. That is exactly
+what is live now:
+
+```
+students             anon SELECT / INSERT / UPDATE / DELETE   qual = true
+registrations        anon SELECT / INSERT                     qual = true
+registration_dates   anon SELECT / INSERT                     qual = true
+staff_clock_events   anon SELECT / INSERT / UPDATE            qual = true
+```
+
+**Anyone holding the public anon key — which is in the page source of every visitor — can
+today read every child's name, date of birth, parent email and full care schedule, and can
+delete or alter any child record.** That is R1 and R4, confirmed live, not theoretical.
+
+**Adding daily sheets, photos and payments on top of this posture is not an option.** A
+nap-and-diaper log keyed to a child record that the public can already enumerate turns an
+existing PII exposure into a child-safety one.
+
+**The fix is also the feature.** A one-app build *requires* real parent and staff sessions,
+and real sessions are precisely what closes R1/R4. The security debt and the product work
+converge — you cannot build the app properly without fixing it, and fixing it is most of
+the security work. Concretely:
+
+- **Parents** → Supabase Auth (email magic-link / OTP), or a short-lived JWT minted by an
+  edge function after the PIN check, carrying a `family_id` claim. Policies become
+  `family_id = (auth.jwt() ->> 'family_id')::uuid`.
+- **Staff** → per-staff sessions carrying `staff_id` and `room_id`. Policies scope events
+  to the teacher's own room.
+- **Admins** → keep Supabase Auth, but move role checks server-side (R20: `restricted` and
+  `staff` roles are enforced only in the browser today, so a `staff`-role user can open the
+  console and read Finance).
+
+Budget **40–70 hrs** for the session/RLS rework. It is the largest single security item and
+it gates everything else.
+
+### 9b. Grants are far wider than policies — one bad policy from a breach
+
+`anon` currently holds `SELECT, INSERT, UPDATE, DELETE, TRUNCATE` **grants** on
+`billing_invoices`, `billing_payments`, `billing_cycles`, `billing_overrides`,
+`billing_summary`, `family_rates`, all six `cacfp_*` tables, `staff_hours`,
+`staff_pto_entries`, `payroll_periods`, `church_staff`, and more.
+
+Those tables are safe **only** because no `anon` RLS policy exists on them — the grant is
+live, the policy is the sole thing standing in the way. Add one permissive policy by
+accident during a future feature and payroll and billing are public instantly. Revoke the
+unused grants so the two layers agree. (~4–8 hrs, low risk, high value.)
+
+### 9c. Shared-device risk — new, and specific to this build
+
+A classroom tablet sits unattended, unlocked, all day, and a lobby check-in tablet is
+handed to parents by design. Both are new attack surfaces we do not have today:
+
+- Short session lifetimes and auto-lock; **never** "remember me" on a shared device.
+- PIN re-auth before anything sensitive (viewing another room, editing past entries).
+- The lobby tablet must run in a locked kiosk mode and must expose **only** check-in/out —
+  never the roster, contact details, or another family's data.
+- 4-digit PINs are too weak to authorize releasing a child to an adult. Keep the existing
+  lockout, add the per-IP throttle that is still open (S6), and prefer magic-link login for
+  the parent app rather than extending PINs into it.
+
+### 9d. Child data — new sensitivity class
+
+Diapering, feeding, naps, medication, allergies and incident reports are not HIPAA (we are
+not a covered entity) but they are sensitive, and state licensing imposes retention and
+access duties regardless. Requirements:
+
+- **Teacher scoping by room.** Cross-room leakage is the classic bug in this feature.
+- **Photos:** private bucket, short-TTL signed URLs, per-family consent enforced *at query
+  time* (not in the UI), **EXIF/geolocation stripped on upload**, wrong-child tagging
+  review, and no group photos unless every child's family consented. The existing
+  `staff-photos` bucket is **public** — that model must not be reused, and staff photos
+  should move off it too.
+- **Incident reports** are legal documents: immutable once signed, full audit trail.
+- **Insider risk across 31 staff.** Per-staff identities (not a shared kiosk identity) are
+  what make `admin_audit_log` meaningful; today a shared-tablet action is attributable only
+  to a PIN.
+- **Deletion requests** (`deletion_requests` exists) must actually purge photos and events.
+
+### 9e. Taking payments ourselves — the compliance we would be assuming
+
+Procare absorbs all of this today. Doing it ourselves means owning it permanently:
+
+- **PCI DSS.** Stripe-hosted Checkout (full redirect, not an embedded iframe) keeps us in
+  **SAQ-A**, the minimal scope, and card data never touches our servers. But even under
+  SAQ-A, **PCI DSS 4.0.1 requirements 6.4.3 and 11.6.1 still apply to our own pages** —
+  script inventory and payment-page tamper detection. Our site currently loads
+  render-blocking third-party scripts **with no SRI** (R10), which is directly in scope.
+- **Nacha WEB debit rule — already in force.** Phase 2 took effect **22 June 2026** and
+  applies to *all* ACH originators regardless of volume: **account validation on first use
+  of any consumer bank account**, plus a documented **risk-based fraud detection protocol
+  reviewed annually**. Authorizations must be retained **two years after revocation** for
+  recurring debits.
+- **Never store PANs or bank numbers** — Stripe customer and payment-method tokens only.
+- **Webhook integrity:** verify the Stripe signature, use idempotency keys, guard against
+  replay. A webhook that naively marks invoices paid is a free-money bug.
+- **Server-side amounts.** Invoice totals must be computed server-side. We currently have
+  open findings (FS5, T1) where client-supplied amounts are trusted — that pattern must not
+  survive into a payment flow.
+- **Refund and chargeback authority** must be role-gated and logged; disputes cost $15 each
+  and someone must respond within the deadline.
+
+### 9f. Operational security — the gate nobody wants to build
+
+- **R7: CI auto-merges every `claude/**` branch straight to production with no gate.** That
+  is already uncomfortable; with payments in the system it is untenable. A required review
+  or at minimum a green-test gate is a prerequisite, not a nicety.
+- **R8: the test suite cannot catch a regression** (the tested functions are *copies* of
+  production code).
+- **No staging environment**, and migrations are applied by hand — which is how R5 and R24
+  silently never shipped.
+- **The anon key has never been rotated** (S8).
+- **Backups/PITR require Supabase Pro** — the free tier also pauses projects.
+- **Incident response:** no on-call, no breach-notification plan. Missouri breach
+  notification law would apply to a parent-data disclosure.
+
+### 9g. Security work, totalled
+
+| Item | Hours |
+|---|---|
+| Parent + staff sessions, RLS rework (closes R1, R4, R20) | 40–70 |
+| Revoke over-wide anon grants (9b) | 4–8 |
+| Shared-device hardening, kiosk lockdown, PIN throttle (S6) | 8–14 |
+| Photo consent + private bucket + EXIF strip + retention purge | 12–20 |
+| CI gate + a test suite that can actually fail (R7, R8) | 10–16 |
+| **Subtotal, before any payment work** | **74–128** |
+| Payments: PCI SAQ-A posture, Nacha protocol, webhook integrity, audit trail | +30–50 |
+| **Subtotal, if we take payments too** | **104–178** |
+
+---
+
+## 10. Data model and storage
+
+### 10a. Schema additions
+
+Four new tables carry the entire classroom feature set. Deliberately few — one event table
+rather than separate diaper/nap/bottle tables keeps the parent timeline a single query.
+
+```sql
+-- Actual attendance. The foundation; nothing else works without it.
+child_attendance (
+  id, student_id → students, care_date, room_id,
+  checked_in_at, checked_in_by,        -- parent name or staff_id
+  checked_out_at, checked_out_by,
+  signature_ref,                        -- or PIN attestation
+  unique (student_id, care_date)
+)
+
+-- One row per logged event. Covers diaper, bathroom, nap, bottle, meal,
+-- mood, activity, note, incident.
+child_events (
+  id, student_id → students, care_date, room_id,
+  event_type,        -- 'diaper'|'bathroom'|'nap'|'bottle'|'meal'|'mood'|'activity'|'note'|'incident'
+  subtype,           -- 'wet'|'BM'|'start'|'end'|'oz'|'ate_all' …
+  occurred_at, value_num, note,
+  recorded_by → staff, recorded_at,
+  client_uuid        -- idempotency key for the offline queue
+)
+
+-- Photos, consent-gated.
+child_photos (
+  id, student_id → students, care_date, storage_key,
+  uploaded_by → staff, uploaded_at, caption,
+  consent_verified bool, purge_after date
+)
+
+-- Threaded messaging, append-only.
+message_threads (id, family_id, room_id, subject, created_at, closed_at)
+message_posts   (id, thread_id, author_type, author_id, body, created_at, read_at)
+```
+
+Plus a `photo_consent` flag on `families`, and an `is_deleted` soft-delete on posts —
+**never a hard delete on messages or incidents**, so nothing can be removed to hide it.
+
+### 10b. Volume and growth — this is not a storage problem
+
+| Data | Rows/month | Rows/year | Notes |
+|---|---|---|---|
+| `child_attendance` | ~1,250 | ~15,000 | one per child-day |
+| `child_events` | ~10,000 | ~120,000 | 1,250 child-days × ~8 events |
+| `message_posts` | ~200–500 | ~5,000 | |
+| `child_photos` (rows) | ~1,250–2,500 | ~15,000–30,000 | |
+
+**Database growth: roughly 50–100 MB/year including indexes.** The database is **21 MB
+today**, and Supabase Pro includes 8 GB. We would reach a quarter of the included quota
+somewhere around year 20. Postgres is not the constraint and will not become one.
+
+**Photos are the only real storage line, and they are still trivial:**
+
+- 1,250 child-days × 1–2 photos × ~250–400 KB compressed = **0.3–1.0 GB/month**
+- **4–12 GB/year**; at a 13-month retention window, steady state ~5–13 GB
+- Cloudflare R2: $0.015/GB-month → **$0.08–0.20/month**, and **egress is free**
+- Supabase Storage: 100 GB included on Pro, egress $0.09/GB → also effectively free at
+  our parent viewing volume (~0.7 GB/month)
+
+**Recommendation: Cloudflare R2** for photos — free egress matters more than the per-GB
+rate once parents start scrolling a photo feed, and we already run on Cloudflare.
+
+### 10c. Retention — decide before launch, not after
+
+| Data | Retention | Driver |
+|---|---|---|
+| CACFP meal records | **3+ years** | federal program requirement, already documented |
+| Attendance | 3 years | state licensing |
+| Incident reports | 3+ years, likely longer | legal exposure; check with the insurer |
+| Daily events (diaper/nap/bottle) | 13 months | no requirement — keep the current year, purge |
+| Photos | 13 months, or on request | consent-based; purge job required |
+| Messages | 3 years | discoverable records; policy decision |
+| ACH authorizations (if we take payments) | **2 years after revocation** | Nacha |
+
+A scheduled purge job is required, not optional — an unbounded photo archive of other
+people's children is a liability that grows on its own.
+
+---
+
+## 11. Bottom line, with the real numbers
+
+**What we now know that we did not before:**
+- Procare costs **$79/mo, month-to-month, no contract** — $948/yr.
+- Our rates are **$1.00/ACH** and **2.7% + $0.30/card**.
+- The real pain is **double entry** (Procare refuses API access) and **aging
+  reconciliation**, not the price.
+- The anon key is a **live read/write/delete handle on every child record** (§9a).
+
+**What that implies:**
+
+1. **The subscription is not the problem — the double entry is.** $948/yr of subscription
+   against **$1,300–2,600/yr of hidden labor** re-keying bills and reconciling by hand.
+   Cancelling Procare to save $79/mo while spending 100+ hours building a replacement is
+   the wrong trade.
+2. **On the payment rail alone, Procare is probably already the cheaper option** — a flat
+   $1 ACH beats Stripe's 0.8% on every payment over $125, and ours average $519. It stops
+   being cheaper only if most families pay by card. **Get the ACH/card split.**
+3. **The "one app for parents and staff" goal is legitimate and is the strongest argument
+   here** — but it is a *product* argument, not a savings argument, and it should be made
+   on those terms.
+4. **The security floor is the same either way.** Even if we never touch payments, R1/R4
+   mean the public key can read and delete child records today. That work (§9g: 74–128 hrs)
+   has to happen before daily sheets ship regardless of what we decide about Procare.
+
+**Recommended sequence, revised:**
+
+| # | Action | Cost | Why first |
+|---|---|---|---|
+| 0 | **Ask Procare about a bulk charge/CSV import** | a phone call | Could kill the double entry outright |
+| 0 | **Pull the ACH/card split off a statement** | 10 minutes | Decides the entire payment question |
+| 1 | **Close R1/R4 — real sessions + RLS** | 40–70 hrs | Already exposed; gates everything |
+| 2 | **Fix payment reconciliation** (monthly import, invoice matching) | 6–12 hrs | Fixes the aging pain on our side |
+| 3 | **Child check-in/out** | 30–45 hrs | The foundation, and Procare doesn't give it to us |
+| 4 | **Daily sheets** | 60–90 hrs | The feature parents actually see |
+| 5 | Messaging | 40–60 hrs | After a written comms policy |
+| 6 | Photos | 40–60 hrs | Highest risk; defer |
+| — | **Taking payments in-house** | 100–150 hrs + permanent PCI/Nacha duty | **Only if the ACH/card split says card-heavy** |
+
+Steps 0 are free and might resolve half the complaint. Steps 1–2 are worth doing on their
+own merits no matter what is decided about Procare.
+
+---
+
 ## Sources
 
 - [Procare: Childcare App — Google Play](https://play.google.com/store/apps/details?id=com.kinderlime.dev&hl=en_US)
@@ -482,3 +807,10 @@ constraint.
 - [Tuition Express fee schedule as published by a center (ACH $1.25 / card 2.75%+$1)](https://www.whatisgrace.org/images/uploads/Preschool/2024-2025_Forms/2025-2026%20Tuition%20Information%20-%20Tution%20Express%20Instructions.pdf)
 - [Tuition Express Agreement (sample)](https://cdn.hibuwebsites.com/c4b19a99b3f3497a882adb79f9b9880d/files/uploaded/Tuition%20Express%20Agreement.pdf)
 - [Tuition Express — SoftwareSuggest](https://www.softwaresuggest.com/tuition-express)
+- [Stripe PCI compliance guide](https://stripe.com/guides/pci-compliance)
+- [PCI DSS 4.0.1 and Stripe — what merchants still own](https://cside.com/blog/can-you-use-stripe-for-pci-dss)
+- [Nacha WEB debit rule, 2026 phases](https://validifi.com/think-nacha-doesnt-apply-to-you-think-again-the-2026-web-debit-rule-impacts-everyone/)
+- [ACH authorization requirements and retention](https://www.pdcflow.com/resources/guides/ach-authorization-requirements/)
+- [2026 Nacha compliance overview — Bottomline](https://www.bottomline.com/learning-center/2026-nacha-compliance-rules-risks-and-how-prepare)
+- [Procare bulk upload of student data (xls/csv)](https://www.procaresupport.com/procare-online/docs/bulk-upload-of-student-data-xls-or-csv)
+- [Procare desktop — Import Data utility](https://www.procaresupport.com/procare-desktop/docs/import-data)
