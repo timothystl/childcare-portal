@@ -335,21 +335,71 @@ prices it as a percentage.**
 | Card — Stripe nonprofit | 2.2% + $0.30 | $11.72 | $891 | $10,689 |
 | Subscription — Procare | $79/mo | — | $79 | **$948** |
 
-**The ACH/card mix decides this completely.** Total annual cost of the payment rail:
+### The actual answer, from the June 2026 merchant statement
 
-| Mix | Stay on Procare (fees + $948 sub) | Move to Stripe (nonprofit rate) | Winner |
+| | Count | Volume | Share of count |
 |---|---|---|---|
-| 100% ACH | **$1,860** | $3,785 | **Procare, by $1,925** |
-| 75% ACH / 25% card | **$4,825** | $5,511 | **Procare, by $686** |
-| 50/50 | **$7,930** | $7,237 | Stripe, by $693 |
-| 100% card | $13,999 | **$10,689** | **Stripe, by $3,310** |
+| **ACH** | **17** | **$9,102.00** | **19.1%** |
+| Visa | 55 | $30,933.50 | |
+| MasterCard | 12 | $8,609.00 | |
+| Discover | 2 | $1,849.00 | |
+| American Express | 3 | $680.00 | |
+| **Card subtotal** | **72** | **$42,071.50** | **80.9%** — avg $584.33 |
+| **Total** | **89** | **$51,173.50** | |
 
-Break-even sits near a **60/40 ACH/card split.** Above that ACH share, Procare's flat $1 is
-the cheaper rail *even after paying $948/yr for the subscription we would otherwise drop*.
-Below it, Stripe's nonprofit card rate wins.
+**Fees:** Processing $1,288.92 + Authorization $0.00 + Other $88.35 = **$1,377.27**
+**Effective rate: 2.691%** of all volume. No chargebacks in the period.
 
-**This one number — what fraction of your 912 annual payments are ACH — decides the entire
-payment question.** It is on your Procare statements.
+**We are card-heavy — only 19% ACH — which is far below the ~60% break-even.** Two findings
+follow, and the second is larger than the first.
+
+### Finding 1 — we are paying ~17% more than the quoted rate
+
+| | |
+|---|---|
+| Expected at our quoted rates (17 ACH × $1.00, card at 2.7% + $0.30) | **$1,174.53** |
+| Actually charged | **$1,377.27** |
+| **Overage** | **$202.74/month = $2,433/year** |
+| Implied effective **card** rate | **3.023%**, not the quoted 2.7% + $0.30 |
+
+The gap is most likely American Express and Discover priced above the quoted Visa/MC rate,
+plus non-qualified downgrades, plus the $88.35 of monthly "Other" fees. **Worth a call to
+Procare to ask them to explain the 3.02% against a 2.7% quote.** That call is worth up to
+$2,433/year and costs nothing.
+
+### Finding 2 — the ACH share is the biggest lever available, and it needs no code
+
+At Procare's own pricing, a card payment costs **$17.67** on average and the identical
+payment by ACH costs **$1.00**. Every family moved from card to bank draft saves **$16.67
+per payment**, permanently, with no vendor change and no development:
+
+| ACH share | Payments to move | Monthly saving | **Annual saving** |
+|---|---|---|---|
+| 19% → 40% | 19 | $317 | **$3,800** |
+| 19% → 50% | 27 | $450 | **$5,400** |
+| 19% → 60% | 36 | $600 | **$7,200** |
+| 19% → 75% | 50 | $833 | **$10,000** |
+
+**This is the single highest-return action in this entire document.** It costs a
+communication campaign and making bank draft the default at enrollment.
+
+### Finding 3 — Stripe would save less than the ACH campaign, and only at the nonprofit rate
+
+Same June volume, priced on Stripe:
+
+| | Card | ACH | Total/mo | vs Procare | Annual, incl. dropping the $79/mo sub |
+|---|---|---|---|---|---|
+| **Stripe nonprofit (2.2% + $0.30)** | $947.17 | $72.82 | **$1,019.99** | −$357.28/mo | **$5,235 gross; ~$3,800–4,100 net of new infra** |
+| Stripe standard (2.9% + $0.30) | $1,241.67 | $72.82 | $1,314.49 | −$62.78/mo | $1,701 gross; **~$250–600 net — not worth it** |
+
+Note Stripe's ACH is *worse* than Procare's ($72.82 vs $17), and its card rate is *better*
+(2.2% vs 3.02%). Since we are 81% card, the card rate dominates and Stripe wins overall —
+**but only on the nonprofit rate**, which must be applied for and approved. At the standard
+rate the whole exercise nets a few hundred dollars a year and is not worth 100+ hours.
+
+**The two levers partly cancel.** Push ACH share up and Procare's flat $1 gets better while
+Stripe's percentage ACH gets worse, shrinking the case for switching. Do the free lever
+first, then re-measure.
 
 **Corrections to the earlier draft:**
 
@@ -743,47 +793,50 @@ people's children is a liability that grows on its own.
 
 ## 11. Bottom line, with the real numbers
 
-**What we now know that we did not before:**
-- Procare costs **$79/mo, month-to-month, no contract** — $948/yr.
-- Our rates are **$1.00/ACH** and **2.7% + $0.30/card**.
-- The real pain is **double entry** (Procare refuses API access) and **aging
-  reconciliation**, not the price.
-- The anon key is a **live read/write/delete handle on every child record** (§9a).
+Grounded in the **June 2026 merchant statement** (§6) and live production data.
 
-**What that implies:**
+### What the statement settled
 
-1. **The subscription is not the problem — the double entry is.** $948/yr of subscription
-   against **$1,300–2,600/yr of hidden labor** re-keying bills and reconciling by hand.
-   Cancelling Procare to save $79/mo while spending 100+ hours building a replacement is
-   the wrong trade.
-2. **On the payment rail alone, Procare is probably already the cheaper option** — a flat
-   $1 ACH beats Stripe's 0.8% on every payment over $125, and ours average $519. It stops
-   being cheaper only if most families pay by card. **Get the ACH/card split.**
-3. **The "one app for parents and staff" goal is legitimate and is the strongest argument
-   here** — but it is a *product* argument, not a savings argument, and it should be made
-   on those terms.
-4. **The security floor is the same either way.** Even if we never touch payments, R1/R4
-   mean the public key can read and delete child records today. That work (§9g: 74–128 hrs)
-   has to happen before daily sheets ship regardless of what we decide about Procare.
+| Question | Answer |
+|---|---|
+| ACH share | **19.1%** of transactions — card-heavy, far below break-even |
+| Effective all-in rate | **2.691%** ($1,377.27 on $51,173.50) |
+| Effective card rate | **3.023%** — vs the 2.7% + $0.30 we were quoted |
+| Overcharge vs quote | **$202.74/month = $2,433/year** |
+| Chargebacks | none in the period |
 
-**Recommended sequence, revised:**
+### The four levers, ranked by return per hour of effort
 
-| # | Action | Cost | Why first |
-|---|---|---|---|
-| 0 | **Ask Procare about a bulk charge/CSV import** | a phone call | Could kill the double entry outright |
-| 0 | **Pull the ACH/card split off a statement** | 10 minutes | Decides the entire payment question |
-| 1 | **Close R1/R4 — real sessions + RLS** | 40–70 hrs | Already exposed; gates everything |
-| 2 | **Fix payment reconciliation** (monthly import, invoice matching) | 6–12 hrs | Fixes the aging pain on our side |
-| 3 | **Child check-in/out** | 30–45 hrs | The foundation, and Procare doesn't give it to us |
-| 4 | **Daily sheets** | 60–90 hrs | The feature parents actually see |
-| 5 | Messaging | 40–60 hrs | After a written comms policy |
-| 6 | Photos | 40–60 hrs | Highest risk; defer |
-| — | **Taking payments in-house** | 100–150 hrs + permanent PCI/Nacha duty | **Only if the ACH/card split says card-heavy** |
+| # | Action | Annual value | Effort | Risk |
+|---|---|---|---|---|
+| 1 | **Move families from card to ACH** (default bank draft at enrollment, campaign to existing families) | **$3,800 – $10,000** | a communication campaign | none |
+| 2 | **Call Procare about the 3.02% vs 2.7% gap** | up to **$2,433** | one phone call | none |
+| 3 | **Fix payment reconciliation in our own ledger** | fixes the aging pain; recovers ~$3,300/mo of unrecorded payments | 6–12 hrs | low |
+| 4 | **Move payments to Stripe** | $3,800–4,100 net — **but only at the nonprofit rate**; ~$250–600 at standard | 100–150 hrs + permanent PCI/Nacha duty | high |
 
-Steps 0 are free and might resolve half the complaint. Steps 1–2 are worth doing on their
-own merits no matter what is decided about Procare.
+**Levers 1 and 2 together are worth more than lever 4 and cost nothing.** Do them first,
+then re-measure — lever 1 actively shrinks lever 4's value, because Procare's flat $1 ACH
+gets better as ACH share rises while Stripe's percentage ACH gets worse.
 
----
+### A reconciliation gap the statement exposed
+
+The June statement shows **89 transactions totalling $51,173.50**. Our `billing_payments`
+table holds **87 payments totalling $47,867.00** for June — **2 payments and $3,306.50
+missing**. That is the reconciliation problem made concrete: our ledger is not merely stale,
+it is incomplete for a month we have already imported. Lever 3 fixes this.
+
+### On the "one app" goal
+
+Still legitimate, still a product argument rather than a savings one. But the statement
+sharpens it: **the money case for leaving Procare is weak** — $3,800–4,100/yr at best, and
+only if Stripe approves nonprofit pricing, against 100–150 hours plus a permanent
+compliance obligation. Meanwhile the free levers are worth up to $12,000/yr combined.
+
+**So decouple the two decisions.** Build the classroom and parent-communication side because
+it fits our per-day model and Procare's app does not — that case stands on its own. Leave
+payments with Procare until either (a) Stripe approves the nonprofit rate *and* the ACH
+campaign has plateaued, or (b) the double entry proves unfixable after asking about a bulk
+charge import.
 
 ## Sources
 
