@@ -562,10 +562,10 @@ function normalise(fnText) {
 }
 
 // ── Ratio-step / next-child calculator (copied from js/admin/admin-reports.js) ──
-// Staffing is a step function: a room needs ceil(children / ratio) teachers, so
-// the child crossing a boundary carries the cost of a whole extra teacher-day.
+// The day is two shifts: AM holds every child booked, PM holds only the
+// full-day children (a half-day booking is a morning session). Staffing steps
+// per shift, so the child who trips a shift pays for that shift's teacher.
 const SHIFT_HRS = { am: 5, pm: 5 };
-const RATIO_STEP_DAY_HOURS = SHIFT_HRS.am + SHIFT_HRS.pm;
 let allRegistrations = [];
 
 function _ratioStepWage(staff, roomId) {
@@ -574,6 +574,36 @@ function _ratioStepWage(staff, roomId) {
     const pool   = inRoom.length ? inRoom : hourly;
     if (!pool.length) return 0;
     return pool.reduce((sum, s) => sum + Number(s.hourly_rate), 0) / pool.length;
+}
+
+function _ratioStaffNeed(children, ratio) {
+    if (!ratio || ratio <= 0) return null;
+    return Math.ceil(children / ratio);
+}
+
+function _ratioStepOffer(opts) {
+    const { isFullDay, rate, ratio, wage, openSeats, headroomAm, headroomPm, amChildren } = opts;
+    const none = { stepsAm: false, stepsPm: false, cost: null, margin: null };
+
+    if (!rate || rate <= 0)                        return Object.assign({ verdict: 'not-offered' }, none);
+    if (openSeats !== null && openSeats <= 0)      return Object.assign({ verdict: 'full' }, none);
+    if (!ratio || ratio <= 0)                      return Object.assign({ verdict: 'no-ratio' }, none);
+
+    // The morning must absorb every booking; only a full day also has to fit
+    // the afternoon.
+    const stepsAm = headroomAm === 0;
+    const stepsPm = isFullDay && headroomPm === 0;
+
+    if (!stepsAm && !stepsPm) {
+        return { verdict: 'free', stepsAm, stepsPm, cost: 0, margin: rate };
+    }
+    // A room with nobody booked needs its first teacher for this child.
+    const verdict = amChildren === 0 ? 'opens' : 'step';
+    if (!wage || wage <= 0) {
+        return { verdict, stepsAm, stepsPm, cost: null, margin: null };
+    }
+    const cost = (stepsAm ? SHIFT_HRS.am : 0) * wage + (stepsPm ? SHIFT_HRS.pm : 0) * wage;
+    return { verdict, stepsAm, stepsPm, cost, margin: rate - cost };
 }
 
 function _buildRatioStepRows(weekDates, rooms, staff) {
@@ -602,38 +632,41 @@ function _buildRatioStepRows(weekDates, rooms, staff) {
             const c        = counts[date][room.id] || { total: 0, half: 0 };
             const ratio    = room.staffRatio || 0;
             const capacity = room.capacity   || 0;
-            const rate     = room.fullDayRate || 0;
             const wage     = wageByRoom[room.id] || 0;
-            const teacherDayCost = wage * RATIO_STEP_DAY_HOURS;
+            const fullRate = room.fullDayRate || 0;
+            // A full-day-only room has no half-day booking to price.
+            const halfRate = room.fullDayOnly ? 0 : (room.halfDayRate || 0);
+
+            // Morning holds everyone; the afternoon holds only full-day children.
+            const amChildren = c.total;
+            const pmChildren = c.total - c.half;
 
             // ceil() is the step. With 0 children 0 teachers are required, so
-            // the first child of the day genuinely does cost a whole teacher —
-            // that is a real step, not an edge case to paper over.
-            const staffReq  = ratio > 0 ? Math.ceil(c.total / ratio) : null;
-            const headroom  = ratio > 0 ? staffReq * ratio - c.total : null;
-            const openSeats = capacity > 0 ? capacity - c.total : null;
+            // the first child of a shift genuinely does cost a teacher — that
+            // is a real step, not an edge case to paper over.
+            const staffAm    = _ratioStaffNeed(amChildren, ratio);
+            const staffPm    = _ratioStaffNeed(pmChildren, ratio);
+            const headroomAm = ratio > 0 ? staffAm * ratio - amChildren : null;
+            const headroomPm = ratio > 0 ? staffPm * ratio - pmChildren : null;
+            const openSeats  = capacity > 0 ? capacity - amChildren : null;
 
-            let verdict, nextMargin = null, nextCost = null;
-            if (openSeats !== null && openSeats <= 0) {
-                verdict = 'full';                       // no seat to sell
-            } else if (ratio <= 0) {
-                verdict = 'no-ratio';                   // ratio not configured
-            } else if (headroom > 0) {
-                verdict = 'free';                       // absorbed by current staff
-                nextMargin = rate;
-                nextCost   = 0;
-            } else {
-                // headroom === 0 → the next child trips the ratio
-                verdict    = c.total === 0 ? 'opens' : 'step';
-                nextCost   = teacherDayCost;
-                nextMargin = teacherDayCost > 0 ? rate - teacherDayCost : null;
-            }
+            // Teachers the afternoon does not need — they can leave at midday
+            // once the half-day children go home.
+            const releasable      = (staffAm === null || staffPm === null) ? null : staffAm - staffPm;
+            const releasableHours = releasable === null ? null : releasable * SHIFT_HRS.pm;
+
+            const shared = { ratio, wage, openSeats, headroomAm, headroomPm, amChildren };
+            const fullDay = _ratioStepOffer(Object.assign({ isFullDay: true,  rate: fullRate }, shared));
+            const halfDay = _ratioStepOffer(Object.assign({ isFullDay: false, rate: halfRate }, shared));
 
             rows.push({
                 date, roomId: room.id, roomLabel: room.label,
-                children: c.total, half: c.half, ratio, capacity,
-                staffReq, headroom, openSeats,
-                rate, wage, nextCost, nextMargin, verdict,
+                children: c.total, half: c.half, amChildren, pmChildren,
+                ratio, capacity, openSeats,
+                staffAm, staffPm, headroomAm, headroomPm,
+                releasable, releasableHours,
+                fullRate, halfRate, wage,
+                fullDay, halfDay,
             });
         });
     });
@@ -642,10 +675,11 @@ function _buildRatioStepRows(weekDates, rooms, staff) {
 
 // Test helpers
 function _rsRoom(over = {}) {
-    return Object.assign({ id: 'a', label: 'A', staffRatio: 4, capacity: 12, fullDayRate: 75 }, over);
+    return Object.assign({ id: 'a', label: 'A', staffRatio: 4, capacity: 20,
+                           fullDayRate: 75, halfDayRate: 45, fullDayOnly: false }, over);
 }
-function _rsBook(list) {
-    allRegistrations = list.map(b => ({
+function _rsRun(rooms, staff, bookings, dates = ['2026-08-11']) {
+    allRegistrations = bookings.map(b => ({
         status: b.status || 'confirmed',
         room_id: b.room || 'a',
         registration_dates: [{
@@ -655,15 +689,14 @@ function _rsBook(list) {
             waitlisted: !!b.wl,
         }],
     }));
-}
-function _rsRun(rooms, staff, bookings, dates = ['2026-08-11']) {
-    _rsBook(bookings);
     return _buildRatioStepRows(dates, rooms, staff);
 }
 const _RS_WAGE = [{ pay_type: 'hourly', hourly_rate: 20, room_id: null }];
-const _rsFill = (n, room = 'a') => Array.from({ length: n }, () => ({ room }));
+// n children: `half` of them half-day (morning only), the rest full-day.
+const _rsFill = (n, half = 0, room = 'a') =>
+    Array.from({ length: n }, (_, i) => ({ room, t: i < half ? 'half' : 'full' }));
 
-describe('_ratioStepWage — pricing one more teacher-day', () => {
+describe('_ratioStepWage — pricing one more teacher-shift', () => {
     test('averages the hourly staff assigned to the room', () => {
         expect(_ratioStepWage([
             { pay_type: 'hourly', hourly_rate: 16, room_id: 'a' },
@@ -696,85 +729,200 @@ describe('_ratioStepWage — pricing one more teacher-day', () => {
     });
 });
 
-describe('_buildRatioStepRows — the ratio step', () => {
-    test('staff required is ceil(children / ratio)', () => {
-        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(9))[0];   // 9 kids, 1:4
-        expect(r.staffReq).toBe(3);
+describe('_ratioStaffNeed — teachers a shift requires', () => {
+    test('rounds up to the next whole teacher', () => {
+        expect(_ratioStaffNeed(9, 4)).toBe(3);
     });
-    test('headroom counts children who still fit under current staff', () => {
-        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(9))[0];   // 3 staff cover 12
-        expect(r.headroom).toBe(3);
+    test('an exact multiple needs no extra teacher', () => {
+        expect(_ratioStaffNeed(8, 4)).toBe(2);
     });
-    test('exactly on the boundary leaves zero headroom', () => {
-        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(8))[0];   // 8 kids, 1:4 → 2 staff
-        expect(r.headroom).toBe(0);
-        expect(r.verdict).toBe('step');
+    test('an empty shift needs nobody', () => {
+        expect(_ratioStaffNeed(0, 4)).toBe(0);
     });
-    test('within a block the next child is absorbed at full rate', () => {
-        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(5))[0];
-        expect(r.verdict).toBe('free');
-        expect(r.nextMargin).toBe(75);
-        expect(r.nextCost).toBe(0);
+    test('an unset ratio is unknown, not zero', () => {
+        expect(_ratioStaffNeed(9, 0)).toBeNull();
     });
-    test('the child that trips the ratio pays for a whole teacher-day', () => {
-        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(8))[0];
-        expect(r.nextCost).toBe(200);              // 20/hr x 10 h
-        expect(r.nextMargin).toBe(-125);           // 75 rate - 200 labor
+});
+
+describe('_ratioStepOffer — what one more booking is worth', () => {
+    const base = { rate: 75, ratio: 4, wage: 20, openSeats: 5,
+                   headroomAm: 2, headroomPm: 2, amChildren: 6 };
+    const offer = over => _ratioStepOffer(Object.assign({ isFullDay: true }, base, over));
+
+    test('room with headroom on both shifts takes the child free', () => {
+        const o = offer({});
+        expect(o.verdict).toBe('free');
+        expect(o.cost).toBe(0);
+        expect(o.margin).toBe(75);
     });
-    test('an empty room is a step — the first child needs a teacher', () => {
+    test('tripping only the morning costs one morning shift', () => {
+        const o = offer({ headroomAm: 0 });
+        expect(o.stepsAm).toBe(true);
+        expect(o.stepsPm).toBe(false);
+        expect(o.cost).toBe(100);            // 5 h x 20
+        expect(o.margin).toBe(-25);
+    });
+    test('tripping only the afternoon costs one afternoon shift', () => {
+        const o = offer({ headroomPm: 0 });
+        expect(o.stepsAm).toBe(false);
+        expect(o.stepsPm).toBe(true);
+        expect(o.cost).toBe(100);
+    });
+    test('tripping both shifts costs a teacher all day', () => {
+        const o = offer({ headroomAm: 0, headroomPm: 0 });
+        expect(o.cost).toBe(200);            // 10 h x 20
+        expect(o.margin).toBe(-125);
+    });
+    test('a half day never trips the afternoon — it has already gone home', () => {
+        const o = _ratioStepOffer(Object.assign({}, base,
+            { isFullDay: false, rate: 45, headroomPm: 0 }));
+        expect(o.stepsPm).toBe(false);
+        expect(o.verdict).toBe('free');
+        expect(o.margin).toBe(45);
+    });
+    test('a half day still trips the morning it shares', () => {
+        const o = _ratioStepOffer(Object.assign({}, base,
+            { isFullDay: false, rate: 45, headroomAm: 0 }));
+        expect(o.stepsAm).toBe(true);
+        expect(o.cost).toBe(100);
+        expect(o.margin).toBe(-55);
+    });
+    test('no seat outranks any ratio headroom', () => {
+        expect(offer({ openSeats: 0 }).verdict).toBe('full');
+        expect(offer({ openSeats: -1 }).verdict).toBe('full');
+    });
+    test('an unset ratio is reported, never guessed', () => {
+        const o = offer({ ratio: 0 });
+        expect(o.verdict).toBe('no-ratio');
+        expect(o.margin).toBeNull();
+    });
+    test('a rate of zero means the booking type is not offered', () => {
+        expect(offer({ rate: 0 }).verdict).toBe('not-offered');
+    });
+    test('unknown wage yields a null margin, never a free teacher', () => {
+        const o = offer({ headroomAm: 0, wage: 0 });
+        expect(o.verdict).toBe('step');
+        expect(o.cost).toBeNull();
+        expect(o.margin).toBeNull();
+    });
+    test('an empty room reports opening it rather than a plain step', () => {
+        expect(offer({ headroomAm: 0, headroomPm: 0, amChildren: 0 }).verdict).toBe('opens');
+    });
+});
+
+describe('_buildRatioStepRows — AM/PM shift split', () => {
+    test('the afternoon drops the half-day children', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(10, 7))[0];
+        expect(r.amChildren).toBe(10);
+        expect(r.pmChildren).toBe(3);
+        expect(r.half).toBe(7);
+    });
+    test('each shift is staffed to its own occupancy', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(10, 7))[0];
+        expect(r.staffAm).toBe(3);           // ceil(10/4)
+        expect(r.staffPm).toBe(1);           // ceil(3/4)
+    });
+    test('teachers the afternoon does not need are counted as releasable', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(10, 7))[0];
+        expect(r.releasable).toBe(2);
+        expect(r.releasableHours).toBe(10);  // 2 teachers x 5 h
+    });
+    test('an all-full-day room releases nobody at midday', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(8, 0))[0];
+        expect(r.pmChildren).toBe(8);
+        expect(r.releasable).toBe(0);
+        expect(r.releasableHours).toBe(0);
+    });
+    test('headroom is tracked per shift', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(10, 7))[0];
+        expect(r.headroomAm).toBe(2);        // 3 teachers cover 12
+        expect(r.headroomPm).toBe(1);        // 1 teacher covers 4
+    });
+    test('when the morning is the tight shift, the full day is the better sale', () => {
+        // 8 children, 3 half → AM 8 (headroom 0), PM 5 (headroom 3)
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(8, 3))[0];
+        expect(r.headroomAm).toBe(0);
+        expect(r.headroomPm).toBe(3);
+        // Both trip the same morning teacher and nothing else, so the labor is
+        // identical either way — take the higher rate.
+        expect(r.fullDay.cost).toBe(100);
+        expect(r.halfDay.cost).toBe(100);
+        expect(r.fullDay.margin).toBe(-25);  // 75 - 100
+        expect(r.halfDay.margin).toBe(-55);  // 45 - 100
+    });
+    test('both shifts on the boundary costs a full-day child a teacher all day', () => {
+        // 8 children, 4 half → AM 8 (headroom 0), PM 4 (headroom 0)
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(8, 4))[0];
+        expect(r.headroomAm).toBe(0);
+        expect(r.headroomPm).toBe(0);
+        expect(r.fullDay.cost).toBe(200);    // both shifts
+        expect(r.fullDay.margin).toBe(-125);
+        expect(r.halfDay.cost).toBe(100);    // morning only
+        expect(r.halfDay.margin).toBe(-55);
+    });
+    test('a slack morning with a tight afternoon makes the half day free', () => {
+        // 6 children, 2 half → AM 6 (headroom 2), PM 4 (headroom 0)
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(6, 2))[0];
+        expect(r.headroomAm).toBe(2);
+        expect(r.headroomPm).toBe(0);
+        expect(r.halfDay.verdict).toBe('free');
+        expect(r.halfDay.margin).toBe(45);
+        expect(r.fullDay.verdict).toBe('step');
+        expect(r.fullDay.margin).toBe(-25);  // 75 - 100 for the afternoon teacher
+    });
+    test('a full-day-only room offers no half day', () => {
+        const r = _rsRun([_rsRoom({ fullDayOnly: true, halfDayRate: null })],
+            _RS_WAGE, _rsFill(4))[0];
+        expect(r.halfDay.verdict).toBe('not-offered');
+        expect(r.halfRate).toBe(0);
+    });
+    test('a room with no half-day rate offers no half day', () => {
+        const r = _rsRun([_rsRoom({ halfDayRate: 0 })], _RS_WAGE, _rsFill(4))[0];
+        expect(r.halfDay.verdict).toBe('not-offered');
+    });
+    test('an empty room is a step on both shifts — the first child needs a teacher', () => {
         const r = _rsRun([_rsRoom()], _RS_WAGE, [])[0];
-        expect(r.children).toBe(0);
-        expect(r.staffReq).toBe(0);
-        expect(r.verdict).toBe('opens');
-        expect(r.nextMargin).toBe(-125);
+        expect(r.amChildren).toBe(0);
+        expect(r.staffAm).toBe(0);
+        expect(r.fullDay.verdict).toBe('opens');
+        expect(r.fullDay.margin).toBe(-125); // 75 - 200 (both shifts)
+        expect(r.halfDay.margin).toBe(-55);  // 45 - 100 (morning only)
     });
-    test('a full room reports no sellable seat and no margin', () => {
+    test('a full room reports no sellable seat for either booking type', () => {
         const r = _rsRun([_rsRoom({ capacity: 4 })], _RS_WAGE, _rsFill(4))[0];
         expect(r.openSeats).toBe(0);
-        expect(r.verdict).toBe('full');
-        expect(r.nextMargin).toBeNull();
+        expect(r.fullDay.verdict).toBe('full');
+        expect(r.halfDay.verdict).toBe('full');
     });
     test('an overbooked room is still full, not sellable', () => {
         const r = _rsRun([_rsRoom({ capacity: 3 })], _RS_WAGE, _rsFill(4))[0];
         expect(r.openSeats).toBe(-1);
-        expect(r.verdict).toBe('full');
+        expect(r.fullDay.verdict).toBe('full');
     });
-    test('an unset ratio is reported, never guessed', () => {
+    test('open seats are counted against the morning, when the room is fullest', () => {
+        const r = _rsRun([_rsRoom({ capacity: 10 })], _RS_WAGE, _rsFill(10, 7))[0];
+        expect(r.openSeats).toBe(0);         // not 7, despite the empty afternoon
+    });
+    test('an unset ratio leaves every shift figure unknown', () => {
         const r = _rsRun([_rsRoom({ staffRatio: 0 })], _RS_WAGE, _rsFill(4))[0];
-        expect(r.staffReq).toBeNull();
-        expect(r.headroom).toBeNull();
-        expect(r.verdict).toBe('no-ratio');
-    });
-    test('unknown wage yields a null margin, not a free teacher', () => {
-        const r = _rsRun([_rsRoom()], [], _rsFill(8))[0];
-        expect(r.verdict).toBe('step');
-        expect(r.nextMargin).toBeNull();
-    });
-    test('unset capacity still computes the ratio step', () => {
-        const r = _rsRun([_rsRoom({ capacity: 0 })], _RS_WAGE, _rsFill(8))[0];
-        expect(r.openSeats).toBeNull();
-        expect(r.verdict).toBe('step');
-    });
-    test('half-day children count toward the ratio (present at the morning peak)', () => {
-        const r = _rsRun([_rsRoom()], _RS_WAGE,
-            [...Array(4).fill({ room: 'a', t: 'half' }), ...Array(4).fill({ room: 'a' })])[0];
-        expect(r.children).toBe(8);
-        expect(r.half).toBe(4);
-        expect(r.staffReq).toBe(2);
+        expect(r.staffAm).toBeNull();
+        expect(r.headroomAm).toBeNull();
+        expect(r.releasable).toBeNull();
+        expect(r.fullDay.verdict).toBe('no-ratio');
     });
     test('waitlisted bookings are excluded from the count', () => {
         const r = _rsRun([_rsRoom()], _RS_WAGE, [{ room: 'a' }, { room: 'a', wl: true }])[0];
-        expect(r.children).toBe(1);
+        expect(r.amChildren).toBe(1);
     });
     test('unconfirmed registrations are excluded from the count', () => {
         const r = _rsRun([_rsRoom()], _RS_WAGE, [{ room: 'a' }, { room: 'a', status: 'pending' }])[0];
-        expect(r.children).toBe(1);
+        expect(r.amChildren).toBe(1);
     });
     test('per-date room override wins over the registration room', () => {
         allRegistrations = [{ status: 'confirmed', room_id: 'b', registration_dates: [
             { care_date: '2026-08-11', room_id: 'a', day_type: 'full', waitlisted: false }] }];
         const r = _buildRatioStepRows(['2026-08-11'], [_rsRoom()], _RS_WAGE)[0];
-        expect(r.children).toBe(1);
+        expect(r.amChildren).toBe(1);
     });
     test('emits one row per room per day', () => {
         const rows = _rsRun([_rsRoom(), _rsRoom({ id: 'b', label: 'B' })], _RS_WAGE,
@@ -784,17 +932,32 @@ describe('_buildRatioStepRows — the ratio step', () => {
     test('bookings outside the requested week are ignored', () => {
         const r = _rsRun([_rsRoom()], _RS_WAGE,
             [{ room: 'a' }, { room: 'a', date: '2026-09-01' }])[0];
-        expect(r.children).toBe(1);
+        expect(r.amChildren).toBe(1);
     });
-    test('real case — Bear Room, 6 children at 1:3, is one child from a 3rd teacher', () => {
-        const bear = _rsRoom({ id: 'bear', staffRatio: 3, capacity: 9, fullDayRate: 80 });
+    test('real case — Bear Room, 6 full-day children at 1:3, one from a 3rd teacher', () => {
+        const bear = _rsRoom({ id: 'bear', staffRatio: 3, capacity: 9,
+                               fullDayRate: 80, fullDayOnly: true, halfDayRate: null });
         const r = _rsRun([bear], [{ pay_type: 'hourly', hourly_rate: 16.83, room_id: 'bear' }],
-            _rsFill(6, 'bear'))[0];
-        expect(r.staffReq).toBe(2);
-        expect(r.headroom).toBe(0);
-        expect(r.openSeats).toBe(3);          // seats look available...
-        expect(r.verdict).toBe('step');       // ...but the ratio says otherwise
-        expect(r.nextMargin).toBeCloseTo(-88.3, 1);
+            _rsFill(6, 0, 'bear'))[0];
+        expect(r.staffAm).toBe(2);
+        expect(r.staffPm).toBe(2);           // no half-days, so no midday relief
+        expect(r.releasable).toBe(0);
+        expect(r.headroomAm).toBe(0);
+        expect(r.openSeats).toBe(3);         // seats look available...
+        expect(r.fullDay.verdict).toBe('step');
+        expect(r.fullDay.margin).toBeCloseTo(-88.3, 1);   // 80 - 168.30, both shifts
+    });
+    test('real case — Goose Room, 10 children with 7 half-day, frees 2 afternoon teachers', () => {
+        const goose = _rsRoom({ id: 'goose', staffRatio: 8, capacity: 15,
+                                fullDayRate: 75, halfDayRate: 45 });
+        const r = _rsRun([goose], [{ pay_type: 'hourly', hourly_rate: 16.83, room_id: 'goose' }],
+            _rsFill(10, 7, 'goose'))[0];
+        expect(r.amChildren).toBe(10);
+        expect(r.pmChildren).toBe(3);
+        expect(r.staffAm).toBe(2);
+        expect(r.staffPm).toBe(1);
+        expect(r.releasableHours).toBe(5);   // one teacher can leave at midday
+        expect(r.fullDay.verdict).toBe('free');
     });
 });
 
@@ -810,6 +973,8 @@ describe('source-drift guard — copies must match js/ source', () => {
         ['getWeekMonday',      'js/app.js'],
         ['csvCell',            'js/admin/admin-core.js'],
         ['_ratioStepWage',     'js/admin/admin-reports.js'],
+        ['_ratioStaffNeed',    'js/admin/admin-reports.js'],
+        ['_ratioStepOffer',    'js/admin/admin-reports.js'],
         ['_buildRatioStepRows','js/admin/admin-reports.js'],
     ];
 

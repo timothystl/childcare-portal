@@ -3779,16 +3779,19 @@ async function generateSeatDayCapacityReport() {
 // day, how much headroom is left before that step and what the next booking
 // is actually worth once the step is priced in.
 //
-// Scope note: "children" counts every non-waitlisted child booked that day,
-// half-day and full-day alike. Ratio compliance is set by peak concurrent
-// occupancy — the morning, when everyone is present — so the peak is the
-// binding constraint and the right basis for the step. Staffing the lighter
-// afternoon separately (once half-day children leave) is a further
-// refinement, deliberately not attempted here.
+// The day is modelled as two shifts. The morning holds every child booked
+// that day; the afternoon holds only the full-day children, because a
+// half-day booking is a morning session. That is the same AM/PM rule the
+// Schedule Planner uses for amNeed/pmNeed in renderScheduleTables(), so the
+// two reports agree on what a day requires.
+//
+// Splitting the day this way is what makes the half-day question answerable:
+// a half-day child only has to fit the morning, so they can be free to take
+// when a full-day child in the same seat would cost an afternoon teacher —
+// or the reverse, when the morning is the tight shift.
 
-// Hours in a teacher-day, taken from the same AM+PM shift model the Schedule
-// Planner and Room P&L already use, so labor costs agree across reports.
-const RATIO_STEP_DAY_HOURS = SHIFT_HRS.am + SHIFT_HRS.pm;
+// Shift lengths come from SHIFT_HRS, the same model the Schedule Planner and
+// Room P&L already use, so labor costs agree across reports.
 
 let _ratioStepRows = [];   // flat rows, retained for export
 
@@ -3803,6 +3806,42 @@ function _ratioStepWage(staff, roomId) {
     const pool   = inRoom.length ? inRoom : hourly;
     if (!pool.length) return 0;
     return pool.reduce((sum, s) => sum + Number(s.hourly_rate), 0) / pool.length;
+}
+
+// Teachers a shift requires. Mirrors the amNeed/pmNeed rule in
+// renderScheduleTables() — keep the two in step if either changes.
+function _ratioStaffNeed(children, ratio) {
+    if (!ratio || ratio <= 0) return null;
+    return Math.ceil(children / ratio);
+}
+
+// Price one more booking of a given type. Returns which shifts it trips, what
+// the triggered labor costs, and the resulting margin — or a reason the
+// question can't be answered (no seat, no ratio, no wage, not offered).
+// `null` cost/margin always means "unknown", never "free".
+function _ratioStepOffer(opts) {
+    const { isFullDay, rate, ratio, wage, openSeats, headroomAm, headroomPm, amChildren } = opts;
+    const none = { stepsAm: false, stepsPm: false, cost: null, margin: null };
+
+    if (!rate || rate <= 0)                        return Object.assign({ verdict: 'not-offered' }, none);
+    if (openSeats !== null && openSeats <= 0)      return Object.assign({ verdict: 'full' }, none);
+    if (!ratio || ratio <= 0)                      return Object.assign({ verdict: 'no-ratio' }, none);
+
+    // The morning must absorb every booking; only a full day also has to fit
+    // the afternoon.
+    const stepsAm = headroomAm === 0;
+    const stepsPm = isFullDay && headroomPm === 0;
+
+    if (!stepsAm && !stepsPm) {
+        return { verdict: 'free', stepsAm, stepsPm, cost: 0, margin: rate };
+    }
+    // A room with nobody booked needs its first teacher for this child.
+    const verdict = amChildren === 0 ? 'opens' : 'step';
+    if (!wage || wage <= 0) {
+        return { verdict, stepsAm, stepsPm, cost: null, margin: null };
+    }
+    const cost = (stepsAm ? SHIFT_HRS.am : 0) * wage + (stepsPm ? SHIFT_HRS.pm : 0) * wage;
+    return { verdict, stepsAm, stepsPm, cost, margin: rate - cost };
 }
 
 // Build one row per room per day for the given week.
@@ -3832,38 +3871,41 @@ function _buildRatioStepRows(weekDates, rooms, staff) {
             const c        = counts[date][room.id] || { total: 0, half: 0 };
             const ratio    = room.staffRatio || 0;
             const capacity = room.capacity   || 0;
-            const rate     = room.fullDayRate || 0;
             const wage     = wageByRoom[room.id] || 0;
-            const teacherDayCost = wage * RATIO_STEP_DAY_HOURS;
+            const fullRate = room.fullDayRate || 0;
+            // A full-day-only room has no half-day booking to price.
+            const halfRate = room.fullDayOnly ? 0 : (room.halfDayRate || 0);
+
+            // Morning holds everyone; the afternoon holds only full-day children.
+            const amChildren = c.total;
+            const pmChildren = c.total - c.half;
 
             // ceil() is the step. With 0 children 0 teachers are required, so
-            // the first child of the day genuinely does cost a whole teacher —
-            // that is a real step, not an edge case to paper over.
-            const staffReq  = ratio > 0 ? Math.ceil(c.total / ratio) : null;
-            const headroom  = ratio > 0 ? staffReq * ratio - c.total : null;
-            const openSeats = capacity > 0 ? capacity - c.total : null;
+            // the first child of a shift genuinely does cost a teacher — that
+            // is a real step, not an edge case to paper over.
+            const staffAm    = _ratioStaffNeed(amChildren, ratio);
+            const staffPm    = _ratioStaffNeed(pmChildren, ratio);
+            const headroomAm = ratio > 0 ? staffAm * ratio - amChildren : null;
+            const headroomPm = ratio > 0 ? staffPm * ratio - pmChildren : null;
+            const openSeats  = capacity > 0 ? capacity - amChildren : null;
 
-            let verdict, nextMargin = null, nextCost = null;
-            if (openSeats !== null && openSeats <= 0) {
-                verdict = 'full';                       // no seat to sell
-            } else if (ratio <= 0) {
-                verdict = 'no-ratio';                   // ratio not configured
-            } else if (headroom > 0) {
-                verdict = 'free';                       // absorbed by current staff
-                nextMargin = rate;
-                nextCost   = 0;
-            } else {
-                // headroom === 0 → the next child trips the ratio
-                verdict    = c.total === 0 ? 'opens' : 'step';
-                nextCost   = teacherDayCost;
-                nextMargin = teacherDayCost > 0 ? rate - teacherDayCost : null;
-            }
+            // Teachers the afternoon does not need — they can leave at midday
+            // once the half-day children go home.
+            const releasable      = (staffAm === null || staffPm === null) ? null : staffAm - staffPm;
+            const releasableHours = releasable === null ? null : releasable * SHIFT_HRS.pm;
+
+            const shared = { ratio, wage, openSeats, headroomAm, headroomPm, amChildren };
+            const fullDay = _ratioStepOffer(Object.assign({ isFullDay: true,  rate: fullRate }, shared));
+            const halfDay = _ratioStepOffer(Object.assign({ isFullDay: false, rate: halfRate }, shared));
 
             rows.push({
                 date, roomId: room.id, roomLabel: room.label,
-                children: c.total, half: c.half, ratio, capacity,
-                staffReq, headroom, openSeats,
-                rate, wage, nextCost, nextMargin, verdict,
+                children: c.total, half: c.half, amChildren, pmChildren,
+                ratio, capacity, openSeats,
+                staffAm, staffPm, headroomAm, headroomPm,
+                releasable, releasableHours,
+                fullRate, halfRate, wage,
+                fullDay, halfDay,
             });
         });
     });
@@ -3918,12 +3960,19 @@ async function generateRatioStepReport() {
         const signed$ = v => (v < 0 ? '−' : '+') + fmt$(v);
 
         // ── Summary ─────────────────────────────────────────
-        const atEdge    = rows.filter(r => r.verdict === 'step');
-        const costly    = atEdge.filter(r => r.nextMargin !== null && r.nextMargin < 0);
-        // Children absorbable at zero extra labor: headroom, bounded by seats.
+        const atEdge = rows.filter(r => r.fullDay.verdict === 'step');
+        const costly = atEdge.filter(r => r.fullDay.margin !== null && r.fullDay.margin < 0);
+        // Full-day children absorbable at zero extra labor: they must fit both
+        // shifts, and there must be a seat.
         const freeSeats = rows
-            .filter(r => r.verdict === 'free')
-            .reduce((s, r) => s + Math.min(r.headroom, r.openSeats ?? r.headroom), 0);
+            .filter(r => r.fullDay.verdict === 'free')
+            .reduce((s, r) => s + Math.min(r.headroomAm, r.headroomPm, r.openSeats ?? Infinity), 0);
+        // Afternoon teachers the bookings don't require.
+        const releasableHours = rows.reduce((s, r) => s + (r.releasableHours || 0), 0);
+        // Where a half day is takeable for free but a full day is not — the
+        // shift split earning its keep.
+        const halfOnlyFree = rows.filter(r =>
+            r.halfDay.verdict === 'free' && r.fullDay.verdict === 'step').length;
 
         const wageKnown = rows.some(r => r.wage > 0);
 
@@ -3934,11 +3983,19 @@ async function generateRatioStepReport() {
                     <span class="fin-kpi-value${atEdge.length ? ' fin-negative' : ''}">${atEdge.length}</span>
                 </div>
                 <div class="fin-kpi">
-                    <span class="fin-kpi-label">…where the next child loses money</span>
+                    <span class="fin-kpi-label">…where the next full day loses money</span>
                     <span class="fin-kpi-value${costly.length ? ' fin-negative' : ''}">${costly.length}</span>
                 </div>
                 <div class="fin-kpi">
-                    <span class="fin-kpi-label">Children absorbable with no new staff</span>
+                    <span class="fin-kpi-label">Afternoon teacher-hours not required</span>
+                    <span class="fin-kpi-value${releasableHours ? ' fin-positive' : ''}">${releasableHours || 0} h</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Room-days where only a half day is free</span>
+                    <span class="fin-kpi-value">${halfOnlyFree}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Full days absorbable with no new staff</span>
                     <span class="fin-kpi-value fin-positive">${freeSeats}</span>
                 </div>
             </div>`;
@@ -3947,52 +4004,59 @@ async function generateRatioStepReport() {
         const body = weekDates.map(date => {
             const dayRows = rows.filter(r => r.date === date);
             const dayTotal = dayRows.reduce((s, r) => s + r.children, 0);
+            const dayHalf = dayRows.reduce((s, r) => s + r.half, 0);
             const header = `<tr class="ar-month-row"><td colspan="8"><strong>${escHtml(friendlyShort(date))}</strong>
-                <span style="font-weight:400;color:#6b7280"> — ${dayTotal} ${dayTotal === 1 ? 'child' : 'children'} booked</span></td></tr>`;
+                <span style="font-weight:400;color:#6b7280"> — ${dayTotal} ${dayTotal === 1 ? 'child' : 'children'} booked${dayHalf ? `, ${dayHalf} leaving at midday` : ''}</span></td></tr>`;
 
-            const cells = dayRows.map(r => {
-                let nextHtml, rowStyle = '';
-                switch (r.verdict) {
-                    case 'full':
-                        nextHtml = '<span style="color:#6b7280">Room full — no seat</span>';
-                        break;
-                    case 'no-ratio':
-                        nextHtml = '<span style="color:#6b7280">Set a ratio in Settings</span>';
-                        break;
-                    case 'free':
-                        nextHtml = `<span style="color:#2e7d32">${signed$(r.nextMargin)} — absorbed by current staff</span>`;
-                        break;
-                    case 'opens':
-                        nextHtml = r.nextMargin === null
-                            ? '<span style="color:#6b7280">Opens the room — 1 teacher (wage unknown)</span>'
-                            : `<span style="color:${r.nextMargin < 0 ? '#c62828' : '#2e7d32'}">${signed$(r.nextMargin)} — opens the room, needs 1 teacher</span>`;
-                        rowStyle = ' style="background:#fffdf5"';
-                        break;
-                    default: { // 'step'
-                        const nth = (r.staffReq || 0) + 1;
-                        nextHtml = r.nextMargin === null
-                            ? `<span style="color:#6b7280">Needs teacher #${nth} (wage unknown)</span>`
-                            : `<span style="color:${r.nextMargin < 0 ? '#c62828' : '#2e7d32'}"><strong>${signed$(r.nextMargin)}</strong> — needs teacher #${nth}</span>`;
-                        rowStyle = r.nextMargin !== null && r.nextMargin < 0
-                            ? ' style="background:#fdf2f2"'
-                            : ' style="background:#fffdf5"';
+            // Renders one offer (a full-day or half-day booking) as a cell.
+            const offerHtml = (o, shiftNote) => {
+                switch (o.verdict) {
+                    case 'not-offered': return '<span style="color:#9ca3af">not offered</span>';
+                    case 'full':        return '<span style="color:#6b7280">no seat</span>';
+                    case 'no-ratio':    return '<span style="color:#6b7280">set a ratio</span>';
+                    case 'free':        return `<span style="color:#2e7d32">${signed$(o.margin)} <span style="color:#6b7280">— no new staff</span></span>`;
+                    default: {          // 'step' | 'opens'
+                        const what = o.verdict === 'opens' ? 'opens the room' : shiftNote(o);
+                        return o.margin === null
+                            ? `<span style="color:#6b7280">needs staff (${escHtml(what)}) — wage unknown</span>`
+                            : `<span style="color:${o.margin < 0 ? '#c62828' : '#2e7d32'}"><strong>${signed$(o.margin)}</strong> <span style="color:#6b7280">— ${escHtml(what)}</span></span>`;
                     }
                 }
+            };
+            const stepNote = o => {
+                if (o.stepsAm && o.stepsPm) return 'a teacher all day';
+                if (o.stepsAm)              return 'a morning teacher';
+                if (o.stepsPm)              return 'an afternoon teacher';
+                return 'a teacher';
+            };
 
-                const headroomHtml = r.headroom === null ? '—'
-                    : r.headroom === 0
-                        ? '<strong style="color:#c62828">0</strong>'
-                        : String(r.headroom);
+            const cells = dayRows.map(r => {
+                const worst = r.fullDay.margin;
+                const rowStyle = worst !== null && worst < 0 ? ' style="background:#fdf2f2"'
+                    : r.fullDay.verdict === 'step' || r.fullDay.verdict === 'opens' ? ' style="background:#fffdf5"'
+                    : '';
+
+                const pair = (am, pm, flagZero) => {
+                    if (am === null || pm === null) return '—';
+                    const f = v => flagZero && v === 0 ? `<strong style="color:#c62828">0</strong>` : String(v);
+                    return `${f(am)} <span style="color:#9ca3af">/</span> <span style="color:#6b7280">${f(pm)}</span>`;
+                };
+
+                const staffCell = r.staffAm === null ? '—'
+                    : pair(r.staffAm, r.staffPm, false) +
+                      (r.releasable > 0
+                          ? `<div style="font-size:.75em;color:#2e7d32">−${r.releasable} at midday</div>`
+                          : '');
 
                 return `<tr${rowStyle}>
                     <td style="padding-left:1.5rem">${escHtml(r.roomLabel)}</td>
-                    <td class="report-num">${r.children}</td>
-                    <td class="report-num" style="color:#6b7280">${r.half || '—'}</td>
+                    <td class="report-num">${pair(r.amChildren, r.pmChildren, false)}</td>
                     <td class="report-num" style="color:#6b7280">${r.ratio ? '1:' + r.ratio : '—'}</td>
-                    <td class="report-num">${r.staffReq ?? '—'}</td>
-                    <td class="report-num">${headroomHtml}</td>
+                    <td class="report-num">${staffCell}</td>
+                    <td class="report-num">${pair(r.headroomAm, r.headroomPm, true)}</td>
                     <td class="report-num">${r.openSeats ?? '—'}</td>
-                    <td>${nextHtml}</td>
+                    <td>${offerHtml(r.fullDay, stepNote)}</td>
+                    <td>${offerHtml(r.halfDay, stepNote)}</td>
                 </tr>`;
             }).join('');
 
@@ -4004,26 +4068,28 @@ async function generateRatioStepReport() {
             <table class="report-table">
                 <thead><tr>
                     <th>Room</th>
-                    <th class="report-num">Children</th>
-                    <th class="report-num">½-day</th>
+                    <th class="report-num">Children<br><span style="font-weight:400;font-size:.85em">AM / PM</span></th>
                     <th class="report-num">Ratio</th>
-                    <th class="report-num">Staff req.</th>
-                    <th class="report-num">Headroom</th>
+                    <th class="report-num">Staff req.<br><span style="font-weight:400;font-size:.85em">AM / PM</span></th>
+                    <th class="report-num">Headroom<br><span style="font-weight:400;font-size:.85em">AM / PM</span></th>
                     <th class="report-num">Open seats</th>
-                    <th>Next child is worth…</th>
+                    <th>Next full-day child</th>
+                    <th>Next half-day child</th>
                 </tr></thead>
                 <tbody>${body}</tbody>
             </table>
             </div>
             <p style="font-size:.8em;color:#6b7280;margin:.75rem 0 0">
-                <strong>Staff req.</strong> = ceil(children &divide; ratio) at peak (morning) occupancy.
-                <strong>Headroom</strong> = children who still fit before another teacher is required; <strong>0</strong> means the next booking trips the ratio.
-                <strong>Next child</strong> prices a full-day booking at the room's full-day rate minus the labor it triggers —
+                The day is split into two shifts: <strong>AM</strong> holds every child booked, <strong>PM</strong> holds only the full-day children,
+                since a half-day booking is a morning session — the same rule the Schedule Planner uses.
+                <strong>Staff req.</strong> = ceil(children &divide; ratio) for each shift; <em>&minus;n at midday</em> marks teachers the afternoon doesn't need.
+                <strong>Headroom</strong> = children who still fit that shift before another teacher is required; <strong>0</strong> means the next booking trips the ratio.
+                <strong>Next child</strong> prices one more booking at the room's rate minus only the shifts it actually triggers —
                 ${wageKnown
-                    ? `a teacher-day costed at the room's average hourly wage &times; ${RATIO_STEP_DAY_HOURS} h (the AM+PM shift length used by the Schedule Planner and Room P&amp;L)`
+                    ? `each shift costed at the room's average hourly wage &times; ${SHIFT_HRS.am} h (the shift length used by the Schedule Planner and Room P&amp;L)`
                     : `no hourly wage is on file for these rooms, so the labor side can't be priced — set hourly rates on the Staff Roster`}.
-                Half-day children count toward the ratio because they are present at the morning peak.
-                Ratios and capacities come from Settings &rarr; Rates &amp; Settings.
+                A half day only has to fit the morning, so it can be free to take where a full day is not; rooms without a half-day rate show <em>not offered</em>.
+                Ratios, capacities and rates come from Settings &rarr; Rates &amp; Settings.
                 Booked children are not the same as attended children — the portal has no child check-in, so these are bookings.
             </p>`;
 
@@ -4036,29 +4102,47 @@ async function generateRatioStepReport() {
 
 function exportRatioStepReport() {
     if (!_ratioStepRows.length) return;
-    const VERDICT = {
-        full:       'Room full — no seat',
-        'no-ratio': 'Ratio not configured',
-        free:       'Absorbed by current staff',
-        opens:      'Opens the room — needs 1 teacher',
-        step:       'Trips the ratio — needs another teacher',
+    const describeOffer = o => {
+        switch (o.verdict) {
+            case 'not-offered': return 'Not offered in this room';
+            case 'full':        return 'Room full — no seat';
+            case 'no-ratio':    return 'Ratio not configured';
+            case 'free':        return 'Absorbed by current staff';
+            case 'opens':       return 'Opens the room — needs a teacher';
+            default:
+                if (o.stepsAm && o.stepsPm) return 'Trips both shifts — needs a teacher all day';
+                if (o.stepsAm)              return 'Trips the morning — needs a morning teacher';
+                if (o.stepsPm)              return 'Trips the afternoon — needs an afternoon teacher';
+                return 'Trips the ratio';
+        }
     };
-    const headers = ['Date', 'Room', 'Children', 'Half-day', 'Ratio', 'Staff required',
-                     'Headroom', 'Open seats', 'Full-day rate', 'Next-child labor cost',
-                     'Next-child margin', 'Next child'];
+    const headers = ['Date', 'Room', 'Children AM', 'Children PM', 'Half-day', 'Ratio',
+                     'Staff required AM', 'Staff required PM', 'Releasable at midday',
+                     'Releasable hours', 'Headroom AM', 'Headroom PM', 'Open seats',
+                     'Full-day rate', 'Next full-day labor', 'Next full-day margin', 'Next full-day',
+                     'Half-day rate', 'Next half-day labor', 'Next half-day margin', 'Next half-day'];
     const rows = _ratioStepRows.map(r => [
         r.date,
         r.roomLabel,
-        r.children,
+        r.amChildren,
+        r.pmChildren,
         r.half,
         r.ratio ? `1:${r.ratio}` : '',
-        r.staffReq ?? '',
-        r.headroom ?? '',
+        r.staffAm ?? '',
+        r.staffPm ?? '',
+        r.releasable ?? '',
+        r.releasableHours ?? '',
+        r.headroomAm ?? '',
+        r.headroomPm ?? '',
         r.openSeats ?? '',
-        r.rate || '',
-        r.nextCost === null ? '' : Math.round(r.nextCost),
-        r.nextMargin === null ? '' : Math.round(r.nextMargin),
-        VERDICT[r.verdict] || r.verdict,
+        r.fullRate || '',
+        r.fullDay.cost   === null ? '' : Math.round(r.fullDay.cost),
+        r.fullDay.margin === null ? '' : Math.round(r.fullDay.margin),
+        describeOffer(r.fullDay),
+        r.halfRate || '',
+        r.halfDay.cost   === null ? '' : Math.round(r.halfDay.cost),
+        r.halfDay.margin === null ? '' : Math.round(r.halfDay.margin),
+        describeOffer(r.halfDay),
     ]);
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
