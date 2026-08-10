@@ -3770,6 +3770,303 @@ async function generateSeatDayCapacityReport() {
 }
 
 // ============================================================
+// RATIO-STEP / NEXT-CHILD CALCULATOR
+// ============================================================
+// Staffing is a step function, not a slope. A room needs
+// ceil(children ÷ ratio) teachers, so the one child who crosses a ratio
+// boundary carries the whole cost of an extra teacher for that day — and can
+// be worth less than nothing on their own. This report shows, per room per
+// day, how much headroom is left before that step and what the next booking
+// is actually worth once the step is priced in.
+//
+// Scope note: "children" counts every non-waitlisted child booked that day,
+// half-day and full-day alike. Ratio compliance is set by peak concurrent
+// occupancy — the morning, when everyone is present — so the peak is the
+// binding constraint and the right basis for the step. Staffing the lighter
+// afternoon separately (once half-day children leave) is a further
+// refinement, deliberately not attempted here.
+
+// Hours in a teacher-day, taken from the same AM+PM shift model the Schedule
+// Planner and Room P&L already use, so labor costs agree across reports.
+const RATIO_STEP_DAY_HOURS = SHIFT_HRS.am + SHIFT_HRS.pm;
+
+let _ratioStepRows = [];   // flat rows, retained for export
+
+// Average hourly wage to price one more teacher-day in a room: staff assigned
+// to that room, else the center-wide average of active hourly staff. Salaried
+// staff are excluded — adding a child doesn't change a salary. Returns 0 when
+// there is no wage data to go on, which callers surface as "unknown" rather
+// than as a free teacher.
+function _ratioStepWage(staff, roomId) {
+    const hourly = staff.filter(s => s.pay_type === 'hourly' && Number(s.hourly_rate) > 0);
+    const inRoom = hourly.filter(s => s.room_id === roomId);
+    const pool   = inRoom.length ? inRoom : hourly;
+    if (!pool.length) return 0;
+    return pool.reduce((sum, s) => sum + Number(s.hourly_rate), 0) / pool.length;
+}
+
+// Build one row per room per day for the given week.
+function _buildRatioStepRows(weekDates, rooms, staff) {
+    const counts = {};                       // date → roomId → { total, half }
+    weekDates.forEach(d => { counts[d] = {}; });
+
+    allRegistrations.forEach(reg => {
+        if (reg.status !== 'confirmed') return;
+        (reg.registration_dates || []).forEach(rd => {
+            if (rd.waitlisted || !counts[rd.care_date]) return;
+            const roomId = rd.room_id || reg.room_id;
+            if (!roomId) return;
+            const c = counts[rd.care_date][roomId] ||
+                      (counts[rd.care_date][roomId] = { total: 0, half: 0 });
+            c.total++;
+            if (rd.day_type === 'half') c.half++;
+        });
+    });
+
+    const wageByRoom = {};
+    rooms.forEach(r => { wageByRoom[r.id] = _ratioStepWage(staff, r.id); });
+
+    const rows = [];
+    weekDates.forEach(date => {
+        rooms.forEach(room => {
+            const c        = counts[date][room.id] || { total: 0, half: 0 };
+            const ratio    = room.staffRatio || 0;
+            const capacity = room.capacity   || 0;
+            const rate     = room.fullDayRate || 0;
+            const wage     = wageByRoom[room.id] || 0;
+            const teacherDayCost = wage * RATIO_STEP_DAY_HOURS;
+
+            // ceil() is the step. With 0 children 0 teachers are required, so
+            // the first child of the day genuinely does cost a whole teacher —
+            // that is a real step, not an edge case to paper over.
+            const staffReq  = ratio > 0 ? Math.ceil(c.total / ratio) : null;
+            const headroom  = ratio > 0 ? staffReq * ratio - c.total : null;
+            const openSeats = capacity > 0 ? capacity - c.total : null;
+
+            let verdict, nextMargin = null, nextCost = null;
+            if (openSeats !== null && openSeats <= 0) {
+                verdict = 'full';                       // no seat to sell
+            } else if (ratio <= 0) {
+                verdict = 'no-ratio';                   // ratio not configured
+            } else if (headroom > 0) {
+                verdict = 'free';                       // absorbed by current staff
+                nextMargin = rate;
+                nextCost   = 0;
+            } else {
+                // headroom === 0 → the next child trips the ratio
+                verdict    = c.total === 0 ? 'opens' : 'step';
+                nextCost   = teacherDayCost;
+                nextMargin = teacherDayCost > 0 ? rate - teacherDayCost : null;
+            }
+
+            rows.push({
+                date, roomId: room.id, roomLabel: room.label,
+                children: c.total, half: c.half, ratio, capacity,
+                staffReq, headroom, openSeats,
+                rate, wage, nextCost, nextMargin, verdict,
+            });
+        });
+    });
+    return rows;
+}
+
+async function generateRatioStepReport() {
+    const container = document.getElementById('ratioStepContent');
+    if (!container) return;
+    const weekOf = document.getElementById('ratioStepWeekOf')?.value;
+    if (!weekOf) { alert('Please select a week.'); return; }
+
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        const weekDates = _buildWeekDates(weekOf);
+        if (!weekDates.length) {
+            container.innerHTML = '<p class="empty-hint">No school days in this week (all days are weekends or closures).</p>';
+            return;
+        }
+
+        if (!allRegistrations.length) allRegistrations = await fetchAllRegistrations();
+        const staff = await fetchAllStaff();
+
+        const roomSel = document.getElementById('ratioStepRoomSel')?.value || 'all';
+        let rooms = getSortedRooms();
+        if (roomSel === 'all') {
+            // Drop rooms with no bookings anywhere this week — an out-of-season
+            // room would otherwise fill the table with "first child costs a
+            // teacher" rows that aren't decisions anyone is weighing.
+            const booked = new Set();
+            allRegistrations.forEach(reg => {
+                if (reg.status !== 'confirmed') return;
+                (reg.registration_dates || []).forEach(rd => {
+                    if (!rd.waitlisted && weekDates.includes(rd.care_date)) {
+                        booked.add(rd.room_id || reg.room_id);
+                    }
+                });
+            });
+            rooms = rooms.filter(r => booked.has(r.id));
+        } else {
+            rooms = rooms.filter(r => r.id === roomSel);
+        }
+        if (!rooms.length) {
+            container.innerHTML = '<p class="empty-hint">No confirmed bookings in any room this week.</p>';
+            return;
+        }
+
+        const rows = _buildRatioStepRows(weekDates, rooms, staff);
+        _ratioStepRows = rows;
+
+        const fmt$ = v => `$${Math.round(Math.abs(v)).toLocaleString('en-US')}`;
+        const signed$ = v => (v < 0 ? '−' : '+') + fmt$(v);
+
+        // ── Summary ─────────────────────────────────────────
+        const atEdge    = rows.filter(r => r.verdict === 'step');
+        const costly    = atEdge.filter(r => r.nextMargin !== null && r.nextMargin < 0);
+        // Children absorbable at zero extra labor: headroom, bounded by seats.
+        const freeSeats = rows
+            .filter(r => r.verdict === 'free')
+            .reduce((s, r) => s + Math.min(r.headroom, r.openSeats ?? r.headroom), 0);
+
+        const wageKnown = rows.some(r => r.wage > 0);
+
+        const summary = `
+            <div class="fin-kpi-row" style="margin-bottom:1.25rem">
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Room-days at a ratio edge</span>
+                    <span class="fin-kpi-value${atEdge.length ? ' fin-negative' : ''}">${atEdge.length}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">…where the next child loses money</span>
+                    <span class="fin-kpi-value${costly.length ? ' fin-negative' : ''}">${costly.length}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Children absorbable with no new staff</span>
+                    <span class="fin-kpi-value fin-positive">${freeSeats}</span>
+                </div>
+            </div>`;
+
+        // ── Table ───────────────────────────────────────────
+        const body = weekDates.map(date => {
+            const dayRows = rows.filter(r => r.date === date);
+            const dayTotal = dayRows.reduce((s, r) => s + r.children, 0);
+            const header = `<tr class="ar-month-row"><td colspan="8"><strong>${escHtml(friendlyShort(date))}</strong>
+                <span style="font-weight:400;color:#6b7280"> — ${dayTotal} ${dayTotal === 1 ? 'child' : 'children'} booked</span></td></tr>`;
+
+            const cells = dayRows.map(r => {
+                let nextHtml, rowStyle = '';
+                switch (r.verdict) {
+                    case 'full':
+                        nextHtml = '<span style="color:#6b7280">Room full — no seat</span>';
+                        break;
+                    case 'no-ratio':
+                        nextHtml = '<span style="color:#6b7280">Set a ratio in Settings</span>';
+                        break;
+                    case 'free':
+                        nextHtml = `<span style="color:#2e7d32">${signed$(r.nextMargin)} — absorbed by current staff</span>`;
+                        break;
+                    case 'opens':
+                        nextHtml = r.nextMargin === null
+                            ? '<span style="color:#6b7280">Opens the room — 1 teacher (wage unknown)</span>'
+                            : `<span style="color:${r.nextMargin < 0 ? '#c62828' : '#2e7d32'}">${signed$(r.nextMargin)} — opens the room, needs 1 teacher</span>`;
+                        rowStyle = ' style="background:#fffdf5"';
+                        break;
+                    default: { // 'step'
+                        const nth = (r.staffReq || 0) + 1;
+                        nextHtml = r.nextMargin === null
+                            ? `<span style="color:#6b7280">Needs teacher #${nth} (wage unknown)</span>`
+                            : `<span style="color:${r.nextMargin < 0 ? '#c62828' : '#2e7d32'}"><strong>${signed$(r.nextMargin)}</strong> — needs teacher #${nth}</span>`;
+                        rowStyle = r.nextMargin !== null && r.nextMargin < 0
+                            ? ' style="background:#fdf2f2"'
+                            : ' style="background:#fffdf5"';
+                    }
+                }
+
+                const headroomHtml = r.headroom === null ? '—'
+                    : r.headroom === 0
+                        ? '<strong style="color:#c62828">0</strong>'
+                        : String(r.headroom);
+
+                return `<tr${rowStyle}>
+                    <td style="padding-left:1.5rem">${escHtml(r.roomLabel)}</td>
+                    <td class="report-num">${r.children}</td>
+                    <td class="report-num" style="color:#6b7280">${r.half || '—'}</td>
+                    <td class="report-num" style="color:#6b7280">${r.ratio ? '1:' + r.ratio : '—'}</td>
+                    <td class="report-num">${r.staffReq ?? '—'}</td>
+                    <td class="report-num">${headroomHtml}</td>
+                    <td class="report-num">${r.openSeats ?? '—'}</td>
+                    <td>${nextHtml}</td>
+                </tr>`;
+            }).join('');
+
+            return header + cells;
+        }).join('');
+
+        container.innerHTML = summary + `
+            <div style="overflow-x:auto">
+            <table class="report-table">
+                <thead><tr>
+                    <th>Room</th>
+                    <th class="report-num">Children</th>
+                    <th class="report-num">½-day</th>
+                    <th class="report-num">Ratio</th>
+                    <th class="report-num">Staff req.</th>
+                    <th class="report-num">Headroom</th>
+                    <th class="report-num">Open seats</th>
+                    <th>Next child is worth…</th>
+                </tr></thead>
+                <tbody>${body}</tbody>
+            </table>
+            </div>
+            <p style="font-size:.8em;color:#6b7280;margin:.75rem 0 0">
+                <strong>Staff req.</strong> = ceil(children &divide; ratio) at peak (morning) occupancy.
+                <strong>Headroom</strong> = children who still fit before another teacher is required; <strong>0</strong> means the next booking trips the ratio.
+                <strong>Next child</strong> prices a full-day booking at the room's full-day rate minus the labor it triggers —
+                ${wageKnown
+                    ? `a teacher-day costed at the room's average hourly wage &times; ${RATIO_STEP_DAY_HOURS} h (the AM+PM shift length used by the Schedule Planner and Room P&amp;L)`
+                    : `no hourly wage is on file for these rooms, so the labor side can't be priced — set hourly rates on the Staff Roster`}.
+                Half-day children count toward the ratio because they are present at the morning peak.
+                Ratios and capacities come from Settings &rarr; Rates &amp; Settings.
+                Booked children are not the same as attended children — the portal has no child check-in, so these are bookings.
+            </p>`;
+
+        const exportBtn = document.getElementById('exportRatioStepBtn');
+        if (exportBtn) exportBtn.style.display = '';
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function exportRatioStepReport() {
+    if (!_ratioStepRows.length) return;
+    const VERDICT = {
+        full:       'Room full — no seat',
+        'no-ratio': 'Ratio not configured',
+        free:       'Absorbed by current staff',
+        opens:      'Opens the room — needs 1 teacher',
+        step:       'Trips the ratio — needs another teacher',
+    };
+    const headers = ['Date', 'Room', 'Children', 'Half-day', 'Ratio', 'Staff required',
+                     'Headroom', 'Open seats', 'Full-day rate', 'Next-child labor cost',
+                     'Next-child margin', 'Next child'];
+    const rows = _ratioStepRows.map(r => [
+        r.date,
+        r.roomLabel,
+        r.children,
+        r.half,
+        r.ratio ? `1:${r.ratio}` : '',
+        r.staffReq ?? '',
+        r.headroom ?? '',
+        r.openSeats ?? '',
+        r.rate || '',
+        r.nextCost === null ? '' : Math.round(r.nextCost),
+        r.nextMargin === null ? '' : Math.round(r.nextMargin),
+        VERDICT[r.verdict] || r.verdict,
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Ratio Step');
+    XLSX.writeFile(wb, 'ratio-step-next-child.xlsx');
+}
+
+// ============================================================
 function setupExtraReports() {
     document.getElementById('generateTrendsBtn')?.addEventListener('click', generateEnrollmentTrends);
     document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
@@ -3781,9 +4078,31 @@ function setupExtraReports() {
     document.getElementById('generateFteBtn')?.addEventListener('click', generateEnrollmentFteReport);
     document.getElementById('generateSeatDayBtn')?.addEventListener('click', generateSeatDayCapacityReport);
     document.getElementById('seatDayRoomSel')?.addEventListener('change', generateSeatDayCapacityReport);
+    document.getElementById('generateRatioStepBtn')?.addEventListener('click', generateRatioStepReport);
+    document.getElementById('exportRatioStepBtn')?.addEventListener('click', exportRatioStepReport);
+    document.getElementById('ratioStepRoomSel')?.addEventListener('change', generateRatioStepReport);
     document.getElementById('generateDiscountPricingBtn')?.addEventListener('click', generateDiscountPricingReport);
     document.getElementById('exportDiscountPricingBtn')?.addEventListener('click', exportDiscountPricingReport);
     document.getElementById('printDiscountPricingBtn')?.addEventListener('click', printDiscountPricingReport);
+
+    // Ratio-step: room picker + default to the Monday of the current week
+    const rsSel = document.getElementById('ratioStepRoomSel');
+    if (rsSel && rsSel.options.length <= 1) {
+        getSortedRooms().forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.textContent = r.label;
+            rsSel.appendChild(opt);
+        });
+    }
+    const rsWeek = document.getElementById('ratioStepWeekOf');
+    if (rsWeek && !rsWeek.value) {
+        const t = new Date();
+        const dow = t.getDay();                       // 0 = Sunday
+        const monday = new Date(t);
+        monday.setDate(t.getDate() - (dow === 0 ? 6 : dow - 1));
+        rsWeek.value = monday.toISOString().split('T')[0];
+    }
 
     const now2 = new Date();
     const dpEl = document.getElementById('discountPricingMonth');

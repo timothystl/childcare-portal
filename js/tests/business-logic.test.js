@@ -561,6 +561,243 @@ function normalise(fnText) {
         .trim();
 }
 
+// ── Ratio-step / next-child calculator (copied from js/admin/admin-reports.js) ──
+// Staffing is a step function: a room needs ceil(children / ratio) teachers, so
+// the child crossing a boundary carries the cost of a whole extra teacher-day.
+const SHIFT_HRS = { am: 5, pm: 5 };
+const RATIO_STEP_DAY_HOURS = SHIFT_HRS.am + SHIFT_HRS.pm;
+let allRegistrations = [];
+
+function _ratioStepWage(staff, roomId) {
+    const hourly = staff.filter(s => s.pay_type === 'hourly' && Number(s.hourly_rate) > 0);
+    const inRoom = hourly.filter(s => s.room_id === roomId);
+    const pool   = inRoom.length ? inRoom : hourly;
+    if (!pool.length) return 0;
+    return pool.reduce((sum, s) => sum + Number(s.hourly_rate), 0) / pool.length;
+}
+
+function _buildRatioStepRows(weekDates, rooms, staff) {
+    const counts = {};                       // date → roomId → { total, half }
+    weekDates.forEach(d => { counts[d] = {}; });
+
+    allRegistrations.forEach(reg => {
+        if (reg.status !== 'confirmed') return;
+        (reg.registration_dates || []).forEach(rd => {
+            if (rd.waitlisted || !counts[rd.care_date]) return;
+            const roomId = rd.room_id || reg.room_id;
+            if (!roomId) return;
+            const c = counts[rd.care_date][roomId] ||
+                      (counts[rd.care_date][roomId] = { total: 0, half: 0 });
+            c.total++;
+            if (rd.day_type === 'half') c.half++;
+        });
+    });
+
+    const wageByRoom = {};
+    rooms.forEach(r => { wageByRoom[r.id] = _ratioStepWage(staff, r.id); });
+
+    const rows = [];
+    weekDates.forEach(date => {
+        rooms.forEach(room => {
+            const c        = counts[date][room.id] || { total: 0, half: 0 };
+            const ratio    = room.staffRatio || 0;
+            const capacity = room.capacity   || 0;
+            const rate     = room.fullDayRate || 0;
+            const wage     = wageByRoom[room.id] || 0;
+            const teacherDayCost = wage * RATIO_STEP_DAY_HOURS;
+
+            // ceil() is the step. With 0 children 0 teachers are required, so
+            // the first child of the day genuinely does cost a whole teacher —
+            // that is a real step, not an edge case to paper over.
+            const staffReq  = ratio > 0 ? Math.ceil(c.total / ratio) : null;
+            const headroom  = ratio > 0 ? staffReq * ratio - c.total : null;
+            const openSeats = capacity > 0 ? capacity - c.total : null;
+
+            let verdict, nextMargin = null, nextCost = null;
+            if (openSeats !== null && openSeats <= 0) {
+                verdict = 'full';                       // no seat to sell
+            } else if (ratio <= 0) {
+                verdict = 'no-ratio';                   // ratio not configured
+            } else if (headroom > 0) {
+                verdict = 'free';                       // absorbed by current staff
+                nextMargin = rate;
+                nextCost   = 0;
+            } else {
+                // headroom === 0 → the next child trips the ratio
+                verdict    = c.total === 0 ? 'opens' : 'step';
+                nextCost   = teacherDayCost;
+                nextMargin = teacherDayCost > 0 ? rate - teacherDayCost : null;
+            }
+
+            rows.push({
+                date, roomId: room.id, roomLabel: room.label,
+                children: c.total, half: c.half, ratio, capacity,
+                staffReq, headroom, openSeats,
+                rate, wage, nextCost, nextMargin, verdict,
+            });
+        });
+    });
+    return rows;
+}
+
+// Test helpers
+function _rsRoom(over = {}) {
+    return Object.assign({ id: 'a', label: 'A', staffRatio: 4, capacity: 12, fullDayRate: 75 }, over);
+}
+function _rsBook(list) {
+    allRegistrations = list.map(b => ({
+        status: b.status || 'confirmed',
+        room_id: b.room || 'a',
+        registration_dates: [{
+            care_date: b.date || '2026-08-11',
+            room_id: b.room || 'a',
+            day_type: b.t || 'full',
+            waitlisted: !!b.wl,
+        }],
+    }));
+}
+function _rsRun(rooms, staff, bookings, dates = ['2026-08-11']) {
+    _rsBook(bookings);
+    return _buildRatioStepRows(dates, rooms, staff);
+}
+const _RS_WAGE = [{ pay_type: 'hourly', hourly_rate: 20, room_id: null }];
+const _rsFill = (n, room = 'a') => Array.from({ length: n }, () => ({ room }));
+
+describe('_ratioStepWage — pricing one more teacher-day', () => {
+    test('averages the hourly staff assigned to the room', () => {
+        expect(_ratioStepWage([
+            { pay_type: 'hourly', hourly_rate: 16, room_id: 'a' },
+            { pay_type: 'hourly', hourly_rate: 20, room_id: 'a' },
+        ], 'a')).toBe(18);
+    });
+    test('falls back to the center-wide average when the room has nobody', () => {
+        expect(_ratioStepWage([
+            { pay_type: 'hourly', hourly_rate: 10, room_id: 'b' },
+            { pay_type: 'hourly', hourly_rate: 30, room_id: 'c' },
+        ], 'a')).toBe(20);
+    });
+    test('room-assigned staff take precedence over the center average', () => {
+        expect(_ratioStepWage([
+            { pay_type: 'hourly', hourly_rate: 50, room_id: 'a' },
+            { pay_type: 'hourly', hourly_rate: 10, room_id: 'b' },
+        ], 'a')).toBe(50);
+    });
+    test('salaried staff are excluded — a salary does not change with a child', () => {
+        expect(_ratioStepWage([{ pay_type: 'salary', salary_biweekly: 2000, room_id: 'a' }], 'a')).toBe(0);
+    });
+    test('zero and missing rates are ignored rather than averaged in', () => {
+        expect(_ratioStepWage([
+            { pay_type: 'hourly', hourly_rate: 0,  room_id: 'a' },
+            { pay_type: 'hourly', hourly_rate: 20, room_id: 'a' },
+        ], 'a')).toBe(20);
+    });
+    test('no wage data at all returns 0 (callers must treat as unknown)', () => {
+        expect(_ratioStepWage([], 'a')).toBe(0);
+    });
+});
+
+describe('_buildRatioStepRows — the ratio step', () => {
+    test('staff required is ceil(children / ratio)', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(9))[0];   // 9 kids, 1:4
+        expect(r.staffReq).toBe(3);
+    });
+    test('headroom counts children who still fit under current staff', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(9))[0];   // 3 staff cover 12
+        expect(r.headroom).toBe(3);
+    });
+    test('exactly on the boundary leaves zero headroom', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(8))[0];   // 8 kids, 1:4 → 2 staff
+        expect(r.headroom).toBe(0);
+        expect(r.verdict).toBe('step');
+    });
+    test('within a block the next child is absorbed at full rate', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(5))[0];
+        expect(r.verdict).toBe('free');
+        expect(r.nextMargin).toBe(75);
+        expect(r.nextCost).toBe(0);
+    });
+    test('the child that trips the ratio pays for a whole teacher-day', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, _rsFill(8))[0];
+        expect(r.nextCost).toBe(200);              // 20/hr x 10 h
+        expect(r.nextMargin).toBe(-125);           // 75 rate - 200 labor
+    });
+    test('an empty room is a step — the first child needs a teacher', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, [])[0];
+        expect(r.children).toBe(0);
+        expect(r.staffReq).toBe(0);
+        expect(r.verdict).toBe('opens');
+        expect(r.nextMargin).toBe(-125);
+    });
+    test('a full room reports no sellable seat and no margin', () => {
+        const r = _rsRun([_rsRoom({ capacity: 4 })], _RS_WAGE, _rsFill(4))[0];
+        expect(r.openSeats).toBe(0);
+        expect(r.verdict).toBe('full');
+        expect(r.nextMargin).toBeNull();
+    });
+    test('an overbooked room is still full, not sellable', () => {
+        const r = _rsRun([_rsRoom({ capacity: 3 })], _RS_WAGE, _rsFill(4))[0];
+        expect(r.openSeats).toBe(-1);
+        expect(r.verdict).toBe('full');
+    });
+    test('an unset ratio is reported, never guessed', () => {
+        const r = _rsRun([_rsRoom({ staffRatio: 0 })], _RS_WAGE, _rsFill(4))[0];
+        expect(r.staffReq).toBeNull();
+        expect(r.headroom).toBeNull();
+        expect(r.verdict).toBe('no-ratio');
+    });
+    test('unknown wage yields a null margin, not a free teacher', () => {
+        const r = _rsRun([_rsRoom()], [], _rsFill(8))[0];
+        expect(r.verdict).toBe('step');
+        expect(r.nextMargin).toBeNull();
+    });
+    test('unset capacity still computes the ratio step', () => {
+        const r = _rsRun([_rsRoom({ capacity: 0 })], _RS_WAGE, _rsFill(8))[0];
+        expect(r.openSeats).toBeNull();
+        expect(r.verdict).toBe('step');
+    });
+    test('half-day children count toward the ratio (present at the morning peak)', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE,
+            [...Array(4).fill({ room: 'a', t: 'half' }), ...Array(4).fill({ room: 'a' })])[0];
+        expect(r.children).toBe(8);
+        expect(r.half).toBe(4);
+        expect(r.staffReq).toBe(2);
+    });
+    test('waitlisted bookings are excluded from the count', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, [{ room: 'a' }, { room: 'a', wl: true }])[0];
+        expect(r.children).toBe(1);
+    });
+    test('unconfirmed registrations are excluded from the count', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE, [{ room: 'a' }, { room: 'a', status: 'pending' }])[0];
+        expect(r.children).toBe(1);
+    });
+    test('per-date room override wins over the registration room', () => {
+        allRegistrations = [{ status: 'confirmed', room_id: 'b', registration_dates: [
+            { care_date: '2026-08-11', room_id: 'a', day_type: 'full', waitlisted: false }] }];
+        const r = _buildRatioStepRows(['2026-08-11'], [_rsRoom()], _RS_WAGE)[0];
+        expect(r.children).toBe(1);
+    });
+    test('emits one row per room per day', () => {
+        const rows = _rsRun([_rsRoom(), _rsRoom({ id: 'b', label: 'B' })], _RS_WAGE,
+            _rsFill(2), ['2026-08-11', '2026-08-12']);
+        expect(rows.length).toBe(4);
+    });
+    test('bookings outside the requested week are ignored', () => {
+        const r = _rsRun([_rsRoom()], _RS_WAGE,
+            [{ room: 'a' }, { room: 'a', date: '2026-09-01' }])[0];
+        expect(r.children).toBe(1);
+    });
+    test('real case — Bear Room, 6 children at 1:3, is one child from a 3rd teacher', () => {
+        const bear = _rsRoom({ id: 'bear', staffRatio: 3, capacity: 9, fullDayRate: 80 });
+        const r = _rsRun([bear], [{ pay_type: 'hourly', hourly_rate: 16.83, room_id: 'bear' }],
+            _rsFill(6, 'bear'))[0];
+        expect(r.staffReq).toBe(2);
+        expect(r.headroom).toBe(0);
+        expect(r.openSeats).toBe(3);          // seats look available...
+        expect(r.verdict).toBe('step');       // ...but the ratio says otherwise
+        expect(r.nextMargin).toBeCloseTo(-88.3, 1);
+    });
+});
+
 describe('source-drift guard — copies must match js/ source', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const selfText = fs.readFileSync(__filename, 'utf8');
@@ -572,6 +809,8 @@ describe('source-drift guard — copies must match js/ source', () => {
         ['effectiveRate',      'js/app.js'],
         ['getWeekMonday',      'js/app.js'],
         ['csvCell',            'js/admin/admin-core.js'],
+        ['_ratioStepWage',     'js/admin/admin-reports.js'],
+        ['_buildRatioStepRows','js/admin/admin-reports.js'],
     ];
 
     for (const [fnName, relPath] of GUARDED) {
