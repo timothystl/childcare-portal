@@ -457,6 +457,27 @@
                 </div>
             </section>
 
+            <!-- Ratio-Step / Next-Child Calculator -->
+            <section class="admin-section collapsible-section" id="ratioStepSection">
+                <h2>&#9878;&#65039; Ratio Step &amp; Next Child</h2>
+                <p class="section-desc">Staffing moves in steps, not inches: a room needs one teacher per ratio block, so the child who crosses a boundary carries the whole cost of another teacher that day. Shows how much headroom each room has left, and what the next booking is really worth.</p>
+                <div class="roster-btns" style="margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+                    <label style="font-weight:600" for="ratioStepWeekOf">Week of (Monday)
+                        <input type="date" id="ratioStepWeekOf" style="margin-left:6px;padding:4px 8px">
+                    </label>
+                    <label style="font-weight:600">Room:
+                        <select id="ratioStepRoomSel" style="margin-left:6px;padding:4px 8px">
+                            <option value="all">All rooms in use</option>
+                        </select>
+                    </label>
+                    <button id="generateRatioStepBtn" class="btn-secondary">Generate Report</button>
+                    <button id="exportRatioStepBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
+                </div>
+                <div id="ratioStepContent">
+                    <p class="empty-hint">Pick a week and click Generate Report.</p>
+                </div>
+            </section>
+
             <!-- Upcoming Room Promotions -->
             <section class="admin-section collapsible-section" id="promotionsSection">
                 <h2>🎂 Upcoming Room Promotions</h2>
