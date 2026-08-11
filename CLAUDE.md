@@ -109,6 +109,11 @@ have used an identical query shape and be invisible.
 is applied. **Re-run this diff after any migration work — a committed migration
 is not a deployed one, and that is exactly how R5 and R24 hid.**
 
+**Updated 2026-08-11:** `add_attendance_records.sql` was written **and applied**
+in the same session (child attendance capture). Verified post-apply: `anon` holds
+zero grants, RLS is on, the only policy is scoped to `authenticated`, and an
+`anon` read returns permission denied. The unapplied list above is unchanged.
+
 ---
 
 ## Project status & outstanding work (older sweeps — updated 2026-07-12)
@@ -378,6 +383,7 @@ Rates are stored in the `settings` table (key = `room_rates`) and merged into `R
 | `closures` | School closure dates |
 | `pin_reset_tokens` | One-time PIN reset tokens |
 | `push_subscriptions` | Web push subscriptions (family_id → endpoint) |
+| `attendance_records` | Child attendance per care date (`present`/`absent`); no row = not yet marked. Admin-only (anon has no grants) |
 | `client_error_log` | Client-side JS errors |
 | `deletion_requests` | Family data deletion requests |
 

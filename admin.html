@@ -457,6 +457,31 @@
                 </div>
             </section>
 
+            <!-- Demand Forecast -->
+            <section class="admin-section collapsible-section" id="forecastSection">
+                <h2>&#128200; Demand Forecast</h2>
+                <p class="section-desc">Projects children per room per day for the weeks ahead, from the same-weekday average and a four-week moving average. Shows what is already booked alongside it, so the booking still to come is visible. Converts bookings into expected attendance once attendance is being marked.</p>
+                <div class="roster-btns" style="margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+                    <label style="font-weight:600">Room:
+                        <select id="forecastRoomSel" style="margin-left:6px;padding:4px 8px">
+                            <option value="all">All rooms</option>
+                        </select>
+                    </label>
+                    <label style="font-weight:600" for="forecastWeeks">Horizon:
+                        <select id="forecastWeeks" style="margin-left:6px;padding:4px 8px">
+                            <option value="2">2 weeks</option>
+                            <option value="4" selected>4 weeks</option>
+                            <option value="8">8 weeks</option>
+                        </select>
+                    </label>
+                    <button id="generateForecastBtn" class="btn-secondary">Generate Forecast</button>
+                    <button id="exportForecastBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
+                </div>
+                <div id="forecastContent">
+                    <p class="empty-hint">Click Generate Forecast to project the weeks ahead.</p>
+                </div>
+            </section>
+
             <!-- Ratio-Step / Next-Child Calculator -->
             <section class="admin-section collapsible-section" id="ratioStepSection">
                 <h2>&#9878;&#65039; Ratio Step &amp; Next Child</h2>

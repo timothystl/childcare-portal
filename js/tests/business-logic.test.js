@@ -961,6 +961,218 @@ describe('_buildRatioStepRows — AM/PM shift split', () => {
     });
 });
 
+// ── Demand forecast (copied from js/admin/admin-reports.js) ──
+// Projects bookings from the same-weekday average, falling back to a moving
+// average, and converts to expected attendance via a measured show rate.
+const FORECAST_MIN_SAMPLES = 4;
+
+function _forecastMean(values) {
+    if (!values || !values.length) return null;
+    return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+function _forecastShowRate(attendanceRows) {
+    let present = 0, marked = 0;
+    (attendanceRows || []).forEach(r => {
+        if (r.status === 'present')     { present++; marked++; }
+        else if (r.status === 'absent') { marked++; }
+    });
+    if (marked === 0) return null;
+    return { rate: present / marked, marked };
+}
+
+function _forecastConfidence(sampleCount) {
+    if (!sampleCount)                          return 'none';
+    if (sampleCount < FORECAST_MIN_SAMPLES)    return 'thin';
+    return 'good';
+}
+
+function _buildForecastRows(opts) {
+    const { targetDates, rooms, history, recent, booked, showRate } = opts;
+    const rows = [];
+
+    targetDates.forEach(date => {
+        const dow = new Date(date + 'T00:00:00').getDay();
+        rooms.forEach(room => {
+            const h        = history[room.id]?.[dow] || { totals: [], halves: [] };
+            const samples  = h.totals.length;
+            const weekday  = _forecastMean(h.totals);
+            const moving   = _forecastMean(recent[room.id]);
+            // Prefer the weekday-specific estimate; fall back to the flat level
+            // only when that weekday has never been seen for this room.
+            const forecast = weekday !== null ? weekday : moving;
+
+            // Half-day share drives the afternoon, so carry it through rather
+            // than assuming the mix holds at the centre-wide average.
+            const meanHalf  = _forecastMean(h.halves);
+            const halfShare = (forecast && meanHalf !== null && weekday)
+                ? Math.min(1, meanHalf / weekday)
+                : 0;
+
+            const bookedNow  = booked[date]?.[room.id]?.total || 0;
+            const expected   = (forecast !== null && showRate) ? forecast * showRate.rate : null;
+            // Staff to what we expect to walk in where that is known, else to
+            // the booking forecast.
+            const basis      = expected !== null ? expected : forecast;
+            const amChildren = basis === null ? null : Math.round(basis);
+            const pmChildren = amChildren === null ? null : Math.round(basis * (1 - halfShare));
+            const staffAm    = amChildren === null ? null : _ratioStaffNeed(amChildren, room.staffRatio || 0);
+            const staffPm    = pmChildren === null ? null : _ratioStaffNeed(pmChildren, room.staffRatio || 0);
+
+            rows.push({
+                date, dow, roomId: room.id, roomLabel: room.label,
+                samples, confidence: _forecastConfidence(samples),
+                weekdayAvg: weekday, movingAvg: moving, forecast,
+                halfShare, bookedNow, expected,
+                amChildren, pmChildren, staffAm, staffPm,
+                capacity: room.capacity || 0,
+                overCapacity: room.capacity > 0 && amChildren !== null && amChildren > room.capacity,
+            });
+        });
+    });
+    return rows;
+}
+
+const _fcRoom = (over = {}) =>
+    Object.assign({ id: 'a', label: 'A', staffRatio: 4, capacity: 20 }, over);
+// history[roomId][dow] = { totals, halves }
+const _fcHist = (dow, totals, halves = totals.map(() => 0)) => ({ a: { [dow]: { totals, halves } } });
+const _fcRun = (over = {}) => _buildForecastRows(Object.assign({
+    targetDates: ['2026-08-13'],           // a Thursday (dow 4)
+    rooms: [_fcRoom()],
+    history: _fcHist(4, [8, 8, 8, 8]),
+    recent: { a: [4, 4] },
+    booked: {},
+    showRate: null,
+}, over))[0];
+
+describe('_forecastMean — an absent estimate is not zero', () => {
+    test('averages a list', () => { expect(_forecastMean([2, 4])).toBe(3); });
+    test('an empty list has no estimate', () => { expect(_forecastMean([])).toBeNull(); });
+    test('a missing list has no estimate', () => { expect(_forecastMean(null)).toBeNull(); });
+    test('a measured zero is an estimate of zero, not a missing one', () => {
+        expect(_forecastMean([0, 0])).toBe(0);
+    });
+});
+
+describe('_forecastShowRate — measured from marked days only', () => {
+    test('no marks means no show rate', () => {
+        expect(_forecastShowRate([])).toBeNull();
+        expect(_forecastShowRate(null)).toBeNull();
+    });
+    test('everyone present is a full show rate', () => {
+        expect(_forecastShowRate([{ status: 'present' }, { status: 'present' }]).rate).toBe(1);
+    });
+    test('present over marked, not over booked', () => {
+        const r = _forecastShowRate([
+            { status: 'present' }, { status: 'present' },
+            { status: 'present' }, { status: 'absent' },
+        ]);
+        expect(r.rate).toBe(0.75);
+        expect(r.marked).toBe(4);
+    });
+    test('unrecognised statuses are ignored rather than counted as absent', () => {
+        const r = _forecastShowRate([{ status: 'present' }, { status: 'unknown' }]);
+        expect(r.rate).toBe(1);
+        expect(r.marked).toBe(1);
+    });
+    test('all absent is a zero show rate, not a missing one', () => {
+        expect(_forecastShowRate([{ status: 'absent' }]).rate).toBe(0);
+    });
+});
+
+describe('_forecastConfidence — how much history is behind an estimate', () => {
+    test('never seen', () => { expect(_forecastConfidence(0)).toBe('none'); });
+    test('seen once is thin', () => { expect(_forecastConfidence(1)).toBe('thin'); });
+    test('just under the bar is thin', () => { expect(_forecastConfidence(3)).toBe('thin'); });
+    test('at the bar is good', () => { expect(_forecastConfidence(4)).toBe('good'); });
+});
+
+describe('_buildForecastRows — projecting the weeks ahead', () => {
+    test('uses the same-weekday average for that weekday', () => {
+        const r = _fcRun();
+        expect(r.weekdayAvg).toBe(8);
+        expect(r.forecast).toBe(8);
+        expect(r.amChildren).toBe(8);
+    });
+    test('a different weekday does not borrow this one\'s history', () => {
+        // history only for Thursday (4); target is a Monday
+        const r = _fcRun({ targetDates: ['2026-08-10'] });
+        expect(r.weekdayAvg).toBeNull();
+        expect(r.forecast).toBe(4);          // falls back to the moving average
+    });
+    test('falls back to the moving average when the weekday is unseen', () => {
+        const r = _fcRun({ history: { a: {} } });
+        expect(r.weekdayAvg).toBeNull();
+        expect(r.movingAvg).toBe(4);
+        expect(r.forecast).toBe(4);
+    });
+    test('no history at all leaves the projection unknown, not zero', () => {
+        const r = _fcRun({ history: { a: {} }, recent: { a: [] } });
+        expect(r.forecast).toBeNull();
+        expect(r.amChildren).toBeNull();
+        expect(r.staffAm).toBeNull();
+    });
+    test('a show rate converts bookings into expected attendance', () => {
+        const r = _fcRun({ showRate: { rate: 0.75, marked: 40 } });
+        expect(r.forecast).toBe(8);          // bookings
+        expect(r.expected).toBe(6);          // 8 x 0.75
+        expect(r.amChildren).toBe(6);        // staffed to who shows up
+    });
+    test('without a show rate the projection stays at the booking level', () => {
+        const r = _fcRun();
+        expect(r.expected).toBeNull();
+        expect(r.amChildren).toBe(8);
+    });
+    test('the afternoon drops that weekday\'s half-day share', () => {
+        const r = _fcRun({ history: _fcHist(4, [8, 8, 8, 8], [4, 4, 4, 4]) });
+        expect(r.halfShare).toBe(0.5);
+        expect(r.amChildren).toBe(8);
+        expect(r.pmChildren).toBe(4);
+    });
+    test('staffing follows the ratio on each projected shift', () => {
+        const r = _fcRun({ history: _fcHist(4, [8, 8, 8, 8], [4, 4, 4, 4]) });
+        expect(r.staffAm).toBe(2);           // ceil(8/4)
+        expect(r.staffPm).toBe(1);           // ceil(4/4)
+    });
+    test('a projection above capacity is flagged', () => {
+        const r = _fcRun({ rooms: [_fcRoom({ capacity: 5 })] });
+        expect(r.amChildren).toBe(8);
+        expect(r.overCapacity).toBe(true);
+    });
+    test('a projection within capacity is not flagged', () => {
+        expect(_fcRun().overCapacity).toBe(false);
+    });
+    test('bookings already on the books are carried through', () => {
+        const r = _fcRun({ booked: { '2026-08-13': { a: { total: 3, half: 1 } } } });
+        expect(r.bookedNow).toBe(3);
+        expect(r.forecast).toBe(8);          // forecast is independent of them
+    });
+    test('a date with no bookings yet reports zero booked, not unknown', () => {
+        expect(_fcRun().bookedNow).toBe(0);
+    });
+    test('confidence reflects how many times the weekday was seen', () => {
+        expect(_fcRun({ history: _fcHist(4, [8, 8, 8, 8]) }).confidence).toBe('good');
+        expect(_fcRun({ history: _fcHist(4, [8, 8]) }).confidence).toBe('thin');
+        expect(_fcRun({ history: { a: {} } }).confidence).toBe('none');
+    });
+    test('emits one row per room per target date', () => {
+        const rows = _buildForecastRows({
+            targetDates: ['2026-08-13', '2026-08-14'],
+            rooms: [_fcRoom(), _fcRoom({ id: 'b', label: 'B' })],
+            history: {}, recent: {}, booked: {}, showRate: null,
+        });
+        expect(rows.length).toBe(4);
+    });
+    test('a half-day share cannot exceed the whole', () => {
+        // more halves than totals would be corrupt input; clamp rather than
+        // produce a negative afternoon
+        const r = _fcRun({ history: _fcHist(4, [4, 4], [8, 8]) });
+        expect(r.halfShare).toBe(1);
+        expect(r.pmChildren).toBe(0);
+    });
+});
+
 describe('source-drift guard — copies must match js/ source', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const selfText = fs.readFileSync(__filename, 'utf8');
@@ -976,6 +1188,10 @@ describe('source-drift guard — copies must match js/ source', () => {
         ['_ratioStaffNeed',    'js/admin/admin-reports.js'],
         ['_ratioStepOffer',    'js/admin/admin-reports.js'],
         ['_buildRatioStepRows','js/admin/admin-reports.js'],
+        ['_forecastMean',       'js/admin/admin-reports.js'],
+        ['_forecastShowRate',   'js/admin/admin-reports.js'],
+        ['_forecastConfidence', 'js/admin/admin-reports.js'],
+        ['_buildForecastRows',  'js/admin/admin-reports.js'],
     ];
 
     for (const [fnName, relPath] of GUARDED) {

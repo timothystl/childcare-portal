@@ -4492,3 +4492,64 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     outline-offset: 2px;
     border-radius: 4px;
 }
+
+/* ============================================================
+   CLASSROOM ATTENDANCE MARKING  (Day view)
+   ============================================================ */
+.att-hint {
+    font-size: .85em;
+    color: var(--text-muted);
+    margin: 0 0 12px;
+}
+.att-hint-future { font-style: italic; }
+
+.att-summary {
+    margin-left: 10px;
+    font-size: .8em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.att-sum-present  { color: var(--green-dark); }
+.att-sum-absent   { color: #c62828; }
+.att-sum-unmarked { color: var(--text-muted); font-weight: 500; }
+.att-sum-sep      { color: var(--border); margin: 0 5px; }
+
+.att-controls {
+    display: inline-flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.att-btn {
+    min-width: 44px;              /* comfortable tap target on a phone */
+    padding: 6px 10px;
+    font-size: .8em;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-muted);
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+}
+.att-btn:hover:not(:disabled)  { border-color: var(--navy-lt); color: var(--navy); }
+.att-btn:disabled              { opacity: .5; cursor: progress; }
+.att-btn:focus-visible {
+    outline: 2px solid var(--navy-lt);
+    outline-offset: 2px;
+}
+.att-present.is-on {
+    background: var(--green-lt);
+    border-color: var(--green);
+    color: var(--green-dark);
+}
+.att-absent.is-on {
+    background: #fdecec;
+    border-color: #e5a3a3;
+    color: #c62828;
+}
+
+@media (max-width: 520px) {
+    .name-list-item { flex-wrap: wrap; }
+    .att-controls   { width: 100%; justify-content: flex-end; }
+}
