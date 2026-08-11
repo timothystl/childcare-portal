@@ -3154,6 +3154,39 @@ async function markInvoicesSent(rows) {
     return sent;
 }
 
+/**
+ * Emails invoices to families and stamps them sent — the last step of the
+ * money flow.
+ *
+ * Only ids travel. The edge function reads the recipient, the family name
+ * and every figure from the database with the service role, and stamps
+ * sent_at/sent_to itself once Resend accepts the message. That is why this
+ * cannot be pointed at an arbitrary address the way the older email
+ * functions can (FS6/FS11), and why the "sent" record cannot drift from
+ * what was actually sent.
+ *
+ * @param {Array<number>} invoiceIds
+ * @param {{resend?: boolean}} [opts] - resend re-sends an already-sent bill
+ * @returns {Promise<{sent: Array<{id,to}>, skipped: Array<{id,reason}>}>}
+ */
+async function emailInvoices(invoiceIds, { resend = false } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated.');
+    const { data, error } = await sbClient.functions.invoke('send-invoice', {
+        body: { invoiceIds, resend },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) {
+        // supabase-js hides the function's own message inside the response.
+        let detail = '';
+        try { detail = (await error.context?.json())?.error || ''; } catch (_) { /* ignore */ }
+        throw new Error(detail || error.message || 'Invoice email failed.');
+    }
+    return data;
+}
+
 /** Undo a send stamp — for a bill marked issued by mistake. */
 async function unmarkInvoiceSent(id) {
     if (!sbClient) throw new Error('Supabase not configured.');

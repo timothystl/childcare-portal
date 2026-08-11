@@ -95,8 +95,26 @@ an `AP_TOOLS` entry, or it is unreachable.**
   - `add_invoice_send_stamp.sql` (**applied 2026-08-11**) adds `sent_at` /
     `sent_to`. Accounts Receivable should age overdue from `sent_at`, not from
     the start of the month.
-  - ⚠️ **"Mark as sent" records, it does not email.** There is no invoice email
-    edge function in this project. Building one is the obvious next step.
+  - **`send-invoice` edge function** (deployed 2026-08-11) does the sending.
+    Two buttons: *Email invoices* (sends + stamps) and *Mark sent (no email)*
+    for bills issued another way. Both stamp `sent_at` and write to the audit
+    log, so AR ages correctly either way.
+    - **Its security posture is the one to copy, not the older functions'.**
+      The request body carries **only invoice ids** — recipient, family name
+      and every figure are read server-side with the service role, so it
+      cannot be aimed at an arbitrary address the way T1/FS6/FS11 describe.
+      It also requires a `full` admin role, not merely a session, and stamps
+      `sent_at` only *after* Resend accepts the message.
+    - Already-sent invoices are skipped unless `resend: true`, so re-clicking
+      cannot double-send. Batch capped at 200.
+    - Needs `RESEND_API_KEY` / `RESEND_FROM_EMAIL` / `RESEND_REPLY_TO`
+      secrets (shared with the other email functions). Without the API key it
+      returns 500 rather than pretending to send.
+    - The "how to pay" line comes from the `invoice_email_note` setting,
+      editable in the tool. ⚠️ `settings.value` is a **text** column, so it
+      arrives at the function as a string even when it holds JSON — `readNote()`
+      handles bare string / JSON string / `{text}`. This is the T3 trap; do not
+      assume a parsed object.
 - **Time off**: staff request days off at the kiosk → the request lands pending
   in the director's "Needs your OK" panel inside Build Staff Schedule →
   approving is what makes it real. Only `approved` rows reach
@@ -481,6 +499,7 @@ supabase/
     send-schedule-change/
     send-waitlist-offer/
     finance-summary/     GET endpoint for the church ChMS finance integration (see below)
+    send-invoice/        Emails a family their monthly invoice (ids only in, service-role reads out)
 
 scripts/
   build.js          esbuild bundler config

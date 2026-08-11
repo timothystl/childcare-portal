@@ -1702,15 +1702,25 @@
                     </div>
                     <div class="roster-btns">
                         <button id="invDraftBtn" class="btn-primary">💾 Save drafts</button>
-                        <button id="invSendBtn"  class="btn-secondary">🧾 Mark all as sent</button>
+                        <button id="invEmailBtn" class="btn-primary">✉️ Email invoices</button>
+                        <button id="invSendBtn"  class="btn-secondary">🧾 Mark sent (no email)</button>
                         <button id="invCsvBtn"   class="btn-secondary">&#8595; Export CSV</button>
                     </div>
                 </div>
                 <div class="ap-stats" id="invSummary" style="margin-bottom:16px"></div>
                 <p id="invNote" class="ap-note" style="min-height:1.2em;color:var(--green-text);font-weight:700"></p>
                 <div id="invBody"><p class="empty-hint">Loading…</p></div>
+                <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);max-width:76ch">
+                    <label for="invNoteText" style="display:block;font-weight:600;font-size:.9em;margin-bottom:6px">Note on every invoice email <span style="font-weight:400;color:var(--text-muted)">(how to pay, when it's due — optional)</span></label>
+                    <textarea id="invNoteText" rows="2" placeholder="e.g. Payment is due by the 10th. Cheques to Timothy Lutheran MDO, or pay in the office."
+                              style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-body);font-size:.92em;background:#fff"></textarea>
+                    <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+                        <button id="invNoteSaveBtn" class="btn-secondary">💾 Save note</button>
+                        <span id="invNoteStatus" style="font-size:.85em;color:var(--green-text);font-weight:700"></span>
+                    </div>
+                </div>
                 <p class="ap-note" style="margin-top:14px;max-width:76ch">
-                    <strong>Mark as sent</strong> records the issue date and the address on file, and writes an audit entry — Accounts Receivable ages “overdue” from that date rather than from the start of the month. It does not email the invoice: this project has no invoice email function yet, so sending is still done however you send it today.
+                    <strong>Email invoices</strong> sends each family their statement and stamps the invoice as sent. <strong>Mark sent (no email)</strong> records the issue date only, for bills you handed over or sent another way. Either way, Accounts Receivable ages “overdue” from that date rather than from the start of the month, and the action is written to the audit log.
                 </p>
             </section>
 

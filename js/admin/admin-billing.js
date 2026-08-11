@@ -2382,6 +2382,7 @@ async function renderInvoicesTool() {
     const monthEl = document.getElementById('invMonth');
     if (monthEl && !monthEl.value) monthEl.value = _invMonth || _invDefaultMonth();
     _invMonth = monthEl?.value || _invDefaultMonth();
+    loadInvoiceNote();
     await loadInvoicesForMonth();
 }
 
@@ -2493,7 +2494,10 @@ function renderInvoiceList() {
             <td style="white-space:nowrap">
                 ${st === 'sent' || st === 'paid' || st === 'partial'
                     ? `<button class="btn-xs" data-inv-unsend="${i}" ${st === 'sent' ? '' : 'disabled'}>Undo send</button>`
-                    : `<button class="btn-xs" data-inv-send="${i}" ${r.familyId ? '' : 'disabled title="No family record matched — fix the email in Family Directory"'}>Mark sent</button>`}
+                    : r.familyId
+                        ? `<button class="btn-xs" data-inv-email="${i}" ${r.email ? '' : 'disabled title="No email on the family record"'}>✉️ Email</button>
+                           <button class="btn-xs" data-inv-send="${i}">Mark sent</button>`
+                        : `<button class="btn-xs" disabled title="No family record matched — fix the email in Family Directory">Mark sent</button>`}
             </td>
         </tr>`;
     }).join('');
@@ -2567,15 +2571,55 @@ async function saveInvoiceDrafts() {
 }
 
 /**
- * Records that the bills went out. This stamps the rows and writes an
- * audit entry — it does not email anything. There is no invoice email
- * function in this project yet; see the note under the table.
+ * Emails every drafted-but-unsent invoice for the month and stamps it.
+ * The send-invoice edge function does the work: only ids are sent, and it
+ * reads the recipient and the amounts itself, so nothing here can aim an
+ * invoice at the wrong address.
+ */
+async function emailAllInvoices() {
+    const pending = _invRows.filter(r => r.invoice && !r.invoice.sent_at && r.email);
+    const noEmail = _invRows.filter(r => r.invoice && !r.invoice.sent_at && !r.email).length;
+    if (!pending.length) {
+        alert(noEmail
+            ? `Nothing to send: ${noEmail} drafted invoice${noEmail === 1 ? ' has' : 's have'} no email on the family record.`
+            : 'Every drafted invoice for this month has already been sent.');
+        return;
+    }
+    if (!confirm(
+        `Email ${pending.length} invoice${pending.length === 1 ? '' : 's'} for ${_invMonth} to famil${pending.length === 1 ? 'y' : 'ies'} now?\n\n` +
+        'This sends real email and stamps each invoice as sent.' +
+        (noEmail ? `\n\n${noEmail} more have no email on file and will be skipped.` : ''))) return;
+
+    const btn = document.getElementById('invEmailBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    try {
+        const res = await emailInvoices(pending.map(r => r.invoice.id));
+        await loadInvoicesForMonth();
+        const sent = res?.sent?.length || 0;
+        const skipped = res?.skipped || [];
+        showAdminNote(`${sent} invoice${sent === 1 ? '' : 's'} emailed.`);
+        if (skipped.length) {
+            alert(`${sent} sent, ${skipped.length} skipped:\n\n` +
+                  skipped.slice(0, 12).map(s => `· #${s.id} — ${s.reason}`).join('\n') +
+                  (skipped.length > 12 ? `\n…and ${skipped.length - 12} more` : ''));
+        }
+    } catch (err) {
+        alert('Could not send those invoices: ' + (err.message || err));
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '✉️ Email invoices'; }
+    }
+}
+
+/**
+ * Records that the bills went out WITHOUT emailing them — for invoices the
+ * director handed over or sent some other way. Keeps the AR ageing honest
+ * either way.
  */
 async function markAllInvoicesSent() {
     const pending = _invRows.filter(r => r.invoice && !r.invoice.sent_at);
     if (!pending.length) { alert('Every drafted invoice for this month is already marked sent.'); return; }
     if (!confirm(`Mark ${pending.length} invoice${pending.length === 1 ? '' : 's'} as sent for ${_invMonth}?\n\n` +
-                 'This records the issue date — Accounts Receivable ages overdue from it. It does not email anything.')) return;
+                 'This records the issue date only — use "Email invoices" if you want the portal to send them.')) return;
     const btn = document.getElementById('invSendBtn');
     if (btn) { btn.disabled = true; btn.textContent = 'Marking…'; }
     try {
@@ -2609,15 +2653,63 @@ function showAdminNote(msg) {
     setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 6000);
 }
 
+/** The "how to pay" line the edge function appends to every invoice email. */
+async function loadInvoiceNote() {
+    const el = document.getElementById('invNoteText');
+    if (!el) return;
+    try {
+        // Stored as { text }. fetchSetting() JSON-parses the text column, so a
+        // bare string that happens to look like JSON would come back as a
+        // number or object — the wrapper makes the round trip predictable.
+        // A legacy bare string is still read correctly.
+        const v = await fetchSetting('invoice_email_note');
+        el.value = (v && typeof v === 'object') ? (v.text || '') : (typeof v === 'string' ? v : '');
+    } catch (_) { /* leave it blank — it is optional */ }
+}
+
+async function saveInvoiceNote() {
+    const el  = document.getElementById('invNoteText');
+    const out = document.getElementById('invNoteStatus');
+    const btn = document.getElementById('invNoteSaveBtn');
+    if (!el) return;
+    if (btn) btn.disabled = true;
+    try {
+        await upsertSetting('invoice_email_note', { text: el.value.trim() });
+        await logAdminAction('update', 'setting', null, { key: 'invoice_email_note' });
+        if (out) { out.style.color = ''; out.textContent = '✓ Saved'; setTimeout(() => { out.textContent = ''; }, 4000); }
+    } catch (err) {
+        if (out) { out.style.color = '#c62828'; out.textContent = 'Could not save: ' + (err.message || err); }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
 function setupInvoices() {
+    document.getElementById('invNoteSaveBtn')?.addEventListener('click', saveInvoiceNote);
     document.getElementById('invMonth')?.addEventListener('change', e => {
         _invMonth = e.target.value;
         loadInvoicesForMonth();
     });
     document.getElementById('invDraftBtn')?.addEventListener('click', saveInvoiceDrafts);
+    document.getElementById('invEmailBtn')?.addEventListener('click', emailAllInvoices);
     document.getElementById('invSendBtn') ?.addEventListener('click', markAllInvoicesSent);
     document.getElementById('invCsvBtn')  ?.addEventListener('click', exportInvoicesCsv);
     document.getElementById('invBody')    ?.addEventListener('click', async e => {
+        const emailBtn = e.target.closest('[data-inv-email]');
+        if (emailBtn) {
+            const r = _invRows[Number(emailBtn.dataset.invEmail)];
+            if (!r?.invoice) { alert('Save the drafts first, then email them.'); return; }
+            if (!confirm(`Email this invoice to ${r.email}?`)) return;
+            emailBtn.disabled = true;
+            try {
+                const res = await emailInvoices([r.invoice.id]);
+                await loadInvoicesForMonth();
+                const why = res?.skipped?.[0]?.reason;
+                if (why) alert('Not sent — ' + why);
+                else showAdminNote(`Invoice emailed to ${r.email}.`);
+            } catch (err) { alert('Could not send that: ' + (err.message || err)); emailBtn.disabled = false; }
+            return;
+        }
         const sendBtn = e.target.closest('[data-inv-send]');
         if (sendBtn) {
             const r = _invRows[Number(sendBtn.dataset.invSend)];
