@@ -1708,6 +1708,9 @@
                 </div>
                 <div class="ap-stats" id="invSummary" style="margin-bottom:16px"></div>
                 <p id="invNote" class="ap-note" style="min-height:1.2em;color:var(--green-text);font-weight:700"></p>
+                <!-- Adjustments drafted when days changed after an invoice was
+                     sent. Reviewed and issued by the director; never automatic. -->
+                <div id="invAdjustments" style="display:none"></div>
                 <div id="invBody"><p class="empty-hint">Loading…</p></div>
                 <p class="ap-note" style="margin-top:14px;max-width:76ch">
                     <strong>Mark as sent</strong> records the issue date and the address on file, and writes an audit entry — Accounts Receivable ages “overdue” from that date rather than from the start of the month. It does not email the invoice: this project has no invoice email function yet, so sending is still done however you send it today.
