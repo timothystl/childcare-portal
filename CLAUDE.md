@@ -73,9 +73,19 @@ at a time by putting `.ap-hidden-tool` on the rest. **Adding a section to
   in the director's "Needs your OK" panel inside Build Staff Schedule →
   approving is what makes it real. Only `approved` rows reach
   `autoFillStaffSchedule()` (via `window.apApprovedOffForWeek`). Table + the two
-  PIN-gated definer RPCs are in `supabase/migrations/add_staff_time_off_requests.sql`
-  — **not yet applied to production.** Until it is, the dashboard's days-off
-  card reads 0 and the schedule sidebar shows an "apply the migration" hint.
+  PIN-gated definer RPCs are in `supabase/migrations/add_staff_time_off_requests.sql`,
+  **applied and verified in production 2026-08-11**.
+  - ⚠️ **`staff.id` is `uuid`**, as is `staff_id` on `staff_clock_events`,
+    `staff_hours` and `staff_schedules`. The first draft of this migration
+    assumed `bigint` and failed with `42804`. Never coerce a staff id with
+    `Number()`/`parseInt()` — `staff_time_off_requests.id` is a bigserial but
+    `staff_id` is not.
+  - `weekday` is `0=Mon … 4=Fri` and is **constrained to 0..4** — the center is
+    closed at weekends and the admin UI indexes a five-entry day array.
+  - Verified live: `anon` has no SELECT/INSERT on the table and cannot reach it
+    except through the two RPCs (both `SECURITY DEFINER`, `search_path` pinned,
+    bcrypt-verifying the PIN); a bad PIN returns `NULL` rather than erroring;
+    a full submit → list → store round trip works and stamps the right weekday.
 
 ---
 
@@ -159,12 +169,18 @@ have used an identical query shape and be invisible.
 `supabase/migrations/` were diffed against the live catalog. Three were unapplied;
 `add_audit_log.sql` has since been superseded and applied as
 `add_audit_log_hardened.sql`. Still unapplied: `enforce_registration_window.sql`
-(R24), `ss1_public_read_rpcs.sql` (known staged groundwork), and
-`add_staff_time_off_requests.sql` (new 2026-08-11 with the portal redesign).
-Everything else is applied. **Re-run this diff after any migration work — a committed migration
+(R24), and `ss1_public_read_rpcs.sql` (known staged
+groundwork). Everything else is applied. **Re-run this diff after any migration work — a committed migration
 is not a deployed one, and that is exactly how R5 and R24 hid.**
 
-**Updated 2026-08-11:** `add_attendance_records.sql` was written **and applied**
+**Updated 2026-08-11:** `add_staff_time_off_requests.sql` was written **and applied**
+in the same session (admin portal redesign — the kiosk→director time-off flow).
+Verified post-apply: `anon` holds zero table grants and is denied SELECT/INSERT,
+RLS is on with a single `authenticated` policy, both RPCs are `SECURITY DEFINER`
+with pinned `search_path`, and an end-to-end submit/list round trip through the
+`anon` role stores the correct staff uuid and weekday.
+
+`add_attendance_records.sql` was also written **and applied**
 in the same session (child attendance capture). Verified post-apply: `anon` holds
 zero grants, RLS is on, the only policy is scoped to `authenticated`, and an
 `anon` read returns permission denied. The unapplied list above is unchanged.

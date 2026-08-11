@@ -1337,7 +1337,11 @@ function apApprovedOffForWeek(weekDates) {
 window.apApprovedOffForWeek = apApprovedOffForWeek;
 
 function apDayListLabel(req, weekDates) {
-    if (req.recurring && req.weekday != null) return `${AP_DAYS[req.weekday]}, every week`;
+    // AP_DAYS is Mon–Fri only. A weekend weekday cannot be produced by the
+    // kiosk (weekday-only calendar) or by the director's Mon–Fri chips, and
+    // the DB constraint now rejects it — but fall back to the dates rather
+    // than rendering "undefined, every week" if one ever appears.
+    if (req.recurring && AP_DAYS[req.weekday]) return `${AP_DAYS[req.weekday]}, every week`;
     const days = (req.off_dates || []);
     if (!days.length) return '—';
     return days.slice(0, 4).map(apFmtDayShort).join(', ') + (days.length > 4 ? ` +${days.length - 4} more` : '');
@@ -1366,8 +1370,8 @@ function apDrawScheduleTimeOff() {
                 <div class="ap-ok-reason">${escHtml([r.reason, r.note].filter(Boolean).join(' — '))}</div>
                 <div class="ap-ok-when">Sent from the time clock, ${escHtml(new Date(r.submitted_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}</div>
                 <div class="ap-ok-actions">
-                    <button class="ap-ok-approve" data-ap-off-decide="${r.id}" data-verdict="approved"${_apTimeOff.busy === r.id ? ' disabled' : ''}>Approve</button>
-                    <button class="ap-ok-deny"    data-ap-off-decide="${r.id}" data-verdict="declined"${_apTimeOff.busy === r.id ? ' disabled' : ''}>Not this week</button>
+                    <button class="ap-ok-approve" data-ap-off-decide="${r.id}" data-verdict="approved"${_apTimeOff.busy === String(r.id) ? ' disabled' : ''}>Approve</button>
+                    <button class="ap-ok-deny"    data-ap-off-decide="${r.id}" data-verdict="declined"${_apTimeOff.busy === String(r.id) ? ' disabled' : ''}>Not this week</button>
                 </div>
             </div>`).join('')}
         </div>` : '';
@@ -1447,11 +1451,13 @@ function apDrawScheduleTimeOff() {
     }
 }
 
+// Ids stay opaque strings end to end: the request id is a bigserial and
+// staff.id is a uuid, so nothing here may be coerced to a Number.
 async function apDecideOff(id, verdict) {
-    _apTimeOff.busy = Number(id);
+    _apTimeOff.busy = String(id);
     apDrawScheduleTimeOff();
     try {
-        await decideTimeOffRequest(Number(id), verdict);
+        await decideTimeOffRequest(id, verdict);
         const row = _apTimeOff.pending.find(r => String(r.id) === String(id));
         _apTimeOff.pending = _apTimeOff.pending.filter(r => String(r.id) !== String(id));
         if (row && verdict === 'approved') {
@@ -1469,7 +1475,7 @@ async function apDecideOff(id, verdict) {
 async function apSaveDirectorOff() {
     const errEl = document.getElementById('apOffError');
     const set = msg => { if (errEl) errEl.textContent = msg; };
-    const staffId = parseInt(document.getElementById('apOffStaff')?.value, 10);
+    const staffId = document.getElementById('apOffStaff')?.value || '';   // uuid
     const repeat  = !!document.getElementById('apOffRepeat')?.checked;
     const reason  = document.getElementById('apOffReason')?.value.trim() || '';
     if (!staffId)                  return set('Pick a staff member.');
@@ -1481,7 +1487,7 @@ async function apSaveDirectorOff() {
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
     try {
         const id = await addDirectorTimeOff({ staffId, dates, recurring: repeat, reason });
-        const staff = (typeof allStaffData !== 'undefined' ? allStaffData : []).find(s => s.id === staffId);
+        const staff = (typeof allStaffData !== 'undefined' ? allStaffData : []).find(s => String(s.id) === staffId);
         _apTimeOff.approved.push({
             id, staff_id: staffId, staff_name: staff?.name || '', staff_role: staff?.role || '',
             off_dates: dates, recurring: repeat,
@@ -1502,7 +1508,7 @@ async function apSaveDirectorOff() {
 async function apRemoveOff(id) {
     if (!confirm('Remove this day off? The schedule will stop working around it.')) return;
     try {
-        await deleteTimeOffRequest(Number(id));
+        await deleteTimeOffRequest(id);
         _apTimeOff.approved = _apTimeOff.approved.filter(r => String(r.id) !== String(id));
         apState.live = null;
         apDrawScheduleTimeOff();
