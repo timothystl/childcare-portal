@@ -3226,10 +3226,14 @@ async function fetchPaymentsForMonth(month) {
 // These call SECURITY DEFINER functions that look up the family UUID server-side,
 // so the parent-facing app (anon key) can create invoices without direct table access.
 
-async function createInvoiceByEmail(email, month, amount) {
+// FS5: the amount is NOT passed. The RPC recomputes the family's whole month
+// from registration_dates × room rates × discounts server-side, so a caller
+// holding the public anon key cannot dictate what a family is billed. The
+// recomputation is idempotent, so calling this twice is a no-op.
+async function createInvoiceByEmail(email, month) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('create_billing_invoice_by_email', {
-        p_email: email, p_month: month, p_amount: amount,
+        p_email: email, p_month: month,
     });
     if (error) throw error;
     return data;
