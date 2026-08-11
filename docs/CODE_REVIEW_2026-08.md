@@ -145,6 +145,13 @@ them is recorded in a comment above the tags in `admin.html`.
 
 ### R1 — The anon key can read every family and child record
 
+> **PARTIALLY FIXED 2026-08-11.** `families` and `students` are closed —
+> `r1r4_phase1_families_students.sql` applied and verified in production; the only
+> anon policy remaining on either table is `anon insert`. **Still open:**
+> `registrations`, `registration_dates` (load-bearing — needs the
+> `ss1_public_read_rpcs.sql` cutover first) and `staff`.
+
+
 `ss1_public_read_rpcs.sql` / `tighten_anon_rls_policies.sql` exist in the repo but
 the permissive policies are still live. Confirmed in production:
 
@@ -226,6 +233,14 @@ attacker would need to view "the raw database." They do not — the REST API ser
 them to unauthenticated callers.
 
 ### R4 — Anyone can delete or alter every child record
+
+> **PARTIALLY FIXED 2026-08-11.** `anon delete students`, `anon update students` and
+> `anon update families` are dropped, and `DELETE, UPDATE, TRUNCATE` revoked from
+> `anon` on both tables. **Still open:** `anon update clock events` — and note the
+> table below is wrong to list it as droppable. It is how the kiosk clocks staff
+> **out** (~1,280 anon calls); it needs scoping via a definer RPC, not removal.
+> `anon insert settings` also remains.
+
 
 Beyond reads, `anon` holds destructive policies:
 

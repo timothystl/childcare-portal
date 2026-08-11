@@ -93,11 +93,30 @@ have used an identical query shape and be invisible.
   Either the public waitlist form is failing today or something else carries it. Last
   application is 2026-07-11. **Submit a test application through the public form to settle.**
 
+**Fixed and verified in production 2026-08-11:**
+- **R1 / R4 — `families` and `students` closed.** `r1r4_phase1_families_students.sql`
+  applied. The five anon policies (`select`/`update` on `families`; `select`/`update`/
+  `delete` on `students`) are dropped and `DELETE, UPDATE, TRUNCATE` revoked from `anon`
+  on both tables. Verified live: the only anon policy left on either is `anon insert`.
+  Safe because `family_login` is SECURITY DEFINER (the parent portal reads children from
+  its payload, never from the tables), `pg_stat_statements` showed ~22 anon calls to the
+  two tables out of 80,992, and PIN reset bypasses anon RLS entirely.
+  **Rollback:** `ROLLBACK_r1r4_phase1_families_students.sql`.
+
+  ⚠️ The ⛔ header on `tighten_anon_rls_policies.sql` claiming `family_login` is
+  SECURITY INVOKER is **wrong** — it is and was DEFINER, so the real cause of the
+  2026-06-05 login regression is **unknown**. Don't plan around that note.
+
 **Still open and serious — see the review doc:**
-- **R1** — the anon key can still read all of `families` / `students` / `registrations`
-  (118 families, 145 children). This is SS1. Staged fix required; a blanket tighten
-  broke parent login once already.
-- **R4** — `anon` holds `DELETE` on `students` and `UPDATE` on `families`/`students`.
+- **R1 (remainder)** — `anon` can still read all of `registrations` / `registration_dates`
+  (child names, parent emails, full schedules) and `staff`. Both are genuinely
+  load-bearing: registrations SELECT drives capacity counts and the duplicate check
+  (~5,700 calls). Fix = apply `ss1_public_read_rpcs.sql`, cut the 4 read helpers over,
+  then drop the policies.
+- **R4 (remainder)** — `anon` holds SELECT/INSERT/**UPDATE** on `staff_clock_events`.
+  ⚠️ Contrary to R4's write-up, that UPDATE is **not** safe to drop — it is how the kiosk
+  clocks staff **out** (~1,280 calls). Needs a definer RPC keyed on the kiosk session,
+  not a policy drop.
 - **R24** — the registration window is **not** enforced server-side (see below).
 - **R20** — `restricted`/`staff` admin roles are enforced only in the browser.
 
