@@ -3129,6 +3129,42 @@ async function updateBillingInvoice(id, fields) {
     return data;
 }
 
+/**
+ * Marks invoices as issued to the family. This is the step the portal
+ * previously had no way to record — see add_invoice_send_stamp.sql.
+ * Accounts Receivable ages overdue from `sent_at`, so a bill issued on
+ * the 20th is not counted as three weeks late.
+ *
+ * @param {Array<{id:number, email:string}>} rows
+ * @returns {Promise<number>} how many were stamped
+ */
+async function markInvoicesSent(rows) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const now = new Date().toISOString();
+    let sent = 0;
+    for (const r of rows) {
+        const { error } = await sbClient
+            .from('billing_invoices')
+            .update({ status: 'sent', sent_at: now, sent_to: r.email || null })
+            .eq('id', r.id);
+        if (error) throw friendlyError(error);
+        sent++;
+    }
+    await logAdminAction('send', 'billing_invoice', null, { count: sent, sent_at: now });
+    return sent;
+}
+
+/** Undo a send stamp — for a bill marked issued by mistake. */
+async function unmarkInvoiceSent(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('billing_invoices')
+        .update({ status: 'draft', sent_at: null, sent_to: null })
+        .eq('id', id);
+    if (error) throw friendlyError(error);
+    await logAdminAction('unsend', 'billing_invoice', id);
+}
+
 async function fetchPaymentsForFamily(familyId) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient

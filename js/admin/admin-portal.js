@@ -6,10 +6,17 @@
 // `.admin-section` / `.table-section` in admin.html becomes one entry in
 // AP_TOOLS, and the shell decides which one is on screen.
 //
-// Three levels of navigation, all client-side:
-//   1. Dashboard  (layout 'dash', no tool open) — metrics + panels + attention
-//   2. Hub        (layout 'list', no tool open) — the tool index for the tab
-//   3. Detail     (a tool is open) — that one section, with a back link
+// Two levels, no modes:
+//   1. Dashboard — the landing state for every tab. Metrics, panels,
+//      attention list, and contextual tool pills next to the numbers
+//      that motivate opening them.
+//   2. Detail    — a tool is open; the sidebar stays put and highlights
+//      where you are, so no back link is needed.
+//
+// The permanent left sidebar (#apNav) is the tool index. There is no
+// layout toggle and no separate list-of-everything screen: asking the
+// director to pick a presentation of the menu before picking a tool was
+// a decision the product should never have put to her.
 //
 // Two tools are new and fully built here rather than mapped:
 //   * Daily Staffing Requirement — ceil(registered children / ratio) per
@@ -38,6 +45,14 @@ const AP_TABS = {
         icon: '🧭', label: 'Director',
         blurb: "Staffing and enrollment in one place — who's coming, who you need on the floor, and who's waiting for a seat.",
     },
+    classrooms: {
+        icon: '📋', label: 'Classrooms',
+        blurb: 'Who is here, in which room, on which day — and the family records behind them.',
+    },
+    staff: {
+        icon: '👥', label: 'Staff',
+        blurb: "Who's working, when, and what they're owed — plus the day-off requests waiting on you.",
+    },
     finance: {
         icon: '💰', label: 'Finance',
         blurb: "Everything financial, grouped by what you're trying to do. Pick a tool to open it — you'll land on just that tool, not the whole page.",
@@ -61,21 +76,26 @@ const AP_TABS = {
 // `pane` is the legacy tab-pane that section lives inside (the shell has
 // to un-hide the pane before it can show the section).
 const AP_TOOLS = [
-    // ── Daily operations (reachable from the Director tab) ──
-    { key: 'roster',      pane: 'daily',         section: 'dailyRosterSection',    tab: 'director', group: 'Daily Ops', tint: AP_TINT.green, icon: '📋', name: 'Classroom Roster',
+    // ── Classrooms · Today ──
+    { key: 'roster',      pane: 'daily',         section: 'dailyRosterSection',      tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📋', name: 'Classroom Roster',
       blurb: 'Who is in each room today, this week, or this month.' },
-    { key: 'capOverview', pane: 'daily',         section: 'capacityOverviewSection', tab: 'director', group: 'Daily Ops', tint: AP_TINT.green, icon: '📆', name: 'Capacity Overview',
+    { key: 'capOverview', pane: 'daily',         section: 'capacityOverviewSection', tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📆', name: 'Capacity Overview',
       blurb: 'Every room, every day of a month, against capacity.' },
-    { key: 'roomSched',   pane: 'daily',         section: 'roomSchedSection',      tab: 'director', group: 'Daily Ops', tint: AP_TINT.green, icon: '📅', name: 'Room Schedule Planner',
+    { key: 'roomSched',   pane: 'daily',         section: 'roomSchedSection',        tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📅', name: 'Room Schedule Planner',
       blurb: 'Move children between rooms day by day.' },
-    { key: 'careCal',     pane: 'registrations', section: 'allRegistrationsSection', tab: 'director', group: 'Daily Ops', tint: AP_TINT.green, icon: '🗒️', name: 'Care Calendar',
+
+    // ── Classrooms · Records ──
+    { key: 'careCal',     pane: 'registrations', section: 'allRegistrationsSection', tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '🗒️', name: 'Care Calendar',
       blurb: 'Every registration — search, filter, edit days, add a child.' },
-    { key: 'missingCal',  pane: 'registrations', section: 'missingCalendarSection', tab: 'director', group: 'Daily Ops', tint: AP_TINT.green, icon: '⚠️', name: 'Missing Care Calendar',
+    { key: 'missingCal',  pane: 'registrations', section: 'missingCalendarSection',  tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '⚠️', name: 'Missing Care Calendar',
       blurb: 'Active children with no registration for a month.' },
-    { key: 'families',    pane: 'families',      section: 'familiesSection',       tab: 'director', group: 'Daily Ops', tint: AP_TINT.green, icon: '👨‍👩‍👧', name: 'Family Directory',
+    { key: 'families',    pane: 'families',      section: 'familiesSection',         tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '👨‍👩‍👧', name: 'Family Directory',
       blurb: 'Family and child records, PINs, discounts, imports.' },
 
     // ── Finance · Money In ──
+    // Invoices comes first: you create the bill before you chase it.
+    { key: 'invoices',    pane: 'finance', section: 'invoicesSection',       tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🧾', name: 'Invoices',
+      blurb: "Draft, adjust, and issue this month's family invoices." },
     { key: 'ar',          pane: 'finance', section: 'billingArSection',      tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📋', name: 'Accounts Receivable',
       blurb: 'Payment status per family for a month — overdue, partial, paid.' },
     { key: 'procare',     pane: 'finance', section: 'billingPaymentsSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📂', name: 'ProCare Import',
@@ -84,7 +104,7 @@ const AP_TOOLS = [
       blurb: 'Collection rate, YTD trends, and scholarship summary.' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Kids Discount Pricing',
       blurb: 'Children on a staff or custom discount, with days and price tag.' },
-    { key: 'famBilling',  pane: 'reports', section: 'familyBillingSection',  tab: 'director', group: 'Billing', tint: AP_TINT.gold, icon: '👨‍👩‍👧', name: 'Family Billing Summary',
+    { key: 'famBilling',  pane: 'reports', section: 'familyBillingSection',  tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '👨‍👩‍👧', name: 'Family Billing Summary',
       blurb: 'Per-family totals for a month, ready to invoice.' },
 
     // ── Finance · How We're Doing ──
@@ -109,13 +129,10 @@ const AP_TOOLS = [
     { key: 'api',         pane: 'finance', section: 'financeApiTesterSection', tab: 'finance', group: 'Plan & Model', tint: AP_TINT.sand, icon: '🔌', name: 'ChMS Finance API',
       blurb: 'Test the connection the church accounting system uses.' },
 
-    // ── Finance · Payroll ──
     // Historical Payroll Records is commented out in admin.html ("hidden
     // 2026-07, may bring back later") — same for New Family Enrollment,
     // Enrollment Forms, and Offer Email Links. They are not registered here;
     // uncomment the section and add an entry to bring the tool back.
-    { key: 'payroll',     pane: 'staffing', section: 'payrollSection',       tab: 'finance', group: 'Payroll', tint: AP_TINT.sand, icon: '💵', name: 'Payroll',
-      blurb: 'Hours, PTO, and pay for a bi-weekly period.' },
 
     // ── Finance · Food Program ──
     { key: 'cacfpMeal',   pane: 'cacfp', section: 'cacfpMealSection',   tab: 'finance', group: 'Food Program', tint: AP_TINT.gold, icon: '🍽️', name: 'Daily Meal Counts',
@@ -153,25 +170,33 @@ const AP_TOOLS = [
     { key: 'planner',     pane: 'waitlist', section: 'enrollmentPlannerSection', tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📅', name: 'Enrollment Planner',
       blurb: 'Cross-reference open capacity with waitlist demand.' },
 
-    // ── Director · Messages ──
-    { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'director', group: 'Messages', tint: AP_TINT.gold, icon: '💬', name: 'Parent Messages',
-      blurb: 'Everything families have sent through the portal.' },
-
-    // ── Director · Staffing ──
-    { key: 'schedule',    pane: 'staffing', section: 'staffScheduleSection', tab: 'director', group: 'Staffing', tint: AP_TINT.sand, icon: '🗓️', name: 'Build Staff Schedule',
+    // ── Staff · Scheduling ──
+    { key: 'schedule',    pane: 'staffing', section: 'staffScheduleSection',  tab: 'staff', group: 'Scheduling', tint: AP_TINT.sand, icon: '🗓️', name: 'Build Staff Schedule',
       blurb: 'Assign staff to rooms and shifts for the week, against what the ratios require.' },
-    { key: 'staffreq',    pane: 'staffing', section: 'staffReqSection',      tab: 'director', group: 'Staffing', tint: AP_TINT.tang, icon: '👥', name: 'Daily Staffing Requirement',
+    { key: 'staffreq',    pane: 'staffing', section: 'staffReqSection',       tab: 'staff', group: 'Scheduling', tint: AP_TINT.tang, icon: '👥', name: 'Daily Staffing Requirement',
       blurb: 'Exactly how many staff each day needs, from the kids actually registered.' },
 
-    // ── Director · Your Team ──
-    { key: 'staffRoster', pane: 'staffing', section: 'staffRosterSection',   tab: 'director', group: 'Your Team', tint: AP_TINT.sand, icon: '👥', name: 'Staff Roster',
+    // ── Staff · Your Team ──
+    { key: 'staffRoster', pane: 'staffing', section: 'staffRosterSection',    tab: 'staff', group: 'Your Team', tint: AP_TINT.sand, icon: '🧑‍🏫', name: 'Staff Roster',
       blurb: 'Staff records, pay type, rooms, and availability.' },
-    { key: 'staffDir',    pane: 'staffing', section: 'staffDirectorySection', tab: 'director', group: 'Your Team', tint: AP_TINT.sand, icon: '🧑‍🏫', name: 'Staff Directory',
+    { key: 'staffDir',    pane: 'staffing', section: 'staffDirectorySection', tab: 'staff', group: 'Your Team', tint: AP_TINT.sand, icon: '📇', name: 'Staff Directory',
       blurb: 'Printable contact list for the team.' },
-    { key: 'pto',         pane: 'staffing', section: 'ptoSection',           tab: 'director', group: 'Your Team', tint: AP_TINT.sand, icon: '🏖️', name: 'PTO Settings',
+
+    // ── Staff · Pay & Policy ──
+    // Payroll is money but it is about people, and everything it needs
+    // (hours, PTO balances, pay type) lives in the Staff tools. It keeps
+    // its full-role gate via AP_FULL_ONLY_KEYS even though the tab is open
+    // to `restricted`.
+    { key: 'payroll',     pane: 'staffing', section: 'payrollSection',        tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.sand, icon: '💵', name: 'Payroll',
+      blurb: 'Hours, PTO, and pay for a bi-weekly period.' },
+    { key: 'pto',         pane: 'staffing', section: 'ptoSection',            tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.sand, icon: '🏖️', name: 'PTO Settings',
       blurb: 'Accrual rules and starting balances.' },
-    { key: 'geofence',    pane: 'staffing', section: 'geofenceSection',      tab: 'director', group: 'Your Team', tint: AP_TINT.sand, icon: '📍', name: 'Geofence & Clock Reminders',
+    { key: 'geofence',    pane: 'staffing', section: 'geofenceSection',       tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.sand, icon: '📍', name: 'Geofence & Clock Reminders',
       blurb: 'Where the time clock will accept a punch, and when to nudge.' },
+
+    // ── Planning · Family Communication ──
+    { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'planning', group: 'Family Communication', tint: AP_TINT.gold, icon: '💬', name: 'Parent Messages',
+      blurb: 'Everything families have sent through the portal.' },
 
     // ── Market Analysis ──
     { key: 'mktPos',      pane: 'market', section: 'marketOverviewSection',  tab: 'market', group: 'Where We Stand', tint: AP_TINT.green, icon: '📈', name: 'Market Position',
@@ -202,28 +227,18 @@ const AP_TOOLS = [
       blurb: 'Who changed what, recorded automatically and unerasable.' },
 ];
 
-// The Director tab is a curated cross-tab shortlist, not a home for tools of
-// its own — these keys point at entries that live under another tab.
-const AP_DIRECTOR_GROUPS = [
-    { label: 'Staffing',      keys: ['schedule', 'staffreq', 'ratios', 'capacity'] },
-    { label: 'Your Team',     keys: ['staffRoster', 'staffDir', 'pto', 'geofence'] },
-    { label: 'Who Is Coming', keys: ['planner', 'fte', 'seatDay', 'trends'] },
-    { label: 'Filling Seats', keys: ['wlPlanner', 'wlDemand', 'wlNotify', 'wlImport', 'promotions'] },
-    { label: 'Messages',      keys: ['msgHistory'] },
-    { label: 'Billing',       keys: ['ar', 'procare', 'discount', 'famBilling'] },
-    { label: 'Day to Day',    keys: ['closedDays', 'regWindow'] },
-    { label: 'Daily Ops',     keys: ['roster', 'capOverview', 'roomSched', 'careCal', 'missingCal', 'families'] },
-];
+// Director owns no tools. It is a dashboard: every link on it deep-links
+// to the tool under its real home tab, so the sidebar reveals where the
+// thing actually lives instead of maintaining a parallel index.
 
 const AP_TOOL_BY_KEY = Object.fromEntries(AP_TOOLS.map(t => [t.key, t]));
 
 // ── Shell state ──────────────────────────────────────────────
 const apState = {
-    tab:    'director',
-    view:   null,          // tool key, or null for dashboard/hub
-    layout: 'dash',        // 'dash' | 'list'
-    done:   {},            // dashboard done-flags, persisted
-    live:   null,          // last loaded dashboard data
+    tab:  'director',
+    view: null,   // tool key, or null for the tab's dashboard
+    done: {},     // dashboard done-flags, persisted
+    live: null,   // last loaded dashboard data
 };
 
 let _apReady       = false;
@@ -317,22 +332,18 @@ function apStaffing(weekDates) {
 // ── Persistence ──────────────────────────────────────────────
 function apLoadPrefs() {
     try {
-        apState.layout = localStorage.getItem('apLayout') || 'dash';
-        apState.tab    = localStorage.getItem('apTab')    || 'director';
-        apState.done   = JSON.parse(localStorage.getItem('apDone') || '{}') || {};
+        // The layout toggle is gone; drop the key it used to persist.
+        localStorage.removeItem('apLayout');
+        apState.tab  = localStorage.getItem('apTab') || 'director';
+        apState.done = JSON.parse(localStorage.getItem('apDone') || '{}') || {};
     } catch (_) { /* defaults stand */ }
     if (!AP_TABS[apState.tab]) apState.tab = 'director';
-    // 'rail' was a third layout in the original handoff; it has been removed.
-    // Anyone whose browser still has it stored falls back to the list.
-    if (apState.layout === 'rail') apState.layout = 'list';
-    if (!['dash', 'list'].includes(apState.layout)) apState.layout = 'dash';
 }
 
 function apSavePrefs() {
     try {
-        localStorage.setItem('apLayout', apState.layout);
-        localStorage.setItem('apTab',    apState.tab);
-        localStorage.setItem('apDone',   JSON.stringify(apState.done));
+        localStorage.setItem('apTab',  apState.tab);
+        localStorage.setItem('apDone', JSON.stringify(apState.done));
     } catch (_) { /* private mode — prefs simply don't persist */ }
 }
 
@@ -344,14 +355,14 @@ function apSavePrefs() {
 // buttons. The portal rebuilds that drawer, so the tab-level rules are
 // restated here rather than inferred from DOM that no longer exists:
 //   full       — everything
-//   restricted — schedule planner, enrollment/waitlist, limited Settings.
-//                No Finance and no Market Analysis at all, and no Family
-//                Billing Summary (financial data that sits in the Director
-//                tab, so AP_FULL_ONLY_TABS alone would not catch it).
+//   restricted — scheduling, enrollment/waitlist, limited Settings.
+//                No Finance and no Market Analysis at all.
 //   staff      — Classrooms only
 const AP_FULL_ONLY_TABS = ['finance', 'market'];
-// Financial tools that live outside the Finance tab and so need naming.
-const AP_FULL_ONLY_KEYS = ['famBilling'];
+// Financial tools that live outside the Finance tab, so the tab rule
+// above cannot catch them. Payroll sits under Staff because it is about
+// people, but it is still pay data.
+const AP_FULL_ONLY_KEYS = ['payroll'];
 
 function apToolAvailable(tool) {
     const el = document.getElementById(tool.section);
@@ -361,7 +372,7 @@ function apToolAvailable(tool) {
     if (pane && pane.style.display === 'none') return false;
 
     const role = typeof currentAdminRole !== 'undefined' ? currentAdminRole : 'full';
-    if (role === 'staff') return tool.pane === 'daily';
+    if (role === 'staff') return tool.tab === 'classrooms' && tool.pane === 'daily';
     if (role !== 'full' && AP_FULL_ONLY_TABS.includes(tool.tab)) return false;
     if (role !== 'full' && AP_FULL_ONLY_KEYS.includes(tool.key)) return false;
     return true;
@@ -369,29 +380,30 @@ function apToolAvailable(tool) {
 
 function apGroupsForTab(tab) {
     const groups = [];
-    if (tab === 'director') {
-        AP_DIRECTOR_GROUPS.forEach(g => {
-            const tools = g.keys.map(k => AP_TOOL_BY_KEY[k]).filter(t => t && apToolAvailable(t));
-            if (tools.length) groups.push({ label: g.label, tools });
-        });
-    } else {
-        AP_TOOLS.filter(t => t.tab === tab && apToolAvailable(t)).forEach(t => {
-            let g = groups.find(x => x.label === t.group);
-            if (!g) { g = { label: t.group, tools: [] }; groups.push(g); }
-            g.tools.push(t);
-        });
-    }
+    AP_TOOLS.filter(t => t.tab === tab && apToolAvailable(t)).forEach(t => {
+        let g = groups.find(x => x.label === t.group);
+        if (!g) { g = { label: t.group, tools: [] }; groups.push(g); }
+        g.tools.push(t);
+    });
     return groups;
 }
 
+// Director deliberately owns no tools, so an empty group list does not
+// mean "no access" for it — it always has its dashboard.
 function apTabAvailable(tab) {
+    if (!AP_TABS[tab]) return false;
+    const role = typeof currentAdminRole !== 'undefined' ? currentAdminRole : 'full';
+    if (tab === 'director') return role !== 'staff';
     return apGroupsForTab(tab).length > 0;
 }
 
 // ── Navigation ───────────────────────────────────────────────
+// Opening a tool always switches the sidebar to that tool's real tab, so
+// a deep link from the Director dashboard teaches where the thing lives.
 function apGo(key) {
     const tool = AP_TOOL_BY_KEY[key];
     if (!tool || !apToolAvailable(tool)) return;
+    apState.tab  = tool.tab;
     apState.view = key;
     apSavePrefs();
     apRender();
@@ -405,26 +417,6 @@ function apGoTab(tab) {
     apSavePrefs();
     apRender();
     window.scrollTo(0, 0);
-}
-
-function apSetLayout(layout) {
-    apState.layout = layout;
-    apSavePrefs();
-    apRender();
-}
-
-function apBack() {
-    apState.view = null;
-    apSavePrefs();
-    apRender();
-    window.scrollTo(0, 0);
-}
-
-/** The tab a tool is filed under for the purpose of the back link + related chips. */
-function apContextTab(tool) {
-    const inDirector = apState.tab === 'director' &&
-        AP_DIRECTOR_GROUPS.some(g => g.keys.includes(tool.key));
-    return inDirector ? 'director' : tool.tab;
 }
 
 // ── Render ───────────────────────────────────────────────────
@@ -448,9 +440,6 @@ function apRender() {
     const tool = apState.view ? AP_TOOL_BY_KEY[apState.view] : null;
     if (apState.view && (!tool || !apToolAvailable(tool))) apState.view = null;
 
-    // Layout toggle + tab chip
-    document.querySelectorAll('#apLayoutToggle button').forEach(b =>
-        b.classList.toggle('is-active', b.dataset.layout === apState.layout));
     const meta      = AP_TABS[apState.tab];
     const chipIcon  = document.getElementById('currentTabIcon');
     const chipLabel = document.getElementById('currentTabLabel');
@@ -460,14 +449,11 @@ function apRender() {
     // Menu drawer — rebuilt on every render so a role that cannot reach a
     // tab never sees an inert button for it.
     const navList = document.querySelector('.mobile-nav-list');
-    if (navList) {
-        navList.innerHTML = `
-            <div class="mobile-nav-group-label">Go to</div>
-            ${Object.keys(AP_TABS).filter(apTabAvailable).map(k => `
-            <button class="mobile-nav-item${k === apState.tab ? ' active' : ''}" data-ap-tab="${k}">
-                <span class="mni-icon">${AP_TABS[k].icon}</span><span>${escHtml(AP_TABS[k].label)}</span>
-            </button>`).join('')}`;
-    }
+    if (navList) navList.innerHTML = apNavHtml('mobile');
+
+    // The sidebar is permanent chrome, on the dashboard and inside a tool.
+    const nav = document.getElementById('apNav');
+    if (nav) nav.innerHTML = apNavHtml('side');
 
     if (apState.view) {
         page.classList.add('hidden');
@@ -478,9 +464,39 @@ function apRender() {
         _apLastOpened = null;
         apShowSection(null);
         page.classList.remove('hidden');
-        if (apState.layout === 'dash') apRenderDashboard(page);
-        else                           apRenderHub(page);
+        apRenderDashboard(page);
     }
+}
+
+/**
+ * The tool index. Rendered twice with the same content: as the permanent
+ * desktop sidebar, and inside the hamburger drawer below 900px.
+ */
+function apNavHtml(where) {
+    const tabCls  = where === 'mobile' ? 'mobile-nav-item' : 'ap-nav-tab';
+    const groupCls = where === 'mobile' ? 'mobile-nav-group-label' : 'ap-nav-group';
+    const itemCls = where === 'mobile' ? 'mobile-nav-item' : 'ap-nav-item';
+
+    const tabs = Object.keys(AP_TABS).filter(apTabAvailable).map(k => `
+        <button class="${tabCls}${k === apState.tab ? ' active is-active' : ''}" data-ap-tab="${k}">
+            <span class="${where === 'mobile' ? 'mni-icon' : ''}">${AP_TABS[k].icon}</span><span>${escHtml(AP_TABS[k].label)}</span>
+        </button>`).join('');
+
+    const groups = apGroupsForTab(apState.tab);
+    const body = groups.length
+        ? groups.map(g => `
+            <div class="${groupCls}">${escHtml(g.label)}</div>
+            ${g.tools.map(t => `
+            <button class="${itemCls}${t.key === apState.view ? ' active is-active' : ''}" data-ap-go="${t.key}">
+                <span class="${where === 'mobile' ? 'mni-icon' : ''}">${t.icon}</span><span>${escHtml(t.name)}</span>
+            </button>`).join('')}`).join('')
+        // Director is the one tab with no tools of its own — say so rather
+        // than leaving a bare gap under it.
+        : `<p class="ap-nav-note">${apState.tab === 'director'
+              ? 'Director is an overview. Every tool lives under its own tab — links on the dashboard take you straight there.'
+              : 'No tools here for your access level.'}</p>`;
+
+    return `<div class="ap-nav-tabs">${tabs}</div>${body}`;
 }
 
 /** Show exactly one section (and the pane containing it); hide everything else. */
@@ -494,57 +510,39 @@ function apShowSection(tool) {
     document.querySelectorAll('.tab-pane .admin-section, .tab-pane .table-section, .tab-pane .capacity-section').forEach(s => {
         // Never override a section the role restrictions have hidden.
         if (s.style.display === 'none') return;
-        s.classList.toggle('ap-hidden-tool', !tool || s.id !== tool.section);
+        const open = !!tool && s.id === tool.section;
+        s.classList.toggle('ap-hidden-tool', !open);
+
+        // The shell now renders the tool's name above the card, so the
+        // section's own <h2> is a duplicate — but only hide it when it is
+        // inert text. Several carry controls inside the heading (Care
+        // Calendar's "New Registration" button, the collapse chevron),
+        // and those must stay reachable.
+        const h2 = s.querySelector(':scope > h2');
+        if (h2) h2.classList.toggle('ap-dup-head',
+            open && !h2.querySelector('button, input, select, a'));
     });
 }
 
-function apRenderHub(page) {
-    const meta   = AP_TABS[apState.tab];
-    const groups = apGroupsForTab(apState.tab);
-    const body   = groups.map(g => `
-        <section class="ap-group">
-            <div class="ap-group-head">
-                <h3>${escHtml(g.label)}</h3>
-                <div class="ap-group-rule"></div>
-            </div>
-            <div class="ap-list">
-                ${g.tools.map(t => `
-                <button class="ap-list-row" data-ap-go="${t.key}">
-                    <span class="ap-list-icon" style="background:${t.tint}">${t.icon}</span>
-                    <span class="ap-list-name">${escHtml(t.name)}</span>
-                    <span class="ap-list-blurb">${escHtml(t.blurb)}</span>
-                    <span class="ap-list-arrow">→</span>
-                </button>`).join('')}
-            </div>
-        </section>`).join('');
-
-    page.innerHTML = `
-        <div class="ap-head">
-            <div>
-                <h2>${escHtml(meta.label)}</h2>
-                <p>${escHtml(meta.blurb)}</p>
-            </div>
-        </div>
-        ${body}`;
-}
-
 function apRenderDetail(tool) {
-    const ctxTab   = apContextTab(tool);
-    const backEl   = document.getElementById('apBack');
-    if (backEl) backEl.textContent = `← All ${AP_TABS[ctxTab].label.toLowerCase()} tools`;
+    // No back link: the sidebar keeps its place and highlights where you
+    // are, which is the way back. A heading instead, so a tool page starts
+    // at the same left edge as a dashboard heading and nothing shifts.
+    const head = document.getElementById('apDetailHead');
+    if (head) {
+        head.innerHTML = `
+            <div class="ap-head">
+                <div>
+                    <h2>${tool.icon} ${escHtml(tool.name)}</h2>
+                    <p>${escHtml(tool.blurb)}</p>
+                </div>
+            </div>`;
+    }
 
     apShowSection(tool);
 
-    // Related: the rest of this tool's group, in whichever tab we came from.
-    let related;
-    if (ctxTab === 'director') {
-        const g = AP_DIRECTOR_GROUPS.find(x => x.keys.includes(tool.key));
-        related = (g ? g.keys : []).filter(k => k !== tool.key)
-            .map(k => AP_TOOL_BY_KEY[k]).filter(t => t && apToolAvailable(t));
-    } else {
-        related = AP_TOOLS.filter(t =>
-            t.tab === tool.tab && t.group === tool.group && t.key !== tool.key && apToolAvailable(t));
-    }
+    const related = AP_TOOLS.filter(t =>
+        t.tab === tool.tab && t.group === tool.group && t.key !== tool.key && apToolAvailable(t));
     const relatedEl = document.getElementById('apRelated');
     if (relatedEl) {
         relatedEl.innerHTML = related.length ? `
@@ -597,6 +595,7 @@ function apOnToolOpened(tool) {
         if (tool.key === 'ar' && typeof setupBillingDashYear === 'function' && !window._apArInit) {
             window._apArInit = true; setupBillingDashYear();
         }
+        if (tool.key === 'invoices' && typeof renderInvoicesTool === 'function') renderInvoicesTool();
         if (tool.key === 'schedule')  apRenderScheduleTimeOff();
         if (tool.key === 'staffreq')  apRenderStaffReq();
         if (tool.key === 'scenario')  apRenderScenario();
@@ -621,26 +620,42 @@ async function apLoadLive() {
         pending:   [], timeOff: [],
         waitlist:  [], unread: 0,
         billed:    0, billedKids: 0,
+        families:  [], schedule: [], invoices: [], providers: [],
         nextClosure: null,
+        monthKey:  new Date().toLocaleDateString('en-CA').slice(0, 7),
+        today:     new Date().toLocaleDateString('en-CA'),
     };
 
+    // Every source is optional: allSettled so one missing table or a
+    // permission error degrades that card, not the whole dashboard.
     const settled = await Promise.allSettled([
         typeof fetchTimeOffRequests === 'function' ? fetchTimeOffRequests({ sinceDate: weekDates[0] }) : [],
         typeof fetchWaitlistApplications === 'function' ? fetchWaitlistApplications() : [],
         typeof fetchMessages === 'function' ? fetchMessages(false) : [],
+        typeof fetchAllFamilies === 'function' ? fetchAllFamilies({ includeArchived: false }) : [],
+        typeof fetchStaffScheduleWeek === 'function' ? fetchStaffScheduleWeek(weekDates[0], weekDates[4]) : [],
+        typeof fetchAllBillingInvoices === 'function' ? fetchAllBillingInvoices() : [],
+        typeof fetchMarketProviders === 'function' ? fetchMarketProviders() : [],
     ]);
-    if (settled[0].status === 'fulfilled') {
-        const rows = settled[0].value || [];
-        live.pending = rows.filter(r => r.status === 'pending');
-        live.timeOff = rows.filter(r => r.status === 'approved');
+    const val = i => settled[i].status === 'fulfilled' ? settled[i].value : null;
+
+    const off = val(0);
+    if (off) {
+        live.pending = off.filter(r => r.status === 'pending');
+        live.timeOff = off.filter(r => r.status === 'approved');
     }
-    if (settled[1].status === 'fulfilled') {
-        live.waitlist = (settled[1].value || []).filter(a => !a.archived_at &&
+    const wl = val(1);
+    if (wl) {
+        live.waitlist = wl.filter(a => !a.archived_at &&
             a.status !== 'enrolled' && a.status !== 'declined' && a.status !== 'withdrawn');
     }
-    if (settled[2].status === 'fulfilled') {
-        live.unread = (settled[2].value || []).filter(m => !m.is_read && !m.is_archived).length;
-    }
+    const msgs = val(2);
+    if (msgs) live.unread = msgs.filter(m => !m.is_read && !m.is_archived).length;
+
+    live.families  = val(3) || [];
+    live.schedule  = val(4) || [];
+    live.invoices  = val(5) || [];
+    live.providers = val(6) || [];
 
     // Billed this month — read from _buildFamilyBillingData(), the SAME function
     // that renders Family Billing Summary and generates draft invoices. This
@@ -649,7 +664,7 @@ async function apLoadLive() {
     // from other months, and ignored change fees and billing overrides — so it
     // disagreed with Family Billing by thousands. Money is computed in exactly
     // one place now; if this figure is wrong, it is wrong in both.
-    const monthKey = new Date().toLocaleDateString('en-CA').slice(0, 7);
+    const monthKey = live.monthKey;
     try {
         // Discounts and family grouping both come from allFamiliesData, which is
         // lazy-loaded when the Families tab opens. Without it the dashboard would
@@ -699,23 +714,23 @@ function apRenderDashboard(page) {
                 <h2>${escHtml(AP_TABS[apState.tab].label)}</h2>
                 <p>Loading today's figures…</p>
             </div></div>`;
-        apLoadLive().then(() => { if (!apState.view && apState.layout === 'dash') apRender(); })
+        apLoadLive().then(() => { if (!apState.view) apRender(); })
                     .catch(err => {
                         console.error('apLoadLive:', err);
-                        page.innerHTML = `<p class="empty-hint">Could not load the dashboard — ${escHtml(err.message || 'unknown error')}. Switch to the List layout to reach the tools directly.</p>`;
+                        page.innerHTML = `<p class="empty-hint">Could not load the dashboard — ${escHtml(err.message || 'unknown error')}. The tools in the sidebar still work.</p>`;
                     });
         return;
     }
 
-    const groups    = apGroupsForTab(apState.tab);
-    const toolCount = groups.reduce((a, g) => a + g.tools.length, 0);
-    const meta      = AP_TABS[apState.tab];
-    const builder   = {
-        director: apDashDirector,
-        finance:  apDashFinance,
-        planning: apDashPlanning,
-        market:   apDashSimple,
-        settings: apDashSettings,
+    const meta = AP_TABS[apState.tab];
+    const builder = {
+        director:   apDashDirector,
+        classrooms: apDashClassrooms,
+        staff:      apDashStaff,
+        finance:    apDashFinance,
+        planning:   apDashPlanning,
+        market:     apDashMarket,
+        settings:   apDashSettings,
     }[apState.tab] || apDashSimple;
     const dash = builder(live);
 
@@ -725,9 +740,7 @@ function apRenderDashboard(page) {
                 <h2>${escHtml(meta.label)}</h2>
                 <p>${escHtml(dash.stamp)}</p>
             </div>
-            <button class="ap-ghost-btn" data-ap-layout="list">All ${toolCount} tools →</button>
         </div>
-        ${apQuickRowHtml(dash.quick)}
         ${dash.kpis.length ? `<div class="ap-metrics">${dash.kpis.map(apKpiHtml).join('')}</div>` : ''}
         <div class="ap-body">
             <div class="ap-col">${(dash.left || []).join('')}</div>
@@ -747,26 +760,7 @@ function apRenderDashboard(page) {
                         </button>`).join('')}
                     </div>
                 </section>` : ''}
-                <section class="ap-mini-panel is-inset">
-                    <h3 class="ap-mini-title">Jump to</h3>
-                    <div style="display:flex;flex-direction:column;gap:2px">
-                        ${Object.keys(AP_TABS).filter(k => k !== apState.tab && apTabAvailable(k)).map(k => `
-                        <button class="ap-jump" data-ap-tab="${k}"><span>${AP_TABS[k].icon}</span><span>${escHtml(AP_TABS[k].label)}</span></button>`).join('')}
-                    </div>
-                </section>
             </div>
-        </div>`;
-}
-
-// A row of one-click tools above the metric cards — the things the director
-// opens every morning, which otherwise sit several scrolls down the hub.
-function apQuickRowHtml(keys) {
-    const tools = (keys || []).map(k => AP_TOOL_BY_KEY[k]).filter(t => t && apToolAvailable(t));
-    if (!tools.length) return '';
-    return `
-        <div class="ap-quick">
-            <span class="ap-quick-label">Open now</span>
-            ${tools.map(t => `<button class="ap-pill" data-ap-go="${t.key}"><span>${t.icon}</span><span>${escHtml(t.name)}</span></button>`).join('')}
         </div>`;
 }
 
@@ -885,6 +879,19 @@ function apWaitlistByRoom(live) {
     return byRoom;
 }
 
+// Draft/sent counts for the month on screen, from billing_invoices joined
+// to its cycle. Used by both the Director and Finance billing cards.
+function apInvoiceState(live) {
+    const rows = (live.invoices || []).filter(i =>
+        (i.billing_cycles?.month || i.month || '').startsWith(live.monthKey));
+    return {
+        drafted: rows.length,
+        sent:    rows.filter(i => i.sent_at).length,
+        unsent:  rows.filter(i => !i.sent_at).length,
+        total:   rows.reduce((a, i) => a + (parseFloat(i.final_amount) || 0), 0),
+    };
+}
+
 function apDashDirector(live) {
     const sf     = live.staffing;
     const peak   = Math.max(0, ...sf.classroom);
@@ -893,6 +900,12 @@ function apDashDirector(live) {
     const posted = !!apState.done['Schedule posted to staff'];
     const waiting = live.pending.map(r => (r.staff_name || '').split(' ')[0]).filter(Boolean);
     const byRoom  = apWaitlistByRoom(live);
+
+    const inv = apInvoiceState(live);
+    const sentThisMonth = inv.sent > 0;
+    const invSub = inv.drafted
+        ? `${inv.drafted} drafted, ${inv.sent ? inv.sent + ' sent' : 'none sent'}`
+        : `${live.billedKids} children registered, nothing drafted`;
 
     const seatsOpen = sf.rows.reduce((a, r) => {
         const cap = r.room.capacity || 0;
@@ -930,9 +943,10 @@ function apDashDirector(live) {
             sub: `${live.waitlist.length} on the waitlist`,
         },
         {
-            label: 'Billed this month', tone: 'warn', value: apMoney(live.billed),
-            sub: `${live.billedKids} children registered`,
+            label: 'Billed this month', tone: sentThisMonth ? 'ok' : 'warn', value: apMoney(live.billed),
+            sub: invSub,
             check: 'Billing completed',
+            link: 'invoices', linkIcon: '🧾', linkLabel: 'Review and send',
         },
     ];
 
@@ -961,6 +975,10 @@ function apDashDirector(live) {
     const edgeRooms = sf.rows.filter(r => r.cells[peakIx < 0 ? 0 : peakIx]?.atEdge);
     if (edgeRooms.length) attention.push({ icon: '⚖️', key: 'ratios',
         text: `${edgeRooms.map(r => r.label).join(', ')} sit${edgeRooms.length > 1 ? '' : 's'} exactly at ratio on ${peakDay} — one more child adds a staff member.`, cta: 'Open Ratios' });
+    if (inv.unsent) attention.push({ icon: '🧾', key: 'invoices', urgent: true,
+        text: `${inv.unsent} invoice${inv.unsent === 1 ? ' is' : 's are'} drafted for this month but not marked sent.`, cta: 'Review and send invoices' });
+    else if (!inv.drafted && live.billed > 0) attention.push({ icon: '🧾', key: 'invoices',
+        text: `${apMoney(live.billed)} is billable this month but no invoices have been drafted.`, cta: 'Open invoices' });
     if (live.unread) attention.push({ icon: '✉️', key: 'msgHistory',
         text: `${live.unread} parent message${live.unread > 1 ? 's have' : ' has'} not been read.`, cta: 'Open Parent Messages' });
     if (live.nextClosure) attention.push({ icon: '🚫', key: 'closedDays',
@@ -973,7 +991,6 @@ function apDashDirector(live) {
 
     return {
         stamp: `Week of ${friendlyShort(live.weekOf)} · registrations as booked`,
-        quick: ['roster', 'capOverview', 'roomSched', 'careCal', 'families'],
         kpis,
         left: [
             apPanel({ title: 'Staff needed this week',
@@ -1002,32 +1019,46 @@ function apDashDirector(live) {
 }
 
 function apDashFinance(live) {
-    const sf = live.staffing;
+    const sf  = live.staffing;
+    const inv = apInvoiceState(live);
+
     const rateRows = sf.rows.map(r => ({
         label: r.label,
         note:  `full day ${apMoney(r.room.fullDayRate || 0)}${r.room.fullDayOnly ? '' : ' · half day ' + apMoney(r.room.halfDayRate || 0)}`,
         value: `${r.cells.reduce((a, c) => a + c.kids, 0)} care days`,
     }));
+
+    const kpis = [
+        { label: 'Billed this month', tone: inv.sent ? 'ok' : 'warn', value: apMoney(live.billed),
+          sub: inv.drafted ? `${inv.drafted} drafted, ${inv.sent ? inv.sent + ' sent' : 'none sent'}` : 'nothing drafted yet',
+          link: 'invoices', linkIcon: '🧾', linkLabel: 'Review and send' },
+        { label: 'Children billed', tone: 'ok', value: live.billedKids, sub: 'with at least one day this month' },
+        { label: 'Care days booked', tone: 'gold', value: sf.kids.reduce((a, b) => a + b, 0), sub: 'this week, all rooms' },
+    ];
+    if (inv.drafted) kpis.push({ label: 'Invoiced value', tone: 'navy', value: apMoney(inv.total),
+                                 sub: 'across drafted invoices' });
+
+    const attention = [];
+    if (inv.unsent) attention.push({ icon: '🧾', key: 'invoices', urgent: true,
+        text: `${inv.unsent} invoice${inv.unsent === 1 ? '' : 's'} for this month ${inv.unsent === 1 ? 'is' : 'are'} drafted but not sent.`,
+        cta: 'Review and send invoices' });
+    else if (!inv.drafted && live.billed > 0) attention.push({ icon: '🧾', key: 'invoices', urgent: true,
+        text: `${apMoney(live.billed)} is billable this month and no invoices are drafted.`, cta: 'Open invoices' });
+    attention.push({ icon: '📋', key: 'ar',       text: 'Accounts receivable ages overdue from the date an invoice was sent.', cta: 'Open accounts receivable' });
+    attention.push({ icon: '🧮', key: 'scenario', text: 'Model a rate change against real care-day volume before you commit.', cta: 'Open rate scenarios' });
+    attention.push({ icon: '🎯', key: 'budget',   text: 'Check this year\u2019s budget targets against the actuals.', cta: 'Open annual budget' });
+
     return {
-        stamp: `${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} · figures from live registrations`,
-        kpis: [
-            { label: 'Billed this month', tone: 'navy', value: apMoney(live.billed), sub: 'from registered days and saved rates' },
-            { label: 'Children billed',   tone: 'ok',   value: live.billedKids, sub: 'with at least one day this month' },
-            { label: 'Care days booked',  tone: 'gold', value: sf.kids.reduce((a, b) => a + b, 0), sub: 'this week, all rooms' },
-            { label: 'Rooms in use',      tone: 'navy', value: sf.rows.length, sub: 'with a child booked this week' },
-        ],
+        stamp: `${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} · billed from care days actually booked`,
+        kpis,
         left: [
             apPanel({ title: 'Where the volume is', sub: 'Care days booked this week per room — what the tuition line is made of.',
-                body: apRowsHtml(rateRows), tools: ['ar', 'famBilling', 'revdash'] }),
+                body: apRowsHtml(rateRows), tools: ['invoices', 'ar', 'famBilling'] }),
             apPanel({ title: 'How full each room is', sub: 'Average booked children per day against capacity.',
                 body: apBarsHtml(apFillBars(sf)), tools: ['pnl', 'arrev', 'budget'] }),
         ],
         right: [],
-        attention: [
-            { icon: '📋', key: 'ar',       text: 'Accounts receivable has not been refreshed on this screen yet.', cta: 'Open Accounts Receivable' },
-            { icon: '🧮', key: 'scenario', text: 'Model a rate change against real care-day volume before you commit.', cta: 'Open Rate Increase Scenarios' },
-            { icon: '🎯', key: 'budget',   text: 'Check this year’s budget targets against the actuals.', cta: 'Open Annual Budget' },
-        ],
+        attention,
     };
 }
 
@@ -1101,6 +1132,236 @@ function apDashSettings(live) {
             { icon: '🔐', key: 'adminRoles', text: 'Review who holds full access to the portal.', cta: 'Open Admin Access' },
             { icon: '🧾', key: 'auditLog',   text: 'The audit log records every significant admin action.', cta: 'Open Audit Log' },
             { icon: '🚫', key: 'closedDays', text: 'Blocked dates show as unavailable on the parent calendar.', cta: 'Open Closed Days' },
+        ],
+    };
+}
+
+// ── Classrooms ───────────────────────────────────────────────
+function apDashClassrooms(live) {
+    const sf  = live.staffing;
+    const idx = Math.max(0, live.weekDates.indexOf(live.today));
+    const dayIx = live.weekDates.includes(live.today) ? idx : 0;
+    const isToday = live.weekDates.includes(live.today);
+
+    const hereToday = sf.rows.reduce((a, r) => a + r.cells[dayIx].kids, 0);
+    const atRatio   = sf.rows.filter(r => r.cells[dayIx].atEdge);
+    const openRooms = sf.rows.filter(r => r.cells[dayIx].kids > 0).length;
+
+    // Children with a registration this month but none for the *next* one is
+    // the Missing Care Calendar tool's job; here we can honestly report the
+    // children on file with no booked day at all this month.
+    const billedKeys = new Set();
+    (allRegistrations || []).forEach(reg => {
+        if ((reg.registration_dates || []).some(d => !d.waitlisted && String(d.care_date).startsWith(live.monthKey)))
+            billedKeys.add((reg.child_name || '').toLowerCase().trim());
+    });
+    let onFile = 0, missing = 0;
+    live.families.forEach(f => (f.students || []).forEach(st => {
+        onFile++;
+        if (!billedKeys.has((st.child_name || '').toLowerCase().trim())) missing++;
+    }));
+
+    const bars = sf.rows.map(r => {
+        const kids = r.cells[dayIx].kids;
+        const cap  = r.room.capacity || 0;
+        const pct  = cap ? Math.round((kids / cap) * 100) : 0;
+        return {
+            label: r.label,
+            note:  cap ? `${kids} of ${cap} seats · ${pct}%` : `${kids} booked · no capacity set`,
+            pct:   Math.min(100, pct),
+            color: r.cells[dayIx].atEdge ? AP_TONE.warn : pct >= 85 ? AP_TONE.warn : pct >= 70 ? AP_TONE.gold : AP_TONE.ok,
+        };
+    });
+
+    const kpis = [
+        { label: isToday ? 'Children here today' : 'Children on Monday', tone: 'navy', value: hereToday,
+          sub: `${openRooms} room${openRooms === 1 ? '' : 's'} in use` },
+        { label: 'Rooms at ratio', tone: atRatio.length ? 'warn' : 'ok', value: atRatio.length,
+          sub: atRatio.length ? atRatio.map(r => r.label.replace(/^\S+\s/, '')).join(', ') : 'all rooms have headroom' },
+    ];
+    if (live.families.length) {
+        kpis.push({ label: 'Children on file', tone: 'ok', value: onFile,
+                    sub: `${live.families.length} families` });
+        if (missing) kpis.push({ label: 'No days this month', tone: 'gold', value: missing,
+                                 sub: 'children with nothing booked',
+                                 link: 'missingCal', linkIcon: '⚠️', linkLabel: 'Review them' });
+    }
+
+    const attention = [];
+    if (missing) attention.push({ icon: '📋', key: 'missingCal', urgent: true,
+        text: `${missing} child${missing === 1 ? ' has' : 'ren have'} no booked day this month.`, cta: 'Open missing calendars' });
+    if (atRatio.length) attention.push({ icon: '🏫', key: 'roomSched',
+        text: `${atRatio.map(r => r.label).join(', ')} ${atRatio.length === 1 ? 'is' : 'are'} exactly at ratio — the next child adds a staff member.`, cta: 'Open room planner' });
+    attention.push({ icon: '🗒️', key: 'careCal',
+        text: 'Add a day, edit a calendar, or register a child from the care calendar.', cta: 'Open care calendar' });
+
+    return {
+        stamp: `${new Date(live.today + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · ${hereToday} children expected`,
+        kpis,
+        left: [
+            apPanel({ title: isToday ? "Today's roster by room" : "Monday's roster by room",
+                sub: 'Headcount against capacity. A room at ratio needs another staff member before the next child.',
+                body: apBarsHtml(bars), tools: ['roster', 'roomSched', 'capOverview'] }),
+        ],
+        right: [],
+        attention,
+    };
+}
+
+// ── Staff ────────────────────────────────────────────────────
+function apDashStaff(live) {
+    const sf = live.staffing;
+    const roster = (typeof allStaffData !== 'undefined' ? allStaffData : []).filter(s => s.active);
+
+    // Scheduled per day, from saved staff_schedules rows for this week.
+    const scheduledByDay = live.weekDates.map(d => {
+        const names = new Set();
+        live.schedule.forEach(r => { if (r.work_date === d) names.add(r.staff_name); });
+        return names.size;
+    });
+    const scheduledAll = new Set(live.schedule.map(r => r.staff_name)).size;
+    const anySchedule  = live.schedule.length > 0;
+
+    const bars = live.weekDates.map((d, i) => {
+        const need = sf.classroom[i];
+        const have = scheduledByDay[i];
+        const short = need - have;
+        return {
+            label: AP_DAYS[i],
+            note: sf.closed[i] ? 'closed'
+                : anySchedule ? `${need} needed · ${have} scheduled${short > 0 ? ` · short ${short}` : ''}`
+                : `${need} needed · nothing scheduled yet`,
+            pct: need ? Math.min(100, Math.round((have / need) * 100)) : 0,
+            color: sf.closed[i] ? AP_TONE.gold : short > 0 ? AP_TONE.warn : AP_TONE.ok,
+        };
+    });
+
+    const offRows = live.pending.map(r => ({
+        label: r.staff_name || 'Staff member',
+        note: `${apDayListLabel(r, live.weekDates)} · asked at the time clock`,
+        value: 'Pending', color: AP_TONE.warn,
+    })).concat(live.timeOff.slice(0, 4).map(r => ({
+        label: r.staff_name || 'Staff member',
+        note: `${apDayListLabel(r, live.weekDates)} · ${r.source === 'director' ? 'you entered this' : 'you approved this'}`,
+        value: r.recurring ? 'Standing' : 'Approved',
+        color: r.recurring ? AP_TONE.navy : AP_TONE.ok,
+    })));
+
+    const kpis = [
+        { label: 'Scheduled this week', tone: anySchedule ? 'ok' : 'warn',
+          value: anySchedule ? `${scheduledAll} of ${roster.length || '—'}` : 'Not built',
+          sub: anySchedule ? 'staff on the posted week' : 'no schedule saved for this week',
+          link: 'schedule', linkIcon: '🗓️', linkLabel: 'Build staff schedule' },
+        { label: 'Days off to approve', tone: live.pending.length ? 'warn' : 'ok', value: live.pending.length,
+          sub: live.pending.length
+              ? live.pending.map(r => (r.staff_name || '').split(' ')[0]).filter(Boolean).slice(0, 3).join(', ') + ' waiting on you'
+              : 'nothing waiting on you',
+          ...(live.pending.length ? { link: 'schedule', linkIcon: '✅', linkLabel: 'Review requests' } : {}) },
+        { label: 'Peak staff needed', tone: 'navy', value: Math.max(0, ...sf.classroom), sub: 'on the heaviest day' },
+    ];
+    if (roster.length) kpis.push({ label: 'On the roster', tone: 'ok', value: roster.length, sub: 'active staff' });
+
+    const attention = [];
+    const shortDays = live.weekDates.map((d, i) => ({ i, short: sf.classroom[i] - scheduledByDay[i] }))
+        .filter(x => anySchedule && x.short > 0 && !sf.closed[x.i]);
+    if (!anySchedule) attention.push({ icon: '🗓️', key: 'schedule', urgent: true,
+        text: 'No staff schedule is saved for this week yet.', cta: 'Build staff schedule' });
+    else if (shortDays.length) attention.push({ icon: '⏰', key: 'schedule', urgent: true,
+        text: `${shortDays.map(x => AP_DAYS[x.i]).join(', ')} ${shortDays.length === 1 ? 'is' : 'are'} short of what the ratios ask for.`, cta: 'Build staff schedule' });
+    if (live.pending.length) attention.push({ icon: '✅', key: 'schedule', urgent: true,
+        text: `${live.pending.length} day-off request${live.pending.length === 1 ? '' : 's'} from the time clock ${live.pending.length === 1 ? 'is' : 'are'} waiting on you.`, cta: 'Review requests' });
+    attention.push({ icon: '📍', key: 'geofence',
+        text: 'Check where the time clock accepts a punch and when staff get nudged.', cta: 'Open clock reminders' });
+
+    return {
+        stamp: `Week of ${friendlyShort(live.weekOf)} · ${roster.length || 'no'} staff on the roster`,
+        kpis,
+        left: [
+            apPanel({ title: 'Coverage against requirement',
+                sub: 'What the saved schedule puts on the floor, against what the ratios ask for that day.',
+                body: apBarsHtml(bars), tools: ['schedule', 'staffreq', 'staffRoster'] }),
+        ],
+        right: offRows.length ? [
+            apPanel({ title: 'Time off this week', tone: 'gold',
+                sub: 'Only approved days are avoided by the scheduler — pending ones change nothing until you say yes.',
+                body: apRowsHtml(offRows), tools: ['schedule'] }),
+        ] : [],
+        attention,
+    };
+}
+
+// ── Market ───────────────────────────────────────────────────
+function apDashMarket(live) {
+    const providers = live.providers || [];
+    if (!providers.length) {
+        return {
+            stamp: 'No comparable providers recorded yet',
+            kpis: [],
+            left: [apPanel({ title: 'Nothing to compare against yet',
+                sub: 'Add the providers you compete with and this dashboard fills in — weekly rates, registration fees, and where we sit in the set.',
+                body: '', tools: ['mktProviders', 'mktPricing'] })],
+            right: [],
+            attention: [{ icon: '🏫', key: 'mktProviders',
+                text: 'The comparable provider set is empty.', cta: 'Add providers' }],
+        };
+    }
+
+    // Weekly-equivalent midpoint per provider, so a range and a single
+    // figure compare on the same basis.
+    const rate = p => {
+        const lo = Number(p.rate_low) || 0, hi = Number(p.rate_high) || lo;
+        const mid = hi ? (lo + hi) / 2 : lo;
+        if (!mid) return 0;
+        const unit = (p.rate_unit || 'week').toLowerCase();
+        return unit.startsWith('day') ? mid * 5 : unit.startsWith('month') ? mid * 12 / 52 : mid;
+    };
+    const priced = providers.map(p => ({ ...p, weekly: rate(p) })).filter(p => p.weekly > 0);
+    const us     = priced.find(p => p.is_own_program);
+    const sorted = [...priced].sort((a, b) => a.weekly - b.weekly);
+    const median = sorted.length
+        ? (sorted.length % 2 ? sorted[(sorted.length - 1) / 2].weekly
+                             : (sorted[sorted.length / 2 - 1].weekly + sorted[sorted.length / 2].weekly) / 2)
+        : 0;
+    const rank = us ? sorted.findIndex(p => p.id === us.id) + 1 : 0;
+    const gap  = us && median ? Math.round(((us.weekly - median) / median) * 100) : 0;
+    const max  = Math.max(...priced.map(p => p.weekly), 1);
+
+    const kpis = [];
+    if (us) kpis.push({ label: 'Our weekly rate', tone: 'navy', value: apMoney(us.weekly),
+                        sub: rank ? `${rank} of ${sorted.length} by price` : 'in the set' });
+    if (median) kpis.push({ label: 'Market median', tone: 'ok', value: apMoney(median),
+                            sub: us ? (gap === 0 ? 'we match it' : `we sit ${Math.abs(gap)}% ${gap < 0 ? 'under' : 'over'}`) : 'across the set' });
+    kpis.push({ label: 'Providers tracked', tone: 'ok', value: providers.length,
+                sub: `${priced.length} with a rate on file`, link: 'mktProviders', linkIcon: '🏫', linkLabel: 'See the set' });
+    const fees = providers.map(p => Number(p.reg_fee_low) || 0).filter(Boolean);
+    if (fees.length) {
+        const fmed = [...fees].sort((a, b) => a - b)[Math.floor(fees.length / 2)];
+        kpis.push({ label: 'Median registration fee', tone: 'gold', value: apMoney(fmed), sub: `${fees.length} providers report one` });
+    }
+
+    const bars = sorted.slice().reverse().slice(0, 8).map(p => ({
+        label: p.name || 'Provider',
+        note:  apMoney(p.weekly) + '/wk' + (us && p.id !== us.id && us.weekly
+                 ? ` · ${Math.abs(Math.round(((p.weekly - us.weekly) / us.weekly) * 100))}% ${p.weekly >= us.weekly ? 'above' : 'below'} us`
+                 : p.is_own_program ? ' · our rate' : ''),
+        pct:   Math.round((p.weekly / max) * 100),
+        color: p.is_own_program ? AP_TONE.navy : AP_TONE.gold,
+    }));
+
+    return {
+        stamp: `${providers.length} comparable providers · weekly-equivalent rates`,
+        kpis,
+        left: [
+            apPanel({ title: 'Pricing landscape',
+                sub: 'Weekly-equivalent full-time rate, us against the comparable set. Ranges are shown at their midpoint.',
+                body: apBarsHtml(bars), tools: ['mktPricing', 'mktPos', 'mktProviders'] }),
+        ],
+        right: [],
+        attention: [
+            ...(us && gap < -3 ? [{ icon: '💲', key: 'scenario',
+                text: `We are ${Math.abs(gap)}% under the market median with no rate change modeled.`, cta: 'Open rate scenarios' }] : []),
+            { icon: '🏫', key: 'mktProviders', text: 'Keep the comparable set current — rates move.', cta: 'Review providers' },
+            { icon: '💵', key: 'mktCost', text: 'Cost and wage context explains why infant care prices the way it does.', cta: 'Open cost context' },
         ],
     };
 }
@@ -1535,23 +1796,12 @@ function setupAdminPortal() {
 
     document.body.classList.add('ap-on');
 
-    // Layout toggle
-    document.getElementById('apLayoutToggle')?.addEventListener('click', e => {
-        const btn = e.target.closest('button[data-layout]');
-        if (btn) apSetLayout(btn.dataset.layout);
-    });
-
-    document.getElementById('apBack')?.addEventListener('click', apBack);
-
     // One delegated handler for every navigation affordance the shell renders.
     document.addEventListener('click', e => {
         const go = e.target.closest('[data-ap-go]');
         if (go) { apGo(go.dataset.apGo); apCloseMenu(); return; }
         const tab = e.target.closest('[data-ap-tab]');
         if (tab) { apGoTab(tab.dataset.apTab); apCloseMenu(); return; }
-        const lay = e.target.closest('[data-ap-layout]');
-        if (lay) { apSetLayout(lay.dataset.apLayout); apCloseMenu(); return; }
-
         const decide = e.target.closest('[data-ap-off-decide]');
         if (decide) { apDecideOff(decide.dataset.apOffDecide, decide.dataset.verdict); return; }
         const remove = e.target.closest('[data-ap-off-remove]');

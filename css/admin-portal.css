@@ -2,9 +2,10 @@
    ADMIN PORTAL SHELL — design handoff "myMDO Admin Portal"
    ------------------------------------------------------------
    The redesign's navigation model layered over the existing admin
-   sections: five role tabs (Director / Finance / Planning / Market /
-   Settings), a Dashboard / List layout toggle, and a per-tool detail
-   view.
+   sections: a permanent left sidebar of seven role tabs (Director /
+   Classrooms / Staff / Finance / Planning / Market / Settings) that
+   expands into the active tab's tool groups, and a content pane that
+   shows either the tab's dashboard or one open tool. No modes.
 
    Every colour here resolves to a token already defined in
    css/styles.css :root — the handoff palette and the Sunlit
@@ -28,37 +29,84 @@
     --ap-neutral-bar: #C9C0A8;  /* comparison bars, dashed add affordances */
 }
 
-/* ── Header additions ────────────────────────────────────── */
-.ap-layout-toggle {
-    display: flex;
-    gap: 2px;
-    background: var(--cream);
-    border: 2px solid var(--border);
-    border-radius: 9px;
-    padding: 3px;
-    height: 44px;
-    align-items: center;
-}
-.ap-layout-toggle button {
-    background: transparent;
-    color: var(--text-muted);
-    border: none;
-    border-radius: 6px;
-    height: 32px;
-    padding: 0 13px;
-    cursor: pointer;
-    font-size: .82em;
-    font-weight: 800;
-    font-family: var(--font-body);
-}
-.ap-layout-toggle button:hover { color: var(--navy); }
-.ap-layout-toggle button.is-active { background: var(--navy); color: #fff; }
-.ap-layout-toggle button.is-active:hover { color: #fff; }
 
 /* ── Shell frame ─────────────────────────────────────────── */
-.ap-shell { display: flex; align-items: flex-start; gap: 0; }
+/* The content pane starts at the sidebar edge. Centering it inside its
+   own column would add a second, arbitrary gutter — that is what made
+   the old list read as a widget dropped into the page. */
+.ap-shell { display: flex; align-items: stretch; gap: 0; }
 .ap-main  { flex: 1; min-width: 0; }
-.ap-page  { padding: 28px 32px 64px; max-width: 1180px; margin: 0 auto; }
+.ap-page  { padding: 32px 40px 72px; max-width: 1320px; margin: 0; }
+
+/* ── Permanent sidebar ───────────────────────────────────── */
+.ap-nav {
+    width: 264px;
+    flex: 0 0 264px;
+    background: var(--cream);
+    border-right: 1px solid var(--border);
+    padding: 24px 14px 48px;
+    position: sticky;
+    top: var(--ap-header-h, 92px);
+    /* min-height as well as max — otherwise the cream column stops at the
+       end of its own content and the page shows bare background beneath it. */
+    min-height: calc(100vh - var(--ap-header-h, 92px));
+    max-height: calc(100vh - var(--ap-header-h, 92px));
+    overflow-y: auto;
+    /* overflow-y alone resolves the x axis to auto and leaves a stray
+       scrollbar under long tool names. */
+    overflow-x: hidden;
+}
+.ap-nav-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding-bottom: 14px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+.ap-nav-tab,
+.ap-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: var(--font-body);
+    color: var(--navy);
+}
+.ap-nav-tab  { padding: 11px 12px; font-size: .9em;  font-weight: 800; }
+.ap-nav-item { padding: 10px 12px; font-size: .86em; font-weight: 600; color: var(--text); }
+.ap-nav-tab:hover  { background: var(--green-lt); }
+.ap-nav-item:hover { background: var(--green-pale); }
+.ap-nav-tab.is-active  { background: var(--sun); }
+.ap-nav-item.is-active { background: var(--green-lt); font-weight: 800; color: var(--navy); }
+.ap-nav-group {
+    font-size: .68em;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 20px 12px 7px;
+}
+.ap-nav-note {
+    font-size: .76em;
+    line-height: 1.5;
+    color: var(--text-muted);
+    padding: 14px 12px 0;
+    text-wrap: pretty;
+    margin: 0;
+}
+
+/* The tool's own heading, so a tool page starts at the same left edge as
+   a dashboard heading and nothing shifts when you move between them. The
+   section's own <h2> then duplicates it — hidden by apShowSection(), but
+   only where the heading is inert text (see the comment there). */
+.ap-detail-head .ap-head { margin-bottom: 18px; }
+.ap-dup-head { display: none !important; }
 
 
 /* ── Page heading ────────────────────────────────────────── */
@@ -115,51 +163,27 @@
 }
 .ap-ghost-btn:hover { border-color: var(--sun); }
 
-.ap-back {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    font-family: var(--font-body);
-    font-size: .9em;
-    font-weight: 700;
-    color: var(--green-text);
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 6px 2px;
-    margin-bottom: 14px;
-}
-.ap-back:hover { color: var(--navy); }
-
-/* ── Daily-ops quick row ─────────────────────────────────── */
-.ap-quick {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
-    padding-bottom: 18px;
-    border-bottom: 1px solid var(--border);
-}
-.ap-quick-label {
-    font-size: .74em;
-    font-weight: 800;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-right: 4px;
-}
-.ap-quick .ap-pill { background: var(--white); }
-
 /* ── Metric row ──────────────────────────────────────────── */
+/* Flex, not grid: one card is twice as wide as the rest, so an auto-fit
+   grid strands the last card alone on a second row whenever the card
+   count and the column count disagree. The max-widths matter as much as
+   the bases — without them a single wrapped card grows to fill the whole
+   row and reads as a banner rather than a metric.
+   align-items:stretch is the default and is what keeps every card the
+   same height regardless of content. */
 .ap-metrics {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(146px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 14px;
     margin-bottom: 26px;
-    align-items: stretch;   /* deliberate: all cards equal height */
+    align-items: stretch;
 }
 .ap-metric {
+    flex: 1 1 160px;
+    max-width: 420px;
+    /* Flex items default to min-width:auto, which the 5-cell mini strip
+       resolves to a width wider than a phone. Let it shrink. */
+    min-width: 0;
     background: var(--white);
     border: 1px solid var(--border);
     border-top: 4px solid var(--navy);
@@ -172,7 +196,7 @@
 .ap-metric.tone-ok   { border-top-color: var(--green-text); }
 .ap-metric.tone-gold { border-top-color: var(--sun); }
 .ap-metric.tone-warn { border-top-color: var(--tang); }
-.ap-metric.span-2    { grid-column: span 2; }
+.ap-metric.span-2    { flex: 2 1 340px; max-width: 620px; }
 .ap-eyebrow {
     font-size: .74em;
     font-weight: 800;
@@ -196,7 +220,7 @@
 
 .ap-mini-strip {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 6px;
     margin: 10px 0 8px;
 }
@@ -414,57 +438,6 @@
     color: var(--navy);
 }
 .ap-jump:hover { background: var(--green-lt); }
-
-/* ── Hub: the tool index ─────────────────────────────────── */
-.ap-group { margin-top: 34px; }
-.ap-group:first-of-type { margin-top: 20px; }
-.ap-group-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-.ap-group-head h3 {
-    font-size: .78em;
-    font-weight: 800;
-    letter-spacing: .09em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin: 0;
-}
-.ap-group-rule { flex: 1; height: 1px; background: var(--border); }
-
-.ap-list {
-    background: var(--white);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: var(--shadow-card);
-}
-.ap-list-row {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    width: 100%;
-    text-align: left;
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--ap-border-lt);
-    padding: 13px 18px;
-    cursor: pointer;
-    font-family: var(--font-body);
-}
-.ap-list-row:last-child { border-bottom: none; }
-.ap-list-row:hover { background: var(--cream); }
-.ap-list-icon {
-    width: 30px;
-    height: 30px;
-    flex: 0 0 30px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: .95em;
-}
-.ap-list-name  { font-weight: 800; font-size: .94em; color: var(--navy); flex: 0 0 210px; }
-.ap-list-blurb { color: var(--text-muted); font-size: .85em; flex: 1; min-width: 0; text-wrap: pretty; }
-.ap-list-arrow { color: var(--green-text); font-weight: 800; }
-
 
 /* ── Detail view ─────────────────────────────────────────── */
 .ap-detail-related { margin-top: 22px; }
@@ -733,18 +706,28 @@
 .ap-req-table tfoot tr.is-soft td   { font-weight: 600; color: var(--text-muted); }
 
 /* ── Responsive ──────────────────────────────────────────── */
+/* Two steps, not one. With the sidebar permanent, the dashboard's minimum
+   is nav 264 + page padding 80 + body grid minimums (340 + 20 + 280) =
+   984px — so the body has to stack BEFORE the nav is dropped, or every
+   viewport between 900 and 984px scrolls sideways. */
+@media (max-width: 1000px) {
+    .ap-body { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The sidebar is desktop chrome. Below 900px it collapses into the
+   hamburger drawer, which renders the same content. */
 @media (max-width: 900px) {
-    .ap-body { grid-template-columns: 1fr; }
-    @media (max-width: 760px) {
-    /* The header is down to logo + tab chip + toggle + hamburger here, and
-       that is one item too many. The chip goes rather than the toggle: the
-       page heading right below it already names the active tab, whereas
-       losing the toggle would strand anyone in the List layout. */
-    .ap-layout-toggle { height: 40px; }
-    .ap-layout-toggle button { padding: 0 10px; font-size: .78em; height: 30px; }
-    .admin-header #currentTabChip { display: none; }
+    .ap-nav  { display: none; }
+    .ap-page { padding: 20px 16px 56px; max-width: 100%; }
+    .ap-metric.span-2 { flex: 1 1 160px; max-width: 420px; }
+    .ap-list-blurb { display: none; }
+}
+
+/* Above 900px the sidebar has replaced the hamburger entirely. */
+@media (min-width: 901px) {
+    .admin-header .mobile-menu-btn { display: none; }
 }
 
 @media print {
-    .ap-layout-toggle, .ap-back, .ap-detail-related { display: none !important; }
+    .ap-nav, .ap-detail-related { display: none !important; }
 }

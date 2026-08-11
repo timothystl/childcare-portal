@@ -62,6 +62,7 @@ async function initDashboard() {
     setupGeofence();
     setupFinanceDashboard();
     setupBilling();
+    setupInvoices();
     setupAuditLog();
     setupTabs();
     setupCollapsibles();

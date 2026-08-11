@@ -44,42 +44,59 @@ Timothy Lutheran MDO (Mother's Day Out) registration portal. Parents register ch
 
 ---
 
-## Admin portal shell (v2.4.0 — the "myMDO Admin Portal" redesign)
+## Admin portal shell (v2.5.0 — the "myMDO Admin Portal" redesign)
 
 `admin.html` no longer navigates by tab-pane. `js/admin/admin-portal.js` owns
-navigation and renders three levels, all client-side:
+navigation. **Two levels, no modes** (this replaced a first cut that shipped a
+Dashboard/List/Rail layout toggle — asking the director to pick a presentation
+of the menu before picking a tool was a decision the product should not have
+put to her):
 
-1. **Dashboard** (`layout === 'dash'`) — an "Open now" row of daily tools, live
-   metric cards, panels, attention list
-2. **Hub** (`layout === 'list'`) — the tool index for the active role tab
-3. **Detail** — one tool on screen, with a back link and Related chips
+1. **Dashboard** — the landing state for every tab. Metrics, panels, attention
+   list, and contextual tool pills next to the numbers that motivate them.
+2. **Detail** — a tool is open. The sidebar stays put and highlights where you
+   are, so there is no back link.
 
-The layout toggle is **Dashboard / List only** — the handoff's third "Rail"
-layout (left sidebar + tile grid) was built and then removed as clunky. There
-is no layout switcher in the menu drawer; the drawer is tab navigation only.
+`#apNav` is a **permanent left sidebar**: seven tabs, then the active tab's
+tool groups. Below 900px it collapses into the hamburger drawer, which renders
+the same content; above 900px the hamburger is hidden entirely.
 
-Five role tabs: **Director · Finance · Planning · Market Analysis · Settings**.
-Every existing `.admin-section` / `.table-section` / `.capacity-section` is one
-entry in `AP_TOOLS` (key → `section` id + `pane`); the shell shows exactly one
-at a time by putting `.ap-hidden-tool` on the rest. **Adding a section to
-`admin.html` means adding an `AP_TOOLS` entry, or it is unreachable.**
+Seven role tabs: **Director · Classrooms · Staff · Finance · Planning ·
+Market Analysis · Settings**. Every existing `.admin-section` /
+`.table-section` / `.capacity-section` is one entry in `AP_TOOLS` (key →
+`section` id + `pane`); the shell shows exactly one at a time by putting
+`.ap-hidden-tool` on the rest. **Adding a section to `admin.html` means adding
+an `AP_TOOLS` entry, or it is unreachable.**
 
+- **Director owns no tools.** It is a dashboard; its sidebar entry expands to a
+  one-line explanation. Every link on it deep-links to the tool under its real
+  home tab (`apGo()` sets `apState.tab` to `tool.tab`), so the sidebar reveals
+  where the thing actually lives instead of maintaining a parallel index.
 - `setupTabs()` (admin-settings.js) keeps only the drawer open/close wiring and
   then hands off to `setupAdminPortal()`. The old `activate(tab)` path is dead.
 - Role restrictions still hide sections with inline `display:none`;
-  `apToolAvailable()` reads that, plus tab-level rules for `restricted`/`staff`.
-  `applySessionRole()` re-renders the shell afterwards.
-- Layout and active tab persist in `localStorage` (`apLayout`, `apTab`, `apDone`);
-  a stored `'rail'` is migrated to `'list'` on load.
-- **Director is the daily-driver tab** and holds most of the tools: Staffing,
-  Your Team, Who Is Coming, Filling Seats, Messages, Billing, Day to Day, Daily
-  Ops. Finance keeps the money tools, Planning keeps waitlist + enrollment
-  outlook, Market and Settings are unchanged. Family Billing Summary lives in
-  Director → Billing but is still full-access-only (`AP_FULL_ONLY_KEYS`).
+  `apToolAvailable()` reads that, plus `AP_FULL_ONLY_TABS` (finance, market)
+  and `AP_FULL_ONLY_KEYS` (payroll — it sits under Staff but is still pay
+  data). `staff` role sees Classrooms only. `applySessionRole()` re-renders.
+- Only `apTab` and `apDone` persist. `apLayout` is removed on load.
+- The section's own `<h2>` is hidden while its tool is open (the shell renders
+  the name above the card) **unless the heading contains a control** — Care
+  Calendar's "New Registration" button lives inside its `<h2>`.
 - New tools built in this module rather than mapped: **Daily Staffing
   Requirement** (`#staffReqSection`) and **Rate Increase Scenarios**
   (`#rateScenarioSection`). Both compute from booked registrations only —
   clock-in room data is deliberately never read.
+- **Invoices** (`#invoicesSection`, rendered by `renderInvoicesTool()` in
+  admin-billing.js) is the middle of the money flow, which was missing: the
+  portal could compute a bill and record a payment but never *issue* one, so
+  all 496 rows in `billing_invoices` sat at `status='draft'` forever. It
+  computes nothing new — `_buildFamilyBillingData()` stays the single source of
+  truth — and adds draft → issue over it.
+  - `add_invoice_send_stamp.sql` (**applied 2026-08-11**) adds `sent_at` /
+    `sent_to`. Accounts Receivable should age overdue from `sent_at`, not from
+    the start of the month.
+  - ⚠️ **"Mark as sent" records, it does not email.** There is no invoice email
+    edge function in this project. Building one is the obvious next step.
 - **Time off**: staff request days off at the kiosk → the request lands pending
   in the director's "Needs your OK" panel inside Build Staff Schedule →
   approving is what makes it real. Only `approved` rows reach
@@ -220,7 +237,9 @@ have used an identical query shape and be invisible.
 `add_audit_log.sql` has since been superseded and applied as
 `add_audit_log_hardened.sql`. Still unapplied: `enforce_registration_window.sql`
 (R24), and `ss1_public_read_rpcs.sql` (known staged
-groundwork). Everything else is applied. **Re-run this diff after any migration work — a committed migration
+groundwork). Everything else is applied, including
+`add_staff_time_off_requests.sql` and `add_invoice_send_stamp.sql`
+(both 2026-08-11). **Re-run this diff after any migration work — a committed migration
 is not a deployed one, and that is exactly how R5 and R24 hid.**
 
 **Updated 2026-08-11:** `add_staff_time_off_requests.sql` was written **and applied**
