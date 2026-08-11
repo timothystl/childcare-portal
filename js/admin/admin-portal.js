@@ -8,7 +8,7 @@
 //
 // Three levels of navigation, all client-side:
 //   1. Dashboard  (layout 'dash', no tool open) — metrics + panels + attention
-//   2. Hub        (layout 'list' | 'rail', no tool open) — index of the tab
+//   2. Hub        (layout 'list', no tool open) — the tool index for the tab
 //   3. Detail     (a tool is open) — that one section, with a back link
 //
 // Two tools are new and fully built here rather than mapped:
@@ -84,7 +84,7 @@ const AP_TOOLS = [
       blurb: 'Collection rate, YTD trends, and scholarship summary.' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Kids Discount Pricing',
       blurb: 'Children on a staff or custom discount, with days and price tag.' },
-    { key: 'famBilling',  pane: 'reports', section: 'familyBillingSection',  tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '👨‍👩‍👧', name: 'Family Billing Summary',
+    { key: 'famBilling',  pane: 'reports', section: 'familyBillingSection',  tab: 'director', group: 'Billing', tint: AP_TINT.gold, icon: '👨‍👩‍👧', name: 'Family Billing Summary',
       blurb: 'Per-family totals for a month, ready to invoice.' },
 
     // ── Finance · How We're Doing ──
@@ -153,24 +153,24 @@ const AP_TOOLS = [
     { key: 'planner',     pane: 'waitlist', section: 'enrollmentPlannerSection', tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📅', name: 'Enrollment Planner',
       blurb: 'Cross-reference open capacity with waitlist demand.' },
 
-    // ── Planning · Family Communication ──
-    { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'planning', group: 'Family Communication', tint: AP_TINT.gold, icon: '💬', name: 'Parent Messages',
+    // ── Director · Messages ──
+    { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'director', group: 'Messages', tint: AP_TINT.gold, icon: '💬', name: 'Parent Messages',
       blurb: 'Everything families have sent through the portal.' },
 
-    // ── Planning · Staffing Needs ──
-    { key: 'schedule',    pane: 'staffing', section: 'staffScheduleSection', tab: 'planning', group: 'Staffing Needs', tint: AP_TINT.sand, icon: '🗓️', name: 'Build Staff Schedule',
+    // ── Director · Staffing ──
+    { key: 'schedule',    pane: 'staffing', section: 'staffScheduleSection', tab: 'director', group: 'Staffing', tint: AP_TINT.sand, icon: '🗓️', name: 'Build Staff Schedule',
       blurb: 'Assign staff to rooms and shifts for the week, against what the ratios require.' },
-    { key: 'staffreq',    pane: 'staffing', section: 'staffReqSection',      tab: 'planning', group: 'Staffing Needs', tint: AP_TINT.tang, icon: '👥', name: 'Daily Staffing Requirement',
+    { key: 'staffreq',    pane: 'staffing', section: 'staffReqSection',      tab: 'director', group: 'Staffing', tint: AP_TINT.tang, icon: '👥', name: 'Daily Staffing Requirement',
       blurb: 'Exactly how many staff each day needs, from the kids actually registered.' },
 
-    // ── Planning · Your Team ──
-    { key: 'staffRoster', pane: 'staffing', section: 'staffRosterSection',   tab: 'planning', group: 'Your Team', tint: AP_TINT.sand, icon: '👥', name: 'Staff Roster',
+    // ── Director · Your Team ──
+    { key: 'staffRoster', pane: 'staffing', section: 'staffRosterSection',   tab: 'director', group: 'Your Team', tint: AP_TINT.sand, icon: '👥', name: 'Staff Roster',
       blurb: 'Staff records, pay type, rooms, and availability.' },
-    { key: 'staffDir',    pane: 'staffing', section: 'staffDirectorySection', tab: 'planning', group: 'Your Team', tint: AP_TINT.sand, icon: '🧑‍🏫', name: 'Staff Directory',
+    { key: 'staffDir',    pane: 'staffing', section: 'staffDirectorySection', tab: 'director', group: 'Your Team', tint: AP_TINT.sand, icon: '🧑‍🏫', name: 'Staff Directory',
       blurb: 'Printable contact list for the team.' },
-    { key: 'pto',         pane: 'staffing', section: 'ptoSection',           tab: 'planning', group: 'Your Team', tint: AP_TINT.sand, icon: '🏖️', name: 'PTO Settings',
+    { key: 'pto',         pane: 'staffing', section: 'ptoSection',           tab: 'director', group: 'Your Team', tint: AP_TINT.sand, icon: '🏖️', name: 'PTO Settings',
       blurb: 'Accrual rules and starting balances.' },
-    { key: 'geofence',    pane: 'staffing', section: 'geofenceSection',      tab: 'planning', group: 'Your Team', tint: AP_TINT.sand, icon: '📍', name: 'Geofence & Clock Reminders',
+    { key: 'geofence',    pane: 'staffing', section: 'geofenceSection',      tab: 'director', group: 'Your Team', tint: AP_TINT.sand, icon: '📍', name: 'Geofence & Clock Reminders',
       blurb: 'Where the time clock will accept a punch, and when to nudge.' },
 
     // ── Market Analysis ──
@@ -206,10 +206,11 @@ const AP_TOOLS = [
 // its own — these keys point at entries that live under another tab.
 const AP_DIRECTOR_GROUPS = [
     { label: 'Staffing',      keys: ['schedule', 'staffreq', 'ratios', 'capacity'] },
+    { label: 'Your Team',     keys: ['staffRoster', 'staffDir', 'pto', 'geofence'] },
     { label: 'Who Is Coming', keys: ['planner', 'fte', 'seatDay', 'trends'] },
     { label: 'Filling Seats', keys: ['wlPlanner', 'wlDemand', 'wlNotify', 'wlImport', 'promotions'] },
     { label: 'Messages',      keys: ['msgHistory'] },
-    { label: 'Billing',       keys: ['ar', 'procare', 'discount'] },
+    { label: 'Billing',       keys: ['ar', 'procare', 'discount', 'famBilling'] },
     { label: 'Day to Day',    keys: ['closedDays', 'regWindow'] },
     { label: 'Daily Ops',     keys: ['roster', 'capOverview', 'roomSched', 'careCal', 'missingCal', 'families'] },
 ];
@@ -220,7 +221,7 @@ const AP_TOOL_BY_KEY = Object.fromEntries(AP_TOOLS.map(t => [t.key, t]));
 const apState = {
     tab:    'director',
     view:   null,          // tool key, or null for dashboard/hub
-    layout: 'dash',        // 'dash' | 'list' | 'rail'
+    layout: 'dash',        // 'dash' | 'list'
     done:   {},            // dashboard done-flags, persisted
     live:   null,          // last loaded dashboard data
 };
@@ -321,7 +322,10 @@ function apLoadPrefs() {
         apState.done   = JSON.parse(localStorage.getItem('apDone') || '{}') || {};
     } catch (_) { /* defaults stand */ }
     if (!AP_TABS[apState.tab]) apState.tab = 'director';
-    if (!['dash', 'list', 'rail'].includes(apState.layout)) apState.layout = 'dash';
+    // 'rail' was a third layout in the original handoff; it has been removed.
+    // Anyone whose browser still has it stored falls back to the list.
+    if (apState.layout === 'rail') apState.layout = 'list';
+    if (!['dash', 'list'].includes(apState.layout)) apState.layout = 'dash';
 }
 
 function apSavePrefs() {
@@ -341,13 +345,13 @@ function apSavePrefs() {
 // restated here rather than inferred from DOM that no longer exists:
 //   full       — everything
 //   restricted — schedule planner, enrollment/waitlist, limited Settings.
-//                No Finance and no Market Analysis at all. (This is slightly
-//                tighter than before: Historical Payroll and Family Billing
-//                Summary used to sit in the Staffing/Billing panes and were
-//                reachable. They are financial data, the documented role says
-//                "no Finance", and they now live under the Finance tab.)
+//                No Finance and no Market Analysis at all, and no Family
+//                Billing Summary (financial data that sits in the Director
+//                tab, so AP_FULL_ONLY_TABS alone would not catch it).
 //   staff      — Classrooms only
 const AP_FULL_ONLY_TABS = ['finance', 'market'];
+// Financial tools that live outside the Finance tab and so need naming.
+const AP_FULL_ONLY_KEYS = ['famBilling'];
 
 function apToolAvailable(tool) {
     const el = document.getElementById(tool.section);
@@ -359,6 +363,7 @@ function apToolAvailable(tool) {
     const role = typeof currentAdminRole !== 'undefined' ? currentAdminRole : 'full';
     if (role === 'staff') return tool.pane === 'daily';
     if (role !== 'full' && AP_FULL_ONLY_TABS.includes(tool.tab)) return false;
+    if (role !== 'full' && AP_FULL_ONLY_KEYS.includes(tool.key)) return false;
     return true;
 }
 
@@ -427,7 +432,6 @@ function apRender() {
     if (!_apReady) return;
     const page   = document.getElementById('apPage');
     const detail = document.getElementById('apDetail');
-    const rail   = document.getElementById('apRail');
     if (!page || !detail) return;
 
     // Fall back to a tab this account can actually see.
@@ -462,19 +466,7 @@ function apRender() {
             ${Object.keys(AP_TABS).filter(apTabAvailable).map(k => `
             <button class="mobile-nav-item${k === apState.tab ? ' active' : ''}" data-ap-tab="${k}">
                 <span class="mni-icon">${AP_TABS[k].icon}</span><span>${escHtml(AP_TABS[k].label)}</span>
-            </button>`).join('')}
-            <div class="mobile-nav-group-label">Layout</div>
-            <div class="ap-layout-toggle ap-drawer-toggle">
-                ${[['dash', 'Dashboard'], ['list', 'List'], ['rail', 'Rail']].map(([k, label]) =>
-                    `<button type="button" data-ap-layout="${k}"${apState.layout === k ? ' class="is-active"' : ''}>${label}</button>`).join('')}
-            </div>`;
-    }
-
-    // Rail
-    const showRail = apState.layout === 'rail';
-    if (rail) {
-        rail.classList.toggle('hidden', !showRail);
-        if (showRail) apRenderRail(rail);
+            </button>`).join('')}`;
     }
 
     if (apState.view) {
@@ -506,31 +498,15 @@ function apShowSection(tool) {
     });
 }
 
-function apRenderRail(rail) {
-    const tabs = Object.keys(AP_TABS).filter(apTabAvailable).map(k => `
-        <button class="ap-rail-tab${k === apState.tab ? ' is-active' : ''}" data-ap-tab="${k}">
-            <span>${AP_TABS[k].icon}</span><span>${escHtml(AP_TABS[k].label)}</span>
-        </button>`).join('');
-    const groups = apGroupsForTab(apState.tab).map(g => `
-        <div class="ap-rail-group">${escHtml(g.label)}</div>
-        ${g.tools.map(t => `
-            <button class="ap-rail-item${t.key === apState.view ? ' is-active' : ''}" data-ap-go="${t.key}">
-                <span>${t.icon}</span><span>${escHtml(t.name)}</span>
-            </button>`).join('')}`).join('');
-    rail.innerHTML = `<div class="ap-rail-tabs">${tabs}</div>${groups}`;
-}
-
 function apRenderHub(page) {
     const meta   = AP_TABS[apState.tab];
     const groups = apGroupsForTab(apState.tab);
-    const isList = apState.layout === 'list';
     const body   = groups.map(g => `
         <section class="ap-group">
             <div class="ap-group-head">
                 <h3>${escHtml(g.label)}</h3>
                 <div class="ap-group-rule"></div>
             </div>
-            ${isList ? `
             <div class="ap-list">
                 ${g.tools.map(t => `
                 <button class="ap-list-row" data-ap-go="${t.key}">
@@ -539,15 +515,7 @@ function apRenderHub(page) {
                     <span class="ap-list-blurb">${escHtml(t.blurb)}</span>
                     <span class="ap-list-arrow">→</span>
                 </button>`).join('')}
-            </div>` : `
-            <div class="ap-tiles">
-                ${g.tools.map(t => `
-                <button class="ap-tile" data-ap-go="${t.key}">
-                    <span class="ap-tile-icon" style="background:${t.tint}">${t.icon}</span>
-                    <span class="ap-tile-name">${escHtml(t.name)}</span>
-                    <span class="ap-tile-blurb">${escHtml(t.blurb)}</span>
-                </button>`).join('')}
-            </div>`}
+            </div>
         </section>`).join('');
 
     page.innerHTML = `
@@ -706,7 +674,7 @@ function apRenderDashboard(page) {
         apLoadLive().then(() => { if (!apState.view && apState.layout === 'dash') apRender(); })
                     .catch(err => {
                         console.error('apLoadLive:', err);
-                        page.innerHTML = `<p class="empty-hint">Could not load the dashboard — ${escHtml(err.message || 'unknown error')}. Use the List or Rail layout to reach the tools directly.</p>`;
+                        page.innerHTML = `<p class="empty-hint">Could not load the dashboard — ${escHtml(err.message || 'unknown error')}. Switch to the List layout to reach the tools directly.</p>`;
                     });
         return;
     }
@@ -731,6 +699,7 @@ function apRenderDashboard(page) {
             </div>
             <button class="ap-ghost-btn" data-ap-layout="list">All ${toolCount} tools →</button>
         </div>
+        ${apQuickRowHtml(dash.quick)}
         ${dash.kpis.length ? `<div class="ap-metrics">${dash.kpis.map(apKpiHtml).join('')}</div>` : ''}
         <div class="ap-body">
             <div class="ap-col">${(dash.left || []).join('')}</div>
@@ -758,6 +727,18 @@ function apRenderDashboard(page) {
                     </div>
                 </section>
             </div>
+        </div>`;
+}
+
+// A row of one-click tools above the metric cards — the things the director
+// opens every morning, which otherwise sit several scrolls down the hub.
+function apQuickRowHtml(keys) {
+    const tools = (keys || []).map(k => AP_TOOL_BY_KEY[k]).filter(t => t && apToolAvailable(t));
+    if (!tools.length) return '';
+    return `
+        <div class="ap-quick">
+            <span class="ap-quick-label">Open now</span>
+            ${tools.map(t => `<button class="ap-pill" data-ap-go="${t.key}"><span>${t.icon}</span><span>${escHtml(t.name)}</span></button>`).join('')}
         </div>`;
 }
 
@@ -964,6 +945,7 @@ function apDashDirector(live) {
 
     return {
         stamp: `Week of ${friendlyShort(live.weekOf)} · registrations as booked`,
+        quick: ['roster', 'capOverview', 'roomSched', 'careCal', 'families'],
         kpis,
         left: [
             apPanel({ title: 'Staff needed this week',

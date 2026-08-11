@@ -61,7 +61,6 @@
                 <div class="ap-layout-toggle" id="apLayoutToggle" role="group" aria-label="Layout">
                     <button type="button" data-layout="dash">Dashboard</button>
                     <button type="button" data-layout="list">List</button>
-                    <button type="button" data-layout="rail">Rail</button>
                 </div>
                 <button id="logoutBtn" class="btn-ghost">Logout</button>
                 <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open navigation menu" aria-expanded="false">
@@ -104,7 +103,6 @@
 
         <!-- ══ Portal shell ═══════════════════════════════════════
              Three navigation levels, all client-side (js/admin/admin-portal.js):
-               #apRail   — the Rail layout's persistent tool index
                #apPage   — Dashboard or Hub (rendered by the shell)
                #apDetail — one open tool: back link, the tool's own section,
                            and its "Related" chips. Every legacy .tab-pane
@@ -112,7 +110,6 @@
                            section at a time.
              ══════════════════════════════════════════════════════ -->
         <div class="ap-shell" id="apShell">
-        <nav class="ap-rail hidden" id="apRail" aria-label="Tools"></nav>
         <div class="ap-main">
         <div class="ap-page hidden" id="apPage"></div>
         <div class="ap-page hidden" id="apDetail">
