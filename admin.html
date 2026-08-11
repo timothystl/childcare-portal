@@ -19,6 +19,7 @@
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/admin.css?v=14">
+    <link rel="stylesheet" href="css/admin-portal.css?v=1">
 </head>
 <body class="admin-body">
 
@@ -55,8 +56,13 @@
             </div>
             <div class="header-actions">
                 <span id="currentTabChip" class="current-tab-chip">
-                    <span class="ctc-icon" id="currentTabIcon">🏫</span><span id="currentTabLabel">Classrooms</span>
+                    <span class="ctc-icon" id="currentTabIcon">🧭</span><span id="currentTabLabel">Director</span>
                 </span>
+                <div class="ap-layout-toggle" id="apLayoutToggle" role="group" aria-label="Layout">
+                    <button type="button" data-layout="dash">Dashboard</button>
+                    <button type="button" data-layout="list">List</button>
+                    <button type="button" data-layout="rail">Rail</button>
+                </div>
                 <button id="logoutBtn" class="btn-ghost">Logout</button>
                 <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open navigation menu" aria-expanded="false">
                     <span class="hamburger-bars" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -95,6 +101,22 @@
                 </div>
             </div>
         </div>
+
+        <!-- ══ Portal shell ═══════════════════════════════════════
+             Three navigation levels, all client-side (js/admin/admin-portal.js):
+               #apRail   — the Rail layout's persistent tool index
+               #apPage   — Dashboard or Hub (rendered by the shell)
+               #apDetail — one open tool: back link, the tool's own section,
+                           and its "Related" chips. Every legacy .tab-pane
+                           lives inside it; the shell shows exactly one
+                           section at a time.
+             ══════════════════════════════════════════════════════ -->
+        <div class="ap-shell" id="apShell">
+        <nav class="ap-rail hidden" id="apRail" aria-label="Tools"></nav>
+        <div class="ap-main">
+        <div class="ap-page hidden" id="apPage"></div>
+        <div class="ap-page hidden" id="apDetail">
+        <button type="button" class="ap-back" id="apBack">← All tools</button>
 
         <!-- ── Tab: Daily ─────────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-daily">
@@ -140,8 +162,9 @@
                 </div>
             </section>
 
-            <!-- Capacity Overview -->
-            <section class="capacity-section">
+            <!-- Capacity Overview — its own tool in the portal shell, so it
+                 needs an id for AP_TOOLS to point at. -->
+            <section class="capacity-section" id="capacityOverviewSection">
                 <div class="capacity-header">
                     <h2>Capacity Overview</h2>
                     <div class="capacity-month-nav">
@@ -308,7 +331,11 @@
             <!-- Waitlist & Capacity Planner — one shared allocation drives all
                  three views (Waitlist Queue / Capacity Planner → Grid / Board).
                  See renderWaitlistPlanner() in js/admin/admin-waitlist.js. -->
-            <div id="wlpRoot" style="margin-bottom:20px;"><p class="empty-hint">Loading…</p></div>
+            <section class="admin-section" id="waitlistPlannerSection">
+                <h2>🗂️ Waitlist &amp; Capacity Planner</h2>
+                <p class="section-desc">One shared allocation drives all three views — Waitlist Queue, Capacity Planner grid, and Board. The queue is first-come, first-served by inquiry date.</p>
+                <div id="wlpRoot" style="margin-bottom:20px;"><p class="empty-hint">Loading…</p></div>
+            </section>
 
             <!-- Waitlist inquiry link + notify email -->
             <section class="admin-section collapsible-section" id="wlNotifySection">
@@ -1075,9 +1102,41 @@
         <!-- ── Tab: Staffing ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-staffing">
 
+            <!-- Daily Staffing Requirement — built entirely from booked
+                 registrations + the saved ratios. Rendered by apRenderStaffReq()
+                 in js/admin/admin-portal.js; it never reads clock-in room data. -->
+            <section class="admin-section" id="staffReqSection">
+                <h2>👥 Daily Staffing Requirement</h2>
+                <p class="section-desc">How many staff each room needs each day of the week, calculated from registered children and your saved ratios — plus staff-hours and estimated labor cost for the week.</p>
+                <div class="ap-callout">Built entirely from <strong>registrations</strong> — the days families booked. It never reads clock-in room assignments, so spotty room selection at the time clock can't distort it.</div>
+                <div class="ap-inputs">
+                    <div class="ap-input-field">
+                        <label for="staffReqWeekOf">Week of</label>
+                        <input type="date" id="staffReqWeekOf">
+                    </div>
+                    <div class="ap-input-field">
+                        <label for="staffReq_hours">Hours open per day</label>
+                        <input type="number" step="0.5" min="0" id="staffReq_hours" value="10.5">
+                    </div>
+                    <div class="ap-input-field">
+                        <label for="staffReq_floaters">Floaters / break relief</label>
+                        <input type="number" step="1" min="0" id="staffReq_floaters" value="1">
+                    </div>
+                    <div class="ap-input-field">
+                        <label for="staffReq_wage">Avg wage ($/hr)</label>
+                        <input type="number" step="0.25" min="0" id="staffReq_wage" value="15.5">
+                    </div>
+                    <div class="ap-input-field">
+                        <label for="staffReq_burden">Payroll burden (%)</label>
+                        <input type="number" step="0.5" min="0" id="staffReq_burden" value="12">
+                    </div>
+                </div>
+                <div id="staffReqBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
             <section class="admin-section collapsible-section" id="staffScheduleSection">
-                <h2>📅 Staff Schedule Planner</h2>
-                <p class="section-desc">Shows minimum staff required per room per day based on confirmed enrollment and the ratios configured in ⚙️ Settings. Closed days are excluded automatically.</p>
+                <h2>🗓️ Build Staff Schedule</h2>
+                <p class="section-desc">Lay out who works which room and shift each day. The requirement row comes from registered children and your saved ratios, so you can see at a glance whether the week is covered before you post it to staff. Closed days are excluded automatically.</p>
                 <div class="roster-controls">
                     <div class="roster-field">
                         <label for="staffWeekOf">Week of (Monday)</label>
@@ -1088,9 +1147,17 @@
                         <button id="exportStaffBtn"    class="btn-secondary">&#8595; Export Excel</button>
                         <button id="emailStaffScheduleBtn" class="btn-secondary">✉️ Email Schedules</button>
                     </div>
+                    <div class="ap-stats" id="apSchedStats" style="margin-left:auto"></div>
                 </div>
-                <div id="staffContent">
-                    <p class="empty-hint">Select a week above and click Generate Schedule.</p>
+                <!-- Time-off approval queue — the director half of the kiosk's
+                     "Ask for a day off" flow. Rendered by apRenderScheduleTimeOff(). -->
+                <div class="ap-sched-split">
+                    <div class="ap-sched-main">
+                        <div id="staffContent">
+                            <p class="empty-hint">Select a week above and click Generate Schedule.</p>
+                        </div>
+                    </div>
+                    <aside class="ap-sched-side" id="apSchedTimeOff"></aside>
                 </div>
             </section>
 
@@ -1517,6 +1584,15 @@
                 </div>
             </section>
 
+            <!-- Rate Increase Scenarios — rendered by apRenderScenario() in
+                 js/admin/admin-portal.js. Care-day volume comes from actual
+                 registrations, so the projection reflects how families book. -->
+            <section class="admin-section" id="rateScenarioSection">
+                <h2>🧮 Rate Increase Scenarios</h2>
+                <p class="section-desc">Move any lever — tuition per care day, registration fee, annual supply fee, staff wages — and see the projected annual change in revenue, cost, and net.</p>
+                <div id="rateScenarioBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
             <!-- Rate / Wage Modeling Tool -->
             <section class="admin-section collapsible-section" id="financeModelSection">
                 <h2>🔧 Rate &amp; Wage Modeling Tool</h2>
@@ -1685,6 +1761,11 @@
             </section>
 
         </div><!-- /#tab-finance -->
+
+        <div class="ap-detail-related" id="apRelated"></div>
+        </div><!-- /#apDetail -->
+        </div><!-- /.ap-main -->
+        </div><!-- /#apShell -->
 
     </div>
 

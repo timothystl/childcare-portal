@@ -1057,6 +1057,13 @@ async function autoFillStaffSchedule() {
         }
 
         const counts = _buildShiftCounts(weekDates);
+        // Approved time off blocks assignment for that staff member on that
+        // date. Only *approved* rows are in this map — a request still sitting
+        // in the director's "Needs your OK" queue deliberately has no effect
+        // on the draft schedule until she says yes.
+        const approvedOff = typeof window.apApprovedOffForWeek === 'function'
+            ? window.apApprovedOffForWeek(weekDates)
+            : {};
         // Exclude administrators, directors, assistant directors, and "Other" from auto-assignment
         const active = allStaffData.filter(s => s.active &&
             !/^admin(istrator)?$/i.test((s.role || '').trim()) &&
@@ -1085,6 +1092,7 @@ async function autoFillStaffSchedule() {
 
                 // Candidates: active staff available today and assigned to this room (or float)
                 const candidates = active.filter(s => {
+                    if ((approvedOff[s.id] || []).includes(d)) return false;
                     const avail = staffAvailability[s.id];
                     // Determine available days from dayPeriods keys or legacy days array
                     const availDays = avail?.dayPeriods

@@ -2247,6 +2247,141 @@ async function saveStaffAvailability(availMap) {
 }
 
 // ============================================================
+// STAFF TIME-OFF REQUESTS
+// ============================================================
+// Table + RPCs live in supabase/migrations/add_staff_time_off_requests.sql.
+// `anon` has no grants on the table — the kiosk goes through the two
+// PIN-gated SECURITY DEFINER RPCs; the admin portal reads the table
+// directly as `authenticated`.
+
+/**
+ * Admin: every time-off request the director might act on or display.
+ * Pending first (that's the "Needs your OK" queue), then most recent.
+ *
+ * @param {{ sinceDate?: string|null }} [opts] - ISO date; drops decided
+ *   one-off requests whose last day is older than this. Standing
+ *   (recurring) requests are always returned regardless of date.
+ * @returns {Promise<Array<Object>>}
+ */
+async function fetchTimeOffRequests({ sinceDate = null } = {}) {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('staff_time_off_requests')
+        .select('id, staff_id, off_dates, recurring, weekday, reason, note, status, source, submitted_at, decided_at, decided_by, staff:staff_id(name, role, room_id)')
+        .order('submitted_at', { ascending: false })
+        .limit(300);
+    if (error) throw friendlyError(error);
+    const rows = (data || []).map(r => ({
+        ...r,
+        off_dates:  Array.isArray(r.off_dates) ? r.off_dates : [],
+        staff_name: r.staff?.name || '',
+        staff_role: r.staff?.role || '',
+        room_id:    r.staff?.room_id || null,
+    }));
+    if (!sinceDate) return rows;
+    // Keep everything still pending, everything standing, and any one-off
+    // whose LAST day has not yet fallen out of the window.
+    return rows.filter(r =>
+        r.status === 'pending' || r.recurring ||
+        (r.off_dates.length && r.off_dates[r.off_dates.length - 1] >= sinceDate)
+    );
+}
+
+/**
+ * Admin: approve or decline a pending request. Approving is what makes the
+ * days off real — the schedule builder only reads `approved` rows.
+ *
+ * @param {number} id
+ * @param {'approved'|'declined'} status
+ */
+async function decideTimeOffRequest(id, status) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    if (status !== 'approved' && status !== 'declined')
+        throw new Error('Invalid time-off decision.');
+    const session = await getAdminSession();
+    const { error } = await sbClient
+        .from('staff_time_off_requests')
+        .update({
+            status,
+            decided_at: new Date().toISOString(),
+            decided_by: session?.user?.email || null,
+        })
+        .eq('id', id);
+    if (error) throw friendlyError(error);
+    await logAdminAction(status === 'approved' ? 'approve' : 'decline', 'time_off_request', id);
+}
+
+/**
+ * Admin: record a day off the director was told about verbally. No approval
+ * step — she has already vetted it, so it lands `approved` immediately.
+ *
+ * @param {{staffId:number, dates:string[], recurring?:boolean, reason?:string}} args
+ */
+async function addDirectorTimeOff({ staffId, dates, recurring = false, reason = '' }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    if (!staffId)           throw new Error('Pick a staff member.');
+    if (!dates || !dates.length) throw new Error('Pick at least one day.');
+    const session = await getAdminSession();
+    // App weekday index is 0=Mon…4=Fri; Date#getDay is 0=Sun…6=Sat.
+    const weekday = recurring
+        ? (new Date(dates[0] + 'T00:00:00').getDay() + 6) % 7
+        : null;
+    const { data, error } = await sbClient
+        .from('staff_time_off_requests')
+        .insert({
+            staff_id:   staffId,
+            off_dates:  dates,
+            recurring,
+            weekday,
+            reason:     (reason || 'told me in person').slice(0, 60),
+            status:     'approved',
+            source:     'director',
+            decided_at: new Date().toISOString(),
+            decided_by: session?.user?.email || null,
+        })
+        .select('id')
+        .single();
+    if (error) throw friendlyError(error);
+    await logAdminAction('create', 'time_off_request', data?.id ?? null, { staff_id: staffId, dates, recurring });
+    return data?.id ?? null;
+}
+
+/** Admin: remove a time-off entry (undo a mistaken director entry / approval). */
+async function deleteTimeOffRequest(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('staff_time_off_requests').delete().eq('id', id);
+    if (error) throw friendlyError(error);
+    await logAdminAction('delete', 'time_off_request', id);
+}
+
+/**
+ * Kiosk: file a request as the PIN-holder. Returns null when the PIN does
+ * not match an active staff member (same signal as lookup_staff_by_pin).
+ *
+ * @param {{pin:string|number, dates:string[], recurring?:boolean, reason?:string, note?:string}} args
+ */
+async function submitTimeOffRequestByPin({ pin, dates, recurring = false, reason = '', note = '' }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('submit_time_off_request', {
+        p_pin:       parseInt(pin, 10),
+        p_dates:     dates,
+        p_recurring: !!recurring,
+        p_reason:    reason || '',
+        p_note:      note || '',
+    });
+    if (error) throw friendlyError(error);
+    return data;
+}
+
+/** Kiosk: the PIN-holder's own recent/standing requests. */
+async function listMyTimeOffRequests(pin) {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient.rpc('list_my_time_off_requests', { p_pin: parseInt(pin, 10) });
+    if (error) throw friendlyError(error);
+    return Array.isArray(data) ? data : [];
+}
+
+// ============================================================
 // ADMIN ROLES  (access control)
 // ============================================================
 /**

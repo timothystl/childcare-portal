@@ -371,6 +371,13 @@ function setupTabs() {
     if (overlay)  overlay.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
     document.getElementById('mobileNavLogout')?.addEventListener('click', () => document.getElementById('logoutBtn').click());
 
+    // The portal shell owns navigation now: five role tabs, a layout toggle,
+    // and one tool on screen at a time. It replaces the drawer's contents and
+    // decides which pane/section is visible, so the legacy tab activation
+    // below must not also run — it would un-hide a whole pane at once.
+    // The menu open/close wiring above is still needed and is kept.
+    if (typeof setupAdminPortal === 'function') { setupAdminPortal(); return; }
+
     const saved = localStorage.getItem('adminActiveTab') || 'daily';
     activate(saved);
 }
