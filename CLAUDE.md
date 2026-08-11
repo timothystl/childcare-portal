@@ -49,9 +49,14 @@ Timothy Lutheran MDO (Mother's Day Out) registration portal. Parents register ch
 `admin.html` no longer navigates by tab-pane. `js/admin/admin-portal.js` owns
 navigation and renders three levels, all client-side:
 
-1. **Dashboard** (`layout === 'dash'`) — live metric cards, panels, attention list
-2. **Hub** (`'list'` / `'rail'`) — the tool index for the active role tab
+1. **Dashboard** (`layout === 'dash'`) — an "Open now" row of daily tools, live
+   metric cards, panels, attention list
+2. **Hub** (`layout === 'list'`) — the tool index for the active role tab
 3. **Detail** — one tool on screen, with a back link and Related chips
+
+The layout toggle is **Dashboard / List only** — the handoff's third "Rail"
+layout (left sidebar + tile grid) was built and then removed as clunky. There
+is no layout switcher in the menu drawer; the drawer is tab navigation only.
 
 Five role tabs: **Director · Finance · Planning · Market Analysis · Settings**.
 Every existing `.admin-section` / `.table-section` / `.capacity-section` is one
@@ -64,7 +69,13 @@ at a time by putting `.ap-hidden-tool` on the rest. **Adding a section to
 - Role restrictions still hide sections with inline `display:none`;
   `apToolAvailable()` reads that, plus tab-level rules for `restricted`/`staff`.
   `applySessionRole()` re-renders the shell afterwards.
-- Layout and active tab persist in `localStorage` (`apLayout`, `apTab`, `apDone`).
+- Layout and active tab persist in `localStorage` (`apLayout`, `apTab`, `apDone`);
+  a stored `'rail'` is migrated to `'list'` on load.
+- **Director is the daily-driver tab** and holds most of the tools: Staffing,
+  Your Team, Who Is Coming, Filling Seats, Messages, Billing, Day to Day, Daily
+  Ops. Finance keeps the money tools, Planning keeps waitlist + enrollment
+  outlook, Market and Settings are unchanged. Family Billing Summary lives in
+  Director → Billing but is still full-access-only (`AP_FULL_ONLY_KEYS`).
 - New tools built in this module rather than mapped: **Daily Staffing
   Requirement** (`#staffReqSection`) and **Rate Increase Scenarios**
   (`#rateScenarioSection`). Both compute from booked registrations only —

@@ -3,8 +3,8 @@
    ------------------------------------------------------------
    The redesign's navigation model layered over the existing admin
    sections: five role tabs (Director / Finance / Planning / Market /
-   Settings), a three-way layout toggle (Dashboard / List / Rail), and
-   a per-tool detail view.
+   Settings), a Dashboard / List layout toggle, and a per-tool detail
+   view.
 
    Every colour here resolves to a token already defined in
    css/styles.css :root — the handoff palette and the Sunlit
@@ -23,7 +23,7 @@
     --ap-border-lt:   #F0EADA;  /* internal dividers, table row rules */
     --ap-tint-blue:   #E4EEF6;  /* "Every week" (standing) tag */
     --ap-tint-border: #F0C4B0;  /* card border inside the tangerine panel */
-    --ap-tint-sand:   #F5F0E4;  /* neutral tool tile tint */
+    --ap-tint-sand:   #F5F0E4;  /* neutral tool icon tint */
     --ap-flag-bg:     #FBDDD1;  /* below-ratio pill */
     --ap-neutral-bar: #C9C0A8;  /* comparison bars, dashed add affordances */
 }
@@ -60,52 +60,6 @@
 .ap-main  { flex: 1; min-width: 0; }
 .ap-page  { padding: 28px 32px 64px; max-width: 1180px; margin: 0 auto; }
 
-.ap-rail {
-    width: 266px;
-    flex: 0 0 266px;
-    background: var(--cream);
-    border-right: 1px solid var(--border);
-    padding: 20px 12px 40px;
-    position: sticky;
-    top: var(--ap-header-h, 92px);
-    max-height: calc(100vh - var(--ap-header-h, 92px));
-    overflow-y: auto;
-}
-.ap-rail-tabs {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding-bottom: 12px;
-    margin-bottom: 8px;
-    border-bottom: 1px solid var(--border);
-}
-.ap-rail-tab,
-.ap-rail-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    text-align: left;
-    background: transparent;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-family: var(--font-body);
-    color: var(--navy);
-}
-.ap-rail-tab  { padding: 9px 12px; font-size: .9em;  font-weight: 800; }
-.ap-rail-item { padding: 8px 12px; font-size: .86em; font-weight: 600; color: var(--text); }
-.ap-rail-tab:hover, .ap-rail-item:hover { background: var(--green-lt); }
-.ap-rail-tab.is-active { background: var(--sun); }
-.ap-rail-item.is-active { background: var(--green-lt); font-weight: 800; }
-.ap-rail-group {
-    font-size: .68em;
-    font-weight: 800;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    padding: 14px 12px 6px;
-}
 
 /* ── Page heading ────────────────────────────────────────── */
 .ap-head {
@@ -176,6 +130,26 @@
     margin-bottom: 14px;
 }
 .ap-back:hover { color: var(--navy); }
+
+/* ── Daily-ops quick row ─────────────────────────────────── */
+.ap-quick {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+}
+.ap-quick-label {
+    font-size: .74em;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-right: 4px;
+}
+.ap-quick .ap-pill { background: var(--white); }
 
 /* ── Metric row ──────────────────────────────────────────── */
 .ap-metrics {
@@ -441,7 +415,7 @@
 }
 .ap-jump:hover { background: var(--green-lt); }
 
-/* ── Hub: list + tile layouts ────────────────────────────── */
+/* ── Hub: the tool index ─────────────────────────────────── */
 .ap-group { margin-top: 34px; }
 .ap-group:first-of-type { margin-top: 20px; }
 .ap-group-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
@@ -491,33 +465,6 @@
 .ap-list-blurb { color: var(--text-muted); font-size: .85em; flex: 1; min-width: 0; text-wrap: pretty; }
 .ap-list-arrow { color: var(--green-text); font-weight: 800; }
 
-.ap-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 18px; }
-.ap-tile {
-    text-align: left;
-    cursor: pointer;
-    background: var(--white);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px;
-    box-shadow: var(--shadow-card);
-    font-family: var(--font-body);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    transition: transform .16s, box-shadow .16s, border-color .16s;
-}
-.ap-tile:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); border-color: var(--sun); }
-.ap-tile-icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 11px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.25em;
-}
-.ap-tile-name  { font-weight: 800; font-size: 1.02em; color: var(--navy); }
-.ap-tile-blurb { color: var(--text-muted); font-size: .86em; line-height: 1.45; text-wrap: pretty; }
 
 /* ── Detail view ─────────────────────────────────────────── */
 .ap-detail-related { margin-top: 22px; }
@@ -788,21 +735,16 @@
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 900px) {
     .ap-body { grid-template-columns: 1fr; }
-    .ap-rail { display: none; }
-    .ap-page { padding: 20px 16px 56px; }
-    .ap-metric.span-2 { grid-column: auto; }
-    .ap-list-name { flex: 0 0 auto; }
-    .ap-list-blurb { display: none; }
+    @media (max-width: 760px) {
+    /* The header is down to logo + tab chip + toggle + hamburger here, and
+       that is one item too many. The chip goes rather than the toggle: the
+       page heading right below it already names the active tab, whereas
+       losing the toggle would strand anyone in the List layout. */
+    .ap-layout-toggle { height: 40px; }
+    .ap-layout-toggle button { padding: 0 10px; font-size: .78em; height: 30px; }
+    .admin-header #currentTabChip { display: none; }
 }
-@media (max-width: 760px) {
-    /* The header is already down to logo + tab chip + hamburger at this width;
-       a third control tips it into horizontal overflow. Layout switching moves
-       into the drawer instead — see .ap-drawer-toggle. */
-    .admin-header .ap-layout-toggle { display: none; }
-}
-.ap-drawer-toggle { margin: 4px 12px 8px; }
-.ap-drawer-toggle button { flex: 1; }
 
 @media print {
-    .ap-layout-toggle, .ap-rail, .ap-back, .ap-detail-related { display: none !important; }
+    .ap-layout-toggle, .ap-back, .ap-detail-related { display: none !important; }
 }
