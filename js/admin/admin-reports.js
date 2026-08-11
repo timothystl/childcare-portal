@@ -114,8 +114,18 @@ ${tableClone.outerHTML}
     setTimeout(() => win.print(), 400);
 }
 
+// ============================================================
+// THE billing calculation. Single source of truth for money.
+// ============================================================
+// Used by: Family Billing Summary (this file), draft-invoice generation
+// (admin-billing.js), and the Director dashboard's "Billed this month"
+// (admin-portal.js). Do NOT add a fourth implementation — the dashboard used
+// to have its own per-registration sum and disagreed with this one by
+// thousands of dollars, because a per-registration calculation structurally
+// cannot apply the sibling discount and does not see change fees or overrides.
 function _buildFamilyBillingData(monthVal, overridesMap = new Map()) {
     const dmap      = getDiscountMap();
+    const famKeyMap = getFamilyKeyMap();
     const familyMap = new Map();
 
     // First pass: collect each child's registration info per family key
@@ -124,7 +134,14 @@ function _buildFamilyBillingData(monthVal, overridesMap = new Map()) {
             !d.waitlisted && d.care_date && d.care_date.startsWith(monthVal));
         if (!dates.length) return;
 
-        const key = (reg.parent_email || reg.parent_name || '').toLowerCase().trim();
+        // Group by FAMILY, not by the email that submitted the registration.
+        // Two parents on one family record register separately otherwise, and
+        // their children never qualify each other for the sibling discount.
+        // Falls back to the email when no family record matches.
+        const email = (reg.parent_email || '').toLowerCase().trim();
+        const key   = famKeyMap.get(email)
+                   || email
+                   || (reg.parent_name || '').toLowerCase().trim();
         if (!familyMap.has(key)) {
             familyMap.set(key, {
                 parentName:  reg.parent_name,
