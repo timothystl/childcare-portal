@@ -63,12 +63,18 @@ jobs:
             echo "Clean merge."
           else
             # Two Claude branches both bump the version, which collides in
-            # package.json + js/build-version.js. Auto-resolve ONLY those two
-            # files (keep the higher version); any other conflict is a real one
-            # and must stop for a human.
+            # package.json + js/build-version.js, and both rebuild dist/, which
+            # collides in whichever bundles they touched. Auto-resolve those
+            # (keep the higher version, take the branch's bundles); any other
+            # conflict is a real one and must stop for a human.
+            #
+            # The dist rule matches every dist/*.min.js rather than a hand-kept
+            # list — the list had drifted and omitted dist/supabase.min.js,
+            # which failed the merge outright whenever two branches both
+            # touched js/supabase.js.
             conflicts="$(git diff --name-only --diff-filter=U)"
             echo "Conflicted files:"; echo "$conflicts"
-            other="$(echo "$conflicts" | grep -vE '^(package\.json|js/build-version\.js|dist/admin\.min\.js|dist/app\.min\.js|dist/lookup\.min\.js)$' || true)"
+            other="$(echo "$conflicts" | grep -vE '^(package\.json|js/build-version\.js|dist/.*\.min\.js)$' || true)"
             if [ -n "$other" ]; then
               echo "::error::Conflict in non-version files — manual merge required:"
               echo "$other"
@@ -97,12 +103,16 @@ jobs:
             sed -i -E "s/(\"version\": *\")[^\"]+/\1${high}/" package.json
             printf 'window.__BUILD_VERSION__ = "v%s";\n' "$high" > js/build-version.js
 
-            # Take the branch's dist bundles (they were built on top of main's JS)
-            for f in dist/admin.min.js dist/app.min.js dist/lookup.min.js; do
-              if echo "$conflicts" | grep -q "^${f}$"; then
-                git checkout --theirs "$f"
-                git add "$f"
-              fi
+            # Take the branch's dist bundles (they were built on top of main's JS).
+            # EVERY dist/*.min.js, not a hand-listed subset: these are build
+            # artifacts, never hand-edited, and a bundle missing from the list
+            # fails the whole auto-merge for a conflict that has no meaning.
+            # dist/supabase.min.js was the one omitted, and it blocked two
+            # merges in a row whenever a concurrent branch touched
+            # js/supabase.js.
+            for f in $(echo "$conflicts" | grep -E '^dist/.*\.min\.js$' || true); do
+              git checkout --theirs "$f"
+              git add "$f"
             done
 
             git add package.json js/build-version.js
