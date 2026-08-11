@@ -133,6 +133,45 @@ has never been a `select *` on `families`. No evidence the hashes were accessed.
 does **not** clear R1: the app legitimately reads names/emails, so a harvester would
 have used an identical query shape and be invisible.
 
+**Fixed and verified in production 2026-08-11:**
+- **FS5 Phase 1** — `add_day_to_invoice_by_email` was `SECURITY DEFINER` and executable
+  by **both `anon` and PUBLIC**, took its delta verbatim with **no clamp**, and had **no
+  status guard**. A negative delta could therefore be pushed at an invoice in *any*
+  status — including `finalized` and `paid` — so the public anon key could set any
+  family's settled invoice to any value, including zero. Strictly worse than FS5 as
+  written. `fs5_phase1_revoke_add_day_anon.sql` applied: revoked from `PUBLIC` **and**
+  `anon` (revoking `anon` alone is insufficient — the `=X/postgres` PUBLIC grant is
+  inherited, same trap as R26/R27), and the delta is clamped `>= 0`. Safe because
+  `pg_stat_statements` shows **30 calls, all `authenticated`, zero anon calls ever**;
+  the only caller is the admin Add-a-Day modal (`js/admin/admin-calendar.js`).
+  Verified post-apply: `has_function_privilege` anon=false, authenticated=true.
+  **Rollback:** `ROLLBACK_fs5_phase1_revoke_add_day_anon.sql`.
+- **FS5 Phase 2** — `create_billing_invoice_by_email` took the invoice amount **from the
+  browser**, and `p_email` chose whose invoice to write, so the public anon key could
+  inflate any family's draft. `fs5_phase2_server_side_invoice_amount.sql` applied:
+  `p_amount` is ignored and the family's whole month is recomputed in the database by
+  `compute_family_month_charges()` (registration_dates × room rates × individual and
+  sibling discounts × change fees, waitlisted days excluded). Verified post-apply by
+  **injection test** — passing `999999` stored `1455.00`. The old 3-arg signature is
+  kept as a shim that ignores the amount, so deploy order doesn't matter.
+  Because it recomputes the whole month the upsert **SETs rather than ADDs**, which is
+  idempotent and supersedes FS3's additive semantics (FS3's clamp and draft-only guard
+  are retained). **Prerequisite for attaching any payment processor — now met.**
+
+  ⚠️ **`compute_family_month_charges()` mirrors `buildBillingBreakdown()` /
+  `getChildDayAmounts()` / `effectiveRate()` in `js/app.js`.** It is exact against the
+  current rate config only because every room has `weeklyFullRate`/`weeklyHalfRate`
+  `NULL`. **Setting a weekly rate in Settings → Rates requires implementing the weekly
+  branch in that SQL function too**, or the draft and the generated invoice will disagree.
+
+- **Billing writes are now recompute-only (2026-08-11).** Seven admin paths can change a
+  child's days; only two used to tell billing anything, and Add-a-Day used a *delta*
+  while all four removal/edit paths did nothing at all — so invoices could only ratchet
+  upward. Every path now calls `_recomputeInvoice()` in `js/admin/admin-calendar.js`.
+  `addDayToInvoiceByEmail()` is deleted; the DB function `add_day_to_invoice_by_email`
+  is unused and can be dropped. **Never add a delta-based billing write — a delta
+  requires every mutation site to opt in, which is exactly how this drifted.**
+
 **Fixed and verified in production 2026-08-03:**
 - **R26** — `anon` could read `staff.staff_pin_hash`, `hourly_rate`, `salary_biweekly`
   and `pto_starting_balance` (staff wages + PIN hashes) via the public key. Same class

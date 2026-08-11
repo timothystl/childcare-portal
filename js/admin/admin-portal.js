@@ -657,17 +657,45 @@ async function apLoadLive() {
     live.invoices  = val(5) || [];
     live.providers = val(6) || [];
 
-    // Billed this month — the same per-registration calculation the billing
-    // tools use, summed over registrations that have a day in this month.
+    // Billed this month — read from _buildFamilyBillingData(), the SAME function
+    // that renders Family Billing Summary and generates draft invoices. This
+    // card used to run its own per-registration sum (calcRegistrationBill),
+    // which structurally could not apply the sibling discount, leaked in days
+    // from other months, and ignored change fees and billing overrides — so it
+    // disagreed with Family Billing by thousands. Money is computed in exactly
+    // one place now; if this figure is wrong, it is wrong in both.
     const monthKey = live.monthKey;
-    const seen = new Set();
-    (allRegistrations || []).forEach(reg => {
-        const inMonth = (reg.registration_dates || []).some(d => !d.waitlisted && String(d.care_date).startsWith(monthKey));
-        if (!inMonth) return;
-        seen.add(`${(reg.parent_email || '').toLowerCase()}:${(reg.child_name || '').toLowerCase()}`);
-        try { live.billed += calcRegistrationBill(reg); } catch (_) { /* rates not loaded yet */ }
-    });
-    live.billedKids = seen.size;
+    try {
+        // Discounts and family grouping both come from allFamiliesData, which is
+        // lazy-loaded when the Families tab opens. Without it the dashboard would
+        // quietly bill every discounted child at full price, so load it here —
+        // same guard the invoice generator uses.
+        if (!allFamiliesData || !allFamiliesData.length) {
+            allFamiliesData = await fetchAllFamilies({ includeArchived: false });
+            _discountMap = null;
+        }
+
+        let overridesMap = new Map();
+        try {
+            const rows = await fetchBillingOverrides(monthKey);
+            overridesMap = new Map((rows || []).map(r => [
+                `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+                parseFloat(r.override_amount),
+            ]));
+        } catch (e) { console.warn('apLoadLive overrides:', e); }
+
+        const families = _buildFamilyBillingData(monthKey, overridesMap);
+        families.forEach(fam => {
+            (fam.children || []).forEach(child => {
+                live.billed += child.hasOverride
+                    ? parseFloat(child.overrideAmount || 0)
+                    : (child.subtotal || 0) + (child.changeFees || 0);
+                live.billedKids++;
+            });
+        });
+    } catch (err) {
+        console.warn('apLoadLive billed:', err); // rates or registrations not loaded yet
+    }
 
     const today = new Date().toLocaleDateString('en-CA');
     const upcoming = [...allClosureDates].filter(d => d >= today).sort();

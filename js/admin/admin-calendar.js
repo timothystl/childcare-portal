@@ -254,6 +254,16 @@ function openEditDaysModal(reg) {
     renderEditCalGrid();
     renderEditDaysList();
     document.getElementById('editDaysModal').classList.remove('hidden');
+
+    // Recompute on open, before any edit. The figure shown has to BE the
+    // invoice rather than a possibly-stale draft, and because the recompute is
+    // idempotent this also quietly heals any month that drifted under the old
+    // delta-based paths — the director sees the true number the moment she
+    // looks at a child.
+    const openMonth = (reg.month_key
+        || reg.registration_dates?.[0]?.care_date?.substring(0, 7)
+        || '');
+    if (openMonth) _recomputeAndShow(reg.parent_email, openMonth);
 }
 
 function renderEditDaysList() {
@@ -304,6 +314,10 @@ function renderEditDaysList() {
                 );
                 renderEditDaysList();
                 renderTable(allRegistrations);
+                // Billing follows the days, always.
+                if (removedDate) {
+                    await _recomputeAndShow(editDaysReg.parent_email, removedDate.care_date.substring(0, 7));
+                }
                 // Notify parent (non-blocking)
                 if (removedDate) {
                     const dateLabel = friendlyShort(removedDate.care_date);
@@ -429,6 +443,7 @@ async function _handleCalDayClick(dateStr) {
             renderEditCalGrid();
             renderEditDaysList();
             renderTable(allRegistrations);
+            await _recomputeAndShow(editDaysReg.parent_email, removedDate.care_date.substring(0, 7));
             _sendSchedulePush(
                 editDaysReg.parent_email, editDaysReg.child_name,
                 'Schedule Update — Timothy Lutheran MDO',
@@ -470,6 +485,10 @@ async function _editDaysPickSelect(dayType, waitlist) {
         renderEditCalGrid();
         renderEditDaysList();
         renderTable(allRegistrations);
+        // Waitlisted days aren't billable, but recompute regardless — the
+        // recompute filters them out itself, and hooking every mutation
+        // unconditionally is what keeps this from drifting again.
+        await _recomputeAndShow(regSnapshot.parent_email, dateStr.substring(0, 7));
         if (!waitlist) {
             const typeLabel = dayType === 'half' ? 'half day' : 'full day';
             _sendSchedulePush(
@@ -626,6 +645,53 @@ function _syncCapSelect() {
         sel.appendChild(opt);
     }
     sel.value = key;
+}
+
+// ============================================================
+// BILLING RECOMPUTE — the single path
+// ============================================================
+// Any change to a child's days — added, removed, or switched between full and
+// half — re-runs the server-side recompute for that family's whole month.
+//
+// This replaced a set of delta adjustments. A delta is a guess about what
+// changed, so every mutation site has to remember to participate; three of
+// them didn't, which meant removing a day never reduced the invoice and the
+// number could only ratchet upward. A recompute is a statement about what is,
+// and it is idempotent — calling it twice, or after a mutation nobody hooked
+// up, still lands on the right answer.
+//
+// Non-blocking by design: the day change is already saved and must not be
+// rolled back if billing is briefly unreachable. A failure is surfaced so the
+// director knows to regenerate, rather than silently leaving a stale figure.
+async function _recomputeInvoice(parentEmail, monthKey) {
+    if (!parentEmail || !monthKey) return null;
+    try {
+        const invoiceId = await createInvoiceByEmail(parentEmail, monthKey);
+        if (!invoiceId) return null;
+        return await fetchBillingInvoiceById(invoiceId);
+    } catch (err) {
+        console.error('Invoice recompute failed:', parentEmail, monthKey, err);
+        if (typeof showToast === 'function') {
+            showToast('Day saved, but the invoice could not be recalculated. Regenerate invoices for this month.', 'error');
+        }
+        return null;
+    }
+}
+
+// Recompute, then show the resulting month total in the Edit Days modal so the
+// director watches the figure move as she works rather than trusting that it
+// will be right later.
+async function _recomputeAndShow(parentEmail, monthKey) {
+    const el = document.getElementById('editDaysTotal');
+    if (el) el.textContent = 'Recalculating…';
+    const invoice = await _recomputeInvoice(parentEmail, monthKey);
+    if (!el) return;
+    if (!invoice) {
+        el.textContent = 'Invoice total unavailable — regenerate invoices for this month.';
+        return;
+    }
+    const label = new Date(`${monthKey}-01T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    el.textContent = `${label} total for this family: $${Number(invoice.final_amount).toFixed(2)}`;
 }
 
 function renderCapacityOverview() {
@@ -1034,13 +1100,10 @@ async function _aadConfirm() {
 
         await addRegistrationDate(_aadSelected.id, _aadRoomId, _aadDateStr, dayType, false, changeFee);
 
-        // Add day rate + change fee to the family's invoice for this month
-        try {
-            const room = ROOMS.find(r => r.id === _aadRoomId);
-            const dayRate = (!room?.fullDayOnly && dayType === 'half') ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
-            const month   = _aadDateStr.substring(0, 7);
-            await addDayToInvoiceByEmail(_aadSelected.parent_email, month, dayRate, changeFee);
-        } catch (_) { /* non-blocking */ }
+        // Recompute the family's month. The change fee was just written onto
+        // the registration_dates row above, so the recompute includes it —
+        // no need to hand billing a separately-calculated delta.
+        await _recomputeInvoice(_aadSelected.parent_email, _aadDateStr.substring(0, 7));
 
         await logAdminAction('add_date', 'registration', String(_aadSelected.id), {
             child_name:   _aadSelected.child_name,
@@ -1701,6 +1764,8 @@ async function _arPickSelect(type) {
             await addRegistrationDate(reg.id, reg.room_id, dateStr, type, false);
             const fresh = await fetchAllRegistrations();
             allRegistrations = fresh;
+            // Full↔half is a price change, so billing has to follow it.
+            await _recomputeInvoice(reg.parent_email, dateStr.substring(0, 7));
             _arRenderCal();
         } catch (err) {
             errEl.textContent = 'Update failed: ' + err.message;
@@ -1722,9 +1787,11 @@ async function _arPickRemoveBooked() {
     _arPickDate = null; _arPickIsBooked = false; _arPickBookedInfo = null;
     const errEl = document.getElementById('adminRegError');
     try {
+        const reg = allRegistrations.find(r => r.id === info.reg_id);
         await deleteRegistrationDate(info.date_id);
         const fresh = await fetchAllRegistrations();
         allRegistrations = fresh;
+        await _recomputeInvoice(reg?.parent_email, dateStr.substring(0, 7));
         _arRenderCal();
     } catch (err) {
         errEl.textContent = 'Remove failed: ' + err.message;
@@ -1886,18 +1953,13 @@ async function _arSubmit() {
             });
         }
 
-        // Create billing invoice — same calculation as the review panel
+        // Create billing invoice. FS5: the RPC recomputes the family's whole
+        // month server-side from the registration rows, so no total is passed.
+        // That also picks up the sibling discount across separate registrations,
+        // which the old per-session calculation here could not see.
         try {
-            const room = _arRoom;
-            let total = 0;
-            for (const [, type] of _arDates.entries()) {
-                const rate = type === 'full' ? (room?.fullDayRate || 0) : (room?.halfDayRate || 0);
-                const disc = _arStudent?.discount_type === 'staff'  ? rate
-                           : _arStudent?.discount_type === 'custom' ? rate * (_arStudent.discount_value || 0) / 100 : 0;
-                total += rate - disc;
-            }
             const monthKey = [..._arDates.keys()][0].substring(0, 7);
-            await createInvoiceByEmail(_arFamily.parent_email, monthKey, Math.round(total * 100) / 100);
+            await createInvoiceByEmail(_arFamily.parent_email, monthKey);
         } catch (_) { /* non-blocking */ }
 
         if (_arWaitlistAppId) {

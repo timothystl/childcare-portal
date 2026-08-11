@@ -1534,8 +1534,11 @@ async function handleSubmit(e) {
                 })),
             ];
 
-            // Create billing invoice — non-blocking, never delays the confirmation
-            createInvoiceByEmail(parentEmail, targetMonthKey, emailGrandTotal).catch(() => {});
+            // Create billing invoice — non-blocking, never delays the confirmation.
+            // FS5: no amount is sent. The RPC recomputes the family's month from
+            // the registration rows just written, so the browser cannot set what
+            // a family is billed.
+            createInvoiceByEmail(parentEmail, targetMonthKey).catch(() => {});
 
             // Day count summary for receipt (unique child-day pairs; a weekly-rate
             // week still counts as 5 individual days for this summary)

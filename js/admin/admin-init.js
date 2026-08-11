@@ -119,13 +119,46 @@ function buildDiscountMap() {
     return map;
 }
 
-// Cached discount map — rebuilt whenever families are loaded
-let _discountMap = null;
+// Build a lookup: parent email (lower-cased) → family id, for BOTH parents.
+// Billing groups by family, not by the email that happened to submit the
+// registration — otherwise two parents of one family register separately and
+// look like two families, so their children never see the sibling discount.
+function buildFamilyKeyMap() {
+    const map = new Map();
+    (allFamiliesData || []).forEach(f => {
+        [f.parent_email, f.parent2_email].filter(Boolean).forEach(email => {
+            map.set(email.toLowerCase().trim(), f.id);
+        });
+    });
+    return map;
+}
+
+// Cached maps — rebuilt whenever families are loaded.
+// Call sites all over the admin modules invalidate by assigning
+// `_discountMap = null`, so _familyKeyMap deliberately rides the SAME signal
+// (rebuilt inside getDiscountMap) rather than needing its own invalidation at
+// nine separate call sites — one of which would inevitably be missed.
+let _discountMap  = null;
+let _familyKeyMap = null;
+
 function getDiscountMap() {
-    if (!_discountMap) _discountMap = buildDiscountMap();
+    if (!_discountMap) {
+        _discountMap  = buildDiscountMap();
+        _familyKeyMap = buildFamilyKeyMap();
+    }
     return _discountMap;
 }
 
+function getFamilyKeyMap() {
+    getDiscountMap();   // ensures both maps are fresh
+    return _familyKeyMap;
+}
+
+// Per-registration estimate for a single row in the registration list.
+// ⚠️ NOT the billing source of truth — it is scoped to one registration, so it
+// cannot apply the family-level sibling discount, and it ignores change fees
+// and billing overrides. For any TOTAL, or anything that becomes an invoice,
+// use _buildFamilyBillingData() in admin-reports.js instead.
 function calcRegistrationBill(reg) {
     const room = ROOMS.find(r => r.id === reg.room_id);
     if (!room) return 0;
