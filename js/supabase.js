@@ -2559,6 +2559,70 @@ async function sendStaffScheduleEmail({ staffName, staffEmail, weekStart, shifts
     return data;
 }
 
+// ── Child Attendance (booked vs. actually attended) ────────────
+// One row per child per care date, status 'present' | 'absent'. The absence of
+// a row means "not yet marked" — deliberately distinct from 'absent', so an
+// unmarked day is never silently counted as a no-show.
+
+// Attendance marks for a single day, keyed by registration_id for direct
+// lookup against a roster row.
+async function fetchAttendanceForDate(careDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('attendance_records')
+        .select('registration_id, care_date, room_id, child_name, status, recorded_by, recorded_at')
+        .eq('care_date', careDate);
+    if (error) throw friendlyError(error);
+    const map = new Map();
+    (data || []).forEach(r => map.set(r.registration_id, r));
+    return map;
+}
+
+// Raw attendance rows across a date range, for reports and the forecast.
+async function fetchAttendanceRange(fromDate, toDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('attendance_records')
+        .select('registration_id, care_date, room_id, child_name, status')
+        .gte('care_date', fromDate)
+        .lte('care_date', toDate);
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+// Mark one child present or absent. Upserts on (registration_id, care_date) so
+// re-marking corrects the existing row instead of stacking duplicates.
+async function saveAttendanceRecord({ registrationId, careDate, roomId, childName, status }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    if (status !== 'present' && status !== 'absent') {
+        throw new Error(`Invalid attendance status: ${status}`);
+    }
+    const row = {
+        registration_id: registrationId,
+        care_date:       careDate,
+        room_id:         roomId || null,
+        child_name:      childName || null,
+        status,
+        recorded_by:     await getAdminEmail(),
+        recorded_at:     new Date().toISOString(),
+    };
+    const { error } = await sbClient
+        .from('attendance_records')
+        .upsert(row, { onConflict: 'registration_id,care_date' });
+    if (error) throw friendlyError(error);
+}
+
+// Clear a mark, returning the day to "not yet marked".
+async function clearAttendanceRecord(registrationId, careDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('attendance_records')
+        .delete()
+        .eq('registration_id', registrationId)
+        .eq('care_date', careDate);
+    if (error) throw friendlyError(error);
+}
+
 // ── Historical Attendance Summary ──────────────────────────────
 
 async function fetchBillingSummary() {

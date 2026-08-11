@@ -228,7 +228,49 @@ function viewRoster() {
     return _viewDayRoster(document.getElementById('rosterDate').value, roomId);
 }
 
-function _viewDayRoster(date, roomId) {
+// ── Attendance marking (Day view only) ──────────────────────
+// The day currently on screen and its marks, keyed by registration_id.
+// A missing entry means "not yet marked", which is deliberately distinct from
+// 'absent' — an unmarked day must never be counted as a no-show.
+let _attendanceDate   = null;
+let _attendanceMap    = new Map();
+let _attendanceByRoom = {};      // roomLabel → kids[], for live tally updates
+let _attendanceBound  = false;   // the delegated listener is attached once only
+
+// Present / absent / unmarked tallies for one room's children.
+function _attendanceTally(kids) {
+    let present = 0, absent = 0;
+    kids.forEach(k => {
+        const st = _attendanceMap.get(k.registrationId)?.status;
+        if (st === 'present') present++;
+        else if (st === 'absent') absent++;
+    });
+    return { present, absent, unmarked: kids.length - present - absent };
+}
+
+function _attendanceSummaryHtml(kids) {
+    const t = _attendanceTally(kids);
+    const parts = [];
+    if (t.present)  parts.push(`<span class="att-sum-present">${t.present} in</span>`);
+    if (t.absent)   parts.push(`<span class="att-sum-absent">${t.absent} out</span>`);
+    if (t.unmarked) parts.push(`<span class="att-sum-unmarked">${t.unmarked} unmarked</span>`);
+    return parts.join('<span class="att-sum-sep">·</span>');
+}
+
+function _attendanceControlsHtml(k) {
+    const st = _attendanceMap.get(k.registrationId)?.status || '';
+    const btn = (status, label) =>
+        `<button type="button" class="att-btn att-${status}${st === status ? ' is-on' : ''}"
+                 data-status="${status}"
+                 aria-pressed="${st === status}"
+                 title="${st === status ? 'Click again to clear' : `Mark ${label.toLowerCase()}`}">${label}</button>`;
+    return `<span class="att-controls" data-reg="${k.registrationId}"
+                  data-room="${escHtml(k.roomId)}" data-name="${escHtml(k.childName)}">
+                ${btn('present', 'In')}${btn('absent', 'Out')}
+            </span>`;
+}
+
+async function _viewDayRoster(date, roomId) {
     if (!date) { alert('Please select a date.'); return; }
 
     const roster    = getRosterForDate(date, roomId);
@@ -239,22 +281,102 @@ function _viewDayRoster(date, roomId) {
         return;
     }
 
+    // Attendance records what happened, so it can't be taken ahead of time.
+    const today    = new Date().toISOString().split('T')[0];
+    const markable = date <= today;
+
+    _attendanceDate = date;
+    _attendanceMap  = new Map();
+    let loadWarning = '';
+    if (markable) {
+        try {
+            _attendanceMap = await fetchAttendanceForDate(date);
+        } catch (err) {
+            console.warn('fetchAttendanceForDate:', err);
+            loadWarning = `<p class="import-error">Couldn't load attendance marks: ${escHtml(err.message)}. The roster below is still accurate; marks may be missing.</p>`;
+        }
+    }
+
     const byRoom = _groupRosterByRoom(roster);
     container.innerHTML = `
         <p class="roster-date-heading">${friendlyShort(date)}</p>
+        ${loadWarning}
+        ${markable
+            ? '<p class="att-hint">Tap <strong>In</strong> or <strong>Out</strong> to record who actually came. Tap the lit button again to clear it.</p>'
+            : '<p class="att-hint att-hint-future">This date is in the future — attendance can be recorded on or after the care date.</p>'}
         ${Object.entries(byRoom).map(([roomLabel, kids]) => `
             <div class="roster-group">
                 <h3 class="roster-room-title">${roomLabel}
                     <span class="roster-count">${kids.length} child${kids.length !== 1 ? 'ren' : ''}</span>
+                    ${markable ? `<span class="att-summary" data-room-label="${escHtml(roomLabel)}">${_attendanceSummaryHtml(kids)}</span>` : ''}
                 </h3>
                 <ul class="name-list">
                     ${kids.map(k => `
                         <li class="name-list-item">
                             <span class="name-list-name">${escHtml(k.childName)}</span>
                             <span class="day-chip ${k.dayType}">${k.dayType === 'half' ? 'Half Day' : 'Full Day'}</span>
+                            ${markable ? _attendanceControlsHtml(k) : ''}
                         </li>`).join('')}
                 </ul>
             </div>`).join('')}`;
+
+    _attendanceByRoom = byRoom;
+    if (markable) _bindAttendanceHandlers(container);
+}
+
+// The roster container outlives each render, so this listener is attached
+// exactly once — re-binding per render would stack duplicate handlers and fire
+// one save per past render. All mutable state is read from module globals.
+function _bindAttendanceHandlers(container) {
+    if (_attendanceBound) return;
+    _attendanceBound = true;
+
+    container.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.att-btn');
+        if (!btn || !container.contains(btn)) return;
+
+        const wrap  = btn.closest('.att-controls');
+        const regId = Number(wrap.dataset.reg);
+        const want  = btn.dataset.status;
+        const current = _attendanceMap.get(regId)?.status || '';
+        // Tapping the lit button clears the mark, back to "not yet marked".
+        const next  = current === want ? null : want;
+
+        const buttons = wrap.querySelectorAll('.att-btn');
+        buttons.forEach(b => { b.disabled = true; });
+        try {
+            if (next === null) {
+                await clearAttendanceRecord(regId, _attendanceDate);
+                _attendanceMap.delete(regId);
+            } else {
+                await saveAttendanceRecord({
+                    registrationId: regId,
+                    careDate:       _attendanceDate,
+                    roomId:         wrap.dataset.room,
+                    childName:      wrap.dataset.name,
+                    status:         next,
+                });
+                _attendanceMap.set(regId, { registration_id: regId, status: next });
+            }
+            buttons.forEach(b => {
+                const on = b.dataset.status === next;
+                b.classList.toggle('is-on', on);
+                b.setAttribute('aria-pressed', String(on));
+            });
+            // Refresh the room's tally in place.
+            const group = wrap.closest('.roster-group');
+            const sumEl = group?.querySelector('.att-summary');
+            const label = sumEl?.dataset.roomLabel;
+            if (sumEl && _attendanceByRoom[label]) {
+                sumEl.innerHTML = _attendanceSummaryHtml(_attendanceByRoom[label]);
+            }
+        } catch (err) {
+            console.error('attendance save:', err);
+            alert(`Couldn't save attendance: ${err.message}`);
+        } finally {
+            buttons.forEach(b => { b.disabled = false; });
+        }
+    });
 }
 
 function _viewWeekRoster(weekOf, roomId) {

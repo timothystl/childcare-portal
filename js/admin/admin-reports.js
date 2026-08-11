@@ -4151,6 +4151,337 @@ function exportRatioStepReport() {
 }
 
 // ============================================================
+// DEMAND FORECAST
+// ============================================================
+// Projects children per room per day for the weeks ahead, at the grain of
+// date × room × half/full, from two models:
+//
+//   * Same-weekday average — the mean of that weekday's realised level over
+//     the history window. This is the primary model, because the weekday
+//     signal here is large (Thursdays have run ~26% heavier than Mondays).
+//   * Four-week moving average — the mean daily level over the last four
+//     weeks, regardless of weekday. A level check against the first.
+//
+// What is deliberately NOT modelled, because the data cannot support it yet:
+// seasonality and year-over-year (bookings only start April 2026 — less than
+// one full cycle), weather, and the booking curve (bookings for a future date
+// keep arriving, so "booked so far" understates it; the column is shown
+// alongside the forecast so the gap is visible rather than hidden).
+//
+// The forecast projects BOOKINGS. Where attendance has been marked, the
+// show rate converts that into expected attendance; until then that column
+// says so rather than quietly assuming everyone turns up.
+
+const FORECAST_HISTORY_WEEKS = 8;   // weekday samples drawn from this window
+const FORECAST_RECENT_WEEKS  = 4;   // moving-average window
+const FORECAST_MIN_SAMPLES   = 4;   // below this a weekday estimate is "thin"
+
+let _forecastRows = [];   // flat rows, retained for export
+
+// Mean of a list, or null when there is nothing to average. Never 0 — an
+// absent estimate and an estimate of zero children are different claims.
+function _forecastMean(values) {
+    if (!values || !values.length) return null;
+    return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+// Share of marked children who actually attended. Days nobody marked are
+// absent from the table entirely and contribute nothing — an unmarked day is
+// not evidence of a no-show. Returns null when there is nothing to go on.
+function _forecastShowRate(attendanceRows) {
+    let present = 0, marked = 0;
+    (attendanceRows || []).forEach(r => {
+        if (r.status === 'present')     { present++; marked++; }
+        else if (r.status === 'absent') { marked++; }
+    });
+    if (marked === 0) return null;
+    return { rate: present / marked, marked };
+}
+
+// How much to trust a weekday estimate, given how many times we have seen it.
+function _forecastConfidence(sampleCount) {
+    if (!sampleCount)                          return 'none';
+    if (sampleCount < FORECAST_MIN_SAMPLES)    return 'thin';
+    return 'good';
+}
+
+// Build one projected row per room per target date.
+//   history[roomId][dow] = { totals: number[], halves: number[] }
+//   recent[roomId]       = number[]   daily totals over the moving-average window
+//   booked[date][roomId] = { total, half }   bookings already on the books
+//   showRate             = { rate, marked } | null
+function _buildForecastRows(opts) {
+    const { targetDates, rooms, history, recent, booked, showRate } = opts;
+    const rows = [];
+
+    targetDates.forEach(date => {
+        const dow = new Date(date + 'T00:00:00').getDay();
+        rooms.forEach(room => {
+            const h        = history[room.id]?.[dow] || { totals: [], halves: [] };
+            const samples  = h.totals.length;
+            const weekday  = _forecastMean(h.totals);
+            const moving   = _forecastMean(recent[room.id]);
+            // Prefer the weekday-specific estimate; fall back to the flat level
+            // only when that weekday has never been seen for this room.
+            const forecast = weekday !== null ? weekday : moving;
+
+            // Half-day share drives the afternoon, so carry it through rather
+            // than assuming the mix holds at the centre-wide average.
+            const meanHalf  = _forecastMean(h.halves);
+            const halfShare = (forecast && meanHalf !== null && weekday)
+                ? Math.min(1, meanHalf / weekday)
+                : 0;
+
+            const bookedNow  = booked[date]?.[room.id]?.total || 0;
+            const expected   = (forecast !== null && showRate) ? forecast * showRate.rate : null;
+            // Staff to what we expect to walk in where that is known, else to
+            // the booking forecast.
+            const basis      = expected !== null ? expected : forecast;
+            const amChildren = basis === null ? null : Math.round(basis);
+            const pmChildren = amChildren === null ? null : Math.round(basis * (1 - halfShare));
+            const staffAm    = amChildren === null ? null : _ratioStaffNeed(amChildren, room.staffRatio || 0);
+            const staffPm    = pmChildren === null ? null : _ratioStaffNeed(pmChildren, room.staffRatio || 0);
+
+            rows.push({
+                date, dow, roomId: room.id, roomLabel: room.label,
+                samples, confidence: _forecastConfidence(samples),
+                weekdayAvg: weekday, movingAvg: moving, forecast,
+                halfShare, bookedNow, expected,
+                amChildren, pmChildren, staffAm, staffPm,
+                capacity: room.capacity || 0,
+                overCapacity: room.capacity > 0 && amChildren !== null && amChildren > room.capacity,
+            });
+        });
+    });
+    return rows;
+}
+
+// Collect realised daily counts from allRegistrations over a date window.
+// Returns { byDate, history, recent } in the shapes _buildForecastRows wants.
+function _collectForecastHistory(historyDates, recentDates, rooms) {
+    const byDate = {};
+    historyDates.forEach(d => { byDate[d] = {}; });
+
+    allRegistrations.forEach(reg => {
+        if (reg.status !== 'confirmed') return;
+        (reg.registration_dates || []).forEach(rd => {
+            if (rd.waitlisted || !byDate[rd.care_date]) return;
+            const roomId = rd.room_id || reg.room_id;
+            if (!roomId) return;
+            const c = byDate[rd.care_date][roomId] ||
+                      (byDate[rd.care_date][roomId] = { total: 0, half: 0 });
+            c.total++;
+            if (rd.day_type === 'half') c.half++;
+        });
+    });
+
+    const history = {}, recent = {};
+    rooms.forEach(room => { history[room.id] = {}; recent[room.id] = []; });
+
+    historyDates.forEach(date => {
+        const dow = new Date(date + 'T00:00:00').getDay();
+        rooms.forEach(room => {
+            const c = byDate[date][room.id] || { total: 0, half: 0 };
+            const slot = history[room.id][dow] ||
+                         (history[room.id][dow] = { totals: [], halves: [] });
+            slot.totals.push(c.total);
+            slot.halves.push(c.half);
+            if (recentDates.includes(date)) recent[room.id].push(c.total);
+        });
+    });
+
+    return { byDate, history, recent };
+}
+
+// Open weekdays in [from, to), skipping weekends and closures.
+function _forecastOpenDays(fromDate, toDate) {
+    const out = [];
+    const d = new Date(fromDate + 'T00:00:00');
+    const end = new Date(toDate + 'T00:00:00');
+    while (d < end) {
+        const dow = d.getDay();
+        if (dow !== 0 && dow !== 6) {
+            const s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            if (!allClosureDates.has(s)) out.push(s);
+        }
+        d.setDate(d.getDate() + 1);
+    }
+    return out;
+}
+
+async function generateDemandForecast() {
+    const container = document.getElementById('forecastContent');
+    if (!container) return;
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+
+    try {
+        if (!allRegistrations.length) allRegistrations = await fetchAllRegistrations();
+
+        const weeksAhead = Number(document.getElementById('forecastWeeks')?.value) || 4;
+        const roomSel    = document.getElementById('forecastRoomSel')?.value || 'all';
+        const rooms = roomSel === 'all'
+            ? getSortedRooms().filter(r => r.status !== 'seasonal')
+            : getSortedRooms().filter(r => r.id === roomSel);
+        if (!rooms.length) { container.innerHTML = '<p class="empty-hint">No rooms to forecast.</p>'; return; }
+
+        const iso   = d => d.toISOString().split('T')[0];
+        const today = new Date(); today.setHours(12, 0, 0, 0);
+
+        const histStart   = new Date(today); histStart.setDate(today.getDate() - FORECAST_HISTORY_WEEKS * 7);
+        const recentStart = new Date(today); recentStart.setDate(today.getDate() - FORECAST_RECENT_WEEKS * 7);
+        const horizonEnd  = new Date(today); horizonEnd.setDate(today.getDate() + weeksAhead * 7);
+
+        const historyDates = _forecastOpenDays(iso(histStart), iso(today));
+        const recentDates  = _forecastOpenDays(iso(recentStart), iso(today));
+        const targetDates  = _forecastOpenDays(iso(today), iso(horizonEnd));
+
+        if (!historyDates.length) {
+            container.innerHTML = '<p class="empty-hint">No history in the last ' +
+                FORECAST_HISTORY_WEEKS + ' weeks to forecast from.</p>';
+            return;
+        }
+
+        const { byDate, history, recent } = _collectForecastHistory(historyDates, recentDates, rooms);
+
+        // Bookings already on the books for the horizon.
+        const { byDate: bookedByDate } = _collectForecastHistory(targetDates, [], rooms);
+
+        // Show rate, if anyone has been marking attendance.
+        let showRate = null, attendanceErr = false;
+        try {
+            showRate = _forecastShowRate(await fetchAttendanceRange(iso(histStart), iso(today)));
+        } catch (err) {
+            console.warn('fetchAttendanceRange:', err);
+            attendanceErr = true;
+        }
+
+        const rows = _buildForecastRows({
+            targetDates, rooms, history, recent, booked: bookedByDate, showRate,
+        });
+        _forecastRows = rows;
+
+        const n1 = v => v === null ? '—' : (Math.round(v * 10) / 10).toString().replace(/\.0$/, '');
+
+        // ── Banner: what the forecast is actually of ──────────
+        const basisBanner = showRate
+            ? `<p class="att-hint" style="color:var(--green-dark)">Adjusted for a
+               <strong>${Math.round(showRate.rate * 100)}%</strong> show rate, measured from
+               ${showRate.marked} marked child-day${showRate.marked === 1 ? '' : 's'} in the last
+               ${FORECAST_HISTORY_WEEKS} weeks.</p>`
+            : `<p class="att-hint"><strong>These are booking forecasts, not attendance forecasts.</strong>
+               ${attendanceErr
+                   ? `Attendance marks couldn't be loaded.`
+                   : `No attendance has been marked yet, so there is no show rate to apply.`}
+               Mark children in or out on the <em>Classrooms</em> tab and this report will convert
+               bookings into expected attendance automatically.</p>`;
+
+        const thin = rows.filter(r => r.confidence !== 'good').length;
+
+        // ── Summary ──────────────────────────────────────────
+        const totalForecast = rows.reduce((s, r) => s + (r.amChildren || 0), 0);
+        const totalBooked   = rows.reduce((s, r) => s + r.bookedNow, 0);
+        const overCap       = rows.filter(r => r.overCapacity).length;
+        const summary = `
+            <div class="fin-kpi-row" style="margin-bottom:1.25rem">
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Projected child-days (next ${weeksAhead} wk)</span>
+                    <span class="fin-kpi-value">${totalForecast}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Already booked</span>
+                    <span class="fin-kpi-value">${totalBooked}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Still expected to book</span>
+                    <span class="fin-kpi-value${totalForecast - totalBooked > 0 ? ' fin-positive' : ''}">${Math.max(0, totalForecast - totalBooked)}</span>
+                </div>
+                <div class="fin-kpi">
+                    <span class="fin-kpi-label">Room-days projected over capacity</span>
+                    <span class="fin-kpi-value${overCap ? ' fin-negative' : ''}">${overCap}</span>
+                </div>
+            </div>`;
+
+        // ── Table ────────────────────────────────────────────
+        const body = targetDates.map(date => {
+            const dayRows = rows.filter(r => r.date === date);
+            const header = `<tr class="ar-month-row"><td colspan="8"><strong>${escHtml(friendlyShort(date))}</strong></td></tr>`;
+            const cells = dayRows.map(r => {
+                const conf = r.confidence === 'good' ? ''
+                    : r.confidence === 'thin'
+                        ? ` <span title="Only ${r.samples} past occurrence${r.samples === 1 ? '' : 's'} of this weekday" style="color:#b45309">thin</span>`
+                        : ` <span title="This weekday has never been seen for this room" style="color:#6b7280">no history</span>`;
+                return `<tr${r.overCapacity ? ' style="background:#fdf2f2"' : ''}>
+                    <td style="padding-left:1.5rem">${escHtml(r.roomLabel)}</td>
+                    <td class="report-num"><strong>${r.amChildren ?? '—'}</strong>${conf}</td>
+                    <td class="report-num" style="color:#6b7280">${r.pmChildren ?? '—'}</td>
+                    <td class="report-num" style="color:#6b7280">${n1(r.weekdayAvg)}</td>
+                    <td class="report-num" style="color:#6b7280">${n1(r.movingAvg)}</td>
+                    <td class="report-num">${r.bookedNow}</td>
+                    <td class="report-num">${r.staffAm ?? '—'} <span style="color:#9ca3af">/</span> <span style="color:#6b7280">${r.staffPm ?? '—'}</span></td>
+                    <td class="report-num"${r.overCapacity ? ' style="color:#c62828;font-weight:700"' : ''}>${r.capacity || '—'}</td>
+                </tr>`;
+            }).join('');
+            return header + cells;
+        }).join('');
+
+        container.innerHTML = basisBanner + summary + `
+            <div style="overflow-x:auto">
+            <table class="report-table">
+                <thead><tr>
+                    <th>Room</th>
+                    <th class="report-num">Projected<br><span style="font-weight:400;font-size:.85em">AM</span></th>
+                    <th class="report-num">Projected<br><span style="font-weight:400;font-size:.85em">PM</span></th>
+                    <th class="report-num">Same-weekday<br><span style="font-weight:400;font-size:.85em">avg</span></th>
+                    <th class="report-num">${FORECAST_RECENT_WEEKS}-wk moving<br><span style="font-weight:400;font-size:.85em">avg</span></th>
+                    <th class="report-num">Booked<br><span style="font-weight:400;font-size:.85em">so far</span></th>
+                    <th class="report-num">Staff req.<br><span style="font-weight:400;font-size:.85em">AM / PM</span></th>
+                    <th class="report-num">Capacity</th>
+                </tr></thead>
+                <tbody>${body}</tbody>
+            </table>
+            </div>
+            <p style="font-size:.8em;color:#6b7280;margin:.75rem 0 0">
+                <strong>Projected</strong> uses the same-weekday average over the last ${FORECAST_HISTORY_WEEKS} weeks,
+                falling back to the ${FORECAST_RECENT_WEEKS}-week moving average where a weekday has no history for that room.
+                PM applies that weekday's own half-day share, since half days are morning sessions.
+                <strong>Booked so far</strong> is what is already on the books — bookings for a future date keep arriving,
+                so it is expected to sit below the projection, and the gap is the booking still to come.
+                Estimates drawn from fewer than ${FORECAST_MIN_SAMPLES} past occurrences are marked <em>thin</em>${thin ? ` (${thin} here)` : ''}.
+                Seasonality, year-over-year and weather are <strong>not</strong> modelled — bookings only begin in April 2026,
+                which is less than one full cycle, and a seasonal curve fitted to that would be invented rather than measured.
+            </p>`;
+
+        const btn = document.getElementById('exportForecastBtn');
+        if (btn) btn.style.display = '';
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function exportDemandForecast() {
+    if (!_forecastRows.length) return;
+    const headers = ['Date', 'Room', 'Projected AM', 'Projected PM', 'Same-weekday avg',
+                     `${FORECAST_RECENT_WEEKS}-week moving avg`, 'Half-day share', 'Booked so far',
+                     'Staff required AM', 'Staff required PM', 'Capacity', 'Over capacity',
+                     'Weekday samples', 'Confidence'];
+    const rows = _forecastRows.map(r => [
+        r.date, r.roomLabel,
+        r.amChildren ?? '', r.pmChildren ?? '',
+        r.weekdayAvg === null ? '' : Math.round(r.weekdayAvg * 10) / 10,
+        r.movingAvg  === null ? '' : Math.round(r.movingAvg  * 10) / 10,
+        Math.round(r.halfShare * 100) / 100,
+        r.bookedNow,
+        r.staffAm ?? '', r.staffPm ?? '',
+        r.capacity || '', r.overCapacity ? 'YES' : '',
+        r.samples, r.confidence,
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Demand Forecast');
+    XLSX.writeFile(wb, 'demand-forecast.xlsx');
+}
+
+// ============================================================
 function setupExtraReports() {
     document.getElementById('generateTrendsBtn')?.addEventListener('click', generateEnrollmentTrends);
     document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
@@ -4162,12 +4493,27 @@ function setupExtraReports() {
     document.getElementById('generateFteBtn')?.addEventListener('click', generateEnrollmentFteReport);
     document.getElementById('generateSeatDayBtn')?.addEventListener('click', generateSeatDayCapacityReport);
     document.getElementById('seatDayRoomSel')?.addEventListener('change', generateSeatDayCapacityReport);
+    document.getElementById('generateForecastBtn')?.addEventListener('click', generateDemandForecast);
+    document.getElementById('exportForecastBtn')?.addEventListener('click', exportDemandForecast);
+    document.getElementById('forecastRoomSel')?.addEventListener('change', generateDemandForecast);
+    document.getElementById('forecastWeeks')?.addEventListener('change', generateDemandForecast);
     document.getElementById('generateRatioStepBtn')?.addEventListener('click', generateRatioStepReport);
     document.getElementById('exportRatioStepBtn')?.addEventListener('click', exportRatioStepReport);
     document.getElementById('ratioStepRoomSel')?.addEventListener('change', generateRatioStepReport);
     document.getElementById('generateDiscountPricingBtn')?.addEventListener('click', generateDiscountPricingReport);
     document.getElementById('exportDiscountPricingBtn')?.addEventListener('click', exportDiscountPricingReport);
     document.getElementById('printDiscountPricingBtn')?.addEventListener('click', printDiscountPricingReport);
+
+    // Demand forecast: room picker (non-seasonal rooms)
+    const fcSel = document.getElementById('forecastRoomSel');
+    if (fcSel && fcSel.options.length <= 1) {
+        getSortedRooms().filter(r => r.status !== 'seasonal').forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.textContent = r.label;
+            fcSel.appendChild(opt);
+        });
+    }
 
     // Ratio-step: room picker + default to the Monday of the current week
     const rsSel = document.getElementById('ratioStepRoomSel');
