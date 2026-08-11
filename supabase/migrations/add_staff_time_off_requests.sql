@@ -25,16 +25,21 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ── 1. Table ─────────────────────────────────────────────────
+-- staff.id is uuid (gen_random_uuid), as is staff_id on staff_clock_events,
+-- staff_hours and staff_schedules — staff_id here must match. The request's
+-- own PK is bigserial, following staff_schedules.
 CREATE TABLE IF NOT EXISTS public.staff_time_off_requests (
     id           bigserial PRIMARY KEY,
-    staff_id     bigint      NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
+    staff_id     uuid        NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
     -- Explicit calendar dates the staffer asked off. For a standing
     -- request this is still populated (the first occurrence) so the
     -- director sees a concrete date; `recurring` + `weekday` carry the
     -- "every week from now on" meaning.
     off_dates    date[]      NOT NULL,
     recurring    boolean     NOT NULL DEFAULT false,
-    -- 0=Mon … 4=Fri. Only meaningful when recurring = true.
+    -- 0=Mon … 4=Fri. Only meaningful when recurring = true. Constrained to
+    -- weekdays: the center is closed at weekends, the kiosk calendar offers
+    -- Mon–Fri only, and the admin UI indexes a five-entry day array.
     weekday      smallint,
     reason       text        NOT NULL DEFAULT '',
     note         text        NOT NULL DEFAULT '',
@@ -46,7 +51,7 @@ CREATE TABLE IF NOT EXISTS public.staff_time_off_requests (
     decided_at   timestamptz,
     decided_by   text,
     CONSTRAINT staff_time_off_dates_not_empty CHECK (array_length(off_dates, 1) >= 1),
-    CONSTRAINT staff_time_off_weekday_range   CHECK (weekday IS NULL OR weekday BETWEEN 0 AND 6)
+    CONSTRAINT staff_time_off_weekday_range   CHECK (weekday IS NULL OR weekday BETWEEN 0 AND 4)
 );
 
 -- The director's queue reads pending-first, newest-first; the schedule
@@ -93,7 +98,7 @@ SECURITY DEFINER
 SET search_path = public, extensions
 AS $$
 DECLARE
-    v_staff_id bigint;
+    v_staff_id uuid;
     v_weekday  smallint;
     v_id       bigint;
 BEGIN
@@ -146,7 +151,7 @@ SECURITY DEFINER
 SET search_path = public, extensions
 AS $$
 DECLARE
-    v_staff_id bigint;
+    v_staff_id uuid;
     v_rows     jsonb;
 BEGIN
     SELECT s.id INTO v_staff_id

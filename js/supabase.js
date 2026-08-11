@@ -2291,7 +2291,7 @@ async function fetchTimeOffRequests({ sinceDate = null } = {}) {
  * Admin: approve or decline a pending request. Approving is what makes the
  * days off real — the schedule builder only reads `approved` rows.
  *
- * @param {number} id
+ * @param {number|string} id - staff_time_off_requests.id (bigserial)
  * @param {'approved'|'declined'} status
  */
 async function decideTimeOffRequest(id, status) {
@@ -2315,7 +2315,8 @@ async function decideTimeOffRequest(id, status) {
  * Admin: record a day off the director was told about verbally. No approval
  * step — she has already vetted it, so it lands `approved` immediately.
  *
- * @param {{staffId:number, dates:string[], recurring?:boolean, reason?:string}} args
+ * @param {{staffId:string, dates:string[], recurring?:boolean, reason?:string}} args
+ *   staffId is staff.id — a uuid, never a number.
  */
 async function addDirectorTimeOff({ staffId, dates, recurring = false, reason = '' }) {
     if (!sbClient) throw new Error('Supabase not configured.');
