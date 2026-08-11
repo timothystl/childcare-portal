@@ -138,7 +138,7 @@ async function buildInvoicePdf(
             page.drawText("Timothy Lutheran Church – Mother's Day Out", {
                 x: MARGIN, y: PAGE_H - 65, size: 9, font: reg, color: rgb(0.65, 0.75, 0.82),
             });
-            const invLabel = isFirstPage ? "Invoice / Receipt" : "Invoice / Receipt (continued)";
+            const invLabel = isFirstPage ? "Booking Confirmation" : "Booking Confirmation (continued)";
             page.drawText(invLabel, {
                 x: PAGE_W - MARGIN - bold.widthOfTextAtSize(invLabel, 13),
                 y: PAGE_H - 44, size: 13, font: bold, color: WHITE,
@@ -167,7 +167,7 @@ async function buildInvoicePdf(
         // Page 1: letterhead + bill-to/meta, then the table header
         drawHeaderBand(true);
         y = PAGE_H - 112;
-        page.drawText("Bill To", { x: MARGIN, y, size: 9, font: bold, color: MID });
+        page.drawText("Booked For", { x: MARGIN, y, size: 9, font: bold, color: MID });
         y -= 15;
         page.drawText(parentName,  { x: MARGIN, y, size: 11, font: bold, color: DARK });
         y -= 14;
@@ -250,7 +250,7 @@ async function buildInvoicePdf(
         y -= 2;
         page.drawLine({ start: { x: MARGIN, y: y + ROW_H }, end: { x: RIGHT_EDGE, y: y + ROW_H }, thickness: 2, color: SUN });
         page.drawRectangle({ x: MARGIN, y: y - 4, width: COL_W, height: ROW_H + 2, color: SUN_PALE });
-        page.drawText("Total Due", { x: MARGIN + 6, y: y + 2, size: 10, font: bold, color: DARK });
+        page.drawText("Estimated total", { x: MARGIN + 6, y: y + 2, size: 10, font: bold, color: DARK });
         const totalStr = `$${grandTotal.toFixed(2)}`;
         page.drawText(totalStr, {
             x: RIGHT_EDGE - bold.widthOfTextAtSize(totalStr, 12) - 8,
@@ -409,14 +409,18 @@ serve(async (req) => {
               <tbody>${rows}</tbody>
               <tfoot>
                 <tr style="background:#FFF8E1;">
-                  <td colspan="2" style="padding:10px 14px;font-weight:700;color:#333;border-top:2px solid #F5B731;">Total Due</td>
+                  <td colspan="2" style="padding:10px 14px;font-weight:700;color:#333;border-top:2px solid #F5B731;">Estimated total</td>
                   <td style="padding:10px 14px;text-align:right;font-weight:700;color:#01294A;font-size:16px;border-top:2px solid #F5B731;">$${(grandTotal as number).toFixed(2)}</td>
                 </tr>
               </tfoot>
             </table>
 
             <p style="color:#555;font-size:14px;line-height:1.65;">
-              A calendar file (.ics) and a PDF invoice are attached. If you have any questions or need to make changes, please reply to this email.
+              This confirms the days you booked. <strong>Your invoice for the month will follow from the office</strong> — the amount above is an estimate based on today's rates and the days listed.
+            </p>
+
+            <p style="color:#555;font-size:14px;line-height:1.65;">
+              A calendar file (.ics) and a summary PDF are attached. If you have any questions or need to make changes, please reply to this email.
             </p>
 
             <p style="color:#333;font-size:15px;margin-top:24px;">Warm regards,<br>

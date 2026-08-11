@@ -594,6 +594,10 @@ async function onChildrenChanged() {
     closeDayPicker();
     capacityCache = {};
 
+    // Refresh which siblings are already booked before anything prices a day —
+    // the set changes as children are added to or removed from this session.
+    await loadSiblingBookedDays();
+
     if (!selectedChildren.length) {
         activeChildId = null;
         hideCalendar();
@@ -986,6 +990,67 @@ function childrenScheduledOn(dateStr, children = selectedChildren) {
     return children.filter(c => childSchedules.get(c.studentId)?.has(dateStr));
 }
 
+// ── Siblings already booked for the target month ─────────────
+// The $10 sibling discount is a family-level, per-day perk, but this session
+// only knows about children picked in THIS session. A parent registering a
+// second child a week after the first therefore looked like a family of one
+// and saw no discount, while the invoice — which computes per family in the
+// database — applied it. The quote and the bill disagreed.
+//
+// dateStr → [{ childName, eff, hasIndividualDiscount }] for the family's other
+// children whose days are already booked for the target month.
+let siblingBookedDays = new Map();
+
+async function loadSiblingBookedDays() {
+    siblingBookedDays = new Map();
+    const fam = selectedFamily;
+    if (!fam || typeof fetchRegistrationsByEmail !== 'function') return;
+
+    const monthKey  = getTargetMonthKey();
+    const emails    = [fam.parent_email, fam.parent2_email].filter(Boolean);
+    const inSession = new Set(selectedChildren.map(c => (c.name || '').toLowerCase()));
+
+    try {
+        const results = await Promise.all(emails.map(e => fetchRegistrationsByEmail(e).catch(() => [])));
+        const seenReg = new Set();
+
+        for (const reg of results.flat()) {
+            if (seenReg.has(reg.id)) continue;      // both parents' emails can return the same row
+            seenReg.add(reg.id);
+            if (reg.status && reg.status !== 'confirmed') continue;
+
+            const nameKey = (reg.child_name || '').toLowerCase();
+            if (inSession.has(nameKey)) continue;   // this child's days come from the picker, not here
+
+            const room = ROOMS.find(r => r.id === reg.room_id);
+            if (!room) continue;
+
+            const student = (fam.students || []).find(s =>
+                (s.child_name || '').toLowerCase() === nameKey);
+            const dType = student?.discount_type  || 'none';
+            const dVal  = parseFloat(student?.discount_value || 0);
+            const hasIndividualDiscount = dType === 'staff' || (dType === 'custom' && dVal > 0);
+
+            for (const d of reg.registration_dates || []) {
+                if (d.waitlisted || !d.care_date) continue;
+                if (!String(d.care_date).startsWith(monthKey)) continue;
+                const base = (!room.fullDayOnly && d.day_type === 'half')
+                    ? (room.halfDayRate || 0) : (room.fullDayRate || 0);
+                if (!siblingBookedDays.has(d.care_date)) siblingBookedDays.set(d.care_date, []);
+                siblingBookedDays.get(d.care_date).push({
+                    childName: reg.child_name,
+                    eff:       effectiveRate(base, dType, dVal),
+                    hasIndividualDiscount,
+                });
+            }
+        }
+    } catch (err) {
+        // Never block registration on this — worst case the quote reverts to
+        // session-only pricing, which is what it did before.
+        console.warn('loadSiblingBookedDays:', err);
+    }
+}
+
 /**
  * Per-day billing breakdown for one calendar date, applying both discount layers:
  *   1. Each child's individual discount (staff = free, custom = % off).
@@ -1013,10 +1078,24 @@ function getChildDayAmounts(dateStr, children = selectedChildren, excludeStudent
     // If anyone present has an individual discount, the sibling discount is off
     // for the whole group that day — otherwise the highest-rate child pays full
     // and everyone else gets $10 off, same as always.
-    const anyIndividualDiscount = entries.some(e => e.hasIndividualDiscount);
-    const ranked = [...entries].sort((a, b) => b.eff - a.eff);
+    //
+    // "Present that day" includes siblings whose days were booked in an EARLIER
+    // session (see loadSiblingBookedDays), because the discount is a family
+    // perk and the invoice computes it per family. Ranking against only this
+    // session's children is what made the quote disagree with the bill.
+    const booked = siblingBookedDays.get(dateStr) || [];
+    const headcount = entries.length + booked.length;
+
+    const anyIndividualDiscount = entries.some(e => e.hasIndividualDiscount)
+                               || booked.some(b => b.hasIndividualDiscount);
+
+    const ranked = [
+        ...entries.map(e => ({ key: e.child.studentId, eff: e.eff })),
+        ...booked.map((b, i) => ({ key: `booked:${b.childName}:${i}`, eff: b.eff })),
+    ].sort((a, b) => b.eff - a.eff);
+
     const discountedIds = new Set(
-        (dayChildren.length < 2 || anyIndividualDiscount) ? [] : ranked.slice(1).map(e => e.child.studentId)
+        (headcount < 2 || anyIndividualDiscount) ? [] : ranked.slice(1).map(e => e.key)
     );
 
     return entries.map(entry => {
@@ -1558,11 +1637,15 @@ async function handleSubmit(e) {
                     <tbody>${weeklyReceiptRows}${dailyReceiptRows}</tbody>
                     <tfoot>
                         <tr class="receipt-total-row">
-                            <td colspan="2"><strong>Total</strong></td>
+                            <td colspan="2"><strong>Estimated total</strong></td>
                             <td class="receipt-amount"><strong>$${grandTotal.toFixed(2)}</strong></td>
                         </tr>
                     </tfoot>
-                </table>`;
+                </table>
+                <p class="receipt-day-summary" style="margin-top:10px">
+                    This confirms the days you booked. Your invoice for the month
+                    will follow from the office.
+                </p>`;
         }
 
         const childList = results
