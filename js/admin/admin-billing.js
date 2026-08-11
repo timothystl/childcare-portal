@@ -2352,3 +2352,293 @@ function _normalizeImportDate(raw) {
     }
     return _todayStr();
 }
+
+// ============================================================
+// INVOICES  — the middle of the money flow
+// ============================================================
+// The portal could already see what was owed (Accounts Receivable),
+// compute what to charge (Family Billing Summary) and record what was
+// paid (ProCare Import) — but nothing issued the bill. 496 rows sat in
+// billing_invoices at status='draft' because the draft → issued path
+// had no UI. This is that UI.
+//
+// It computes NOTHING new: _buildFamilyBillingData() is the same
+// function behind Family Billing Summary and the dashboard's billed
+// figure, so money stays calculated in exactly one place. Invoices is a
+// workflow over that output — draft, adjust, override, issue, export.
+
+let _invMonth   = '';
+let _invRows    = [];     // [{ familyId, name, email, children, days, base, discount, changeFees, total, invoice }]
+let _invCycleId = null;
+let _invBusy    = false;
+
+function _invDefaultMonth() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Entry point — called by the portal shell when the Invoices tool opens. */
+async function renderInvoicesTool() {
+    const monthEl = document.getElementById('invMonth');
+    if (monthEl && !monthEl.value) monthEl.value = _invMonth || _invDefaultMonth();
+    _invMonth = monthEl?.value || _invDefaultMonth();
+    await loadInvoicesForMonth();
+}
+
+async function loadInvoicesForMonth() {
+    const body = document.getElementById('invBody');
+    if (!body) return;
+    body.innerHTML = '<p class="empty-hint">Loading invoices…</p>';
+    try {
+        const families = (allFamiliesData && allFamiliesData.length)
+            ? allFamiliesData
+            : await fetchAllFamilies({ includeArchived: false });
+
+        const overrideRows = await fetchBillingOverrides(_invMonth);
+        const overridesMap = new Map();
+        overrideRows.forEach(r => overridesMap.set(
+            `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+            parseFloat(r.override_amount || 0)));
+
+        // Same calculation as Family Billing Summary — one source of truth.
+        const billing = _buildFamilyBillingData(_invMonth, overridesMap);
+
+        // Existing invoice rows for this month, so status/send stamps survive.
+        const cycle = await getOrCreateBillingCycle(_invMonth);
+        _invCycleId = cycle?.id ?? null;
+        const existing = _invCycleId ? await fetchInvoicesForCycle(_invCycleId) : [];
+        const byFamily = new Map(existing.map(i => [String(i.family_id), i]));
+
+        _invRows = billing.map(fam => {
+            const match = families.find(f =>
+                (f.parent_email  || '').toLowerCase() === (fam.parentEmail || '').toLowerCase() ||
+                (f.parent2_email || '').toLowerCase() === (fam.parentEmail || '').toLowerCase());
+            let base = 0, discount = 0, changeFees = 0, total = 0, days = 0, overridden = false;
+            (fam.children || []).forEach(c => {
+                base       += (c.subtotal || 0) + (c.changeFees || 0) + (c.discountDollar || 0) + (c.sibDiscount || 0);
+                discount   += (c.discountDollar || 0) + (c.sibDiscount || 0);
+                changeFees += c.changeFees || 0;
+                days       += (c.fullDays || 0) + (c.halfDays || 0);
+                total      += c.hasOverride
+                    ? parseFloat(c.overrideAmount || 0)
+                    : (c.subtotal || 0) + (c.changeFees || 0);
+                if (c.hasOverride) overridden = true;
+            });
+            return {
+                familyId:   match?.id || null,
+                name:       fam.parentName || '(no name)',
+                email:      fam.parentEmail || '',
+                children:   (fam.children || []).map(c => c.childName).filter(Boolean),
+                days,
+                base:       Math.round(base * 100) / 100,
+                discount:   Math.round(discount * 100) / 100,
+                changeFees: Math.round(changeFees * 100) / 100,
+                total:      Math.round(Math.max(0, total) * 100) / 100,
+                overridden,
+                invoice:    match ? byFamily.get(String(match.id)) || null : null,
+            };
+        });
+        renderInvoiceList();
+    } catch (err) {
+        console.error('loadInvoicesForMonth:', err);
+        body.innerHTML = `<p class="empty-hint">Could not load invoices — ${escHtml(err.message || 'unknown error')}</p>`;
+    }
+}
+
+function _invStatusOf(row) {
+    const inv = row.invoice;
+    if (!inv)                       return 'unsaved';
+    if (inv.status === 'paid')      return 'paid';
+    if (inv.status === 'partial')   return 'partial';
+    if (inv.sent_at)                return 'sent';
+    return 'draft';
+}
+
+const _INV_PILL = {
+    unsaved: ['bl-badge-noinv',     'Not drafted'],
+    draft:   ['bl-badge-finalized', 'Draft'],
+    sent:    ['bl-badge-partial',   'Sent'],
+    partial: ['bl-badge-partial',   'Part paid'],
+    paid:    ['bl-badge-paid',      'Paid'],
+};
+
+function renderInvoiceList() {
+    const body = document.getElementById('invBody');
+    if (!body) return;
+    if (!_invRows.length) {
+        body.innerHTML = '<p class="empty-hint">No families have booked days in this month, so there is nothing to bill.</p>';
+        _invRenderSummary();
+        return;
+    }
+
+    const rows = _invRows.map((r, i) => {
+        const st = _invStatusOf(r);
+        const [cls, label] = _INV_PILL[st];
+        const sentNote = r.invoice?.sent_at
+            ? `<br><small style="color:var(--text-muted)">sent ${escHtml(friendlyShort(String(r.invoice.sent_at).slice(0, 10)))}</small>`
+            : '';
+        return `<tr>
+            <td>
+                <strong>${escHtml(r.name)}</strong>${sentNote}
+                <br><small style="color:var(--text-muted)">${escHtml(r.email || 'no email on file')}</small>
+            </td>
+            <td>${escHtml(r.children.join(', ') || '—')}</td>
+            <td style="text-align:center">${r.days}</td>
+            <td style="text-align:right">$${r.base.toFixed(2)}</td>
+            <td style="text-align:right">${r.discount ? '−$' + r.discount.toFixed(2) : '—'}</td>
+            <td style="text-align:right">${r.changeFees ? '$' + r.changeFees.toFixed(2) : '—'}</td>
+            <td style="text-align:right"><strong>$${r.total.toFixed(2)}</strong>${
+                r.overridden ? '<br><small style="color:var(--tang)">overridden</small>' : ''}</td>
+            <td><span class="bl-badge ${cls}">${label}</span></td>
+            <td style="white-space:nowrap">
+                ${st === 'sent' || st === 'paid' || st === 'partial'
+                    ? `<button class="btn-xs" data-inv-unsend="${i}" ${st === 'sent' ? '' : 'disabled'}>Undo send</button>`
+                    : `<button class="btn-xs" data-inv-send="${i}" ${r.familyId ? '' : 'disabled title="No family record matched — fix the email in Family Directory"'}>Mark sent</button>`}
+            </td>
+        </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+        <div class="table-wrapper">
+            <table class="report-table">
+                <thead><tr>
+                    <th>Family</th><th>Children</th><th style="text-align:center">Days</th>
+                    <th style="text-align:right">Base</th><th style="text-align:right">Discount</th>
+                    <th style="text-align:right">Change fees</th><th style="text-align:right">Total</th>
+                    <th>Status</th><th></th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
+    _invRenderSummary();
+}
+
+function _invRenderSummary() {
+    const el = document.getElementById('invSummary');
+    if (!el) return;
+    const total   = _invRows.reduce((a, r) => a + r.total, 0);
+    const drafted = _invRows.filter(r => r.invoice).length;
+    const sent    = _invRows.filter(r => r.invoice?.sent_at).length;
+    const unmatched = _invRows.filter(r => !r.familyId).length;
+    el.innerHTML = `
+        <div class="ap-stat"><div class="ap-stat-label">Families</div><div class="ap-stat-value">${_invRows.length}</div></div>
+        <div class="ap-stat"><div class="ap-stat-label">Total billed</div><div class="ap-stat-value">$${Math.round(total).toLocaleString()}</div></div>
+        <div class="ap-stat"><div class="ap-stat-label">Drafted</div><div class="ap-stat-value">${drafted} of ${_invRows.length}</div></div>
+        <div class="ap-stat"><div class="ap-stat-label">Sent</div><div class="ap-stat-value ${sent ? 'is-ok' : 'is-alert'}">${sent}</div></div>
+        ${unmatched ? `<div class="ap-stat"><div class="ap-stat-label">No family record</div><div class="ap-stat-value is-alert">${unmatched}</div></div>` : ''}`;
+}
+
+/** Write the current calculation into billing_invoices as drafts. */
+async function saveInvoiceDrafts() {
+    if (_invBusy) return;
+    const btn = document.getElementById('invDraftBtn');
+    _invBusy = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+        const cycle = await getOrCreateBillingCycle(_invMonth);
+        _invCycleId = cycle.id;
+        let saved = 0;
+        for (const r of _invRows) {
+            if (!r.familyId) continue;
+            // Never overwrite a bill that has already gone out.
+            if (r.invoice?.sent_at) continue;
+            const row = await upsertBillingInvoice({
+                cycle_id:          _invCycleId,
+                family_id:         r.familyId,
+                base_amount:       r.base,
+                discount_amount:   r.discount,
+                adjustment_amount: 0,
+                adjustment_note:   '',
+                final_amount:      r.total,
+                status:            'draft',
+            });
+            r.invoice = row;
+            saved++;
+        }
+        await logAdminAction('draft', 'billing_invoice', null, { month: _invMonth, count: saved });
+        renderInvoiceList();
+        showAdminNote(`${saved} invoice${saved === 1 ? '' : 's'} drafted for ${_invMonth}.`);
+    } catch (err) {
+        alert('Could not save drafts: ' + (err.message || err));
+    } finally {
+        _invBusy = false;
+        if (btn) { btn.disabled = false; btn.textContent = '💾 Save drafts'; }
+    }
+}
+
+/**
+ * Records that the bills went out. This stamps the rows and writes an
+ * audit entry — it does not email anything. There is no invoice email
+ * function in this project yet; see the note under the table.
+ */
+async function markAllInvoicesSent() {
+    const pending = _invRows.filter(r => r.invoice && !r.invoice.sent_at);
+    if (!pending.length) { alert('Every drafted invoice for this month is already marked sent.'); return; }
+    if (!confirm(`Mark ${pending.length} invoice${pending.length === 1 ? '' : 's'} as sent for ${_invMonth}?\n\n` +
+                 'This records the issue date — Accounts Receivable ages overdue from it. It does not email anything.')) return;
+    const btn = document.getElementById('invSendBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Marking…'; }
+    try {
+        await markInvoicesSent(pending.map(r => ({ id: r.invoice.id, email: r.email })));
+        await loadInvoicesForMonth();
+        showAdminNote(`${pending.length} invoice${pending.length === 1 ? '' : 's'} marked sent.`);
+    } catch (err) {
+        alert('Could not mark those sent: ' + (err.message || err));
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🧾 Mark all as sent'; }
+    }
+}
+
+function exportInvoicesCsv() {
+    if (!_invRows.length) { alert('Nothing to export.'); return; }
+    const header = ['Family', 'Email', 'Children', 'Days', 'Base', 'Discount', 'Change fees', 'Total', 'Status', 'Sent'];
+    const lines = [header.join(',')].concat(_invRows.map(r => [
+        csvCell(r.name), csvCell(r.email), csvCell(r.children.join('; ')), r.days,
+        r.base.toFixed(2), r.discount.toFixed(2), r.changeFees.toFixed(2), r.total.toFixed(2),
+        csvCell(_INV_PILL[_invStatusOf(r)][1]),
+        csvCell(r.invoice?.sent_at ? String(r.invoice.sent_at).slice(0, 10) : ''),
+    ].join(',')));
+    downloadFile(`invoices-${_invMonth}.csv`, 'text/csv', lines.join('\n'));
+}
+
+/** Small inline confirmation under the toolbar — the admin CSS has no toast. */
+function showAdminNote(msg) {
+    const el = document.getElementById('invNote');
+    if (!el) return;
+    el.textContent = msg;
+    setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 6000);
+}
+
+function setupInvoices() {
+    document.getElementById('invMonth')?.addEventListener('change', e => {
+        _invMonth = e.target.value;
+        loadInvoicesForMonth();
+    });
+    document.getElementById('invDraftBtn')?.addEventListener('click', saveInvoiceDrafts);
+    document.getElementById('invSendBtn') ?.addEventListener('click', markAllInvoicesSent);
+    document.getElementById('invCsvBtn')  ?.addEventListener('click', exportInvoicesCsv);
+    document.getElementById('invBody')    ?.addEventListener('click', async e => {
+        const sendBtn = e.target.closest('[data-inv-send]');
+        if (sendBtn) {
+            const r = _invRows[Number(sendBtn.dataset.invSend)];
+            if (!r?.invoice) { alert('Save the drafts first, then mark them sent.'); return; }
+            sendBtn.disabled = true;
+            try {
+                await markInvoicesSent([{ id: r.invoice.id, email: r.email }]);
+                await loadInvoicesForMonth();
+            } catch (err) { alert('Could not mark that sent: ' + (err.message || err)); sendBtn.disabled = false; }
+            return;
+        }
+        const undoBtn = e.target.closest('[data-inv-unsend]');
+        if (undoBtn) {
+            const r = _invRows[Number(undoBtn.dataset.invUnsend)];
+            if (!r?.invoice) return;
+            if (!confirm('Put this invoice back to draft? Accounts Receivable will stop ageing it.')) return;
+            undoBtn.disabled = true;
+            try {
+                await unmarkInvoiceSent(r.invoice.id);
+                await loadInvoicesForMonth();
+            } catch (err) { alert('Could not undo that: ' + (err.message || err)); undoBtn.disabled = false; }
+        }
+    });
+}

@@ -58,10 +58,6 @@
                 <span id="currentTabChip" class="current-tab-chip">
                     <span class="ctc-icon" id="currentTabIcon">🧭</span><span id="currentTabLabel">Director</span>
                 </span>
-                <div class="ap-layout-toggle" id="apLayoutToggle" role="group" aria-label="Layout">
-                    <button type="button" data-layout="dash">Dashboard</button>
-                    <button type="button" data-layout="list">List</button>
-                </div>
                 <button id="logoutBtn" class="btn-ghost">Logout</button>
                 <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open navigation menu" aria-expanded="false">
                     <span class="hamburger-bars" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -102,18 +98,24 @@
         </div>
 
         <!-- ══ Portal shell ═══════════════════════════════════════
-             Three navigation levels, all client-side (js/admin/admin-portal.js):
-               #apPage   — Dashboard or Hub (rendered by the shell)
-               #apDetail — one open tool: back link, the tool's own section,
-                           and its "Related" chips. Every legacy .tab-pane
-                           lives inside it; the shell shows exactly one
-                           section at a time.
+             Two levels, no modes (js/admin/admin-portal.js):
+               #apNav    — the permanent sidebar: tabs, then the active
+                           tab's tool groups. It is the tool index and the
+                           way back; there is no layout toggle and no
+                           separate list-of-everything screen.
+               #apPage   — the active tab's dashboard (the default landing
+                           state for every tab).
+               #apDetail — one open tool: its heading, the tool's own
+                           section, and its "Related" chips. Every legacy
+                           .tab-pane lives inside it and the shell shows
+                           exactly one section at a time.
              ══════════════════════════════════════════════════════ -->
         <div class="ap-shell" id="apShell">
+        <nav class="ap-nav" id="apNav" aria-label="Tools"></nav>
         <div class="ap-main">
         <div class="ap-page hidden" id="apPage"></div>
         <div class="ap-page hidden" id="apDetail">
-        <button type="button" class="ap-back" id="apBack">← All tools</button>
+        <div class="ap-detail-head" id="apDetailHead"></div>
 
         <!-- ── Tab: Daily ─────────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-daily">
@@ -1686,6 +1688,32 @@
             </section>
 
             <!-- Accounts Receivable -->
+            <!-- Invoices — the step between computing a bill and chasing it.
+                 Renders via renderInvoicesTool() in js/admin/admin-billing.js,
+                 over the same _buildFamilyBillingData() the Family Billing
+                 Summary uses. No second calculation. -->
+            <section class="admin-section" id="invoicesSection">
+                <h2>🧾 Invoices</h2>
+                <p class="section-desc">Draft, adjust, and issue this month's family invoices. Amounts come from the same calculation as Family Billing Summary — days actually booked, discounts, sibling credit and change fees.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="invMonth">Month</label>
+                        <input type="month" id="invMonth">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="invDraftBtn" class="btn-primary">💾 Save drafts</button>
+                        <button id="invSendBtn"  class="btn-secondary">🧾 Mark all as sent</button>
+                        <button id="invCsvBtn"   class="btn-secondary">&#8595; Export CSV</button>
+                    </div>
+                </div>
+                <div class="ap-stats" id="invSummary" style="margin-bottom:16px"></div>
+                <p id="invNote" class="ap-note" style="min-height:1.2em;color:var(--green-text);font-weight:700"></p>
+                <div id="invBody"><p class="empty-hint">Loading…</p></div>
+                <p class="ap-note" style="margin-top:14px;max-width:76ch">
+                    <strong>Mark as sent</strong> records the issue date and the address on file, and writes an audit entry — Accounts Receivable ages “overdue” from that date rather than from the start of the month. It does not email the invoice: this project has no invoice email function yet, so sending is still done however you send it today.
+                </p>
+            </section>
+
             <section class="admin-section collapsible-section" id="billingArSection">
                 <h2>📋 Accounts Receivable</h2>
                 <p class="section-desc">View payment status per family for a selected month. Invoices are created automatically when registrations are submitted.</p>
