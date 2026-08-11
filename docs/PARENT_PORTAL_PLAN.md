@@ -32,7 +32,8 @@ door — the notification carries the news, the app carries the detail.
 | Meals | Parents pack food. **Bottles + feeding times for Bear (infants)**; broad meal report elsewhere. No CACFP coupling. |
 | Diapering | Shown in **all rooms**, ignored where irrelevant (potty training crosses room lines). |
 | Announcements | Purely informational. Closures continue to read from the **existing `closures` data**; billing consequences handled separately. |
-| Director | A **configurable role**, not a hardcoded person. Reassignable in Settings. |
+| Director | A **configurable role**, not a hardcoded person. Reassignable in Settings. Incident review notifications go to the role address **`mdo@timothystl.org`**. |
+| Push scope | **Per family** — both parents are notified of the same events. Content is still scoped to that family's own children. |
 | Scale | 121 families (~242 parents), 149 children. |
 
 ---
@@ -255,10 +256,16 @@ start whenever you're ready, independent of build order.*
 
 ### 8.1 Prerequisite, non-negotiable
 
-**FS5 / T1 must be closed first.** Invoice amounts are currently client-supplied,
-and `anon` can inflate a known family's draft invoice. That is tolerable today
-only because no payment processor is attached. Attaching one converts it into a
-live financial vector. Server-side amount computation lands before any card does.
+**FS5 / T1 must be closed first.** Invoice amounts were client-supplied, and
+`anon` could inflate a known family's draft invoice. That is tolerable only
+while no payment processor is attached; attaching one converts it into a live
+financial vector.
+
+**Status: migrations written 2026-08-11, not yet applied.**
+`fs5_phase1_revoke_add_day_anon.sql` and
+`fs5_phase2_server_side_invoice_amount.sql`, with rollbacks for both. Phase 2
+removes the amount from the API surface entirely and recomputes it in the
+database. Apply and verify both before any processor work begins.
 
 ### 8.2 Processor requirements
 
@@ -347,11 +354,7 @@ clean.
   made it" reassurance may be worth a real-time push.
 - Meal amount scale: `some` / `most` / `all` — is a "didn't touch it" option
   wanted?
-- A role address (e.g. `director@timothystl.org`) for incident review
-  notifications; a shared address survives staffing changes where a personal one
-  doesn't. Confirm the director is in `admin_roles` as **full**.
-- Whether Phase 1 push should be per-parent or per-family (two parents, two
-  devices, one family record).
+- Confirm the director is in `admin_roles` as **full**.
 - Supabase JWT signing mode (legacy shared secret vs. asymmetric keys).
 
 ---

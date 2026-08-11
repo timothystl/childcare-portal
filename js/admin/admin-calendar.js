@@ -1886,18 +1886,13 @@ async function _arSubmit() {
             });
         }
 
-        // Create billing invoice — same calculation as the review panel
+        // Create billing invoice. FS5: the RPC recomputes the family's whole
+        // month server-side from the registration rows, so no total is passed.
+        // That also picks up the sibling discount across separate registrations,
+        // which the old per-session calculation here could not see.
         try {
-            const room = _arRoom;
-            let total = 0;
-            for (const [, type] of _arDates.entries()) {
-                const rate = type === 'full' ? (room?.fullDayRate || 0) : (room?.halfDayRate || 0);
-                const disc = _arStudent?.discount_type === 'staff'  ? rate
-                           : _arStudent?.discount_type === 'custom' ? rate * (_arStudent.discount_value || 0) / 100 : 0;
-                total += rate - disc;
-            }
             const monthKey = [..._arDates.keys()][0].substring(0, 7);
-            await createInvoiceByEmail(_arFamily.parent_email, monthKey, Math.round(total * 100) / 100);
+            await createInvoiceByEmail(_arFamily.parent_email, monthKey);
         } catch (_) { /* non-blocking */ }
 
         if (_arWaitlistAppId) {
