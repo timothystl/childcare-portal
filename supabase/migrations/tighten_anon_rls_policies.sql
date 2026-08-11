@@ -1,6 +1,29 @@
 -- ============================================================
 -- ⛔ DO NOT APPLY — THIS MIGRATION CAUSED A PRODUCTION REGRESSION (2026-06-05)
 -- ============================================================
+--
+-- ⚠️ CORRECTION 2026-08-11 — THE ROOT-CAUSE NOTE BELOW IS WRONG.
+--   `family_login` is SECURITY DEFINER: declared so in add_family_login_rpc.sql
+--   (its original migration) and confirmed in production
+--   (pg_proc.prosecdef = true). A definer function executes with its owner's
+--   privileges and bypasses RLS, so dropping an anon policy on `families`
+--   CANNOT starve its internal lookup. `lookup_staff_by_pin` is likewise
+--   SECURITY DEFINER.
+--
+--   Corroborating evidence: the R3 fix later revoked anon's SELECT on
+--   families.pin_hash and parent login kept working.
+--
+--   So the true cause of the 2026-06-05 regression is UNKNOWN. Note that this
+--   file drops SEVEN policies across THREE tables at once — including three
+--   `staff` SELECT policies, and ~1,600 anon calls per five months hit `staff`.
+--   The kiosk is the more likely casualty than login.
+--
+--   DO NOT treat "family_login needs anon SELECT on families" as fact. The
+--   evidence-based replacement for the families/students half of this file is
+--   r1r4_phase1_families_students.sql (+ its ROLLBACK). The `staff` half
+--   remains untriaged.
+--
+-- ── original (incorrect) note, kept for the record ───────────
 -- Dropping the anon SELECT on `families` broke PARENT LOGIN: the family_login
 -- RPC is evidently SECURITY INVOKER (runs as the anon caller), so without an
 -- anon SELECT policy on families its internal lookup returns 0 rows →
