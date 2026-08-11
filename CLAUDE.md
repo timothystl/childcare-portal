@@ -44,6 +44,41 @@ Timothy Lutheran MDO (Mother's Day Out) registration portal. Parents register ch
 
 ---
 
+## Admin portal shell (v2.4.0 — the "myMDO Admin Portal" redesign)
+
+`admin.html` no longer navigates by tab-pane. `js/admin/admin-portal.js` owns
+navigation and renders three levels, all client-side:
+
+1. **Dashboard** (`layout === 'dash'`) — live metric cards, panels, attention list
+2. **Hub** (`'list'` / `'rail'`) — the tool index for the active role tab
+3. **Detail** — one tool on screen, with a back link and Related chips
+
+Five role tabs: **Director · Finance · Planning · Market Analysis · Settings**.
+Every existing `.admin-section` / `.table-section` / `.capacity-section` is one
+entry in `AP_TOOLS` (key → `section` id + `pane`); the shell shows exactly one
+at a time by putting `.ap-hidden-tool` on the rest. **Adding a section to
+`admin.html` means adding an `AP_TOOLS` entry, or it is unreachable.**
+
+- `setupTabs()` (admin-settings.js) keeps only the drawer open/close wiring and
+  then hands off to `setupAdminPortal()`. The old `activate(tab)` path is dead.
+- Role restrictions still hide sections with inline `display:none`;
+  `apToolAvailable()` reads that, plus tab-level rules for `restricted`/`staff`.
+  `applySessionRole()` re-renders the shell afterwards.
+- Layout and active tab persist in `localStorage` (`apLayout`, `apTab`, `apDone`).
+- New tools built in this module rather than mapped: **Daily Staffing
+  Requirement** (`#staffReqSection`) and **Rate Increase Scenarios**
+  (`#rateScenarioSection`). Both compute from booked registrations only —
+  clock-in room data is deliberately never read.
+- **Time off**: staff request days off at the kiosk → the request lands pending
+  in the director's "Needs your OK" panel inside Build Staff Schedule →
+  approving is what makes it real. Only `approved` rows reach
+  `autoFillStaffSchedule()` (via `window.apApprovedOffForWeek`). Table + the two
+  PIN-gated definer RPCs are in `supabase/migrations/add_staff_time_off_requests.sql`
+  — **not yet applied to production.** Until it is, the dashboard's days-off
+  card reads 0 and the schedule sidebar shows an "apply the migration" hint.
+
+---
+
 ## ⚠️ Current open queue — start here (updated 2026-08-03, v2.3.23)
 
 A fifth sweep (whole codebase + **live production verification**) was done 2026-08-02,
@@ -124,8 +159,9 @@ have used an identical query shape and be invisible.
 `supabase/migrations/` were diffed against the live catalog. Three were unapplied;
 `add_audit_log.sql` has since been superseded and applied as
 `add_audit_log_hardened.sql`. Still unapplied: `enforce_registration_window.sql`
-(R24) and `ss1_public_read_rpcs.sql` (known staged groundwork). Everything else
-is applied. **Re-run this diff after any migration work — a committed migration
+(R24), `ss1_public_read_rpcs.sql` (known staged groundwork), and
+`add_staff_time_off_requests.sql` (new 2026-08-11 with the portal redesign).
+Everything else is applied. **Re-run this diff after any migration work — a committed migration
 is not a deployed one, and that is exactly how R5 and R24 hid.**
 
 **Updated 2026-08-11:** `add_attendance_records.sql` was written **and applied**

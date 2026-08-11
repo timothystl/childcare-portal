@@ -1,0 +1,808 @@
+/* ============================================================
+   ADMIN PORTAL SHELL — design handoff "myMDO Admin Portal"
+   ------------------------------------------------------------
+   The redesign's navigation model layered over the existing admin
+   sections: five role tabs (Director / Finance / Planning / Market /
+   Settings), a three-way layout toggle (Dashboard / List / Rail), and
+   a per-tool detail view.
+
+   Every colour here resolves to a token already defined in
+   css/styles.css :root — the handoff palette and the Sunlit
+   Neighborhood palette are the same system:
+     Navy #01294A --navy · Ink #2E2A22 --text · Muted #7A6E5A --text-muted
+     Green #3A7B60 --green-text · Gold #F5B731 --sun
+     Tangerine #E97D55 --tang · Page bg #F5F0E4 --warm-gray
+     Surface warm #FDFAF0 --cream · Border #E8E0CC --border
+     Header mint #C9E6DC --green-lt · Tint gold #FFF8E1 --sun-pale
+     Tint green #EAF5EF --green-pale · Tint tangerine #FDEEE8 --tang-pale
+   Tokens the base palette has no name for are declared below.
+   ============================================================ */
+
+:root {
+    --ap-deep-tang:   #B3452B;  /* attention text on tangerine tint (higher contrast) */
+    --ap-border-lt:   #F0EADA;  /* internal dividers, table row rules */
+    --ap-tint-blue:   #E4EEF6;  /* "Every week" (standing) tag */
+    --ap-tint-border: #F0C4B0;  /* card border inside the tangerine panel */
+    --ap-tint-sand:   #F5F0E4;  /* neutral tool tile tint */
+    --ap-flag-bg:     #FBDDD1;  /* below-ratio pill */
+    --ap-neutral-bar: #C9C0A8;  /* comparison bars, dashed add affordances */
+}
+
+/* ── Header additions ────────────────────────────────────── */
+.ap-layout-toggle {
+    display: flex;
+    gap: 2px;
+    background: var(--cream);
+    border: 2px solid var(--border);
+    border-radius: 9px;
+    padding: 3px;
+    height: 44px;
+    align-items: center;
+}
+.ap-layout-toggle button {
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    border-radius: 6px;
+    height: 32px;
+    padding: 0 13px;
+    cursor: pointer;
+    font-size: .82em;
+    font-weight: 800;
+    font-family: var(--font-body);
+}
+.ap-layout-toggle button:hover { color: var(--navy); }
+.ap-layout-toggle button.is-active { background: var(--navy); color: #fff; }
+.ap-layout-toggle button.is-active:hover { color: #fff; }
+
+/* ── Shell frame ─────────────────────────────────────────── */
+.ap-shell { display: flex; align-items: flex-start; gap: 0; }
+.ap-main  { flex: 1; min-width: 0; }
+.ap-page  { padding: 28px 32px 64px; max-width: 1180px; margin: 0 auto; }
+
+.ap-rail {
+    width: 266px;
+    flex: 0 0 266px;
+    background: var(--cream);
+    border-right: 1px solid var(--border);
+    padding: 20px 12px 40px;
+    position: sticky;
+    top: var(--ap-header-h, 92px);
+    max-height: calc(100vh - var(--ap-header-h, 92px));
+    overflow-y: auto;
+}
+.ap-rail-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+.ap-rail-tab,
+.ap-rail-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: var(--font-body);
+    color: var(--navy);
+}
+.ap-rail-tab  { padding: 9px 12px; font-size: .9em;  font-weight: 800; }
+.ap-rail-item { padding: 8px 12px; font-size: .86em; font-weight: 600; color: var(--text); }
+.ap-rail-tab:hover, .ap-rail-item:hover { background: var(--green-lt); }
+.ap-rail-tab.is-active { background: var(--sun); }
+.ap-rail-item.is-active { background: var(--green-lt); font-weight: 800; }
+.ap-rail-group {
+    font-size: .68em;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 14px 12px 6px;
+}
+
+/* ── Page heading ────────────────────────────────────────── */
+.ap-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+}
+.ap-head h2 {
+    font-family: var(--font-head);
+    font-size: 1.85em;
+    color: var(--navy);
+    font-weight: 700;
+    margin: 0;
+}
+.ap-head p {
+    color: var(--text-muted);
+    font-size: .95em;
+    margin: 6px 0 0;
+    max-width: 62ch;
+    text-wrap: pretty;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.ap-pill {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 7px 15px;
+    font-size: .83em;
+    font-weight: 800;
+    color: var(--navy);
+    cursor: pointer;
+    font-family: var(--font-body);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+.ap-pill:hover { border-color: var(--sun); background: var(--sun-pale); }
+
+.ap-ghost-btn {
+    background: transparent;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 16px;
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: .86em;
+    font-weight: 800;
+    color: var(--navy);
+}
+.ap-ghost-btn:hover { border-color: var(--sun); }
+
+.ap-back {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: .9em;
+    font-weight: 700;
+    color: var(--green-text);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 2px;
+    margin-bottom: 14px;
+}
+.ap-back:hover { color: var(--navy); }
+
+/* ── Metric row ──────────────────────────────────────────── */
+.ap-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(146px, 1fr));
+    gap: 14px;
+    margin-bottom: 26px;
+    align-items: stretch;   /* deliberate: all cards equal height */
+}
+.ap-metric {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--navy);
+    border-radius: 12px;
+    padding: 16px 18px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+}
+.ap-metric.tone-ok   { border-top-color: var(--green-text); }
+.ap-metric.tone-gold { border-top-color: var(--sun); }
+.ap-metric.tone-warn { border-top-color: var(--tang); }
+.ap-metric.span-2    { grid-column: span 2; }
+.ap-eyebrow {
+    font-size: .74em;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.ap-metric-value {
+    font-family: var(--font-head);
+    font-size: 1.85em;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 6px 0 2px;
+    line-height: 1.1;
+}
+.ap-metric-sub { font-size: .82em; font-weight: 700; color: var(--navy); }
+.ap-metric.tone-ok   .ap-metric-sub { color: var(--green-text); }
+.ap-metric.tone-gold .ap-metric-sub { color: var(--sun); }
+.ap-metric.tone-warn .ap-metric-sub { color: var(--tang); }
+.ap-metric .ap-pill { margin-top: 10px; align-self: flex-start; }
+
+.ap-mini-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    margin: 10px 0 8px;
+}
+.ap-mini-day {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 6px 2px 7px;
+    text-align: center;
+}
+.ap-mini-day.is-peak { background: var(--tang-pale); border-color: var(--tang); }
+.ap-mini-label {
+    font-size: .66em;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.ap-mini-value {
+    font-family: var(--font-head);
+    font-size: 1.2em;
+    font-weight: 700;
+    color: var(--navy);
+    line-height: 1.2;
+}
+.ap-mini-day.is-peak .ap-mini-value { color: var(--ap-deep-tang); }
+
+.ap-check-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 11px;
+    border-top: 1px solid var(--ap-border-lt);
+    cursor: pointer;
+    font-size: .82em;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+.ap-check-row input { width: 17px; height: 17px; accent-color: var(--green-text); cursor: pointer; margin: 0; }
+.ap-check-row.is-done { color: var(--green-text); }
+
+/* ── Dashboard body ──────────────────────────────────────── */
+.ap-body {
+    display: grid;
+    grid-template-columns: minmax(340px, 1.55fr) minmax(280px, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+/* min-width:0 — grid items default to min-width:auto, which would let the
+   staffing matrix's 430px min-width push the whole page wider than the
+   viewport instead of scrolling inside its own .ap-grid-wrap. */
+.ap-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.ap-col > * { min-width: 0; }
+
+.ap-panel {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+}
+.ap-panel.tone-gold { border-top: 4px solid var(--sun); }
+.ap-panel-head { padding: 18px 22px 4px; }
+.ap-panel-head h3 { font-size: 1.02em; font-weight: 800; color: var(--navy); margin: 0; }
+.ap-panel-head p  { color: var(--text-muted); font-size: .85em; margin: 4px 0 0; text-wrap: pretty; }
+.ap-panel-tools {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 16px 22px 20px;
+    margin-top: 8px;
+    border-top: 1px solid var(--ap-border-lt);
+}
+
+/* bars */
+.ap-bars { padding: 14px 22px 4px; display: flex; flex-direction: column; gap: 13px; }
+.ap-bar-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 5px;
+}
+.ap-bar-label { font-size: .88em; font-weight: 700; color: var(--text); }
+.ap-bar-note  { font-size: .84em; color: var(--text-muted); }
+.ap-bar-track { height: 12px; border-radius: 99px; background: var(--ap-border-lt); overflow: hidden; }
+.ap-bar-fill  { height: 100%; border-radius: 99px; background: var(--navy); }
+
+/* label / value rows */
+.ap-rows { padding: 8px 22px 4px; }
+.ap-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--ap-border-lt);
+}
+.ap-row-label { font-size: .9em;  font-weight: 700; color: var(--text); }
+.ap-row-note  { font-size: .78em; color: var(--text-muted); }
+.ap-row-value { font-weight: 800; font-size: 1em; white-space: nowrap; color: var(--navy); }
+
+/* staffing matrix */
+.ap-grid-wrap { padding: 14px 22px 6px; overflow-x: auto; }
+.ap-grid-inner { min-width: 430px; }
+.ap-grid-headrow,
+.ap-grid-row {
+    display: grid;
+    grid-template-columns: 118px repeat(5, 1fr);
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.ap-grid-headrow { align-items: end; }
+.ap-grid-row     { align-items: stretch; }
+.ap-grid-dayhead {
+    text-align: center;
+    border-radius: 8px 8px 0 0;
+    padding: 4px 0 6px;
+    font-size: .76em;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.ap-grid-dayhead.is-peak { background: var(--sun-pale); }
+.ap-grid-roomlabel { display: flex; flex-direction: column; justify-content: center; }
+.ap-grid-room  { font-size: .86em; font-weight: 800; color: var(--navy); line-height: 1.2; }
+.ap-grid-ratio { font-size: .72em; color: var(--text-muted); }
+.ap-grid-cell {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 8px 4px;
+    text-align: center;
+}
+.ap-grid-cell.is-edge { background: var(--tang-pale); border-color: var(--tang); }
+.ap-grid-staff { font-size: 1.12em; font-weight: 800; color: var(--navy); line-height: 1.1; }
+.ap-grid-cell.is-edge .ap-grid-staff { color: var(--ap-deep-tang); }
+.ap-grid-kids  { font-size: .7em; color: var(--text-muted); margin-top: 2px; }
+.ap-grid-foot {
+    font-size: .78em;
+    color: var(--text-muted);
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--ap-border-lt);
+    text-wrap: pretty;
+}
+
+/* waitlist queue */
+.ap-queue { padding: 6px 22px 4px; }
+.ap-queue-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--ap-border-lt);
+}
+.ap-queue-bar { width: 6px; align-self: stretch; border-radius: 99px; flex: 0 0 6px; background: var(--navy); }
+.ap-queue-name { font-size: .92em; font-weight: 800; color: var(--navy); }
+.ap-queue-meta { font-size: .8em; color: var(--text-muted); margin-top: 2px; }
+.ap-queue-want { font-size: .8em; color: var(--text); margin-top: 3px; }
+
+/* attention list */
+.ap-attention { display: flex; flex-direction: column; gap: 12px; }
+.ap-attn {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    text-align: left;
+    width: 100%;
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 14px;
+    cursor: pointer;
+    font-family: var(--font-body);
+}
+.ap-attn:hover { border-color: var(--sun); }
+.ap-attn.is-urgent { background: var(--tang-pale); border-color: var(--tang); }
+.ap-attn-icon { font-size: 1.15em; line-height: 1.2; }
+.ap-attn-text { display: block; font-size: .88em; font-weight: 700; color: var(--navy); text-wrap: pretty; }
+.ap-attn-cta  { display: block; font-size: .8em; color: var(--green-text); font-weight: 800; margin-top: 4px; }
+
+.ap-mini-panel {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+    padding: 20px 22px;
+}
+.ap-mini-panel.is-inset { background: var(--cream); box-shadow: none; }
+.ap-mini-title {
+    font-size: .78em;
+    font-weight: 800;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 14px;
+}
+.ap-jump {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: .88em;
+    font-weight: 700;
+    color: var(--navy);
+}
+.ap-jump:hover { background: var(--green-lt); }
+
+/* ── Hub: list + tile layouts ────────────────────────────── */
+.ap-group { margin-top: 34px; }
+.ap-group:first-of-type { margin-top: 20px; }
+.ap-group-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.ap-group-head h3 {
+    font-size: .78em;
+    font-weight: 800;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0;
+}
+.ap-group-rule { flex: 1; height: 1px; background: var(--border); }
+
+.ap-list {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+}
+.ap-list-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--ap-border-lt);
+    padding: 13px 18px;
+    cursor: pointer;
+    font-family: var(--font-body);
+}
+.ap-list-row:last-child { border-bottom: none; }
+.ap-list-row:hover { background: var(--cream); }
+.ap-list-icon {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .95em;
+}
+.ap-list-name  { font-weight: 800; font-size: .94em; color: var(--navy); flex: 0 0 210px; }
+.ap-list-blurb { color: var(--text-muted); font-size: .85em; flex: 1; min-width: 0; text-wrap: pretty; }
+.ap-list-arrow { color: var(--green-text); font-weight: 800; }
+
+.ap-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 18px; }
+.ap-tile {
+    text-align: left;
+    cursor: pointer;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: var(--shadow-card);
+    font-family: var(--font-body);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: transform .16s, box-shadow .16s, border-color .16s;
+}
+.ap-tile:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); border-color: var(--sun); }
+.ap-tile-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25em;
+}
+.ap-tile-name  { font-weight: 800; font-size: 1.02em; color: var(--navy); }
+.ap-tile-blurb { color: var(--text-muted); font-size: .86em; line-height: 1.45; text-wrap: pretty; }
+
+/* ── Detail view ─────────────────────────────────────────── */
+.ap-detail-related { margin-top: 22px; }
+.ap-detail-related .ap-mini-title { margin-bottom: 10px; }
+.ap-related-chips { display: flex; gap: 10px; flex-wrap: wrap; }
+.ap-related-chips .ap-pill { background: var(--white); font-weight: 700; font-size: .86em; }
+
+/* The shell shows exactly one tool at a time; every other section in the
+   same pane carries this class. Inline display:none from the role
+   restrictions still wins, which is deliberate. */
+.ap-hidden-tool { display: none !important; }
+
+/* In the portal shell every tool renders on its own page, so the legacy
+   per-section collapse chevron would only ever hide the whole page. */
+.ap-on .collapse-toggle { display: none; }
+.ap-on .admin-section.is-collapsed .collapsible-body,
+.ap-on .table-section.is-collapsed .collapsible-body { display: block !important; }
+.ap-on .admin-section.is-collapsed,
+.ap-on .table-section.is-collapsed { padding-bottom: inherit; }
+
+/* Build Staff Schedule: grid + time-off sidebar */
+.ap-sched-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 268px;
+    gap: 20px;
+    align-items: start;
+}
+.ap-sched-main { min-width: 0; }
+.ap-sched-side { position: sticky; top: 110px; }
+@media (max-width: 1000px) {
+    .ap-sched-split { grid-template-columns: 1fr; }
+    .ap-sched-side  { position: static; }
+}
+
+/* ── "Needs your OK" — time-off approval queue ───────────── */
+.ap-ok-panel {
+    background: var(--tang-pale);
+    border: 1px solid var(--tang);
+    border-radius: 10px;
+    padding: 13px 12px;
+    margin-bottom: 16px;
+}
+.ap-ok-title {
+    font-size: .74em;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ap-deep-tang);
+    margin: 0 0 10px;
+}
+.ap-ok-card {
+    background: var(--white);
+    border: 1px solid var(--ap-tint-border);
+    border-radius: 9px;
+    padding: 9px 10px;
+    margin-bottom: 9px;
+}
+.ap-ok-card:last-child { margin-bottom: 0; }
+.ap-ok-who { display: flex; gap: 7px; align-items: center; }
+.ap-ok-name { font-size: .82em; font-weight: 800; color: var(--navy); }
+.ap-ok-days { font-size: .78em; font-weight: 800; color: var(--text); margin-top: 6px; }
+.ap-ok-reason { font-size: .76em; color: var(--text-muted); text-wrap: pretty; margin-top: 1px; }
+.ap-ok-when { font-size: .68em; color: #9A8E78; margin-top: 4px; }
+.ap-ok-actions { display: flex; gap: 6px; margin-top: 9px; }
+.ap-ok-actions button {
+    flex: 1;
+    border-radius: 7px;
+    padding: 8px 4px;
+    font-size: .76em;
+    font-weight: 800;
+    font-family: var(--font-body);
+    cursor: pointer;
+}
+.ap-ok-approve { background: var(--green-text); color: #fff; border: none; }
+.ap-ok-deny    { background: transparent; color: var(--text-muted); border: 1.5px solid var(--border); }
+.ap-ok-approve:disabled, .ap-ok-deny:disabled { opacity: .55; cursor: default; }
+
+.ap-avatar {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    border-radius: 99px;
+    background: var(--navy);
+    color: #fff;
+    font-size: .62em;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ap-avatar.role-assistant { background: var(--green-text); }
+.ap-avatar.role-float     { background: var(--sun); color: var(--navy); }
+
+/* time-off sidebar */
+.ap-off-side {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 16px;
+    margin-bottom: 18px;
+}
+.ap-off-list { display: flex; flex-direction: column; gap: 9px; }
+.ap-off-item { display: flex; gap: 8px; align-items: flex-start; }
+.ap-off-line { display: flex; gap: 5px; align-items: baseline; flex-wrap: wrap; }
+.ap-off-name { font-size: .8em; font-weight: 800; color: var(--navy); }
+.ap-off-days { font-size: .78em; color: var(--text); }
+.ap-off-src  { display: block; font-size: .7em; color: var(--text-muted); text-wrap: pretty; }
+.ap-tag {
+    font-size: .62em;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    border-radius: 99px;
+    padding: 1px 7px;
+    background: var(--green-pale);
+    color: var(--green-text);
+}
+.ap-tag.is-standing { background: var(--ap-tint-blue); color: var(--navy); }
+.ap-off-remove {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: .9em;
+    line-height: 1;
+    padding: 0 2px;
+    margin-left: auto;
+}
+.ap-off-remove:hover { color: var(--ap-deep-tang); }
+
+.ap-add-off {
+    margin-top: 11px;
+    width: 100%;
+    background: var(--sun-pale);
+    color: var(--navy);
+    border: 1.5px dashed var(--sun);
+    border-radius: 8px;
+    padding: 9px 6px;
+    font-size: .78em;
+    font-weight: 800;
+    font-family: var(--font-body);
+    cursor: pointer;
+}
+.ap-add-off:hover { background: var(--sun-lt); }
+.ap-add-form {
+    margin-top: 12px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+.ap-add-field { display: flex; flex-direction: column; gap: 4px; }
+.ap-add-label {
+    font-size: .68em;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.ap-add-form select,
+.ap-add-form input[type="text"] {
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font-family: var(--font-body);
+    font-size: .82em;
+    background: var(--cream);
+    width: 100%;
+}
+.ap-day-chips { display: flex; gap: 4px; }
+.ap-day-chip {
+    flex: 1;
+    background: var(--white);
+    color: var(--text-muted);
+    border: 1.5px solid var(--border);
+    border-radius: 7px;
+    padding: 7px 0;
+    font-size: .7em;
+    font-weight: 800;
+    font-family: var(--font-body);
+    cursor: pointer;
+}
+.ap-day-chip.is-on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.ap-add-check { display: flex; gap: 7px; align-items: center; font-size: .76em; color: var(--text); cursor: pointer; }
+.ap-add-check input { width: 15px; height: 15px; accent-color: var(--navy); }
+.ap-add-actions { display: flex; gap: 6px; }
+.ap-add-actions button {
+    border-radius: 7px;
+    padding: 9px 6px;
+    font-size: .78em;
+    font-weight: 800;
+    font-family: var(--font-body);
+    cursor: pointer;
+}
+.ap-add-save   { flex: 1; background: var(--navy); color: #fff; border: none; }
+.ap-add-cancel { background: transparent; color: var(--text-muted); border: 1.5px solid var(--border); padding-left: 12px; padding-right: 12px; }
+.ap-note { font-size: .72em; color: var(--text-muted); margin-top: 8px; text-wrap: pretty; }
+.ap-err  { color: var(--ap-deep-tang); font-size: .76em; font-weight: 700; min-height: 1em; }
+
+/* summary strip shared by the schedule + staffing tools */
+.ap-stats { display: flex; gap: 14px; flex-wrap: wrap; }
+.ap-stat {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 9px 16px;
+}
+.ap-stat-label {
+    font-size: .7em;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.ap-stat-value { font-weight: 800; font-size: 1.08em; color: var(--navy); margin-top: 2px; }
+.ap-stat-value.is-alert { color: var(--ap-deep-tang); }
+.ap-stat-value.is-ok    { color: var(--green-text); }
+
+/* ── Daily Staffing Requirement ──────────────────────────── */
+.ap-callout {
+    background: var(--sun-pale);
+    border: 1px solid var(--sun);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: .86em;
+    color: var(--text);
+    margin-bottom: 18px;
+    max-width: 76ch;
+    text-wrap: pretty;
+}
+.ap-inputs { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 20px; }
+.ap-input-field { display: flex; flex-direction: column; gap: 6px; }
+.ap-input-field label { font-weight: 600; font-size: .85em; }
+.ap-input-field input {
+    width: 120px;
+    padding: 9px 13px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: var(--font-body);
+    background: var(--white);
+}
+.ap-req-table { border-collapse: collapse; width: 100%; min-width: 720px; }
+.ap-req-table th {
+    text-align: center;
+    padding: 8px 12px;
+    font-size: .78em;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    font-weight: 800;
+}
+.ap-req-table th.ap-th-left { text-align: left; }
+.ap-req-table td { padding: 9px 12px; text-align: center; border-bottom: 1px solid var(--ap-border-lt); }
+.ap-req-table td.ap-td-room  { text-align: left; font-weight: 700; font-size: .92em; color: var(--navy); }
+.ap-req-table td.ap-td-ratio { text-align: left; font-size: .86em; color: var(--text-muted); white-space: nowrap; }
+.ap-req-staff { font-weight: 800; font-size: 1.05em; color: var(--navy); }
+.ap-req-staff.is-edge { color: var(--tang); }
+.ap-req-kids  { font-size: .76em; color: var(--text-muted); }
+.ap-req-table tfoot td { border-bottom: none; padding-top: 9px; }
+.ap-req-table tfoot tr.is-strong td { font-weight: 800; color: var(--navy); }
+.ap-req-table tfoot tr.is-total td  { font-weight: 800; color: var(--green-text); }
+.ap-req-table tfoot tr.is-soft td   { font-weight: 600; color: var(--text-muted); }
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 900px) {
+    .ap-body { grid-template-columns: 1fr; }
+    .ap-rail { display: none; }
+    .ap-page { padding: 20px 16px 56px; }
+    .ap-metric.span-2 { grid-column: auto; }
+    .ap-list-name { flex: 0 0 auto; }
+    .ap-list-blurb { display: none; }
+}
+@media (max-width: 760px) {
+    /* The header is already down to logo + tab chip + hamburger at this width;
+       a third control tips it into horizontal overflow. Layout switching moves
+       into the drawer instead — see .ap-drawer-toggle. */
+    .admin-header .ap-layout-toggle { display: none; }
+}
+.ap-drawer-toggle { margin: 4px 12px 8px; }
+.ap-drawer-toggle button { flex: 1; }
+
+@media print {
+    .ap-layout-toggle, .ap-rail, .ap-back, .ap-detail-related { display: none !important; }
+}

@@ -153,13 +153,21 @@ async function applySessionRole() {
         console.error('applySessionRole failed:', err);
     }
     applyRoleRestrictions();
+    // Restrictions hide sections with inline display:none, and the portal
+    // index is built from what is visible — so it has to be rebuilt after.
+    if (typeof apRender === 'function') apRender();
 }
 
 // Undo any restrictions from a previous session before applying new ones.
 function _resetRoleRestrictions() {
+    // capacitySection is in this list because applyRoleRestrictions() hides it
+    // for `restricted` — without it here, a full admin logging in after a
+    // restricted one on the same page would keep Classroom Capacity hidden
+    // (and the portal, which indexes by visibility, would drop the tool).
     ['logHoursSection', 'payrollSection', 'staffRosterToggleWrap',
      'staffRosterSection', 'adminRolesSection', 'auditLogSection',
-     'closedDaysSection', 'ratesSection', 'ratiosSection', 'offerLinksSection', 'summerCampSection']
+     'closedDaysSection', 'ratesSection', 'ratiosSection', 'capacitySection',
+     'offerLinksSection', 'summerCampSection']
         .forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = '';

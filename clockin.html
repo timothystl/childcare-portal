@@ -330,6 +330,213 @@
 
         #loadingScreen { display: none; }
         .loading-wrap { padding: 24px 0; }
+
+        /* ── Time off ─────────────────────────────────────────
+           Wall-mounted touch device: no hit target below 44px. */
+        .to-section {
+            margin-top: 22px;
+            padding-top: 18px;
+            border-top: 1px solid var(--border);
+            text-align: left;
+        }
+        .to-label {
+            font-size: .72em;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+        .to-req-list { display: flex; flex-direction: column; gap: 8px; }
+        .to-req {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 11px;
+        }
+        .to-req-top {
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+            justify-content: space-between;
+        }
+        .to-req-days { font-size: .84em; font-weight: 800; color: var(--navy); }
+        .to-pill {
+            font-size: .64em;
+            font-weight: 800;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            border-radius: 99px;
+            padding: 2px 8px;
+            white-space: nowrap;
+            background: var(--sun-pale);
+            color: #8A6A12;
+        }
+        .to-pill.is-approved { background: var(--green-pale); color: #3A7B60; }
+        .to-req-note { font-size: .76em; color: var(--text-muted); margin-top: 2px; }
+
+        .btn-askoff {
+            width: 100%;
+            margin-top: 12px;
+            padding: 15px;
+            min-height: 44px;
+            border: 1.5px dashed var(--sun);
+            border-radius: 12px;
+            background: var(--sun-pale);
+            color: var(--navy);
+            font-size: .92em;
+            font-weight: 800;
+            font-family: var(--font-body);
+            cursor: pointer;
+        }
+        .btn-askoff:active { background: var(--sun-lt); }
+
+        #timeOffScreen, #sentScreen { display: none; }
+        #timeOffScreen { text-align: left; }
+        #timeOffScreen h1, #sentScreen h1 {
+            font-family: var(--font-head);
+            font-size: 1.25em;
+            font-weight: 700;
+            color: var(--navy);
+            text-align: center;
+        }
+        .to-sub {
+            color: var(--text-muted);
+            font-size: .85em;
+            margin: 4px 0 20px;
+            text-align: center;
+            text-wrap: pretty;
+        }
+        .to-head-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .to-count { font-size: .7em; font-weight: 700; color: #3A7B60; }
+        .to-cal {
+            background: var(--white);
+            border: 1.5px solid var(--border);
+            border-radius: 13px;
+            padding: 10px;
+        }
+        .to-cal-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .to-cal-nav button {
+            width: 44px;
+            height: 44px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            background: var(--cream);
+            color: var(--navy);
+            font-size: 1.05em;
+            font-weight: 800;
+            font-family: var(--font-body);
+            cursor: pointer;
+        }
+        .to-cal-nav button:disabled { color: #CFC7B4; cursor: default; }
+        .to-cal-month { font-family: var(--font-head); font-size: 1em; font-weight: 700; color: var(--navy); }
+        .to-dow, .to-week { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+        .to-dow { margin-bottom: 5px; }
+        .to-dow span {
+            text-align: center;
+            font-size: .62em;
+            font-weight: 800;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+        .to-weeks { display: flex; flex-direction: column; gap: 5px; }
+        .to-day {
+            background: var(--white);
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            min-height: 44px;
+            cursor: pointer;
+            font-family: var(--font-body);
+            font-size: .92em;
+            font-weight: 800;
+            color: var(--text);
+        }
+        .to-day.is-dim { background: var(--warm-gray); color: #BDB4A0; cursor: default; }
+        .to-day.is-on  { background: var(--navy); border-color: var(--navy); color: var(--white); }
+        .to-cal-foot { font-size: .68em; color: var(--text-muted); margin-top: 8px; text-align: center; }
+
+        .to-reasons { display: flex; flex-wrap: wrap; gap: 6px; }
+        .to-reason {
+            background: var(--white);
+            color: var(--text-muted);
+            border: 1.5px solid var(--border);
+            border-radius: 99px;
+            padding: 11px 16px;
+            min-height: 44px;
+            font-size: .8em;
+            font-weight: 800;
+            font-family: var(--font-body);
+            cursor: pointer;
+        }
+        .to-reason.is-on { background: #C9E6DC; border-color: #3A7B60; color: var(--navy); }
+        #toNote {
+            width: 100%;
+            margin-top: 12px;
+            padding: 13px;
+            min-height: 44px;
+            border: 1.5px solid var(--border);
+            border-radius: 11px;
+            background: var(--white);
+            font-family: var(--font-body);
+            font-size: .88em;
+            color: var(--text);
+        }
+        .to-repeat {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            margin-top: 14px;
+            padding: 13px;
+            background: var(--white);
+            border: 1.5px solid var(--border);
+            border-radius: 11px;
+            cursor: pointer;
+        }
+        .to-repeat input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--navy); }
+        .to-repeat b { display: block; font-size: .86em; font-weight: 800; color: var(--navy); }
+        .to-repeat span { display: block; font-size: .74em; color: var(--text-muted); text-wrap: pretty; }
+        .to-summary { font-size: .8em; color: var(--text-muted); margin-top: 14px; min-height: 20px; }
+        .btn-send {
+            width: 100%;
+            margin-top: 6px;
+            padding: 17px;
+            min-height: 44px;
+            border: none;
+            border-radius: 16px;
+            background: #B9C6BF;
+            color: var(--white);
+            font-size: 1em;
+            font-weight: 800;
+            font-family: var(--font-body);
+            cursor: pointer;
+        }
+        .btn-send.is-ready { background: #3A7B60; }
+        .to-tick {
+            width: 64px; height: 64px;
+            border-radius: 99px;
+            background: var(--green-pale);
+            border: 2px solid var(--green-lt);
+            color: #3A7B60;
+            font-size: 1.8em;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 14px auto 16px;
+        }
     </style>
 </head>
 <body>
@@ -375,6 +582,7 @@
         <div class="room-grid" id="roomGrid"></div>
         <div class="msg" id="roomMsg"></div>
         <button class="btn-clock btn-in" id="btnConfirmClockIn">Clock In</button>
+        <button class="btn-askoff" id="btnAskOffRoom">Ask for a day off</button>
         <button class="btn-signout" id="btnRoomCancel">Cancel</button>
     </div>
 
@@ -397,7 +605,63 @@
         <div class="msg" id="clockMsg"></div>
         <button class="btn-clock btn-in"  id="btnClockIn">Clock In</button>
         <button class="btn-clock btn-out" id="btnClockOut">Clock Out</button>
+
+        <!-- Your time off — pending requests are waiting on the director;
+             approved ones are already respected by the schedule. -->
+        <div class="to-section">
+            <p class="to-label">Your time off</p>
+            <div class="to-req-list" id="toMyRequests"></div>
+            <button class="btn-askoff" id="btnAskOff">Ask for a day off</button>
+        </div>
+
         <button class="btn-signout" id="btnSignOut">Sign Out</button>
+    </div>
+
+    <!-- Ask for a day off -->
+    <div id="timeOffScreen">
+        <h1>Ask for a day off</h1>
+        <p class="to-sub">Goes to the director for approval. Your schedule doesn't change until she says yes.</p>
+
+        <div class="to-head-row">
+            <p class="to-label" style="margin:0">Which days?</p>
+            <span class="to-count" id="toPickedCount"></span>
+        </div>
+        <div class="to-cal">
+            <div class="to-cal-nav">
+                <button type="button" id="toPrevMonth" aria-label="Previous month">&lsaquo;</button>
+                <span class="to-cal-month" id="toMonthLabel"></span>
+                <button type="button" id="toNextMonth" aria-label="Next month">&rsaquo;</button>
+            </div>
+            <div class="to-dow" id="toDowHeads"></div>
+            <div class="to-weeks" id="toWeeks"></div>
+            <p class="to-cal-foot">Weekdays only — the center is closed on weekends.</p>
+        </div>
+
+        <p class="to-label" style="margin:16px 0 8px">Why?</p>
+        <div class="to-reasons" id="toReasons"></div>
+
+        <input type="text" id="toNote" maxlength="300" placeholder="Anything she should know (optional)">
+
+        <label class="to-repeat">
+            <input type="checkbox" id="toRepeat">
+            <span style="min-width:0">
+                <b>Every week from now on</b>
+                <span>For a standing day off — a class, a second job, a regular appointment.</span>
+            </span>
+        </label>
+
+        <div class="to-summary" id="toSummary">Tap the days you need off.</div>
+        <button class="btn-send" id="btnSendOff">Send to the director</button>
+        <button class="btn-signout" id="btnOffBack">Back</button>
+    </div>
+
+    <!-- Sent confirmation -->
+    <div id="sentScreen">
+        <div class="to-tick">✓</div>
+        <h1>Sent to the director</h1>
+        <p class="to-sub" id="toSentLine" style="margin-bottom:10px"></p>
+        <p class="to-sub" style="margin-top:0">She'll approve or come find you. Keep working your posted schedule until then.</p>
+        <button class="btn-clock btn-in" id="btnOffDone" style="margin-top:12px">Done</button>
     </div>
 </div>
 
@@ -570,6 +834,11 @@ function showScreen(name) {
     document.getElementById('loadingScreen').style.display = name === 'loading' ? 'block' : 'none';
     document.getElementById('roomScreen').style.display    = name === 'room'    ? 'block' : 'none';
     document.getElementById('clockScreen').style.display   = name === 'clock'   ? 'block' : 'none';
+    document.getElementById('timeOffScreen').style.display = name === 'timeoff' ? 'block' : 'none';
+    document.getElementById('sentScreen').style.display    = name === 'sent'    ? 'block' : 'none';
+    // The PIN prompt only makes sense on the PIN screen.
+    document.querySelector('.subtitle').style.display      = name === 'pin'     ? '' : 'none';
+    document.querySelector('h1').style.display             = name === 'pin'     ? '' : 'none';
 }
 
 // Numpad handlers
@@ -650,6 +919,7 @@ async function verifyPin() {
             new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
         await refreshClockStatus();
+        toLoadMyRequests();   // fire-and-forget: the panel fills in as it lands
         _maybeShowPushPrompt(staffId);
         // Route: clock-out goes straight to clock screen; clock-in needs room selection first
         if (openEventId) {
@@ -835,6 +1105,217 @@ function setMsg(text, type) {
     el.textContent = text;
     el.className   = 'msg' + (type ? ' msg-' + type : '');
 }
+
+// ══ Time off ═══════════════════════════════════════════════════
+// Requests go to the director's "Needs your OK" queue and change nothing
+// until she approves them. Both RPCs are SECURITY DEFINER and re-verify
+// the PIN server-side — this page has no table access to
+// staff_time_off_requests at all (see the migration for the grants).
+
+const TO_DOW     = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+const TO_REASONS = ['Appointment', 'Sick', 'Family', 'Class', 'Other'];
+
+let toMonth   = 0;                 // months ahead of the current one
+let toPicked  = [];                // [{ key, label, ts }]
+let toReason  = 'Appointment';
+let toBusy    = false;
+
+/** Mon–Fri grid for the month `offset` months from now. */
+function toMonthGrid(offset) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const base  = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+    const start = new Date(base);
+    // Back up to the Monday on or before the 1st.
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    const rows = [];
+    for (let w = 0; w < 6; w++) {
+        const days = [];
+        for (let i = 0; i < 5; i++) {
+            const d = new Date(start);
+            d.setDate(start.getDate() + w * 7 + i);
+            days.push({
+                key:     d.toLocaleDateString('en-CA'),
+                ts:      d.getTime(),
+                num:     d.getDate(),
+                inMonth: d.getMonth() === base.getMonth(),
+                past:    d.getTime() < today.getTime(),
+                label:   `${TO_DOW[i]} ${d.getMonth() + 1}/${d.getDate()}`,
+            });
+        }
+        rows.push(days);
+    }
+    return {
+        label: base.toLocaleDateString([], { month: 'long', year: 'numeric' }),
+        rows:  rows.filter(r => r.some(d => d.inMonth)),
+    };
+}
+
+function toRenderCalendar() {
+    const grid = toMonthGrid(toMonth);
+    document.getElementById('toMonthLabel').textContent = grid.label;
+    document.getElementById('toPrevMonth').disabled = toMonth <= 0;
+    document.getElementById('toDowHeads').innerHTML =
+        TO_DOW.map(d => `<span>${d}</span>`).join('');
+    document.getElementById('toWeeks').innerHTML = grid.rows.map(row => `
+        <div class="to-week">
+            ${row.map(d => {
+                const on  = toPicked.some(p => p.key === d.key);
+                const dim = !d.inMonth || d.past;
+                return `<button type="button" class="to-day${on ? ' is-on' : ''}${dim && !on ? ' is-dim' : ''}"
+                        data-day="${d.key}" data-label="${d.label}" data-ts="${d.ts}"
+                        ${d.past ? 'disabled' : ''}>${d.num}</button>`;
+            }).join('')}
+        </div>`).join('');
+}
+
+function toRenderReasons() {
+    document.getElementById('toReasons').innerHTML = TO_REASONS.map(r =>
+        `<button type="button" class="to-reason${toReason === r ? ' is-on' : ''}" data-reason="${r}">${r}</button>`
+    ).join('');
+}
+
+function toPickedLabels() {
+    return toPicked.slice().sort((a, b) => a.ts - b.ts).map(p => p.label);
+}
+
+function toRenderSummary() {
+    const labels = toPickedLabels();
+    const repeat = document.getElementById('toRepeat').checked;
+    document.getElementById('toPickedCount').textContent =
+        toPicked.length ? `${toPicked.length} day${toPicked.length > 1 ? 's' : ''} picked` : '';
+    document.getElementById('toSummary').textContent = labels.length
+        ? (repeat
+            ? `Every ${labels[0].split(' ')[0]} from ${labels[0]} on · ${toReason}`
+            : `${labels.join(', ')} · ${toReason}`)
+        : 'Tap the days you need off.';
+    const send = document.getElementById('btnSendOff');
+    send.classList.toggle('is-ready', labels.length > 0 && !toBusy);
+}
+
+async function toLoadMyRequests() {
+    const list = document.getElementById('toMyRequests');
+    list.innerHTML = '';
+    if (!pin) return;
+    try {
+        const { data, error } = await sb.rpc('list_my_time_off_requests', { p_pin: parseInt(pin, 10) });
+        if (error) throw error;
+        const rows = Array.isArray(data) ? data : [];
+        if (!rows.length) {
+            list.innerHTML = '<p class="to-req-note">Nothing requested yet.</p>';
+            return;
+        }
+        list.innerHTML = rows.map(r => {
+            const approved = r.status === 'approved';
+            const days = r.recurring
+                ? `${TO_DOW[(new Date(r.off_dates[0] + 'T00:00:00').getDay() + 6) % 7]}, every week`
+                : (r.off_dates || []).map(d => {
+                      const dt = new Date(d + 'T00:00:00');
+                      return `${TO_DOW[(dt.getDay() + 6) % 7]} ${dt.getMonth() + 1}/${dt.getDate()}`;
+                  }).join(', ');
+            const note = [r.reason, r.note].filter(Boolean).join(' — ') ||
+                         (approved ? 'Approved' : 'Waiting on the director');
+            return `<div class="to-req">
+                <div class="to-req-top">
+                    <span class="to-req-days">${escapeText(days)}</span>
+                    <span class="to-pill${approved ? ' is-approved' : ''}">${approved ? 'Approved' : 'Pending'}</span>
+                </div>
+                <div class="to-req-note">${escapeText(note)}</div>
+            </div>`;
+        }).join('');
+    } catch (err) {
+        list.innerHTML = `<p class="to-req-note">Couldn't load your time off right now.</p>`;
+        console.error('toLoadMyRequests:', err);
+    }
+}
+
+// Minimal escaper — this page does not load supabase.js (and therefore has
+// no escHtml). Staff-authored notes come back through the RPC, so they are
+// never interpolated raw.
+function escapeText(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Reachable from the clock screen (clocked in) and the room screen (not yet
+// clocked in) — a staffer should never have to punch in just to ask for a day.
+let toReturnScreen = 'clock';
+
+function toOpen(from) {
+    toReturnScreen = from;
+    toMonth = 0; toPicked = []; toReason = 'Appointment'; toBusy = false;
+    document.getElementById('toNote').value = '';
+    document.getElementById('toRepeat').checked = false;
+    document.getElementById('btnSendOff').textContent = 'Send to the director';
+    document.getElementById('btnSendOff').disabled = false;
+    toRenderCalendar(); toRenderReasons(); toRenderSummary();
+    showScreen('timeoff');
+}
+
+document.getElementById('btnAskOff').addEventListener('click', () => toOpen('clock'));
+document.getElementById('btnAskOffRoom').addEventListener('click', () => toOpen('room'));
+
+document.getElementById('toPrevMonth').addEventListener('click', () => {
+    if (toMonth <= 0) return;
+    toMonth--; toRenderCalendar();
+});
+document.getElementById('toNextMonth').addEventListener('click', () => {
+    toMonth++; toRenderCalendar();
+});
+
+document.getElementById('toWeeks').addEventListener('click', e => {
+    const btn = e.target.closest('.to-day');
+    if (!btn || btn.disabled) return;
+    const key = btn.dataset.day;
+    toPicked = toPicked.some(p => p.key === key)
+        ? toPicked.filter(p => p.key !== key)
+        : toPicked.concat([{ key, label: btn.dataset.label, ts: Number(btn.dataset.ts) }]);
+    toRenderCalendar();
+    toRenderSummary();
+});
+
+document.getElementById('toReasons').addEventListener('click', e => {
+    const btn = e.target.closest('.to-reason');
+    if (!btn) return;
+    toReason = btn.dataset.reason;
+    toRenderReasons();
+    toRenderSummary();
+});
+
+document.getElementById('toRepeat').addEventListener('change', toRenderSummary);
+
+document.getElementById('btnOffBack').addEventListener('click', () => showScreen(toReturnScreen));
+document.getElementById('btnOffDone').addEventListener('click', () => showScreen(toReturnScreen));
+
+document.getElementById('btnSendOff').addEventListener('click', async () => {
+    const labels = toPickedLabels();
+    if (!labels.length || toBusy) return;
+    const btn = document.getElementById('btnSendOff');
+    toBusy = true;
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+        const dates  = toPicked.slice().sort((a, b) => a.ts - b.ts).map(p => p.key);
+        const repeat = document.getElementById('toRepeat').checked;
+        const { data, error } = await sb.rpc('submit_time_off_request', {
+            p_pin:       parseInt(pin, 10),
+            p_dates:     dates,
+            p_recurring: repeat,
+            p_reason:    toReason,
+            p_note:      document.getElementById('toNote').value.trim(),
+        });
+        if (error) throw error;
+        if (!data) throw new Error('Your PIN was not recognised — sign out and try again.');
+        document.getElementById('toSentLine').textContent =
+            (repeat ? `Every ${labels[0].split(' ')[0]} from ${labels[0]} on` : labels.join(', ')) + ` — ${toReason}.`;
+        toPicked = [];
+        showScreen('sent');
+        toLoadMyRequests();
+    } catch (err) {
+        document.getElementById('toSummary').textContent = 'Could not send: ' + (err.message || err);
+        btn.disabled = false; btn.textContent = 'Send to the director';
+    } finally {
+        toBusy = false;
+    }
+});
 </script>
 <script src="js/error-monitor.js"></script>
 <script>

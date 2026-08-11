@@ -120,6 +120,9 @@ const ENTRIES = [
                 'js/admin/admin-waitlist.js',
                 'js/admin/admin-cacfp.js',
                 'js/admin/admin-market.js',
+                // Last: the portal shell indexes the sections the modules above
+                // own, and calls into their loaders when a tool is opened.
+                'js/admin/admin-portal.js',
             ].map((f, i) => i === 0 ? f : fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
         },
@@ -151,6 +154,7 @@ const HTML_PATCHES = [
             /<script src="js\/admin\/admin-billing\.js"><\/script>\n/,
             /<script src="js\/admin\/admin-cacfp\.js"><\/script>\n/,
             /<script src="js\/admin\/admin-market\.js"><\/script>\n/,
+            /<script src="js\/admin\/admin-portal\.js"><\/script>\n/,
         ],
         // Insert bundles before </body>
         insert: [
