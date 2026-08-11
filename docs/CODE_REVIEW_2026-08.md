@@ -608,6 +608,29 @@ script's atomic write.
 
 ## R1 remediation plan — four phases
 
+> **Update 2026-08-11 — evidence gathered, Phase 1 written.**
+> Three corrections to what follows:
+> 1. **`family_login` is SECURITY DEFINER** (`pg_proc.prosecdef = true`, and declared
+>    so in its original migration). The ⛔ header on `tighten_anon_rls_policies.sql`
+>    blaming the June regression on it being SECURITY INVOKER is **wrong**, so the
+>    true cause of that regression is unknown. Do not plan around it.
+> 2. **`families` and `students` are not load-bearing for anon.** `pg_stat_statements`
+>    shows ~10 and ~12 anon calls respectively out of **80,992**, all matching admin
+>    query shapes; and only 7 of 48 sensitive-table helpers in `js/supabase.js` are
+>    reachable from parent/kiosk pages — all 7 touching `registrations` /
+>    `registration_dates` only. The parent portal reads children from the
+>    `family_login` payload, not from tables. **Phases 2 and 4 can be done today for
+>    these two tables** — see `r1r4_phase1_families_students.sql`.
+> 3. **`anon update clock events` is NOT safe to drop**, contrary to R4's write-up.
+>    It is how the kiosk clocks staff **out** (~1,280 calls). It needs scoping via a
+>    definer RPC, not removal.
+>
+> Revised order: families/students (done, ready to apply) → `registrations` /
+> `registration_dates` via `ss1_public_read_rpcs.sql` → `staff_clock_events` →
+> `staff`.
+
+
+
 The principle: **anon should be able to write what a stranger legitimately submits** —
 a registration, a waitlist application, a message — **and read almost nothing
 directly.** Everything a logged-in parent sees should come back through a function
