@@ -2371,6 +2371,7 @@ let _invMonth   = '';
 let _invRows    = [];     // [{ familyId, name, email, children, days, base, discount, changeFees, total, invoice }]
 let _invCycleId = null;
 let _invBusy    = false;
+let _invAdjustments = [];  // pending draft adjustments awaiting review
 
 function _invDefaultMonth() {
     const d = new Date();
@@ -2408,7 +2409,26 @@ async function loadInvoicesForMonth() {
         const cycle = await getOrCreateBillingCycle(_invMonth);
         _invCycleId = cycle?.id ?? null;
         const existing = _invCycleId ? await fetchInvoicesForCycle(_invCycleId) : [];
-        const byFamily = new Map(existing.map(i => [String(i.family_id), i]));
+
+        // A family can now hold several rows for one month: the original plus
+        // any adjustments. The table shows the ORIGINAL — keying the map on
+        // family_id alone would let a later adjustment shadow it.
+        const byFamily = new Map(
+            existing.filter(i => (i.invoice_type || 'original') === 'original')
+                    .map(i => [String(i.family_id), i])
+        );
+
+        // Adjustments awaiting the director's review, newest first.
+        _invAdjustments = existing
+            .filter(i => i.invoice_type === 'adjustment' && i.status === 'draft')
+            .map(i => ({
+                id:     i.id,
+                amount: Number(i.final_amount) || 0,
+                reason: i.reason || 'Schedule change',
+                name:   i.families?.parent_name  || '(no name)',
+                email:  i.families?.parent_email || '',
+            }))
+            .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
 
         _invRows = billing.map(fam => {
             const match = families.find(f =>
@@ -2449,6 +2469,7 @@ async function loadInvoicesForMonth() {
 function _invStatusOf(row) {
     const inv = row.invoice;
     if (!inv)                       return 'unsaved';
+    if (inv.status === 'void')      return 'void';
     if (inv.status === 'paid')      return 'paid';
     if (inv.status === 'partial')   return 'partial';
     if (inv.sent_at)                return 'sent';
@@ -2461,10 +2482,92 @@ const _INV_PILL = {
     sent:    ['bl-badge-partial',   'Sent'],
     partial: ['bl-badge-partial',   'Part paid'],
     paid:    ['bl-badge-paid',      'Paid'],
+    void:    ['bl-badge-noinv',     'Pre-system'],
 };
+
+// ── Adjustment review queue ──────────────────────────────────
+// Adjustments never go out on their own. A schedule change to a month whose
+// invoice has been sent drafts one of these; it waits here until the director
+// issues it. Repeated edits update the same draft, so this lists one net
+// adjustment per family, not one per click.
+function renderAdjustmentQueue() {
+    const wrap = document.getElementById('invAdjustments');
+    if (!wrap) return;
+
+    if (!_invAdjustments.length) {
+        wrap.innerHTML = '';
+        wrap.style.display = 'none';
+        return;
+    }
+    wrap.style.display = '';
+
+    const rows = _invAdjustments.map(a => {
+        const isCredit = a.amount < 0;
+        const amtTxt   = `${isCredit ? '−' : '+'}$${Math.abs(a.amount).toFixed(2)}`;
+        const amtColor = isCredit ? 'var(--green-text)' : 'var(--mustard-dark)';
+        return `
+            <li style="display:flex;align-items:center;gap:.75rem;padding:.6rem .25rem;
+                       border-bottom:1px solid var(--border)">
+                <div style="flex:1;min-width:0">
+                    <strong>${escHtml(a.name)}</strong>
+                    <div style="font-size:.82em;color:var(--text-muted)">${escHtml(a.reason)}</div>
+                </div>
+                <strong style="color:${amtColor};font-variant-numeric:tabular-nums">${amtTxt}</strong>
+                <button type="button" class="btn-primary btn-sm inv-adj-issue"
+                        data-id="${a.id}" data-email="${escHtml(a.email)}">Issue</button>
+                <button type="button" class="btn-ghost btn-sm inv-adj-discard"
+                        data-id="${a.id}">Discard</button>
+            </li>`;
+    }).join('');
+
+    const net = _invAdjustments.reduce((s, a) => s + a.amount, 0);
+    wrap.innerHTML = `
+        <div style="background:var(--sun-pale);border:1.5px solid var(--sun-lt);
+                    border-radius:var(--radius-md);padding:.9rem 1rem;margin-bottom:1rem">
+            <h3 style="margin:0 0 .15rem;font-size:1em;color:var(--navy)">
+                Adjustments awaiting review (${_invAdjustments.length})
+            </h3>
+            <p style="margin:0 0 .5rem;font-size:.85em;color:var(--text-muted)">
+                Days changed after these invoices were sent. Net
+                ${net < 0 ? '−' : '+'}$${Math.abs(net).toFixed(2)}.
+                Issuing records the adjustment as billed; it does not email.
+            </p>
+            <ul style="list-style:none;margin:0;padding:0">${rows}</ul>
+        </div>`;
+
+    wrap.querySelectorAll('.inv-adj-issue').forEach(btn => {
+        btn.addEventListener('click', () => _invIssueAdjustment(btn.dataset.id, btn.dataset.email));
+    });
+    wrap.querySelectorAll('.inv-adj-discard').forEach(btn => {
+        btn.addEventListener('click', () => _invDiscardAdjustment(btn.dataset.id));
+    });
+}
+
+async function _invIssueAdjustment(id, email) {
+    if (!confirm('Issue this adjustment?\n\nIt becomes part of the family\'s bill for the month and can no longer be edited. This records it — it does not email.')) return;
+    try {
+        await markInvoicesSent([{ id: Number(id), email }]);
+        await loadInvoicesForMonth();
+        showAdminNote('Adjustment issued.');
+    } catch (err) {
+        alert('Could not issue that adjustment: ' + (err.message || err));
+    }
+}
+
+async function _invDiscardAdjustment(id) {
+    if (!confirm('Discard this adjustment?\n\nThe schedule change stays; only the pending bill for it is withdrawn. It will reappear if the days change again.')) return;
+    try {
+        await deleteDraftAdjustment(Number(id));
+        await loadInvoicesForMonth();
+        showAdminNote('Adjustment discarded.');
+    } catch (err) {
+        alert('Could not discard that adjustment: ' + (err.message || err));
+    }
+}
 
 function renderInvoiceList() {
     const body = document.getElementById('invBody');
+    renderAdjustmentQueue();
     if (!body) return;
     if (!_invRows.length) {
         body.innerHTML = '<p class="empty-hint">No families have booked days in this month, so there is nothing to bill.</p>';
@@ -2544,8 +2647,11 @@ async function saveInvoiceDrafts() {
         let saved = 0;
         for (const r of _invRows) {
             if (!r.familyId) continue;
-            // Never overwrite a bill that has already gone out.
+            // Never overwrite a bill that has already gone out — once issued,
+            // a change becomes an adjustment, not an edit.
             if (r.invoice?.sent_at) continue;
+            // Never revive a frozen pre-system month.
+            if (r.invoice?.status === 'void') continue;
             const row = await upsertBillingInvoice({
                 cycle_id:          _invCycleId,
                 family_id:         r.familyId,

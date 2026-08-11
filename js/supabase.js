@@ -3317,6 +3317,21 @@ async function createInvoiceByEmail(email, month) {
 // registration_dates row, so the recompute picks it up without being told.
 // The add_day_to_invoice_by_email DB function is now unused and can be dropped.
 
+// Discards a pending draft adjustment. Draft-only by design: an adjustment that
+// has been issued is a bill a family has already been given, and withdrawing it
+// is a credit, not a delete.
+async function deleteDraftAdjustment(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('billing_invoices')
+        .delete()
+        .eq('id', id)
+        .eq('status', 'draft')
+        .eq('invoice_type', 'adjustment');
+    if (error) throw friendlyError(error);
+    await logAdminAction('discard', 'billing_invoice', String(id), { invoice_type: 'adjustment' });
+}
+
 // Reads back one invoice so the admin UI can show the recomputed month total.
 async function fetchBillingInvoiceById(id) {
     if (!sbClient) throw new Error('Supabase not configured.');
