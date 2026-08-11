@@ -2004,6 +2004,13 @@
                     </div>
                 </div>
                 <p style="color:var(--text-muted);font-size:.82em;margin:0 0 4px">Click a day to add &middot; click again to remove</p>
+                <!-- Live recomputed invoice total. Every day change re-runs the
+                     server-side calculation for the family's whole month, so
+                     this figure is the invoice, not an estimate of it. -->
+                <div id="editDaysTotal" style="background:var(--green-pale);border:1px solid var(--green);
+                     border-radius:8px;padding:.5rem .75rem;font-size:.88em;font-weight:700;
+                     color:var(--green-text);margin-top:.5rem;min-height:18px"
+                     aria-live="polite"></div>
                 <div id="editDaysError" style="color:#c62828;font-size:.85em;margin-top:4px;min-height:18px"></div>
             </div>
         </div>

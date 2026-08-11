@@ -3239,11 +3239,23 @@ async function createInvoiceByEmail(email, month) {
     return data;
 }
 
-async function addDayToInvoiceByEmail(email, month, dayAmount, changeFee = 0) {
+// REMOVED: addDayToInvoiceByEmail().
+// It nudged the invoice by a delta, which meant every place that changed a
+// child's days had to remember to participate — and removing a day, or
+// switching full↔half, never did, so invoices only ever ratcheted upward.
+// Every mutation now calls createInvoiceByEmail() above, which recomputes the
+// family's whole month and is idempotent. The change fee is stored on the
+// registration_dates row, so the recompute picks it up without being told.
+// The add_day_to_invoice_by_email DB function is now unused and can be dropped.
+
+// Reads back one invoice so the admin UI can show the recomputed month total.
+async function fetchBillingInvoiceById(id) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient.rpc('add_day_to_invoice_by_email', {
-        p_email: email, p_month: month, p_day_amount: dayAmount, p_change_fee: changeFee,
-    });
+    const { data, error } = await sbClient
+        .from('billing_invoices')
+        .select('id, base_amount, discount_amount, final_amount, status')
+        .eq('id', id)
+        .maybeSingle();
     if (error) throw error;
     return data;
 }
