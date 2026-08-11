@@ -1,8 +1,21 @@
 -- ============================================================
 -- FS5 Phase 2 — server-side invoice amounts (closes T1's amount half)
 -- ============================================================
--- STATUS: not yet applied. Apply in the Supabase SQL Editor, THEN deploy the
--- matching JS. Ordering is safe in either direction — see "Deploy order".
+-- STATUS: ✅ APPLIED AND VERIFIED IN PRODUCTION 2026-08-11.
+--
+--   Post-apply verification (all passed):
+--     * Injection test — create_billing_invoice_by_email(<email>,'2026-08',999999)
+--       via the legacy 3-arg shim stored final_amount = 1455.00, the correct
+--       computed total. The caller's amount is genuinely ignored.
+--     * compute_family_month_charges: anon = false, authenticated = true.
+--       create_billing_invoice_by_email (both arities): anon = true,
+--       authenticated = true. anon can create an invoice but cannot reach the
+--       raw computation.
+--     * The Wohlstadter 2026-08 double-count ($2,910 stored against $1,455 of
+--       actual days) was corrected to $1,455.00 by that same call.
+--
+--   All 495 invoices were `status = 'draft'` at apply time, so nothing settled
+--   could be disturbed.
 --
 -- WHAT WAS WRONG
 -- --------------

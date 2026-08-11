@@ -129,12 +129,31 @@ have used an identical query shape and be invisible.
   the only caller is the admin Add-a-Day modal (`js/admin/admin-calendar.js`).
   Verified post-apply: `has_function_privilege` anon=false, authenticated=true.
   **Rollback:** `ROLLBACK_fs5_phase1_revoke_add_day_anon.sql`.
-  ⚠️ **FS5 Phase 2 is written but NOT applied** —
-  `fs5_phase2_server_side_invoice_amount.sql` removes the client-supplied amount from
-  `create_billing_invoice_by_email` and recomputes the month server-side. It changes
-  some existing draft amounts (it also fixes a sibling-discount bug — see the migration
-  header) and needs a reconciliation review before it goes in. **This is a hard
-  prerequisite for attaching any payment processor.**
+- **FS5 Phase 2** — `create_billing_invoice_by_email` took the invoice amount **from the
+  browser**, and `p_email` chose whose invoice to write, so the public anon key could
+  inflate any family's draft. `fs5_phase2_server_side_invoice_amount.sql` applied:
+  `p_amount` is ignored and the family's whole month is recomputed in the database by
+  `compute_family_month_charges()` (registration_dates × room rates × individual and
+  sibling discounts × change fees, waitlisted days excluded). Verified post-apply by
+  **injection test** — passing `999999` stored `1455.00`. The old 3-arg signature is
+  kept as a shim that ignores the amount, so deploy order doesn't matter.
+  Because it recomputes the whole month the upsert **SETs rather than ADDs**, which is
+  idempotent and supersedes FS3's additive semantics (FS3's clamp and draft-only guard
+  are retained). **Prerequisite for attaching any payment processor — now met.**
+
+  ⚠️ **`compute_family_month_charges()` mirrors `buildBillingBreakdown()` /
+  `getChildDayAmounts()` / `effectiveRate()` in `js/app.js`.** It is exact against the
+  current rate config only because every room has `weeklyFullRate`/`weeklyHalfRate`
+  `NULL`. **Setting a weekly rate in Settings → Rates requires implementing the weekly
+  branch in that SQL function too**, or the draft and the generated invoice will disagree.
+
+- **Billing writes are now recompute-only (2026-08-11).** Seven admin paths can change a
+  child's days; only two used to tell billing anything, and Add-a-Day used a *delta*
+  while all four removal/edit paths did nothing at all — so invoices could only ratchet
+  upward. Every path now calls `_recomputeInvoice()` in `js/admin/admin-calendar.js`.
+  `addDayToInvoiceByEmail()` is deleted; the DB function `add_day_to_invoice_by_email`
+  is unused and can be dropped. **Never add a delta-based billing write — a delta
+  requires every mutation site to opt in, which is exactly how this drifted.**
 
 **Fixed and verified in production 2026-08-03:**
 - **R26** — `anon` could read `staff.staff_pin_hash`, `hourly_rate`, `salary_biweekly`
