@@ -1,7 +1,19 @@
 -- ============================================================
 -- FS5 Phase 1 — add_day_to_invoice_by_email: revoke anon/PUBLIC + clamp
 -- ============================================================
--- STATUS: not yet applied. Apply in the Supabase SQL Editor.
+-- STATUS: ✅ APPLIED AND VERIFIED IN PRODUCTION 2026-08-11.
+--
+--   Post-apply verification (all passed):
+--     * proacl is now `postgres | authenticated | service_role` — both the
+--       `anon` grant and the PUBLIC grant (`=X/postgres`) are gone.
+--     * has_function_privilege: anon = false, authenticated = true,
+--       service_role = true.
+--     * SECURITY DEFINER retained; search_path still pinned to `public`.
+--     * The GREATEST() clamp is present in the deployed function body.
+--
+--   Still to smoke-test in the UI: the admin "Add a Day" modal on admin.html
+--   (expect the family's invoice for that month to increase by day rate +
+--   change fee). The privilege check above says it will work; this confirms it.
 --
 -- This is the sharper half of FS5 and it is free to close.
 --
