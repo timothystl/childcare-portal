@@ -42,6 +42,54 @@ function json(req: Request, body: unknown, status = 200): Response {
     return new Response(JSON.stringify(body), { status, headers: corsHeaders(req) });
 }
 
+const WORKER_ORIGIN = "https://mdo.timothystl.org";
+
+// One notification per child per day, and one per FAMILY per send — siblings in
+// the same photo must not produce two buzzes on the same phone.
+async function notifyFirstPhoto(
+    admin: ReturnType<typeof createClient>,
+    studentIds: string[],
+    careDate: string,
+    thisPhotoId: number,
+) {
+    const { data: kids } = await admin
+        .from("students").select("id, child_name, family_id").in("id", studentIds);
+    if (!kids?.length) return;
+
+    const families = new Map<string, string[]>();
+
+    for (const kid of kids as any[]) {
+        // Any earlier photo of this child today means the family has already
+        // been told, so this one goes quietly into the feed.
+        const { data: prior } = await admin
+            .from("child_photo_students")
+            .select("photo_id, child_photos!inner(care_date)")
+            .eq("student_id", kid.id)
+            .eq("child_photos.care_date", careDate)
+            .neq("photo_id", thisPhotoId)
+            .limit(1);
+        if (prior?.length) continue;
+
+        if (!kid.family_id) continue;
+        if (!families.has(kid.family_id)) families.set(kid.family_id, []);
+        families.get(kid.family_id)!.push((kid.child_name || "").split(" ")[0]);
+    }
+
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    for (const [familyId, names] of families) {
+        const who = names.length === 1 ? names[0] : names.join(" and ");
+        await fetch(`${WORKER_ORIGIN}/send-push`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceKey}` },
+            body: JSON.stringify({
+                family_id: familyId,
+                title: "A photo from today",
+                body:  `There's a new photo of ${who} in the portal.`,
+            }),
+        });
+    }
+}
+
 serve(async (req) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) });
     if (req.method !== "POST")    return json(req, { error: "method_not_allowed" }, 405);
@@ -145,6 +193,24 @@ serve(async (req) => {
             await admin.from("child_photos").delete().eq("id", photo.id);
             await admin.storage.from("child-photos").remove([path]);
             return json(req, { error: "upload_failed" }, 500);
+        }
+
+        // 5. Notify — at most ONE photo notification per child per day, which is
+        //    the policy: a parent pinged for every picture stops reading pings,
+        //    and then the incident notification arrives in a stream they have
+        //    learned to ignore.
+        //
+        //    The cap is derived from the data rather than stored: this photo is
+        //    the child's first today if no OTHER photo of them exists for the
+        //    date. No counter to keep in sync, and it stays correct if a photo
+        //    is deleted.
+        //
+        //    Best-effort. A failed notification must never fail the upload —
+        //    the photo is safely stored and the parent will see it in the feed.
+        try {
+            await notifyFirstPhoto(admin, studentIds, careDate, photo.id);
+        } catch (e) {
+            console.error("photo notify (non-fatal):", e);
         }
 
         return json(req, { id: photo.id, care_date: careDate, expires_at: expiresAt });
