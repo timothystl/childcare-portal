@@ -391,3 +391,40 @@
     .pt-incident-type { background: #fff !important; color: #000 !important; border: 1.5px solid #000; }
     .pt-incident-what, .pt-incident-did, .pt-incident-meta, .pt-incident-when { color: #000 !important; }
 }
+
+/* ── Messages (Phase 2) ─────────────────────────────────── */
+.pm-section { margin-top: 20px; padding-top: 18px; border-top: 1px solid #eef1f4; }
+.pm-head {
+    font-size: .74em; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: #78838f; margin-bottom: 10px;
+}
+.pm-thread { display: grid; gap: 10px; max-height: 320px; overflow-y: auto; margin-bottom: 12px; }
+.pm-empty  { color: #78838f; font-size: .88em; line-height: 1.5; margin: 0; }
+
+.pm-msg { padding: 10px 13px; border-radius: 14px; max-width: 88%; }
+.pm-theirs { background: #f2f5f7; justify-self: start; border-bottom-left-radius: 4px; }
+.pm-mine   { background: var(--green-pale); justify-self: end; border-bottom-right-radius: 4px; }
+.pm-msg-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 3px; }
+.pm-who  { font-size: .74em; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #78838f; }
+.pm-when { font-size: .74em; color: #96a0aa; }
+.pm-body { color: var(--navy); font-size: .93em; line-height: 1.5; white-space: pre-wrap; }
+/* Only ever on the parent's own messages — "read" on a received message would
+   just mean "you read it". */
+.pm-receipt { display: block; margin-top: 4px; text-align: right; font-size: .72em; color: #96a0aa; }
+
+.pm-composer { display: flex; gap: 8px; align-items: flex-end; }
+.pm-composer textarea {
+    flex: 1; box-sizing: border-box; font-family: inherit; font-size: .95em;
+    padding: 10px 12px; border: 1.5px solid #d7dee5; border-radius: 10px;
+    resize: vertical; min-height: 44px;
+}
+.pm-send {
+    min-height: 44px; padding: 0 18px; border: none; border-radius: 10px;
+    background: var(--navy); color: #fff; font-family: inherit;
+    font-weight: 800; cursor: pointer; flex: none;
+}
+.pm-send[disabled] { opacity: .6; cursor: default; }
+
+/* Messages are a conversation, not a care record — the printed day report is
+   about the child. */
+@media print { .pm-section { display: none !important; } }

@@ -4638,3 +4638,52 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 
     @page { margin: 16mm; }
 }
+
+/* ── Parent messages (Phase 2) ───────────────────────────── */
+.thr-row {
+    display: flex; flex-direction: column; gap: 4px; width: 100%;
+    background: #fff; border: 1.5px solid #e3e8ed; border-radius: 12px;
+    padding: 13px 16px; margin-bottom: 10px; text-align: left;
+    font-family: inherit; cursor: pointer;
+}
+/* Waiting-on-you is a state worth seeing across the room. */
+.thr-unread { border-left: 4px solid var(--tang); background: var(--tang-pale); }
+.thr-top  { display: flex; align-items: center; gap: 10px; }
+.thr-name { font-weight: 800; color: var(--navy); flex: 1; }
+.thr-badge {
+    background: var(--tang); color: #fff; border-radius: 999px;
+    padding: 1px 9px; font-size: .76em; font-weight: 800;
+}
+.thr-when { color: #78838f; font-size: .82em; }
+.thr-last { color: #78838f; font-size: .88em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.thr-head { margin: 12px 0; display: flex; flex-direction: column; gap: 2px; }
+.thr-messages { display: grid; gap: 10px; margin-bottom: 16px; max-height: 50vh; overflow-y: auto; }
+.thr-msg { padding: 10px 14px; border-radius: 14px; max-width: 80%; }
+.thr-them { background: #f2f5f7; justify-self: start; }
+.thr-us   { background: var(--green-pale); justify-self: end; }
+.thr-msg-who  { display: block; font-size: .74em; font-weight: 800; letter-spacing: .04em;
+                text-transform: uppercase; color: #78838f; margin-bottom: 3px; }
+.thr-msg-body { color: var(--navy); font-size: .93em; line-height: 1.5; white-space: pre-wrap; }
+
+.thr-composer textarea {
+    width: 100%; box-sizing: border-box; font-family: inherit; font-size: .95em;
+    padding: 11px 13px; border: 1.5px solid #d7dee5; border-radius: 10px;
+    resize: vertical; margin-bottom: 8px;
+}
+
+/* ── Admin toast ─────────────────────────────────────────── */
+.admin-toast {
+    position: fixed; left: 50%; transform: translateX(-50%) translateY(20px);
+    bottom: 24px; z-index: 9000;
+    background: var(--navy); color: #fff;
+    padding: 13px 22px; border-radius: 12px;
+    font-size: .93em; font-weight: 700; font-family: inherit;
+    max-width: calc(100% - 40px); text-align: center;
+    box-shadow: 0 4px 20px rgba(1, 41, 74, .35);
+    opacity: 0; pointer-events: none;
+    transition: opacity .18s, transform .18s;
+}
+.admin-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.admin-toast-err  { background: var(--tang-dark); }
+@media print { .admin-toast { display: none !important; } }

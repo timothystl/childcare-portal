@@ -261,3 +261,50 @@
     outline: none; border-color: var(--navy);
     box-shadow: 0 0 0 3px rgba(1, 41, 74, .12);
 }
+
+/* ── Messages ───────────────────────────────────────────────
+   One button and one number on the roster. Staff are logging, not working an
+   inbox — the badge says "someone is waiting on you" and nothing more. */
+.sl-messages-btn {
+    width: 100%; min-height: 48px; margin-bottom: 12px;
+    background: #fff; border: 1.5px solid #d7dee5; border-radius: 12px;
+    padding: 13px; font-family: inherit; font-size: .98em; font-weight: 800;
+    color: var(--navy); cursor: pointer;
+}
+.sl-messages-btn.sl-has-unread {
+    background: var(--sun-pale); border-color: var(--sun); color: #6a5320;
+}
+
+.sl-thread-list { display: grid; gap: 10px; }
+.sl-thread {
+    display: flex; flex-direction: column; gap: 4px; width: 100%;
+    background: #fff; border: 1.5px solid #e3e8ed; border-radius: 12px;
+    padding: 13px 15px; text-align: left; font-family: inherit;
+    cursor: pointer; min-height: 56px;
+}
+.sl-thread-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sl-thread-name { font-weight: 800; color: var(--navy); }
+.sl-thread-unread {
+    background: var(--tang); color: #fff; border-radius: 999px;
+    padding: 1px 9px; font-size: .76em; font-weight: 800; flex: none;
+}
+.sl-thread-last {
+    color: #78838f; font-size: .86em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.sl-thread-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.sl-thread-who  { font-weight: 800; color: var(--navy); }
+.sl-thread-messages { display: grid; gap: 8px; max-height: 46vh; overflow-y: auto; margin-bottom: 12px; }
+
+.sl-msg { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; }
+.sl-msg-them { background: #f2f5f7; }
+.sl-msg-us   { background: var(--green-pale); }
+.sl-msg-who  { font-size: .74em; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #78838f; }
+.sl-msg-body { color: var(--navy); font-size: .94em; line-height: 1.45; }
+
+.sl-thread-composer textarea {
+    width: 100%; box-sizing: border-box; font-family: inherit; font-size: 1em;
+    padding: 12px 14px; border: 1.5px solid #d7dee5; border-radius: 10px;
+    min-height: 60px; resize: vertical;
+}

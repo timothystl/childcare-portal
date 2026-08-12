@@ -149,6 +149,7 @@ async function slLoadRoster() {
     try {
         slChildren = await listRoomChildren(slStaffId, slPin, slRoomId);
         slRenderRoster();
+        slLoadThreads();          // fire-and-forget: the badge fills in as it lands
     } catch (e) {
         console.warn('roster:', e);
         slEl('slRoster').innerHTML = '<p class="sl-empty">Could not load the roster. Pull to retry.</p>';
@@ -281,6 +282,119 @@ function slOpenSheet(studentId) {
 function slCloseSheet() {
     slEl('slSheet').classList.add('hidden');
     slOpenChild = null;
+}
+
+// ── Messages ────────────────────────────────────────────────
+// A teacher only sees threads for families with a child on THEIR room's roster
+// today — the scoping is enforced in the RPC, not here. Messages can be about
+// custody, health or money, and a Bee Room teacher has no business reading the
+// Owl Room's.
+
+let slThreads  = [];
+let slOpenThread = null;
+
+async function slLoadThreads() {
+    try {
+        slThreads = await staffListThreads(slStaffId, slPin, slRoomId);
+    } catch (e) {
+        console.warn('threads:', e);
+        slThreads = [];
+    }
+    slRenderThreadBadge();
+}
+
+// One number on the roster screen. Staff are logging, not reading an inbox —
+// the badge is there to say "someone is waiting on you", nothing more.
+function slRenderThreadBadge() {
+    const btn = slEl('slMessagesBtn');
+    if (!btn) return;
+    const unread = slThreads.reduce((n, t) => n + (t.unread || 0), 0);
+    btn.textContent = unread ? `💬 Messages (${unread})` : '💬 Messages';
+    btn.classList.toggle('sl-has-unread', unread > 0);
+}
+
+function slOpenMessages() {
+    slEl('slMessagesSheet')?.classList.remove('hidden');
+    slRenderThreadList();
+}
+
+function slCloseMessages() {
+    slEl('slMessagesSheet')?.classList.add('hidden');
+    slOpenThread = null;
+}
+
+function slRenderThreadList() {
+    const wrap = slEl('slThreadList');
+    if (!wrap) return;
+    slOpenThread = null;
+    slEl('slThreadView')?.classList.add('hidden');
+    wrap.classList.remove('hidden');
+
+    if (!slThreads.length) {
+        wrap.innerHTML = '<p class="sl-empty">No messages from families in this room today.</p>';
+        return;
+    }
+    wrap.innerHTML = slThreads.map(t => `
+        <button type="button" class="sl-thread" data-thread="${t.thread_id}">
+            <span class="sl-thread-top">
+                <span class="sl-thread-name">${slEsc(t.family_name || 'Family')}</span>
+                ${t.unread ? `<span class="sl-thread-unread">${t.unread}</span>` : ''}
+            </span>
+            <span class="sl-thread-last">${slEsc(t.last_body || 'No messages yet')}</span>
+        </button>`).join('');
+    wrap.querySelectorAll('.sl-thread').forEach(b => {
+        b.addEventListener('click', () => slOpenThreadView(Number(b.dataset.thread)));
+    });
+}
+
+async function slOpenThreadView(threadId) {
+    slOpenThread = threadId;
+    slEl('slThreadList')?.classList.add('hidden');
+    const view = slEl('slThreadView');
+    view?.classList.remove('hidden');
+    slEl('slThreadMessages').innerHTML = '<p class="sl-empty">Loading…</p>';
+
+    const t = slThreads.find(x => Number(x.thread_id) === threadId);
+    slEl('slThreadWho').textContent = t?.family_name || 'Family';
+
+    try {
+        // Opening marks the parent's messages read server-side, which is what
+        // drives the receipt they see.
+        const items = await staffThreadMessages(slStaffId, slPin, threadId);
+        slEl('slThreadMessages').innerHTML = items.length
+            ? items.map(m => `<div class="sl-msg ${m.sender_type === 'parent' ? 'sl-msg-them' : 'sl-msg-us'}">
+                    <span class="sl-msg-who">${slEsc(m.sender_type === 'parent' ? (m.sender_name || 'Parent') : (m.sender_name || 'You'))}</span>
+                    <span class="sl-msg-body">${slEsc(m.body)}</span>
+                </div>`).join('')
+            : '<p class="sl-empty">No messages yet.</p>';
+        if (t) { t.unread = 0; slRenderThreadBadge(); }
+    } catch (e) {
+        console.warn('thread:', e);
+        slEl('slThreadMessages').innerHTML = '<p class="sl-empty">Could not load this conversation.</p>';
+    }
+}
+
+async function slSendThreadMessage() {
+    if (!slOpenThread) return;
+    const input = slEl('slThreadInput');
+    const body = (input?.value || '').trim();
+    if (!body) return;
+
+    const btn = slEl('slThreadSendBtn');
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+        const id = await staffSendMessage(slStaffId, slPin, slOpenThread, body);
+        if (!id) { slToast('That did not send.', 'err'); return; }
+        input.value = '';
+        await slOpenThreadView(slOpenThread);
+    } catch (e) {
+        console.warn('send:', e);
+        // The box is NOT cleared on failure — retyping a message you already
+        // wrote is the most annoying way to lose work.
+        slToast('That did not send. Try again.', 'err');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Send';
+    }
 }
 
 // ── Incident report ─────────────────────────────────────────
@@ -471,6 +585,10 @@ document.addEventListener('DOMContentLoaded', () => {
     slEl('slPostBtn')?.addEventListener('click', slFlushQueue);
     slEl('slPhotoBtn')?.addEventListener('click', () => slEl('slPhotoInput')?.click());
     slEl('slPhotoInput')?.addEventListener('change', e => slPhotoPicked(e.target.files?.[0]));
+    slEl('slMessagesBtn')?.addEventListener('click', slOpenMessages);
+    slEl('slMessagesClose')?.addEventListener('click', slCloseMessages);
+    slEl('slThreadBack')?.addEventListener('click', slRenderThreadList);
+    slEl('slThreadSendBtn')?.addEventListener('click', slSendThreadMessage);
     slEl('slIncidentBtn')?.addEventListener('click', slOpenIncident);
     slEl('slIncidentCancel')?.addEventListener('click', slCloseIncident);
     slEl('slIncidentForm')?.addEventListener('submit', slSubmitIncident);

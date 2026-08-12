@@ -2290,6 +2290,112 @@ async function fetchMyIncidentReports(studentId = null) {
     return data || [];
 }
 
+// ── Messaging (Phase 2) ─────────────────────────────────────
+// ONE THREAD PER FAMILY. The `messages` table and its admin inbox are untouched
+// — that is still the public contact form, the only way a NON-family reaches
+// the office.
+//
+// ⚠️ A teacher only sees threads for families with a child on THEIR room's
+// roster today. Messages can be about custody, health, or money; a Bee Room
+// teacher has no business reading the Owl Room's. The director is unscoped —
+// she reads everything through is_admin() in the admin inbox.
+
+/** The signed-in parent's thread id, created on first use. */
+async function myMessageThread() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('my_message_thread');
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** RLS restricts this to the caller's own thread — no filter here on purpose. */
+async function fetchThreadMessages(threadId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('message_items')
+        .select('id, sender_type, sender_name, body, read_at, created_at')
+        .eq('thread_id', threadId)
+        .order('created_at', { ascending: true });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
+ * Parents post directly — they hold a real session. The policy pins
+ * sender_type to 'parent', so a parent cannot post something attributed to a
+ * teacher even by crafting the request.
+ */
+async function sendParentMessage(threadId, body, senderName) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('message_items').insert({
+        thread_id: threadId, sender_type: 'parent',
+        sender_name: senderName || null, body: String(body || '').trim(),
+    });
+    if (error) throw friendlyError(error);
+    return true;
+}
+
+/** Clears the OTHER side's messages. Used by the parent view and admin inbox. */
+async function markThreadRead(threadId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('mark_thread_read', { p_thread_id: threadId });
+    if (error) throw friendlyError(error);
+    return data ?? 0;
+}
+
+// Staff, PIN-gated. Reading a thread also marks the parent's messages read,
+// which is what the parent's receipt reflects.
+async function staffListThreads(staffId, pin, roomId, careDate = null) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('staff_list_threads', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10),
+        p_room_id: roomId, p_care_date: careDate,
+    });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+async function staffThreadMessages(staffId, pin, threadId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('staff_thread_messages', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10), p_thread_id: threadId,
+    });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+async function staffSendMessage(staffId, pin, threadId, body) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('staff_send_message', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10),
+        p_thread_id: threadId, p_body: body,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** Admin: every thread, newest first, with the family and unread count. */
+async function fetchAllThreads() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('message_threads')
+        .select('id, family_id, last_message_at, families(parent_name, parent_email), message_items(id, body, sender_type, read_at, created_at)')
+        .order('last_message_at', { ascending: false })
+        .limit(200);
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+async function sendAdminMessage(threadId, body, senderName) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.from('message_items').insert({
+        thread_id: threadId, sender_type: 'admin',
+        sender_name: senderName || 'The office', body: String(body || '').trim(),
+    });
+    if (error) throw friendlyError(error);
+    return true;
+}
+
 /** Published, unexpired announcements. The policy filters drafts, not this. */
 async function fetchAnnouncements() {
     if (!sbClient) throw new Error('Supabase not configured.');
