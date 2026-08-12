@@ -120,6 +120,7 @@ const ENTRIES = [
                 // Load order matters: portal-auth calls ptLoadToday() once a
                 // session exists, so the feed's functions must already exist.
                 'js/portal/portal-today.js',
+                'js/portal/portal-messages.js',
                 'js/portal/portal-auth.js',
             ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
@@ -145,6 +146,7 @@ const ENTRIES = [
                 'js/admin/admin-settings.js',
                 'js/admin/admin-waitlist.js',
                 'js/admin/admin-incidents.js',
+                'js/admin/admin-threads.js',
                 'js/admin/admin-cacfp.js',
                 'js/admin/admin-market.js',
                 // Last: the portal shell indexes the sections the modules above

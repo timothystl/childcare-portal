@@ -84,6 +84,18 @@
                  feed already IS the day, and a second rendering of the same
                  data is a second thing to keep correct. -->
             <button type="button" id="ptPrintBtn" class="pt-print-btn">🖨️ Print this day</button>
+
+            <!-- Messages sit BELOW the day rather than behind a tab: a parent
+                 who opens the app is looking at today, and a reply they have
+                 not seen should be in front of them, not one navigation away. -->
+            <div id="pmSection" class="pm-section hidden">
+                <div class="pm-head">Messages</div>
+                <div id="pmThread" class="pm-thread"></div>
+                <div class="pm-composer">
+                    <textarea id="pmInput" rows="2" placeholder="Message your teacher or the office…"></textarea>
+                    <button type="button" id="pmSendBtn" class="pm-send">Send</button>
+                </div>
+            </div>
             <div id="ptAnnouncements" class="pt-announcements hidden"></div>
         </div>
 

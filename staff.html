@@ -55,6 +55,7 @@
             <span id="slRoomTitle" class="sl-room-title"></span>
             <button id="slRefreshBtn" class="sl-link-btn">Refresh</button>
         </header>
+        <button type="button" id="slMessagesBtn" class="sl-messages-btn">💬 Messages</button>
         <div id="slRoster" class="sl-roster"></div>
         <button id="slPostBtn" class="sl-post-btn hidden">Post 0</button>
     </div>
@@ -126,6 +127,29 @@
                 </label>
                 <button type="submit" id="slIncSubmitBtn" class="btn-primary sl-btn">Send to director</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Messages. Scoped by the RPC to families with a child on THIS room's
+         roster today — a teacher has no business reading another room's. -->
+    <div id="slMessagesSheet" class="sl-sheet hidden">
+        <div class="sl-sheet-inner">
+            <div class="sl-sheet-head">
+                <span class="sl-sheet-name">Messages</span>
+                <button type="button" id="slMessagesClose" class="sl-link-btn">Done</button>
+            </div>
+            <div id="slThreadList" class="sl-thread-list"></div>
+            <div id="slThreadView" class="hidden">
+                <div class="sl-thread-head">
+                    <button type="button" id="slThreadBack" class="sl-link-btn">← All</button>
+                    <span id="slThreadWho" class="sl-thread-who"></span>
+                </div>
+                <div id="slThreadMessages" class="sl-thread-messages"></div>
+                <div class="sl-thread-composer">
+                    <textarea id="slThreadInput" rows="2" placeholder="Reply…"></textarea>
+                    <button type="button" id="slThreadSendBtn" class="btn-primary sl-btn">Send</button>
+                </div>
+            </div>
         </div>
     </div>
 

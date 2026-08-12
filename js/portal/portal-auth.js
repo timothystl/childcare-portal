@@ -143,6 +143,10 @@ async function portalShowSignedIn() {
     if (portalContext && typeof ptLoadToday === 'function') {
         await ptLoadToday();
     }
+    if (portalContext && typeof pmLoad === 'function') {
+        pmInit();
+        await pmLoad();
+    }
 
     if (new URLSearchParams(location.search).get('check') === '1') {
         pEl('portalCheck')?.classList.remove('hidden');

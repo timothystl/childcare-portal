@@ -96,6 +96,11 @@ const AP_TOOLS = [
     // here is a parent who has not been told yet.
     { key: 'incidents',   pane: 'daily',         section: 'incidentsSection',        tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '🩹', name: 'Incident Reports',
       blurb: 'Review what staff filed, then release it to the family.' },
+    // Separate from the Contact Us inbox: that is the public form, this is
+    // families you already have. Teachers only see their own room's threads,
+    // so the office is the only place the whole picture exists.
+    { key: 'threads',     pane: 'families',      section: 'threadsSection',          tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '💬', name: 'Parent Messages',
+      blurb: 'Conversations with enrolled families — reply as the office.' },
 
     // ── Finance · Money In ──
     // Invoices comes first: you create the bill before you chase it.
@@ -602,6 +607,7 @@ function apOnToolOpened(tool) {
         }
         if (tool.key === 'invoices' && typeof renderInvoicesTool === 'function') renderInvoicesTool();
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
+        if (tool.key === 'threads' && typeof renderThreadsTool === 'function') renderThreadsTool();
         if (tool.key === 'schedule')  apRenderScheduleTimeOff();
         if (tool.key === 'staffreq')  apRenderStaffReq();
         if (tool.key === 'scenario')  apRenderScenario();

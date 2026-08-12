@@ -1,0 +1,87 @@
+-- APPLIED TO PRODUCTION 2026-08-12. Three migrations recorded together:
+--   phase2_messaging
+--   phase2_messaging_staff_rpcs
+--   fix_staff_thread_messages_ambiguous_columns   (see the bug at the bottom)
+--
+-- ============================================================
+-- PHASE 2 — parent ↔ staff messaging
+-- ============================================================
+-- Design: PARENT_PORTAL_PLAN §6. Upgrades the one-way contact form into a
+-- conversation. The existing `messages` table and its admin inbox are untouched
+-- — that is still the public contact form, and the only way a NON-family
+-- reaches the office.
+--
+-- ONE THREAD PER FAMILY, not per subject. The plan allowed subjects; for 121
+-- families "message the office" is one ongoing conversation, and a thread list
+-- where every family has exactly one row is a list nobody needs to read. A
+-- UNIQUE constraint enforces it. Subjects can be added later without moving a
+-- single message.
+--
+--   message_threads   family_id UNIQUE, last_message_at (kept by trigger)
+--   message_items     sender_type parent|staff|admin, body, read_at
+--
+-- sender_name is denormalised for the same reason incident_reports.
+-- reported_by_name is: a message is a record and must still say who wrote it
+-- after a staff member leaves. No DELETE grant for anyone.
+
+-- ── Access ──────────────────────────────────────────────────
+-- ⚠️ Roles named explicitly. NOT `TO public` — that is what leaked staff wages
+-- and church payroll on this same day.
+--
+--   parents — read own thread; INSERT pinned to sender_type = 'parent' and
+--             sender_staff_id IS NULL, so a parent cannot post a message
+--             attributed to a teacher even by crafting the request
+--   admin   — everything, via is_admin()
+--   staff   — PIN-gated definer RPCs only; no table grants
+--
+-- my_message_thread() is definer because a parent has no INSERT policy on
+-- message_threads and should not have one — the first message creates the
+-- thread server-side.
+
+-- ── ⚠️ THE STAFF SCOPING DECISION ───────────────────────────
+-- A teacher sees threads for families whose child is on THEIR room's roster for
+-- the day — not every family in the centre. Messages can be about a custody
+-- arrangement, a medical result, or money. A Bee Room teacher has no business
+-- reading the Owl Room's correspondence, and "it's a small centre and everyone
+-- is trusted" is exactly how that ends up being read.
+--
+-- The director is NOT scoped: she is an admin and reads every thread through
+-- the ordinary is_admin() policy in the admin inbox. That is why the office
+-- view exists — somebody has to see the whole picture.
+--
+-- Consequence to know: a family with no child booked TODAY is invisible to
+-- staff. Deliberate. The office always sees everything.
+--
+--   staff_list_threads()     room-scoped list + unread counts
+--   staff_thread_messages()  reading it MARKS the parent's messages read, so
+--                            the receipt cannot drift from what was displayed
+--   staff_send_message()     re-checks scope before writing
+--   staff_can_see_thread()   the shared predicate all three use
+
+-- ============================================================
+-- ⚠️ THE BUG THIS SHIPPED WITH, CAUGHT BY TEST
+-- ============================================================
+-- staff_thread_messages declares RETURNS TABLE (id, sender_type, ..., read_at,
+-- created_at). Those output names become plpgsql VARIABLES inside the body, so
+-- the read-marking UPDATE:
+--
+--     UPDATE message_items SET read_at = now()
+--     WHERE thread_id = p_thread_id AND read_at IS NULL AND sender_type='parent'
+--
+-- raised 42702 "column reference read_at is ambiguous" — EVERY time a staff
+-- member opened a thread. The function would never have worked once.
+-- Fixed by aliasing the table and qualifying every column.
+--
+-- ============================================================
+-- VERIFIED AFTER APPLYING, as the roles themselves (rolled back)
+-- ============================================================
+--   parent  thread auto-created; sees own messages; posting AS staff BLOCKED
+--           (42501) with zero rows written
+--   parent  sees 1 of 2 threads and only their own messages — the other
+--           family's thread returns 0 rows
+--   staff   sees only the family with a child in their room today (Ricketts),
+--           with the correct unread count
+--   staff   reading an OFF-room thread -> 0 rows
+--   staff   sending into an OFF-room thread -> REFUSED, message not written
+--   staff   sending into their own room's thread -> SENT
+--   staff   opening a thread marks the parent's message read (false -> true)
