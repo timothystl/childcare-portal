@@ -269,8 +269,8 @@ export default {
       // device to receive another staff member's notifications, or filled the
       // table. The PIN is the credential staff have, so it is the credential
       // used — and staff_id is DERIVED from it, never taken from the body.
-      const { pin, endpoint, p256dh, auth } = await request.json().catch(() => ({}));
-      if (!pin || !endpoint || !p256dh || !auth) {
+      const { staff_id: claimedStaffId, pin, endpoint, p256dh, auth } = await request.json().catch(() => ({}));
+      if (!claimedStaffId || !pin || !endpoint || !p256dh || !auth) {
         return new Response('Missing fields', { status: 400 });
       }
       if (!/^\d{4,8}$/.test(String(pin))) return new Response('Unauthorized', { status: 401 });
@@ -282,7 +282,9 @@ export default {
           'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
           'Content-Type':  'application/json',
         },
-        body: JSON.stringify({ p_pin: parseInt(String(pin), 10) }),
+        // Named account + PIN. The pin-only signature is dropped — it tested a
+        // guess against every staff hash and left no account to lock.
+        body: JSON.stringify({ p_staff_id: claimedStaffId, p_pin: parseInt(String(pin), 10) }),
       });
       if (!pinRes.ok) return new Response('Unauthorized', { status: 401 });
       const staff_id = await pinRes.json().catch(() => null);

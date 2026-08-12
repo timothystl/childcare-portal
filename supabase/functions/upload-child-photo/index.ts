@@ -107,25 +107,29 @@ serve(async (req) => {
     try { body = await req.json(); } catch { return json(req, { error: "bad_request" }, 400); }
 
     try {
+        const staffId    = String(body.staff_id ?? "").trim();
         const pin        = String(body.pin ?? "").trim();
         const studentIds = Array.isArray(body.student_ids) ? body.student_ids.map(String) : [];
         const caption    = String(body.caption ?? "").trim().slice(0, 300);
         const kind       = body.kind === "incident" ? "incident" : "daily";
         const dataUrl    = String(body.image ?? "");
 
+        if (!staffId)                return json(req, { error: "invalid_credentials" }, 400);
         if (!/^\d{4,8}$/.test(pin))  return json(req, { error: "invalid_credentials" }, 400);
         if (!studentIds.length)      return json(req, { error: "no_children_tagged" }, 400);
         if (studentIds.length > MAX_TAGGED) return json(req, { error: "too_many_children" }, 400);
 
-        // 1. Verify the PIN server-side. staff_id_for_pin is not granted to
-        //    anon precisely so this is the only way to reach it.
-        const { data: staffId, error: pinErr } =
-            await admin.rpc("staff_id_for_pin", { p_pin: parseInt(pin, 10) });
+        // 1. Verify the PIN server-side, AGAINST A NAMED STAFF MEMBER. The
+        //    pin-only signature is dropped: it tested a guess against every
+        //    staff hash and left nothing to lock. staff_id_for_pin is not
+        //    granted to anon, so the service role is the only way here.
+        const { data: verifiedStaffId, error: pinErr } =
+            await admin.rpc("staff_id_for_pin", { p_staff_id: staffId, p_pin: parseInt(pin, 10) });
         if (pinErr) {
             console.error("staff_id_for_pin:", pinErr);
             return json(req, { error: "server_error" }, 500);
         }
-        if (!staffId) return json(req, { error: "invalid_credentials" }, 401);
+        if (!verifiedStaffId) return json(req, { error: "invalid_credentials" }, 401);
 
         // 2. Decode. Only the two formats the bucket accepts; anything else is
         //    rejected rather than stored and discovered later.
@@ -168,7 +172,7 @@ serve(async (req) => {
             .from("child_photos")
             .insert({
                 kind, care_date: careDate, storage_path: path,
-                caption: caption || null, posted_by_staff_id: staffId,
+                caption: caption || null, posted_by_staff_id: verifiedStaffId,
                 expires_at: expiresAt,
             })
             .select("id")

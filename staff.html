@@ -24,7 +24,13 @@
         <div class="sl-card">
             <div class="sl-logo"><img src="/images/logo/myMDO_primary_logo_light.png" alt="myMDO"></div>
             <h1>Staff Log</h1>
-            <p class="sl-sub">Enter your kiosk PIN.</p>
+            <p class="sl-sub">Choose your name, then enter your PIN.</p>
+            <!-- Identity first. A PIN with no name was tested against every
+                 staff hash, so one guess had ~33 chances to land and there was
+                 no account to lock. -->
+            <select id="slStaffSelect" class="sl-staff-select">
+                <option value="">Loading…</option>
+            </select>
             <input type="password" id="slPinInput" class="sl-pin-input" placeholder="••••"
                    inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off">
             <button id="slPinBtn" class="btn-primary sl-btn">Sign In</button>
