@@ -130,13 +130,45 @@ async function loadStaffList() {
     }
 }
 
+// The email is flagged, the mobile is not: one blocks the move to real
+// accounts, the other is just convenient. Flagging both equally would make the
+// blocking one easy to miss.
+function _srContactCell(s) {
+    const email = (s.email || '').trim();
+    const phone = (s.phone || '').trim();
+    const rows  = [];
+    // Only flag it on active staff. Someone deactivated has no sign-in to lose,
+    // and marking them red makes the banner's count disagree with the table.
+    rows.push(email
+        ? `<span class="sr-contact-ok" title="${escHtml(email)}">${escHtml(email)}</span>`
+        : (s.active ? `<span class="sr-contact-missing">No email — can't sign in</span>`
+                    : `<span class="sr-contact-ok">—</span>`));
+    if (phone) rows.push(`<span class="sr-contact-ok">${escHtml(phone)}</span>`);
+    return rows.join('<br>');
+}
+
 function renderStaffList(staff) {
     const container = document.getElementById('staffRosterContent');
     if (!staff.length) {
         container.innerHTML = '<p class="empty-hint">No staff members found. Click "+ Add Staff Member" to get started.</p>';
         return;
     }
+    // Staff are moving from PINs to real sign-in accounts, and the address is
+    // the identity — so a missing email is a person who cannot be migrated.
+    // Showing the count turns "collect the emails" into a list she can work
+    // down rather than a chore with no visible end.
+    const needContact = staff.filter(s => s.active && !(s.email || '').trim()).length;
+    const contactBanner = needContact ? `
+        <div class="staff-contact-gap">
+            <strong>${needContact} active staff ${needContact === 1 ? 'has' : 'have'} no email address on file.</strong>
+            Staff are moving to their own sign-in instead of a shared 4-digit PIN,
+            and the email address is what they sign in with — anyone without one
+            can't be moved over. Add them with <em>Edit</em>; the mobile number is
+            optional but useful for reaching people.
+        </div>` : '';
+
     container.innerHTML = `
+        ${contactBanner}
         <div class="table-wrapper">
         <table class="report-table staff-roster-table">
             <thead>
@@ -146,6 +178,7 @@ function renderStaffList(staff) {
                     <th class="sr-col-room">Room</th>
                     <th class="sr-col-pay">Pay</th>
                     <th class="sr-col-pin">PIN</th>
+                    <th class="sr-col-contact">Contact</th>
                     <th class="sr-col-status">Status</th>
                     <th class="sr-col-actions">Actions</th>
                 </tr>
@@ -165,6 +198,7 @@ function renderStaffList(staff) {
                             <td>${escHtml(roomLabel)}</td>
                             <td>${payDisplay}</td>
                             <td><code>${pinDisplay}</code></td>
+                            <td class="sr-contact-cell">${_srContactCell(s)}</td>
                             <td><span class="status-chip ${s.active ? 'chip-confirmed' : 'chip-waitlist'}">${s.active ? 'Active' : 'Inactive'}</span></td>
                             <td class="actions-cell">
                                 <button class="btn-secondary staff-edit-btn" data-staff-id="${s.id}">Edit</button>
@@ -230,6 +264,7 @@ function openStaffForm(staff = null) {
     document.getElementById('staffFormTitle').textContent = staff ? 'Edit Staff Member' : 'Add Staff Member';
     document.getElementById('sfName').value      = staff?.name || '';
     document.getElementById('sfEmail').value     = staff?.email || '';
+    document.getElementById('sfPhone').value     = staff?.phone || '';
     document.getElementById('sfRole').value      = staff?.role || '';
     document.getElementById('sfRoom').value      = staff?.room_id || '';
     document.getElementById('sfHireDate').value  = staff?.hire_date || '';
@@ -299,6 +334,15 @@ async function onSaveStaffMember() {
     const pinVal = document.getElementById('sfPin').value.trim();
     if (pinVal && (!/^\d{4}$/.test(pinVal))) { alert('PIN must be exactly 4 digits.'); return; }
 
+    // This address becomes their sign-in identity once staff move to real
+    // accounts, so a typo here is a login that never works. The field is
+    // type=email but it sits outside a <form>, so nothing validates it for us.
+    const emailVal = document.getElementById('sfEmail').value.trim();
+    if (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
+        alert('That email address does not look right.\n\nIt becomes their sign-in, so it needs to be exact.');
+        return;
+    }
+
     const saveBtn = document.getElementById('saveStaffBtn');
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
@@ -327,6 +371,7 @@ async function onSaveStaffMember() {
             id:              savingId,
             name,
             email:           document.getElementById('sfEmail').value.trim() || null,
+            phone:           document.getElementById('sfPhone').value.trim() || null,
             role:            document.getElementById('sfRole').value.trim(),
             payType,
             hourlyRate:      parseFloat(document.getElementById('sfRate').value) || 0,
@@ -353,7 +398,15 @@ async function onSaveStaffMember() {
         }
         loadStaffList();
     } catch (err) {
-        alert('Save failed: ' + err.message);
+        // staff_email_unique. Two people on one address would map two staff
+        // onto a single account at the auth cutover, so it's blocked at entry —
+        // but "duplicate key value violates unique constraint" means nothing to
+        // the person typing it.
+        const msg = /staff_email_unique|duplicate key/i.test(err.message || '')
+            ? `Another staff member already uses ${document.getElementById('sfEmail').value.trim()}.\n\n`
+              + 'Each person needs their own address — it becomes their sign-in.'
+            : 'Save failed: ' + err.message;
+        alert(msg);
         if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
     }
 }

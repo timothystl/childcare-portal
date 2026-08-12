@@ -1765,7 +1765,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('staff')
-        .select('id, name, email, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at, pto_starting_balance')
+        .select('id, name, email, phone, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at, pto_starting_balance')
         .order('name');
     if (!includeInactive) query = query.eq('active', true);
     const { data, error } = await query;
@@ -1773,11 +1773,12 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     return data || [];
 }
 
-async function upsertStaffMember({ id = null, name, email, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin, ptoStartingBalance }) {
+async function upsertStaffMember({ id = null, name, email, phone, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin, ptoStartingBalance }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const record = {
         name,
         email:            email || null,
+        phone:            phone || null,
         role:             role || null,
         pay_type:         payType || 'hourly',
         hourly_rate:      payType === 'salary' ? 0 : (hourlyRate || 0),
