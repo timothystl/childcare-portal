@@ -716,7 +716,12 @@ function openFamilyModal(family = null) {
             r.checked = (r.value === grp);
         });
         // Children
-        familyModalChildren = (family.students || []).map(s => ({ ...s }));
+        // allergies is an array — copy it, or editing chips and then cancelling
+        // would still have mutated the loaded family record in place.
+        familyModalChildren = (family.students || []).map(s => ({
+            ...s,
+            allergies: Array.isArray(s.allergies) ? s.allergies.map(a => ({ ...a })) : [],
+        }));
     } else {
         // Clear all fields
         ['fmParentName','fmParentEmail','fmParentPhone',
@@ -803,6 +808,34 @@ function renderModalChildRows() {
                         <input type="text" class="fmc-discount-note" value="${escHtml(child.discount_note || '')}" placeholder="Optional note">
                     </div>
                 </div>
+                <div class="fm-child-safety">
+                    <label style="font-size:.82em;color:#555;font-weight:600;display:block;margin-bottom:4px">
+                        Allergies &amp; Care Notes
+                        <span style="font-weight:400;color:#888">(shown to staff before they log a meal)</span>
+                    </label>
+                    <div class="fmc-allergy-chips" data-index="${i}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+                        ${_fmAllergyChipsHtml(child.allergies)}
+                    </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                        <input type="text" class="fmc-allergy-label" placeholder="e.g. Peanut"
+                               style="flex:1;min-width:140px" maxlength="60">
+                        <select class="fmc-allergy-severity" style="width:130px">
+                            <option value="severe">Severe</option>
+                            <option value="sensitivity">Sensitivity</option>
+                            <option value="note">Care note</option>
+                        </select>
+                        <button type="button" class="btn-secondary btn-sm fmc-allergy-add" data-index="${i}">Add</button>
+                    </div>
+                    <div class="fm-field fm-field-grow" style="margin-top:6px">
+                        <label>Other care notes</label>
+                        <input type="text" class="fmc-care-notes" value="${escHtml(child.care_notes || '')}"
+                               placeholder="e.g. inhaler in cubby">
+                    </div>
+                    <label style="font-size:.85em;display:flex;align-items:center;gap:6px;margin-top:8px">
+                        <input type="checkbox" class="fmc-photo-release" ${child.photo_release === false ? '' : 'checked'}>
+                        Photo release — may appear in photos shared with other families
+                    </label>
+                </div>
                 <div class="fm-child-recurring">
                     <label style="font-size:.82em;color:#555;font-weight:600;display:block;margin-bottom:4px">Recurring Days <span style="font-weight:400;color:#888">(reminder shown when entering care days)</span></label>
                     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -821,6 +854,50 @@ function renderModalChildRows() {
         sel.addEventListener('change', () => {
             const wrap = sel.closest('.fm-child-discount').querySelector('.discount-value-wrap');
             if (wrap) wrap.style.display = sel.value === 'custom' ? '' : 'none';
+        });
+    });
+
+    // Allergy chips: add / remove operate on familyModalChildren directly and
+    // repaint just that row's chip strip, so a full re-render never wipes
+    // half-typed values in the other fields.
+    container.querySelectorAll('.fmc-allergy-add').forEach(btn => {
+        const row = btn.closest('.fm-child-row');
+        const add = () => {
+            const idx      = parseInt(btn.dataset.index);
+            const labelEl  = row.querySelector('.fmc-allergy-label');
+            const sevEl    = row.querySelector('.fmc-allergy-severity');
+            const label    = (labelEl?.value || '').trim();
+            if (!label) { labelEl?.focus(); return; }
+            const child = familyModalChildren[idx];
+            if (!child) return;
+            if (!Array.isArray(child.allergies)) child.allergies = [];
+            // Same label twice is a data-entry slip, not two allergies.
+            if (child.allergies.some(a => (a.label || '').toLowerCase() === label.toLowerCase())) {
+                labelEl.value = '';
+                return;
+            }
+            child.allergies.push({ label, severity: sevEl?.value || 'severe' });
+            labelEl.value = '';
+            _fmRepaintAllergyChips(row, idx);
+            labelEl.focus();
+        };
+        btn.addEventListener('click', add);
+        // Enter in the label field should add, not submit the modal.
+        row.querySelector('.fmc-allergy-label')?.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); add(); }
+        });
+    });
+
+    container.querySelectorAll('.fmc-allergy-chips').forEach(strip => {
+        strip.addEventListener('click', e => {
+            const btn = e.target.closest('.fmc-allergy-remove');
+            if (!btn) return;
+            const idx = parseInt(strip.dataset.index);
+            const at  = parseInt(btn.dataset.at);
+            const child = familyModalChildren[idx];
+            if (!child || !Array.isArray(child.allergies)) return;
+            child.allergies.splice(at, 1);
+            _fmRepaintAllergyChips(strip.closest('.fm-child-row'), idx);
         });
     });
 
@@ -843,18 +920,53 @@ function addModalChildRow() {
             familyModalChildren[idx].discount_value = parseFloat(row.querySelector('.fmc-discount-value')?.value) || 0;
             familyModalChildren[idx].discount_note  = row.querySelector('.fmc-discount-note')?.value.trim() || null;
             familyModalChildren[idx].recurring_days = [...row.querySelectorAll('.fmc-recurring-day:checked')].map(cb => cb.value);
+            familyModalChildren[idx].care_notes     = row.querySelector('.fmc-care-notes')?.value.trim() || null;
+            familyModalChildren[idx].photo_release  = row.querySelector('.fmc-photo-release')?.checked !== false;
+            // allergies are already on familyModalChildren — chips write there directly
         }
     });
 
     familyModalChildren.push({
         id: null, child_name: '', child_dob: null,
         room_override: null, discount_type: 'none', discount_value: 0, discount_note: null,
-        recurring_days: [],
+        recurring_days: [], allergies: [], care_notes: null, photo_release: true,
     });
     renderModalChildRows();
     // Focus the new name input
     const rows = document.querySelectorAll('#fmChildRows .fm-child-row');
     if (rows.length) rows[rows.length - 1].querySelector('.fmc-name')?.focus();
+}
+
+// Chip styling mirrors the staff quick-log sheet in the design: a severe
+// allergy is solid --tang so it reads at a glance across a room; sensitivities
+// and care notes are outlined.
+const _FM_SEV_STYLE = {
+    severe:      'background:var(--tang);color:#fff;border:1.5px solid var(--tang)',
+    sensitivity: 'background:#fff;color:var(--tang-dark);border:1.5px solid var(--tang-soft)',
+    note:        'background:#fff;color:var(--text-muted);border:1.5px solid var(--border)',
+};
+
+function _fmAllergyChipsHtml(allergies) {
+    const list = Array.isArray(allergies) ? allergies : [];
+    if (!list.length) {
+        return '<span style="font-size:.82em;color:#888">None recorded</span>';
+    }
+    return list.map((a, at) => {
+        const style = _FM_SEV_STYLE[a.severity] || _FM_SEV_STYLE.note;
+        return `<span style="${style};border-radius:999px;padding:2px 10px;font-size:.78em;
+                     font-weight:800;letter-spacing:.04em;display:inline-flex;align-items:center;gap:6px">
+                    ${escHtml(a.label)}
+                    <button type="button" class="fmc-allergy-remove" data-at="${at}"
+                            title="Remove ${escHtml(a.label)}"
+                            style="background:none;border:none;cursor:pointer;padding:0;font-size:1.1em;
+                                   line-height:1;color:inherit;opacity:.75">&times;</button>
+                </span>`;
+    }).join('');
+}
+
+function _fmRepaintAllergyChips(row, idx) {
+    const strip = row?.querySelector('.fmc-allergy-chips');
+    if (strip) strip.innerHTML = _fmAllergyChipsHtml(familyModalChildren[idx]?.allergies);
 }
 
 function removeModalChildRow(index) {
@@ -877,6 +989,12 @@ function readModalChildrenFromDom() {
             discount_value: parseFloat(row.querySelector('.fmc-discount-value').value) || 0,
             discount_note:  row.querySelector('.fmc-discount-note').value.trim() || null,
             recurring_days: [...row.querySelectorAll('.fmc-recurring-day:checked')].map(cb => cb.value),
+            // Allergies live on familyModalChildren rather than in the DOM —
+            // they are chips, not inputs.
+            allergies:      Array.isArray(familyModalChildren[idx]?.allergies)
+                                ? familyModalChildren[idx].allergies : [],
+            care_notes:     row.querySelector('.fmc-care-notes')?.value.trim() || null,
+            photo_release:  row.querySelector('.fmc-photo-release')?.checked !== false,
         });
     });
     return children;
@@ -964,6 +1082,9 @@ async function saveFamilyModal() {
                         discount_value: child.discount_value,
                         discount_note:  child.discount_note,
                         recurring_days: child.recurring_days?.length ? child.recurring_days : null,
+                        allergies:      child.allergies || [],
+                        care_notes:     child.care_notes,
+                        photo_release:  child.photo_release,
                     });
                 } else {
                     await addStudent({
@@ -975,6 +1096,9 @@ async function saveFamilyModal() {
                         discountValue: child.discount_value,
                         discountNote:  child.discount_note,
                         recurringDays: child.recurring_days?.length ? child.recurring_days : null,
+                        allergies:     child.allergies || [],
+                        careNotes:     child.care_notes,
+                        photoRelease:  child.photo_release,
                     });
                 }
             }
