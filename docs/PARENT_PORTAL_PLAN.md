@@ -355,7 +355,24 @@ clean.
 - Meal amount scale: `some` / `most` / `all` — is a "didn't touch it" option
   wanted?
 - Confirm the director is in `admin_roles` as **full**.
-- Confirm `parent-session` issues a token (no invocation has been made yet).
+### Phase 0 verification (2026-08-11) — all passed
+
+- `parent-session` deployed, `PARENT_JWT_SECRET` set. A login with a bogus email
+  returned **401 `not_found`**, not 500 `server_misconfigured` — so the secret is
+  present and the call reached `family_login`. Edge logs show `OPTIONS 200`
+  (CORS preflight) then `POST 401`, no server error.
+- `pg_has_role('authenticator','parent_portal','MEMBER')` = **true**, so
+  PostgREST can `SET ROLE` from the token's `role` claim. `parent_portal` is
+  `NOLOGIN` and holds schema `USAGE` only.
+- `parent_portal` holds **zero** table privileges; `parent_refresh_tokens` is
+  unreadable by `anon`, `authenticated` and `parent_portal` alike.
+- The allergy shape guard rejects an empty label and an unknown severity, and
+  accepts a well-formed value. 149 children default to `photo_release = true`.
+
+**Still unexercised:** a real issued token has not yet been presented to
+PostgREST — that needs one login with a genuine family email and PIN. Every
+component it depends on is verified; the end-to-end round trip is not. Do this
+as the first step of Phase 1, before any table policy is written against it.
 
 ## ⚠️ JWT signing — settled, with an expiry date
 
