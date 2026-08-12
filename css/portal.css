@@ -291,3 +291,73 @@
 }
 .pt-photo { display: block; border-radius: 10px; overflow: hidden; line-height: 0; }
 .pt-photo img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+
+/* Print button — on screen only; it must not appear on the page it prints. */
+.pt-print-btn {
+    width: 100%; margin-top: 18px; min-height: 44px;
+    background: none; border: 1.5px solid #d7dee5; border-radius: 10px;
+    padding: 12px; font-family: inherit; font-size: .92em; font-weight: 700;
+    color: var(--navy); cursor: pointer;
+}
+
+/* The print header exists only on paper. */
+.pt-print-head { display: none; }
+
+/* ============================================================
+   Full-day report (print)
+   ============================================================
+   There is no separate report screen. The feed already IS the day, and a second
+   rendering of the same data would be a second thing to keep correct. Printing
+   strips the app and leaves the record.
+
+   This is also the printable-report best practice for incidents: a parent or
+   the director can produce a dated, named sheet for a file without anyone
+   building an export. */
+@media print {
+    /* Everything that is app rather than record. */
+    .portal-logo, .portal-links, .portal-signout, .portal-check,
+    .pt-switcher, .pt-print-btn, .portal-greeting, .portal-sub,
+    .pt-announcements {
+        display: none !important;
+    }
+
+    /* The screen layout centres the card with flex and a min-height, which on
+       paper reserves a full viewport and pushed a blank second page. */
+    body.portal-body {
+        background: #fff; display: block; padding: 0;
+        min-height: 0; align-items: initial; justify-content: initial;
+    }
+    .portal-card {
+        box-shadow: none; border-radius: 0; max-width: none;
+        padding: 0; background: #fff;
+    }
+
+    .pt-print-head {
+        display: block;
+        border-bottom: 2px solid #01294A;
+        padding-bottom: 8px; margin-bottom: 14px;
+    }
+    .pt-print-org  { font-size: 10pt; color: #444; }
+    .pt-print-meta { font-size: 15pt; font-weight: 800; color: #01294A; margin-top: 2px; }
+
+    /* The screen header duplicates the print header; keep one. */
+    .pt-day-head { display: none; }
+
+    .pt-safety {
+        background: #fff !important; border: 1.5px solid #999 !important;
+        page-break-inside: avoid;
+    }
+    .pt-chip { border: 1px solid #333 !important; background: #fff !important; color: #000 !important; }
+    /* Severity still has to survive a black-and-white printer, so severe keeps
+       a heavier rule rather than relying on colour that will not print. */
+    .pt-chip-severe { border-width: 2.5px !important; font-weight: 800; }
+
+    .pt-event { page-break-inside: avoid; border-bottom: 1px solid #ddd; }
+    .pt-event-label, .pt-event-time { color: #000; }
+
+    /* Photos are ephemeral and often numerous; a day report is a record of care,
+       not a contact sheet. */
+    .pt-photos { display: none !important; }
+
+    @page { margin: 14mm; }
+}

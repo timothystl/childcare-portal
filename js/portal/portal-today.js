@@ -131,6 +131,15 @@ async function ptSelectChild(childId) {
     }
 
     ptRenderPhotos(childId);
+
+    // The print header carries the identifying detail the screen shows in page
+    // chrome. On paper the chrome is gone, and an undated sheet about an
+    // unnamed child is worthless in a file.
+    const meta = ptEl('ptPrintMeta');
+    if (meta && child) {
+        meta.textContent = `${child.child_name} — ${new Date(ptDate + 'T12:00:00')
+            .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`;
+    }
 }
 
 // ── Photos ──────────────────────────────────────────────────
@@ -199,6 +208,8 @@ async function ptLoadToday() {
         ptEl('ptNoChildren')?.classList.remove('hidden');
         return;
     }
+
+    ptEl('ptPrintBtn')?.addEventListener('click', () => window.print());
 
     ptEl('ptNoChildren')?.classList.add('hidden');
     ptEl('ptFeed')?.classList.remove('hidden');
