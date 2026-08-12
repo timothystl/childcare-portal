@@ -53,9 +53,36 @@ serve(async (req) => {
             .select('value')
             .eq('key', 'admin_roles')
             .maybeSingle();
-        const roles = roleSetting?.value || {};
+        // FS10: this used to read `Object.keys(roles).length > 0 && …`, which
+        // FAILED OPEN — an empty or missing admin_roles skipped the check and
+        // handed any signed-in user the Auth Admin API. It also treated the
+        // value as an object, but settings.value is a TEXT column, so `roles`
+        // was a string and roles[email] was always undefined (the same T3 trap
+        // recorded in CLAUDE.md).
+        //
+        // Now: parse defensively, then fail CLOSED. No roles configured means
+        // nobody is an admin — which matches is_admin() in the database, so the
+        // two cannot disagree about who is privileged.
+        let roles: Record<string, string> = {};
+        const rawRoles = roleSetting?.value;
+        if (rawRoles && typeof rawRoles === 'object') {
+            roles = rawRoles as Record<string, string>;
+        } else if (typeof rawRoles === 'string') {
+            try {
+                const parsed = JSON.parse(rawRoles);
+                if (parsed && typeof parsed === 'object') roles = parsed;
+            } catch {
+                console.error('admin-users: admin_roles is not valid JSON — denying');
+            }
+        }
+
+        // Match case-insensitively: admin_roles is hand-edited, and the same
+        // rule applies in the database predicate.
         const callerEmail = (user.email || '').toLowerCase().trim();
-        if (Object.keys(roles).length > 0 && roles[callerEmail] !== 'full') {
+        const callerRole = Object.entries(roles)
+            .find(([k]) => k.toLowerCase().trim() === callerEmail)?.[1];
+
+        if (callerRole !== 'full') {
             return new Response(JSON.stringify({ error: "Forbidden: full admin role required" }), {
                 status: 403, headers: { ...ch, "Content-Type": "application/json" },
             });
