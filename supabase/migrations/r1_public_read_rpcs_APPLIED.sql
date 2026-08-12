@@ -1,0 +1,39 @@
+-- ============================================================
+-- R1 — close the anon read on registrations / registration_dates
+-- ============================================================
+-- APPLIED AND VERIFIED IN PRODUCTION 2026-08-11, in two steps with the
+-- frontend deploy between them. Supersedes ss1_public_read_rpcs.sql (never
+-- applied), which covered the first two RPCs but not the family read that
+-- actually blocked dropping the policies.
+--
+-- anon could read every child name, parent name, parent email and full care
+-- schedule in the center, with the public key that ships in every browser.
+-- The reads were load-bearing — ~5,700 calls across capacity counts and the
+-- duplicate check — so they had to be replaced, not merely revoked.
+--
+-- STEP 1 (this file): create the RPCs. No behaviour change.
+-- STEP 2 (r1_drop_anon_read_policies): drop the policies AND the grants,
+--         only after the frontend using the RPCs is live (v2.5.16).
+--
+--   fetchCapacityForDates            -> capacity_counts(room, dates[])
+--   checkExistingRegistration        -> registration_conflict(month, child, email)
+--   checkExistingRegistrationByChild -> registration_conflict(month, child, NULL)
+--   fetchRegistrationsByEmail        -> family_registrations(email, pin)
+--
+-- ⚠️ verify_family_pin shares family_login's lockout rather than
+-- reimplementing bcrypt. Without that, family_registrations would be a second
+-- door onto the same PINs with no counter — brute-forceable while family_login
+-- sat there untouched. It is granted to NOBODY; only the definer functions
+-- above call it.
+--
+-- Verified: capacity counts return; the conflict check finds a real
+-- registration, respects email scoping, rejects a wrong email and returns
+-- nothing for an unregistered child; family_registrations returns [] on a bad
+-- PIN; after step 2 anon gets insufficient_privilege on both tables directly
+-- while every RPC path still works and anon INSERT (the registration flow
+-- itself) is untouched.
+--
+-- ROLLBACK: ROLLBACK_r1_public_read_rpcs.sql
+-- ============================================================
+-- Function bodies as applied — see the migration history entries
+-- r1_public_read_rpcs and r1_drop_anon_read_policies for the exact SQL.
