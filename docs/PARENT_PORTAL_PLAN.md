@@ -1,6 +1,10 @@
 # myMDO Parent Communication — Build Plan
 
-**Status:** planning · no code written yet
+**Status:** Phase 0 and Phase 1 **shipped and live** (2026-08-12) — parent
+identity, staff quick-log app, parent Today feed, photos with consent enforced
+on the image bytes, enforced retention, push, printable day report, and
+director-reviewed incident reports with PDF export. Phase 2 (messaging) is next;
+Phase 4 (payments) is unblocked but waits on a processor decision.
 **Design source:** `design_handoff_parent_communication` (canvas + README, 14 screens)
 **Written:** 2026-08-11
 
@@ -126,12 +130,12 @@ their phone whenever they logged in on a laptop. `generateLink` sends no mail.
 New, additive — nothing existing is modified or removed:
 
 ```
-portal.html            parent app (tabbed: Today / Schedule / Billing / Messages)   ✅ sign-in shipped
-staff.html             staff phone (roster, quick log, incident report)
+portal.html            parent app (Today shipped; Schedule/Billing/Messages to come)  ✅
+staff.html             staff phone (roster, quick log, photo, incident report)        ✅ shipped
 css/portal.css         phone-first styles, built on existing tokens                 ✅ shipped
-js/portal/             portal-auth ✅, portal-today, portal-day,
+js/portal/             portal-auth ✅, portal-today ✅ (day report = print CSS),
                        portal-schedule, portal-billing, portal-messages
-js/staff/              staff-roster, staff-log, staff-incident
+js/staff/              staff-log ✅ (roster + quick log + photo + incident in one)
 ```
 
 `portal.html` shipped 2026-08-12 as **sign-in only** — the tabs come with the
@@ -254,6 +258,17 @@ Threaded parent ↔ staff, upgrading the one-way contact form.
 
 ## 7. Phase 3 — Incident reports
 
+> **⚠️ PARTLY BUILT IN PHASE 1 (2026-08-12), and the status flow below is
+> WRONG.** The director reversed it: staff submit → **director reviews** →
+> approval is what notifies the family. See §10. The shipped table is
+> `incident_reports` (not `incidents`), with submit / review RPCs, a parent view
+> gated on `status = 'approved'`, and PDF export.
+>
+> Still unbuilt from the richer spec below: body-map location, multi-select
+> first-aid, aftercare checklist, witnesses, and the signature block including
+> **parent acknowledgment**. The PDF currently prints signature *lines* for wet
+> signatures rather than capturing an in-app acknowledgment.
+
 `incidents` — occurred_at, place, type, body-map location, narrative, first-aid
 (multi), aftercare checklist, witnesses, optional photo, and the signature block:
 teacher (staff id + timestamp), director (staff id + timestamp), parent
@@ -286,11 +301,16 @@ start whenever you're ready, independent of build order.*
 while no payment processor is attached; attaching one converts it into a live
 financial vector.
 
-**Status: migrations written 2026-08-11, not yet applied.**
+**Status: ✅ APPLIED AND VERIFIED IN PRODUCTION 2026-08-11.**
 `fs5_phase1_revoke_add_day_anon.sql` and
-`fs5_phase2_server_side_invoice_amount.sql`, with rollbacks for both. Phase 2
-removes the amount from the API surface entirely and recomputes it in the
-database. Apply and verify both before any processor work begins.
+`fs5_phase2_server_side_invoice_amount.sql` are both live. Phase 2 removed the
+amount from the API surface entirely and recomputes it in the database —
+verified by injection test: passing `999999` stored `1455.00`.
+
+**The prerequisite is therefore met and no longer blocks processor work.**
+Billing writes were additionally made recompute-only across all eight admin
+mutation paths on the same day, so a day change can no longer ratchet an invoice
+upward without the rest of the month being recomputed.
 
 ### 8.2 Processor requirements
 
