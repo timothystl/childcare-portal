@@ -8,8 +8,9 @@
 //
 // Output:
 //   dist/supabase.min.js   — shared data layer
-//   dist/app.min.js        — parent portal
+//   dist/app.min.js        — parent registration flow (index/calendar)
 //   dist/lookup.min.js     — schedule lookup
+//   dist/portal.min.js     — parent portal (portal.html)
 //   dist/admin.min.js      — admin dashboard (all modules bundled)
 //   dist/error-monitor.min.js
 //
@@ -96,6 +97,18 @@ const ENTRIES = [
         outfile: 'dist/menu.min.js',
         stdin: {
             contents: fs.readFileSync(path.join(ROOT, 'js/menu.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
+        // Parent portal. One file today (sign-in); Phase 1 adds the Today feed,
+        // day report and photo grid as further js/portal/ modules concatenated
+        // here in load order, the way the admin bundle does it.
+        outfile: 'dist/portal.min.js',
+        stdin: {
+            contents: [
+                'js/portal/portal-auth.js',
+            ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
         },
     },
@@ -226,6 +239,19 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/waitlist-status.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'portal.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/portal\/portal-auth\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/error-monitor.min.js"></script>`,
+            `    <script src="dist/portal.min.js"></script>`,
         ],
     },
     {

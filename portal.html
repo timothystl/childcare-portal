@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/logo/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/logo/favicon-16.png">
+  <link rel="apple-touch-icon" href="/images/logo/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#01294A">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>Parent Portal — Timothy Lutheran Church MDO</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/portal.css">
+</head>
+<body class="portal-body">
+
+    <!-- Sign in -->
+    <div id="portalSignIn" class="portal-card">
+        <div class="portal-logo">
+            <img src="/images/logo/myMDO_primary_logo_light.png" alt="myMDO">
+        </div>
+        <h1>Parent Portal</h1>
+        <p class="portal-sub">Sign in with the same email and PIN you use for registration.</p>
+
+        <div class="form-group">
+            <label for="portalEmail">Email Address</label>
+            <input type="email" id="portalEmail" placeholder="your@email.com" autocomplete="email" inputmode="email">
+        </div>
+
+        <div class="form-group">
+            <label for="portalPin">PIN</label>
+            <input type="text" id="portalPin" placeholder="4-digit PIN" maxlength="8"
+                   inputmode="numeric" pattern="[0-9]*" autocomplete="current-password">
+        </div>
+
+        <button id="portalSignInBtn" class="btn-primary portal-btn">Sign In</button>
+        <p id="portalError" class="portal-error hidden"></p>
+
+        <p class="portal-hint">
+            Each parent has their own PIN.
+            <a href="reset-pin.html">Forgot your PIN?</a>
+        </p>
+
+        <div class="portal-links">
+            <a href="calendar.html">Register for care days</a>
+            <a href="lookup.html">View my schedule</a>
+        </div>
+    </div>
+
+    <!-- Signed in -->
+    <div id="portalSignedIn" class="portal-card hidden">
+        <div class="portal-logo">
+            <img src="/images/logo/myMDO_primary_logo_light.png" alt="myMDO">
+        </div>
+        <h1 id="portalGreeting" class="portal-greeting">Hi.</h1>
+        <p id="portalGreetingSub" class="portal-sub"></p>
+
+        <div class="portal-soon">
+            <strong>Coming soon.</strong> Your child's day — photos, meals, naps, and
+            notes from their teacher — will appear here. Until then, registration and
+            schedules work exactly as they do today.
+        </div>
+
+        <div class="portal-links">
+            <a href="calendar.html">Register for care days</a>
+            <a href="lookup.html">View my schedule</a>
+        </div>
+
+        <button id="portalSignOutBtn" class="portal-signout">Sign out</button>
+
+        <!--
+          Isolation check — diagnostic, not parent-facing. Shown only with
+          ?check=1 so a parent who signs in normally never sees a security
+          test panel. This is the acceptance test from PARENT_PORTAL_PLAN.md
+          §3.1, run as the real parent role instead of reasoned about from
+          the catalog.
+        -->
+        <div id="portalCheck" class="portal-check hidden">
+            <h2>Session isolation check</h2>
+            <p class="portal-check-intro">
+                Each row asks this signed-in session for one row of an admin table.
+                A tick means nothing came back.
+            </p>
+            <ul id="portalCheckList"></ul>
+            <p id="portalCheckSummary" class="portal-check-summary"></p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js');
+      }
+    </script>
+    <script src="dist/supabase.min.js"></script>
+    <script src="dist/error-monitor.min.js"></script>
+    <script src="dist/portal.min.js"></script>
+</body>
+</html>
