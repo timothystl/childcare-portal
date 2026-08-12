@@ -1,6 +1,13 @@
 -- ============================================================
 -- PARENT PORTAL — PHASE 0 (foundation)
 -- ============================================================
+-- ⚠️ PARTIALLY SUPERSEDED — DO NOT RE-RUN AS-IS.
+-- The two auth objects it creates, `parent_portal` (role) and
+-- `parent_refresh_tokens` (table), were dropped by
+-- parent_portal_option_b_retire_phase0_auth_APPLIED.sql when parents moved to
+-- real Supabase Auth users. The students columns (allergies / care_notes /
+-- photo_release) and allergies_shape_ok() are still live and still correct.
+--
 -- Design: docs/PARENT_PORTAL_PLAN.md §4.
 -- Nothing parent-visible ships from this. It is the ground everything else
 -- stands on: child safety data, photo consent, and a database identity for

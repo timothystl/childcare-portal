@@ -71,40 +71,54 @@ photographs of children, and incident reports — and the open findings in
 `docs/CODE_REVIEW_2026-08.md` (R1, R3, R26, R27) are all the same failure: anon
 holding grants nobody audited.
 
-**Parents get a real database identity.** The login edge function mints a
-Supabase-signed JWT carrying a `family_id` claim. Every new table then gets an
-ordinary RLS policy and the *database* enforces family isolation:
+**Parents get a real database identity.** ✅ **Built 2026-08-12 — Option B.**
+Parents are ordinary **Supabase Auth users**. The `parent-session` edge function
+verifies email + PIN through `family_login`, maps the address to an `auth.users`
+row in `parent_accounts`, and returns a genuine Supabase session. Every new table
+then gets an ordinary RLS policy and the *database* enforces family isolation:
 
 ```sql
-USING (family_id = (auth.jwt() ->> 'family_id')::uuid)
+USING (family_id IN (SELECT parent_family_ids()))
 ```
 
 No `SECURITY DEFINER` RPC per read (that would be ~15 functions, and it is exactly
-the pattern that produced R1/R3/R26/R27).
+the pattern that produced R1/R3/R26/R27) — one definer function, reused by every
+policy.
 
-> ### ⚠️ The JWT must NOT use `role: authenticated`
+> ### ⚠️ Why `role: authenticated` is now safe — and the order that made it so
 >
-> Every existing admin table carries `FOR ALL TO authenticated USING (true)` —
+> **This section originally said the opposite, and was right at the time.** Every
+> admin table then carried `FOR ALL TO authenticated USING (true)` —
 > `billing_invoices`, `staff`, `admin_audit_log`, all of them. Handing parents the
-> `authenticated` role would give all 242 of them full read/write on staff wages
-> and the billing ledger.
+> `authenticated` role would have given all 242 of them read/write on staff wages
+> and the billing ledger. The plan was a dedicated `parent_portal` Postgres role.
 >
-> Instead: create a dedicated Postgres role, `parent_portal`, `NOLOGIN`, granted to
-> `authenticator`, holding grants **only** on the new parent-facing tables. The JWT
-> carries `role: parent_portal`. All new policies are written `TO parent_portal`.
+> **The policy-scoping work (stages 1–5, 2026-08-12) removed the reason for it.**
+> All 27 of those tables are now scoped to `is_admin()`, so an `authenticated`
+> token grants **nothing** by default. Access exists only where an explicit parent
+> policy keys through `parent_family_ids()`.
 >
-> **Acceptance test, must run before any parent traffic:** authenticate as
-> `parent_portal` and confirm `permission denied` on `families`, `staff`,
-> `billing_invoices`, `admin_audit_log`, `staff_clock_events`, and
-> `attendance_records`; and confirm a parent JWT for family A returns zero rows for
-> family B's photos, logs, messages, and incidents.
+> That is a strictly better boundary than the custom role was going to be: it needs
+> no access-token hook rewriting the `role` claim on every login, and it cannot be
+> defeated by that hook silently failing. `parent_portal` and its refresh-token
+> table were dropped — see
+> `parent_portal_option_b_retire_phase0_auth_APPLIED.sql`.
+>
+> **Acceptance test, must still run before any parent traffic:** hold a real parent
+> session and confirm `permission denied` / zero rows on `families`, `staff`,
+> `billing_invoices`, `admin_audit_log`, `staff_clock_events`,
+> `attendance_records` and `parent_accounts`; and confirm a parent of family A
+> returns zero rows for family B's photos, logs, messages, and incidents.
 
-Sessions: a short-lived access JWT (1 hour) plus a hashed, revocable refresh token
-row (30 days). Sign-out revokes the refresh row. This replaces the current 1-hour
-HMAC token that only `/push-subscribe` accepts.
+Sessions are Supabase's own: a 1-hour access token plus a rotating refresh token
+that supabase-js renews on its own. Sign-out is `auth.signOut()`. This replaces
+both the 1-hour HMAC token that only `/push-subscribe` accepted **and** the
+hand-signed HS256 token Phase 0 shipped.
 
-Note: Supabase is migrating to asymmetric JWT signing keys. Confirm which signing
-mode the project is on before implementing the mint step.
+⚠️ Login is minted with `admin.generateLink` + `verifyOtp`, **not** by rotating the
+user's password and signing in. An admin password update revokes every existing
+session for that user, so the password route would silently sign a parent out of
+their phone whenever they logged in on a laptop. `generateLink` sends no mail.
 
 ### 3.2 Pages and build
 
@@ -149,11 +163,15 @@ view listing opt-outs so fixing them is a two-minute job rather than a hunt.
 
 *Nothing parent-visible. Prerequisite for everything below.*
 
-- Postgres role `parent_portal` + grants; the acceptance test in §3.1.
-- `parent_refresh_tokens` (hashed token, family_id, parent slot, expires_at, revoked_at).
-- Edge function `parent-session`: login → JWT + refresh; refresh; sign-out.
-  Reuses the existing `family_login(text, text)` RPC unchanged — PIN semantics,
-  lockout, and the SS2 text-PIN fix all stay exactly as they are.
+- ~~Postgres role `parent_portal` + grants~~ — **superseded by Option B.** Replaced
+  by `parent_accounts` (`user_id` → `family_id`) and `parent_family_ids()`. The
+  acceptance test in §3.1 still applies, run against a real parent session.
+- ~~`parent_refresh_tokens`~~ — **dropped.** Supabase Auth owns refresh now.
+- Edge function `parent-session`: login → a real Supabase session (access +
+  refresh token). Reuses the existing `family_login(text, text)` RPC unchanged —
+  PIN semantics, lockout, and the SS2 text-PIN fix all stay exactly as they are.
+  Client entry point is `parentPortalLogin()` / `parentPortalLogout()` in
+  `js/supabase.js`.
 - `students` gains:
   - `photo_release boolean NOT NULL DEFAULT true`
   - `allergies jsonb NOT NULL DEFAULT '[]'` — `[{label, severity}]` where severity
@@ -374,7 +392,35 @@ PostgREST — that needs one login with a genuine family email and PIN. Every
 component it depends on is verified; the end-to-end round trip is not. Do this
 as the first step of Phase 1, before any table policy is written against it.
 
+### Option B verification (2026-08-12)
+
+- `parent-session` redeployed as **v4**, `verify_jwt: false` (parents arrive with
+  an email and a PIN, not a token).
+- `parent_refresh_tokens` dropped (0 rows); `parent_portal` role dropped after
+  revoking its incidental grants and its `authenticator` membership. Catalog
+  re-checked after: role gone, table gone, `parent_accounts` +
+  `parent_family_ids()` + `my_parent_context()` present.
+- `PARENT_JWT_SECRET` is no longer read by anything. It can be deleted from the
+  function secrets — but see the DO-NOT-REVOKE box below, which is about the
+  *underlying* legacy secret and still stands.
+
+**Not yet exercised: an end-to-end login.** The build sandbox has no network path
+to `*.supabase.co`, so the round trip could not be run from here. **Do this first
+in Phase 1, before any table policy is written against the identity:** log in as a
+real family, confirm a session comes back, then confirm that session is denied on
+`staff`, `billing_invoices` and `parent_accounts`. The one step with genuine
+runtime uncertainty is the OTP redemption — the function tries `magiclink` then
+`email` rather than assuming which type GoTrue answers to, so a wrong guess
+degrades to a retry instead of a failed login, but it has not been observed
+succeeding.
+
 ## ⚠️ JWT signing — settled, with an expiry date
+
+> **Update 2026-08-12 — this section is now history for parents.** Option B
+> removed the parent portal's dependency on the legacy secret entirely. The
+> DO-NOT-REVOKE warning below still stands, but for a different reason: the
+> `anon` key that `index.html`, `lookup.html` and `calendar.html` run on is still
+> an HS256 token verified by it.
 
 **This project has ALREADY migrated to JWT Signing Keys.** The dashboard's
 Legacy JWT Secret tab states it plainly: *"Legacy JWT secret has been migrated
@@ -397,17 +443,23 @@ it `parent-session` returns 500 rather than issuing a token nothing can verify.
 
 **Agreed plan (2026-08-11): A now, B before Phase 1 ships.**
 
-- **A — legacy secret + RLS (built).** Parents get a `parent_portal` token; the
-  database enforces family isolation. Works today, dies whenever the legacy
-  secret is revoked.
-- **B — parents become real Supabase Auth users (before Phase 1).** On first PIN
-  login the edge function creates or looks up an `auth.users` row for that
-  parent and returns a genuine Supabase session; a **custom access token hook**
-  adds `family_id` to the claims. Survives the key rotation, keeps RLS as the
-  enforcement point, and parents never see a password — the PIN stays the
+- **A — legacy secret + RLS.** ~~Built 2026-08-11~~, **retired 2026-08-12.**
+  Parents got a `parent_portal` token signed with the legacy secret. It worked,
+  and it died the day the secret was revoked — which is why it was always a
+  stopgap.
+- **B — parents become real Supabase Auth users.** ✅ **Shipped 2026-08-12.** On
+  first PIN login the edge function creates or looks up an `auth.users` row for
+  that parent and returns a genuine Supabase session. The PIN stays the
   credential and `family_login` keeps owning the bcrypt compare and lockout.
 
-  B is deliberately scheduled *before* Phase 1 rather than after: Phase 1 is
+  **Simpler than designed: no custom access token hook.** The plan was to inject
+  `family_id` into the claims. That turned out to be unnecessary — the policy
+  scoping done the same day means a plain `authenticated` token grants nothing,
+  so family isolation can come from a join (`parent_accounts`, read through
+  `parent_family_ids()`) rather than from a claim. A join is a fact the database
+  owns; a claim is only as good as the hook that keeps writing it.
+
+  B was deliberately scheduled *before* Phase 1 rather than after: Phase 1 is
   where photos of children and daily logs get their table policies, and those
   policies should be written once against the identity model that will still be
   there in a year.

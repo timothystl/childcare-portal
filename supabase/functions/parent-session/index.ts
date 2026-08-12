@@ -1,35 +1,29 @@
 // ============================================================
-// parent-session — login / refresh / sign-out for the parent portal
+// parent-session — Option B: parents as real Supabase Auth users
 // ============================================================
-// Issues a Supabase-signed access JWT carrying a `family_id` claim, so every
-// parent-facing table can be protected by an ordinary RLS policy:
+// Email + PIN remains the credential. family_login still owns the bcrypt
+// compare, the attempt counter and the lockout. What changed is what a
+// successful login produces: a genuine Supabase session instead of a
+// hand-signed HS256 token.
 //
-//     USING (family_id = (auth.jwt() ->> 'family_id')::uuid)
+// WHY THE CHANGE. The Phase 0 version signed its own token with the project's
+// LEGACY JWT secret. The dashboard states that secret is verification-only and
+// on a deprecation path; the moment it is revoked, every token signed with it
+// dies. Real auth users survive that rotation.
 //
-// The database enforces family isolation itself. A parent physically cannot
-// fetch another family's photos, day logs, messages or incidents, whatever the
-// browser asks for.
+// ⚠️ WHY GIVING PARENTS `authenticated` IS SAFE NOW, AND WAS NOT THIS MORNING.
+// An auth user's token carries role = 'authenticated'. Until the policy-scoping
+// work, that role had blanket read/write on 27 tables including staff wages and
+// the billing ledger — so this design would have been a breach. Every one of
+// those is now scoped to is_admin(), so a parent gets NOTHING by default.
+// Access comes only from explicit parent policies keyed through
+// parent_accounts / parent_family_ids().
 //
-// ⚠️ THE ROLE CLAIM IS `parent_portal`, NEVER `authenticated`.
-// Every admin table in this project is policied `FOR ALL TO authenticated
-// USING (true)` — billing_invoices, staff (wages), admin_audit_log. Minting
-// parents an `authenticated` token would hand all ~242 of them full read/write
-// on the center's payroll and ledger. `parent_portal` is NOLOGIN and starts
-// with zero table privileges (see parent_portal_phase0.sql); each parent-facing
-// table grants to it explicitly as it is built.
+// That is also why there is no custom access-token hook rewriting the role
+// claim: the boundary is table policies, not a hook that has to keep firing.
 //
-// SIGNING: this project is on Supabase's LEGACY shared JWT secret (the anon key
-// is HS256 and there is no auth.jwks table), so tokens are HS256-signed with
-// that secret. It is NOT available to SQL or the management API — set it as a
-// function secret:
-//
-//     supabase secrets set PARENT_JWT_SECRET="<Dashboard → Settings → API → JWT Secret>"
-//
-// Without it the function returns 500 rather than issuing an unverifiable token.
-//
-// Deploy with JWT verification OFF — parents authenticate here with email+PIN,
-// they do not arrive holding a token:
-//     supabase functions deploy parent-session --no-verify-jwt
+// Deploy with JWT verification OFF — parents arrive with an email and a PIN,
+// not a token.
 // ============================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -39,9 +33,6 @@ const ALLOWED_ORIGINS = new Set([
     "https://mdo.timothystl.org",
     "http://localhost:8000",
 ]);
-
-const ACCESS_TTL_SECONDS  = 60 * 60;            // 1 hour
-const REFRESH_TTL_DAYS    = 30;
 
 function corsHeaders(req: Request): Record<string, string> {
     const origin = req.headers.get("origin") || "";
@@ -57,80 +48,13 @@ function json(req: Request, body: unknown, status = 200): Response {
     return new Response(JSON.stringify(body), { status, headers: corsHeaders(req) });
 }
 
-// ── JWT (HS256) ──────────────────────────────────────────────
-// Hand-rolled rather than pulling a JWT library: this signs tokens that grant
-// database access, and a compromised dependency here is a compromised database.
-// Web Crypto is in the Deno runtime already.
-function b64url(bytes: Uint8Array): string {
-    let bin = "";
-    for (const b of bytes) bin += String.fromCharCode(b);
-    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function b64urlJson(obj: unknown): string {
-    return b64url(new TextEncoder().encode(JSON.stringify(obj)));
-}
-
-async function signJwt(payload: Record<string, unknown>, secret: string): Promise<string> {
-    const header = { alg: "HS256", typ: "JWT" };
-    const data   = `${b64urlJson(header)}.${b64urlJson(payload)}`;
-    const key    = await crypto.subtle.importKey(
-        "raw", new TextEncoder().encode(secret),
-        { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
-    );
-    const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data)));
-    return `${data}.${b64url(sig)}`;
-}
-
-// ── Refresh tokens ───────────────────────────────────────────
-// Stored hashed. A refresh token IS a session, so the table must not hold
-// anything usable if it leaks. SHA-256 is right here (not bcrypt): these are
-// 256 bits of CSPRNG output, not guessable passwords, and the refresh path
-// looks them up by hash on every call.
-function newRefreshToken(): string {
-    return b64url(crypto.getRandomValues(new Uint8Array(32)));
-}
-
-async function hashToken(token: string): Promise<string> {
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
-    return b64url(new Uint8Array(digest));
-}
-
-async function issueSession(
-    admin: ReturnType<typeof createClient>,
-    secret: string,
-    familyId: string,
-    parentSlot: number,
-    deviceLabel: string | null,
-) {
-    const now = Math.floor(Date.now() / 1000);
-    const accessToken = await signJwt({
-        iss:         "supabase",
-        role:        "parent_portal",   // NEVER "authenticated" — see header
-        family_id:   familyId,
-        parent_slot: parentSlot,
-        iat:         now,
-        exp:         now + ACCESS_TTL_SECONDS,
-    }, secret);
-
-    const refreshToken = newRefreshToken();
-    const expiresAt    = new Date(Date.now() + REFRESH_TTL_DAYS * 86400_000).toISOString();
-
-    const { error } = await admin.from("parent_refresh_tokens").insert({
-        family_id:    familyId,
-        parent_slot:  parentSlot,
-        token_hash:   await hashToken(refreshToken),
-        device_label: deviceLabel,
-        expires_at:   expiresAt,
-    });
-    if (error) throw new Error(`could not store session: ${error.message}`);
-
-    return {
-        access_token:  accessToken,
-        expires_in:    ACCESS_TTL_SECONDS,
-        refresh_token: refreshToken,
-        refresh_expires_at: expiresAt,
-    };
+// A password nobody ever learns — not the parent, not the browser. Parents
+// authenticate with their PIN through family_login; this exists only because
+// creating an auth user requires the column to be something. It is set once, at
+// account creation, and never used again in the normal path.
+function randomPassword(): string {
+    const b = crypto.getRandomValues(new Uint8Array(48));
+    return btoa(String.fromCharCode(...b)).replace(/[^a-zA-Z0-9]/g, "") + "aA1!";
 }
 
 serve(async (req) => {
@@ -140,104 +64,137 @@ serve(async (req) => {
     const origin = req.headers.get("origin") || "";
     if (origin && !ALLOWED_ORIGINS.has(origin)) return json(req, { error: "forbidden" }, 403);
 
-    const secret = Deno.env.get("PARENT_JWT_SECRET") ?? "";
-    if (!secret) {
-        console.error("PARENT_JWT_SECRET is not set — refusing to issue tokens");
-        return json(req, { error: "server_misconfigured" }, 500);
-    }
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const anonKey     = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
-    const admin = createClient(
-        Deno.env.get("SUPABASE_URL") ?? "",
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    );
+    const admin = createClient(supabaseUrl, serviceKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+    });
 
     let body: Record<string, unknown>;
     try { body = await req.json(); } catch { return json(req, { error: "bad_request" }, 400); }
 
-    const action = String(body.action ?? "");
+    const action = String(body.action ?? "login");
 
     try {
-        // ── login ────────────────────────────────────────────
-        if (action === "login") {
-            const email = String(body.email ?? "").trim();
-            const pin   = String(body.pin ?? "").trim();
-            if (!email || !/^\d{4,8}$/.test(pin)) return json(req, { error: "invalid_credentials" }, 400);
+        if (action !== "login") return json(req, { error: "unknown_action" }, 400);
 
-            // family_login owns PIN verification, the bcrypt compare, the
-            // attempt counter and the lockout. Do not reimplement any of it.
-            const { data, error } = await admin.rpc("family_login", { p_email: email, p_pin: pin });
-            if (error) return json(req, { error: "login_failed" }, 500);
-            if (data?.error) return json(req, { error: data.error, attempts_left: data.attempts_left }, 401);
-
-            const familyId   = data?.family?.id;
-            const parentSlot = data?.isParent2 ? 2 : 1;
-            if (!familyId) return json(req, { error: "login_failed" }, 500);
-
-            const session = await issueSession(
-                admin, secret, familyId, parentSlot,
-                (body.device_label ? String(body.device_label) : null)?.slice(0, 120) ?? null,
-            );
-            return json(req, { ...session, family: data.family, parent_slot: parentSlot });
+        const email = String(body.email ?? "").trim().toLowerCase();
+        const pin   = String(body.pin ?? "").trim();
+        if (!email || !/^\d{4,8}$/.test(pin)) {
+            return json(req, { error: "invalid_credentials" }, 400);
         }
 
-        // ── refresh ──────────────────────────────────────────
-        if (action === "refresh") {
-            const token = String(body.refresh_token ?? "");
-            if (!token) return json(req, { error: "invalid_refresh" }, 400);
+        // 1. The PIN check. family_login owns bcrypt, the attempt counter and
+        //    the lockout — none of that is reimplemented here.
+        const { data: login, error: loginErr } =
+            await admin.rpc("family_login", { p_email: email, p_pin: pin });
+        if (loginErr) {
+            console.error("family_login:", loginErr);
+            return json(req, { error: "login_failed" }, 500);
+        }
+        if (login?.error) {
+            return json(req, { error: login.error, attempts_left: login.attempts_left }, 401);
+        }
 
-            const hash = await hashToken(token);
-            const { data: row, error } = await admin
-                .from("parent_refresh_tokens")
-                .select("id, family_id, parent_slot, expires_at, revoked_at, device_label")
-                .eq("token_hash", hash)
-                .maybeSingle();
+        const familyId   = login?.family?.id;
+        const parentSlot = login?.isParent2 ? 2 : 1;
+        if (!familyId) return json(req, { error: "login_failed" }, 500);
 
-            if (error) return json(req, { error: "refresh_failed" }, 500);
-            if (!row || row.revoked_at || new Date(row.expires_at) < new Date()) {
-                return json(req, { error: "invalid_refresh" }, 401);
+        // 2. Find or create the auth user for this address. Public signups are
+        //    disabled (S4); the service role creates users directly, which is
+        //    unaffected by that and is the only way an account can appear here.
+        let userId: string | null = null;
+
+        const { data: existing } = await admin
+            .from("parent_accounts").select("user_id").eq("email", email).maybeSingle();
+        if (existing?.user_id) userId = existing.user_id;
+
+        if (!userId) {
+            const { data: created, error } = await admin.auth.admin.createUser({
+                email,
+                password: randomPassword(),
+                email_confirm: true,          // no verification mail; the PIN is the proof
+                user_metadata: { portal: "parent" },
+            });
+            if (error || !created?.user) {
+                // A user can already exist without a parent_accounts row (an
+                // admin who is also a parent, or a half-finished earlier login).
+                // generateLink below resolves the address either way, so only a
+                // genuine failure to resolve it is fatal — recorded, not thrown.
+                console.error("createUser:", error);
+            } else {
+                userId = created.user.id;
             }
-
-            // Rotate: the presented token is spent immediately. If it is ever
-            // presented again the session is already gone, which is what turns
-            // a stolen refresh token into a dead end rather than a standing key.
-            await admin.from("parent_refresh_tokens")
-                .update({ revoked_at: new Date().toISOString(), last_used_at: new Date().toISOString() })
-                .eq("id", row.id);
-
-            const session = await issueSession(
-                admin, secret, row.family_id, row.parent_slot, row.device_label ?? null,
-            );
-            return json(req, session);
         }
 
-        // ── sign out ─────────────────────────────────────────
-        if (action === "signout") {
-            const token = String(body.refresh_token ?? "");
-            const all   = body.all_devices === true;
+        // 3. Mint a one-time token for this address and redeem it for a real
+        //    session. generateLink does NOT send mail — it only returns the
+        //    token — so nothing lands in the parent's inbox.
+        //
+        //    Why not sign in with a password we rotate each time: an admin
+        //    password update revokes every existing session for that user, so
+        //    logging in on a phone would silently kill the session on a laptop.
+        //    A one-time token leaves other sessions alone.
+        const { data: linked, error: linkErr } = await admin.auth.admin.generateLink({
+            type: "magiclink",
+            email,
+        });
+        const tokenHash = linked?.properties?.hashed_token;
+        if (linkErr || !tokenHash) {
+            console.error("generateLink:", linkErr);
+            return json(req, { error: "session_failed" }, 500);
+        }
+        userId = linked?.user?.id ?? userId;
+        if (!userId) return json(req, { error: "session_failed" }, 500);
 
-            if (token) {
-                const hash = await hashToken(token);
-                if (all) {
-                    // Revoke every live session for this family, not just this
-                    // device — "sign out everywhere" after a lost phone.
-                    const { data: row } = await admin.from("parent_refresh_tokens")
-                        .select("family_id").eq("token_hash", hash).maybeSingle();
-                    if (row?.family_id) {
-                        await admin.from("parent_refresh_tokens")
-                            .update({ revoked_at: new Date().toISOString() })
-                            .eq("family_id", row.family_id).is("revoked_at", null);
-                    }
-                } else {
-                    await admin.from("parent_refresh_tokens")
-                        .update({ revoked_at: new Date().toISOString() })
-                        .eq("token_hash", hash).is("revoked_at", null);
-                }
-            }
-            // Always 200: telling a caller whether a token existed is a probe.
-            return json(req, { ok: true });
+        // 4. The mapping that every parent RLS policy reads. Written with the
+        //    service role; parents cannot see or change it. It goes in before
+        //    the session is handed out, so a token never exists without the
+        //    row that scopes it.
+        const { error: mapErr } = await admin.from("parent_accounts").upsert({
+            user_id: userId,
+            family_id: familyId,
+            parent_slot: parentSlot,
+            email,
+            last_login_at: new Date().toISOString(),
+        }, { onConflict: "user_id" });
+        if (mapErr) {
+            console.error("parent_accounts upsert:", mapErr);
+            return json(req, { error: "session_failed" }, 500);
         }
 
-        return json(req, { error: "unknown_action" }, 400);
+        // 5. Redeem the token. GoTrue keys the lookup on the token TYPE as well
+        //    as the hash, and which type a magic-link hash answers to has moved
+        //    between releases, so both spellings are tried rather than assumed.
+        //    A single generated hash is valid for either attempt because a
+        //    failed verify does not consume it.
+        const publicClient = createClient(supabaseUrl, anonKey, {
+            auth: { autoRefreshToken: false, persistSession: false },
+        });
+
+        let session = null;
+        let lastErr: unknown = null;
+        for (const type of ["magiclink", "email"] as const) {
+            const { data, error } = await publicClient.auth.verifyOtp({
+                token_hash: tokenHash, type,
+            });
+            if (data?.session) { session = data.session; break; }
+            lastErr = error;
+        }
+        if (!session) {
+            console.error("verifyOtp:", lastErr);
+            return json(req, { error: "session_failed" }, 500);
+        }
+
+        return json(req, {
+            access_token:  session.access_token,
+            refresh_token: session.refresh_token,
+            expires_at:    session.expires_at,
+            family:        login.family,
+            parent_slot:   parentSlot,
+        });
 
     } catch (err) {
         console.error("parent-session:", err);
