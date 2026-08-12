@@ -125,13 +125,19 @@ their phone whenever they logged in on a laptop. `generateLink` sends no mail.
 New, additive — nothing existing is modified or removed:
 
 ```
-portal.html            parent app (tabbed: Today / Schedule / Billing / Messages)
+portal.html            parent app (tabbed: Today / Schedule / Billing / Messages)   ✅ sign-in shipped
 staff.html             staff phone (roster, quick log, incident report)
-css/portal.css         phone-first styles, built on existing tokens
-js/portal/             portal-auth, portal-today, portal-day,
+css/portal.css         phone-first styles, built on existing tokens                 ✅ shipped
+js/portal/             portal-auth ✅, portal-today, portal-day,
                        portal-schedule, portal-billing, portal-messages
 js/staff/              staff-roster, staff-log, staff-incident
 ```
+
+`portal.html` shipped 2026-08-12 as **sign-in only** — the tabs come with the
+Today feed. It exists this early because Option B changed what a login produces
+and that round trip needed a way to be run for real; `?check=1` is that. It is
+deliberately **not linked from anywhere** yet, so parents keep using
+`calendar.html` / `lookup.html` until there is something behind the door.
 
 Both pages get bundle entries in `scripts/build.js`. Per `CLAUDE.md`, the deploy
 has **no build step** — `dist/` is committed, so `npm run build` runs and `dist/`
@@ -405,14 +411,18 @@ as the first step of Phase 1, before any table policy is written against it.
   *underlying* legacy secret and still stands.
 
 **Not yet exercised: an end-to-end login.** The build sandbox has no network path
-to `*.supabase.co`, so the round trip could not be run from here. **Do this first
-in Phase 1, before any table policy is written against the identity:** log in as a
-real family, confirm a session comes back, then confirm that session is denied on
-`staff`, `billing_invoices` and `parent_accounts`. The one step with genuine
-runtime uncertainty is the OTP redemption — the function tries `magiclink` then
-`email` rather than assuming which type GoTrue answers to, so a wrong guess
-degrades to a retry instead of a failed login, but it has not been observed
-succeeding.
+to `*.supabase.co`, so the round trip could not be run from here. The one step
+with genuine runtime uncertainty is the OTP redemption — the function tries
+`magiclink` then `email` rather than assuming which type GoTrue answers to, so a
+wrong guess degrades to a retry instead of a failed login, but it has not been
+observed succeeding.
+
+**How to settle it: `portal.html?check=1`.** Sign in as a real family. The page
+runs the §3.1 acceptance test as the actual parent role — token shape, whether
+`my_parent_context()` recognises the session, and one read against each admin
+table — and prints a green/red list. Without `?check=1` a parent sees only the
+ordinary signed-in card, never the diagnostic panel. **Do this before any Phase 1
+table policy is written against this identity.**
 
 ## ⚠️ JWT signing — settled, with an expiry date
 

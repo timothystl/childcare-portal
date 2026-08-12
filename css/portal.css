@@ -1,0 +1,202 @@
+/* ============================================================
+   portal.css — parent portal
+   ============================================================
+   Phone-first, built on the Sunlit Neighborhood tokens in styles.css.
+   Nothing here redefines a colour; every value is a var() so the portal
+   cannot drift away from the rest of the site.
+
+   Scope note: this is the sign-in page only. Phase 1 adds the Today feed,
+   day report, and photo grid — put those in their own blocks below rather
+   than widening these selectors.
+   ============================================================ */
+
+.portal-body {
+    background: var(--cream);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+}
+
+.portal-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(1, 41, 74, .10);
+    padding: 32px 28px;
+    width: 100%;
+    max-width: 420px;
+}
+
+.portal-logo img { height: 64px; display: block; margin: 0 auto 18px; }
+
+.portal-card h1 {
+    font-family: 'Lora', Georgia, serif;
+    color: var(--navy);
+    font-size: 1.55em;
+    text-align: center;
+    margin: 0 0 8px;
+}
+
+.portal-sub {
+    text-align: center;
+    color: #5a6673;
+    font-size: .94em;
+    margin: 0 0 24px;
+    line-height: 1.5;
+}
+
+.portal-card .form-group { margin-bottom: 16px; }
+
+.portal-card label {
+    display: block;
+    font-weight: 700;
+    color: var(--navy);
+    font-size: .88em;
+    margin-bottom: 6px;
+}
+
+.portal-card input[type="email"],
+.portal-card input[type="text"] {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid #d7dee5;
+    border-radius: 10px;
+    font-size: 1em;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.portal-card input:focus {
+    outline: none;
+    border-color: var(--navy);
+    box-shadow: 0 0 0 3px rgba(1, 41, 74, .12);
+}
+
+.portal-btn {
+    width: 100%;
+    margin-top: 6px;
+    padding: 13px;
+    font-size: 1.02em;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.portal-btn[disabled] { opacity: .6; cursor: default; }
+
+.portal-error {
+    margin-top: 14px;
+    padding: 11px 13px;
+    background: var(--tang-pale);
+    border-left: 3px solid var(--tang);
+    border-radius: 6px;
+    color: var(--tang-dark);
+    font-size: .9em;
+    line-height: 1.45;
+}
+
+.portal-hint {
+    margin-top: 16px;
+    font-size: .84em;
+    color: #6b7683;
+    text-align: center;
+    line-height: 1.5;
+}
+
+.portal-links {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid #eef1f4;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+    font-size: .92em;
+}
+
+/* ── Signed-in state ────────────────────────────────────── */
+
+.portal-greeting {
+    font-family: 'Lora', Georgia, serif;
+    color: var(--navy);
+    font-size: 1.5em;
+    margin: 0 0 8px;
+    text-align: center;
+}
+
+.portal-soon {
+    margin-top: 20px;
+    padding: 14px 16px;
+    background: var(--sun-pale);
+    border-radius: 10px;
+    font-size: .89em;
+    color: #6a5320;
+    line-height: 1.5;
+}
+
+.portal-signout {
+    margin-top: 18px;
+    background: none;
+    border: none;
+    color: var(--green-text);
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: .9em;
+    font-family: inherit;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* ── Isolation check (?check=1) ─────────────────────────── */
+/* Diagnostic, not parent-facing. Hidden unless explicitly asked for. */
+
+.portal-check {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #eef1f4;
+}
+
+.portal-check h2 {
+    font-size: .95em;
+    color: var(--navy);
+    margin: 0 0 4px;
+}
+
+.portal-check p.portal-check-intro {
+    font-size: .82em;
+    color: #6b7683;
+    margin: 0 0 14px;
+    line-height: 1.5;
+}
+
+.portal-check ul { list-style: none; margin: 0; padding: 0; }
+
+.pchk {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid #f4f6f8;
+    font-size: .86em;
+}
+
+.pchk-mark { font-weight: 700; width: 14px; flex: none; }
+.pchk-ok   .pchk-mark { color: var(--green-text); }
+.pchk-fail .pchk-mark { color: var(--tang-dark); }
+.pchk-label { flex: 1; color: var(--navy); }
+.pchk-detail { color: #78838f; font-size: .92em; text-align: right; }
+.pchk-fail .pchk-detail { color: var(--tang-dark); font-weight: 700; }
+
+.portal-check-summary {
+    margin-top: 14px;
+    padding: 11px 13px;
+    border-radius: 8px;
+    font-size: .86em;
+    line-height: 1.45;
+}
+
+.portal-check-summary.ok   { background: var(--green-pale); color: var(--green-dark); }
+.portal-check-summary.fail { background: var(--tang-pale);  color: var(--tang-dark); font-weight: 700; }
+
+.hidden { display: none !important; }
