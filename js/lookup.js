@@ -78,7 +78,11 @@ async function doLookup() {
             return;
         }
 
-        const registrations = await fetchRegistrationsByEmail(family.parent_email);
+        // R1: the schedule read is PIN-gated server-side now, so pass the PIN
+        // the parent just authenticated with. Use the email they typed —
+        // family.parent_email is always parent 1, and a parent 2 signing in
+        // would fail the check.
+        const registrations = await fetchRegistrationsByEmail(email, pin);
         if (!registrations.length) {
             showError('No registrations found for your account.');
             return;

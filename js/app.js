@@ -358,6 +358,9 @@ function setupFamilyLookup() {
     document.getElementById('changeFamilyBtn')?.addEventListener('click', resetFamilyLookup);
 }
 
+// Set on a successful family lookup, cleared when the family is reset.
+let _familyAuth = null;
+
 async function runEmailPinLookup() {
     const email  = document.getElementById('familyEmailInput')?.value.trim();
     const pin    = document.getElementById('familyPinInput')?.value.trim();
@@ -377,6 +380,10 @@ async function runEmailPinLookup() {
             return;
         }
         _familySessionToken = result.sessionToken ?? null;
+        // R1: the sibling-booked-days read is PIN-gated server-side now. Hold
+        // the credential the parent just authenticated with for this session
+        // only — it is never persisted, and clearing the family clears it.
+        _familyAuth = { email, pin };
         selectFamily(result.family, result.isParent2);
     } catch {
         showToast('Lookup failed. Please try again.');
@@ -1007,16 +1014,15 @@ async function loadSiblingBookedDays() {
     if (!fam || typeof fetchRegistrationsByEmail !== 'function') return;
 
     const monthKey  = getTargetMonthKey();
-    const emails    = [fam.parent_email, fam.parent2_email].filter(Boolean);
     const inSession = new Set(selectedChildren.map(c => (c.name || '').toLowerCase()));
 
     try {
-        const results = await Promise.all(emails.map(e => fetchRegistrationsByEmail(e).catch(() => [])));
-        const seenReg = new Set();
+        if (!_familyAuth) return;   // not authenticated — quote stays session-only
+        // One call: the RPC returns the whole family's registrations, both
+        // parents included, so there is nothing to merge or de-duplicate.
+        const results = await fetchRegistrationsByEmail(_familyAuth.email, _familyAuth.pin);
 
-        for (const reg of results.flat()) {
-            if (seenReg.has(reg.id)) continue;      // both parents' emails can return the same row
-            seenReg.add(reg.id);
+        for (const reg of results) {
             if (reg.status && reg.status !== 'confirmed') continue;
 
             const nameKey = (reg.child_name || '').toLowerCase();
