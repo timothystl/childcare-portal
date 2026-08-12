@@ -355,15 +355,50 @@ clean.
 - Meal amount scale: `some` / `most` / `all` — is a "didn't touch it" option
   wanted?
 - Confirm the director is in `admin_roles` as **full**.
-- ~~Supabase JWT signing mode~~ — **settled 2026-08-11: legacy shared HS256
-  secret.** The anon key's header is `{"alg":"HS256"}`, there is no `auth.jwks`
-  table, and a modern `sb_publishable_…` key exists alongside the legacy one.
-  Parent tokens are HS256-signed with the project JWT secret.
-- ⚠️ **`PARENT_JWT_SECRET` must be set before the portal can issue a session.**
-  The secret is not readable from SQL or the management API — copy it from
-  Dashboard → Settings → API → JWT Secret and set it:
-  `supabase secrets set PARENT_JWT_SECRET="…"`. Until then `parent-session`
-  returns 500 rather than issuing a token nothing can verify.
+- Confirm `parent-session` issues a token (no invocation has been made yet).
+
+## ⚠️ JWT signing — settled, with an expiry date
+
+**This project has ALREADY migrated to JWT Signing Keys.** The dashboard's
+Legacy JWT Secret tab states it plainly: *"Legacy JWT secret has been migrated
+to new JWT Signing Keys… It is used to **only verify** JSON Web Tokens."*
+
+The legacy HS256 secret survives as a **verification-only** key. That is what
+still validates the `anon` and `service_role` keys the whole app runs on, and
+it is why `parent-session` can sign HS256 tokens that Supabase accepts.
+
+`PARENT_JWT_SECRET` is that legacy secret. It is not readable from SQL or the
+management API — copy it from Dashboard → JWT Keys → Legacy JWT Secret. Without
+it `parent-session` returns 500 rather than issuing a token nothing can verify.
+
+> ### 🚫 DO NOT REVOKE THE LEGACY JWT SECRET
+> Revoking it invalidates **every** HS256 token at once — parent sessions *and*
+> the `anon` key `index.html`, `lookup.html` and `calendar.html` all depend on.
+> Supabase's UI actively nudges toward this ("Consider switching to publishable
+> and secret API keys to disable them"). Do not accept that prompt until the
+> work below is done.
+
+**Agreed plan (2026-08-11): A now, B before Phase 1 ships.**
+
+- **A — legacy secret + RLS (built).** Parents get a `parent_portal` token; the
+  database enforces family isolation. Works today, dies whenever the legacy
+  secret is revoked.
+- **B — parents become real Supabase Auth users (before Phase 1).** On first PIN
+  login the edge function creates or looks up an `auth.users` row for that
+  parent and returns a genuine Supabase session; a **custom access token hook**
+  adds `family_id` to the claims. Survives the key rotation, keeps RLS as the
+  enforcement point, and parents never see a password — the PIN stays the
+  credential and `family_login` keeps owning the bcrypt compare and lockout.
+
+  B is deliberately scheduled *before* Phase 1 rather than after: Phase 1 is
+  where photos of children and daily logs get their table policies, and those
+  policies should be written once against the identity model that will still be
+  there in a year.
+
+- **C — rejected.** Routing every parent read through service-role edge
+  functions moves enforcement out of the database and into per-endpoint
+  discipline. That is the shape of R1/R3/R26/R27, and this project has spent
+  months moving the other way.
 
 ---
 
