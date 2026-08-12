@@ -274,3 +274,20 @@
 .pt-ann { background: var(--green-pale); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
 .pt-ann-title { font-weight: 800; color: var(--green-dark); font-size: .92em; margin-bottom: 3px; }
 .pt-ann-body  { color: #40525f; font-size: .88em; line-height: 1.5; }
+
+/* Photos — ephemeral by design, so the retention is stated where a parent
+   sees the pictures rather than buried in a policy page. */
+.pt-photos { margin-top: 18px; padding-top: 16px; border-top: 1px solid #eef1f4; }
+.pt-photos-head {
+    display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px;
+}
+.pt-photos-head > span:first-child {
+    font-size: .74em; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: #78838f;
+}
+.pt-photos-note { font-size: .78em; color: #96a0aa; }
+.pt-photo-strip {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+}
+.pt-photo { display: block; border-radius: 10px; overflow: hidden; line-height: 0; }
+.pt-photo img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
