@@ -261,7 +261,7 @@ async function buildInvoicePdf(
         y -= 36;
         page.drawLine({ start: { x: MARGIN, y }, end: { x: RIGHT_EDGE, y }, thickness: 0.5, color: LITE });
         y -= 13;
-        page.drawText("Please retain this invoice for your records (FSA / dependent care).", {
+        page.drawText("Please retain this confirmation for your records (FSA / dependent care).", {
             x: MARGIN, y, size: 8, font: reg, color: MID,
         });
         y -= 12;
@@ -313,7 +313,7 @@ serve(async (req) => {
         // single parent, and must have been created within the last 30 minutes.
         // Without that recency bound, arbitrary ids would let anyone trigger an
         // email about any family's registration at any time.
-        const { data: payload, error: payloadErr } =
+        const { data: emailPayload, error: payloadErr } =
             await serviceClient.rpc("registration_email_payload", {
                 p_registration_ids: registrationIds,
             });
@@ -325,7 +325,7 @@ serve(async (req) => {
                 { status: 500, headers: { ...ch, "Content-Type": "application/json" } }
             );
         }
-        if (!payload || !payload.parentEmail || !payload.dates?.length) {
+        if (!emailPayload || !emailPayload.parentEmail || !emailPayload.dates?.length) {
             // Null means the ids failed a server-side check. Deliberately vague:
             // distinguishing "no such registration" from "too old" would make
             // this an oracle for probing ids.
@@ -335,13 +335,13 @@ serve(async (req) => {
             );
         }
 
-        const parentName  = payload.parentName || "";
-        const parentEmail = payload.parentEmail as string;
-        const childNames  = (payload.childNames || []) as string[];
-        const dates       = (payload.dates || []) as DateEntry[];
-        const grandTotal  = Number(payload.grandTotal || 0);
-        const monthLabel  = payload.monthKey
-            ? new Date(`${payload.monthKey}-01T00:00:00`).toLocaleDateString("en-US",
+        const parentName  = emailPayload.parentName || "";
+        const parentEmail = emailPayload.parentEmail as string;
+        const childNames  = (emailPayload.childNames || []) as string[];
+        const dates       = (emailPayload.dates || []) as DateEntry[];
+        const grandTotal  = Number(emailPayload.grandTotal || 0);
+        const monthLabel  = emailPayload.monthKey
+            ? new Date(`${emailPayload.monthKey}-01T00:00:00`).toLocaleDateString("en-US",
                 { month: "long", year: "numeric" })
             : "";
 
@@ -481,7 +481,7 @@ serve(async (req) => {
             { filename: "mdo-schedule.ics", content: icalBase64, content_type: "text/calendar" },
         ];
         if (pdfBase64) {
-            attachments.push({ filename: "mdo-invoice.pdf", content: pdfBase64, content_type: "application/pdf" });
+            attachments.push({ filename: "mdo-booking-confirmation.pdf", content: pdfBase64, content_type: "application/pdf" });
         }
 
         const res = await fetch("https://api.resend.com/emails", {
