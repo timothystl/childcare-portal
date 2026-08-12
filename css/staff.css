@@ -1,0 +1,206 @@
+/* ============================================================
+   staff.css — the staff phone app
+   ============================================================
+   Phone-first and thumb-first. Staff use this one-handed while holding a
+   child, so every tap target is at least 44px and the common actions sit in
+   the lower half of the screen where a thumb reaches.
+
+   Built on the Sunlit Neighborhood tokens in styles.css — no hardcoded hex
+   except neutral greys that have no token.
+   ============================================================ */
+
+.sl-body {
+    background: var(--cream);
+    min-height: 100vh;
+    margin: 0;
+    padding: 0 0 env(safe-area-inset-bottom);
+}
+
+.sl-screen { padding: 16px; max-width: 640px; margin: 0 auto; }
+.sl-center  { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.hidden     { display: none !important; }
+
+/* ── Sign in ─────────────────────────────────────────────── */
+
+.sl-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(1, 41, 74, .10);
+    padding: 30px 26px;
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
+}
+.sl-logo img { height: 56px; margin-bottom: 16px; }
+.sl-card h1 {
+    font-family: 'Lora', Georgia, serif;
+    color: var(--navy); font-size: 1.45em; margin: 0 0 6px;
+}
+.sl-sub  { color: #5a6673; font-size: .93em; margin: 0 0 20px; }
+.sl-hint { color: #78838f; font-size: .8em; margin-top: 14px; line-height: 1.5; }
+
+.sl-pin-input {
+    width: 100%;
+    padding: 16px;
+    font-size: 1.8em;
+    letter-spacing: .35em;
+    text-align: center;
+    border: 1.5px solid #d7dee5;
+    border-radius: 12px;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+.sl-pin-input:focus {
+    outline: none; border-color: var(--navy);
+    box-shadow: 0 0 0 3px rgba(1, 41, 74, .12);
+}
+
+.sl-btn {
+    width: 100%; margin-top: 14px; padding: 15px;
+    font-size: 1.05em; border-radius: 12px; cursor: pointer; min-height: 48px;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+
+.sl-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 14px; min-height: 44px;
+}
+.sl-whoami, .sl-room-title {
+    font-weight: 800; color: var(--navy); font-size: 1.02em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sl-link-btn {
+    background: none; border: none; color: var(--green-text);
+    font-family: inherit; font-size: .92em; font-weight: 700;
+    cursor: pointer; padding: 10px 6px; min-height: 44px;
+}
+.sl-h2 {
+    font-family: 'Lora', Georgia, serif; color: var(--navy);
+    font-size: 1.3em; margin: 0 0 14px;
+}
+
+/* ── Rooms ───────────────────────────────────────────────── */
+
+.sl-room-list { display: grid; gap: 10px; }
+.sl-room-btn {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    background: #fff; border: 1.5px solid #e3e8ed; border-radius: 14px;
+    padding: 16px 18px; cursor: pointer; text-align: left;
+    font-family: inherit; min-height: 60px;
+}
+.sl-room-btn:active { background: var(--sun-pale); }
+.sl-room-label { font-weight: 800; color: var(--navy); font-size: 1.05em; }
+.sl-room-ages  { color: #78838f; font-size: .85em; }
+
+/* ── Roster ──────────────────────────────────────────────── */
+
+.sl-roster { display: grid; gap: 10px; padding-bottom: 84px; }
+.sl-empty  { color: #78838f; font-size: .92em; text-align: center; padding: 30px 10px; }
+
+.sl-child {
+    display: flex; flex-direction: column; gap: 8px;
+    background: #fff; border: 1.5px solid #e3e8ed; border-radius: 14px;
+    padding: 15px 16px; cursor: pointer; text-align: left;
+    font-family: inherit; width: 100%; min-height: 56px;
+}
+.sl-child:active { background: var(--sun-pale); }
+.sl-child-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.sl-child-name  { font-weight: 800; color: var(--navy); font-size: 1.05em; }
+.sl-child-state {
+    font-size: .76em; font-weight: 800; letter-spacing: .05em;
+    text-transform: uppercase; color: #78838f;
+    border: 1.5px solid #d7dee5; border-radius: 999px; padding: 3px 10px;
+    flex: none;
+}
+.sl-child-state.in {
+    color: var(--green-dark); background: var(--green-pale); border-color: var(--green-lt);
+}
+.sl-child-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.sl-chip {
+    border-radius: 999px; padding: 3px 10px; font-size: .76em;
+    font-weight: 800; letter-spacing: .03em; display: inline-flex; align-items: center;
+}
+
+/* ── Post button ─────────────────────────────────────────── */
+/* Fixed so the count is visible wherever staff are in the roster — an unposted
+   queue should never scroll out of sight. */
+.sl-post-btn {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    background: var(--navy); color: #fff; border: none;
+    border-radius: 999px; padding: 14px 30px; font-size: 1em; font-weight: 800;
+    font-family: inherit; cursor: pointer; min-height: 48px;
+    box-shadow: 0 4px 16px rgba(1, 41, 74, .35); z-index: 40;
+}
+
+/* ── Quick-log sheet ─────────────────────────────────────── */
+
+.sl-sheet {
+    position: fixed; inset: 0; background: rgba(1, 41, 74, .45);
+    display: flex; align-items: flex-end; justify-content: center; z-index: 60;
+}
+.sl-sheet-inner {
+    background: #fff; width: 100%; max-width: 640px;
+    border-radius: 20px 20px 0 0; padding: 18px 18px calc(22px + env(safe-area-inset-bottom));
+    max-height: 88vh; overflow-y: auto;
+}
+.sl-sheet-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+}
+.sl-sheet-name {
+    font-family: 'Lora', Georgia, serif; font-size: 1.3em;
+    font-weight: 700; color: var(--navy);
+}
+
+/* Safety panel — always present, above every input. */
+.sl-safety {
+    background: var(--tang-pale); border-left: 3px solid var(--tang);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;
+}
+.sl-safety-empty { background: #f5f7f9; border-left-color: #d7dee5; }
+.sl-safety-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sl-safety-note {
+    margin-top: 8px; font-size: .88em; color: var(--tang-dark); line-height: 1.45;
+}
+.sl-safety-none { font-size: .85em; color: #78838f; }
+
+.sl-group { margin-bottom: 16px; }
+.sl-group-label {
+    font-size: .74em; font-weight: 800; letter-spacing: .09em;
+    text-transform: uppercase; color: #78838f; margin-bottom: 7px;
+}
+.sl-act-row, .sl-bottle-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.sl-act {
+    flex: 1 1 auto; min-width: 88px; min-height: 48px;
+    background: #fff; border: 1.5px solid #d7dee5; border-radius: 12px;
+    padding: 13px 14px; font-size: .96em; font-weight: 700;
+    font-family: inherit; color: var(--navy); cursor: pointer;
+    transition: background .12s, border-color .12s, transform .12s;
+}
+.sl-act:active { transform: scale(.97); background: var(--sun-pale); }
+
+/* Confirmation is the button itself going green — no toast for the happy
+   path, because a staff member logging twelve things does not want twelve
+   notifications. */
+.sl-act-done {
+    background: var(--green-pale); border-color: var(--green);
+    color: var(--green-dark);
+}
+
+/* ── Toast ───────────────────────────────────────────────── */
+/* Errors only. */
+.sl-toast {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    background: var(--navy); color: #fff;
+    padding: 12px 20px; border-radius: 12px; font-size: .9em; font-weight: 700;
+    max-width: calc(100% - 32px); text-align: center; z-index: 80;
+    box-shadow: 0 4px 16px rgba(1, 41, 74, .35);
+}
+.sl-toast-err { background: var(--tang-dark); }

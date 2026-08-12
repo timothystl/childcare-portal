@@ -2031,6 +2031,82 @@ async function fetchStaffByPin(pin) {
     return data; // null if not found
 }
 
+// ============================================================
+// PHASE 1 — daily feed
+// ============================================================
+// Staff writes go through PIN-gated SECURITY DEFINER RPCs, never table grants:
+// staff have no Supabase account and work from personal phones on the public
+// anon key. Granting anon table writes instead is what left staff_clock_events
+// open for months.
+//
+// ⚠️ p_pin is an INTEGER — staff PINs are the older int-based system (family
+// PINs went text in SS2, staff PINs did not). A staff PIN with a leading zero
+// cannot round-trip through this and would need the same treatment SS2 gave
+// families.
+
+/**
+ * Roster for a room on a date: who is booked, plus the allergy and care data
+ * the quick-log sheet renders above every input.
+ * @returns {Promise<Array>} [] on a bad PIN — the RPC returns no rows.
+ */
+async function listRoomChildren(pin, roomId, careDate = null) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('list_room_children', {
+        p_pin: parseInt(pin, 10), p_room_id: roomId, p_care_date: careDate,
+    });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
+ * Records one logged moment.
+ * @returns {Promise<number|null>} New event id, or null when the RPC rejected
+ *   it (bad PIN, or an event_type the database will not accept). Null is a
+ *   permanent failure, not a transient one — the caller must not retry it.
+ */
+async function logChildEvent(pin, entry) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('log_child_event', {
+        p_pin:         parseInt(pin, 10),
+        p_student_id:  entry.student_id,
+        p_event_type:  entry.event_type,
+        p_detail:      entry.detail || {},
+        p_occurred_at: entry.occurred_at || null,
+        p_care_date:   entry.care_date || null,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/**
+ * A child's logged day, newest last — the parent Today feed and the full-day
+ * report both read this. RLS restricts it to the signed-in parent's children,
+ * so there is no family filter here on purpose: the database owns that rule.
+ */
+async function fetchChildDay(studentId, careDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('child_day_events')
+        .select('id, event_type, occurred_at, detail, care_date, student_id')
+        .eq('student_id', studentId)
+        .eq('care_date', careDate)
+        .order('occurred_at', { ascending: true });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/** Published, unexpired announcements. The policy filters drafts, not this. */
+async function fetchAnnouncements() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('announcements')
+        .select('id, title, body, published_at, expires_at')
+        .order('published_at', { ascending: false })
+        .limit(20);
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
 /**
  * Returns the most recent open (clocked-in, not yet clocked-out) event for the given date,
  * or null if the staff member is not currently clocked in.
