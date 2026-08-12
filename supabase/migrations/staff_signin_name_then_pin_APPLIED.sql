@@ -1,0 +1,76 @@
+-- APPLIED TO PRODUCTION 2026-08-12. Two migrations recorded together:
+--   staff_signin_name_then_pin
+--   staff_writes_require_identity
+--
+-- ============================================================
+-- Staff sign-in: pick your name, then enter your PIN
+-- ============================================================
+-- WHY THROTTLING WAS NOT ENOUGH. The kiosk accepted a PIN with no identity, so
+-- every guess was tested against EVERY staff hash: with ~33 staff in a 10,000
+-- space, roughly 1 in 300 random guesses landed on somebody. And because no
+-- account was named, there was nothing to lock — a per-account lockout was
+-- impossible to express.
+--
+-- Naming the account first changes both:
+--   * a guess is 1 in 10,000 against ONE person, not ~1 in 300 against any
+--   * failures attach to that person, so a real lockout exists
+--
+-- Layered, not replaced: the per-IP and global throttles from
+-- throttle_staff_pin_attempts still run underneath.
+--
+--   per account : 5 failures -> locked 15 minutes; a correct PIN clears the
+--                 counter so old fumbles cannot accumulate into a lockout
+--   per IP      : 10 failures in 15 minutes
+--   global      : 300 failures in 5 minutes
+--
+-- ⚠️ Staff names are NOT newly exposed by the picker. anon already reads active
+-- staff display columns through the "anon read active staff" policy, which the
+-- roster and directory depend on.
+
+ALTER TABLE public.staff
+    ADD COLUMN IF NOT EXISTS pin_failed_attempts smallint NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS pin_locked_until    timestamptz;
+
+-- list_staff_for_signin()  the picker; only active staff who HAVE a PIN,
+--                          because listing someone who cannot sign in is a dead
+--                          end that looks like a broken PIN
+-- verify_staff_pin(id,pin) returns the staff record, NULL for a wrong PIN, or
+--                          {"error":"locked"|"throttled"} so a staff member
+--                          locked out by someone else's guessing is told why
+--                          rather than believing their own PIN broke
+-- staff_id_for_pin(id,pin) internal; same lockout + throttle, used by the edge
+--                          functions with the service role
+-- (Full bodies in git history.)
+
+-- ── Every staff write now names the staff member ────────────
+-- Leaving the pin-only signatures callable would have kept the weakness alive
+-- behind a new front door, so the old ones are DROPPED, not superseded:
+--   log_child_event(integer, ...)
+--   list_room_children(integer, ...)
+--   submit_incident_report(integer, ...)
+--   staff_id_for_pin(integer)
+--   lookup_staff_by_pin(integer)   <- THE brute-force surface itself
+--
+-- Callers updated in the same change: clockin.html (name tiles then numpad),
+-- staff.html (name select), upload-child-photo (v3),
+-- worker /staff-push-subscribe.
+
+-- ============================================================
+-- VERIFIED AFTER APPLYING (rolled back)
+-- ============================================================
+--   correct PIN                 -> signed in
+--   wrong PIN                   -> NULL
+--   5 wrong tries               -> {"error":"locked","until":...}
+--   correct PIN while locked    -> still locked
+--   locking person A            -> person B signs in unaffected
+--   lock expiry passes          -> A signs in again
+--   catalog                     -> lookup_staff_by_pin GONE; every remaining
+--                                  RPC takes p_staff_id; staff_id_for_pin not
+--                                  anon-executable
+--
+-- In Chromium, both sign-in surfaces driven end to end:
+--   kiosk boots on the name step, tiles render, picking a name shows the PIN
+--   pad with that name, wrong/locked/correct all behave, "Not you?" returns to
+--   the name step, and it calls verify_staff_pin — never the dropped RPC
+--   staff app refuses a PIN with no name chosen, reports a lock with its
+--   expiry, and threads the staff id into the roster call

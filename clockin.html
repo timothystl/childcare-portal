@@ -18,6 +18,35 @@
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:wght@400;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
+        /* ── Name step ──────────────────────────────────────────
+           Big tiles rather than a dropdown: this is a wall tablet tapped by
+           someone holding a bag and a coffee. */
+        .name-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px;
+            margin: 6px auto 0;
+            max-width: 460px;
+        }
+        .name-btn {
+            min-height: 60px;
+            padding: 14px 12px;
+            background: #fff;
+            border: 1.5px solid #d7dee5;
+            border-radius: 14px;
+            font-family: inherit;
+            font-size: 1.02em;
+            font-weight: 800;
+            color: var(--navy);
+            cursor: pointer;
+        }
+        .name-btn:active { background: var(--sun-pale); transform: scale(.98); }
+        .change-name-btn {
+            background: none; border: none; color: var(--green-text);
+            font-family: inherit; font-size: .92em; font-weight: 700;
+            cursor: pointer; padding: 10px; min-height: 44px;
+            display: block; margin: 0 auto 6px;
+        }
         /* ── Sunlit Neighborhood — Variation B: Staff Clock-In ── */
         :root {
             --navy:       #01294A;
@@ -546,8 +575,18 @@
     <p class="subtitle">Enter your 4-digit PIN to continue</p>
 
     <!-- PIN Entry -->
+    <!-- Who are you? Identity before the PIN: a PIN alone was tested against
+         every staff hash, so one guess had ~33 chances to land and there was no
+         account to lock. Big name tiles suit a wall tablet better than a
+         dropdown. -->
+    <div id="nameScreen">
+        <div class="pin-label">Tap your name</div>
+        <div id="nameGrid" class="name-grid"></div>
+    </div>
+
     <div id="pinScreen">
-        <div class="pin-label">Your PIN</div>
+        <div class="pin-label"><span id="pinWho"></span> — your PIN</div>
+        <button type="button" id="changeNameBtn" class="change-name-btn">← Not you?</button>
         <div class="pin-display">
             <div class="pin-dot" id="d0"></div>
             <div class="pin-dot" id="d1"></div>
@@ -790,7 +829,7 @@ async function _maybeShowPushPrompt(id, staffPin) {
                 // staff_id is derived server-side from the PIN — the endpoint
                 // no longer accepts a caller-supplied id, because it used to
                 // accept one with no authentication at all.
-                body:    JSON.stringify({ pin: staffPin, endpoint, p256dh, auth }),
+                body:    JSON.stringify({ staff_id: id, pin: staffPin, endpoint, p256dh, auth }),
             });
             localStorage.setItem('push_subscribed_' + id, '1');
         } catch (err) { console.warn('Staff push subscription failed:', err); }
@@ -802,6 +841,12 @@ async function _maybeShowPushPrompt(id, staffPin) {
 
 // Load geofence settings on page start
 _loadGeofenceSettings();
+
+// The kiosk opens on the name step, not the numpad. Without this the page
+// booted to a PIN pad with nobody selected, and the first four taps would have
+// bounced straight back here.
+loadNameGrid();
+showScreen('name');
 
 // ── Helpers ───────────────────────────────────────────────────
 function todayStr() {
@@ -837,6 +882,7 @@ function showError(msg) {
 }
 
 function showScreen(name) {
+    document.getElementById('nameScreen').style.display    = name === 'name'    ? 'block' : 'none';
     document.getElementById('pinScreen').style.display     = name === 'pin'     ? 'block' : 'none';
     document.getElementById('loadingScreen').style.display = name === 'loading' ? 'block' : 'none';
     document.getElementById('roomScreen').style.display    = name === 'room'    ? 'block' : 'none';
@@ -844,9 +890,55 @@ function showScreen(name) {
     document.getElementById('timeOffScreen').style.display = name === 'timeoff' ? 'block' : 'none';
     document.getElementById('sentScreen').style.display    = name === 'sent'    ? 'block' : 'none';
     // The PIN prompt only makes sense on the PIN screen.
-    document.querySelector('.subtitle').style.display      = name === 'pin'     ? '' : 'none';
-    document.querySelector('h1').style.display             = name === 'pin'     ? '' : 'none';
+    const onSignIn = (name === 'pin' || name === 'name');
+    const sub = document.querySelector('.subtitle');
+    sub.style.display = onSignIn ? '' : 'none';
+    if (onSignIn) {
+        sub.textContent = name === 'name'
+            ? 'Tap your name to begin'
+            : 'Enter your 4-digit PIN to continue';
+    }
+    document.querySelector('h1').style.display             = onSignIn ? '' : 'none';
 }
+
+// ── Name step ─────────────────────────────────────────────────
+let selectedStaffId = null;
+
+async function loadNameGrid() {
+    const grid = document.getElementById('nameGrid');
+    try {
+        const { data, error } = await sb.rpc('list_staff_for_signin');
+        if (error) throw error;
+        const staff = data || [];
+        if (!staff.length) {
+            grid.innerHTML = '<p class="pin-error">No staff are set up to sign in. Ask the office.</p>';
+            return;
+        }
+        grid.innerHTML = staff.map(s =>
+            '<button class="name-btn" data-id="' + s.id + '" data-name="' +
+            String(s.name || '').replace(/"/g, '&quot;') + '">' +
+            String(s.name || '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])) +
+            '</button>').join('');
+        grid.querySelectorAll('.name-btn').forEach(b => {
+            b.addEventListener('click', () => {
+                selectedStaffId = b.dataset.id;
+                document.getElementById('pinWho').textContent = b.dataset.name;
+                pin = ''; updateDots();
+                document.getElementById('pinError').textContent = '';
+                showScreen('pin');
+            });
+        });
+    } catch (e) {
+        console.warn('staff list:', e);
+        grid.innerHTML = '<p class="pin-error">Could not load the staff list.</p>';
+    }
+}
+
+document.getElementById('changeNameBtn').addEventListener('click', () => {
+    selectedStaffId = null; pin = ''; updateDots();
+    document.getElementById('pinError').textContent = '';
+    showScreen('name');
+});
 
 // Numpad handlers
 document.querySelectorAll('.num-btn[data-n]').forEach(btn => {
@@ -856,6 +948,7 @@ document.querySelectorAll('.num-btn[data-n]').forEach(btn => {
         document.getElementById('pinError').textContent = '';
         updateDots();
         if (pin.length === 4) {
+            if (!selectedStaffId) { pin = ''; updateDots(); showScreen('name'); return; }
             if (checkLockout()) { pin = ''; updateDots(); return; }
             await verifyPin();
         }
@@ -907,9 +1000,27 @@ function checkLockout() {
 async function verifyPin() {
     showScreen('loading');
     try {
-        const { data, error } = await sb.rpc('lookup_staff_by_pin', { p_pin: parseInt(pin, 10) });
+        const { data, error } = await sb.rpc('verify_staff_pin',
+            { p_staff_id: selectedStaffId, p_pin: parseInt(pin, 10) });
         if (error) throw error;
-        if (!data) {
+
+        // The server locks the ACCOUNT after five wrong tries, and throttles by
+        // device underneath that. Both are reported plainly: someone locked out
+        // by another person's guessing should not think their own PIN broke.
+        if (data && data.error === 'locked') {
+            const until = data.until
+                ? new Date(data.until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                : 'shortly';
+            showScreen('pin');
+            showError('Too many wrong tries. Locked until ' + until + '. Ask the office.');
+            return;
+        }
+        if (data && data.error === 'throttled') {
+            showScreen('pin');
+            showError('Too many attempts on this device. Wait a few minutes.');
+            return;
+        }
+        if (!data || !data.id) {
             recordFailedAttempt();
             showScreen('pin');
             showError('Invalid PIN. Please try again.');
@@ -1043,11 +1154,11 @@ document.getElementById('btnConfirmClockIn').addEventListener('click', async () 
         }
         await refreshClockStatus();
         setTimeout(() => {
-            staffId = null; staffRoomId = null; selectedRoomId = null; pin = '';
+            staffId = null; staffRoomId = null; selectedRoomId = null; pin = ''; selectedStaffId = null;
             updateDots();
             document.getElementById('pinError').textContent = '';
             document.getElementById('roomMsg').textContent = '';
-            showScreen('pin');
+            showScreen('name');
         }, 2500);
     } catch (err) {
         document.getElementById('roomMsg').textContent = 'Error: ' + err.message;
@@ -1057,10 +1168,10 @@ document.getElementById('btnConfirmClockIn').addEventListener('click', async () 
 });
 
 document.getElementById('btnRoomCancel').addEventListener('click', () => {
-    staffId = null; staffRoomId = null; selectedRoomId = null; pin = '';
+    staffId = null; staffRoomId = null; selectedRoomId = null; pin = ''; selectedStaffId = null;
     updateDots();
     document.getElementById('pinError').textContent = '';
-    showScreen('pin');
+    showScreen('name');
 });
 
 // ── Clock In (second shift from clock screen) ─────────────────
@@ -1100,11 +1211,11 @@ document.getElementById('btnClockOut').addEventListener('click', async () => {
 
 // ── Sign Out ──────────────────────────────────────────────────
 document.getElementById('btnSignOut').addEventListener('click', () => {
-    staffId = null; staffRoomId = null; selectedRoomId = null; pin = '';
+    staffId = null; staffRoomId = null; selectedRoomId = null; pin = ''; selectedStaffId = null;
     updateDots();
     document.getElementById('pinError').textContent = '';
     document.getElementById('clockMsg').textContent = '';
-    showScreen('pin');
+    showScreen('name');
 });
 
 function setMsg(text, type) {

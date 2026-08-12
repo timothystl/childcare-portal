@@ -248,3 +248,16 @@
     outline: none; border-color: var(--navy);
     box-shadow: 0 0 0 3px rgba(1, 41, 74, .12);
 }
+
+/* Name picker — same weight as the PIN field, because it is now half the
+   credential rather than a convenience. */
+.sl-staff-select {
+    width: 100%; box-sizing: border-box; margin-bottom: 12px;
+    padding: 14px 16px; font-size: 1.05em; font-family: inherit;
+    border: 1.5px solid #d7dee5; border-radius: 12px;
+    background: #fff; color: var(--navy); min-height: 52px;
+}
+.sl-staff-select:focus {
+    outline: none; border-color: var(--navy);
+    box-shadow: 0 0 0 3px rgba(1, 41, 74, .12);
+}

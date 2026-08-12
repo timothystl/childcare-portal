@@ -21,6 +21,7 @@ const SL_QUEUE_KEY = 'mdo_staff_log_queue';
 
 let slPin       = null;   // memory only — see above
 let slStaff     = null;
+let slStaffId   = null;   // chosen on the picker, sent with every write
 let slRoomId    = null;
 let slChildren  = [];
 let slOpenChild = null;
@@ -54,28 +55,57 @@ function slShow(screen) {
 
 // ── Sign in ─────────────────────────────────────────────────
 
-async function slSignIn() {
-    const pin = (slEl('slPinInput')?.value || '').trim();
-    if (!/^\d{4,8}$/.test(pin)) {
-        slToast('Enter your PIN.', 'err');
-        return;
+async function slLoadStaffPicker() {
+    const sel = slEl('slStaffSelect');
+    if (!sel) return;
+    try {
+        const staff = await listStaffForSignin();
+        sel.innerHTML = '<option value="">Choose your name…</option>' +
+            staff.map(s => `<option value="${slEsc(s.id)}">${slEsc(s.name)}</option>`).join('');
+    } catch (e) {
+        console.warn('staff list:', e);
+        slToast('Could not load the staff list.', 'err');
     }
+}
+
+async function slSignIn() {
+    const staffId = slEl('slStaffSelect')?.value || '';
+    const pin     = (slEl('slPinInput')?.value || '').trim();
+
+    // Identity first. A PIN with no name was the whole weakness: it was tested
+    // against every staff hash, so one guess had ~33 chances to land and there
+    // was no account to lock.
+    if (!staffId)             { slToast('Choose your name first.', 'err'); return; }
+    if (!/^\d{4,8}$/.test(pin)) { slToast('Enter your PIN.', 'err'); return; }
+
     const btn = slEl('slPinBtn');
     if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
     try {
-        const staff = await fetchStaffByPin(pin);
-        if (!staff) {
-            slToast('That PIN was not recognised.', 'err');
+        const res = await verifyStaffPin(staffId, pin);
+
+        if (res?.error === 'locked') {
+            // Say why. Someone locked out by another person's guessing should
+            // not think their own PIN has stopped working.
+            const until = res.until ? new Date(res.until).toLocaleTimeString('en-US',
+                { hour: 'numeric', minute: '2-digit' }) : 'shortly';
+            slToast(`Too many wrong tries — locked until ${until}. Ask the office.`, 'err');
             return;
         }
-        slPin   = pin;
-        slStaff = staff;
+        if (res?.error === 'throttled') {
+            slToast('Too many attempts on this device. Wait a few minutes.', 'err');
+            return;
+        }
+        if (!res) { slToast('That PIN was not recognised.', 'err'); return; }
+
+        slPin     = pin;
+        slStaffId = res.id;
+        slStaff   = res;
         slEl('slPinInput').value = '';
-        slEl('slWhoami').textContent = staff.name || 'Signed in';
+        slEl('slWhoami').textContent = res.name || 'Signed in';
         slRenderRooms();
-        // A staff member assigned to a room goes straight there — the room
-        // picker is a fallback for floaters and the director, not a toll gate.
-        if (staff.room_id) { slOpenRoom(staff.room_id); } else { slShow('slRoomScreen'); }
+        // Someone assigned to a room goes straight there — the picker is a
+        // fallback for floaters and the director, not a toll gate.
+        if (res.room_id) { slOpenRoom(res.room_id); } else { slShow('slRoomScreen'); }
         slFlushQueue();
     } catch (e) {
         console.warn('staff sign-in:', e);
@@ -86,7 +116,7 @@ async function slSignIn() {
 }
 
 function slSignOut() {
-    slPin = null; slStaff = null; slRoomId = null; slChildren = [];
+    slPin = null; slStaff = null; slStaffId = null; slRoomId = null; slChildren = [];
     slShow('slPinScreen');
 }
 
@@ -117,7 +147,7 @@ async function slOpenRoom(roomId) {
 
 async function slLoadRoster() {
     try {
-        slChildren = await listRoomChildren(slPin, slRoomId);
+        slChildren = await listRoomChildren(slStaffId, slPin, slRoomId);
         slRenderRoster();
     } catch (e) {
         console.warn('roster:', e);
@@ -284,7 +314,7 @@ async function slSubmitIncident(e) {
     const btn = slEl('slIncSubmitBtn');
     btn.disabled = true; btn.textContent = 'Sending…';
     try {
-        const id = await submitIncidentReport(slPin, {
+        const id = await submitIncidentReport(slStaffId, slPin, {
             studentId:    slOpenChild.student_id,
             incidentType: slEl('slIncType').value,
             description,
@@ -325,7 +355,7 @@ async function slPhotoPicked(file) {
     if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
     try {
         const dataUrl = await compressImageToDataUrl(file);
-        await uploadChildPhoto(slPin, {
+        await uploadChildPhoto(slStaffId, slPin, {
             studentIds: [slOpenChild.student_id],
             dataUrl,
             kind: 'daily',
@@ -404,7 +434,7 @@ async function slFlushQueue() {
             const entry = slQueue[0];
             let id;
             try {
-                id = await logChildEvent(slPin, entry);
+                id = await logChildEvent(slStaffId, slPin, entry);
             } catch (e) {
                 console.warn('flush failed, will retry:', e);
                 break;                      // network — keep the queue intact
@@ -448,4 +478,5 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('online', slFlushQueue);
 
     slShow('slPinScreen');
+    slLoadStaffPicker();
 });

@@ -2024,11 +2024,35 @@ async function fetchStaffScheduleRange(startDate, endDate) {
  * @param {string|number} pin - Staff clock-in PIN
  * @returns {Promise<StaffRecord|null>} Matching staff row, or null if not found
  */
-async function fetchStaffByPin(pin) {
+/**
+ * ⚠️ REPLACED by listStaffForSignin() + verifyStaffPin(). The old
+ * lookup_staff_by_pin(pin) is DROPPED, not deprecated: it took a PIN with no
+ * identity and tested it against every staff hash, so with ~33 staff in a
+ * 10,000 space roughly 1 in 300 random guesses landed on somebody, and there
+ * was no account to lock. Naming the account first makes a guess 1 in 10,000
+ * against one person and makes a per-person lockout possible.
+ */
+async function listStaffForSignin() {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient.rpc('lookup_staff_by_pin', { p_pin: parseInt(pin, 10) });
-    if (error) throw error;
-    return data; // null if not found
+    const { data, error } = await sbClient.rpc('list_staff_for_signin');
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
+ * @returns {Promise<object|null>} The staff record, or null for a wrong PIN.
+ *   `{ error: 'locked', until }` after five failures on that account, and
+ *   `{ error: 'throttled' }` when the IP/global limiter has tripped — both are
+ *   surfaced so a staff member locked out by someone else's guessing is told
+ *   why rather than believing their own PIN stopped working.
+ */
+async function verifyStaffPin(staffId, pin) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('verify_staff_pin', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10),
+    });
+    if (error) throw friendlyError(error);
+    return data;
 }
 
 // ============================================================
@@ -2049,10 +2073,11 @@ async function fetchStaffByPin(pin) {
  * the quick-log sheet renders above every input.
  * @returns {Promise<Array>} [] on a bad PIN — the RPC returns no rows.
  */
-async function listRoomChildren(pin, roomId, careDate = null) {
+async function listRoomChildren(staffId, pin, roomId, careDate = null) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('list_room_children', {
-        p_pin: parseInt(pin, 10), p_room_id: roomId, p_care_date: careDate,
+        p_staff_id: staffId, p_pin: parseInt(pin, 10),
+        p_room_id: roomId, p_care_date: careDate,
     });
     if (error) throw friendlyError(error);
     return data || [];
@@ -2064,9 +2089,10 @@ async function listRoomChildren(pin, roomId, careDate = null) {
  *   it (bad PIN, or an event_type the database will not accept). Null is a
  *   permanent failure, not a transient one — the caller must not retry it.
  */
-async function logChildEvent(pin, entry) {
+async function logChildEvent(staffId, pin, entry) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('log_child_event', {
+        p_staff_id:    staffId,
         p_pin:         parseInt(pin, 10),
         p_student_id:  entry.student_id,
         p_event_type:  entry.event_type,
@@ -2153,7 +2179,7 @@ function compressImageToDataUrl(file, maxEdge = 1280, quality = 0.72) {
  * Posts a photo to the day feed. The PIN is verified server-side; the storage
  * path, expiry and care date are all decided by the edge function, never here.
  */
-async function uploadChildPhoto(pin, { studentIds, dataUrl, caption = '', kind = 'daily' }) {
+async function uploadChildPhoto(staffId, pin, { studentIds, dataUrl, caption = '', kind = 'daily' }) {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/upload-child-photo`, {
         method:  'POST',
         headers: {
@@ -2161,7 +2187,7 @@ async function uploadChildPhoto(pin, { studentIds, dataUrl, caption = '', kind =
             apikey:         SUPABASE_ANON_KEY,
             Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ pin: String(pin), student_ids: studentIds, image: dataUrl, caption, kind }),
+        body: JSON.stringify({ staff_id: staffId, pin: String(pin), student_ids: studentIds, image: dataUrl, caption, kind }),
     });
     const data = await res.json().catch(() => null);
     if (!res.ok || !data || data.error) {
@@ -2207,9 +2233,10 @@ async function fetchChildPhotos(studentId, careDate, ttlSeconds = 3600) {
 // read that bypasses `status = 'approved'`.
 
 /** Staff file a report. PIN-gated; returns the new id, or null if refused. */
-async function submitIncidentReport(pin, r) {
+async function submitIncidentReport(staffId, pin, r) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('submit_incident_report', {
+        p_staff_id:      staffId,
         p_pin:           parseInt(pin, 10),
         p_student_id:    r.studentId,
         p_incident_type: r.incidentType,
