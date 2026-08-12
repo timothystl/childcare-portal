@@ -14,9 +14,17 @@
 -- column and the uniqueness the auth mapping will depend on, so the office can
 -- collect it first.
 --
--- ⚠️ The clock-in kiosk stays PIN-based. clockin.html IS a shared wall device,
--- so PINs do not disappear — they narrow to clock-in only. Two auth paths is
--- the correct end state here, not a compromise.
+-- ⚠️ CORRECTION (same day, before any of this was built on). An earlier version
+-- of this comment said "the clock-in kiosk stays PIN-based, clockin.html IS a
+-- shared wall device, so two auth paths is the correct end state." That is
+-- WRONG. There is no kiosk. Staff clock in on their own phones too — the name
+-- `clockin.html` and the word "kiosk" throughout this repo are historical and
+-- actively mislead.
+--
+-- The consequence is the opposite of what that note claimed: with no shared
+-- device anywhere, the PIN has no remaining justification and retires
+-- COMPLETELY once staff have accounts, rather than narrowing to clock-in.
+-- Do not plan around the old note.
 --
 -- ── WHAT ────────────────────────────────────────────────────
 alter table public.staff add column if not exists phone text;

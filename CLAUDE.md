@@ -486,7 +486,11 @@ Supabase dashboard editor, or `supabase functions deploy <name>`).
 admin.html          Admin dashboard (password-protected via Supabase Auth)
 index.html          Parent registration portal
 calendar.html       Monthly calendar view (parent-facing)
-clockin.html        Staff clock-in/out kiosk
+clockin.html        Staff clock-in/out. ⚠️ NOT a kiosk despite the name used
+                    throughout this repo — staff clock in on their OWN phones.
+                    There is no shared device anywhere in the centre. Any
+                    security reasoning that rests on "it's a shared wall
+                    device" is wrong; see staff_contact_details_APPLIED.sql.
 enroll.html         Enrollment info + PDF forms
 lookup.html         Family schedule lookup
 reset-pin.html      PIN reset flow
