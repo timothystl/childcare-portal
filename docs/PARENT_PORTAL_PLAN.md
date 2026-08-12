@@ -26,7 +26,7 @@ door — the notification carries the news, the app carries the detail.
 | Photo release | Checkbox on the child profile, **parent-toggleable, default enrolled**. Director fixes the few opt-outs. |
 | Photo retention | Daily photos **~7 days**, then auto-deleted. Parents told they're ephemeral; every photo has a save button. |
 | Incident retention | The **signed PDF is the archival record** (3yr guideline / 5yr SOL / to age 23 for major injury). Live photo rows expire on the short clock. |
-| Incident routing | Parent notified **immediately**; director reviews after. |
+| Incident routing | ~~Parent notified immediately; director reviews after.~~ **REVERSED 2026-08-12:** staff submit → **director reviews** → approval is what publishes the report and notifies the family. See §10. |
 | Check-in/out | **Staff-performed**, replacing the ProCare flow. No parent signature required. |
 | Staff devices | Personal phones, individual login. **Kiosk PIN is sufficient** to sign a report. |
 | Meals | Parents pack food. **Bottles + feeding times for Bear (infants)**; broad meal report elsewhere. No CACFP coupling. |
@@ -44,7 +44,8 @@ Real-time push (per-parent, own children only):
 
 - new message from staff
 - **first photo of the day** per child (not per photo — that's how you get muted)
-- incident report
+- incident report — **on director approval, not on filing** (see §10), and the
+  notification carries no detail: a lock-screen preview is read in public
 - invoice due and payment receipt
 
 End-of-day summary push (one per child):
@@ -373,6 +374,28 @@ clean.
 ---
 
 ## 10. Open items
+
+### Incident reports — the plan was reversed (2026-08-12)
+
+§5 and §2 said parents are notified **immediately**, with director review after.
+The director decided the opposite, and it is now built that way: staff submit →
+the director reviews → **approval is what publishes the report and notifies the
+family**. A submitted report is invisible to parents; no policy can return one.
+
+The reason: an incident is the one case where a staff member's first phrasing
+reaches a parent unedited, at the worst possible moment. "Fell and hit his head"
+lands very differently at 2pm from a phone than after Jacinda has seen the child.
+
+Consequences worth knowing:
+- The notification carries **no detail** — not the injury, not the body part. A
+  lock-screen preview is read in public. It says to open the portal.
+- Staff are told on the form that filing is not telling, because someone who
+  believes the parent already knows may not seek them out at pickup — and that
+  conversation matters more than the record.
+- **PDF export** (director queue) produces a signed-sheet record. Retention
+  outlives this app: guidelines 3 years, statute of limitations 5, major injury
+  until the child is 23. Nothing sweeps incident reports or incident photos.
+- Nobody can delete a report. There is no DELETE grant on `incident_reports`.
 
 - Real-time vs. summary for check-in/out — currently planned as summary; the "she
   made it" reassurance may be worth a real-time push.

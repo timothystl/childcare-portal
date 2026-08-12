@@ -215,3 +215,36 @@
 .sl-photo-btn[disabled] {
     background: #f0f3f6; color: #96a0aa; cursor: default;
 }
+
+/* Incident report — visually distinct from the quick-log chips, because it is
+   a different kind of act: a record, not a tap. */
+.sl-incident-btn {
+    width: 100%; margin-top: 8px; min-height: 48px;
+    background: #fff; color: var(--tang-dark);
+    border: 1.5px solid var(--tang-soft); border-radius: 12px;
+    padding: 14px; font-size: 1em; font-weight: 800;
+    font-family: inherit; cursor: pointer;
+}
+
+.sl-inc-notice {
+    background: var(--sun-pale); border-left: 3px solid var(--sun);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;
+    font-size: .87em; color: #6a5320; line-height: 1.5;
+}
+
+.sl-field { display: block; margin-bottom: 14px; }
+.sl-field > span {
+    display: block; font-size: .78em; font-weight: 800; letter-spacing: .06em;
+    text-transform: uppercase; color: #78838f; margin-bottom: 6px;
+}
+.sl-optional { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.sl-field input, .sl-field select, .sl-field textarea {
+    width: 100%; box-sizing: border-box; font-family: inherit; font-size: 1em;
+    padding: 12px 14px; border: 1.5px solid #d7dee5; border-radius: 10px;
+    min-height: 48px; background: #fff; color: var(--navy);
+}
+.sl-field textarea { min-height: 84px; resize: vertical; }
+.sl-field input:focus, .sl-field select:focus, .sl-field textarea:focus {
+    outline: none; border-color: var(--navy);
+    box-shadow: 0 0 0 3px rgba(1, 41, 74, .12);
+}

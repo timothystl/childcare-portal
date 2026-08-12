@@ -253,6 +253,58 @@ function slCloseSheet() {
     slOpenChild = null;
 }
 
+// ── Incident report ─────────────────────────────────────────
+// ⚠️ Filing does NOT notify the parent. The director reviews first, and her
+// approval is what reaches the family. Staff are told this on the form, because
+// someone who believes a parent has already been told may not go and find them
+// at pickup — and that conversation matters more than the record.
+
+function slOpenIncident() {
+    if (!slOpenChild) return;
+    slEl('slIncidentChild').textContent = slOpenChild.child_name;
+    slEl('slIncidentForm').reset();
+    slEl('slIncidentSheet').classList.remove('hidden');
+}
+
+function slCloseIncident() {
+    slEl('slIncidentSheet').classList.add('hidden');
+}
+
+async function slSubmitIncident(e) {
+    e.preventDefault();
+    if (!slOpenChild) return;
+
+    const description = slEl('slIncDescription').value.trim();
+    const actionTaken = slEl('slIncAction').value.trim();
+    if (!description || !actionTaken) {
+        slToast('Describe what happened and what you did.', 'err');
+        return;
+    }
+
+    const btn = slEl('slIncSubmitBtn');
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+        const id = await submitIncidentReport(slPin, {
+            studentId:    slOpenChild.student_id,
+            incidentType: slEl('slIncType').value,
+            description,
+            actionTaken,
+            location:     slEl('slIncLocation').value.trim(),
+            bodyArea:     slEl('slIncBodyArea').value.trim(),
+        });
+        if (!id) { slToast('The report was not accepted. Check your PIN.', 'err'); return; }
+
+        slCloseIncident();
+        slCloseSheet();
+        slToast('Report sent to the director for review.', 'ok');
+    } catch (err) {
+        console.warn('incident:', err);
+        slToast('Could not send the report. Try again.', 'err');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Send to director';
+    }
+}
+
 // ── Photos ──────────────────────────────────────────────────
 // Deliberately NOT part of the offline queue. A queued photo would mean holding
 // megabytes of a child's image in localStorage on a personal phone until the
@@ -389,6 +441,9 @@ document.addEventListener('DOMContentLoaded', () => {
     slEl('slPostBtn')?.addEventListener('click', slFlushQueue);
     slEl('slPhotoBtn')?.addEventListener('click', () => slEl('slPhotoInput')?.click());
     slEl('slPhotoInput')?.addEventListener('change', e => slPhotoPicked(e.target.files?.[0]));
+    slEl('slIncidentBtn')?.addEventListener('click', slOpenIncident);
+    slEl('slIncidentCancel')?.addEventListener('click', slCloseIncident);
+    slEl('slIncidentForm')?.addEventListener('submit', slSubmitIncident);
 
     window.addEventListener('online', slFlushQueue);
 
