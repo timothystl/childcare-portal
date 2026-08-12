@@ -221,9 +221,21 @@ have used an identical query shape and be invisible.
 - `submitWaitlistApplication()` chained `.insert().select()`, anon had **no SELECT
   policy** on `waitlist_applications`, and RLS applies SELECT policies to `RETURNING`.
   Proven as the `anon` role in a rolled-back transaction: the insert **succeeds without
-  `RETURNING` and fails with it** (`42501`), so the whole statement aborted and nothing
-  was written. A parent filled in the form, saw an error, and no application was saved.
-  The month-long gap (last application 2026-07-11) was the symptom.
+  `RETURNING` and fails with it** (`42501`), so the whole statement would abort and
+  nothing be written.
+- ⚠️ **No applications were actually lost — an earlier note here said otherwise and was
+  wrong.** `pg_stat_statements` (complete since 2026-03-10, zero evictions) shows the
+  `anon` role has **never** issued a single query against `waitlist_applications`. All 49
+  rows were written by an authenticated admin: **47 within one minute on 2026-07-03** (a
+  bulk import) plus one each on 07-10 and 07-11, entered by hand. Zero have
+  `confirmation_sent_at`. The "month-long gap" is not lost submissions — it is a form
+  nobody uses.
+- **The real gap is discoverability, not the bug.** `inquiry.html` is linked from exactly
+  one place: the marketing site (`marketing/website/index.html`). Nothing on the portal
+  links to it, yet `index.html`'s own FAQ tells parents to "join the online waitlist
+  through the care day portal." Inquiries arrive by phone/email and the office types
+  them in. (`messages`, the Contact Us table, is the same story — 1–3 a month, none
+  since July.)
 - Fixed by `fix_public_waitlist_submit.sql` (**applied 2026-08-12**): a
   `submit_waitlist_application(jsonb)` SECURITY DEFINER RPC returning only `id` and
   `applied_at`. **Not** fixed with an anon SELECT policy — that would have exposed all

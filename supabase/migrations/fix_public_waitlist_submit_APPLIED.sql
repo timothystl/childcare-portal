@@ -15,7 +15,17 @@
 -- Postgres applies SELECT policies to rows returned by RETURNING, and PostgREST
 -- turns .select() into RETURNING. So the whole statement aborts and NOTHING is
 -- written — a parent fills in the form, gets an error, and no application is
--- saved. That matches the month-long gap in applications exactly.
+-- saved.
+--
+-- ⚠️ SCOPE CORRECTION (same day). The first version of this header blamed the
+-- month-long gap in applications on this bug. That was wrong.
+-- pg_stat_statements — complete since 2026-03-10 with zero evictions — shows the
+-- anon role has NEVER queried waitlist_applications. All 49 rows were written by
+-- an authenticated admin: 47 inside a single minute on 2026-07-03 (a bulk
+-- import) plus one each on 07-10 and 07-11, by hand. Nothing was lost. The form
+-- was broken AND unused, and the second half is the more interesting problem:
+-- inquiry.html is linked only from the marketing site, so parents cannot find it
+-- from the portal at all.
 --
 -- The fix is NOT an anon SELECT policy — that would expose all 37 columns of
 -- every family's waitlist entry, which is the R27 class of mistake.
