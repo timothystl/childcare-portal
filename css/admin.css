@@ -2555,6 +2555,25 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .sr-col-role    { min-width: 130px; }
 .sr-col-room    { min-width: 100px; }
 .sr-col-pay     { min-width: 160px; }
+.sr-col-contact { min-width: 200px; }
+
+/* Contact details — the email is the coming sign-in identity, so a missing one
+   is a blocker, not a cosmetic gap. */
+.sr-contact-cell    { font-size: 0.85rem; line-height: 1.5; }
+.sr-contact-ok      { color: var(--text-muted, #5a6b7a); }
+.sr-contact-missing { color: #a33; font-weight: 600; }
+.staff-contact-gap {
+    margin: 0 0 14px;
+    padding: 12px 14px;
+    border: 1px solid #e6c98a;
+    border-left: 4px solid #d99b1f;
+    border-radius: 6px;
+    background: #fdf7e8;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    white-space: normal;
+}
+.staff-contact-gap strong { display: block; margin-bottom: 3px; }
 .sr-col-hire    { min-width: 100px; }
 .sr-col-status  { min-width: 80px; }
 .sr-col-actions { min-width: 160px; }
