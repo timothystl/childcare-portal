@@ -900,7 +900,7 @@ async function searchFamilies(query) {
     try {
         const { data, error } = await sbClient
             .from('families')
-            .select('id, parent_name, parent_email, parent_phone, has_pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
+            .select('id, parent_name, parent_email, parent_phone, has_pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days, allergies, care_notes, photo_release)')
             .or(`parent_name.ilike.%${query}%,parent_email.ilike.%${query}%`)
             .order('parent_name')
             .limit(8);
@@ -1139,7 +1139,7 @@ async function createFamily({ parentName, parentEmail, parentPhone, pin: provide
  * @param {string|null} [params.childDob] - ISO 8601 date or null
  * @returns {Promise<Student>}
  */
-async function addStudent({ familyId, childName, childDob, roomOverride = null, discountType = null, discountValue = null, discountNote = null, recurringDays = null }) {
+async function addStudent({ familyId, childName, childDob, roomOverride = null, discountType = null, discountValue = null, discountNote = null, recurringDays = null, allergies = [], careNotes = null, photoRelease = true }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: existing } = await sbClient
         .from('students').select('id')
@@ -1156,6 +1156,12 @@ async function addStudent({ familyId, childName, childDob, roomOverride = null, 
             discount_value: discountValue ?? null,
             discount_note:  discountNote || null,
             recurring_days: recurringDays || null,
+            // Child safety + consent. The DB enforces the allergies shape
+            // (allergies_shape_ok), so a malformed write fails loudly here
+            // rather than silently hiding an allergy from the staff panel.
+            allergies:      Array.isArray(allergies) ? allergies : [],
+            care_notes:     careNotes || null,
+            photo_release:  photoRelease !== false,
         })
         .select().single();
     if (error) throw error;
@@ -1172,7 +1178,7 @@ async function fetchAllFamilies({ includeArchived = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, created_at, active, group, registration_locked, registration_lock_reason, login_locked, new_family_fee_charged, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days)')
+        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, created_at, active, group, registration_locked, registration_lock_reason, login_locked, new_family_fee_charged, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days, allergies, care_notes, photo_release)')
         .order('parent_name');
     if (!includeArchived) query = query.eq('active', true);
     const { data, error } = await query;
