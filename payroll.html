@@ -800,12 +800,40 @@ const MDO_ROOMS = {
 // ============================================================
 // INIT
 // ============================================================
+// Send the user back to the login screen. Called on start-up when there is no
+// valid session, and by any query that comes back unauthorised.
+function showLogin(message) {
+    document.getElementById('dashboard')?.classList.add('hidden');
+    document.getElementById('loginScreen')?.classList.remove('hidden');
+    const err = document.getElementById('loginError');
+    if (err && message) { err.textContent = message; err.classList.remove('hidden'); }
+}
+
+// getSession() only reads localStorage, so an EXPIRED session still looks valid
+// and the dashboard would render and fire its queries unauthenticated. Those
+// queries then ran as `anon` — and while anon held wage grants they SUCCEEDED
+// and displayed payroll instead of failing. The grants are revoked now
+// (r26_complete_revoke_anon_staff_wages.sql), so this page must not depend on
+// them: getUser() asks the server, so an expired token is caught here.
 (async () => {
     const { data: { session } } = await sb.auth.getSession();
-    if (session) {
-        showDashboard();
+    if (!session) return;                       // never signed in — show login
+    const { data: { user }, error } = await sb.auth.getUser();
+    if (error || !user) {
+        await sb.auth.signOut().catch(() => {});
+        showLogin('Your session expired. Please sign in again.');
+        return;
     }
+    showDashboard();
 })();
+
+// Catches a refresh failure mid-session, so a token that dies while the page is
+// open drops back to the login screen rather than silently failing every query.
+sb.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED_FAILED') {
+        showLogin('Your session expired. Please sign in again.');
+    }
+});
 
 document.getElementById('loginBtn').addEventListener('click', attemptLogin);
 document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
@@ -1124,6 +1152,23 @@ async function loadMdoData(periodStart, periodEnd) {
             .select('staff_id, pto_hours_used')
             .eq('period_start', periodStart),
     ]);
+
+    // `.data || []` would turn an auth or permission failure into an empty
+    // report — a blank page that looks like "no payroll this period" rather
+    // than "you are not signed in". Surface it instead.
+    const authFailure = [staffRes, hoursRes, clockRes, ptoRes].find(r =>
+        r.error && (r.status === 401 || r.status === 403 || r.error.code === '42501'
+                    || /jwt|permission denied/i.test(r.error.message || '')));
+    if (authFailure) {
+        console.error('payroll: not authorised —', authFailure.error);
+        await sb.auth.signOut().catch(() => {});
+        showLogin('Your session expired. Please sign in again.');
+        throw new Error('not authorised');
+    }
+    const otherFailure = [staffRes, hoursRes, clockRes, ptoRes].find(r => r.error);
+    if (otherFailure) {
+        console.error('payroll: load failed —', otherFailure.error);
+    }
 
     mdoStaff = staffRes.data || [];
     mdoPtoMap = new Map();
