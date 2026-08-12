@@ -62,6 +62,13 @@
 
         <!-- Today feed -->
         <div id="ptFeed" class="pt-feed hidden">
+            <!-- Print-only header, and it must come FIRST in the DOM: print has
+                 no flex ordering to lean on, so a header placed later in the
+                 markup prints at the bottom of the sheet. It did, once. -->
+            <div class="pt-print-head" aria-hidden="true">
+                <div class="pt-print-org">Timothy Lutheran Church — Mother's Day Out</div>
+                <div id="ptPrintMeta" class="pt-print-meta"></div>
+            </div>
             <div id="ptSwitcher" class="pt-switcher hidden"></div>
             <div class="pt-day-head">
                 <span id="ptChildName" class="pt-child-name"></span>
@@ -70,6 +77,10 @@
             <div id="ptSafety" class="pt-safety hidden"></div>
             <ul id="ptTimeline" class="pt-timeline"></ul>
             <div id="ptPhotos" class="pt-photos hidden"></div>
+            <!-- Print produces the full-day report. No separate screen: the
+                 feed already IS the day, and a second rendering of the same
+                 data is a second thing to keep correct. -->
+            <button type="button" id="ptPrintBtn" class="pt-print-btn">🖨️ Print this day</button>
             <div id="ptAnnouncements" class="pt-announcements hidden"></div>
         </div>
 
