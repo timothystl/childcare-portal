@@ -1,0 +1,48 @@
+-- APPLIED TO PRODUCTION 2026-08-12.
+-- ============================================================
+-- family_login: try EVERY slot the address appears in
+-- ============================================================
+-- THE BUG. The lookup matched parent_email first and only fell through to
+-- parent2_email if the first found nothing:
+--
+--     SELECT ... WHERE lower(parent_email)  = lower(p_email);
+--     IF NOT FOUND THEN
+--         SELECT ... WHERE lower(parent2_email) = lower(p_email);
+--         v_is_p2 := true;
+--     END IF;
+--
+-- So when ONE address is on both slots, only parent 1's hash was ever checked.
+-- The Millers share themillers597@gmail.com: Darren is parent 1, Lindsey is
+-- parent 2, and both have PINs. Lindsey's correct PIN could never succeed.
+--
+-- ⚠️ And it was worse than a failed login. Every wrong answer increments
+-- login_attempts, and five locks the FAMILY — so Lindsey typing her own correct
+-- PIN five times would have locked Darren out too, with nothing in the app
+-- explaining why.
+--
+-- THE FIX. Collect every (family, slot) the address appears in and try each
+-- hash. One candidate for almost everyone; two for a shared household inbox.
+-- Also covers the case nobody has hit yet: the same address as parent 2 on one
+-- family and parent 1 on another.
+--
+-- Slot 1 is tried first so that when both slots share an address and both
+-- hashes somehow match, the resulting identity is the same as before.
+--
+-- Failures are counted ONCE PER FAMILY, not once per slot — a shared inbox must
+-- not burn through the five-attempt lockout twice as fast as anyone else's.
+--
+-- Behaviour deliberately unchanged elsewhere: same jsonb shape, same isParent2
+-- flag, same five-attempt family lockout, same not_found. Only WHICH hashes get
+-- tried has changed. Full body in git history.
+
+-- ============================================================
+-- VERIFIED AFTER APPLYING (rolled back)
+-- ============================================================
+-- Millers, two known PINs on one shared address:
+--   Darren  (slot 1) -> signs in, isParent2 false
+--   Lindsey (slot 2) -> signs in, isParent2 true      <- was impossible before
+--   wrong PIN        -> invalid_pin
+--   login_attempts   -> 1 after one failure, not 2
+-- Ordinary single-slot family:
+--   signs in; five failures still lock; the correct PIN is refused while
+--   locked; an unknown address still returns not_found
