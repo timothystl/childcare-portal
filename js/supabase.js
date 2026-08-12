@@ -456,19 +456,18 @@ function friendlyError(err) {
  * @param {string[]} dateStrings - ISO 8601 dates to check (YYYY-MM-DD)
  * @returns {Promise<Object<string, number>>} Map of date string to booking count
  */
+// R1: counts come from a definer RPC. Reading registration_dates directly
+// required an anon SELECT policy over the whole table, which exposed every
+// child's schedule to anyone holding the public key. The RPC returns counts
+// only — no names, no emails, no dates beyond the ones asked for.
 async function fetchCapacityForDates(roomId, dateStrings) {
     if (!dateStrings.length || !sbClient) return {};
-    const { data, error } = await sbClient
-        .from('registration_dates')
-        .select('care_date')
-        .eq('room_id', roomId)
-        .eq('waitlisted', false)
-        .in('care_date', dateStrings);
+    const { data, error } = await sbClient.rpc('capacity_counts', {
+        p_room_id: roomId, p_dates: dateStrings,
+    });
     if (error) { console.error('fetchCapacityForDates:', error); return {}; }
     const counts = {};
-    (data || []).forEach(row => {
-        counts[row.care_date] = (counts[row.care_date] || 0) + 1;
-    });
+    (data || []).forEach(row => { counts[row.care_date] = row.cnt; });
     return counts;
 }
 
@@ -811,74 +810,34 @@ async function checkDateConflicts(email, childName, dateStrings) {
  * @param {string|null} [childName] - Child name filter (case-insensitive)
  * @returns {Promise<Registration|null>}
  */
+// R1: both duplicate checks now go through registration_conflict(), a definer
+// RPC returning only the child's own name and when it was submitted. The old
+// version read `registrations` directly, which needed an anon SELECT policy
+// over every row — child names, parent names and parent emails for the whole
+// center, readable with the public key. The caller already knows the child's
+// name, and created_at is all the parent-facing message uses.
 async function checkExistingRegistration(email, monthKey, childName = null) {
     if (!sbClient) return null;
     try {
-        let regsQuery = sbClient
-            .from('registrations')
-            .select('id, created_at, child_name, parent_email')
-            .ilike('parent_email', email);
-        if (childName) regsQuery = regsQuery.ilike('child_name', childName);
-        const { data: regs, error: regErr } = await regsQuery;
-        if (regErr || !regs || !regs.length) return null;
-
-        const ids = regs.map(r => r.id);
-        const [yr, mo] = monthKey.split('-');
-        const nextMo = mo === '12'
-            ? `${parseInt(yr) + 1}-01`
-            : `${yr}-${String(parseInt(mo) + 1).padStart(2, '0')}`;
-        const { data: dates, error: datesErr } = await sbClient
-            .from('registration_dates')
-            .select('registration_id')
-            .in('registration_id', ids)
-            .gte('care_date', monthKey + '-01')
-            .lt('care_date', nextMo + '-01')
-            .eq('waitlisted', false)
-            .limit(1);
-        if (datesErr) return null;
-        if (!(dates && dates.length > 0)) return null;
-        // Return the specific registration that has dates in this month — a parent
-        // can have multiple registrations for the same child across different
-        // months, and regs[0] (arbitrary query order) may not be the one that
-        // actually conflicts, showing the wrong "submitted on" date to the parent.
-        return regs.find(r => r.id === dates[0].registration_id) || regs[0];
-    } catch {
-        return null;
-    }
+        const { data, error } = await sbClient.rpc('registration_conflict', {
+            p_month_key: monthKey, p_child_name: childName, p_email: email,
+        });
+        if (error || !data || !data.length) return null;
+        return data[0];
+    } catch { return null; }
 }
 
-// Check if ANY registration exists for this child name in the given month, regardless of which parent submitted it.
-// Used to prevent a second parent from re-registering a child that the first parent already scheduled.
+// Blocks a second parent re-registering a child the first parent already
+// scheduled — hence no email filter.
 async function checkExistingRegistrationByChild(monthKey, childName) {
     if (!sbClient || !childName) return null;
     try {
-        const { data: regs, error: regErr } = await sbClient
-            .from('registrations')
-            .select('id, created_at, child_name, parent_email, parent_name')
-            .ilike('child_name', childName);
-        if (regErr || !regs || !regs.length) return null;
-
-        const ids = regs.map(r => r.id);
-        const [yr, mo] = monthKey.split('-');
-        const nextMo = mo === '12'
-            ? `${parseInt(yr) + 1}-01`
-            : `${yr}-${String(parseInt(mo) + 1).padStart(2, '0')}`;
-        const { data: dates, error: datesErr } = await sbClient
-            .from('registration_dates')
-            .select('registration_id')
-            .in('registration_id', ids)
-            .gte('care_date', monthKey + '-01')
-            .lt('care_date', nextMo + '-01')
-            .eq('waitlisted', false)
-            .limit(1);
-        if (datesErr) return null;
-        if (!(dates && dates.length > 0)) return null;
-        // Return the specific registration that has dates in this month so
-        // the created_at shown in the error message matches the actual conflict.
-        return regs.find(r => r.id === dates[0].registration_id) || regs[0];
-    } catch {
-        return null;
-    }
+        const { data, error } = await sbClient.rpc('registration_conflict', {
+            p_month_key: monthKey, p_child_name: childName, p_email: null,
+        });
+        if (error || !data || !data.length) return null;
+        return data[0];
+    } catch { return null; }
 }
 
 // ============================================================
@@ -1464,19 +1423,18 @@ async function submitFamilyDeletionRequest({ familyId, parentEmail, parentName, 
 }
 
 // fetchRegistrationsByEmail — used by parent lookup portal
-async function fetchRegistrationsByEmail(email) {
+// R1: PIN-gated. This used to read `registrations` directly with an anon
+// SELECT policy, so the email argument selected ANY family's rows — the public
+// key could enumerate every child, parent and schedule in the center. The RPC
+// verifies the PIN server-side (sharing family_login's lockout, so it cannot be
+// used as a second door to brute-force PINs) and returns only that family's own
+// registrations.
+async function fetchRegistrationsByEmail(email, pin) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
-        .from('registrations')
-        .select(`
-            id, created_at, status,
-            parent_name, parent_email, parent_phone,
-            child_name, room_id,
-            registration_dates ( care_date, waitlisted, day_type )
-        `)
-        .ilike('parent_email', email)
-        .order('created_at', { ascending: false })
-        .limit(50);
+    if (!pin) return [];   // no PIN, no data — callers authenticate first
+    const { data, error } = await sbClient.rpc('family_registrations', {
+        p_email: email, p_pin: String(pin),
+    });
     if (error) throw error;
     return data || [];
 }
