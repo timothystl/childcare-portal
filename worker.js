@@ -264,10 +264,30 @@ export default {
 
     // ── POST /staff-push-subscribe — save a push subscription for a staff member ──
     if (url.pathname === '/staff-push-subscribe' && request.method === 'POST') {
-      const { staff_id, endpoint, p256dh, auth } = await request.json().catch(() => ({}));
-      if (!staff_id || !endpoint || !p256dh || !auth) {
+      // ⚠️ This had NO authentication at all: the caller named a staff_id and
+      // the subscription was written. Anyone could have registered their own
+      // device to receive another staff member's notifications, or filled the
+      // table. The PIN is the credential staff have, so it is the credential
+      // used — and staff_id is DERIVED from it, never taken from the body.
+      const { pin, endpoint, p256dh, auth } = await request.json().catch(() => ({}));
+      if (!pin || !endpoint || !p256dh || !auth) {
         return new Response('Missing fields', { status: 400 });
       }
+      if (!/^\d{4,8}$/.test(String(pin))) return new Response('Unauthorized', { status: 401 });
+
+      const pinRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/staff_id_for_pin`, {
+        method: 'POST',
+        headers: {
+          'apikey':        env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({ p_pin: parseInt(String(pin), 10) }),
+      });
+      if (!pinRes.ok) return new Response('Unauthorized', { status: 401 });
+      const staff_id = await pinRes.json().catch(() => null);
+      if (!staff_id) return new Response('Unauthorized', { status: 401 });
+
       const res = await fetch(`${SUPABASE_URL}/rest/v1/staff_push_subscriptions`, {
         method:  'POST',
         headers: {
@@ -333,13 +353,26 @@ export default {
         return new Response('Forbidden', { status: 403 });
       }
 
-      // Verify the caller holds a valid Supabase session (admin is authenticated)
+      // ⚠️ "Holds a valid session" USED to mean "is an admin", because admins
+      // were the only people with Supabase accounts. Option B gave every parent
+      // a real session, so that check stopped meaning anything: any of ~242
+      // parents could have sent an arbitrary notification to any family, or
+      // broadcast one to all 121. Ask the database whether they are an admin.
       const bearer = request.headers.get('Authorization');
       if (!bearer) return new Response('Unauthorized', { status: 401 });
-      const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-        headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': bearer },
+
+      const adminRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/is_admin`, {
+        method: 'POST',
+        headers: {
+          'apikey':        env.SUPABASE_ANON_KEY ?? '',
+          'Authorization': bearer,           // the CALLER's token, so is_admin() sees their email
+          'Content-Type':  'application/json',
+        },
+        body: '{}',
       });
-      if (!userRes.ok) return new Response('Unauthorized', { status: 401 });
+      if (!adminRes.ok) return new Response('Unauthorized', { status: 401 });
+      const isAdmin = await adminRes.json().catch(() => false);
+      if (isAdmin !== true) return new Response('Forbidden', { status: 403 });
 
       const { family_id, parent_email, broadcast, title, body: msgBody } = await request.json().catch(() => ({}));
       if (!title) return new Response('Missing title', { status: 400 });

@@ -1,0 +1,31 @@
+-- APPLIED TO PRODUCTION 2026-08-12.
+--
+-- staff_id_for_pin() was documented as "deliberately NOT granted to anon" and
+-- the migration only did REVOKE ... FROM PUBLIC. That is not sufficient:
+-- Supabase's DEFAULT PRIVILEGES grant EXECUTE on new public functions to anon
+-- and authenticated, and revoking PUBLIC does not remove an explicit role
+-- grant. The function was therefore anon-callable — a bare PIN oracle
+-- returning a staff uuid, with the comment above it claiming otherwise.
+--
+-- Same trap as R26/R27 and the `TO public` policies: the revoke has to name the
+-- role. Verify with has_function_privilege, never by reading the migration.
+--
+-- Nothing loses access: the only callers are the upload-child-photo and
+-- staff-push-subscribe paths, both of which run with the service role.
+REVOKE EXECUTE ON FUNCTION public.staff_id_for_pin(integer) FROM anon;
+
+-- ⚠️ NOT FIXED HERE, and worth its own work: lookup_staff_by_pin(integer) is
+-- anon-callable by design (the kiosk needs it) and staff PINs are 4 digits with
+-- no attempt limit, so the whole PIN space can be walked from the public key in
+-- minutes. That is a pre-existing weakness, not one introduced by Phase 1, and
+-- the fix is rate limiting rather than a revoke — removing the grant would
+-- break the clock-in kiosk.
+
+-- ============================================================
+-- VERIFIED AFTER APPLYING (has_function_privilege, not by reading the file)
+-- ============================================================
+--   anon TRUE  : log_child_event, list_room_children   (the staff app; both
+--                take a PIN and verify it server-side)
+--   anon FALSE : staff_id_for_pin, parent_family_ids, parent_owns_student,
+--                photo_is_releasable, photo_depicts_my_child,
+--                set_photo_release, sweep_expired_child_photos

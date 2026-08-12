@@ -754,7 +754,11 @@ function _urlBase64ToUint8Array(b64url) {
     return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
-async function _maybeShowPushPrompt(id) {
+// The PIN is captured at prompt time and closed over. `pin` is module-level
+// and is cleared when the screen changes, so reading it inside the async
+// click handler below would often find an empty string by the time the staff
+// member taps Allow.
+async function _maybeShowPushPrompt(id, staffPin) {
     if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
     if (Notification.permission === 'denied') return;
     if (localStorage.getItem('push_subscribed_' + id)) return;
@@ -783,7 +787,10 @@ async function _maybeShowPushPrompt(id) {
             await fetch('/staff-push-subscribe', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ staff_id: id, endpoint, p256dh, auth }),
+                // staff_id is derived server-side from the PIN — the endpoint
+                // no longer accepts a caller-supplied id, because it used to
+                // accept one with no authentication at all.
+                body:    JSON.stringify({ pin: staffPin, endpoint, p256dh, auth }),
             });
             localStorage.setItem('push_subscribed_' + id, '1');
         } catch (err) { console.warn('Staff push subscription failed:', err); }
@@ -920,7 +927,7 @@ async function verifyPin() {
 
         await refreshClockStatus();
         toLoadMyRequests();   // fire-and-forget: the panel fills in as it lands
-        _maybeShowPushPrompt(staffId);
+        _maybeShowPushPrompt(staffId, pin);
         // Route: clock-out goes straight to clock screen; clock-in needs room selection first
         if (openEventId) {
             showScreen('clock');
