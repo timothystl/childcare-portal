@@ -4553,3 +4553,88 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     .name-list-item { flex-wrap: wrap; }
     .att-controls   { width: 100%; justify-content: flex-end; }
 }
+
+/* ============================================================
+   Incident reports — director review
+   ============================================================ */
+
+.inc-tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.inc-tab {
+    background: #fff; border: 1.5px solid var(--border, #d7dee5); border-radius: 999px;
+    padding: 8px 16px; font-family: inherit; font-size: .88em; font-weight: 700;
+    color: var(--navy); cursor: pointer;
+}
+.inc-tab.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+.inc-card {
+    background: #fff; border: 1.5px solid #e3e8ed; border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 12px;
+}
+/* A pending report is a family that has not been told. It should look like it. */
+.inc-pending { border-left: 4px solid var(--tang); }
+
+.inc-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+}
+.inc-child { font-weight: 800; color: var(--navy); font-size: 1.05em; margin-right: 8px; }
+.inc-type {
+    font-size: .74em; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+    background: var(--sun-pale); color: #6a5320; border-radius: 999px; padding: 3px 10px;
+}
+.inc-when { font-size: .84em; color: #78838f; }
+.inc-waiting {
+    margin-top: 8px; font-size: .84em; font-weight: 700; color: var(--tang-dark);
+}
+
+.inc-detail { margin: 12px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; }
+.inc-detail dt {
+    font-size: .74em; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+    color: #78838f; white-space: nowrap;
+}
+.inc-detail dd { margin: 0; color: var(--navy); font-size: .92em; line-height: 1.5; }
+
+.inc-notes {
+    width: 100%; box-sizing: border-box; margin-top: 12px;
+    border: 1.5px solid #d7dee5; border-radius: 8px; padding: 10px 12px;
+    font-family: inherit; font-size: .92em; resize: vertical;
+}
+.inc-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.inc-print-actions { margin-top: 10px; }
+
+/* ── PDF export ───────────────────────────────────────────── */
+/* The host is empty and hidden until an export is requested. */
+#incidentPrintHost { display: none; }
+
+@media print {
+    /* Only when an export was actually asked for — otherwise printing any
+       other admin screen would emit a blank incident sheet. */
+    body.printing-incident > *:not(#incidentPrintHost) { display: none !important; }
+    body.printing-incident #incidentPrintHost {
+        display: block !important;
+        font-family: 'Nunito', system-ui, sans-serif; color: #000;
+    }
+
+    .incp-head { border-bottom: 2px solid #01294A; padding-bottom: 10px; margin-bottom: 18px; }
+    .incp-org  { font-size: 10pt; color: #444; }
+    .incp-head h1 { font-family: 'Lora', Georgia, serif; font-size: 20pt; margin: 4px 0 0; color: #01294A; }
+
+    .incp-table { width: 100%; border-collapse: collapse; }
+    .incp-table th {
+        text-align: left; vertical-align: top; width: 30%;
+        font-size: 9pt; letter-spacing: .05em; text-transform: uppercase; color: #444;
+        padding: 8px 10px 8px 0; border-bottom: 1px solid #ddd;
+    }
+    .incp-table td {
+        padding: 8px 0; border-bottom: 1px solid #ddd; font-size: 11pt; line-height: 1.5;
+    }
+
+    /* A signed sheet is what makes this a record rather than a printout. */
+    .incp-sign { margin-top: 34px; display: flex; gap: 40px; font-size: 9.5pt; color: #444; }
+    .incp-sign > div { flex: 1; }
+    .incp-line { display: block; border-bottom: 1px solid #000; height: 34px; margin-bottom: 4px; }
+
+    .incp-foot { margin-top: 26px; font-size: 8.5pt; color: #666; }
+
+    @page { margin: 16mm; }
+}

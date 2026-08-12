@@ -91,6 +91,11 @@ const AP_TOOLS = [
       blurb: 'Active children with no registration for a month.' },
     { key: 'families',    pane: 'families',      section: 'familiesSection',         tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '👨‍👩‍👧', name: 'Family Directory',
       blurb: 'Family and child records, PINs, discounts, imports.' },
+    // Incidents sit under Classrooms because that is where they happen and who
+    // reports them. Approval is what notifies the family, so a report waiting
+    // here is a parent who has not been told yet.
+    { key: 'incidents',   pane: 'daily',         section: 'incidentsSection',        tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '🩹', name: 'Incident Reports',
+      blurb: 'Review what staff filed, then release it to the family.' },
 
     // ── Finance · Money In ──
     // Invoices comes first: you create the bill before you chase it.
@@ -596,6 +601,7 @@ function apOnToolOpened(tool) {
             window._apArInit = true; setupBillingDashYear();
         }
         if (tool.key === 'invoices' && typeof renderInvoicesTool === 'function') renderInvoicesTool();
+        if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
         if (tool.key === 'schedule')  apRenderScheduleTimeOff();
         if (tool.key === 'staffreq')  apRenderStaffReq();
         if (tool.key === 'scenario')  apRenderScenario();

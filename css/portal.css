@@ -361,3 +361,33 @@
 
     @page { margin: 14mm; }
 }
+
+/* Incident reports — above the timeline, and visually unmistakable. */
+.pt-incidents { margin-bottom: 16px; }
+.pt-incident {
+    background: var(--tang-pale); border-left: 4px solid var(--tang);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+}
+.pt-incident-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; margin-bottom: 8px;
+}
+.pt-incident-type {
+    font-size: .74em; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+    color: #fff; background: var(--tang); border-radius: 999px; padding: 3px 10px;
+}
+.pt-incident-when { font-size: .82em; color: var(--tang-dark); }
+.pt-incident-what { margin: 0 0 8px; color: var(--tang-dark); font-size: .93em; line-height: 1.5; font-weight: 700; }
+.pt-incident-did  { margin: 0 0 6px; color: var(--tang-dark); font-size: .9em; line-height: 1.5; }
+.pt-incident-meta { margin: 0; color: #8a6a5c; font-size: .82em; line-height: 1.5; }
+
+/* On paper an incident is the most important thing on the sheet, so unlike the
+   photos it is kept — and given a border that survives a mono printer. */
+@media print {
+    .pt-incident {
+        background: #fff !important; border: 2px solid #000 !important;
+        border-left-width: 5px !important; page-break-inside: avoid;
+    }
+    .pt-incident-type { background: #fff !important; color: #000 !important; border: 1.5px solid #000; }
+    .pt-incident-what, .pt-incident-did, .pt-incident-meta, .pt-incident-when { color: #000 !important; }
+}

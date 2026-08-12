@@ -131,6 +131,7 @@ async function ptSelectChild(childId) {
     }
 
     ptRenderPhotos(childId);
+    ptRenderIncidents(childId);
 
     // The print header carries the identifying detail the screen shows in page
     // chrome. On paper the chrome is gone, and an undated sheet about an
@@ -139,6 +140,46 @@ async function ptSelectChild(childId) {
     if (meta && child) {
         meta.textContent = `${child.child_name} — ${new Date(ptDate + 'T12:00:00')
             .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`;
+    }
+}
+
+// ── Incident reports ────────────────────────────────────────
+// Only ever approved ones: RLS will not return a submitted report, and there is
+// no filter here because the database owns that rule.
+//
+// These sit ABOVE the timeline, not inside it. An injury is not one entry among
+// the diapers — a parent scanning the feed must not have to find it.
+async function ptRenderIncidents(childId) {
+    const wrap = ptEl('ptIncidents');
+    if (!wrap) return;
+    wrap.classList.add('hidden');
+    wrap.innerHTML = '';
+    try {
+        const reports = await fetchMyIncidentReports(childId);
+        if (!reports.length) return;
+        wrap.classList.remove('hidden');
+        wrap.innerHTML = reports.map(r => {
+            const when = new Date(r.occurred_at).toLocaleString('en-US', {
+                month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                timeZone: 'America/Chicago',
+            });
+            const label = { injury: 'Injury', illness: 'Illness',
+                            behavior: 'Behaviour', other: 'Note' }[r.incident_type] || 'Report';
+            return `<div class="pt-incident">
+                <div class="pt-incident-head">
+                    <span class="pt-incident-type">${ptEsc(label)}</span>
+                    <span class="pt-incident-when">${ptEsc(when)}</span>
+                </div>
+                <p class="pt-incident-what">${ptEsc(r.description)}</p>
+                <p class="pt-incident-did"><strong>What we did:</strong> ${ptEsc(r.action_taken)}</p>
+                ${r.body_area ? `<p class="pt-incident-meta">Area: ${ptEsc(r.body_area)}</p>` : ''}
+                ${r.location  ? `<p class="pt-incident-meta">Where: ${ptEsc(r.location)}</p>` : ''}
+                <p class="pt-incident-meta">Reported by ${ptEsc(r.reported_by_name || 'staff')}${
+                    r.reviewed_at ? ', reviewed by the director' : ''}.</p>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        console.warn('incidents:', e);
     }
 }
 

@@ -2200,6 +2200,69 @@ async function fetchChildPhotos(studentId, careDate, ttlSeconds = 3600) {
         .filter(r => r.url);   // an unsigned row is one RLS refused — drop it
 }
 
+// ── Incident reports ────────────────────────────────────────
+// ⚠️ THE DIRECTOR REVIEWS BEFORE THE PARENT SEES IT. A submitted report is
+// invisible to parents — there is no policy that can return one — and approval
+// is what both publishes it and notifies the family. Do not add a parent-facing
+// read that bypasses `status = 'approved'`.
+
+/** Staff file a report. PIN-gated; returns the new id, or null if refused. */
+async function submitIncidentReport(pin, r) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('submit_incident_report', {
+        p_pin:           parseInt(pin, 10),
+        p_student_id:    r.studentId,
+        p_incident_type: r.incidentType,
+        p_description:   r.description,
+        p_action_taken:  r.actionTaken,
+        p_location:      r.location || null,
+        p_body_area:     r.bodyArea || null,
+        p_occurred_at:   r.occurredAt || null,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** Admin: the review queue. Defaults to what is waiting on the director. */
+async function fetchIncidentReports({ status = 'submitted', limit = 200 } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    let q = sbClient
+        .from('incident_reports')
+        .select('*, students(child_name, family_id)')
+        .order('occurred_at', { ascending: false })
+        .limit(limit);
+    if (status) q = q.eq('status', status);
+    const { data, error } = await q;
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/** Admin: approve or return one. Approval stamps the reviewer server-side. */
+async function reviewIncidentReport(id, status, notes = '') {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('review_incident_report', {
+        p_id: id, p_status: status, p_notes: notes,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/**
+ * A parent's approved incident reports. RLS enforces both halves — own child,
+ * and approved — so this query carries neither filter.
+ */
+async function fetchMyIncidentReports(studentId = null) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    let q = sbClient
+        .from('incident_reports')
+        .select('id, student_id, care_date, occurred_at, incident_type, location, body_area, description, action_taken, reported_by_name, reviewed_at')
+        .order('occurred_at', { ascending: false });
+    if (studentId) q = q.eq('student_id', studentId);
+    const { data, error } = await q;
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
 /** Published, unexpired announcements. The policy filters drafts, not this. */
 async function fetchAnnouncements() {
     if (!sbClient) throw new Error('Supabase not configured.');

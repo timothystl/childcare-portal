@@ -69,6 +69,57 @@
                  phone rather than the photo library. -->
             <input type="file" id="slPhotoInput" accept="image/*" capture="environment" class="hidden">
             <button type="button" id="slPhotoBtn" class="sl-photo-btn">📷 Add a photo</button>
+            <button type="button" id="slIncidentBtn" class="sl-incident-btn">🩹 Report an incident</button>
+        </div>
+    </div>
+
+    <!-- Incident report -->
+    <div id="slIncidentSheet" class="sl-sheet hidden">
+        <div class="sl-sheet-inner">
+            <div class="sl-sheet-head">
+                <span class="sl-sheet-name">Incident — <span id="slIncidentChild"></span></span>
+                <button type="button" id="slIncidentCancel" class="sl-link-btn">Cancel</button>
+            </div>
+
+            <!-- Staff are told plainly that filing is not telling. Someone who
+                 believes the parent has already been notified may not go and
+                 find them at pickup, and that conversation matters more than
+                 the record. -->
+            <div class="sl-inc-notice">
+                This goes to the director for review. <strong>The family is not
+                notified until she approves it</strong> — still speak to them at pickup.
+            </div>
+
+            <form id="slIncidentForm">
+                <label class="sl-field">
+                    <span>What kind</span>
+                    <select id="slIncType">
+                        <option value="injury">Injury</option>
+                        <option value="illness">Illness</option>
+                        <option value="behavior">Behaviour</option>
+                        <option value="other">Other</option>
+                    </select>
+                </label>
+                <label class="sl-field">
+                    <span>Where it happened</span>
+                    <input type="text" id="slIncLocation" placeholder="Playground, Owl Room…">
+                </label>
+                <label class="sl-field">
+                    <span>Part of the body <span class="sl-optional">(if an injury)</span></span>
+                    <input type="text" id="slIncBodyArea" placeholder="Left knee, forehead…">
+                </label>
+                <label class="sl-field">
+                    <span>What happened</span>
+                    <textarea id="slIncDescription" rows="4" required
+                              placeholder="Plain description of what you saw."></textarea>
+                </label>
+                <label class="sl-field">
+                    <span>What you did</span>
+                    <textarea id="slIncAction" rows="3" required
+                              placeholder="First aid given, who was told, how the child was afterwards."></textarea>
+                </label>
+                <button type="submit" id="slIncSubmitBtn" class="btn-primary sl-btn">Send to director</button>
+            </form>
         </div>
     </div>
 

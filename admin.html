@@ -265,6 +265,15 @@
         <div class="tab-pane hidden" id="tab-families">
 
             <!-- Family Directory -->
+            <!-- Incident reports — director review. Approval is what tells the
+                 family, so anything sitting here is a parent who has not been
+                 told yet. Registered in AP_TOOLS as `incidents`; without that
+                 entry this section would be unreachable. -->
+            <section class="admin-section collapsible-section" id="incidentsSection">
+                <h2>🩹 Incident Reports</h2>
+                <div id="incidentsBody"></div>
+            </section>
+
             <section class="admin-section collapsible-section" id="familiesSection">
                 <h2>👨‍👩‍👧 Family Directory</h2>
                 <p class="section-desc">Browse and manage the family roster used for parent look-up. You can force-assign a child to a specific room or set per-child discounts inline.</p>
@@ -2523,6 +2532,8 @@
     navigator.serviceWorker.register('/sw.js');
   }
 </script>
+    <!-- Filled by incidentPrint(); visible only while body.printing-incident. -->
+    <div id="incidentPrintHost" aria-hidden="true"></div>
     <script src="dist/supabase.min.js"></script>
     <script src="dist/error-monitor.min.js"></script>
     <script src="dist/admin.min.js"></script>
