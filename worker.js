@@ -361,6 +361,13 @@ export default {
       const bearer = request.headers.get('Authorization');
       if (!bearer) return new Response('Unauthorized', { status: 401 });
 
+      // Scheduled senders (the end-of-day summary, the photo notification) run
+      // as the service role and have no admin user to speak for. Same escape
+      // hatch /send-staff-push already uses. The key never reaches a browser.
+      const rawBearer = bearer.replace(/^Bearer\s+/i, '');
+      const isService = env.SUPABASE_SERVICE_ROLE_KEY && rawBearer === env.SUPABASE_SERVICE_ROLE_KEY;
+
+      if (!isService) {
       const adminRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/is_admin`, {
         method: 'POST',
         headers: {
@@ -373,6 +380,7 @@ export default {
       if (!adminRes.ok) return new Response('Unauthorized', { status: 401 });
       const isAdmin = await adminRes.json().catch(() => false);
       if (isAdmin !== true) return new Response('Forbidden', { status: 403 });
+      }
 
       const { family_id, parent_email, broadcast, title, body: msgBody } = await request.json().catch(() => ({}));
       if (!title) return new Response('Missing title', { status: 400 });
