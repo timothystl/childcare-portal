@@ -379,7 +379,12 @@ clean.
 - Meal amount scale: `some` / `most` / `all` — is a "didn't touch it" option
   wanted?
 - Confirm the director is in `admin_roles` as **full**.
-### Phase 0 verification (2026-08-11) — all passed
+### Phase 0 verification (2026-08-11) — historical, superseded by Option B
+
+> These checks were run against the Phase 0 hand-signed-token design. The
+> objects they verify (`parent_portal`, `parent_refresh_tokens`) no longer
+> exist. Kept for the record; the live verification is the Option B section
+> below.
 
 - `parent-session` deployed, `PARENT_JWT_SECRET` set. A login with a bogus email
   returned **401 `not_found`**, not 500 `server_misconfigured` — so the secret is
@@ -410,19 +415,28 @@ as the first step of Phase 1, before any table policy is written against it.
   function secrets — but see the DO-NOT-REVOKE box below, which is about the
   *underlying* legacy secret and still stands.
 
-**Not yet exercised: an end-to-end login.** The build sandbox has no network path
-to `*.supabase.co`, so the round trip could not be run from here. The one step
-with genuine runtime uncertainty is the OTP redemption — the function tries
-`magiclink` then `email` rather than assuming which type GoTrue answers to, so a
-wrong guess degrades to a retry instead of a failed login, but it has not been
-observed succeeding.
+**✅ Exercised end to end 2026-08-12 — all green.** A real family signed in at
+`portal.html?check=1` on the live site. The session came back as a genuine
+Supabase token (`role: authenticated`), `my_parent_context()` recognised the
+family, and every admin table returned nothing. The OTP redemption — the one
+step with real runtime uncertainty, since which type a magic-link hash answers
+to has moved between GoTrue releases — works.
 
-**How to settle it: `portal.html?check=1`.** Sign in as a real family. The page
-runs the §3.1 acceptance test as the actual parent role — token shape, whether
-`my_parent_context()` recognises the session, and one read against each admin
-table — and prints a green/red list. Without `?check=1` a parent sees only the
-ordinary signed-in card, never the diagnostic panel. **Do this before any Phase 1
-table policy is written against this identity.**
+**Phase 0 is therefore closed, and the §3.1 acceptance test has passed against
+the real identity.** Phase 1 table policies can be written against
+`parent_family_ids()`.
+
+⚠️ **The first run was NOT green, and that is the point of the panel.** It found
+three tables answering a parent — `staff`, `staff_hours`, `staff_clock_events` —
+because their policies were written `TO public`, which includes `authenticated`,
+not just anon. Sweeping the catalog for the same shape found four more
+(`church_staff`, `church_staff_period_entries`, `payroll_periods`,
+`staff_pto_entries`) that were open to the public anon key outright. See
+`close_to_public_policy_leaks_APPLIED.sql`.
+
+**Re-run this panel after every migration that adds or changes a policy.**
+Reasoning about RLS from the catalog missed all seven; asking the database as
+the actual role found them in one page load.
 
 ## ⚠️ JWT signing — settled, with an expiry date
 
