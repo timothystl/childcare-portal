@@ -1842,9 +1842,15 @@ function downloadIcal(sortedDates, parentName) {
 
     populateSiblingRoomSelect(document.getElementById('wlSiblingRoom'));
 
-    if (!openBtn) return; // guard
+    // Guard on the MODAL, not on one particular opener. This used to read
+    // `if (!openBtn) return`, and #waitlistBtn does not exist on calendar.html —
+    // so the whole setup bailed on the only page that has the form, taking
+    // #waitlistCalloutBtn down with it. The modal and its form were fully built
+    // and completely unreachable: the FAQ told parents to "join the online
+    // waitlist through the care day portal", and the portal had no way in.
+    if (!modal) return;
 
-    openBtn.addEventListener('click', () => { modal.style.display = 'flex'; });
+    openBtn?.addEventListener('click', () => { modal.style.display = 'flex'; });
     document.getElementById('waitlistCalloutBtn')?.addEventListener('click', () => { modal.style.display = 'flex'; });
     closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
     modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
