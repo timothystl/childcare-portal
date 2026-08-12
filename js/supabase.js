@@ -3166,16 +3166,19 @@ async function markInvoicesSent(rows) {
  * what was actually sent.
  *
  * @param {Array<number>} invoiceIds
- * @param {{resend?: boolean}} [opts] - resend re-sends an already-sent bill
+ * @param {{resend?: boolean, test?: boolean}} [opts] - `resend` re-sends an
+ *   already-sent bill; `test` sends one sample to the signed-in admin's own
+ *   address (taken server-side from the session, never from here) and
+ *   stamps nothing.
  * @returns {Promise<{sent: Array<{id,to}>, skipped: Array<{id,reason}>}>}
  */
-async function emailInvoices(invoiceIds, { resend = false } = {}) {
+async function emailInvoices(invoiceIds, { resend = false, test = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: { session } } = await sbClient.auth.getSession();
     const token = session?.access_token;
     if (!token) throw new Error('Not authenticated.');
     const { data, error } = await sbClient.functions.invoke('send-invoice', {
-        body: { invoiceIds, resend },
+        body: { invoiceIds, resend, test },
         headers: { Authorization: `Bearer ${token}` },
     });
     if (error) {
