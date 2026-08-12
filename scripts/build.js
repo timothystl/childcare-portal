@@ -101,6 +101,16 @@ const ENTRIES = [
         },
     },
     {
+        // Staff phone app — quick log, room roster.
+        outfile: 'dist/staff.min.js',
+        stdin: {
+            contents: [
+                'js/staff/staff-log.js',
+            ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         // Parent portal. One file today (sign-in); Phase 1 adds the Today feed,
         // day report and photo grid as further js/portal/ modules concatenated
         // here in load order, the way the admin bundle does it.
@@ -239,6 +249,19 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/waitlist-status.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'staff.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/error-monitor\.js"><\/script>\n/,
+            /<script src="js\/staff\/staff-log\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/error-monitor.min.js"></script>`,
+            `    <script src="dist/staff.min.js"></script>`,
         ],
     },
     {
