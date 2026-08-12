@@ -2790,7 +2790,30 @@ async function saveInvoiceNote() {
     }
 }
 
+/**
+ * Sends one sample invoice to the signed-in admin. The edge function takes
+ * the recipient from the session, not from here, so this cannot reach a
+ * family — and it stamps nothing, so no bill is marked issued.
+ */
+async function sendTestInvoice() {
+    const btn = document.getElementById('invTestBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    try {
+        // Pass a drafted invoice when there is one so the preview shows real
+        // figures rather than a placeholder.
+        const drafted = _invRows.find(r => r.invoice)?.invoice?.id;
+        const res = await emailInvoices(drafted ? [drafted] : [], { test: true });
+        showAdminNote(`Test invoice sent to ${res?.to || 'your address'}` +
+                      (res?.usedRealInvoice ? ' — using this month\u2019s real figures.' : ' — using sample figures, nothing is drafted yet.'));
+    } catch (err) {
+        alert('Could not send the test: ' + (err.message || err));
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '✉️ Send me a test'; }
+    }
+}
+
 function setupInvoices() {
+    document.getElementById('invTestBtn')?.addEventListener('click', sendTestInvoice);
     document.getElementById('invNoteSaveBtn')?.addEventListener('click', saveInvoiceNote);
     document.getElementById('invMonth')?.addEventListener('change', e => {
         _invMonth = e.target.value;

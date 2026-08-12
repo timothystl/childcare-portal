@@ -19,6 +19,10 @@
 //      the message, so the record cannot claim a send that did not happen.
 //   4. The batch is capped, and an already-sent invoice is skipped unless
 //      `resend: true` is passed — re-running the button cannot double-send.
+//   5. `test: true` sends one sample to the CALLER'S OWN address, taken from
+//      the verified JWT and never from the body, so the test affordance
+//      cannot become the relay that rule 1 exists to prevent. A test does
+//      not stamp anything and is clearly marked in the subject and body.
 //
 // Deploy:  supabase functions deploy send-invoice
 // Secrets: RESEND_API_KEY, RESEND_FROM_EMAIL, RESEND_REPLY_TO
@@ -99,6 +103,7 @@ function monthLabel(month: string): string {
 function buildHtml(o: {
     parentName: string; month: string; base: number; discount: number;
     adjustment: number; adjustmentNote: string; total: number; note: string;
+    isTest?: boolean;
 }): string {
     const line = (label: string, value: string, strong = false) => `
         <tr>
@@ -117,6 +122,12 @@ function buildHtml(o: {
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F0E4;padding:32px 16px;">
     <tr><td align="center">
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(1,41,74,.08);">
+
+        ${o.isTest ? `<tr>
+          <td style="background:#01294A;padding:12px 32px;text-align:center;">
+            <p style="margin:0;color:#F5B731;font-size:13px;font-weight:800;letter-spacing:.04em;">TEST PREVIEW — this bill was not sent to any family</p>
+          </td>
+        </tr>` : ''}
 
         <tr>
           <td style="background:#C9E6DC;padding:26px 32px;border-bottom:3px solid #F5B731;text-align:center;">
@@ -227,8 +238,9 @@ serve(async (req) => {
             ? body.invoiceIds.map((n: unknown) => Number(n)).filter((n: number) => Number.isFinite(n))
             : [];
         const resend = body?.resend === true;
+        const isTest = body?.test === true;
 
-        if (!ids.length)          return json({ error: "No invoices given." }, 400, ch);
+        if (!ids.length && !isTest) return json({ error: "No invoices given." }, 400, ch);
         if (ids.length > MAX_BATCH) return json({ error: `Too many invoices in one call (max ${MAX_BATCH}).` }, 400, ch);
 
         const apiKey    = Deno.env.get("RESEND_API_KEY");
@@ -241,6 +253,66 @@ serve(async (req) => {
         const { data: noteRow } = await admin
             .from("settings").select("value").eq("key", "invoice_email_note").maybeSingle();
         const note = readNote(noteRow?.value);
+
+        // ── 3b. Test send: one sample, to the caller, stamping nothing ──
+        // The recipient is the address on the verified session, never the
+        // request body, so this cannot be aimed anywhere else.
+        if (isTest) {
+            if (!looksLikeEmail(callerEmail)) {
+                return json({ error: "Your admin account has no usable email address." }, 400, ch);
+            }
+            // Prefer a real drafted invoice so the preview matches what
+            // families will get; fall back to a representative sample when
+            // nothing is drafted yet.
+            const { data: sampleRows } = ids.length
+                ? await admin.from("billing_invoices")
+                    .select("base_amount, discount_amount, adjustment_amount, adjustment_note, final_amount, billing_cycles(month)")
+                    .in("id", ids).limit(1)
+                : await admin.from("billing_invoices")
+                    .select("base_amount, discount_amount, adjustment_amount, adjustment_note, final_amount, billing_cycles(month)")
+                    .order("id", { ascending: false }).limit(1);
+            const sample = sampleRows?.[0];
+
+            const now = new Date();
+            const html = buildHtml({
+                parentName:     "there",
+                month:          (sample as any)?.billing_cycles?.month
+                                  || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+                base:           Number(sample?.base_amount)       || 320,
+                discount:       Number(sample?.discount_amount)   || 0,
+                adjustment:     Number(sample?.adjustment_amount) || 0,
+                adjustmentNote: sample?.adjustment_note || "",
+                total:          Number(sample?.final_amount)      || 320,
+                note,
+                isTest:         true,
+            });
+
+            const res = await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    from:     fromEmail,
+                    to:       [callerEmail],
+                    reply_to: replyTo,
+                    subject:  "[TEST] Your invoice — Timothy Lutheran MDO",
+                    html,
+                }),
+            });
+            if (!res.ok) {
+                let detail = String(res.status);
+                try { detail = JSON.stringify(await res.json()); } catch { /* keep the status */ }
+                return json({ error: `Resend rejected the test: ${detail}` }, 502, ch);
+            }
+            await admin.from("admin_audit_log").insert({
+                admin_email: callerEmail, action: "email_test", entity: "billing_invoice",
+                details: { to: callerEmail, usedRealInvoice: !!sample },
+            }).then(() => {}, (e: unknown) => console.error("send-invoice: audit write failed", e));
+
+            return json({
+                success: true, test: true, to: callerEmail, usedRealInvoice: !!sample,
+                sent: [], skipped: [],
+            }, 200, ch);
+        }
 
         // ── 4. Everything else is read server-side ───────────────
         const { data: invoices, error: invErr } = await admin
