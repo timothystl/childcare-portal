@@ -117,6 +117,9 @@ const ENTRIES = [
         outfile: 'dist/portal.min.js',
         stdin: {
             contents: [
+                // Load order matters: portal-auth calls ptLoadToday() once a
+                // session exists, so the feed's functions must already exist.
+                'js/portal/portal-today.js',
                 'js/portal/portal-auth.js',
             ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,

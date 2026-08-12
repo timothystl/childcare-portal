@@ -2095,6 +2095,31 @@ async function fetchChildDay(studentId, careDate) {
     return data || [];
 }
 
+/**
+ * The signed-in parent's children. RLS scopes this to their family, so there is
+ * no filter here on purpose — the database owns the rule, and a filter in JS
+ * would imply otherwise to whoever reads it next.
+ */
+async function fetchMyChildren() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('students')
+        .select('id, child_name, child_dob, allergies, care_notes, photo_release, room_override')
+        .order('child_name');
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/** Flips one child's photo consent. Returns false if the child isn't theirs. */
+async function setPhotoRelease(studentId, released) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('set_photo_release', {
+        p_student_id: studentId, p_released: !!released,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
 /** Published, unexpired announcements. The policy filters drafts, not this. */
 async function fetchAnnouncements() {
     if (!sbClient) throw new Error('Supabase not configured.');

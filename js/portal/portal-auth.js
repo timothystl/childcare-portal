@@ -133,8 +133,15 @@ async function portalShowSignedIn() {
     const sub = pEl('portalGreetingSub');
     if (sub) {
         sub.textContent = portalContext
-            ? 'You are signed in. The rest of the portal is being built — for now, your schedule lives on the pages below.'
+            ? "Here's how the day is going."
             : 'You are signed in, but the database did not recognise this session as a parent. Contact the office.';
+    }
+
+    // The feed is the point of the page. It loads after the greeting so the
+    // parent sees who they are signed in as while it fetches, rather than a
+    // blank card.
+    if (portalContext && typeof ptLoadToday === 'function') {
+        await ptLoadToday();
     }
 
     if (new URLSearchParams(location.search).get('check') === '1') {
