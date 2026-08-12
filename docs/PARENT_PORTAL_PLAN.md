@@ -355,7 +355,15 @@ clean.
 - Meal amount scale: `some` / `most` / `all` — is a "didn't touch it" option
   wanted?
 - Confirm the director is in `admin_roles` as **full**.
-- Supabase JWT signing mode (legacy shared secret vs. asymmetric keys).
+- ~~Supabase JWT signing mode~~ — **settled 2026-08-11: legacy shared HS256
+  secret.** The anon key's header is `{"alg":"HS256"}`, there is no `auth.jwks`
+  table, and a modern `sb_publishable_…` key exists alongside the legacy one.
+  Parent tokens are HS256-signed with the project JWT secret.
+- ⚠️ **`PARENT_JWT_SECRET` must be set before the portal can issue a session.**
+  The secret is not readable from SQL or the management API — copy it from
+  Dashboard → Settings → API → JWT Secret and set it:
+  `supabase secrets set PARENT_JWT_SECRET="…"`. Until then `parent-session`
+  returns 500 rather than issuing a token nothing can verify.
 
 ---
 
