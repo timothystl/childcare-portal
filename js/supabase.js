@@ -2120,6 +2120,86 @@ async function setPhotoRelease(studentId, released) {
     return data === true;
 }
 
+/**
+ * Compresses an image in the browser before it ever leaves the phone.
+ * 121 families on classroom wifi: a 4 MB camera JPEG per photo would make
+ * posting slow enough that staff stop doing it, and the plan says photos may be
+ * compressed automatically. Long edge 1280px, JPEG q0.72 — plenty for a phone
+ * screen, typically 150-350 KB.
+ */
+function compressImageToDataUrl(file, maxEdge = 1280, quality = 0.72) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+            const w = Math.round(img.width * scale);
+            const h = Math.round(img.height * scale);
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            c.getContext('2d').drawImage(img, 0, 0, w, h);
+            // Always JPEG: the bucket accepts jpeg and webp, and Safari's webp
+            // encoding support has been inconsistent enough that picking it
+            // would fail on exactly the phones most staff carry.
+            resolve(c.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that image.')); };
+        img.src = url;
+    });
+}
+
+/**
+ * Posts a photo to the day feed. The PIN is verified server-side; the storage
+ * path, expiry and care date are all decided by the edge function, never here.
+ */
+async function uploadChildPhoto(pin, { studentIds, dataUrl, caption = '', kind = 'daily' }) {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/upload-child-photo`, {
+        method:  'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            apikey:         SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ pin: String(pin), student_ids: studentIds, image: dataUrl, caption, kind }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || data.error) {
+        throw new Error(data?.error || 'upload_failed');
+    }
+    return data;
+}
+
+/**
+ * A child's photos for a date, as displayable URLs.
+ *
+ * The bucket is PRIVATE, so this signs each object. Signing goes through RLS —
+ * a parent can only sign an object the storage policy already lets them read,
+ * which is the same consent rule as the table. If a photo contains a child who
+ * has opted out, both the row and the bytes are unreachable.
+ */
+async function fetchChildPhotos(studentId, careDate, ttlSeconds = 3600) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: rows, error } = await sbClient
+        .from('child_photos')
+        .select('id, storage_path, caption, care_date, kind, child_photo_students!inner(student_id)')
+        .eq('care_date', careDate)
+        .eq('child_photo_students.student_id', studentId)
+        .order('created_at', { ascending: true });
+    if (error) throw friendlyError(error);
+    if (!rows || !rows.length) return [];
+
+    const { data: signed, error: sErr } = await sbClient
+        .storage.from('child-photos')
+        .createSignedUrls(rows.map(r => r.storage_path), ttlSeconds);
+    if (sErr) throw friendlyError(sErr);
+
+    const urlByPath = new Map((signed || []).map(s => [s.path, s.signedUrl]));
+    return rows
+        .map(r => ({ ...r, url: urlByPath.get(r.storage_path) }))
+        .filter(r => r.url);   // an unsigned row is one RLS refused — drop it
+}
+
 /** Published, unexpired announcements. The policy filters drafts, not this. */
 async function fetchAnnouncements() {
     if (!sbClient) throw new Error('Supabase not configured.');

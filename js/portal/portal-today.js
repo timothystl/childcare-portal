@@ -129,6 +129,35 @@ async function ptSelectChild(childId) {
         console.warn('day feed:', e);
         ptEl('ptTimeline').innerHTML = '<li class="pt-loading">Could not load today.</li>';
     }
+
+    ptRenderPhotos(childId);
+}
+
+// ── Photos ──────────────────────────────────────────────────
+// Loaded separately from the timeline so a slow or failed photo fetch never
+// costs a parent the day's log, which is the part that actually matters.
+async function ptRenderPhotos(childId) {
+    const wrap = ptEl('ptPhotos');
+    if (!wrap) return;
+    wrap.classList.add('hidden');
+    wrap.innerHTML = '';
+    try {
+        const photos = await fetchChildPhotos(childId, ptDate);
+        if (!photos.length) return;
+        wrap.classList.remove('hidden');
+        wrap.innerHTML = `
+            <div class="pt-photos-head">
+                <span>Today's photos</span>
+                <span class="pt-photos-note">Saved for about a week — download any you'd like to keep.</span>
+            </div>
+            <div class="pt-photo-strip">
+                ${photos.map(p => `<a class="pt-photo" href="${ptEsc(p.url)}" target="_blank" rel="noopener"
+                       download><img src="${ptEsc(p.url)}" alt="${ptEsc(p.caption || 'Photo from today')}" loading="lazy"></a>`).join('')}
+            </div>`;
+    } catch (e) {
+        // Silent: a parent who cannot load photos should still see the day.
+        console.warn('photos:', e);
+    }
 }
 
 async function ptRenderAnnouncements() {

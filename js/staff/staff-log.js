@@ -237,12 +237,56 @@ function slOpenSheet(studentId) {
         b.addEventListener('click', () => slCommit('bottle', { oz: Number(b.dataset.bottle) }, b));
     });
 
+    // The photo control reflects consent rather than failing after the fact.
+    const photoBtn = slEl('slPhotoBtn');
+    if (photoBtn) {
+        const released = child.photo_release === true;
+        photoBtn.disabled = !released;
+        photoBtn.textContent = released ? '📷 Add a photo' : 'Not photo-released';
+    }
+
     slEl('slSheet').classList.remove('hidden');
 }
 
 function slCloseSheet() {
     slEl('slSheet').classList.add('hidden');
     slOpenChild = null;
+}
+
+// ── Photos ──────────────────────────────────────────────────
+// Deliberately NOT part of the offline queue. A queued photo would mean holding
+// megabytes of a child's image in localStorage on a personal phone until the
+// signal comes back — the storage limit would break it and the privacy cost is
+// not worth it. Photos upload now or tell you they didn't.
+
+async function slPhotoPicked(file) {
+    if (!file || !slOpenChild) return;
+
+    // Photo release is per child and staff must not have to remember who opted
+    // out. A photo of a child who has not been released is simply not offered.
+    if (slOpenChild.photo_release !== true) {
+        slToast(`${slOpenChild.child_name} is not photo-released.`, 'err');
+        return;
+    }
+
+    const btn = slEl('slPhotoBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    try {
+        const dataUrl = await compressImageToDataUrl(file);
+        await uploadChildPhoto(slPin, {
+            studentIds: [slOpenChild.student_id],
+            dataUrl,
+            kind: 'daily',
+        });
+        slToast(`Photo posted for ${slOpenChild.child_name}.`, 'ok');
+    } catch (e) {
+        console.warn('photo upload:', e);
+        slToast('Photo did not send. Try again.', 'err');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '📷 Add a photo'; }
+        const input = slEl('slPhotoInput');
+        if (input) input.value = '';   // so the same file can be picked again
+    }
 }
 
 // ── Optimistic commit + offline queue ───────────────────────
@@ -343,6 +387,8 @@ document.addEventListener('DOMContentLoaded', () => {
     slEl('slSheet')?.addEventListener('click', e => { if (e.target.id === 'slSheet') slCloseSheet(); });
     slEl('slRefreshBtn')?.addEventListener('click', slLoadRoster);
     slEl('slPostBtn')?.addEventListener('click', slFlushQueue);
+    slEl('slPhotoBtn')?.addEventListener('click', () => slEl('slPhotoInput')?.click());
+    slEl('slPhotoInput')?.addEventListener('change', e => slPhotoPicked(e.target.files?.[0]));
 
     window.addEventListener('online', slFlushQueue);
 

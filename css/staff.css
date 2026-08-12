@@ -204,3 +204,14 @@
     box-shadow: 0 4px 16px rgba(1, 41, 74, .35);
 }
 .sl-toast-err { background: var(--tang-dark); }
+
+/* Photo control — reflects consent rather than failing after the tap. */
+.sl-photo-btn {
+    width: 100%; margin-top: 6px; min-height: 48px;
+    background: var(--sun); color: var(--navy); border: none;
+    border-radius: 12px; padding: 14px; font-size: 1em; font-weight: 800;
+    font-family: inherit; cursor: pointer;
+}
+.sl-photo-btn[disabled] {
+    background: #f0f3f6; color: #96a0aa; cursor: default;
+}
