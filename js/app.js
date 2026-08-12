@@ -1585,8 +1585,6 @@ async function handleSubmit(e) {
         ].sort((a, b) => a.date.localeCompare(b.date) || a.childName.localeCompare(b.childName));
 
         let receiptHtml = '';
-        let emailDatesWithAmounts = [];
-        let emailGrandTotal = 0;
         if (sortedDates.length) {
             const weeklyReceiptRows = weeklyRows.map(w => {
                 const label      = w.dayType === 'half' ? 'Half Day (weekly rate)' : 'Full Day (weekly rate)';
@@ -1606,18 +1604,6 @@ async function handleSubmit(e) {
                     <td class="receipt-amount">$${r.amount.toFixed(2)}</td>
                 </tr>`;
             }).join('');
-
-            emailGrandTotal = grandTotal;
-            emailDatesWithAmounts = [
-                ...weeklyRows.map(w => ({
-                    date: w.dates[0], dayType: w.dayType, amount: w.weeklyAmount, childName: w.child.name,
-                    label: `Weekly rate (${friendlyDate(w.dates[0])} – ${friendlyDate(w.dates[w.dates.length - 1])})`,
-                })),
-                ...dailyRows.map(r => ({
-                    date: r.date, dayType: r.dayType, amount: r.amount, childName: r.child.name,
-                    multiDiscount: r.multiDiscount || 0,
-                })),
-            ];
 
             // Create billing invoice — non-blocking, never delays the confirmation.
             // FS5: no amount is sent. The RPC recomputes the family's month from
@@ -1693,14 +1679,8 @@ async function handleSubmit(e) {
         (async () => {
             const statusEl = document.getElementById('emailScheduleStatus');
             try {
-                await sendScheduleEmail({
-                    parentName,
-                    parentEmail,
-                    monthLabel: win.targetLabel,
-                    childNames: results.map(r => r.child.name),
-                    dates: emailDatesWithAmounts,
-                    grandTotal: emailGrandTotal,
-                });
+                // T1: ids only — the server builds the whole email.
+                await sendScheduleEmail(results.map(r => r.reg?.id).filter(Boolean));
                 if (statusEl) statusEl.textContent = `✓ A confirmation email was sent to ${parentEmail}.`;
             } catch (err) {
                 if (statusEl) {

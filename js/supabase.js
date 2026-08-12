@@ -2618,20 +2618,22 @@ async function saveWaitlistNotifySettings(settings) {
 }
 
 /**
- * Sends the registration confirmation email to a parent via Edge Function.
- * @param {Object}   params
- * @param {string}   params.parentName
- * @param {string}   params.parentEmail
- * @param {string}   params.monthLabel   - e.g. 'April 2026'
- * @param {string[]} params.childNames
- * @param {Array}    params.dates        - Formatted date objects for the email body
- * @param {number}   params.grandTotal   - Total billed amount in dollars
- * @returns {Promise<Object>} Edge function response data
+ * Sends the registration confirmation email.
+ *
+ * T1: the body carries ONLY the registration ids. Recipient, names, dates and
+ * every amount are read server-side by registration_email_payload(). The old
+ * signature took parentEmail, the date list and grandTotal from here, which
+ * meant anyone could send a fake confirmation with any figures to any
+ * registered family — the function had no auth check at all.
+ *
+ * @param {number[]} registrationIds - ids just returned by submitRegistration
  */
-async function sendScheduleEmail({ parentName, parentEmail, monthLabel, childNames, dates, grandTotal }) {
+async function sendScheduleEmail(registrationIds) {
     if (!sbClient) throw new Error('Supabase not configured.');
+    const ids = (registrationIds || []).map(Number).filter(Number.isInteger);
+    if (!ids.length) throw new Error('No registration ids to confirm.');
     const { data, error } = await sbClient.functions.invoke('send-schedule-confirmation', {
-        body: { parentName, parentEmail, monthLabel, childNames, dates, grandTotal },
+        body: { registrationIds: ids },
         headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
     });
     if (error) throw error;
