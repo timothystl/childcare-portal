@@ -2552,14 +2552,25 @@ async function callAdminUsers(action, payload = {}) {
 //   CREATE POLICY "Public insert" ON waitlist_applications FOR INSERT WITH CHECK (true);
 //   CREATE POLICY "Auth all"     ON waitlist_applications FOR ALL  USING (auth.role() = 'authenticated');
 
+// Goes through the submit_waitlist_application definer RPC, not a direct
+// insert. The direct insert was BROKEN and silently losing applications:
+// .select() becomes RETURNING, Postgres applies SELECT policies to returned
+// rows, anon has no SELECT policy on this table, so the whole statement aborted
+// and nothing was written. Verified as the anon role 2026-08-12 — the insert
+// succeeds without RETURNING and fails with it.
+//
+// The fix is deliberately not "give anon a SELECT policy": that would expose
+// all 37 columns of every family's waitlist entry. The RPC returns only the id
+// and applied_at that the confirmation screen needs, and takes an explicit
+// column allow-list so a submitter cannot set status, offer or tour fields.
 async function submitWaitlistApplication(data) {
     if (!sbClient) throw new Error('Supabase is not configured yet.');
-    const { data: result, error } = await sbClient
-        .from('waitlist_applications')
-        .insert(data)
-        .select()
-        .single();
-    if (error) throw error;
+    const { data: rows, error } = await sbClient
+        .rpc('submit_waitlist_application', { p_payload: data });
+    if (error) throw friendlyError(error);
+    // The RPC RETURNS TABLE, so supabase-js hands back an array of one row.
+    const result = Array.isArray(rows) ? rows[0] : rows;
+    if (!result?.id) throw new Error('The application could not be saved. Please call the office.');
     return result;
 }
 

@@ -217,11 +217,23 @@ have used an identical query shape and be invisible.
   could **INSERT closures and settings**. Revoked in `phase1_revoke_unused_anon_verbs.sql`.
   `waitlist_applications` deliberately untouched — see below.
 
-**Needs a human / live site (can't be settled from code or catalog):**
-- `submitWaitlistApplication()` chains `.insert().select()`, but anon has **no SELECT
-  policy** on `waitlist_applications` and RLS applies SELECT policies to `RETURNING`.
-  Either the public waitlist form is failing today or something else carries it. Last
-  application is 2026-07-11. **Submit a test application through the public form to settle.**
+**SETTLED 2026-08-12 — the public waitlist form was broken, and is now fixed.**
+- `submitWaitlistApplication()` chained `.insert().select()`, anon had **no SELECT
+  policy** on `waitlist_applications`, and RLS applies SELECT policies to `RETURNING`.
+  Proven as the `anon` role in a rolled-back transaction: the insert **succeeds without
+  `RETURNING` and fails with it** (`42501`), so the whole statement aborted and nothing
+  was written. A parent filled in the form, saw an error, and no application was saved.
+  The month-long gap (last application 2026-07-11) was the symptom.
+- Fixed by `fix_public_waitlist_submit.sql` (**applied 2026-08-12**): a
+  `submit_waitlist_application(jsonb)` SECURITY DEFINER RPC returning only `id` and
+  `applied_at`. **Not** fixed with an anon SELECT policy — that would have exposed all
+  37 columns of every family's entry (the R27 class of mistake). The RPC takes an
+  explicit column allow-list, verified by injection test: a payload carrying
+  `status:'offered'`, `paperwork_received:true`, `deposit_paid:true` and a backdated
+  `applied_at` stored `pending / false / false / now()`.
+- ⚠️ **Any anon `.insert().select()` is suspect for the same reason.** RLS applies
+  SELECT policies to `RETURNING`, so an insert that works alone fails the moment a
+  `.select()` is chained. Check before adding one.
 
 **Fixed and verified in production 2026-08-11:**
 - **R1 / R4 — `families` and `students` closed.** `r1r4_phase1_families_students.sql`
