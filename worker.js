@@ -200,18 +200,55 @@ export default {
     }
 
     // ── POST /push-subscribe — save a push subscription for a family ────────
+    // Two ways in, because two logins exist:
+    //
+    //   1. A real Supabase session (the parent portal, Option B). The family is
+    //      DERIVED from the token via parent_accounts — the caller does not get
+    //      to say which family they are subscribing, which the old path allowed
+    //      as long as the id matched the token.
+    //   2. The legacy HMAC family token (calendar.html). Kept because that page
+    //      still issues it; remove this branch when calendar.html moves to the
+    //      portal session.
     if (url.pathname === '/push-subscribe' && request.method === 'POST') {
-      const { family_id, endpoint, p256dh, auth } = await request.json().catch(() => ({}));
-      if (!family_id || !endpoint || !p256dh || !auth) {
+      const body = await request.json().catch(() => ({}));
+      const { endpoint, p256dh, auth } = body;
+      if (!endpoint || !p256dh || !auth) {
         return new Response('Missing fields', { status: 400 });
       }
 
-      // Require a valid HMAC session token to prevent unauthenticated registrations.
       const bearer = (request.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
-      const tokenOk = bearer
-        ? await verifyFamilyToken(bearer, env.FAMILY_SESSION_SECRET ?? '', family_id)
-        : false;
-      if (!tokenOk) return new Response('Unauthorized', { status: 401 });
+      if (!bearer) return new Response('Unauthorized', { status: 401 });
+
+      let family_id = null;
+
+      // Ask Supabase to validate the token rather than verifying it here. The
+      // project signs with asymmetric keys now, so local verification would mean
+      // fetching and caching a JWKS — and getting that subtly wrong fails open.
+      const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        headers: { 'apikey': env.SUPABASE_ANON_KEY ?? '', 'Authorization': `Bearer ${bearer}` },
+      });
+      if (userRes.ok) {
+        const user = await userRes.json().catch(() => null);
+        if (user?.id) {
+          const paRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/parent_accounts?user_id=eq.${encodeURIComponent(user.id)}&select=family_id&limit=1`,
+            { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+          );
+          if (paRes.ok) {
+            const rows = await paRes.json().catch(() => []);
+            if (rows.length) family_id = rows[0].family_id;
+          }
+        }
+      }
+
+      // Legacy path: the caller supplies the family id and the HMAC proves it.
+      if (!family_id && body.family_id) {
+        const ok = await verifyFamilyToken(bearer, env.FAMILY_SESSION_SECRET ?? '', body.family_id);
+        if (ok) family_id = body.family_id;
+      }
+
+      if (!family_id) return new Response('Unauthorized', { status: 401 });
+
       const res = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions`, {
         method:  'POST',
         headers: {
