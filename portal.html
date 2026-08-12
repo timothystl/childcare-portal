@@ -60,10 +60,21 @@
         <h1 id="portalGreeting" class="portal-greeting">Hi.</h1>
         <p id="portalGreetingSub" class="portal-sub"></p>
 
-        <div class="portal-soon">
-            <strong>Coming soon.</strong> Your child's day — photos, meals, naps, and
-            notes from their teacher — will appear here. Until then, registration and
-            schedules work exactly as they do today.
+        <!-- Today feed -->
+        <div id="ptFeed" class="pt-feed hidden">
+            <div id="ptSwitcher" class="pt-switcher hidden"></div>
+            <div class="pt-day-head">
+                <span id="ptChildName" class="pt-child-name"></span>
+                <span id="ptDate" class="pt-date"></span>
+            </div>
+            <div id="ptSafety" class="pt-safety hidden"></div>
+            <ul id="ptTimeline" class="pt-timeline"></ul>
+            <div id="ptAnnouncements" class="pt-announcements hidden"></div>
+        </div>
+
+        <div id="ptNoChildren" class="portal-soon hidden">
+            <strong>No children on file yet.</strong> Once your registration is
+            processed, your child's day will appear here.
         </div>
 
         <div class="portal-links">

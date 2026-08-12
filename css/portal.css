@@ -200,3 +200,77 @@
 .portal-check-summary.fail { background: var(--tang-pale);  color: var(--tang-dark); font-weight: 700; }
 
 .hidden { display: none !important; }
+
+/* ============================================================
+   Today feed (Phase 1)
+   ============================================================ */
+
+.pt-feed { margin-top: 4px; }
+
+/* Child switcher — swaps content in place, never navigates. */
+.pt-switcher {
+    display: flex; gap: 6px; margin-bottom: 16px;
+    background: #f2f5f7; border-radius: 999px; padding: 4px;
+}
+.pt-tab {
+    flex: 1; border: none; background: none; border-radius: 999px;
+    padding: 10px 12px; font-family: inherit; font-size: .92em; font-weight: 800;
+    color: #5a6673; cursor: pointer; min-height: 44px;
+}
+.pt-tab.active { background: #fff; color: var(--navy); box-shadow: 0 1px 4px rgba(1,41,74,.12); }
+
+.pt-day-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; margin-bottom: 12px;
+}
+.pt-child-name {
+    font-family: 'Lora', Georgia, serif; font-size: 1.15em;
+    font-weight: 700; color: var(--navy);
+}
+.pt-date { font-size: .84em; color: #78838f; }
+
+/* Allergies as the parent has them on file — reassurance that the room knows. */
+.pt-safety {
+    background: var(--sun-pale); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 16px;
+}
+.pt-safety-title {
+    font-size: .74em; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: #6a5320; margin-bottom: 8px;
+}
+.pt-safety-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pt-safety-note { margin-top: 8px; font-size: .86em; color: #6a5320; line-height: 1.45; }
+
+.pt-chip {
+    border-radius: 999px; padding: 3px 10px; font-size: .76em;
+    font-weight: 800; display: inline-flex; align-items: center;
+}
+.pt-chip-severe { background: var(--tang); color: #fff; border: 1.5px solid var(--tang); }
+.pt-chip-sens   { background: #fff; color: var(--tang-dark); border: 1.5px solid var(--tang-soft); }
+.pt-chip-note   { background: #fff; color: #5a6673; border: 1.5px solid #d7dee5; }
+
+/* Timeline */
+.pt-timeline { list-style: none; margin: 0; padding: 0; }
+.pt-event {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 2px; border-bottom: 1px solid #f0f3f6;
+}
+.pt-event:last-child { border-bottom: none; }
+.pt-event-icon { font-size: 1.15em; line-height: 1.3; flex: none; width: 24px; text-align: center; }
+.pt-event-body {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; flex: 1; min-width: 0;
+}
+.pt-event-label { color: var(--navy); font-size: .95em; font-weight: 600; }
+.pt-event-time  { color: #78838f; font-size: .82em; flex: none; }
+
+.pt-loading { color: #78838f; font-size: .9em; padding: 16px 2px; list-style: none; }
+.pt-empty { text-align: center; padding: 26px 12px; }
+.pt-empty p { margin: 0; color: var(--navy); font-size: .95em; font-weight: 700; }
+.pt-empty-sub { margin-top: 6px !important; color: #78838f !important; font-size: .86em !important; font-weight: 400 !important; }
+
+/* Announcements */
+.pt-announcements { margin-top: 20px; padding-top: 16px; border-top: 1px solid #eef1f4; }
+.pt-ann { background: var(--green-pale); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+.pt-ann-title { font-weight: 800; color: var(--green-dark); font-size: .92em; margin-bottom: 3px; }
+.pt-ann-body  { color: #40525f; font-size: .88em; line-height: 1.5; }
