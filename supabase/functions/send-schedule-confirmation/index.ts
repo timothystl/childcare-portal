@@ -284,22 +284,21 @@ serve(async (req) => {
     }
 
     try {
-        const { parentName, parentEmail, monthLabel, childNames, dates, grandTotal } =
-            await req.json();
+        // T1 — the caller supplies ONLY registration ids. Recipient, names,
+        // dates and every amount are read server-side.
+        //
+        // This function previously took parentEmail, the whole date list and
+        // grandTotal from the request body with no auth check at all, so anyone
+        // could send a fake confirmation carrying any figures to any registered
+        // family. Trimming the body to ids is the same posture send-invoice
+        // uses, and CLAUDE.md names that one as the pattern to copy.
+        const { registrationIds } = await req.json();
 
-        if (!parentEmail || !dates?.length) {
+        if (!Array.isArray(registrationIds) || registrationIds.length === 0 ||
+            registrationIds.length > 10 ||
+            !registrationIds.every((n: unknown) => Number.isInteger(n) && (n as number) > 0)) {
             return new Response(
-                JSON.stringify({ error: "Missing required fields" }),
-                { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
-            );
-        }
-
-        // Reject PostgREST .or()/.ilike() metacharacters: `,()*` are the URL-decoded
-        // shorthand PostgREST itself interprets, and `%`/`_` are literal Postgres
-        // ILIKE wildcards that pass straight through regardless of that shorthand.
-        if (typeof parentEmail !== "string" || !/^[^\s,()*%_@]+@[^\s,()*%_@]+\.[^\s,()*%_@]+$/.test(parentEmail)) {
-            return new Response(
-                JSON.stringify({ error: "Invalid email" }),
+                JSON.stringify({ error: "registrationIds must be 1-10 positive integers" }),
                 { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
             );
         }
@@ -309,18 +308,42 @@ serve(async (req) => {
             Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
             { auth: { autoRefreshToken: false, persistSession: false } },
         );
-        const { data: family } = await serviceClient
-            .from("families")
-            .select("id")
-            .or(`parent_email.ilike.${parentEmail},parent2_email.ilike.${parentEmail}`)
-            .limit(1)
-            .maybeSingle();
-        if (!family) {
+
+        // registration_email_payload enforces the rest: the ids must belong to a
+        // single parent, and must have been created within the last 30 minutes.
+        // Without that recency bound, arbitrary ids would let anyone trigger an
+        // email about any family's registration at any time.
+        const { data: payload, error: payloadErr } =
+            await serviceClient.rpc("registration_email_payload", {
+                p_registration_ids: registrationIds,
+            });
+
+        if (payloadErr) {
+            console.error("registration_email_payload:", payloadErr);
             return new Response(
-                JSON.stringify({ error: "Recipient not found" }),
+                JSON.stringify({ error: "Could not build the confirmation" }),
+                { status: 500, headers: { ...ch, "Content-Type": "application/json" } }
+            );
+        }
+        if (!payload || !payload.parentEmail || !payload.dates?.length) {
+            // Null means the ids failed a server-side check. Deliberately vague:
+            // distinguishing "no such registration" from "too old" would make
+            // this an oracle for probing ids.
+            return new Response(
+                JSON.stringify({ error: "No eligible registration for these ids" }),
                 { status: 403, headers: { ...ch, "Content-Type": "application/json" } }
             );
         }
+
+        const parentName  = payload.parentName || "";
+        const parentEmail = payload.parentEmail as string;
+        const childNames  = (payload.childNames || []) as string[];
+        const dates       = (payload.dates || []) as DateEntry[];
+        const grandTotal  = Number(payload.grandTotal || 0);
+        const monthLabel  = payload.monthKey
+            ? new Date(`${payload.monthKey}-01T00:00:00`).toLocaleDateString("en-US",
+                { month: "long", year: "numeric" })
+            : "";
 
         const apiKey    = Deno.env.get("RESEND_API_KEY");
         const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
