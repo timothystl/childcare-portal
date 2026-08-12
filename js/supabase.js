@@ -993,6 +993,58 @@ async function lookupFamilyForRegistration(email, pin) {
     }
 }
 
+// Parent portal login (Option B). Exchanges email + PIN for a real Supabase
+// session rather than a lookup payload: the parent-session edge function
+// verifies the PIN with family_login, maps the address to an auth user in
+// parent_accounts, and returns genuine access/refresh tokens.
+//
+// Why this exists alongside lookupFamilyForRegistration(): that one returns
+// DATA and leaves the browser unauthenticated, which is all the registration
+// form needs. The portal needs an IDENTITY, because every parent-facing table
+// is gated by RLS policies that read parent_family_ids() off the JWT. Without
+// setSession() the client is still anon and those policies return nothing.
+//
+// Raw fetch, not sbClient.functions.invoke(), for the reason documented on
+// lookupFamilyForRegistration above — invoke() attaches the current session
+// token and the gateway rejects it under ES256 signing keys.
+async function parentPortalLogin(email, pin) {
+    if (!sbClient) return { error: 'unavailable' };
+    try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/parent-session`, {
+            method:  'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                apikey:          SUPABASE_ANON_KEY,
+                Authorization:  `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ action: 'login', email, pin: String(pin) }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!data)        return { error: 'server_error' };
+        if (data.error)   return { error: data.error, attempts_left: data.attempts_left };
+        if (!data.access_token) return { error: 'server_error' };
+
+        // Hand the tokens to supabase-js so it owns refresh from here on. Every
+        // subsequent query on this client carries the parent's identity.
+        const { error: setErr } = await sbClient.auth.setSession({
+            access_token:  data.access_token,
+            refresh_token: data.refresh_token,
+        });
+        if (setErr) {
+            console.warn('parentPortalLogin: setSession failed —', setErr);
+            return { error: 'server_error' };
+        }
+        return { family: data.family, parentSlot: data.parent_slot };
+    } catch (_) {
+        return { error: 'server_error' };
+    }
+}
+
+async function parentPortalLogout() {
+    if (!sbClient) return;
+    try { await sbClient.auth.signOut(); } catch (_) { /* already gone */ }
+}
+
 // Looks up a family's waitlist status by email only (no PIN — see
 // waitlist-status.html). Goes through the waitlist-status edge function
 // (service-role) rather than a direct table query: waitlist_applications RLS
