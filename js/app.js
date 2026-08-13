@@ -42,7 +42,7 @@ function getCentralTimeNow() {
         hour: 'numeric', hour12: false,
     }).formatToParts(now);
     const get = (type) => parseInt(parts.find(p => p.type === type).value, 10);
-    // hour12:false can return 24 for midnight in some environments; normalise to 0.
+    // hour12:false can return 24 for midnight in some environments; normalize to 0.
     return { year: get('year'), month: get('month') - 1, day: get('day'), hour: get('hour') % 24 };
 }
 
@@ -273,7 +273,7 @@ function getRoomFromDob(dobStr) {
 // Synchronous room lookup: admin override first, else the single active room
 // whose age range matches. When Settings → Rates puts more than one active
 // room in the same age band (Turtle and Owl currently both cover 24–36mo),
-// this returns only the first by ageMinMonths — same behaviour as before this
+// this returns only the first by ageMinMonths — same behavior as before this
 // function existed. Callers that need the overlap actually split between the
 // two rooms must use the async resolveRoomForStudent() below instead. This
 // synchronous version stays for call sites that only need a fast/offline

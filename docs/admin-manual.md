@@ -455,7 +455,7 @@ Each room has a `status` field that controls how it behaves throughout the syste
 | Status | What it means |
 |--------|--------------|
 | `active` | Open and enrollable year-round. Children are auto-assigned by age. Appears everywhere. |
-| `coming_soon` | Not yet open. Excluded from parent booking and age-based auto-assignment. Shows as "Coming Soon" in the admin capacity overview and rates table, and as a greyed-out card on the public website. |
+| `coming_soon` | Not yet open. Excluded from parent booking and age-based auto-assignment. Shows as "Coming Soon" in the admin capacity overview and rates table, and as a grayed-out card on the public website. |
 | `seasonal` | Only open during certain times (e.g. summer camp). Admin controls visibility via the Summer Camp toggle in Settings. Excluded from the rates table (has its own section). |
 
 ### Adding a new room
@@ -493,7 +493,7 @@ When the state inspection clears and a room is ready to enroll:
 1. In `js/supabase.js`, find the room and change:
    - `status: 'coming_soon'` → `status: 'active'`
    - `capacity: null` → `capacity: <licensed number>`
-2. Deploy. The room is immediately enrollable, the capacity overview shows real utilisation, and the website card loses the "Coming Soon" badge.
+2. Deploy. The room is immediately enrollable, the capacity overview shows real utilization, and the website card loses the "Coming Soon" badge.
 
 ### The Goose Room (current status: Coming Soon)
 

@@ -615,7 +615,7 @@ async function generateFinanceDashboard() {
                 pointRadius: 0, fill: false,
             });
         }
-        // Always show the 70% industry standard as a grey reference line
+        // Always show the 70% industry standard as a gray reference line
         laborPctDatasets.push({
             label: '70% Industry Standard',
             data: moLabels.map(() => 70),

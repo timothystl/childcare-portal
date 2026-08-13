@@ -460,7 +460,7 @@ as the first step of Phase 1, before any table policy is written against it.
 
 **✅ Exercised end to end 2026-08-12 — all green.** A real family signed in at
 `portal.html?check=1` on the live site. The session came back as a genuine
-Supabase token (`role: authenticated`), `my_parent_context()` recognised the
+Supabase token (`role: authenticated`), `my_parent_context()` recognized the
 family, and every admin table returned nothing. The OTP redemption — the one
 step with real runtime uncertainty, since which type a magic-link hash answers
 to has moved between GoTrue releases — works.

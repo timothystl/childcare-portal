@@ -20,7 +20,7 @@ Red lines are errors. Yellow warnings are usually fine. If you see red, copy the
 text — that is the single most useful thing you can bring back.
 
 Do a hard refresh on each page the first time: **⌘ + Shift + R** / **Ctrl + Shift + R**.
-Caching behaviour changed, so the first load should be from scratch.
+Caching behavior changed, so the first load should be from scratch.
 
 ---
 
@@ -79,11 +79,11 @@ purpose-built lookup instead), and re-enabled pinch-zoom.
 their PIN. 3. Clock them out. 4. Try pinch-to-zoom — it should now work (it was
 disabled before; this is intended).
 
-**Bad:** PIN not recognised, or an error on clock-in.
+**Bad:** PIN not recognized, or an error on clock-in.
 
 ### ☐ 5. Registration — a real submission
 Registration is open now (the window runs the 1st–15th).
-1. Log in as a parent. 2. Pick days for a child. 3. Confirm **closed days are greyed
+1. Log in as a parent. 2. Pick days for a child. 3. Confirm **closed days are grayed
 out** — this checks the closures permission change. 4. Confirm the rate/price shows —
 this checks the settings permission change. 5. Submit.
 6. Confirm it appears in the admin Calendar tab.
@@ -138,7 +138,7 @@ Check the "myMDO" logo lockup on the parent portal — the script "my" should re
 a handwriting face. Confirm headings look right and nothing overflows its box on
 mobile. If the layout now breaks somewhere because real fonts are wider, tell me.
 
-### ☐ 12. Link colour
+### ☐ 12. Link color
 Links were a light green that failed accessibility contrast standards. They're now a
 darker green. Purely a legibility fix — confirm it still looks like your brand.
 
@@ -248,7 +248,7 @@ different from before, tell me — it would mean I missed a usage.
 
 - **R24** — the registration window is not enforced on the server; the deadline is
   currently enforced only by the browser and can be bypassed. Fixing it changes
-  behaviour at a live deadline, so it needs a deliberate go-ahead.
+  behavior at a live deadline, so it needs a deliberate go-ahead.
 - **R4** — an anonymous visitor can still delete child records. Needs the same
   function-by-function tracing I did elsewhere; the parent portal genuinely writes to
   that table, so it isn't a one-liner.

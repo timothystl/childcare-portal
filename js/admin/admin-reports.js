@@ -4181,7 +4181,7 @@ function exportRatioStepReport() {
 // Projects children per room per day for the weeks ahead, at the grain of
 // date × room × half/full, from two models:
 //
-//   * Same-weekday average — the mean of that weekday's realised level over
+//   * Same-weekday average — the mean of that weekday's realized level over
 //     the history window. This is the primary model, because the weekday
 //     signal here is large (Thursdays have run ~26% heavier than Mondays).
 //   * Four-week moving average — the mean daily level over the last four
@@ -4251,7 +4251,7 @@ function _buildForecastRows(opts) {
             const forecast = weekday !== null ? weekday : moving;
 
             // Half-day share drives the afternoon, so carry it through rather
-            // than assuming the mix holds at the centre-wide average.
+            // than assuming the mix holds at the center-wide average.
             const meanHalf  = _forecastMean(h.halves);
             const halfShare = (forecast && meanHalf !== null && weekday)
                 ? Math.min(1, meanHalf / weekday)
@@ -4281,7 +4281,7 @@ function _buildForecastRows(opts) {
     return rows;
 }
 
-// Collect realised daily counts from allRegistrations over a date window.
+// Collect realized daily counts from allRegistrations over a date window.
 // Returns { byDate, history, recent } in the shapes _buildForecastRows wants.
 function _collectForecastHistory(historyDates, recentDates, rooms) {
     const byDate = {};

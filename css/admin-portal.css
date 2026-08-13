@@ -7,7 +7,7 @@
    expands into the active tab's tool groups, and a content pane that
    shows either the tab's dashboard or one open tool. No modes.
 
-   Every colour here resolves to a token already defined in
+   Every color here resolves to a token already defined in
    css/styles.css :root — the handoff palette and the Sunlit
    Neighborhood palette are the same system:
      Navy #01294A --navy · Ink #2E2A22 --text · Muted #7A6E5A --text-muted
