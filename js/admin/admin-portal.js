@@ -21,7 +21,7 @@
 // Two tools are new and fully built here rather than mapped:
 //   * Daily Staffing Requirement — ceil(registered children / ratio) per
 //     room per day, from booked registrations only. Never clock-in data.
-//   * Rate Increase Scenarios — annual revenue/labour/net projection off
+//   * Rate Increase Scenarios — annual revenue/labor/net projection off
 //     real care-day volume.
 // A third, the time-off approval queue, is injected into the existing
 // Build Staff Schedule tool; it is the director half of the kiosk's

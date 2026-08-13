@@ -147,7 +147,7 @@ Only after stages 1–4 does parent portal Option B become safe to build.
   RLS entirely.
 - **`restricted` and `staff` admins will genuinely lose access** to finance and
   payroll once stage 2 lands. That is the point — today it is hidden in the
-  browser only — but it is a behaviour change for `amy.b.ricketts@gmail.com`,
+  browser only — but it is a behavior change for `amy.b.ricketts@gmail.com`,
   who is `restricted`. Tell her before, not after.
 
 ---

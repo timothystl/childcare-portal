@@ -42,7 +42,7 @@ function getCentralTimeNow() {
         hour: 'numeric', hour12: false,
     }).formatToParts(now);
     const get = (type) => parseInt(parts.find(p => p.type === type).value, 10);
-    // hour12:false can return 24 for midnight in some environments; normalise to 0.
+    // hour12:false can return 24 for midnight in some environments; normalize to 0.
     return { year: get('year'), month: get('month') - 1, day: get('day'), hour: get('hour') % 24 };
 }
 

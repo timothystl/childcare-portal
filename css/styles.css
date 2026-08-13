@@ -419,7 +419,7 @@ button:focus-visible,
 .limited-badge   { color: var(--mustard-dark); }
 .available-badge { color: var(--green-dark); }
 
-/* Legend — update dot.full to match grey/unavailable look */
+/* Legend — update dot.full to match gray/unavailable look */
 .dot.full      { background: var(--warm-gray); border-color: var(--border); }
 
 /* Legend */

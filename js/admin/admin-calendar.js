@@ -732,7 +732,7 @@ function renderCapacityOverview() {
         const metaTxt = hasCap
             ? `Max ${room.capacity}/day &middot; ${used} booking${used !== 1 ? 's' : ''}`
             : `Capacity TBD &middot; ${used} booking${used !== 1 ? 's' : ''}`;
-        const pctTxt  = hasCap ? `${pct}% utilisation` : 'Utilisation pending capacity';
+        const pctTxt  = hasCap ? `${pct}% utilization` : 'Utilization pending capacity';
         return `
             <div class="cap-card" data-room-id="${room.id}" data-month-key="${key}" role="button" tabindex="0" title="View ${room.label} calendar">
                 <h3>${room.label}</h3>

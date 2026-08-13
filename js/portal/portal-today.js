@@ -25,7 +25,7 @@ function ptEsc(s) {
 }
 
 // The center is in America/Chicago. Using the device's local date would show a
-// parent in another timezone the wrong day — which for a travelling parent is
+// parent in another timezone the wrong day — which for a traveling parent is
 // exactly when they most want to look.
 function ptToday() {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });

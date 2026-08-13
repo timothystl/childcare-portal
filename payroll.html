@@ -801,7 +801,7 @@ const MDO_ROOMS = {
 // INIT
 // ============================================================
 // Send the user back to the login screen. Called on start-up when there is no
-// valid session, and by any query that comes back unauthorised.
+// valid session, and by any query that comes back unauthorized.
 function showLogin(message) {
     document.getElementById('dashboard')?.classList.add('hidden');
     document.getElementById('loginScreen')?.classList.remove('hidden');
@@ -1160,10 +1160,10 @@ async function loadMdoData(periodStart, periodEnd) {
         r.error && (r.status === 401 || r.status === 403 || r.error.code === '42501'
                     || /jwt|permission denied/i.test(r.error.message || '')));
     if (authFailure) {
-        console.error('payroll: not authorised —', authFailure.error);
+        console.error('payroll: not authorized —', authFailure.error);
         await sb.auth.signOut().catch(() => {});
         showLogin('Your session expired. Please sign in again.');
-        throw new Error('not authorised');
+        throw new Error('not authorized');
     }
     const otherFailure = [staffRes, hoursRes, clockRes, ptoRes].find(r => r.error);
     if (otherFailure) {

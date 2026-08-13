@@ -525,7 +525,7 @@ describe('csvCell — RFC 4180 quoting + formula-injection guard', () => {
 // in js/app.js and all of these still pass.
 //
 // This guard closes that gap. It reads the real source, extracts the named
-// function by brace-matching, normalises whitespace/comments, and compares it to
+// function by brace-matching, normalizes whitespace/comments, and compares it to
 // the copy in this file. If production changes and the copy is not re-synced,
 // the suite goes red and names the function.
 //
@@ -553,7 +553,7 @@ function extractFunction(sourceText, name) {
 }
 
 // Strip comments and collapse whitespace so formatting-only edits don't trip it.
-function normalise(fnText) {
+function normalize(fnText) {
     return fnText
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/\/\/[^\n]*/g, '')
@@ -1203,13 +1203,13 @@ describe('source-drift guard — copies must match js/ source', () => {
             if (!fromSource) throw new Error(`${fnName} not found in ${relPath} — was it renamed or removed?`);
             if (!fromTest)   throw new Error(`${fnName} not found in this test file`);
 
-            if (normalise(fromSource) !== normalise(fromTest)) {
+            if (normalize(fromSource) !== normalize(fromTest)) {
                 throw new Error(
                     `${fnName} has drifted from ${relPath}.\n` +
                     `      The tests above are therefore testing code that is no longer in production.\n` +
                     `      Re-sync the copy in js/tests/business-logic.test.js with the source.\n` +
-                    `      --- ${relPath} ---\n      ${normalise(fromSource)}\n` +
-                    `      --- test copy ---\n      ${normalise(fromTest)}`
+                    `      --- ${relPath} ---\n      ${normalize(fromSource)}\n` +
+                    `      --- test copy ---\n      ${normalize(fromTest)}`
                 );
             }
         });
