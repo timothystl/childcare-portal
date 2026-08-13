@@ -687,3 +687,73 @@
 @media (prefers-reduced-motion: reduce) {
     .pa-toggle, .pa-knob { transition: none; }
 }
+
+/* ============================================================
+   SCHEDULE TAB (design §7)
+   ============================================================ */
+.ps-room { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--text-muted); }
+
+.ps-month { padding: 12px 0; border-bottom: 1px solid var(--warm-gray); }
+.ps-month:last-child { border-bottom: none; }
+.ps-month-row {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; flex-wrap: wrap; margin-bottom: 9px;
+}
+.ps-month-label { font-family: var(--font-head); font-size: 17px; color: var(--navy); }
+.ps-month-meta { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ps-tally { font-size: 12px; font-weight: 700; }
+.ps-tally-full { color: var(--green-dark); }
+.ps-tally-half { color: var(--mustard-dark); }
+.ps-month-bill { font-size: 16px; font-weight: 800; color: var(--navy); }
+
+/* A status pill only ever renders from a REAL issued invoice — see
+   portal-schedule.js. "estimate" is what an un-billed month honestly is. */
+.ps-status {
+    font-size: 11px; font-weight: 800; letter-spacing: .05em;
+    border-radius: 999px; padding: 2px 8px;
+}
+.ps-paid { color: var(--green-text); background: var(--green-pale); }
+.ps-due  { color: var(--mustard-dark); background: var(--sun-pale); }
+.ps-est  { font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: .03em; }
+
+.ps-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.ps-chip {
+    min-width: 58px;
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+    text-align: center;
+}
+.ps-chip-dow  { font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+.ps-chip-date { font-size: 13px; font-weight: 700; color: var(--navy); }
+.ps-chip-kind { font-size: 10.5px; font-weight: 700; color: var(--text-muted); }
+.ps-chip-half { background: var(--sun-pale); border-color: var(--sun-lt); }
+/* Closed: struck through and dimmed. The center is shut and the day is not
+   charged, so it must not look like a day anyone is paying for. */
+.ps-chip-closed {
+    background: var(--warm-gray);
+    border-color: var(--border);
+    opacity: .65;
+    text-decoration: line-through;
+}
+
+.ps-register {
+    display: block;
+    text-align: center;
+    margin: 16px 0 8px;
+    padding: 13px;
+    border: 1.5px solid var(--navy);
+    border-radius: var(--radius-sm);
+    color: var(--navy);
+    font-weight: 800;
+    text-decoration: none;
+    min-height: 44px;
+}
+.ps-disclaimer {
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--text-muted);
+    margin: 10px 2px 6px;
+}

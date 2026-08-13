@@ -99,22 +99,13 @@
         </section>
 
         <!-- ══ SCHEDULE ═══════════════════════════════════════ -->
-        <!-- Not built. The two links are kept here rather than deleted because
-             this is where a parent now looks for them — but they lead to the
-             OLD pages, which do not share this session and will ask for the
-             email and PIN again. That second sign-in is the known split, and
-             it closes when day requests move into this tab. -->
+        <!-- Booked days grouped by child and month with what each month costs
+             (design §7). Read-only: "Register for additional days" still leads
+             to calendar.html, which does NOT share this session and asks for
+             the email and PIN again. That second sign-in closes only when day
+             REQUESTS move in here, which is its own piece of work. -->
         <section class="pt-tab hidden" data-tab="schedule">
-            <div class="tab-placeholder">
-                <h2>Your schedule is coming here</h2>
-                <p>Care days, monthly totals and what each month costs — all in
-                   one place. For now these open the older pages, which will ask
-                   for your email and PIN again.</p>
-                <div class="tab-ph-links">
-                    <a class="btn-secondary" href="calendar.html">Register for care days</a>
-                    <a class="btn-ghost" href="lookup.html">View my schedule</a>
-                </div>
-            </div>
+            <div id="ptScheduleBody"></div>
         </section>
 
         <!-- ══ BILLING ════════════════════════════════════════ -->

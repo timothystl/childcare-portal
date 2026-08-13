@@ -122,6 +122,7 @@ const ENTRIES = [
                 // session exists, so the feed's functions must already exist.
                 'js/portal/portal-nav.js',
         'js/portal/portal-account.js',
+        'js/portal/portal-schedule.js',
         'js/portal/portal-today.js',
                 'js/portal/portal-messages.js',
                 'js/portal/portal-auth.js',
