@@ -796,7 +796,12 @@ function renderCalendar() {
 
         const cell = document.createElement('div');
         const isLocked = isSelected && entry?.locked;
-        cell.className = `cal-day ${status}${isSelected ? ' selected' : ''}${isLocked ? ' recurring-locked' : ''}${isPickerOpen ? ' picker-active' : ''}`;
+        // Half days get their own class so they read differently at a glance.
+        // Both used to render identical navy, so a parent could only tell a half
+        // day from a full one by reading the small badge — two parents got it
+        // wrong and had to have their bookings redone by the office.
+        const isHalf = isSelected && !isLocked && entry?.dayType === 'half';
+        cell.className = `cal-day ${status}${isSelected ? ' selected' : ''}${isHalf ? ' selected-half' : ''}${isLocked ? ' recurring-locked' : ''}${isPickerOpen ? ' picker-active' : ''}`;
         cell.setAttribute('data-date', dateStr);
 
         let badge = '';
