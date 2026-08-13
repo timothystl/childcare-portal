@@ -169,6 +169,17 @@
 }
 .sl-safety-none { font-size: .85em; color: #78838f; }
 
+/* Not-yet-reviewed reads as a warning, not as the grey "nothing here" state —
+   grey is what the all-clear looks like, and these two must not be confusable
+   at a glance on a phone in a bright room. */
+.sl-safety-warn { background: #fdf3e7; border-left-color: #d98324; }
+.sl-safety-unknown {
+    font-size: .88em;
+    font-weight: 600;
+    color: #7a4a10;
+    line-height: 1.45;
+}
+
 .sl-group { margin-bottom: 16px; }
 .sl-group-label {
     font-size: .74em; font-weight: 800; letter-spacing: .09em;

@@ -1085,6 +1085,11 @@ async function saveFamilyModal() {
                         allergies:      child.allergies || [],
                         care_notes:     child.care_notes,
                         photo_release:  child.photo_release,
+                        // Saving the child IS the review. An empty list stamped
+                        // here means a real "no allergies"; unstamped means
+                        // nobody has looked, and the staff app says exactly that
+                        // rather than implying an all-clear.
+                        allergies_reviewed_at: new Date().toISOString(),
                     });
                 } else {
                     await addStudent({

@@ -233,11 +233,27 @@ function slOpenSheet(studentId) {
     // remember to scroll up to find out this child cannot have dairy.
     const chips = slAllergyChips(child.allergies);
     const notes = (child.care_notes || '').trim();
-    slEl('slSheetSafety').innerHTML = (chips || notes)
-        ? `${chips ? `<div class="sl-safety-chips">${chips}</div>` : ''}
-           ${notes ? `<div class="sl-safety-note">${slEsc(notes)}</div>` : ''}`
-        : '<div class="sl-safety-none">No allergies or care notes on file.</div>';
-    slEl('slSheetSafety').className = (chips || notes) ? 'sl-safety' : 'sl-safety sl-safety-empty';
+
+    // ⚠️ "Nothing recorded" is NOT the same as "no allergies", and the panel
+    // must never let one read as the other. An empty list used to print "No
+    // allergies or care notes on file" — an affirmative all-clear — for a child
+    // nobody had reviewed. allergies_reviewed says which of the two this is.
+    let panel, cls;
+    if (chips || notes) {
+        panel = `${chips ? `<div class="sl-safety-chips">${chips}</div>` : ''}
+                 ${notes ? `<div class="sl-safety-note">${slEsc(notes)}</div>` : ''}`;
+        cls   = 'sl-safety';
+    } else if (child.allergies_reviewed) {
+        panel = '<div class="sl-safety-none">No allergies or care notes on file.</div>';
+        cls   = 'sl-safety sl-safety-empty';
+    } else {
+        panel = '<div class="sl-safety-unknown">⚠️ Allergies not yet recorded for '
+              + slEsc((child.child_name || 'this child').split(' ')[0])
+              + '. Check the paper file before any food or bottle.</div>';
+        cls   = 'sl-safety sl-safety-warn';
+    }
+    slEl('slSheetSafety').innerHTML = panel;
+    slEl('slSheetSafety').className = cls;
 
     // Bottle gets its own row because it carries an amount. Infants only in
     // practice, but the plan says show diapering everywhere and simply ignore
