@@ -2116,10 +2116,31 @@ async function fetchMyChildren() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
         .from('students')
-        .select('id, child_name, child_dob, allergies, care_notes, photo_release, room_override')
+        .select('id, child_name, child_dob, allergies, care_notes, photo_release, room_override, allergies_reviewed_at, allergies_source')
         .order('child_name');
     if (error) throw friendlyError(error);
     return data || [];
+}
+
+/**
+ * A parent confirms their own child's allergies and care notes. Counts on its
+ * own — the parent is the authority on their own child, and requiring the
+ * office to countersign 150 of these would rebuild the bottleneck it removes.
+ * Authorization is entirely parent_owns_student() inside the RPC; the student
+ * id is checked there, never trusted.
+ * @param {string} studentId
+ * @param {Array<{label:string,severity:'severe'|'sensitivity'|'note'}>} allergies
+ * @param {string} careNotes
+ */
+async function confirmChildAllergies(studentId, allergies, careNotes) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('confirm_child_allergies', {
+        p_student_id: studentId,
+        p_allergies:  allergies || [],
+        p_care_notes: careNotes || null,
+    });
+    if (error) throw friendlyError(error);
+    return data || {};
 }
 
 /** Flips one child's photo consent. Returns false if the child isn't theirs. */
