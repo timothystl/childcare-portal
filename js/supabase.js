@@ -2143,6 +2143,11 @@ async function confirmChildAllergies(studentId, allergies, careNotes) {
     return data || {};
 }
 
+/** True once THIS parent has vouched for the record, not just the office. */
+function allergiesConfirmedByParent(child) {
+    return child?.allergies_source === 'parent';
+}
+
 /** Flips one child's photo consent. Returns false if the child isn't theirs. */
 async function setPhotoRelease(studentId, released) {
     if (!sbClient) throw new Error('Supabase not configured.');
