@@ -1,12 +1,20 @@
 // Service Worker for Timothy Lutheran MDO
 // Cache-first for static assets, network-only for API calls
 
-const CACHE_NAME = 'tl-mdo-v5';
+const CACHE_NAME = 'tl-mdo-v6';
 
 // Static assets to pre-cache on install
-// Uses clean URLs (no .html) to match how Cloudflare Assets serves them
+// Uses clean URLs (no .html) to match how Cloudflare Assets serves them.
+//
+// ⚠️ cache.addAll() rejects as a whole if any single URL 404s, which leaves the
+// worker installed with an empty cache and no offline fallback at all. Every
+// entry here must exist in the repo.
+//
+// /portal is the manifest's start_url — an installed home screen icon opens it,
+// so it and the assets it loads have to be in the offline shell.
 const PRECACHE_URLS = [
   '/',
+  '/portal',
   '/calendar',
   '/lookup',
   '/admin',
@@ -17,6 +25,10 @@ const PRECACHE_URLS = [
   '/css/styles.css',
   '/css/admin.css',
   '/css/lookup.css',
+  '/css/portal.css',
+  '/dist/portal.min.js',
+  '/dist/supabase.min.js',
+  '/dist/error-monitor.min.js',
   '/js/app.js',
   '/js/supabase.js',
   '/js/error-monitor.js',
