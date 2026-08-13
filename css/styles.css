@@ -394,11 +394,11 @@ button:focus-visible,
 .cal-day.selected     { background: var(--navy) !important; border-color: var(--navy) !important; color: var(--sun); }
 .cal-day.selected .spot-badge { color: var(--sun); }
 
-/* Half day is the colour INVERSE of a full day — gold fill, navy text — rather
+/* Half day is the color INVERSE of a full day — gold fill, navy text — rather
    than a second shade of blue. Two navy variants read as "selected, slightly
    different"; inverting reads as a different kind of day at a glance, which is
    the actual question a parent is answering. The ½ day / Full badge still says
-   it in words, so nobody is relying on colour alone. */
+   it in words, so nobody is relying on color alone. */
 .cal-day.selected.selected-half {
     background: var(--sun) !important;
     border-color: var(--sun) !important;

@@ -16,7 +16,7 @@ let _incFilter = 'submitted';
 function _incEl(id) { return document.getElementById(id); }
 
 const INC_TYPE_LABEL = {
-    injury: 'Injury', illness: 'Illness', behavior: 'Behaviour', other: 'Other',
+    injury: 'Injury', illness: 'Illness', behavior: 'Behavior', other: 'Other',
 };
 
 // How long a family has been waiting, which is the thing that should nag.

@@ -1421,7 +1421,7 @@ document.getElementById('btnSendOff').addEventListener('click', async () => {
             p_note:      document.getElementById('toNote').value.trim(),
         });
         if (error) throw error;
-        if (!data) throw new Error('Your PIN was not recognised — sign out and try again.');
+        if (!data) throw new Error('Your PIN was not recognized — sign out and try again.');
         document.getElementById('toSentLine').textContent =
             (repeat ? `Every ${labels[0].split(' ')[0]} from ${labels[0]} on` : labels.join(', ')) + ` — ${toReason}.`;
         toPicked = [];

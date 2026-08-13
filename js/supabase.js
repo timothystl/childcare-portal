@@ -943,7 +943,7 @@ async function requestPinReset(email) {
         });
         // A non-OK status means the request was not accepted (e.g. server/email
         // failure). The edge function returns 200 even for unknown emails to avoid
-        // account enumeration, so res.ok still preserves that privacy behaviour.
+        // account enumeration, so res.ok still preserves that privacy behavior.
         return res.ok;
     } catch (_) {
         return false;

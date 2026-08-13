@@ -2150,7 +2150,7 @@
     <!-- R10: xlsx (~900 KB) and chart.js (~200 KB) are only ever touched inside
          functions the admin triggers later (exports, chart tabs) — never at parse
          time — so `defer` takes them off the critical rendering path without
-         changing behaviour. They still execute before DOMContentLoaded, which is
+         changing behavior. They still execute before DOMContentLoaded, which is
          what every consumer here waits on.
          supabase-js is deliberately NOT deferred: dist/supabase.min.js calls
          window.supabase.createClient() at top level during parsing.

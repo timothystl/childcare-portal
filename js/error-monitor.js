@@ -5,7 +5,7 @@
 // them to the `client_error_log` Supabase table so admins can diagnose
 // production issues without waiting for a parent to call the office.
 //
-// Behaviour:
+// Behavior:
 //   - Runs silently; never interrupts the user or throws its own errors
 //   - Throttled to MAX_ERRORS per page load to prevent flooding
 //   - Only reports after sbClient is initialised (defined in supabase.js)

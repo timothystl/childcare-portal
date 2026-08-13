@@ -14,7 +14,7 @@
 
 let ptChildren  = [];
 let ptActiveId  = null;
-let ptDate      = null;   // YYYY-MM-DD in the centre's timezone
+let ptDate      = null;   // YYYY-MM-DD in the center's timezone
 
 function ptEl(id) { return document.getElementById(id); }
 
@@ -24,7 +24,7 @@ function ptEsc(s) {
     ));
 }
 
-// The centre is in America/Chicago. Using the device's local date would show a
+// The center is in America/Chicago. Using the device's local date would show a
 // parent in another timezone the wrong day — which for a travelling parent is
 // exactly when they most want to look.
 function ptToday() {
@@ -164,7 +164,7 @@ async function ptRenderIncidents(childId) {
                 timeZone: 'America/Chicago',
             });
             const label = { injury: 'Injury', illness: 'Illness',
-                            behavior: 'Behaviour', other: 'Note' }[r.incident_type] || 'Report';
+                            behavior: 'Behavior', other: 'Note' }[r.incident_type] || 'Report';
             return `<div class="pt-incident">
                 <div class="pt-incident-head">
                     <span class="pt-incident-type">${ptEsc(label)}</span>

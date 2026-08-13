@@ -1003,7 +1003,7 @@ function _buildForecastRows(opts) {
             const forecast = weekday !== null ? weekday : moving;
 
             // Half-day share drives the afternoon, so carry it through rather
-            // than assuming the mix holds at the centre-wide average.
+            // than assuming the mix holds at the center-wide average.
             const meanHalf  = _forecastMean(h.halves);
             const halfShare = (forecast && meanHalf !== null && weekday)
                 ? Math.min(1, meanHalf / weekday)
@@ -1071,7 +1071,7 @@ describe('_forecastShowRate — measured from marked days only', () => {
         expect(r.rate).toBe(0.75);
         expect(r.marked).toBe(4);
     });
-    test('unrecognised statuses are ignored rather than counted as absent', () => {
+    test('unrecognized statuses are ignored rather than counted as absent', () => {
         const r = _forecastShowRate([{ status: 'present' }, { status: 'unknown' }]);
         expect(r.rate).toBe(1);
         expect(r.marked).toBe(1);
