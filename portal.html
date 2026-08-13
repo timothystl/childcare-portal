@@ -52,8 +52,13 @@
         </div>
     </div>
 
-    <!-- Signed in -->
-    <div id="portalSignedIn" class="portal-card hidden">
+    <!-- Signed in — five-tab app shell (docs/design_handoff/README.md §Navigation).
+         The route body scrolls; #ptTabs never does. -->
+    <div id="portalSignedIn" class="portal-app app-shell hidden">
+      <main id="ptRoute" class="app-route">
+
+        <!-- ══ TODAY ══════════════════════════════════════════ -->
+        <section class="pt-tab" data-tab="today">
         <div class="portal-logo">
             <img src="/images/logo/myMDO_primary_logo_light.png" alt="myMDO">
         </div>
@@ -84,10 +89,49 @@
                  feed already IS the day, and a second rendering of the same
                  data is a second thing to keep correct. -->
             <button type="button" id="ptPrintBtn" class="pt-print-btn">🖨️ Print this day</button>
+            <div id="ptAnnouncements" class="pt-announcements hidden"></div>
+        </div>
 
-            <!-- Messages sit BELOW the day rather than behind a tab: a parent
-                 who opens the app is looking at today, and a reply they have
-                 not seen should be in front of them, not one navigation away. -->
+        <div id="ptNoChildren" class="portal-soon hidden">
+            <strong>No children on file yet.</strong> Once your registration is
+            processed, your child's day will appear here.
+        </div>
+        </section>
+
+        <!-- ══ SCHEDULE ═══════════════════════════════════════ -->
+        <!-- Not built. The two links are kept here rather than deleted because
+             this is where a parent now looks for them — but they lead to the
+             OLD pages, which do not share this session and will ask for the
+             email and PIN again. That second sign-in is the known split, and
+             it closes when day requests move into this tab. -->
+        <section class="pt-tab hidden" data-tab="schedule">
+            <div class="tab-placeholder">
+                <h2>Your schedule is coming here</h2>
+                <p>Care days, monthly totals and what each month costs — all in
+                   one place. For now these open the older pages, which will ask
+                   for your email and PIN again.</p>
+                <div class="tab-ph-links">
+                    <a class="btn-secondary" href="calendar.html">Register for care days</a>
+                    <a class="btn-ghost" href="lookup.html">View my schedule</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- ══ BILLING ════════════════════════════════════════ -->
+        <section class="pt-tab hidden" data-tab="billing">
+            <div class="tab-placeholder">
+                <h2>Online billing is coming</h2>
+                <p>Statements, saved card or bank account, autopay and receipts.
+                   Until then, bills come from the office by email exactly as
+                   they do today — nothing about how you pay has changed.</p>
+            </div>
+        </section>
+
+        <!-- ══ MESSAGES ═══════════════════════════════════════ -->
+        <!-- Its own tab per the design. Loaded on first open, never on sign-in:
+             reading the thread marks it read, so loading eagerly would clear a
+             parent's unread badge for messages they never looked at. -->
+        <section class="pt-tab hidden" data-tab="messages">
             <div id="pmSection" class="pm-section hidden">
                 <div class="pm-head">Messages</div>
                 <div id="pmThread" class="pm-thread"></div>
@@ -96,37 +140,44 @@
                     <button type="button" id="pmSendBtn" class="pm-send">Send</button>
                 </div>
             </div>
-            <div id="ptAnnouncements" class="pt-announcements hidden"></div>
-        </div>
+        </section>
 
-        <div id="ptNoChildren" class="portal-soon hidden">
-            <strong>No children on file yet.</strong> Once your registration is
-            processed, your child's day will appear here.
-        </div>
+        <!-- ══ ACCOUNT ════════════════════════════════════════ -->
+        <section class="pt-tab hidden" data-tab="account">
+            <div class="pt-account-head">
+                <span id="ptAccountName" class="pt-child-name"></span>
+                <span id="ptAccountEmail" class="pt-date"></span>
+            </div>
+            <div class="tab-placeholder">
+                <h2>Children, contacts and preferences</h2>
+                <p>Your children's details, who may collect them, your PIN, and
+                   which notifications you get. Coming next — for now, call the
+                   office for any change.</p>
+            </div>
+            <!-- Sign out lives under Account per the design ("This phone"),
+                 not floating at the bottom of the day. -->
+            <button id="portalSignOutBtn" class="portal-signout">Sign out</button>
 
-        <div class="portal-links">
-            <a href="calendar.html">Register for care days</a>
-            <a href="lookup.html">View my schedule</a>
-        </div>
+            <!--
+              Isolation check — diagnostic, not parent-facing. Shown only with
+              ?check=1 so a parent who signs in normally never sees a security
+              test panel. This is the acceptance test from PARENT_PORTAL_PLAN.md
+              §3.1, run as the real parent role instead of reasoned about from
+              the catalog.
+            -->
+            <div id="portalCheck" class="portal-check hidden">
+                <h2>Session isolation check</h2>
+                <p class="portal-check-intro">
+                    Each row asks this signed-in session for one row of an admin table.
+                    A tick means nothing came back.
+                </p>
+                <ul id="portalCheckList"></ul>
+                <p id="portalCheckSummary" class="portal-check-summary"></p>
+            </div>
+        </section>
 
-        <button id="portalSignOutBtn" class="portal-signout">Sign out</button>
-
-        <!--
-          Isolation check — diagnostic, not parent-facing. Shown only with
-          ?check=1 so a parent who signs in normally never sees a security
-          test panel. This is the acceptance test from PARENT_PORTAL_PLAN.md
-          §3.1, run as the real parent role instead of reasoned about from
-          the catalog.
-        -->
-        <div id="portalCheck" class="portal-check hidden">
-            <h2>Session isolation check</h2>
-            <p class="portal-check-intro">
-                Each row asks this signed-in session for one row of an admin table.
-                A tick means nothing came back.
-            </p>
-            <ul id="portalCheckList"></ul>
-            <p id="portalCheckSummary" class="portal-check-summary"></p>
-        </div>
+      </main>
+      <nav id="ptTabs" class="tabbar" role="tablist" aria-label="Parent portal"></nav>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

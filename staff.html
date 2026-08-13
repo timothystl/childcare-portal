@@ -48,16 +48,72 @@
         <div id="slRoomList" class="sl-room-list"></div>
     </div>
 
-    <!-- Roster -->
-    <div id="slRosterScreen" class="sl-screen hidden">
-        <header class="sl-header">
-            <button id="slChangeRoomBtn" class="sl-link-btn">← Rooms</button>
-            <span id="slRoomTitle" class="sl-room-title"></span>
-            <button id="slRefreshBtn" class="sl-link-btn">Refresh</button>
-        </header>
-        <button type="button" id="slMessagesBtn" class="sl-messages-btn">💬 Messages</button>
-        <div id="slRoster" class="sl-roster"></div>
-        <button id="slPostBtn" class="sl-post-btn hidden">Post 0</button>
+    <!-- Signed in — four-tab app shell (docs/design_handoff/README.md §Navigation).
+         Modal sheets below (quick log, incident) sit ABOVE this and cover the
+         tab bar entirely, per the design: they are dismissed by their own
+         control, never by a tab. -->
+    <div id="slRosterScreen" class="sl-screen app-shell hidden">
+      <main id="slRoute" class="app-route">
+
+        <!-- ══ ROOM ═══════════════════════════════════════════ -->
+        <section class="sl-tab" data-tab="room">
+            <header class="sl-header">
+                <button id="slChangeRoomBtn" class="sl-link-btn">← Rooms</button>
+                <span id="slRoomTitle" class="sl-room-title"></span>
+                <button id="slRefreshBtn" class="sl-link-btn">Refresh</button>
+            </header>
+            <div id="slRoster" class="sl-roster"></div>
+            <button id="slPostBtn" class="sl-post-btn hidden">Post 0</button>
+        </section>
+
+        <!-- ══ SCHEDULE ═══════════════════════════════════════ -->
+        <!-- Time off already works, but from the clock-in page. Pointing at it
+             rather than duplicating the flow — two places to request a day off
+             is how they drift apart. -->
+        <section class="sl-tab hidden" data-tab="schedule">
+            <div class="tab-placeholder">
+                <h2>Your shifts are coming here</h2>
+                <p>This week and next, who you're paired with, and your time-off
+                   requests. For now, request a day off from the clock-in page.</p>
+                <div class="tab-ph-links">
+                    <a class="btn-secondary" href="clockin.html">Go to clock in / time off</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- ══ MESSAGES ═══════════════════════════════════════ -->
+        <!-- Scoped by the RPC to families with a child on THIS room's roster
+             today — a teacher has no business reading another room's. -->
+        <section class="sl-tab hidden" data-tab="messages">
+            <div id="slThreadList" class="sl-thread-list"></div>
+            <div id="slThreadView" class="hidden">
+                <div class="sl-thread-head">
+                    <button type="button" id="slThreadBack" class="sl-link-btn">← All</button>
+                    <span id="slThreadWho" class="sl-thread-who"></span>
+                </div>
+                <div id="slThreadMessages" class="sl-thread-messages"></div>
+                <div class="sl-thread-composer">
+                    <textarea id="slThreadInput" rows="2" placeholder="Reply…"></textarea>
+                    <button type="button" id="slThreadSendBtn" class="btn-primary sl-btn">Send</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ══ ACCOUNT ════════════════════════════════════════ -->
+        <section class="sl-tab hidden" data-tab="account">
+            <div class="sl-account-head">
+                <span id="slAccountName" class="sl-room-title"></span>
+            </div>
+            <div class="tab-placeholder">
+                <h2>Your details and training</h2>
+                <p>Display name, mobile, PIN, and CPR / first-aid expiry dates.
+                   Coming next — the office keeps these for now.</p>
+            </div>
+            <button type="button" id="slSignOutBtn2" class="sl-signout">Sign out</button>
+        </section>
+
+      </main>
+      <nav id="slTabs" class="tabbar" role="tablist" aria-label="Staff app"></nav>
     </div>
 
     <!-- Quick-log sheet -->
@@ -127,29 +183,6 @@
                 </label>
                 <button type="submit" id="slIncSubmitBtn" class="btn-primary sl-btn">Send to director</button>
             </form>
-        </div>
-    </div>
-
-    <!-- Messages. Scoped by the RPC to families with a child on THIS room's
-         roster today — a teacher has no business reading another room's. -->
-    <div id="slMessagesSheet" class="sl-sheet hidden">
-        <div class="sl-sheet-inner">
-            <div class="sl-sheet-head">
-                <span class="sl-sheet-name">Messages</span>
-                <button type="button" id="slMessagesClose" class="sl-link-btn">Done</button>
-            </div>
-            <div id="slThreadList" class="sl-thread-list"></div>
-            <div id="slThreadView" class="hidden">
-                <div class="sl-thread-head">
-                    <button type="button" id="slThreadBack" class="sl-link-btn">← All</button>
-                    <span id="slThreadWho" class="sl-thread-who"></span>
-                </div>
-                <div id="slThreadMessages" class="sl-thread-messages"></div>
-                <div class="sl-thread-composer">
-                    <textarea id="slThreadInput" rows="2" placeholder="Reply…"></textarea>
-                    <button type="button" id="slThreadSendBtn" class="btn-primary sl-btn">Send</button>
-                </div>
-            </div>
         </div>
     </div>
 

@@ -1676,3 +1676,82 @@ input.prefilled {
     }
 }
 
+
+/* ============================================================
+   APP SHELL + TAB BAR  (parent portal and staff app)
+   ============================================================ */
+/* Geometry is from the design handoff (docs/design_handoff/README.md,
+   "Navigation"). Defined once here because both apps share it exactly —
+   only the tab list differs. The bar NEVER scrolls: the route body owns the
+   scroll, the bar is flex-shrink:0 beneath it. */
+.app-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;   /* dvh so an iOS URL bar can't hide the tab bar */
+}
+.app-route {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tabbar {
+    display: grid;
+    background: var(--white);
+    border-top: 1px solid var(--border);
+    padding: 8px 2px 22px;   /* bottom clears the home indicator */
+    flex-shrink: 0;
+}
+.tabbar-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    position: relative;
+    cursor: pointer;
+    padding: 2px 0;
+    background: none;
+    border: none;
+    font: inherit;
+    min-height: 44px;        /* the repo's minimum tap target */
+}
+.tabbar-icon  { font-size: 20px; line-height: 1; opacity: .5; }
+.tabbar-label { font-size: 10.5px; font-weight: 600; color: var(--text-muted); }
+.tabbar-item.is-active .tabbar-icon  { opacity: 1; }
+.tabbar-item.is-active .tabbar-label { font-weight: 800; color: var(--navy); }
+.tabbar-badge {
+    position: absolute;
+    top: -2px; right: 14px;
+    background: var(--tang);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    border-radius: 999px;
+    padding: 1px 6px;
+}
+/* A tab with nothing behind it yet says so plainly rather than rendering an
+   empty screen that reads as broken. */
+.tab-placeholder {
+    margin: 18px 16px;
+    padding: 22px 18px;
+    background: var(--linen);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    text-align: center;
+}
+.tab-placeholder h2 {
+    font-family: var(--font-head);
+    font-size: 1.15em;
+    color: var(--navy);
+    margin-bottom: 8px;
+}
+.tab-placeholder p { font-size: .9em; color: var(--text-muted); line-height: 1.55; }
+.tab-placeholder .tab-ph-links { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+
+@media print {
+    .tabbar { display: none !important; }
+    .app-route { overflow: visible !important; }
+    .app-shell { display: block !important; }
+}

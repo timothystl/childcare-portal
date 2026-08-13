@@ -62,6 +62,23 @@ function pmRender(items) {
     wrap.scrollTop = wrap.scrollHeight;
 }
 
+/**
+ * Unread count for the Messages tab badge. Deliberately separate from pmLoad:
+ * it counts WITHOUT marking anything read. Calling pmLoad to get this number
+ * would clear the badge for a parent who never opened the tab — the badge would
+ * be permanently zero and the feature pointless.
+ */
+async function pmUnreadCount() {
+    try {
+        const id = await myMessageThread();
+        if (!id) return 0;
+        const items = await fetchThreadMessages(id);
+        return items.filter(m => m.sender_type !== 'parent' && !m.read_at).length;
+    } catch (_) {
+        return 0;   // a badge is not worth an error state
+    }
+}
+
 async function pmLoad() {
     const wrap = pmEl('pmThread');
     if (!wrap) return;
@@ -77,6 +94,9 @@ async function pmLoad() {
         // the unread badge does not persist after the parent has plainly seen it.
         if (items.some(m => m.sender_type !== 'parent' && !m.read_at)) {
             await markThreadRead(pmThreadId);
+            // The badge must clear at the same moment, or it contradicts the
+            // thread the parent is looking at.
+            if (typeof ptSetBadge === 'function') ptSetBadge('messages', 0);
         }
     } catch (e) {
         console.warn('messages:', e);
