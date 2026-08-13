@@ -394,6 +394,20 @@ button:focus-visible,
 .cal-day.selected     { background: var(--navy) !important; border-color: var(--navy) !important; color: var(--sun); }
 .cal-day.selected .spot-badge { color: var(--sun); }
 
+/* Half day is the colour INVERSE of a full day — gold fill, navy text — rather
+   than a second shade of blue. Two navy variants read as "selected, slightly
+   different"; inverting reads as a different kind of day at a glance, which is
+   the actual question a parent is answering. The ½ day / Full badge still says
+   it in words, so nobody is relying on colour alone. */
+.cal-day.selected.selected-half {
+    background: var(--sun) !important;
+    border-color: var(--sun) !important;
+    color: var(--navy);
+}
+.cal-day.selected.selected-half .spot-badge,
+.cal-day.selected.selected-half .selected-type-badge,
+.cal-day.selected.selected-half .day-num { color: var(--navy); }
+
 .day-num { font-size: 1em; font-weight: 600; }
 
 .spot-badge {
@@ -428,6 +442,7 @@ button:focus-visible,
 .dot.limited   { background: var(--sun-pale); border-color: var(--sun); }
 .dot.full      { background: var(--warm-gray); border-color: var(--border); }
 .dot.selected  { background: var(--navy); border-color: var(--navy); }
+.dot.selected-half { background: var(--sun); border-color: var(--sun); }
 
 /* ============================================================
    SELECTED DATES LIST
