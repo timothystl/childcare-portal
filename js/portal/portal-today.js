@@ -96,21 +96,163 @@ function ptRenderSwitcher() {
     });
 }
 
-function ptRenderSafety(child) {
-    const wrap = ptEl('ptSafety');
-    if (!wrap) return;
-    const list = Array.isArray(child?.allergies) ? child.allergies : [];
-    const notes = (child?.care_notes || '').trim();
-    if (!list.length && !notes) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
-    wrap.classList.remove('hidden');
-    const chips = list.map(a => {
+function ptSafetyChips(list) {
+    return list.map(a => {
         const cls = a.severity === 'severe' ? 'pt-chip-severe'
                   : a.severity === 'sensitivity' ? 'pt-chip-sens' : 'pt-chip-note';
         return `<span class="pt-chip ${cls}">${ptEsc(a.label)}</span>`;
     }).join('');
-    wrap.innerHTML = `<div class="pt-safety-title">On file for ${ptEsc((child.child_name || '').split(' ')[0])}</div>
-        ${chips ? `<div class="pt-safety-chips">${chips}</div>` : ''}
-        ${notes ? `<div class="pt-safety-note">${ptEsc(notes)}</div>` : ''}`;
+}
+
+function ptRenderSafety(child) {
+    const wrap = ptEl('ptSafety');
+    if (!wrap) return;
+    // No child at all (family with no students yet, or a render race). The old
+    // version survived this by accident — an empty allergy list fell through to
+    // its early return. The ask branch below dereferences child.id, so guard it
+    // properly rather than relying on that.
+    if (!child) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
+    const list  = Array.isArray(child?.allergies) ? child.allergies : [];
+    const notes = (child?.care_notes || '').trim();
+    const first = ptEsc((child?.child_name || '').split(' ')[0]);
+
+    // Never confirmed by anyone: ASK, rather than showing nothing. The parent
+    // knows this better than any export does, and their answer counts on its
+    // own — no office sign-off, which would just rebuild the bottleneck.
+    if (!child?.allergies_reviewed_at) {
+        wrap.classList.remove('hidden');
+        wrap.className = 'pt-safety pt-safety-ask';
+        wrap.innerHTML = `
+            <div class="pt-safety-title">Does ${first} have any allergies?</div>
+            <p class="pt-ask-copy">Please confirm — teachers see this before every
+               snack, bottle and meal. If there are none, say so and we'll stop asking.</p>
+            <button type="button" class="pt-ask-btn" data-child="${ptEsc(child.id)}">Add allergies &amp; care notes</button>
+            <button type="button" class="pt-ask-none" data-child="${ptEsc(child.id)}">${first} has no allergies</button>`;
+        wrap.querySelector('.pt-ask-btn').onclick  = () => ptOpenAllergyEditor(child.id);
+        wrap.querySelector('.pt-ask-none').onclick = (e) => ptConfirmNoAllergies(child.id, e.currentTarget);
+        return;
+    }
+
+    wrap.className = 'pt-safety';
+    if (!list.length && !notes) {
+        // Confirmed, and genuinely none. Say that rather than hiding the block —
+        // a parent who told us "no allergies" should see it stuck.
+        wrap.classList.remove('hidden');
+        wrap.innerHTML = `<div class="pt-safety-title">On file for ${first}</div>
+            <p class="pt-safety-none">No allergies. <button type="button" class="pt-ask-link"
+               data-child="${ptEsc(child.id)}">Update</button></p>`;
+        wrap.querySelector('.pt-ask-link').onclick = () => ptOpenAllergyEditor(child.id);
+        return;
+    }
+    wrap.classList.remove('hidden');
+    wrap.innerHTML = `<div class="pt-safety-title">On file for ${first}</div>
+        ${list.length ? `<div class="pt-safety-chips">${ptSafetyChips(list)}</div>` : ''}
+        ${notes ? `<div class="pt-safety-note">${ptEsc(notes)}</div>` : ''}
+        <p class="pt-safety-none"><button type="button" class="pt-ask-link"
+           data-child="${ptEsc(child.id)}">Update</button></p>`;
+    wrap.querySelector('.pt-ask-link').onclick = () => ptOpenAllergyEditor(child.id);
+}
+
+// ── Allergy editor ──────────────────────────────────────────
+// Deliberately not a modal library: a list of chips you add to, plus a notes
+// box. Severity matters more than the label being tidy, so it is a radio the
+// parent cannot skip rather than a dropdown defaulting to something mild.
+let ptDraftAllergies = [];
+
+function ptOpenAllergyEditor(childId) {
+    const child = ptChildren.find(c => String(c.id) === String(childId));
+    if (!child) return;
+    ptDraftAllergies = Array.isArray(child.allergies) ? child.allergies.map(a => ({ ...a })) : [];
+    const first = ptEsc((child.child_name || '').split(' ')[0]);
+    const wrap = ptEl('ptSafety');
+    wrap.classList.remove('hidden');
+    wrap.className = 'pt-safety pt-safety-edit';
+    wrap.innerHTML = `
+        <div class="pt-safety-title">${first}'s allergies</div>
+        <div id="ptDraftChips" class="pt-safety-chips"></div>
+        <div class="pt-ask-row">
+            <input type="text" id="ptAllergyLabel" placeholder="Peanuts, dairy, pollen…" maxlength="60">
+            <select id="ptAllergySeverity">
+                <option value="severe">Severe</option>
+                <option value="sensitivity">Sensitivity</option>
+                <option value="note">Note</option>
+            </select>
+            <button type="button" id="ptAllergyAdd">Add</button>
+        </div>
+        <label class="pt-ask-notes">
+            <span>Anything else the teachers should know?</span>
+            <textarea id="ptCareNotes" rows="3" maxlength="500"
+                placeholder="Inhaler in the front pocket, needs it before outside play…">${ptEsc(child.care_notes || '')}</textarea>
+        </label>
+        <div class="pt-ask-actions">
+            <button type="button" id="ptAllergySave" class="pt-ask-btn">Save</button>
+            <button type="button" id="ptAllergyCancel" class="pt-ask-link">Cancel</button>
+        </div>
+        <p id="ptAllergyMsg" class="pt-ask-msg"></p>`;
+
+    const redraw = () => {
+        ptEl('ptDraftChips').innerHTML = ptDraftAllergies.length
+            ? ptDraftAllergies.map((a, i) => {
+                const cls = a.severity === 'severe' ? 'pt-chip-severe'
+                          : a.severity === 'sensitivity' ? 'pt-chip-sens' : 'pt-chip-note';
+                return `<span class="pt-chip ${cls}">${ptEsc(a.label)}
+                    <button type="button" class="pt-chip-x" data-i="${i}" aria-label="Remove ${ptEsc(a.label)}">×</button></span>`;
+            }).join('')
+            : '<span class="pt-ask-empty">Nothing added yet.</span>';
+        ptEl('ptDraftChips').querySelectorAll('.pt-chip-x').forEach(b => {
+            b.onclick = () => { ptDraftAllergies.splice(Number(b.dataset.i), 1); redraw(); };
+        });
+    };
+    redraw();
+
+    const add = () => {
+        const label = (ptEl('ptAllergyLabel').value || '').trim();
+        if (!label) return;
+        // Same label twice is a slip, not two allergies — mirrors the admin editor.
+        if (ptDraftAllergies.some(a => a.label.toLowerCase() === label.toLowerCase())) {
+            ptEl('ptAllergyMsg').textContent = `${label} is already on the list.`;
+            return;
+        }
+        ptDraftAllergies.push({ label, severity: ptEl('ptAllergySeverity').value });
+        ptEl('ptAllergyLabel').value = '';
+        ptEl('ptAllergyMsg').textContent = '';
+        redraw();
+    };
+    ptEl('ptAllergyAdd').onclick = add;
+    ptEl('ptAllergyLabel').addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); add(); }
+    });
+    ptEl('ptAllergyCancel').onclick = () => ptRenderSafety(child);
+    ptEl('ptAllergySave').onclick = async (e) => {
+        // A typed-but-not-added allergy is the obvious trap here: the parent
+        // fills the box, hits Save, and their peanut allergy is silently gone.
+        if ((ptEl('ptAllergyLabel').value || '').trim()) add();
+        await ptSaveAllergies(child, ptDraftAllergies, ptEl('ptCareNotes').value, e.currentTarget);
+    };
+}
+
+async function ptConfirmNoAllergies(childId, btn) {
+    const child = ptChildren.find(c => String(c.id) === String(childId));
+    if (!child) return;
+    await ptSaveAllergies(child, [], '', btn);
+}
+
+async function ptSaveAllergies(child, allergies, careNotes, btn) {
+    const label = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+        const saved = await confirmChildAllergies(child.id, allergies, careNotes);
+        // Update the local copy so the panel re-renders as confirmed without a
+        // round trip — and so switching children and back does not un-confirm it.
+        child.allergies = saved.allergies || [];
+        child.care_notes = saved.care_notes || '';
+        child.allergies_reviewed_at = saved.reviewed_at;
+        ptRenderSafety(child);
+    } catch (err) {
+        const msg = ptEl('ptAllergyMsg');
+        if (msg) msg.textContent = 'Could not save: ' + (err.message || err);
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+    }
 }
 
 async function ptSelectChild(childId) {

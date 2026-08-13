@@ -428,3 +428,82 @@
 /* Messages are a conversation, not a care record — the printed day report is
    about the child. */
 @media print { .pm-section { display: none !important; } }
+
+/* ============================================================
+   ALLERGY CONFIRMATION (parent-entered, counts on its own)
+   ============================================================ */
+/* The ask is a prompt, not a warning: the parent has done nothing wrong, we
+   simply have not been told yet. Green rather than the tangerine used for a
+   real allergy, so the two never read as the same thing. */
+.pt-safety-ask {
+    background: var(--green-pale, #EAF5EF);
+    border-left: 4px solid var(--green, #5BAD8B);
+}
+.pt-ask-copy {
+    font-size: .88em;
+    line-height: 1.5;
+    color: var(--text, #2E2A22);
+    margin: 6px 0 12px;
+}
+.pt-ask-btn {
+    background: var(--navy, #01294A);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 11px 16px;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 44px;          /* thumb-sized: this is a phone in one hand */
+}
+.pt-ask-btn:disabled { opacity: .6; cursor: default; }
+.pt-ask-none {
+    display: block;
+    margin-top: 8px;
+    background: none;
+    border: none;
+    color: var(--green-text, #3A7B60);
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 10px 0;
+    min-height: 44px;
+}
+.pt-ask-link {
+    background: none;
+    border: none;
+    color: var(--green-text, #3A7B60);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 4px 0;
+}
+.pt-safety-edit { background: var(--white, #fff); border-left: 4px solid var(--navy, #01294A); }
+.pt-ask-row { display: flex; gap: 6px; margin: 10px 0; flex-wrap: wrap; }
+.pt-ask-row input[type="text"] { flex: 1 1 140px; min-width: 0; }
+.pt-ask-row input, .pt-ask-row select, .pt-ask-notes textarea {
+    padding: 10px;
+    border: 1px solid var(--border, #E8E0CC);
+    border-radius: 8px;
+    font: inherit;
+    min-height: 44px;
+}
+.pt-ask-row button {
+    background: var(--sun, #F5B731);
+    color: var(--navy, #01294A);
+    border: none; border-radius: 8px;
+    padding: 0 16px; font: inherit; font-weight: 700;
+    cursor: pointer; min-height: 44px;
+}
+.pt-ask-notes { display: block; margin-top: 10px; font-size: .86em; }
+.pt-ask-notes span { display: block; margin-bottom: 4px; font-weight: 600; }
+.pt-ask-notes textarea { width: 100%; resize: vertical; }
+.pt-ask-actions { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
+.pt-ask-msg { margin-top: 8px; font-size: .84em; color: var(--tang-dark, #7a2a18); }
+.pt-ask-empty { font-size: .85em; color: var(--text-muted, #7A6E5A); }
+.pt-chip-x {
+    background: none; border: none; cursor: pointer;
+    font-size: 1.1em; line-height: 1; padding: 0 0 0 6px;
+    color: inherit; opacity: .75;
+}
