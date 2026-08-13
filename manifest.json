@@ -1,8 +1,8 @@
 {
-  "name": "Timothy Lutheran MDO",
-  "short_name": "TL MDO",
+  "name": "myMDO — Timothy Lutheran Mother's Day Out",
+  "short_name": "myMDO",
   "description": "Mother's Day Out — care day scheduling and family portal",
-  "start_url": "/calendar",
+  "start_url": "/portal",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
@@ -11,20 +11,20 @@
   "categories": ["education", "lifestyle"],
   "icons": [
     {
-      "src": "/images/logo.png",
+      "src": "/images/logo/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/images/logo.png",
+      "src": "/images/logo/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/images/logo.png",
-      "sizes": "500x500",
+      "src": "/images/logo/icon-maskable-512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     }
@@ -33,14 +33,14 @@
     {
       "name": "Family Portal",
       "short_name": "Portal",
-      "url": "/calendar",
-      "icons": [{ "src": "/images/logo.png", "sizes": "192x192" }]
+      "url": "/portal",
+      "icons": [{ "src": "/images/logo/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Staff Clock-In",
       "short_name": "Clock In",
-      "url": "/clockin.html",
-      "icons": [{ "src": "/images/logo.png", "sizes": "192x192" }]
+      "url": "/clockin",
+      "icons": [{ "src": "/images/logo/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
