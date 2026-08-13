@@ -507,3 +507,13 @@
     font-size: 1.1em; line-height: 1; padding: 0 0 0 6px;
     color: inherit; opacity: .75;
 }
+
+/* Office-entered but not yet vouched for by this parent. Softer than the
+   never-recorded ask — the information IS there, we just want it confirmed. */
+.pt-safety-check { border-left: 4px solid var(--green, #5BAD8B); }
+.pt-check-ask {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border, #E8E0CC);
+}
+.pt-check-ask .pt-ask-copy { margin-top: 0; }

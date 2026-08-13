@@ -133,24 +133,41 @@ function ptRenderSafety(child) {
         return;
     }
 
-    wrap.className = 'pt-safety';
-    if (!list.length && !notes) {
-        // Confirmed, and genuinely none. Say that rather than hiding the block —
-        // a parent who told us "no allergies" should see it stuck.
-        wrap.classList.remove('hidden');
-        wrap.innerHTML = `<div class="pt-safety-title">On file for ${first}</div>
-            <p class="pt-safety-none">No allergies. <button type="button" class="pt-ask-link"
-               data-child="${ptEsc(child.id)}">Update</button></p>`;
-        wrap.querySelector('.pt-ask-link').onclick = () => ptOpenAllergyEditor(child.id);
-        return;
-    }
+    // The office transcribed it but this parent has never confirmed it. Ask —
+    // but show what we already hold rather than hiding it behind a question: a
+    // parent who opens the app must be able to SEE the peanut allergy, not be
+    // interviewed about it first.
+    //
+    // ⚠️ Without this branch the prompt is dead code. The office review stamped
+    // all 150 children at once, so `allergies_reviewed_at` is set for everyone
+    // and the never-reviewed branch above can no longer fire for anybody.
+    const parentConfirmed = child.allergies_source === 'parent';
+
+    wrap.className = parentConfirmed ? 'pt-safety' : 'pt-safety pt-safety-check';
     wrap.classList.remove('hidden');
-    wrap.innerHTML = `<div class="pt-safety-title">On file for ${first}</div>
-        ${list.length ? `<div class="pt-safety-chips">${ptSafetyChips(list)}</div>` : ''}
-        ${notes ? `<div class="pt-safety-note">${ptEsc(notes)}</div>` : ''}
-        <p class="pt-safety-none"><button type="button" class="pt-ask-link"
-           data-child="${ptEsc(child.id)}">Update</button></p>`;
-    wrap.querySelector('.pt-ask-link').onclick = () => ptOpenAllergyEditor(child.id);
+
+    const body = (list.length || notes)
+        ? `${list.length ? `<div class="pt-safety-chips">${ptSafetyChips(list)}</div>` : ''}
+           ${notes ? `<div class="pt-safety-note">${ptEsc(notes)}</div>` : ''}`
+        : `<p class="pt-safety-none">No allergies on file.</p>`;
+
+    const footer = parentConfirmed
+        ? `<p class="pt-safety-none"><button type="button" class="pt-ask-link">Update</button></p>`
+        : `<div class="pt-check-ask">
+             <p class="pt-ask-copy">Is this right for ${first}? The office entered it —
+                a quick check from you is what makes it certain.</p>
+             <button type="button" class="pt-ask-btn pt-check-yes">Yes, that's right</button>
+             <button type="button" class="pt-ask-none pt-check-fix">No — update it</button>
+           </div>`;
+
+    wrap.innerHTML = `<div class="pt-safety-title">On file for ${first}</div>${body}${footer}`;
+
+    const upd = wrap.querySelector('.pt-ask-link') || wrap.querySelector('.pt-check-fix');
+    if (upd) upd.onclick = () => ptOpenAllergyEditor(child.id);
+    const yes = wrap.querySelector('.pt-check-yes');
+    // Confirming re-saves exactly what is displayed, which flips the source to
+    // 'parent'. Nothing about the content changes — only who vouched for it.
+    if (yes) yes.onclick = (e) => ptSaveAllergies(child, list, notes, e.currentTarget);
 }
 
 // ── Allergy editor ──────────────────────────────────────────
@@ -247,6 +264,10 @@ async function ptSaveAllergies(child, allergies, careNotes, btn) {
         child.allergies = saved.allergies || [];
         child.care_notes = saved.care_notes || '';
         child.allergies_reviewed_at = saved.reviewed_at;
+        // Must be set too, or the "is this right?" strip re-renders after a
+        // successful confirm and the parent is asked the same question forever.
+        // Only parents can reach this RPC, so the answer is always 'parent'.
+        child.allergies_source = saved.source || 'parent';
         ptRenderSafety(child);
     } catch (err) {
         const msg = ptEl('ptAllergyMsg');
