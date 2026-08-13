@@ -655,3 +655,52 @@ Set as Cloudflare Pages environment variables and Supabase Edge Function secrets
 **Deploy an edge function:** Use `supabase functions deploy <function-name>` from the repo root (requires Supabase CLI and project linked).
 
 **Change payroll period length:** Adjust the `14` constant in `_buildPayrollPeriodList()` in `admin-reports.js`.
+
+---
+
+## ⚠️ The `.insert().select()` trap — audited 2026-08-13
+
+**This took parent registration down for ~6 hours on 2026-08-12.** Worth reading
+before touching any anon write path.
+
+RLS and column grants apply to `RETURNING`. So a supabase-js chain like
+`.from('x').insert({...}).select()` needs **SELECT on x**, not just INSERT. When
+R1 revoked anon's SELECT on `registrations`, `submitRegistration()` started
+failing with `42501 permission denied for table registrations` and the insert
+**never landed** — the whole statement aborts, so it fails silently-shaped: the
+parent sees an error, nothing is written, and no partial row is left behind to
+notice later.
+
+The class was already documented here for the public waitlist form, and the same
+bug then shipped into the registration path anyway. Documenting a trap does not
+close it.
+
+**Fixed** by `submit_registration(jsonb)` — SECURITY DEFINER, column allow-list,
+`search_path` pinned, both inserts in one transaction, `month_key` computed
+server-side. anon needs no SELECT on either table.
+
+### Audit result (2026-08-13) — all 11 real chains
+
+Only tables anon can INSERT but not SELECT are at risk. Every remaining
+`.insert().select()` is on an admin path where `authenticated` holds SELECT
+(verified against `has_table_privilege`, not assumed):
+
+| Site | Table | Reached by | Safe because |
+|---|---|---|---|
+| `createFamily` | families | admin-families.js | authenticated has SELECT |
+| `addDirectorTimeOff` | staff_time_off_requests | admin-portal.js | authenticated has SELECT |
+| settings / staff / students / billing_* / cacfp_* | — | admin only | anon has no INSERT at all |
+
+`addMessage` (Contact Us, genuinely anon) is a **bare** `.insert()` with no
+`.select()`, so it is unaffected.
+
+**Before granting/revoking anon SELECT on any table, grep for `.insert(` on it
+first.** And when adding an anon write, prefer a definer RPC over a table grant.
+
+### How the verification nearly lied, twice
+- A blocked UPDATE under RLS returns **0 rows affected, not an error**. A probe
+  that only catches exceptions reads a blocked write as a successful no-op.
+  Count the rows.
+- Verifying a write **as the role under test** fails when that role cannot read
+  the table — the error looks like the function is broken when the test is.
+  `reset role` before checking what was written.
