@@ -143,10 +143,26 @@ async function portalShowSignedIn() {
     if (portalContext && typeof ptLoadToday === 'function') {
         await ptLoadToday();
     }
-    if (portalContext && typeof pmLoad === 'function') {
+    // Account tab identity.
+    const acctName = pEl('ptAccountName');
+    if (acctName) acctName.textContent = portalContext?.parent_name || '';
+    const acctEmail = pEl('ptAccountEmail');
+    if (acctEmail) acctEmail.textContent = portalContext?.parent_email || '';
+
+    // ⚠️ pmInit only — NOT pmLoad. Messages moved behind their own tab, and
+    // reading the thread marks it read. Loading it here would clear the unread
+    // badge for a parent who never opened Messages. portal-nav loads it on
+    // first open; pmUnreadCount only counts, and does not mark.
+    if (portalContext && typeof pmInit === 'function') {
         pmInit();
-        await pmLoad();
+        if (typeof pmUnreadCount === 'function' && typeof ptSetBadge === 'function') {
+            pmUnreadCount().then(n => ptSetBadge('messages', n)).catch(() => {});
+        }
     }
+
+    // The tab shell last: every tab's content is in the DOM by now, so the
+    // first render cannot flash an empty pane.
+    if (typeof ptInitTabs === 'function') ptInitTabs();
 
     if (new URLSearchParams(location.search).get('check') === '1') {
         pEl('portalCheck')?.classList.remove('hidden');

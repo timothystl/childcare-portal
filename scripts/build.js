@@ -105,7 +105,8 @@ const ENTRIES = [
         outfile: 'dist/staff.min.js',
         stdin: {
             contents: [
-                'js/staff/staff-log.js',
+                'js/staff/staff-nav.js',
+        'js/staff/staff-log.js',
             ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
         },
@@ -119,7 +120,8 @@ const ENTRIES = [
             contents: [
                 // Load order matters: portal-auth calls ptLoadToday() once a
                 // session exists, so the feed's functions must already exist.
-                'js/portal/portal-today.js',
+                'js/portal/portal-nav.js',
+        'js/portal/portal-today.js',
                 'js/portal/portal-messages.js',
                 'js/portal/portal-auth.js',
             ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),

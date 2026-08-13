@@ -319,3 +319,21 @@
     padding: 12px 14px; border: 1.5px solid #d7dee5; border-radius: 10px;
     min-height: 60px; resize: vertical;
 }
+
+/* ── Tab shell ───────────────────────────────────────────── */
+.sl-tab { padding: 0 14px; }
+.sl-account-head { padding: 18px 0 4px; }
+.sl-signout {
+    display: block;
+    width: 100%;
+    margin: 18px 0 24px;
+    padding: 14px;
+    background: none;
+    border: none;
+    color: var(--tang-dark);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    min-height: 44px;
+}

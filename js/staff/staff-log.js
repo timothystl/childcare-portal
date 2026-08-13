@@ -102,6 +102,8 @@ async function slSignIn() {
         slStaff   = res;
         slEl('slPinInput').value = '';
         slEl('slWhoami').textContent = res.name || 'Signed in';
+        const acct = slEl('slAccountName');
+        if (acct) acct.textContent = res.name || '';
         slRenderRooms();
         // Someone assigned to a room goes straight there — the picker is a
         // fallback for floaters and the director, not a toll gate.
@@ -141,6 +143,7 @@ async function slOpenRoom(roomId) {
     const room = ROOMS.find(r => r.id === roomId);
     slEl('slRoomTitle').textContent = room ? room.label : 'Room';
     slShow('slRosterScreen');
+    if (typeof slInitTabs === 'function') slInitTabs();
     slEl('slRoster').innerHTML = '<p class="sl-empty">Loading…</p>';
     await slLoadRoster();
 }
@@ -313,30 +316,36 @@ async function slLoadThreads() {
     try {
         slThreads = await staffListThreads(slStaffId, slPin, slRoomId);
     } catch (e) {
+        // ⚠️ Do NOT clear slThreads here. Zeroing it repaints the badge to 0,
+        // so one dropped request makes a real "3 families are waiting on you"
+        // silently vanish. A stale count is far better than a wrong one.
         console.warn('threads:', e);
-        slThreads = [];
+        return;
     }
     slRenderThreadBadge();
+    // Re-render the list if the tab is already open, so a background refresh
+    // from slLoadRoster does not leave a stale list on screen.
+    if (typeof slRoute !== 'undefined' && slRoute === 'messages') slRenderThreadList();
 }
 
-// One number on the roster screen. Staff are logging, not reading an inbox —
-// the badge is there to say "someone is waiting on you", nothing more.
-function slRenderThreadBadge() {
-    const btn = slEl('slMessagesBtn');
-    if (!btn) return;
-    const unread = slThreads.reduce((n, t) => n + (t.unread || 0), 0);
-    btn.textContent = unread ? `💬 Messages (${unread})` : '💬 Messages';
-    btn.classList.toggle('sl-has-unread', unread > 0);
-}
-
-function slOpenMessages() {
-    slEl('slMessagesSheet')?.classList.remove('hidden');
+// What the Messages TAB calls. Renders immediately so the pane is never blank
+// — the sheet used to render on open, and removing it took that with it.
+async function slOpenMessagesTab() {
+    const wrap = slEl('slThreadList');
+    if (wrap && !slThreads.length) wrap.innerHTML = '<p class="sl-empty">Loading…</p>';
+    if (!slThreads.length) await slLoadThreads();
+    // slLoadThreads returns early on failure, so an empty list here can mean
+    // "nothing to show" OR "the request died". Render either way — a pane stuck
+    // on "Loading…" forever is the worst of the three.
     slRenderThreadList();
 }
 
-function slCloseMessages() {
-    slEl('slMessagesSheet')?.classList.add('hidden');
-    slOpenThread = null;
+// The count now rides on the Messages TAB rather than a button on the roster.
+// Staff are logging, not reading an inbox — the badge says "someone is waiting
+// on you" and nothing more.
+function slRenderThreadBadge() {
+    const unread = slThreads.reduce((n, t) => n + (t.unread || 0), 0);
+    if (typeof slSetBadge === 'function') slSetBadge('messages', unread);
 }
 
 function slRenderThreadList() {
@@ -594,6 +603,10 @@ document.addEventListener('DOMContentLoaded', () => {
     slEl('slPinBtn')?.addEventListener('click', slSignIn);
     slEl('slPinInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') slSignIn(); });
     slEl('slSignOutBtn')?.addEventListener('click', slSignOut);
+    // Second sign-out, in the Account tab. The room-picker one is only
+    // reachable before a room is chosen; once a teacher is on the roster the
+    // tab bar is the only navigation they have.
+    slEl('slSignOutBtn2')?.addEventListener('click', slSignOut);
     slEl('slChangeRoomBtn')?.addEventListener('click', () => slShow('slRoomScreen'));
     slEl('slSheetClose')?.addEventListener('click', slCloseSheet);
     slEl('slSheet')?.addEventListener('click', e => { if (e.target.id === 'slSheet') slCloseSheet(); });
@@ -601,8 +614,6 @@ document.addEventListener('DOMContentLoaded', () => {
     slEl('slPostBtn')?.addEventListener('click', slFlushQueue);
     slEl('slPhotoBtn')?.addEventListener('click', () => slEl('slPhotoInput')?.click());
     slEl('slPhotoInput')?.addEventListener('change', e => slPhotoPicked(e.target.files?.[0]));
-    slEl('slMessagesBtn')?.addEventListener('click', slOpenMessages);
-    slEl('slMessagesClose')?.addEventListener('click', slCloseMessages);
     slEl('slThreadBack')?.addEventListener('click', slRenderThreadList);
     slEl('slThreadSendBtn')?.addEventListener('click', slSendThreadMessage);
     slEl('slIncidentBtn')?.addEventListener('click', slOpenIncident);

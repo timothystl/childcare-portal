@@ -517,3 +517,22 @@
     border-top: 1px dashed var(--border, #E8E0CC);
 }
 .pt-check-ask .pt-ask-copy { margin-top: 0; }
+
+/* ── Tab shell ───────────────────────────────────────────── */
+/* The signed-in app fills the viewport instead of being a centered card, so
+   the tab bar can sit on the bottom edge the way the design has it. The
+   sign-in card is untouched and stays centered. */
+.portal-app {
+    max-width: 560px;
+    margin: 0 auto;
+    background: var(--white);
+    width: 100%;
+}
+.portal-app .app-route { padding: 0 0 8px; }
+.pt-tab { padding: 0 16px; }
+.pt-account-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 18px 0 4px;
+}
