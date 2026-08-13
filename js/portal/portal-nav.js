@@ -72,6 +72,7 @@ function ptGoTab(key) {
     if (!ptOpened[key]) {
         ptOpened[key] = true;
         if (key === 'messages' && typeof pmLoad === 'function') pmLoad();
+        if (key === 'account'  && typeof paLoad === 'function') paLoad();
     }
 }
 

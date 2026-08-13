@@ -2148,6 +2148,51 @@ function allergiesConfirmedByParent(child) {
     return child?.allergies_source === 'parent';
 }
 
+// ============================================================
+// PARENT ACCOUNT  (portal Account tab — design §10b)
+// ============================================================
+// Every one of these derives the family from the session inside the RPC. None
+// takes a family id, so none can be aimed at another family.
+
+/** Children, both parent slots, pickup list and notification prefs in one call. */
+async function fetchMyAccount() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('my_account');
+    if (error) throw friendlyError(error);
+    return data && data !== 'null' ? data : null;
+}
+
+/** Updates ONLY the calling parent's own slot — parent 2 cannot rewrite parent 1's. */
+async function updateMyPhone(phone) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('update_my_phone', { p_phone: phone || null });
+    if (error) throw friendlyError(error);
+    return data;
+}
+
+async function setMyNotificationPrefs(prefs) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('set_my_notification_prefs', { p_prefs: prefs || {} });
+    if (error) throw friendlyError(error);
+    return data;
+}
+
+async function addPickupContact(name, relationship, note) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('add_pickup_contact', {
+        p_name: name, p_relationship: relationship || null, p_note: note || null,
+    });
+    if (error) throw friendlyError(error);
+    return data;
+}
+
+async function removePickupContact(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('remove_pickup_contact', { p_id: id });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
 /** Flips one child's photo consent. Returns false if the child isn't theirs. */
 async function setPhotoRelease(studentId, released) {
     if (!sbClient) throw new Error('Supabase not configured.');
