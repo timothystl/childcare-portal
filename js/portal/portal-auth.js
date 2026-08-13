@@ -134,7 +134,7 @@ async function portalShowSignedIn() {
     if (sub) {
         sub.textContent = portalContext
             ? "Here's how the day is going."
-            : 'You are signed in, but the database did not recognise this session as a parent. Contact the office.';
+            : 'You are signed in, but the database did not recognize this session as a parent. Contact the office.';
     }
 
     // The feed is the point of the page. It loads after the greeting so the

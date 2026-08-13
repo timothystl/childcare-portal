@@ -1,5 +1,41 @@
 # Childcare Portal — Claude Code Guide
 
+## ⚠ American English spelling and conventions
+
+**Everything a human reads is written in American English.** Screen labels, button text, help
+copy, toasts, error messages, emails to parents and staff, code comments, commit messages, this
+file, `README.md`, and everything under `docs/`. This is not a style preference — this is a
+St. Louis childcare center writing to its own families and staff, and "colour" or "behaviour" on
+an admin screen reads as a typo to every one of them.
+
+`-ize` / `-or` / `-er` / `-og`, and American date order (July 24, not 24 July):
+color · behavior · organize · recognize · normalize · initialize · center · neighbor · gray ·
+labeled · honor · judgment · enrollment · defense · utilization · authorized · realize ·
+customize · minimize · analyze · fulfill · catalog · while (not "whilst").
+
+**⚠ Four things that look British and must NOT be "corrected":**
+
+| Leave alone | Why |
+|---|---|
+| `aria-labelledby` | An HTML attribute name. Renaming it silently unlabels the element for a screen reader, with nothing to see in a browser. |
+| `'cancelled'` | A stored `registrations.status` value. Changing the spelling in code without a migration orphans every cancelled row in the live table. Same for the `behavior` **key** in `admin-incidents.js` — the display label is "Behavior", the stored value stays `behavior`. |
+| `supabase/migrations/**` | A record of what was applied to the live database. A migration file's content should match what actually ran. |
+| `dist/**` | Generated. Fix the source in `js/`, then `npm run build` — never hand-edit a bundle. |
+
+Also leave alone the words that only look similar and are already American: `analysis`,
+`analyst`, `optimistic`, `optimistically`, `realistic`, `fulfilled`, and `outsideFence` (which
+contains "deFence" only by accident — this is why the check below is **case-sensitive**).
+
+**How to check.** It should return nothing; worth running before opening a PR.
+
+```
+git ls-files | grep -vE '^(dist|supabase/migrations)/|package-lock\.json$' \
+  | xargs grep -nE '\b(colour|neighbour|centre|centred|behaviour|organis[ei]|recognis|initialis|normalis|sanitis|optimis[ei]|licence|labelled|labelling|honour|grey|greyed|analyse|analysed|favour|enrolment|categoris|utilisation|judgement|defence|authoris|realise|realised|customis|minimis|whilst)' \
+  | grep -v labelledby
+```
+
+---
+
 ## Git branch naming
 
 Always use descriptive branch names in the format `type/short-description` (e.g. `fix/billing-change-fees`, `feat/add-goose-room`, `chore/update-deps`). Never use auto-generated random names.
@@ -488,7 +524,7 @@ index.html          Parent registration portal
 calendar.html       Monthly calendar view (parent-facing)
 clockin.html        Staff clock-in/out. ⚠️ NOT a kiosk despite the name used
                     throughout this repo — staff clock in on their OWN phones.
-                    There is no shared device anywhere in the centre. Any
+                    There is no shared device anywhere in the center. Any
                     security reasoning that rests on "it's a shared wall
                     device" is wrong; see staff_contact_details_APPLIED.sql.
 enroll.html         Enrollment info + PDF forms
@@ -619,7 +655,7 @@ and has a handler for the `P0001` error a database trigger would raise.
 > in the live database (verified against `information_schema`). The `P0001` handler in
 > `app.js:1383` can never fire. Since `anon` holds INSERT on `registrations`, the window
 > is enforced **only by client-side JavaScript** and can be bypassed by anyone posting
-> directly to the API. Apply the migration to make the documented behaviour real.
+> directly to the API. Apply the migration to make the documented behavior real.
 
 ---
 

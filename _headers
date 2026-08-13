@@ -9,7 +9,7 @@
 # still revalidate on every request — `no-cache` allows an empty 304 response
 # instead of re-sending the full body (dist/admin.min.js is ~600 KB).
 # NOTE: worker.js sets these headers too and takes precedence in the Workers
-# Assets deploy; both are kept in sync so the behaviour is the same either way.
+# Assets deploy; both are kept in sync so the behavior is the same either way.
 #
 # Pragma/Expires are NOT redeclared per-path below. This file previously tried
 # to blank them out here (`Pragma:` / `Expires:` with no value) to stop the

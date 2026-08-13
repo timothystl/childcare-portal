@@ -116,7 +116,7 @@ Traced function-by-function out to real callers, then revoked what nothing uses:
 | Table | anon actually needs | was also granted | now |
 |---|---|---|---|
 | `messages` | INSERT (Contact Us, Message the Office) | **SELECT** | revoked |
-| `closures` | SELECT (grey out closed days) | **INSERT** | revoked |
+| `closures` | SELECT (gray out closed days) | **INSERT** | revoked |
 | `settings` | SELECT (room rates) | **INSERT** | revoked |
 
 `messages` is the notable one: every parent contact message — name, email, and body —
@@ -505,7 +505,7 @@ Measured against the two surfaces it actually renders on:
 | `--wlp-grad-fg` `#667EEA` | `#E5E8FB` | **3.01** | ✗ FAIL |
 
 `--green` is also used for `.sub-label` in the admin (`css/admin.css:72`) and for
-link colour in `lookup.css` and `waitlist-status.css` — so this affects parents,
+link color in `lookup.css` and `waitlist-status.css` — so this affects parents,
 who are the least captive audience and most likely to be on a phone outdoors.
 
 The rest of the palette is fine and often excellent (`--text` on `--cream` is

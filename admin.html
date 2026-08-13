@@ -910,7 +910,7 @@
             <!-- New Family Enrollment Capacity — hidden 2026-07, may bring back later
             <section class="admin-section collapsible-section" id="enrollmentCapacitySection">
                 <h2>🚫 New Family Enrollment</h2>
-                <p class="section-desc">When checked, the "Download Enrollment Forms" button on the public website is greyed out and replaced with a message directing families to the waitlist or director. Uncheck to re-open enrollment.</p>
+                <p class="section-desc">When checked, the "Download Enrollment Forms" button on the public website is grayed out and replaced with a message directing families to the waitlist or director. Uncheck to re-open enrollment.</p>
                 <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
                     <label style="display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer;">
                         <input type="checkbox" id="enrollmentAtCapacityToggle" style="width:18px;height:18px;cursor:pointer;">
@@ -2150,7 +2150,7 @@
     <!-- R10: xlsx (~900 KB) and chart.js (~200 KB) are only ever touched inside
          functions the admin triggers later (exports, chart tabs) — never at parse
          time — so `defer` takes them off the critical rendering path without
-         changing behaviour. They still execute before DOMContentLoaded, which is
+         changing behavior. They still execute before DOMContentLoaded, which is
          what every consumer here waits on.
          supabase-js is deliberately NOT deferred: dist/supabase.min.js calls
          window.supabase.createClient() at top level during parsing.

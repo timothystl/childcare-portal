@@ -95,7 +95,7 @@ async function slSignIn() {
             slToast('Too many attempts on this device. Wait a few minutes.', 'err');
             return;
         }
-        if (!res) { slToast('That PIN was not recognised.', 'err'); return; }
+        if (!res) { slToast('That PIN was not recognized.', 'err'); return; }
 
         slPin     = pin;
         slStaffId = res.id;

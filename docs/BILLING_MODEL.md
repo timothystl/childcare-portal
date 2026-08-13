@@ -183,7 +183,7 @@ would re-bill closed months with facts that arrived later — July alone would m
 Proposed: mark **April–July** as `issued` with `reason = 'pre-system record'`, freezing
 them as-is without claiming they are accurate, and start clean from **August**, whose
 recompute lands about **$1,000 lower** (the sibling-discount and double-count
-corrections, in families' favour).
+corrections, in families' favor).
 
 Needs a decision with the director before anything is written.
 

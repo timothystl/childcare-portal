@@ -128,7 +128,7 @@ Every significant action taken by any admin user is automatically recorded in a 
 >
 > **As of 3 August 2026 the audit log is live and recording.** It was also hardened beyond the original design: the log is readable only by an authenticated staff account and by nobody else, entries are written exclusively by a server-side routine that stamps the staff member's email itself (so it cannot be forged from a browser), and **no staff account — at any access level — can edit or delete an entry once written.** That last point is what makes "tamper-evident" an accurate description rather than an aspiration.
 >
-> The quiet-failure behaviour has also been changed: an audit failure still never blocks a staff member's work, but it now reports itself loudly, so a broken audit trail cannot go unnoticed again. Tracked as R5 in `docs/CODE_REVIEW_2026-08.md`.
+> The quiet-failure behavior has also been changed: an audit failure still never blocks a staff member's work, but it now reports itself loudly, so a broken audit trail cannot go unnoticed again. Tracked as R5 in `docs/CODE_REVIEW_2026-08.md`.
 
 ---
 

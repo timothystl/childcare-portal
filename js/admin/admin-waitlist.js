@@ -1511,7 +1511,7 @@ function wlpRosterSectionHtml(sel, mi, alloc, cap) {
         : `<div class="wlp-empty-note">No children booked here on ${escHtml(sel.day)}.</div>`;
     const subhint = isCurrent
         ? `${roster.length} of ${cap ?? '—'} seats filled — real, registered bookings.`
-        : `${roster.length} of ${cap ?? '—'} seats — projected; greyed rows aren't enrolled yet.`;
+        : `${roster.length} of ${cap ?? '—'} seats — projected; grayed rows aren't enrolled yet.`;
     return `
         <div class="wlp-section-label" style="margin-bottom:6px">In the room · ${escHtml(sel.day)}${isCurrent ? '' : ' · projected'}</div>
         <div class="wlp-sidebar-hint">${subhint}</div>

@@ -134,7 +134,7 @@ const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // ← paste anon key here
 
 ---
 
-## STEP 5 — Customise Rooms & Capacity
+## STEP 5 — Customize Rooms & Capacity
 
 In `js/supabase.js`, edit the `ROOMS` array to match your actual rooms:
 
@@ -195,7 +195,7 @@ Every time you push to GitHub, Cloudflare automatically re-deploys.
 
 ## STEP 9 — (Optional) Custom Domain
 
-In Cloudflare Pages → your project → **Custom domains**, add your own domain (e.g. `register.yourcentre.com`).
+In Cloudflare Pages → your project → **Custom domains**, add your own domain (e.g. `register.yourcenter.com`).
 
 ---
 
@@ -235,7 +235,7 @@ childcare-portal/
 
 | Problem | Fix |
 |---|---|
-| Calendar shows no availability colours | Select a room first |
+| Calendar shows no availability colors | Select a room first |
 | Submissions not saving | Check Supabase URL & anon key in `js/supabase.js` |
 | Admin page says "Failed to load" | Check RLS policies were created in Step 2 |
 | Export button doesn't work | Allow popups in your browser |

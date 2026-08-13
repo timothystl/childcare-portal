@@ -2,7 +2,7 @@
    portal.css — parent portal
    ============================================================
    Phone-first, built on the Sunlit Neighborhood tokens in styles.css.
-   Nothing here redefines a colour; every value is a var() so the portal
+   Nothing here redefines a color; every value is a var() so the portal
    cannot drift away from the rest of the site.
 
    Scope note: this is the sign-in page only. Phase 1 adds the Today feed,
@@ -321,7 +321,7 @@
         display: none !important;
     }
 
-    /* The screen layout centres the card with flex and a min-height, which on
+    /* The screen layout centers the card with flex and a min-height, which on
        paper reserves a full viewport and pushed a blank second page. */
     body.portal-body {
         background: #fff; display: block; padding: 0;
@@ -349,7 +349,7 @@
     }
     .pt-chip { border: 1px solid #333 !important; background: #fff !important; color: #000 !important; }
     /* Severity still has to survive a black-and-white printer, so severe keeps
-       a heavier rule rather than relying on colour that will not print. */
+       a heavier rule rather than relying on color that will not print. */
     .pt-chip-severe { border-width: 2.5px !important; font-weight: 800; }
 
     .pt-event { page-break-inside: avoid; border-bottom: 1px solid #ddd; }
