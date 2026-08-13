@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&amp;family=Lora:wght@400;600;700&amp;family=Nunito:wght@400;600;700;800&amp;display=swap" rel="stylesheet">
+<script src="./image-slot.js"></script>
+<style>
+  body { margin:0; background:#F5F0E4; font-family:'Nunito',system-ui,sans-serif; color:#2E2A22; }
+  a { color:#3A7B60; }
+  a:hover { color:#01294A; }
+  ::-webkit-scrollbar { width:0; height:0; }
+</style>
+</helmet>
+
+<section style="padding:48px; display:flex; gap:48px; align-items:flex-start; flex-wrap:wrap">
+
+  <div style="display:flex; flex-direction:column; gap:14px; align-items:center">
+    <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ W }}" height="{{ H }}" hint-size="390px,844px">
+          <sc-if value="{{ isSignin }}">
+          
+          <div style="background:#C9E6DC; min-height:100%; padding:60px 20px 24px; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#fff; border-radius:14px; padding:40px 28px 32px; box-shadow:0 16px 56px rgba(0,0,0,.22); text-align:center; border:1px solid #E8E0CC">
+              <div style="margin-bottom:20px">
+                <img src="images/logo/myMDO_primary_logo_light.png" alt="myMDO" style="height:78px; display:block; margin:0 auto">
+              </div>
+              <div style="width:76px; height:76px; border-radius:20px; border:3px solid #01294A; margin:0 auto 16px; display:flex; align-items:center; justify-content:center; font-size:34px">🙂</div>
+              <h1 style="font-family:'Lora',serif; font-size:22px; color:#01294A; margin:0 0 6px">Welcome back, Hannah</h1>
+              <p style="color:#7A6E5A; font-size:15px; margin:0 0 22px; line-height:1.5">Look at your phone to unlock, or enter your PIN.</p>
+              <button onClick="{{ goToday }}" style="width:100%; background:#01294A; color:#fff; border:none; padding:14px 26px; font-size:17px; font-weight:800; font-family:'Nunito',sans-serif; border-radius:6px">Unlock with Face ID</button>
+              <div style="display:flex; gap:9px; justify-content:center; margin:22px 0 6px">
+                <div style="width:46px; height:56px; border:1px solid #E8E0CC; border-radius:8px; background:#FAF7ED; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:800; color:#01294A">•</div>
+                <div style="width:46px; height:56px; border:1px solid #E8E0CC; border-radius:8px; background:#FAF7ED; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:800; color:#01294A">•</div>
+                <div style="width:46px; height:56px; border:2px solid #F5B731; border-radius:8px; background:#fff; box-shadow:0 0 0 3px rgba(245,183,49,0.15)"></div>
+                <div style="width:46px; height:56px; border:1px solid #E8E0CC; border-radius:8px; background:#FAF7ED"></div>
+              </div>
+              <p style="font-size:13px; color:#7A6E5A; margin:10px 0 0">Same PIN you use for My Schedule. <a href="#" style="color:#3A7B60; text-decoration:none">Forgot it?</a></p>
+            </div>
+            <p style="text-align:center; font-size:13px; color:rgba(1,41,74,.65); margin-top:20px; line-height:1.5">Signed in on this phone until you sign out.<br>Two parents, two PINs, one family record.</p>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isToday }}">
+          
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#C9E6DC; border-bottom:3px solid #F5B731; padding:52px 18px 14px">
+              <div style="display:flex; justify-content:space-between; align-items:center">
+                <div style="display:flex; align-items:baseline; line-height:1"><span style="font-family:'Dancing Script',cursive; font-weight:700; color:#3A7B60; font-size:26px">my</span><span style="font-weight:800; color:#01294A; font-size:26px">MDO</span></div>
+                <div style="display:flex; gap:8px; align-items:center">
+                  <div style="position:relative; width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,.65); display:flex; align-items:center; justify-content:center; font-size:18px">🔔<span style="position:absolute; top:5px; right:6px; width:9px; height:9px; border-radius:50%; background:#E97D55; border:2px solid #C9E6DC"></span></div>
+                </div>
+              </div>
+              <div style="display:flex; gap:8px; margin-top:14px">
+                <div style="display:flex; align-items:center; gap:8px; background:#01294A; border-radius:22px; padding:6px 14px 6px 6px">
+                  <div style="width:30px; height:30px; border-radius:50%; background:#F5B731; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:14px">E</div>
+                  <span style="color:#fff; font-weight:800; font-size:14px">Ellie</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.6); border-radius:22px; padding:6px 14px 6px 6px">
+                  <div style="width:30px; height:30px; border-radius:50%; background:#5BAD8B; color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:14px">J</div>
+                  <span style="color:#01294A; font-weight:700; font-size:14px">Jack</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="flex:1; min-height:0; overflow:auto; padding:16px 16px 18px; display:block">
+              <div style="display:flex; flex-direction:column; gap:14px">
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:16px 18px 12px; border-bottom:1px solid #F5F0E4; display:flex; justify-content:space-between; align-items:flex-start; gap:10px">
+                  <div style="display:flex; flex-direction:column; gap:4px">
+                    <div style="font-family:'Lora',serif; font-size:19px; font-weight:700; color:#01294A">Tuesday, August 11</div>
+                    <div style="font-size:14px; color:#7A6E5A">Toddlers · Miss Amy &amp; Miss Kiara</div>
+                    <span style="align-self:flex-start; background:#FDEEE8; border:1.5px solid #E97D55; color:#7a2a18; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:800; letter-spacing:.04em">PEANUT ALLERGY ON FILE</span>
+                  </div>
+                  <span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:4px 11px; border-radius:999px; font-size:12px; font-weight:700; letter-spacing:.06em; white-space:nowrap">AT SCHOOL</span>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:1px; background:#F5F0E4">
+                  <div style="background:#fff; padding:13px 18px">
+                    <div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Checked in</div>
+                    <div style="font-size:20px; font-weight:800; color:#01294A; margin-top:2px">8:42a</div>
+                  </div>
+                  <div style="background:#fff; padding:13px 18px">
+                    <div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Nap</div>
+                    <div style="font-size:20px; font-weight:800; color:#01294A; margin-top:2px">1h 35m</div>
+                  </div>
+                  <div style="background:#fff; padding:13px 18px">
+                    <div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Meals</div>
+                    <div style="font-size:20px; font-weight:800; color:#01294A; margin-top:2px">3 of 3</div>
+                  </div>
+                  <div style="background:#fff; padding:13px 18px">
+                    <div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Diapers</div>
+                    <div style="font-size:20px; font-weight:800; color:#01294A; margin-top:2px">4 changes</div>
+                  </div>
+                </div>
+
+                <div style="padding:14px 18px 16px; border-top:1px solid #F5F0E4; display:flex; flex-direction:column; gap:12px">
+                  <div style="display:flex; gap:12px">
+                    <div style="display:flex; flex-direction:column; align-items:center; width:52px; flex-shrink:0"><span style="font-size:13px; font-weight:700; color:#7A6E5A">1:45p</span><span style="flex:1; width:2px; background:#E8E0CC; margin-top:4px"></span></div>
+                    <div style="flex:1">
+                      <div style="font-size:15px; font-weight:700; color:#2E2A22">Woke up happy</div>
+                      <div style="font-size:14px; color:#7A6E5A; line-height:1.45">Slept 12:10p – 1:45p on her mat by the window.</div>
+                      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:9px">
+                        <image-slot id="feed-1" shape="rounded" radius="10" placeholder="Nap photo" style="height:96px"></image-slot>
+                        <image-slot id="feed-2" shape="rounded" radius="10" placeholder="Snack time" style="height:96px"></image-slot>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:12px">
+                    <div style="display:flex; flex-direction:column; align-items:center; width:52px; flex-shrink:0"><span style="font-size:13px; font-weight:700; color:#7A6E5A">11:30a</span><span style="flex:1; width:2px; background:#E8E0CC; margin-top:4px"></span></div>
+                    <div style="flex:1">
+                      <div style="font-size:15px; font-weight:700; color:#2E2A22">Lunch — ate all of it</div>
+                      <div style="font-size:14px; color:#7A6E5A; line-height:1.45">Chicken, green beans, pears. Asked for seconds on pears.</div>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:12px">
+                    <div style="display:flex; flex-direction:column; align-items:center; width:52px; flex-shrink:0"><span style="font-size:13px; font-weight:700; color:#7A6E5A">9:50a</span></div>
+                    <div style="flex:1">
+                      <div style="font-size:15px; font-weight:700; color:#2E2A22">Chapel with Pastor Dinger</div>
+                      <div style="font-size:14px; color:#7A6E5A; line-height:1.45">Sang "Jesus Loves Me" twice. She knows the hand motions now.</div>
+                    </div>
+                  </div>
+                  <button onClick="{{ goDay }}" style="align-self:flex-start; background:transparent; border:1.5px solid #01294A; color:#01294A; font-family:'Nunito',sans-serif; font-weight:600; font-size:14px; border-radius:6px; padding:9px 18px">See full day →</button>
+                </div>
+              </div>
+
+              <div style="background:#FFF8E1; border:1.5px solid #FDE598; border-radius:12px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:14px">
+                <div style="display:flex; flex-direction:column; gap:2px">
+                  <strong style="color:#01294A; font-size:15px">August statement · $312.00</strong>
+                  <span style="color:#7a5a00; font-size:13px">Due Friday, Aug 15 · autopay off</span>
+                </div>
+                <button onClick="{{ goPay }}" style="background:#F5B731; color:#01294A; border:none; border-radius:6px; padding:10px 18px; font-size:15px; font-weight:800; font-family:'Nunito',sans-serif; white-space:nowrap; box-shadow:0 2px 8px rgba(245,183,49,0.35)">Pay</button>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:12px; padding:14px 16px; display:flex; gap:12px; align-items:flex-start">
+                <div style="width:38px; height:38px; border-radius:50%; background:#01294A; color:#F5B731; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:16px; flex-shrink:0">A</div>
+                <div style="flex:1">
+                  <div style="display:flex; justify-content:space-between; align-items:baseline"><span style="font-weight:700; color:#01294A; font-size:15px">Miss Amy</span><span style="font-size:12px; color:#7A6E5A">11:02a</span></div>
+                  <div style="font-size:14px; color:#2E2A22; line-height:1.45; margin-top:2px">Ellie is almost out of size 4 diapers — could you send a pack Thursday?</div>
+                  <div style="display:flex; gap:8px; margin-top:10px">
+                    <button style="background:#01294A; color:#fff; border:none; border-radius:6px; padding:7px 14px; font-size:13px; font-weight:800; font-family:'Nunito',sans-serif">Will do 👍</button>
+                    <button onClick="{{ goThread }}" style="background:transparent; border:1.5px solid #01294A; color:#01294A; border-radius:6px; padding:6px 14px; font-size:13px; font-weight:600; font-family:'Nunito',sans-serif">Reply</button>
+                  </div>
+                </div>
+              </div>
+
+              <div style="background:#EAF5EF; border:1.5px solid #C9E6DC; border-radius:12px; padding:13px 16px">
+                <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#3A7B60; margin-bottom:3px">Announcement</div>
+                <div style="font-size:15px; font-weight:700; color:#01294A">Closed Monday, Sept 1 — Labor Day</div>
+                <div style="font-size:14px; color:#7A6E5A; line-height:1.45; margin-top:2px">No charge for that day. Your September statement already reflects it.</div>
+              </div>
+            </div>
+            </div>
+
+          
+            <div style="display:grid; grid-template-columns:repeat(5,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goToday }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">🏠</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Today</span></div><div onClick="{{ goSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goBilling }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💳</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Billing</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">1</span></div><div onClick="{{ goMessages }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💬</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">2</span></div><div onClick="{{ goAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👤</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isDay }}">
+          
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#C9E6DC; border-bottom:3px solid #F5B731; padding:52px 18px 14px; display:flex; align-items:center; gap:12px">
+              <span onClick="{{ goToday }}" style="font-size:20px; color:#01294A; font-weight:800">←</span>
+              <div style="flex:1">
+                <div style="font-family:'Lora',serif; font-size:18px; font-weight:700; color:#01294A">Ellie's day</div>
+                <div style="font-size:13px; color:rgba(1,41,74,.65)">Tuesday, August 11 · full day</div>
+              </div>
+              <span style="font-size:19px">⬇</span>
+            </div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:12px">
+
+              <div style="position:relative; border-radius:14px; overflow:hidden; height:210px">
+                <image-slot id="day-hero" shape="rect" placeholder="Photo of the day" style="width:100%; height:100%"></image-slot>
+                <div style="position:absolute; left:0; right:0; bottom:0; padding:28px 14px 12px; background:linear-gradient(180deg,rgba(1,41,74,0),rgba(1,41,74,.78)); color:#fff; pointer-events:none">
+                  <div style="font-size:15px; font-weight:700">Water table on the playground</div>
+                  <div style="font-size:13px; opacity:.85">10:20a · Miss Kiara</div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Naps</div>
+                <div style="padding:14px 18px; display:flex; flex-direction:column; gap:10px">
+                  <div style="display:flex; justify-content:space-between; align-items:center"><span style="font-size:15px; color:#2E2A22">12:10p – 1:45p</span><span style="font-size:14px; font-weight:700; color:#1a5c3e">1h 35m</span></div>
+                  <div style="height:10px; border-radius:5px; background:#F5F0E4; overflow:hidden"><div style="width:62%; height:100%; background:#5BAD8B; margin-left:26%"></div></div>
+                  <div style="display:flex; justify-content:space-between; font-size:12px; color:#7A6E5A"><span>11:00a</span><span>3:00p</span></div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Meals &amp; bottles</div>
+                <div style="display:flex; flex-direction:column">
+                  <div style="padding:12px 18px; border-bottom:1px solid #F5F0E4; display:flex; justify-content:space-between; align-items:center"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Breakfast · 9:15a</div><div style="font-size:13px; color:#7A6E5A">Oatmeal, banana</div></div><span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700">Most</span></div>
+                  <div style="padding:12px 18px; border-bottom:1px solid #F5F0E4; display:flex; justify-content:space-between; align-items:center"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Lunch · 11:30a</div><div style="font-size:13px; color:#7A6E5A">Chicken, green beans, pears</div></div><span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700">All</span></div>
+                  <div style="padding:12px 18px; display:flex; justify-content:space-between; align-items:center"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Snack · 2:15p</div><div style="font-size:13px; color:#7A6E5A">Goldfish, water cup</div></div><span style="background:#FFF8E1; color:#7a5a00; border:1px solid #FDE598; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700">Some</span></div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Diapering</div>
+                <div style="padding:14px 18px; display:flex; flex-wrap:wrap; gap:7px">
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FAF7ED; border:1.5px solid #E8E0CC; border-radius:8px; padding:5px 10px; min-width:62px; font-size:12px"><span style="font-weight:700; color:#01294A">8:55a</span><span style="color:#7A6E5A; font-weight:600">Wet</span></span>
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FAF7ED; border:1.5px solid #E8E0CC; border-radius:8px; padding:5px 10px; min-width:62px; font-size:12px"><span style="font-weight:700; color:#01294A">11:05a</span><span style="color:#7A6E5A; font-weight:600">BM</span></span>
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FAF7ED; border:1.5px solid #E8E0CC; border-radius:8px; padding:5px 10px; min-width:62px; font-size:12px"><span style="font-weight:700; color:#01294A">1:50p</span><span style="color:#7A6E5A; font-weight:600">Wet</span></span>
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FAF7ED; border:1.5px solid #E8E0CC; border-radius:8px; padding:5px 10px; min-width:62px; font-size:12px"><span style="font-weight:700; color:#01294A">3:20p</span><span style="color:#7A6E5A; font-weight:600">Dry</span></span>
+                </div>
+                <div style="padding:0 18px 14px"><div style="background:#FDEEE8; border:1.5px solid #f2b89a; border-radius:8px; padding:10px 12px; font-size:13px; color:#7a2a18">Send more size 4 diapers — 3 left in her cubby.</div></div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; padding:16px 18px">
+                <div style="font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px; margin-bottom:6px">A note from Miss Amy</div>
+                <p style="font-size:15px; line-height:1.55; color:#2E2A22; margin:0">Ellie had a really sweet day. She shared the water table without being asked and helped put the cups away at clean-up. Bring a change of clothes tomorrow — we'll be outside if the weather holds.</p>
+              </div>
+            </div>
+            </div>
+          
+            <div style="display:grid; grid-template-columns:repeat(5,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goToday }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">🏠</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Today</span></div><div onClick="{{ goSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goBilling }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💳</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Billing</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">1</span></div><div onClick="{{ goMessages }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💬</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">2</span></div><div onClick="{{ goAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👤</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isSchedule }}">
+          
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#C9E6DC; border-bottom:3px solid #F5B731; padding:52px 18px 14px">
+              <div style="font-family:'Lora',serif; font-size:20px; font-weight:700; color:#01294A">My Schedule</div>
+              <div style="font-size:13px; color:rgba(1,41,74,.65)">Ellie · Toddlers · confirmed care days</div>
+            </div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:14px">
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC">
+                  <div><div style="font-family:'Lora',serif; font-weight:700; font-size:17px; color:#01294A">August 2026</div><div style="font-size:13px; color:#7A6E5A"><span style="color:#1a5c3e; font-weight:700">6 Full</span> + <span style="color:#7a5a00; font-weight:700">2 Half</span></div></div>
+                  <div style="text-align:right"><div style="font-size:19px; font-weight:800; color:#1a5c3e">$204.00</div><div style="font-size:12px; color:#3A7B60; font-weight:700">PAID Aug 1</div></div>
+                </div>
+                <div style="padding:14px 18px; display:flex; flex-wrap:wrap; gap:7px">
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FAF7ED; border:1.5px solid #E8E0CC; border-radius:8px; padding:5px 10px; min-width:58px; font-size:12px; line-height:1.3"><span style="font-size:11px; color:#7A6E5A; font-weight:600; text-transform:uppercase">Tue</span><span style="font-weight:700; color:#01294A">Aug 11</span><span style="font-size:11px; color:#7A6E5A; font-weight:600">Full</span></span>
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FAF7ED; border:1.5px solid #E8E0CC; border-radius:8px; padding:5px 10px; min-width:58px; font-size:12px; line-height:1.3"><span style="font-size:11px; color:#7A6E5A; font-weight:600; text-transform:uppercase">Thu</span><span style="font-weight:700; color:#01294A">Aug 13</span><span style="font-size:11px; color:#7A6E5A; font-weight:600">Full</span></span>
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FFF8E1; border:1.5px solid #FDE598; border-radius:8px; padding:5px 10px; min-width:58px; font-size:12px; line-height:1.3"><span style="font-size:11px; color:#7A6E5A; font-weight:600; text-transform:uppercase">Tue</span><span style="font-weight:700; color:#7a5a00">Aug 18</span><span style="font-size:11px; color:#7A6E5A; font-weight:600">½</span></span>
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FAF7ED; border:1.5px solid #E8E0CC; border-radius:8px; padding:5px 10px; min-width:58px; font-size:12px; line-height:1.3"><span style="font-size:11px; color:#7A6E5A; font-weight:600; text-transform:uppercase">Thu</span><span style="font-weight:700; color:#01294A">Aug 20</span><span style="font-size:11px; color:#7A6E5A; font-weight:600">Full</span></span>
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FAF7ED; border:1.5px solid #E8E0CC; border-radius:8px; padding:5px 10px; min-width:58px; font-size:12px; line-height:1.3"><span style="font-size:11px; color:#7A6E5A; font-weight:600; text-transform:uppercase">Tue</span><span style="font-weight:700; color:#01294A">Aug 25</span><span style="font-size:11px; color:#7A6E5A; font-weight:600">Full</span></span>
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FFF8E1; border:1.5px solid #FDE598; border-radius:8px; padding:5px 10px; min-width:58px; font-size:12px; line-height:1.3"><span style="font-size:11px; color:#7A6E5A; font-weight:600; text-transform:uppercase">Thu</span><span style="font-weight:700; color:#7a5a00">Aug 27</span><span style="font-size:11px; color:#7A6E5A; font-weight:600">½</span></span>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC">
+                  <div><div style="font-family:'Lora',serif; font-weight:700; font-size:17px; color:#01294A">September 2026</div><div style="font-size:13px; color:#7A6E5A"><span style="color:#1a5c3e; font-weight:700">8 Full</span></div></div>
+                  <div style="text-align:right"><div style="font-size:19px; font-weight:800; color:#1a5c3e">$272.00</div><div style="font-size:12px; color:#7a5a00; font-weight:700">DUE SEP 1</div></div>
+                </div>
+                <div style="padding:14px 18px; display:flex; flex-wrap:wrap; gap:7px">
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FAF7ED; border:1.5px solid #E8E0CC; border-radius:8px; padding:5px 10px; min-width:58px; font-size:12px; line-height:1.3"><span style="font-size:11px; color:#7A6E5A; font-weight:600; text-transform:uppercase">Tue</span><span style="font-weight:700; color:#01294A">Sep 2</span><span style="font-size:11px; color:#7A6E5A; font-weight:600">Full</span></span>
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#FAF7ED; border:1.5px solid #E8E0CC; border-radius:8px; padding:5px 10px; min-width:58px; font-size:12px; line-height:1.3"><span style="font-size:11px; color:#7A6E5A; font-weight:600; text-transform:uppercase">Thu</span><span style="font-weight:700; color:#01294A">Sep 4</span><span style="font-size:11px; color:#7A6E5A; font-weight:600">Full</span></span>
+                  <span style="display:inline-flex; flex-direction:column; align-items:center; background:#F5F0E4; border:1.5px solid #E8E0CC; border-radius:8px; padding:5px 10px; min-width:58px; font-size:12px; line-height:1.3; opacity:.65"><span style="font-size:11px; color:#7A6E5A; font-weight:600; text-transform:uppercase">Mon</span><span style="font-weight:700; color:#7A6E5A; text-decoration:line-through">Sep 1</span><span style="font-size:11px; color:#7A6E5A; font-weight:600">Closed</span></span>
+                </div>
+                <div style="padding:0 18px 16px"><button onClick="{{ goPay }}" style="width:100%; background:#F5B731; color:#01294A; border:none; border-radius:6px; padding:12px; font-size:15px; font-weight:800; font-family:'Nunito',sans-serif">Pay September · $272.00</button></div>
+              </div>
+
+              <button style="background:transparent; border:1.5px solid #01294A; color:#01294A; border-radius:6px; padding:12px; font-size:15px; font-weight:600; font-family:'Nunito',sans-serif">Register for additional days →</button>
+              <p style="text-align:center; font-size:13px; color:#7A6E5A; line-height:1.5; margin:0">Showing this month and next. Older months live in Billing → Statements.</p>
+            </div>
+            </div>
+          
+            <div style="display:grid; grid-template-columns:repeat(5,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goToday }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🏠</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Today</span></div><div onClick="{{ goSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">🗓</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Schedule</span></div><div onClick="{{ goBilling }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💳</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Billing</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">1</span></div><div onClick="{{ goMessages }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💬</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">2</span></div><div onClick="{{ goAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👤</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isBilling }}">
+          
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#C9E6DC; border-bottom:3px solid #F5B731; padding:52px 18px 14px">
+              <div style="font-family:'Lora',serif; font-size:20px; font-weight:700; color:#01294A">Billing</div>
+              <div style="font-size:13px; color:rgba(1,41,74,.65)">Reyes family · 2 children</div>
+            </div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:14px">
+
+              <div style="background:#01294A; border-radius:14px; padding:20px; color:#fff">
+                <div style="font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:rgba(255,255,255,.65)">Balance due</div>
+                <div style="font-size:40px; font-weight:800; letter-spacing:-.02em; margin:2px 0 4px">$312.00</div>
+                <div style="font-size:14px; color:#FDE598">Due Friday, August 15</div>
+                <button onClick="{{ goPay }}" style="width:100%; margin-top:16px; background:#F5B731; color:#01294A; border:none; border-radius:6px; padding:13px; font-size:16px; font-weight:800; font-family:'Nunito',sans-serif">Pay now</button>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:14px; border-top:1px solid rgba(255,255,255,.18)">
+                  <div><div style="font-size:14px; font-weight:700">Autopay</div><div style="font-size:13px; color:rgba(255,255,255,.6)">Charge on the 1st of each month</div></div>
+                  <div style="width:50px; height:30px; border-radius:15px; background:rgba(255,255,255,.25); padding:3px; display:flex; align-items:center"><div style="width:24px; height:24px; border-radius:50%; background:#fff"></div></div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">August statement</div>
+                <div style="padding:6px 18px 14px">
+                  <div style="display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid #F5F0E4; font-size:15px"><span style="color:#2E2A22">Ellie · 6 full, 2 half</span><span style="font-weight:700; color:#2E2A22">$204.00</span></div>
+                  <div style="display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid #F5F0E4; font-size:15px"><span style="color:#2E2A22">Jack · 4 full</span><span style="font-weight:700; color:#2E2A22">$136.00</span></div>
+                  <div style="display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid #F5F0E4; font-size:15px"><span style="color:#3A7B60">Sibling discount</span><span style="font-weight:700; color:#3A7B60">−$28.00</span></div>
+                  <div style="display:flex; justify-content:space-between; padding:12px 0 4px; font-size:17px"><span style="font-weight:800; color:#01294A">Total</span><span style="font-weight:800; color:#01294A">$312.00</span></div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; display:flex; justify-content:space-between; align-items:center"><span style="font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Payment method</span><span style="font-size:13px; font-weight:700; color:#3A7B60">Change</span></div>
+                <div style="padding:14px 18px; display:flex; align-items:center; gap:12px">
+                  <div style="width:44px; height:30px; border-radius:5px; background:#01294A; display:flex; align-items:center; justify-content:center; color:#F5B731; font-size:12px; font-weight:800">VISA</div>
+                  <div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">•••• 4412</div><div style="font-size:13px; color:#7A6E5A">Expires 09/28 · Hannah Reyes</div></div>
+                  <span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700">DEFAULT</span>
+                </div>
+                <div style="padding:0 18px 14px; display:flex; align-items:center; gap:12px">
+                  <div style="width:44px; height:30px; border-radius:5px; background:#FAF7ED; border:1px solid #E8E0CC; display:flex; align-items:center; justify-content:center; font-size:15px">🏦</div>
+                  <div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Checking •••• 8830</div><div style="font-size:13px; color:#7A6E5A">ACH · no processing fee</div></div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">History</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:13px 18px; border-bottom:1px solid #F5F0E4"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">July 2026</div><div style="font-size:13px; color:#7A6E5A">Paid Jul 2 · Visa 4412</div></div><span style="font-weight:700; color:#1a5c3e; font-size:15px">$288.00</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:13px 18px; border-bottom:1px solid #F5F0E4"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">June 2026</div><div style="font-size:13px; color:#7A6E5A">Paid Jun 1 · Visa 4412</div></div><span style="font-weight:700; color:#1a5c3e; font-size:15px">$306.00</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:13px 18px"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Registration fee 2026–27</div><div style="font-size:13px; color:#7A6E5A">Paid Apr 14 · Checking 8830</div></div><span style="font-weight:700; color:#1a5c3e; font-size:15px">$75.00</span></div>
+              </div>
+              <button style="background:transparent; border:1.5px solid #01294A; color:#01294A; border-radius:6px; padding:12px; font-size:15px; font-weight:600; font-family:'Nunito',sans-serif">Download statements (PDF)</button>
+            </div>
+            </div>
+          
+            <div style="display:grid; grid-template-columns:repeat(5,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goToday }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🏠</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Today</span></div><div onClick="{{ goSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goBilling }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">💳</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Billing</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">1</span></div><div onClick="{{ goMessages }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💬</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">2</span></div><div onClick="{{ goAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👤</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isPaysheet }}">
+          
+          <div style="min-height:100%; background:#01294A; position:relative; display:flex; flex-direction:column; justify-content:flex-end; font-family:'Nunito',sans-serif">
+            <div style="position:absolute; inset:0; background:rgba(1,15,26,.55)"></div>
+            <div style="position:relative; background:#FDFAF0; border-radius:22px 22px 0 0; padding:10px 18px 30px">
+              <div onClick="{{ goBilling }}" style="width:42px; height:5px; border-radius:3px; background:#E8E0CC; margin:0 auto 16px"></div>
+              <div style="font-family:'Lora',serif; font-size:21px; font-weight:700; color:#01294A; margin-bottom:2px">Pay August statement</div>
+              <div style="font-size:14px; color:#7A6E5A; margin-bottom:18px">Reyes family · due Friday, Aug 15</div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:12px; padding:16px 18px; margin-bottom:14px">
+                <div style="display:flex; justify-content:space-between; align-items:baseline"><span style="font-size:15px; color:#7A6E5A">Amount</span><span style="font-size:32px; font-weight:800; color:#01294A">$312.00</span></div>
+                <div style="display:flex; gap:8px; margin-top:12px">
+                  <div style="flex:1; text-align:center; border:2px solid #01294A; background:#FAF7ED; border-radius:8px; padding:10px 6px"><div style="font-size:14px; font-weight:800; color:#01294A">Full balance</div><div style="font-size:13px; color:#2E2A22; font-weight:600">$312.00</div></div>
+                  <div style="flex:1; text-align:center; border:1.5px solid #E8E0CC; background:#fff; border-radius:8px; padding:10px 6px"><div style="font-size:14px; font-weight:700; color:#7A6E5A">Other amount</div><div style="font-size:13px; color:#7A6E5A">Enter</div></div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:12px; overflow:hidden; margin-bottom:14px">
+                <div style="padding:13px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid #F5F0E4; background:#FAF7ED">
+                  <div style="width:44px; height:30px; border-radius:5px; background:#01294A; display:flex; align-items:center; justify-content:center; color:#F5B731; font-size:12px; font-weight:800">VISA</div>
+                  <div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Visa •••• 4412</div><div style="font-size:13px; color:#7A6E5A">+ $9.36 card fee (3%)</div></div>
+                  <div style="width:22px; height:22px; border-radius:50%; border:2px solid #E8E0CC"></div>
+                </div>
+                <div style="padding:13px 16px; display:flex; align-items:center; gap:12px">
+                  <div style="width:44px; height:30px; border-radius:5px; background:#FAF7ED; border:1px solid #E8E0CC; display:flex; align-items:center; justify-content:center; font-size:15px">🏦</div>
+                  <div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Checking •••• 8830</div><div style="font-size:13px; color:#3A7B60; font-weight:700">No fee</div></div>
+                  <div style="width:22px; height:22px; border-radius:50%; background:#01294A; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:800">✓</div>
+                </div>
+              </div>
+
+              <label style="display:flex; align-items:center; gap:10px; background:#EAF5EF; border:1.5px solid #C9E6DC; border-radius:10px; padding:12px 14px; margin-bottom:16px">
+                <div style="width:22px; height:22px; border-radius:5px; background:#5BAD8B; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:14px; flex-shrink:0">✓</div>
+                <span style="font-size:14px; color:#1a5c3e; line-height:1.4">Turn on autopay — charge this account on the 1st each month</span>
+              </label>
+
+              <div style="display:flex; justify-content:space-between; font-size:17px; font-weight:800; color:#01294A; padding:0 2px 14px"><span>Total today</span><span>$312.00</span></div>
+              <button onClick="{{ goPaid }}" style="width:100%; background:#01294A; color:#fff; border:none; border-radius:6px; padding:15px; font-size:17px; font-weight:800; font-family:'Nunito',sans-serif">Pay $312.00</button>
+              <p style="text-align:center; font-size:12px; color:#7A6E5A; margin:12px 0 0; line-height:1.5">Payments are processed by our card processor. myMDO never stores your card or bank number.</p>
+            </div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isPaid }}">
+          <div style="min-height:100%; background:#01294A; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:0 24px; font-family:'Nunito',sans-serif; text-align:center">
+            <div style="width:78px; height:78px; border-radius:50%; background:#5BAD8B; color:#fff; display:flex; align-items:center; justify-content:center; font-size:38px; font-weight:800; margin-bottom:20px">✓</div>
+            <div style="font-family:'Lora',serif; font-size:26px; font-weight:700; color:#fff; margin-bottom:6px">Paid $312.00</div>
+            <div style="font-size:15px; color:rgba(255,255,255,.75); line-height:1.55">Checking •••• 8830 · Confirmation #A4-91662</div>
+            <div style="font-size:15px; color:#FDE598; line-height:1.55; margin-top:4px">Autopay is on — next charge Sept 1</div>
+            <div style="background:rgba(255,255,255,.1); border-radius:12px; padding:14px 18px; margin-top:24px; font-size:14px; color:rgba(255,255,255,.8); line-height:1.5">A receipt is on its way to hannah.reyes@gmail.com</div>
+            <button onClick="{{ goBilling }}" style="width:100%; margin-top:26px; background:#F5B731; color:#01294A; border:none; border-radius:6px; padding:15px; font-size:17px; font-weight:800; font-family:'Nunito',sans-serif; cursor:pointer">Done</button>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isInbox }}">
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#C9E6DC; border-bottom:3px solid #F5B731; padding:52px 18px 14px; display:flex; justify-content:space-between; align-items:flex-end">
+              <div><div style="font-family:'Lora',serif; font-size:20px; font-weight:700; color:#01294A">Messages</div><div style="font-size:13px; color:rgba(1,41,74,.65)">Staff reply during class hours</div></div>
+              <span style="background:#01294A; color:#fff; border-radius:6px; padding:8px 14px; font-size:14px; font-weight:800">New</span>
+            </div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:14px 16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:9px">
+              <div onClick="{{ goThread }}" style="display:flex; gap:12px; padding:13px 16px; background:#fff; border:1px solid #E8E0CC; border-radius:12px; cursor:pointer; align-items:flex-start"><div style="width:42px; height:42px; border-radius:50%; background:#01294A; color:#F5B731; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:17px; flex-shrink:0">A</div><div style="flex:1; min-width:0"><div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px"><span style="font-size:16px; font-weight:800; color:#01294A">Miss Amy</span><span style="font-size:12px; color:#7A6E5A; white-space:nowrap">12:22p</span></div><div style="font-size:12px; color:#7A6E5A; font-weight:600">Ellie's teacher · Toddlers</div><div style="font-size:14px; color:#2E2A22; line-height:1.4; margin-top:3px">She fell asleep before I could get her shoes off 😊</div></div><span style="width:10px; height:10px; border-radius:50%; background:#E97D55; margin-top:6px; flex-shrink:0"></span></div>
+              <div onClick="{{ goThread }}" style="display:flex; gap:12px; padding:13px 16px; background:#fff; border:1px solid #E8E0CC; border-radius:12px; cursor:pointer; align-items:flex-start"><div style="width:42px; height:42px; border-radius:50%; background:#5BAD8B; color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:17px; flex-shrink:0">D</div><div style="flex:1; min-width:0"><div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px"><span style="font-size:16px; font-weight:800; color:#01294A">Miss Dana</span><span style="font-size:12px; color:#7A6E5A; white-space:nowrap">10:05a</span></div><div style="font-size:12px; color:#7A6E5A; font-weight:600">Jack's teacher · Preschool</div><div style="font-size:14px; color:#2E2A22; line-height:1.4; margin-top:3px">Jack led the line to chapel and took it very seriously.</div></div><span style="width:10px; height:10px; border-radius:50%; background:#E97D55; margin-top:6px; flex-shrink:0"></span></div>
+              <div onClick="{{ goThread }}" style="display:flex; gap:12px; padding:13px 16px; background:#fff; border:1px solid #E8E0CC; border-radius:12px; cursor:pointer; align-items:flex-start"><div style="width:42px; height:42px; border-radius:50%; background:#F5B731; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:17px; flex-shrink:0">S</div><div style="flex:1; min-width:0"><div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px"><span style="font-size:16px; font-weight:700; color:#01294A">Front office</span><span style="font-size:12px; color:#7A6E5A; white-space:nowrap">Mon</span></div><div style="font-size:12px; color:#7A6E5A; font-weight:600">Sonya Bell, director</div><div style="font-size:14px; color:#7A6E5A; line-height:1.4; margin-top:3px">Your emergency contact form is up for renewal Sept 1.</div></div></div>
+              <div style="margin-top:6px; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; padding:0 2px">From the center</div>
+              <div style="background:#EAF5EF; border:1.5px solid #C9E6DC; border-radius:12px; padding:13px 16px">
+                <div style="font-size:15px; font-weight:700; color:#01294A">Closed Monday, Sept 1 — Labor Day</div>
+                <div style="font-size:14px; color:#7A6E5A; line-height:1.45; margin-top:2px">No charge for that day. Posted Aug 8 · announcements can't be replied to.</div>
+              </div>
+              <div style="background:#EAF5EF; border:1.5px solid #C9E6DC; border-radius:12px; padding:13px 16px">
+                <div style="font-size:15px; font-weight:700; color:#01294A">Family picnic — Saturday, Sept 13</div>
+                <div style="font-size:14px; color:#7A6E5A; line-height:1.45; margin-top:2px">11a at the church pavilion. Bring a side to share.</div>
+              </div>
+            </div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(5,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goToday }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🏠</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Today</span></div><div onClick="{{ goSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goBilling }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💳</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Billing</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">1</span></div><div onClick="{{ goMessages }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">💬</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">2</span></div><div onClick="{{ goAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👤</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isThread }}">
+          
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#C9E6DC; border-bottom:3px solid #F5B731; padding:52px 18px 14px; display:flex; align-items:center; gap:12px">
+              <span onClick="{{ goMessages }}" style="font-size:20px; color:#01294A; font-weight:800">←</span>
+              <div style="width:38px; height:38px; border-radius:50%; background:#01294A; color:#F5B731; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:16px; flex-shrink:0">A</div>
+              <div style="flex:1"><div style="font-family:'Lora',serif; font-size:17px; font-weight:700; color:#01294A">Miss Amy</div><div style="font-size:13px; color:rgba(1,41,74,.65)">Toddlers · usually replies by 3p</div></div>
+            </div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:12px">
+              <div style="text-align:center; font-size:12px; color:#7A6E5A; font-weight:700; letter-spacing:.06em">TUESDAY, AUGUST 11</div>
+              <div style="align-self:flex-start; max-width:80%; background:#fff; border:1px solid #E8E0CC; border-radius:14px 14px 14px 4px; padding:11px 14px">
+                <div style="font-size:15px; color:#2E2A22; line-height:1.45">Good morning! Ellie came in happy today — she went straight for the blocks.</div>
+                <div style="font-size:11px; color:#7A6E5A; margin-top:4px">8:50a</div>
+              </div>
+              <div style="align-self:flex-start; max-width:80%; background:#fff; border:1px solid #E8E0CC; border-radius:14px 14px 14px 4px; padding:11px 14px">
+                <div style="font-size:15px; color:#2E2A22; line-height:1.45">She's almost out of size 4 diapers — could you send a pack Thursday?</div>
+                <div style="font-size:11px; color:#7A6E5A; margin-top:4px">11:02a</div>
+              </div>
+              <div style="align-self:flex-end; max-width:80%; background:#01294A; border-radius:14px 14px 4px 14px; padding:11px 14px">
+                <div style="font-size:15px; color:#fff; line-height:1.45">Absolutely — I'll drop a box Thursday morning. Thank you!</div>
+                <div style="font-size:11px; color:rgba(255,255,255,.6); margin-top:4px">11:14a · Read</div>
+              </div>
+              <div style="align-self:flex-start; max-width:80%; background:#fff; border:1px solid #E8E0CC; border-radius:14px 14px 14px 4px; padding:11px 14px 12px">
+                <div style="font-size:15px; color:#2E2A22; line-height:1.45; margin-bottom:8px">She fell asleep before I could get her shoes off 😊</div>
+                <image-slot id="msg-photo" shape="rounded" radius="10" placeholder="Nap photo" style="height:150px; width:100%"></image-slot>
+                <div style="font-size:11px; color:#7A6E5A; margin-top:6px">12:22p</div>
+              </div>
+            </div>
+            </div>
+            <div style="border-top:1px solid #E8E0CC; background:#fff; padding:10px 14px 26px; display:flex; align-items:center; gap:10px">
+              <span style="font-size:22px; color:#7A6E5A">＋</span>
+              <div style="flex:1; border:1px solid #E8E0CC; border-radius:20px; padding:10px 14px; font-size:15px; color:#7A6E5A; background:#FAF7ED">Message Miss Amy…</div>
+              <div style="width:38px; height:38px; border-radius:50%; background:#01294A; color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:800">↑</div>
+            </div>
+          
+            <div style="display:grid; grid-template-columns:repeat(5,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goToday }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🏠</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Today</span></div><div onClick="{{ goSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goBilling }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💳</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Billing</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">1</span></div><div onClick="{{ goMessages }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">💬</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">2</span></div><div onClick="{{ goAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👤</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isAccount }}">
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#C9E6DC; border-bottom:3px solid #F5B731; padding:52px 18px 14px">
+              <div style="font-family:'Lora',serif; font-size:20px; font-weight:700; color:#01294A">Account</div>
+              <div style="font-size:13px; color:rgba(1,41,74,.65)">Reyes family · with us since 2024</div>
+            </div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:14px">
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Children</div>
+                <div onClick="{{ goChild }}" style="display:flex; align-items:center; gap:12px; padding:13px 18px; border-bottom:1px solid #F5F0E4; cursor:pointer"><div style="width:42px; height:42px; border-radius:50%; background:#F5B731; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:17px; flex-shrink:0">E</div><div style="flex:1"><div style="font-size:16px; font-weight:700; color:#01294A">Ellie Reyes</div><div style="font-size:13px; color:#7A6E5A">Toddlers · Miss Amy</div></div><span style="background:#FDEEE8; border:1.5px solid #E97D55; color:#7a2a18; border-radius:999px; padding:2px 9px; font-size:11px; font-weight:800">PEANUT</span><span style="font-size:17px; color:#7A6E5A; font-weight:800">›</span></div>
+                <div onClick="{{ goChild }}" style="display:flex; align-items:center; gap:12px; padding:13px 18px; border-bottom:1px solid #F5F0E4; cursor:pointer"><div style="width:42px; height:42px; border-radius:50%; background:#5BAD8B; color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:17px; flex-shrink:0">J</div><div style="flex:1"><div style="font-size:16px; font-weight:700; color:#01294A">Jack Reyes</div><div style="font-size:13px; color:#7A6E5A">Preschool · Miss Dana</div></div><span style="font-size:17px; color:#7A6E5A; font-weight:800">›</span></div>
+                <div style="padding:12px 18px; font-size:14px; font-weight:700; color:#3A7B60">+ Add a child</div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Parents & guardians</div>
+                <div style="display:flex; align-items:center; gap:12px; padding:13px 18px; border-bottom:1px solid #F5F0E4"><div style="width:42px; height:42px; border-radius:50%; background:#01294A; color:#F5B731; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:17px">H</div><div style="flex:1"><div style="font-size:16px; font-weight:700; color:#01294A">Hannah Reyes <span style="font-size:12px; font-weight:700; color:#7A6E5A">(you)</span></div><div style="font-size:13px; color:#7A6E5A">Primary contact · billing</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Email</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">hannah.reyes@gmail.com</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Mobile</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">(314) 555-0148</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">PIN</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">•••• · sign-in and pickup</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Change</span></div>
+                <div style="display:flex; align-items:center; gap:12px; padding:13px 18px; border-bottom:1px solid #F5F0E4"><div style="width:42px; height:42px; border-radius:50%; background:#C9E6DC; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:17px">D</div><div style="flex:1"><div style="font-size:16px; font-weight:700; color:#01294A">Daniel Reyes</div><div style="font-size:13px; color:#7A6E5A">Second parent · own PIN &amp; app access</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                <div style="padding:12px 18px; font-size:14px; font-weight:700; color:#3A7B60">+ Invite another parent</div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Approved for pickup</div>
+                <div style="padding:13px 18px; display:flex; flex-direction:column; gap:10px">
+                  <div style="display:flex; align-items:center; gap:10px"><span style="width:34px; height:34px; border-radius:50%; background:#FAF7ED; border:1px solid #E8E0CC; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:14px">J</span><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">June Halvorsen</div><div style="font-size:13px; color:#7A6E5A">Grandmother · photo on file</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                  <div style="display:flex; align-items:center; gap:10px"><span style="width:34px; height:34px; border-radius:50%; background:#FAF7ED; border:1px solid #E8E0CC; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:14px">T</span><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Tessa Boyd</div><div style="font-size:13px; color:#7A6E5A">Neighbor · Thursdays only</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                  <div style="background:#FFF8E1; border:1.5px solid #FDE598; border-radius:8px; padding:10px 12px; font-size:13px; color:#7a5a00; line-height:1.45">New names show ID at the desk the first time. The office reviews additions.</div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Notifications</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Daily moments</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">Photos, naps, meals as they happen</div></div><div style="width:48px; height:29px; border-radius:15px; background:#5BAD8B; padding:3px; display:flex; align-items:center; justify-content:flex-end; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Messages from staff</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">Push and badge</div></div><div style="width:48px; height:29px; border-radius:15px; background:#5BAD8B; padding:3px; display:flex; align-items:center; justify-content:flex-end; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Billing reminders</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">3 days before a statement is due</div></div><div style="width:48px; height:29px; border-radius:15px; background:#5BAD8B; padding:3px; display:flex; align-items:center; justify-content:flex-end; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Center announcements</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">Closings, events, reminders</div></div><div style="width:48px; height:29px; border-radius:15px; background:#5BAD8B; padding:3px; display:flex; align-items:center; justify-content:flex-end; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Quiet hours</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">Hold non-urgent pushes 7p – 7a</div></div><div style="width:48px; height:29px; border-radius:15px; background:#E8E0CC; padding:3px; display:flex; align-items:center; justify-content:flex-start; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">This phone</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Face ID sign-in</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">Falls back to your 4-digit PIN</div></div><div style="width:48px; height:29px; border-radius:15px; background:#5BAD8B; padding:3px; display:flex; align-items:center; justify-content:flex-end; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Language</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">English</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Change</span></div>
+                <div style="padding:14px 18px; font-size:15px; font-weight:800; color:#7a2a18">Sign out</div>
+              </div>
+
+              <p style="text-align:center; font-size:13px; color:#7A6E5A; line-height:1.5; margin:0 0 4px">myMDO · Timothy Lutheran Mother's Day Out<br>Version 1.0 · <a href="#" style="color:#3A7B60; text-decoration:none">Privacy &amp; photo policy</a></p>
+            </div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(5,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goToday }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🏠</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Today</span></div><div onClick="{{ goSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goBilling }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💳</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Billing</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">1</span></div><div onClick="{{ goMessages }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💬</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">2</span></div><div onClick="{{ goAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">👤</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isChild }}">
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#C9E6DC; border-bottom:3px solid #F5B731; padding:52px 18px 14px; display:flex; align-items:center; gap:12px">
+              <span onClick="{{ goAccount }}" style="font-size:20px; color:#01294A; font-weight:800; cursor:pointer">←</span>
+              <div style="flex:1"><div style="font-family:'Lora',serif; font-size:18px; font-weight:700; color:#01294A">Ellie Reyes</div><div style="font-size:13px; color:rgba(1,41,74,.65)">Toddlers · enrolled Tue &amp; Thu</div></div>
+            </div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:14px">
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="display:flex; gap:14px; padding:16px 18px; align-items:center">
+                  <image-slot id="child-photo" shape="circle" placeholder="Ellie's photo" style="width:74px; height:74px; flex-shrink:0"></image-slot>
+                  <div style="flex:1; display:flex; flex-direction:column; gap:3px">
+                    <div style="font-family:'Lora',serif; font-size:19px; font-weight:700; color:#01294A">Ellie Marie Reyes</div>
+                    <div style="font-size:14px; color:#7A6E5A">Born March 4, 2024 · 2 years 5 months</div>
+                    <span style="align-self:flex-start; font-size:13px; font-weight:700; color:#3A7B60">Change photo</span>
+                  </div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Nickname staff use</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">Ellie</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Room</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">Toddlers · Miss Amy &amp; Miss Kiara</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Request</span></div>
+              </div>
+
+              <div style="background:#FDEEE8; border:1.5px solid #E97D55; border-radius:14px; overflow:hidden">
+                <div style="padding:13px 18px; background:#f8ded3; border-bottom:1.5px solid #f2b89a; display:flex; align-items:center; gap:9px"><span style="width:24px; height:24px; border-radius:50%; background:#E97D55; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800">!</span><span style="font-family:'Lora',serif; font-weight:700; color:#7a2a18; font-size:16px">Allergies &amp; medical</span></div>
+                <div style="padding:14px 18px; display:flex; flex-direction:column; gap:10px">
+                  <div style="display:flex; flex-wrap:wrap; gap:7px">
+                    <span style="background:#E97D55; color:#fff; border-radius:999px; padding:5px 12px; font-size:13px; font-weight:800">Peanuts — severe</span>
+                    <span style="background:#fff; border:1.5px solid #f2b89a; color:#7a2a18; border-radius:999px; padding:5px 12px; font-size:13px; font-weight:700">Dairy — sensitivity</span>
+                    <span style="background:#fff; border:1.5px solid #f2b89a; color:#7a2a18; border-radius:999px; padding:5px 12px; font-size:13px; font-weight:700">EpiPen in cubby</span>
+                  </div>
+                  <div style="font-size:14px; color:#7a2a18; line-height:1.5">Shows on a teacher's screen before they log any meal or snack.</div>
+                  <div style="display:flex; gap:9px; flex-wrap:wrap">
+                    <span style="background:#01294A; color:#fff; border-radius:6px; padding:10px 16px; font-size:14px; font-weight:800">Request a change</span>
+                    <span style="border:1.5px solid #E97D55; color:#7a2a18; border-radius:6px; padding:9px 16px; font-size:14px; font-weight:700">Upload action plan</span>
+                  </div>
+                  <div style="font-size:13px; color:#7a2a18; opacity:.8; line-height:1.45">Medical details are changed by the office so the nurse form stays on file — your request goes to Sonya.</div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Day-to-day</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Nap</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">Mat by the window · sleep sack, no music</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Comfort item</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">Grey bunny — in her bag</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Potty</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">Diapers, size 4 · practicing at home</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Words to know</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">"Bee-bee" = bunny, "up-up" = pick me up</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Photos & privacy</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Share her photos with her room</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">Other Toddlers parents see group photos she is in</div></div><div style="width:48px; height:29px; border-radius:15px; background:#5BAD8B; padding:3px; display:flex; align-items:center; justify-content:flex-end; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Use photos in center materials</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">Website, flyers, newsletters</div></div><div style="width:48px; height:29px; border-radius:15px; background:#E8E0CC; padding:3px; display:flex; align-items:center; justify-content:flex-start; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Photo archive</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">Kept 12 months, then deleted</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">View</span></div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">On file</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Immunization record</div><div style="font-size:13px; color:#7A6E5A">Uploaded Apr 14, 2026</div></div><span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700">CURRENT</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Emergency contact form</div><div style="font-size:13px; color:#7a5a00; font-weight:700">Renew by Sept 1</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Update</span></div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; padding:14px 18px; font-size:14px; color:#7A6E5A; line-height:1.5">Care days and rates live in <strong style="color:#01294A">Schedule</strong>. Withdrawals go through the office.</div>
+            </div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(5,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goToday }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🏠</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Today</span></div><div onClick="{{ goSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goBilling }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💳</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Billing</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">1</span></div><div onClick="{{ goMessages }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💬</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">2</span></div><div onClick="{{ goAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">👤</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isIncidentParent }}">
+          
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#C9E6DC; border-bottom:3px solid #F5B731; padding:52px 18px 14px; display:flex; align-items:center; gap:12px">
+              <span onClick="{{ goToday }}" style="font-size:20px; color:#01294A; font-weight:800">←</span>
+              <div style="flex:1"><div style="font-family:'Lora',serif; font-size:18px; font-weight:700; color:#01294A">Incident report</div><div style="font-size:13px; color:rgba(1,41,74,.65)">Ellie · Tuesday, August 11 · peanut allergy on file</div></div>
+              <span style="font-size:19px">⬇</span>
+            </div>
+
+            <div style="flex:1; min-height:0; overflow:auto; padding:16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:14px">
+              <div style="background:#FDEEE8; border:1.5px solid #f2b89a; border-radius:12px; padding:16px 18px">
+                <div style="display:flex; align-items:center; gap:11px; margin-bottom:8px">
+                  <span style="width:34px; height:34px; border-radius:50%; background:#E97D55; color:#fff; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; flex-shrink:0">!</span>
+                  <div><div style="font-family:'Lora',serif; font-size:18px; font-weight:700; color:#7a2a18">A small fall on the playground</div><div style="font-size:13px; color:#7a2a18; opacity:.8">10:35a · reported by Miss Amy</div></div>
+                </div>
+                <p style="font-size:15px; line-height:1.55; color:#2E2A22; margin:0">She's okay. Ellie bumped the left side of her forehead on the climber rail, got a cold pack, and was back to playing within five minutes.</p>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">What happened</div>
+                <div style="padding:14px 18px; display:flex; flex-direction:column; gap:12px">
+                  <p style="font-size:15px; line-height:1.55; color:#2E2A22; margin:0">Ellie was climbing the small ladder and lost her footing on the second rung. She landed on her side in the mulch and bumped her forehead on the rail.</p>
+                  <div style="display:flex; gap:10px; flex-wrap:wrap">
+                    <div style="flex:1; min-width:110px; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:8px; padding:10px 12px"><div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#7A6E5A">Where</div><div style="font-size:15px; font-weight:700; color:#01294A">Forehead, left</div></div>
+                    <div style="flex:1; min-width:110px; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:8px; padding:10px 12px"><div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#7A6E5A">Type</div><div style="font-size:15px; font-weight:700; color:#01294A">Fall</div></div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Care given</div>
+                <div style="padding:14px 18px; display:flex; flex-direction:column; gap:9px">
+                  <div style="display:flex; align-items:center; gap:10px"><span style="width:22px; height:22px; border-radius:50%; background:#5BAD8B; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800">✓</span><span style="font-size:15px; color:#2E2A22">Cold pack for about 10 minutes</span></div>
+                  <div style="display:flex; align-items:center; gap:10px"><span style="width:22px; height:22px; border-radius:50%; background:#5BAD8B; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800">✓</span><span style="font-size:15px; color:#2E2A22">Comfort and quiet rest with Miss Amy</span></div>
+                  <div style="display:flex; align-items:center; gap:10px"><span style="width:22px; height:22px; border-radius:50%; background:#5BAD8B; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800">✓</span><span style="font-size:15px; color:#2E2A22">Back to playing within 5 minutes</span></div>
+                  <div style="background:#EAF5EF; border:1.5px solid #C9E6DC; border-radius:8px; padding:11px 13px; font-size:14px; color:#1a5c3e; line-height:1.45; margin-top:4px">No medical attention was needed. Watch for a bruise over the next day or two.</div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Signed by</div>
+                <div style="padding:14px 18px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #F5F0E4"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Amy Whitfield</div><div style="font-size:13px; color:#7A6E5A">Toddlers teacher · 10:41a</div></div><span style="font-family:'Dancing Script',cursive; font-size:24px; color:#01294A">Amy W.</span></div>
+                <div style="padding:14px 18px; display:flex; justify-content:space-between; align-items:center"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Sonya Bell</div><div style="font-size:13px; color:#7A6E5A">Director · 10:58a</div></div><span style="font-family:'Dancing Script',cursive; font-size:24px; color:#01294A">Sonya B.</span></div>
+              </div>
+            </div>
+            </div>
+
+            <div style="padding:14px 16px 26px; background:#fff; border-top:1px solid #E8E0CC; display:flex; flex-direction:column; gap:9px">
+              <button onClick="{{ goToday }}" style="width:100%; background:#01294A; color:#fff; border:none; border-radius:6px; padding:15px; font-size:16px; font-weight:800; font-family:'Nunito',sans-serif">Sign — I've read this</button>
+              <button style="width:100%; background:transparent; border:1.5px solid #01294A; color:#01294A; border-radius:6px; padding:12px; font-size:15px; font-weight:600; font-family:'Nunito',sans-serif">Message Miss Amy about this</button>
+            </div>
+          
+            <div style="display:grid; grid-template-columns:repeat(5,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goToday }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">🏠</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Today</span></div><div onClick="{{ goSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goBilling }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💳</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Billing</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">1</span></div><div onClick="{{ goMessages }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💬</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">2</span></div><div onClick="{{ goAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👤</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isRoster }}">
+          
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#01294A; padding:52px 18px 14px">
+              <div style="display:flex; justify-content:space-between; align-items:center">
+                <div><div style="font-family:'Lora',serif; font-size:20px; font-weight:700; color:#fff">Toddlers</div><div style="font-size:13px; color:rgba(255,255,255,.65)">9 present · 2 absent · 2 with allergies</div></div>
+                <div style="background:#F5B731; color:#01294A; font-size:12px; font-weight:800; padding:5px 12px; border-radius:999px">2:41p</div>
+              </div>
+              <div style="display:flex; gap:8px; margin-top:14px">
+                <div style="flex:1; background:rgba(255,255,255,.12); border-radius:8px; padding:9px; text-align:center"><div style="font-size:12px; color:rgba(255,255,255,.6); font-weight:700">NAPPING</div><div style="font-size:18px; font-weight:800; color:#fff">0</div></div>
+                <div style="flex:1; background:rgba(255,255,255,.12); border-radius:8px; padding:9px; text-align:center"><div style="font-size:12px; color:rgba(255,255,255,.6); font-weight:700">NEEDS CHANGE</div><div style="font-size:18px; font-weight:800; color:#F5B731">3</div></div>
+                <div style="flex:1; background:rgba(255,255,255,.12); border-radius:8px; padding:9px; text-align:center"><div style="font-size:12px; color:rgba(255,255,255,.6); font-weight:700">UNPOSTED</div><div style="font-size:18px; font-weight:800; color:#fff">5</div></div>
+              </div>
+            </div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:14px 16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:9px">
+              <div style="display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #E8E0CC; border-radius:12px; padding:11px 13px">
+                <div style="width:44px; height:44px; border-radius:50%; background:#F5B731; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:18px; flex-shrink:0">E</div>
+                <div style="flex:1"><div style="display:flex; align-items:center; gap:7px"><span style="font-size:16px; font-weight:700; color:#01294A">Ellie R.</span><span style="background:#FDEEE8; border:1.5px solid #E97D55; color:#7a2a18; border-radius:999px; padding:1px 8px; font-size:11px; font-weight:800; letter-spacing:.04em">PEANUT</span></div><div style="font-size:13px; color:#7A6E5A">In 8:42a · nap 1h35m · 4 changes</div></div>
+                <div onClick="{{ goQuickLog }}" style="width:34px; height:34px; border-radius:50%; background:#01294A; color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700">+</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:12px; background:#fff; border:1.5px solid #F5B731; border-radius:12px; padding:11px 13px">
+                <div style="width:44px; height:44px; border-radius:50%; background:#C9E6DC; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:18px; flex-shrink:0">M</div>
+                <div style="flex:1"><div style="font-size:16px; font-weight:700; color:#01294A">Marcus T.</div><div style="font-size:13px; color:#7a5a00; font-weight:700">Last change 3h ago</div></div>
+                <div onClick="{{ goQuickLog }}" style="width:34px; height:34px; border-radius:50%; background:#01294A; color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700">+</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #E8E0CC; border-radius:12px; padding:11px 13px">
+                <div style="width:44px; height:44px; border-radius:50%; background:#5BAD8B; color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:18px; flex-shrink:0">J</div>
+                <div style="flex:1"><div style="font-size:16px; font-weight:700; color:#01294A">Jack R.</div><div style="font-size:13px; color:#7A6E5A">In 8:42a · nap 55m · 2 changes</div></div>
+                <div onClick="{{ goQuickLog }}" style="width:34px; height:34px; border-radius:50%; background:#01294A; color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700">+</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #E8E0CC; border-radius:12px; padding:11px 13px; opacity:.55">
+                <div style="width:44px; height:44px; border-radius:50%; background:#F5F0E4; color:#7A6E5A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:18px; flex-shrink:0">S</div>
+                <div style="flex:1"><div style="font-size:16px; font-weight:700; color:#01294A">Sofia B.</div><div style="font-size:13px; color:#7A6E5A">Absent today</div></div>
+              </div>
+              <div style="display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #E8E0CC; border-radius:12px; padding:11px 13px">
+                <div style="width:44px; height:44px; border-radius:50%; background:#FDEEE8; color:#7a2a18; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:18px; flex-shrink:0">N</div>
+                <div style="flex:1"><div style="display:flex; align-items:center; gap:7px"><span style="font-size:16px; font-weight:700; color:#01294A">Nora P.</span><span style="background:#FDEEE8; border:1.5px solid #E97D55; color:#7a2a18; border-radius:999px; padding:1px 8px; font-size:11px; font-weight:800; letter-spacing:.04em">EGG · DAIRY</span></div><div style="font-size:13px; color:#7A6E5A">In 9:05a · nap 1h10m · 3 changes</div></div>
+                <div onClick="{{ goQuickLog }}" style="width:34px; height:34px; border-radius:50%; background:#01294A; color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700">+</div>
+              </div>
+            </div>
+            </div>
+            <div style="padding:12px 16px 26px; background:#fff; border-top:1px solid #E8E0CC; display:flex; gap:10px">
+              <button style="flex:1; background:#F5B731; color:#01294A; border:none; border-radius:6px; padding:13px; font-size:15px; font-weight:800; font-family:'Nunito',sans-serif">📷 Photo to whole room</button>
+              <button style="background:#01294A; color:#fff; border:none; border-radius:6px; padding:13px 16px; font-size:15px; font-weight:800; font-family:'Nunito',sans-serif">Post 5</button>
+            </div>
+          
+            <div style="display:grid; grid-template-columns:repeat(4,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goRoster }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">👶</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Room</span></div><div onClick="{{ goStaffSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goStaffInbox }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💬</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">3</span></div><div onClick="{{ goStaffAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👤</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isQuickLog }}">
+          
+          <div style="min-height:100%; background:#01294A; display:flex; flex-direction:column; justify-content:flex-end; font-family:'Nunito',sans-serif">
+            <div style="background:#FDFAF0; border-radius:22px 22px 0 0; padding:10px 18px 30px">
+              <div onClick="{{ goRoster }}" style="width:42px; height:5px; border-radius:3px; background:#E8E0CC; margin:0 auto 16px"></div>
+              <div style="display:flex; align-items:center; gap:12px; margin-bottom:18px">
+                <div style="width:44px; height:44px; border-radius:50%; background:#F5B731; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:18px; flex-shrink:0">E</div>
+                <div><div style="font-family:'Lora',serif; font-size:19px; font-weight:700; color:#01294A">Ellie R.</div><div style="font-size:13px; color:#7A6E5A">Logging at 2:41p</div></div>
+              </div>
+
+              <div style="background:#FDEEE8; border:1.5px solid #E97D55; border-radius:10px; padding:11px 13px; margin-bottom:18px; display:flex; gap:10px; align-items:flex-start">
+                <span style="width:24px; height:24px; border-radius:50%; background:#E97D55; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; flex-shrink:0">!</span>
+                <div style="flex:1">
+                  <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7a2a18">Allergies &amp; care notes</div>
+                  <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">
+                    <span style="background:#E97D55; color:#fff; border-radius:999px; padding:4px 11px; font-size:13px; font-weight:800">Peanuts — severe</span>
+                    <span style="background:#fff; border:1.5px solid #f2b89a; color:#7a2a18; border-radius:999px; padding:4px 11px; font-size:13px; font-weight:700">Dairy — sensitivity</span>
+                    <span style="background:#fff; border:1.5px solid #f2b89a; color:#7a2a18; border-radius:999px; padding:4px 11px; font-size:13px; font-weight:700">EpiPen in cubby</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">Diapering</div>
+              <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:18px">
+                <div style="border:2px solid #01294A; background:#01294A; color:#fff; border-radius:10px; padding:14px 4px; text-align:center; font-size:14px; font-weight:800">Wet</div>
+                <div style="border:1.5px solid #E8E0CC; background:#fff; border-radius:10px; padding:14px 4px; text-align:center; font-size:14px; font-weight:700; color:#01294A">Poop</div>
+                <div style="border:1.5px solid #E8E0CC; background:#fff; border-radius:10px; padding:14px 4px; text-align:center; font-size:14px; font-weight:700; color:#01294A">Both</div>
+                <div style="border:1.5px solid #E8E0CC; background:#fff; border-radius:10px; padding:14px 4px; text-align:center; font-size:14px; font-weight:700; color:#01294A">Dry</div>
+              </div>
+
+              <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">Nap</div>
+              <div style="display:flex; gap:8px; margin-bottom:18px">
+                <div style="flex:1; border:1.5px solid #E8E0CC; background:#fff; border-radius:10px; padding:14px 4px; text-align:center; font-size:14px; font-weight:700; color:#01294A">Fell asleep</div>
+                <div style="flex:1; border:2px solid #5BAD8B; background:#EAF5EF; border-radius:10px; padding:14px 4px; text-align:center; font-size:14px; font-weight:800; color:#1a5c3e">Woke 1:45p ✓</div>
+              </div>
+
+              <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">Snack · 2:15p</div>
+              <div style="display:flex; gap:8px; margin-bottom:18px">
+                <div style="flex:1; border:1.5px solid #E8E0CC; background:#fff; border-radius:10px; padding:12px 4px; text-align:center; font-size:14px; font-weight:700; color:#01294A">None</div>
+                <div style="flex:1; border:2px solid #F5B731; background:#FFF8E1; border-radius:10px; padding:12px 4px; text-align:center; font-size:14px; font-weight:800; color:#7a5a00">Some</div>
+                <div style="flex:1; border:1.5px solid #E8E0CC; background:#fff; border-radius:10px; padding:12px 4px; text-align:center; font-size:14px; font-weight:700; color:#01294A">Most</div>
+                <div style="flex:1; border:1.5px solid #E8E0CC; background:#fff; border-radius:10px; padding:12px 4px; text-align:center; font-size:14px; font-weight:700; color:#01294A">All</div>
+              </div>
+
+              <div style="display:flex; gap:10px; margin-bottom:16px">
+                <div style="flex:1; border:1.5px dashed #E8E0CC; background:#fff; border-radius:10px; padding:14px; text-align:center; font-size:14px; font-weight:700; color:#7A6E5A">📷 Add photo</div>
+                <div style="flex:1; border:1.5px dashed #E8E0CC; background:#fff; border-radius:10px; padding:14px; text-align:center; font-size:14px; font-weight:700; color:#7A6E5A">✎ Note to parent</div>
+              </div>
+
+              <button style="width:100%; display:flex; align-items:center; gap:11px; text-align:left; background:#FDEEE8; border:1.5px solid #E97D55; border-radius:10px; padding:13px 14px; margin-bottom:16px; font-family:'Nunito',sans-serif; cursor:pointer" style-hover="background:#f8ded3">
+                <span style="width:30px; height:30px; border-radius:50%; background:#E97D55; color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:800; flex-shrink:0">!</span>
+                <span style="flex:1">
+                  <span onClick="{{ goIncidentStaff }}" style="display:block; font-size:15px; font-weight:800; color:#7a2a18">Flag as incident / injury</span>
+                  <span style="display:block; font-size:13px; color:#7a2a18; opacity:.8; line-height:1.35">Goes to the office first, then the parent</span>
+                </span>
+                <span style="font-size:18px; color:#7a2a18; font-weight:800">→</span>
+              </button>
+
+              <button onClick="{{ goRoster }}" style="width:100%; background:#01294A; color:#fff; border:none; border-radius:6px; padding:15px; font-size:17px; font-weight:800; font-family:'Nunito',sans-serif">Save · notify Hannah</button>
+              <p style="text-align:center; font-size:13px; color:#7A6E5A; margin:10px 0 0">Or hold to save without a push notification.</p>
+            </div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isIncidentStaff }}">
+          
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#E97D55; padding:52px 18px 14px; display:flex; align-items:center; gap:12px">
+              <span onClick="{{ goRoster }}" style="font-size:20px; color:#fff; font-weight:800">✕</span>
+              <div style="flex:1">
+                <div style="font-family:'Lora',serif; font-size:19px; font-weight:700; color:#fff">Incident report</div>
+                <div style="font-size:13px; color:rgba(255,255,255,.85)">Ellie R. · Toddlers · Tue, Aug 11</div>
+              </div>
+              <span style="background:rgba(255,255,255,.22); color:#fff; font-size:12px; font-weight:800; padding:5px 11px; border-radius:999px">DRAFT</span>
+            </div>
+
+            <div style="flex:1; min-height:0; overflow:auto; padding:16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:14px">
+              <div style="background:#FDEEE8; border:1.5px solid #f2b89a; border-radius:10px; padding:12px 14px; font-size:13px; color:#7a2a18; line-height:1.45">This goes to the office for review before Hannah sees it. Nothing is sent until Miss Amy and the director both sign.</div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); padding:16px 18px; display:flex; flex-direction:column; gap:14px">
+                <div>
+                  <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">Time &amp; place</div>
+                  <div style="display:flex; gap:8px">
+                    <div style="flex:1; border:1px solid #E8E0CC; border-radius:8px; padding:10px 12px; background:#FAF7ED; font-size:15px; font-weight:700; color:#01294A">10:35a</div>
+                    <div style="flex:2; border:1px solid #E8E0CC; border-radius:8px; padding:10px 12px; background:#fff; font-size:15px; color:#2E2A22">Playground — climber</div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">Type</div>
+                  <div style="display:flex; flex-wrap:wrap; gap:7px">
+                    <span style="border:2px solid #E97D55; background:#FDEEE8; color:#7a2a18; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:800">Fall</span>
+                    <span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">Bump / bruise</span>
+                    <span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">Bite</span>
+                    <span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">Scratch</span>
+                    <span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">Illness</span>
+                    <span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">Other</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">Where on the body</div>
+                  <div style="display:flex; gap:12px; align-items:center">
+                    <div style="width:96px; height:130px; border:1px solid #E8E0CC; border-radius:10px; background:#FAF7ED; position:relative; display:flex; align-items:center; justify-content:center; font-size:12px; color:#7A6E5A; text-align:center; line-height:1.3">Tap the<br>body map<span style="position:absolute; top:26px; left:38px; width:18px; height:18px; border-radius:50%; background:#E97D55; border:2px solid #fff"></span></div>
+                    <div style="flex:1; display:flex; flex-direction:column; gap:6px">
+                      <span style="background:#FDEEE8; border:1.5px solid #f2b89a; color:#7a2a18; border-radius:999px; padding:5px 12px; font-size:13px; font-weight:700; align-self:flex-start">Forehead, left side</span>
+                      <span style="font-size:13px; color:#7A6E5A; line-height:1.45">Small raised bump, no broken skin, no bleeding.</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">What happened</div>
+                  <div style="border:1px solid #E8E0CC; border-radius:8px; padding:11px 13px; background:#fff; font-size:15px; color:#2E2A22; line-height:1.5">Ellie was climbing the small ladder and lost her footing on the second rung. She landed on her side in the mulch and bumped her forehead on the rail.</div>
+                </div>
+
+                <div>
+                  <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">First aid given</div>
+                  <div style="display:flex; flex-wrap:wrap; gap:7px">
+                    <span style="border:2px solid #5BAD8B; background:#EAF5EF; color:#1a5c3e; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:800">Cold pack</span>
+                    <span style="border:2px solid #5BAD8B; background:#EAF5EF; color:#1a5c3e; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:800">Comfort / rest</span>
+                    <span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">Cleaned</span>
+                    <span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">Bandage</span>
+                    <span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">None needed</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">After</div>
+                  <div style="display:flex; flex-direction:column; gap:8px">
+                    <div style="display:flex; align-items:center; gap:10px"><span style="width:22px; height:22px; border-radius:5px; background:#5BAD8B; color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800">✓</span><span style="font-size:15px; color:#2E2A22">Back to playing within 5 minutes</span></div>
+                    <div style="display:flex; align-items:center; gap:10px"><span style="width:22px; height:22px; border-radius:5px; border:1.5px solid #E8E0CC; background:#fff"></span><span style="font-size:15px; color:#2E2A22">Parent called at the time</span></div>
+                    <div style="display:flex; align-items:center; gap:10px"><span style="width:22px; height:22px; border-radius:5px; border:1.5px solid #E8E0CC; background:#fff"></span><span style="font-size:15px; color:#2E2A22">Medical attention recommended</span></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">Witnesses</div>
+                  <div style="display:flex; gap:7px; flex-wrap:wrap">
+                    <span style="background:#01294A; color:#fff; border-radius:999px; padding:6px 13px; font-size:13px; font-weight:700">Miss Amy ✕</span>
+                    <span style="background:#01294A; color:#fff; border-radius:999px; padding:6px 13px; font-size:13px; font-weight:700">Miss Kiara ✕</span>
+                    <span style="border:1.5px dashed #E8E0CC; color:#7A6E5A; border-radius:999px; padding:6px 13px; font-size:13px; font-weight:700">+ Add</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">Photo (optional)</div>
+                  <image-slot id="incident-photo" shape="rounded" radius="10" placeholder="Photo of the injury" style="height:120px; width:100%"></image-slot>
+                  <div style="font-size:12px; color:#7A6E5A; margin-top:6px">Only visible to the office and this child's parents.</div>
+                </div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; padding:16px 18px">
+                <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:10px">Signatures</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:1px solid #F5F0E4"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Amy Whitfield</div><div style="font-size:13px; color:#7A6E5A">Teacher · signed 10:41a</div></div><span style="font-family:'Dancing Script',cursive; font-size:24px; color:#01294A">Amy W.</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding-top:10px"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Director</div><div style="font-size:13px; color:#7a5a00; font-weight:700">Waiting for review</div></div><span style="border:1.5px dashed #E8E0CC; border-radius:6px; padding:6px 16px; font-size:13px; color:#7A6E5A; font-weight:700">Sign</span></div>
+              </div>
+            </div>
+            </div>
+
+            <div style="padding:12px 16px 26px; background:#fff; border-top:1px solid #E8E0CC; display:flex; gap:10px">
+              <button style="background:transparent; border:1.5px solid #01294A; color:#01294A; border-radius:6px; padding:13px 18px; font-size:15px; font-weight:600; font-family:'Nunito',sans-serif">Save draft</button>
+              <button onClick="{{ goIncidentParent }}" style="flex:1; background:#E97D55; color:#fff; border:none; border-radius:6px; padding:13px; font-size:15px; font-weight:800; font-family:'Nunito',sans-serif">Send to office</button>
+            </div>
+          
+            <div style="display:grid; grid-template-columns:repeat(4,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goRoster }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">👶</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Room</span></div><div onClick="{{ goStaffSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goStaffInbox }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💬</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">3</span></div><div onClick="{{ goStaffAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👤</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isStaffSchedule }}">
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#01294A; padding:52px 18px 14px">
+              <div style="display:flex; justify-content:space-between; align-items:flex-end">
+                <div><div style="font-family:'Lora',serif; font-size:20px; font-weight:700; color:#fff">My schedule</div><div style="font-size:13px; color:rgba(255,255,255,.65)">Amy Whitfield · Toddlers lead</div></div>
+                <div style="background:#F5B731; color:#01294A; font-size:12px; font-weight:800; padding:5px 12px; border-radius:999px">18.5 hrs this wk</div>
+              </div>
+              <div style="display:flex; gap:8px; margin-top:14px">
+                <div style="flex:1; background:rgba(255,255,255,.12); border-radius:8px; padding:9px; text-align:center"><div style="font-size:11px; color:rgba(255,255,255,.6); font-weight:700">SHIFTS LEFT</div><div style="font-size:18px; font-weight:800; color:#fff">2</div></div>
+                <div style="flex:1; background:rgba(255,255,255,.12); border-radius:8px; padding:9px; text-align:center"><div style="font-size:11px; color:rgba(255,255,255,.6); font-weight:700">DAYS OFF LEFT</div><div style="font-size:18px; font-weight:800; color:#fff">4</div></div>
+                <div style="flex:1; background:rgba(255,255,255,.12); border-radius:8px; padding:9px; text-align:center"><div style="font-size:11px; color:rgba(255,255,255,.6); font-weight:700">PENDING</div><div style="font-size:18px; font-weight:800; color:#F5B731">1</div></div>
+              </div>
+            </div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:14px">
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">This week</div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="width:52px; text-align:center; flex-shrink:0"><div style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Tue</div><div style="font-size:17px; font-weight:800; color:#01294A">11</div></div><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">8:15a – 2:45p</div><div style="font-size:13px; color:#7A6E5A">Toddlers · with Miss Kiara</div></div><span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap">Today</span></div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="width:52px; text-align:center; flex-shrink:0"><div style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Thu</div><div style="font-size:17px; font-weight:800; color:#01294A">13</div></div><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">8:15a – 2:45p</div><div style="font-size:13px; color:#7A6E5A">Toddlers · with Miss Kiara</div></div></div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="width:52px; text-align:center; flex-shrink:0"><div style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Fri</div><div style="font-size:17px; font-weight:800; color:#01294A">14</div></div><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Off</div><div style="font-size:13px; color:#7A6E5A">No class day</div></div><span style="background:#F5F0E4; color:#7A6E5A; border:1px solid #E8E0CC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap">Off</span></div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Next week</div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="width:52px; text-align:center; flex-shrink:0"><div style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Tue</div><div style="font-size:17px; font-weight:800; color:#01294A">18</div></div><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">8:15a – 12:30p</div><div style="font-size:13px; color:#7A6E5A">Toddlers · half day</div></div><span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap">Half</span></div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="width:52px; text-align:center; flex-shrink:0"><div style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Wed</div><div style="font-size:17px; font-weight:800; color:#01294A">19</div></div><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">9:00a – 11:00a</div><div style="font-size:13px; color:#7A6E5A">Staff in-service · fellowship hall</div></div><span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap">Training</span></div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="width:52px; text-align:center; flex-shrink:0"><div style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Thu</div><div style="font-size:17px; font-weight:800; color:#01294A">20</div></div><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">8:15a – 2:45p</div><div style="font-size:13px; color:#7A6E5A">Covering Preschool for Miss Dana</div></div><span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap">Sub</span></div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; display:flex; justify-content:space-between; align-items:center"><span style="font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Days off requested</span><span style="font-size:13px; font-weight:700; color:#3A7B60">History</span></div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Thu, Aug 27</div><div style="font-size:13px; color:#7A6E5A">Doctor appointment</div></div><span style="background:#FFF8E1; color:#7a5a00; border:1px solid #FDE598; padding:4px 11px; border-radius:999px; font-size:12px; font-weight:800; white-space:nowrap">PENDING</span></div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Tue, Sept 9 – Thu, Sept 11</div><div style="font-size:13px; color:#7A6E5A">Family trip · Kiara covering</div></div><span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:4px 11px; border-radius:999px; font-size:12px; font-weight:800; white-space:nowrap">APPROVED</span></div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Tue, Oct 14</div><div style="font-size:13px; color:#7A6E5A">Personal day</div></div><span style="background:#FDEEE8; color:#7a2a18; border:1px solid #f2b89a; padding:4px 11px; border-radius:999px; font-size:12px; font-weight:800; white-space:nowrap">NEEDS COVER</span></div>
+                <div style="padding:14px 18px"><button onClick="{{ goTimeOff }}" style="width:100%; background:#01294A; color:#fff; border:none; border-radius:6px; padding:13px; font-size:15px; font-weight:800; font-family:'Nunito',sans-serif; cursor:pointer">Request a day off</button></div>
+              </div>
+
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Center calendar</div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="width:52px; text-align:center; flex-shrink:0"><div style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Mon</div><div style="font-size:17px; font-weight:800; color:#01294A">Sep 1</div></div><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Closed — Labor Day</div><div style="font-size:13px; color:#7A6E5A">No care, no charge</div></div><span style="background:#F5F0E4; color:#7A6E5A; border:1px solid #E8E0CC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap">Closed</span></div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="width:52px; text-align:center; flex-shrink:0"><div style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Sat</div><div style="font-size:17px; font-weight:800; color:#01294A">Sep 13</div></div><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Family picnic · 11a</div><div style="font-size:13px; color:#7A6E5A">Volunteers welcome, not required</div></div><span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap">Optional</span></div>
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div style="width:52px; text-align:center; flex-shrink:0"><div style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Thu</div><div style="font-size:17px; font-weight:800; color:#01294A">Nov 26</div></div><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Closed — Thanksgiving</div><div style="font-size:13px; color:#7A6E5A">Center closed Thu &amp; Fri</div></div><span style="background:#F5F0E4; color:#7A6E5A; border:1px solid #E8E0CC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap">Closed</span></div>
+              </div>
+
+              <p style="text-align:center; font-size:13px; color:#7A6E5A; line-height:1.5; margin:0 0 4px">Sonya sees requests the moment you send them. Anything inside two weeks needs a named sub.</p>
+            </div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(4,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goRoster }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👶</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Room</span></div><div onClick="{{ goStaffSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">🗓</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Schedule</span></div><div onClick="{{ goStaffInbox }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💬</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">3</span></div><div onClick="{{ goStaffAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👤</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isTimeOff }}">
+          <div style="min-height:100%; background:#01294A; display:flex; flex-direction:column; justify-content:flex-end; font-family:'Nunito',sans-serif">
+            <div style="background:#FDFAF0; border-radius:22px 22px 0 0; padding:10px 18px 30px">
+              <div onClick="{{ goStaffSchedule }}" style="width:42px; height:5px; border-radius:3px; background:#E8E0CC; margin:0 auto 16px; cursor:pointer"></div>
+              <div style="font-family:'Lora',serif; font-size:21px; font-weight:700; color:#01294A; margin-bottom:2px">Request a day off</div>
+              <div style="font-size:14px; color:#7A6E5A; margin-bottom:18px">Goes to Sonya · you have 4 paid days left</div>
+
+              <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">Which days</div>
+              <div style="display:flex; flex-wrap:wrap; gap:7px; margin-bottom:18px">
+                <span style="display:inline-flex; flex-direction:column; align-items:center; background:#01294A; border:2px solid #01294A; border-radius:8px; padding:6px 11px; min-width:60px; font-size:12px; line-height:1.3"><span style="font-size:11px; color:rgba(255,255,255,.7); font-weight:700; text-transform:uppercase">Thu</span><span style="font-weight:800; color:#fff">Aug 27</span><span style="font-size:11px; color:#F5B731; font-weight:700">Full</span></span>
+                <span style="display:inline-flex; flex-direction:column; align-items:center; background:#fff; border:1.5px solid #E8E0CC; border-radius:8px; padding:6px 11px; min-width:60px; font-size:12px; line-height:1.3"><span style="font-size:11px; color:#7A6E5A; font-weight:700; text-transform:uppercase">Tue</span><span style="font-weight:700; color:#01294A">Sep 1</span><span style="font-size:11px; color:#7A6E5A; font-weight:600">Closed</span></span>
+                <span style="display:inline-flex; flex-direction:column; align-items:center; background:#fff; border:1.5px solid #E8E0CC; border-radius:8px; padding:6px 11px; min-width:60px; font-size:12px; line-height:1.3"><span style="font-size:11px; color:#7A6E5A; font-weight:700; text-transform:uppercase">Thu</span><span style="font-weight:700; color:#01294A">Sep 3</span><span style="font-size:11px; color:#7A6E5A; font-weight:600">Full</span></span>
+                <span style="display:inline-flex; align-items:center; border:1.5px dashed #E8E0CC; color:#7A6E5A; border-radius:8px; padding:6px 13px; font-size:13px; font-weight:700">+ Pick dates</span>
+              </div>
+
+              <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">Reason</div>
+              <div style="display:flex; flex-wrap:wrap; gap:7px; margin-bottom:18px">
+                <span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">Personal</span><span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">Sick</span><span style="border:2px solid #01294A; background:#FAF7ED; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:800">Appointment</span><span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">Family</span><span style="border:1.5px solid #E8E0CC; background:#fff; color:#01294A; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:700">Other</span>
+              </div>
+
+              <div style="font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7A6E5A; margin-bottom:8px">Coverage</div>
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:12px; overflow:hidden; margin-bottom:18px">
+                <div style="padding:12px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid #F5F0E4; background:#FAF7ED"><div style="width:34px; height:34px; border-radius:50%; background:#C9E6DC; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700">K</div><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Miss Kiara</div><div style="font-size:13px; color:#3A7B60; font-weight:700">Available that day</div></div><div style="width:22px; height:22px; border-radius:50%; background:#01294A; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800">✓</div></div>
+                <div style="padding:12px 16px; display:flex; align-items:center; gap:12px"><div style="width:34px; height:34px; border-radius:50%; background:#F5F0E4; color:#7A6E5A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700">B</div><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Miss Bree (float)</div><div style="font-size:13px; color:#7A6E5A">Already in Preschool</div></div><div style="width:22px; height:22px; border-radius:50%; border:2px solid #E8E0CC"></div></div>
+              </div>
+
+              <div style="border:1px solid #E8E0CC; border-radius:10px; background:#fff; padding:11px 13px; font-size:14px; color:#7A6E5A; line-height:1.45; margin-bottom:18px">Note for Sonya — 10:30a follow-up at the clinic, back for pickup if you need me.</div>
+
+              <button onClick="{{ goStaffSchedule }}" style="width:100%; background:#01294A; color:#fff; border:none; border-radius:6px; padding:15px; font-size:17px; font-weight:800; font-family:'Nunito',sans-serif; cursor:pointer">Send request</button>
+              <p style="text-align:center; font-size:13px; color:#7A6E5A; margin:10px 0 0">You'll get a push when Sonya answers.</p>
+            </div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isStaffInbox }}">
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#01294A; padding:52px 18px 14px; display:flex; justify-content:space-between; align-items:flex-end">
+              <div><div style="font-family:'Lora',serif; font-size:20px; font-weight:700; color:#fff">Messages</div><div style="font-size:13px; color:rgba(255,255,255,.65)">Toddlers · 3 unread</div></div>
+              <span style="background:#F5B731; color:#01294A; border-radius:6px; padding:8px 14px; font-size:14px; font-weight:800">New</span>
+            </div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:14px 16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:9px">
+              <div style="background:#FFF8E1; border:1.5px solid #FDE598; border-radius:12px; padding:12px 14px; font-size:13px; color:#7a5a00; line-height:1.45">Parents see "usually replies by 3p." Messages you send after 5p still deliver — quiet hours hold the push until 7a.</div>
+              <div style="display:flex; gap:12px; padding:13px 16px; background:#fff; border:1px solid #E8E0CC; border-radius:12px; align-items:flex-start"><div style="width:42px; height:42px; border-radius:50%; background:#F5B731; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:17px; flex-shrink:0">H</div><div style="flex:1; min-width:0"><div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px"><span style="font-size:16px; font-weight:800; color:#01294A">Hannah Reyes</span><span style="font-size:12px; color:#7A6E5A; white-space:nowrap">11:14a</span></div><div style="font-size:12px; color:#7A6E5A; font-weight:600">Ellie's mom</div><div style="font-size:14px; color:#2E2A22; line-height:1.4; margin-top:3px">Absolutely — I'll drop a box Thursday morning. Thank you!</div></div><span style="width:10px; height:10px; border-radius:50%; background:#E97D55; margin-top:6px; flex-shrink:0"></span></div>
+              <div style="display:flex; gap:12px; padding:13px 16px; background:#fff; border:1px solid #E8E0CC; border-radius:12px; align-items:flex-start"><div style="width:42px; height:42px; border-radius:50%; background:#01294A; color:#F5B731; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:17px; flex-shrink:0">S</div><div style="flex:1; min-width:0"><div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px"><span style="font-size:16px; font-weight:800; color:#01294A">Sonya Bell</span><span style="font-size:12px; color:#7A6E5A; white-space:nowrap">10:58a</span></div><div style="font-size:12px; color:#7A6E5A; font-weight:600">Director · office</div><div style="font-size:14px; color:#2E2A22; line-height:1.4; margin-top:3px">Incident report for Ellie is signed and sent to Hannah.</div></div><span style="width:10px; height:10px; border-radius:50%; background:#E97D55; margin-top:6px; flex-shrink:0"></span></div>
+              <div style="display:flex; gap:12px; padding:13px 16px; background:#fff; border:1px solid #E8E0CC; border-radius:12px; align-items:flex-start"><div style="width:42px; height:42px; border-radius:50%; background:#5BAD8B; color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:17px; flex-shrink:0">P</div><div style="flex:1; min-width:0"><div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px"><span style="font-size:16px; font-weight:700; color:#01294A">Toddlers parents</span><span style="font-size:12px; color:#7A6E5A; white-space:nowrap">Mon</span></div><div style="font-size:12px; color:#7A6E5A; font-weight:600">Broadcast · 11 families</div><div style="font-size:14px; color:#7A6E5A; line-height:1.4; margin-top:3px">Reminder: bring a change of clothes — we're outside tomorrow.</div></div></div>
+              <div style="display:flex; gap:12px; padding:13px 16px; background:#fff; border:1px solid #E8E0CC; border-radius:12px; align-items:flex-start"><div style="width:42px; height:42px; border-radius:50%; background:#C9E6DC; color:#01294A; display:flex; align-items:center; justify-content:center; font-family:'Lora',serif; font-weight:700; font-size:17px; flex-shrink:0">T</div><div style="flex:1; min-width:0"><div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px"><span style="font-size:16px; font-weight:800; color:#01294A">Nora P.’s dad</span><span style="font-size:12px; color:#7A6E5A; white-space:nowrap">Mon</span></div><div style="font-size:12px; color:#7A6E5A; font-weight:600">Egg &amp; dairy on file</div><div style="font-size:14px; color:#2E2A22; line-height:1.4; margin-top:3px">Can she have the birthday cupcakes Thursday?</div></div><span style="width:10px; height:10px; border-radius:50%; background:#E97D55; margin-top:6px; flex-shrink:0"></span></div>
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(4,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goRoster }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👶</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Room</span></div><div onClick="{{ goStaffSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goStaffInbox }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">💬</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">3</span></div><div onClick="{{ goStaffAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👤</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Account</span></div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ isStaffAccount }}">
+          <div style="height:100%; background:#FDFAF0; display:flex; flex-direction:column; font-family:'Nunito',sans-serif">
+            <div style="background:#01294A; padding:52px 18px 14px">
+              <div style="font-family:'Lora',serif; font-size:20px; font-weight:700; color:#fff">My account</div>
+              <div style="font-size:13px; color:rgba(255,255,255,.65)">Amy Whitfield · staff since 2021</div>
+            </div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:16px; display:block">
+              <div style="display:flex; flex-direction:column; gap:14px">
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Me</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Name shown to parents</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">Miss Amy</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Mobile</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">(314) 555-0193</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Edit</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">Rooms</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">Toddlers (lead) · Preschool (sub)</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Office</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#7A6E5A">PIN</div><div style="font-size:15px; font-weight:700; color:#2E2A22; margin-top:1px">•••• · sign-in and room check-in</div></div><span style="font-size:13px; font-weight:700; color:#3A7B60">Change</span></div>
+              </div>
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Training & clearances</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">CPR &amp; First Aid</div><div style="font-size:13px; color:#7a5a00; font-weight:700">Expires Oct 30, 2026</div></div><span style="background:#FFF8E1; color:#7a5a00; border:1px solid #FDE598; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700">RENEW SOON</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Background check</div><div style="font-size:13px; color:#7A6E5A">Cleared Mar 2, 2026</div></div><span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700">CURRENT</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px"><div><div style="font-size:15px; font-weight:700; color:#2E2A22">Mandated reporter training</div><div style="font-size:13px; color:#7A6E5A">Completed Jan 2026</div></div><span style="background:#EAF5EF; color:#1a5c3e; border:1px solid #C9E6DC; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700">CURRENT</span></div>
+              </div>
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Notifications</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Parent messages</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">Only while I am clocked in</div></div><div style="width:48px; height:29px; border-radius:15px; background:#5BAD8B; padding:3px; display:flex; align-items:center; justify-content:flex-end; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Schedule changes</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">Shift edits, sub requests, closings</div></div><div style="width:48px; height:29px; border-radius:15px; background:#5BAD8B; padding:3px; display:flex; align-items:center; justify-content:flex-end; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Time-off decisions</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">When Sonya approves or declines</div></div><div style="width:48px; height:29px; border-radius:15px; background:#5BAD8B; padding:3px; display:flex; align-items:center; justify-content:flex-end; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Quiet hours</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">Nothing between 5p and 7a</div></div><div style="width:48px; height:29px; border-radius:15px; background:#5BAD8B; padding:3px; display:flex; align-items:center; justify-content:flex-end; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+              </div>
+              <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+                <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">This phone</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 18px; border-bottom:1px solid #F5F0E4; gap:12px"><div style="flex:1"><div style="font-size:15px; font-weight:700; color:#2E2A22">Face ID sign-in</div><div style="font-size:13px; color:#7A6E5A; line-height:1.4">Falls back to your staff PIN</div></div><div style="width:48px; height:29px; border-radius:15px; background:#5BAD8B; padding:3px; display:flex; align-items:center; justify-content:flex-end; flex-shrink:0"><div style="width:23px; height:23px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2)"></div></div></div>
+                <div style="padding:14px 18px; font-size:15px; font-weight:800; color:#7a2a18">Sign out of this room</div>
+              </div>
+              <p style="text-align:center; font-size:13px; color:#7A6E5A; line-height:1.5; margin:0 0 4px">Pay, hours and HR paperwork stay in the office system — this is the classroom side only.</p>
+            </div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(4,1fr); background:#fff; border-top:1px solid #E8E0CC; padding:8px 2px 22px; flex-shrink:0"><div onClick="{{ goRoster }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">👶</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Room</span></div><div onClick="{{ goStaffSchedule }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">🗓</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Schedule</span></div><div onClick="{{ goStaffInbox }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px; opacity:.5">💬</span><span style="font-size:10.5px; font-weight:600; color:#7A6E5A">Messages</span><span style="position:absolute; top:-2px; right:14px; background:#E97D55; color:#fff; font-size:10px; font-weight:800; border-radius:999px; padding:1px 6px">3</span></div><div onClick="{{ goStaffAccount }}" style="display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; cursor:pointer; padding:2px 0"><span style="font-size:20px">👤</span><span style="font-size:10.5px; font-weight:800; color:#01294A">Account</span></div></div>
+          </div>
+          </sc-if>
+    </x-import>
+    <div style="display:flex; gap:8px; align-items:center">
+      <span style="font-size:13px; color:#7A6E5A; font-weight:700">Now viewing</span>
+      <span style="background:#01294A; color:#fff; border-radius:999px; padding:5px 13px; font-size:13px; font-weight:800">{{ crumb }}</span>
+    </div>
+  </div>
+
+  <div style="max-width:430px; display:flex; flex-direction:column; gap:22px">
+    <div style="display:flex; flex-direction:column; gap:10px">
+      <div style="display:flex; align-items:baseline; gap:2px; line-height:1">
+        <span style="font-family:'Dancing Script',cursive; font-weight:700; color:#5BAD8B; font-size:34px">my</span>
+        <span style="font-weight:800; color:#01294A; font-size:34px">MDO</span>
+        <span style="background:#F5B731; color:#01294A; font-size:11px; font-weight:800; letter-spacing:.06em; padding:3px 10px; border-radius:20px; margin-left:10px; position:relative; top:-6px">CLICK-THROUGH</span>
+      </div>
+      <h1 style="font-family:'Lora',Georgia,serif; font-weight:700; color:#01294A; font-size:27px; margin:0; letter-spacing:-.01em">Tap the phone — it navigates</h1>
+      <p style="font-size:15px; line-height:1.6; color:#7A6E5A; margin:0; text-wrap:pretty">Parents get five tabs on every screen: Today, Schedule, Billing, Messages, Account. Staff get their own four — Room, Schedule, Messages, Account — so a teacher can see her shifts, her requested days off and center closings without calling the office.</p>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:9px">
+      <span style="font-family:'Lora',serif; font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#7A6E5A">Jump in</span>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <button onClick="{{ goSignin }}" style="background:#fff; border:1.5px solid #01294A; color:#01294A; border-radius:999px; padding:8px 15px; font-size:14px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer">Sign in</button><button onClick="{{ goToday }}" style="background:#fff; border:1.5px solid #01294A; color:#01294A; border-radius:999px; padding:8px 15px; font-size:14px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer">Parent · Today</button><button onClick="{{ goAccount }}" style="background:#fff; border:1.5px solid #01294A; color:#01294A; border-radius:999px; padding:8px 15px; font-size:14px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer">Parent · Account</button>
+        <button onClick="{{ goRoster }}" style="background:#fff; border:1.5px solid #5BAD8B; color:#1a5c3e; border-radius:999px; padding:8px 15px; font-size:14px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer">Staff · Room</button><button onClick="{{ goStaffSchedule }}" style="background:#fff; border:1.5px solid #5BAD8B; color:#1a5c3e; border-radius:999px; padding:8px 15px; font-size:14px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer">Staff · Schedule</button><button onClick="{{ goStaffAccount }}" style="background:#fff; border:1.5px solid #5BAD8B; color:#1a5c3e; border-radius:999px; padding:8px 15px; font-size:14px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer">Staff · Account</button>
+      </div>
+    </div>
+
+    <div style="background:#fff; border:1px solid #E8E0CC; border-radius:14px; box-shadow:0 2px 12px rgba(1,41,74,0.06); overflow:hidden">
+      <div style="padding:13px 18px; background:#FAF7ED; border-bottom:1px solid #E8E0CC; font-family:'Lora',serif; font-weight:700; color:#01294A; font-size:16px">Wired routes</div>
+      <div style="padding:4px 18px 14px">
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid #F5F0E4"><span style="font-size:14px; font-weight:700; color:#01294A">Parent tab bar</span><span style="font-size:12px; color:#7A6E5A; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:999px; padding:3px 10px; white-space:nowrap">tab</span><span style="font-size:14px; color:#2E2A22; text-align:right">Today · Schedule · Billing · Messages · Account</span></div>
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid #F5F0E4"><span style="font-size:14px; font-weight:700; color:#01294A">Today</span><span style="font-size:12px; color:#7A6E5A; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:999px; padding:3px 10px; white-space:nowrap">See full day</span><span style="font-size:14px; color:#2E2A22; text-align:right">Full day report</span></div>
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid #F5F0E4"><span style="font-size:14px; font-weight:700; color:#01294A">Today or Billing</span><span style="font-size:12px; color:#7A6E5A; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:999px; padding:3px 10px; white-space:nowrap">Pay</span><span style="font-size:14px; color:#2E2A22; text-align:right">Pay sheet → confirmation → Billing</span></div>
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid #F5F0E4"><span style="font-size:14px; font-weight:700; color:#01294A">Today</span><span style="font-size:12px; color:#7A6E5A; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:999px; padding:3px 10px; white-space:nowrap">Reply</span><span style="font-size:14px; color:#2E2A22; text-align:right">Miss Amy thread</span></div>
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid #F5F0E4"><span style="font-size:14px; font-weight:700; color:#01294A">Messages</span><span style="font-size:12px; color:#7A6E5A; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:999px; padding:3px 10px; white-space:nowrap">a conversation</span><span style="font-size:14px; color:#2E2A22; text-align:right">Thread</span></div>
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid #F5F0E4"><span style="font-size:14px; font-weight:700; color:#01294A">Account</span><span style="font-size:12px; color:#7A6E5A; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:999px; padding:3px 10px; white-space:nowrap">a child</span><span style="font-size:14px; color:#2E2A22; text-align:right">Child info · allergies, photo consent</span></div>
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid #F5F0E4"><span style="font-size:14px; font-weight:700; color:#01294A">Staff tab bar</span><span style="font-size:12px; color:#7A6E5A; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:999px; padding:3px 10px; white-space:nowrap">tab</span><span style="font-size:14px; color:#2E2A22; text-align:right">Room · Schedule · Messages · Account</span></div>
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid #F5F0E4"><span style="font-size:14px; font-weight:700; color:#01294A">Staff Room</span><span style="font-size:12px; color:#7A6E5A; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:999px; padding:3px 10px; white-space:nowrap">+ on a child</span><span style="font-size:14px; color:#2E2A22; text-align:right">Quick log sheet</span></div>
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid #F5F0E4"><span style="font-size:14px; font-weight:700; color:#01294A">Quick log</span><span style="font-size:12px; color:#7A6E5A; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:999px; padding:3px 10px; white-space:nowrap">Flag incident</span><span style="font-size:14px; color:#2E2A22; text-align:right">Incident form → office → parent view</span></div>
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid #F5F0E4"><span style="font-size:14px; font-weight:700; color:#01294A">Staff Schedule</span><span style="font-size:12px; color:#7A6E5A; background:#FAF7ED; border:1px solid #E8E0CC; border-radius:999px; padding:3px 10px; white-space:nowrap">Request a day off</span><span style="font-size:14px; color:#2E2A22; text-align:right">Request sheet with coverage</span></div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:12px">
+      <p style="font-size:14px; line-height:1.6; color:#7A6E5A; margin:0; text-wrap:pretty"><strong style="color:#01294A">Parent Account</strong> holds what a family changes itself — contact info, PIN, pickup list, notification and photo preferences. Anything with a medical or legal trail (allergies, immunizations, withdrawal) is a request to the office, not a direct edit.</p>
+      <p style="font-size:14px; line-height:1.6; color:#7A6E5A; margin:0; text-wrap:pretty"><strong style="color:#01294A">Staff Schedule</strong> shows this week and next, subbing assignments, requested days off with status, and the center calendar. Requests inside two weeks ask for a named sub before they'll send — Sonya still decides.</p>
+    </div>
+  </div>
+
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">class Component extends DCLogic {
+  state = { screen: 'today' };
+  go(s) { this.setState({ screen: s }); }
+  renderVals() {
+    const s = this.state.screen;
+    const names = { signin:'Sign in', today:'Parent · Today', day:'Full day report', schedule:'Parent · Schedule', billing:'Billing', paysheet:'Pay sheet', paid:'Payment confirmed', inbox:'Parent · Messages', thread:'Miss Amy thread', account:'Parent · Account', child:'Ellie · child info', incidentParent:'Incident (parent)', roster:'Staff · Toddlers', quicklog:'Staff · quick log', incidentStaff:'Staff · incident form', staffSchedule:'Staff · schedule', timeOff:'Staff · day off request', staffInbox:'Staff · messages', staffAccount:'Staff · account' };
+    return {
+      W: 390, H: 844, crumb: names[s] || s,
+      isSignin: s === 'signin', isToday: s === 'today', isDay: s === 'day',
+      isSchedule: s === 'schedule', isBilling: s === 'billing', isPaysheet: s === 'paysheet',
+      isPaid: s === 'paid', isInbox: s === 'inbox', isThread: s === 'thread',
+      isAccount: s === 'account', isChild: s === 'child', isIncidentParent: s === 'incidentParent',
+      isRoster: s === 'roster', isQuickLog: s === 'quicklog', isIncidentStaff: s === 'incidentStaff',
+      isStaffSchedule: s === 'staffSchedule', isTimeOff: s === 'timeOff',
+      isStaffInbox: s === 'staffInbox', isStaffAccount: s === 'staffAccount',
+      goSignin: () => this.go('signin'),
+      goToday: () => this.go('today'),
+      goSchedule: () => this.go('schedule'),
+      goBilling: () => this.go('billing'),
+      goMessages: () => this.go('inbox'),
+      goAccount: () => this.go('account'),
+      goDay: () => this.go('day'),
+      goPay: () => this.go('paysheet'),
+      goPaid: () => this.go('paid'),
+      goThread: () => this.go('thread'),
+      goChild: () => this.go('child'),
+      goIncidentParent: () => this.go('incidentParent'),
+      goRoster: () => this.go('roster'),
+      goQuickLog: () => this.go('quicklog'),
+      goIncidentStaff: () => this.go('incidentStaff'),
+      goStaffSchedule: () => this.go('staffSchedule'),
+      goTimeOff: () => this.go('timeOff'),
+      goStaffInbox: () => this.go('staffInbox'),
+      goStaffAccount: () => this.go('staffAccount')
+    };
+  }
+}</script>
+</body>
+</html>
