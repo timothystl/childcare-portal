@@ -2186,6 +2186,14 @@ async function addPickupContact(name, relationship, note) {
     return data;
 }
 
+/** The parent's booked days, closures and any real invoice — from the session. */
+async function fetchMySchedule() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('my_schedule');
+    if (error) throw friendlyError(error);
+    return data && data !== 'null' ? data : null;
+}
+
 async function removePickupContact(id) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('remove_pickup_contact', { p_id: id });
