@@ -535,19 +535,34 @@ async function deleteClosure(closeDate) {
 async function submitRegistration({ parent, child, roomId, confirmedDates, waitlistDates = [], status = 'confirmed', submittedBy = 'parent1' }) {
     if (!sbClient) throw new Error('Supabase is not configured yet.');
 
-    // FS1: stamp month_key ('YYYY-MM' of the earliest care date) at insert time
-    // so the registrations_child_month_unique partial index can enforce one
-    // confirmed registration per child+month. Without this the column stays NULL
-    // and the index (NULLs are distinct) catches nothing.
-    const _regDates = [...confirmedDates, ...waitlistDates]
-        .map(d => d && d.date)
-        .filter(Boolean)
-        .sort();
-    const monthKey = _regDates.length ? _regDates[0].slice(0, 7) : null;
+    // FS1's month_key stamp still happens — it is what
+    // registrations_child_month_unique keys on, so without it the index (NULLs
+    // are distinct) catches nothing. It moved INTO submit_registration, computed
+    // from the earliest care date server-side. Do not re-add a client-side
+    // month_key: whoever sets it controls duplicate prevention.
 
-    const { data: reg, error: regError } = await sbClient
-        .from('registrations')
-        .insert({
+    // ⚠️ This used to be .insert().select() on `registrations`, then a second
+    // insert into registration_dates. That broke the moment R1 revoked anon's
+    // SELECT: PostgREST asks for RETURNING, RETURNING needs SELECT, so the whole
+    // statement aborted with 42501 and NOTHING was written — parents simply
+    // could not book. Same trap already documented for the public waitlist form.
+    //
+    // Now one SECURITY DEFINER call. anon needs no SELECT on either table, both
+    // inserts share a transaction (the old code "rolled back" with a DELETE,
+    // which left a ghost registration if the process died between them), and
+    // month_key is computed server-side so the client cannot sidestep the
+    // duplicate index by lying about it.
+    const dates = [
+        ...confirmedDates.map(({ date, dayType }) => ({
+            date, day_type: dayType, waitlisted: false, room_id: roomId,
+        })),
+        ...(waitlistDates || []).map(({ date, dayType }) => ({
+            date, day_type: dayType, waitlisted: true, room_id: roomId,
+        })),
+    ];
+
+    const { data: reg, error: regError } = await sbClient.rpc('submit_registration', {
+        p_payload: {
             parent_name:  parent.name,
             parent_email: parent.email,
             parent_phone: parent.phone,
@@ -557,45 +572,15 @@ async function submitRegistration({ parent, child, roomId, confirmedDates, waitl
             room_id:      roomId,
             status:       status,
             submitted_by: submittedBy,
-            month_key:    monthKey,
-        })
-        .select()
-        .single();
+            dates,
+        },
+    });
 
     if (regError) {
         if (regError.code === '23505') {
             throw Object.assign(new Error(`${child.name} is already registered for this month. Please contact the office if you need to make changes.`), { code: '23505' });
         }
         throw regError;
-    }
-
-    const dateRows = [
-        ...confirmedDates.map(({ date, dayType }) => ({
-            registration_id: reg.id,
-            room_id:         roomId,
-            care_date:       date,
-            waitlisted:      false,
-            day_type:        dayType,
-        })),
-        ...(waitlistDates || []).map(({ date, dayType }) => ({
-            registration_id: reg.id,
-            room_id:         roomId,
-            care_date:       date,
-            waitlisted:      true,
-            day_type:        dayType,
-        })),
-    ];
-
-    if (dateRows.length) {
-        const { error: datesError } = await sbClient
-            .from('registration_dates')
-            .insert(dateRows);
-        if (datesError) {
-            // Rollback: remove the registration row we just created so it doesn't
-            // show as a ghost/orphan (no dates) on future duplicate checks.
-            await sbClient.from('registrations').delete().eq('id', reg.id);
-            throw datesError;
-        }
     }
 
     return reg;
