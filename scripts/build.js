@@ -59,6 +59,13 @@ const ENTRIES = [
         },
     },
     {
+        outfile: 'dist/app-update.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/app-update.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         outfile: 'dist/app.min.js',
         stdin: {
             contents: fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8'),
@@ -272,6 +279,7 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/staff.min.js"></script>`,
+            `    <script src="dist/app-update.min.js"></script>`,
         ],
     },
     {
@@ -285,6 +293,7 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/portal.min.js"></script>`,
+            `    <script src="dist/app-update.min.js"></script>`,
         ],
     },
     {

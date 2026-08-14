@@ -19,6 +19,23 @@
     padding: 24px 16px;
 }
 
+/* Signed in, the app shell owns the viewport and the body must stop being the
+   sign-in page's centering wrapper.
+   .portal-body centers its child and pads it by 24px. The shell inside is
+   min-height:100dvh, so the document came out ~48px TALLER than the screen —
+   which on iOS is the slight drift up and down, and it takes the tab bar with
+   it, because the bar sits at the bottom of the shell rather than being pinned
+   to the window. Height, not min-height, so the shell cannot grow the page. */
+.portal-body.portal-app-open {
+    display: block;
+    padding: 0;
+    min-height: 0;
+    height: 100dvh;
+    overflow: hidden;              /* .app-route is the only scroller */
+    overscroll-behavior-y: none;   /* and no rubber-band past the document */
+}
+.portal-body.portal-app-open .app-shell { height: 100%; min-height: 0; }
+
 .portal-card {
     background: #fff;
     border-radius: 16px;

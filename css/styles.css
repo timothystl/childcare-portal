@@ -1700,6 +1700,10 @@ input.prefilled {
     min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    /* Stop a flick that reaches the end of the route from chaining into the
+       page behind it — that chain is what makes the whole screen, tab bar
+       included, drift on iOS. */
+    overscroll-behavior-y: contain;
 }
 
 .tabbar {
