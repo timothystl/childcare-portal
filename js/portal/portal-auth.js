@@ -103,6 +103,7 @@ async function portalSignOut() {
     portalContext = null;
     pEl('portalSignedIn')?.classList.add('hidden');
     pEl('portalSignIn')?.classList.remove('hidden');
+    document.body.classList.remove('portal-app-open');
     const pin = pEl('portalPin');
     if (pin) pin.value = '';
 }
@@ -125,6 +126,10 @@ async function portalShowSignedIn() {
 
     pEl('portalSignIn')?.classList.add('hidden');
     pEl('portalSignedIn')?.classList.remove('hidden');
+    // The body stops being the sign-in page's centering wrapper — see
+    // .portal-app-open in portal.css. Without this the shell sits inside 24px
+    // of padding and the page scrolls a little on iOS, tab bar and all.
+    document.body.classList.add('portal-app-open');
 
     const name = portalContext?.parent_name || portalContext?.family_name || 'there';
     const greet = pEl('portalGreeting');
