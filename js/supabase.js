@@ -2498,6 +2498,22 @@ async function logFireDrill(staffId, pin, payload = {}) {
     return data ?? null;
 }
 
+// ── Clock-in integrity ──────────────────────────────────────
+/**
+ * Clock events with the columns the integrity report needs. `authenticated`
+ * only — anon writes the device id but has no SELECT on it.
+ */
+async function fetchClockIntegrity(sinceDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_clock_events')
+        .select('id, staff_id, work_date, clock_in, clock_out, clock_in_device_id, clock_out_device_id, clock_in_location_status, clock_in_outside_fence')
+        .gte('work_date', sinceDate)
+        .order('clock_in', { ascending: false });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
 /** Admin: the drill log, newest first. */
 async function fetchFireDrills(limit = 60) {
     if (!sbClient) throw new Error('Supabase not configured.');
@@ -2656,12 +2672,18 @@ async function getClockStatus(staffId, workDate) {
  * @param {string} workDate - ISO 8601 date (YYYY-MM-DD)
  * @returns {Promise<void>}
  */
-async function clockIn(staffId, workDate, roomId = null, { lat = null, lon = null, outsideFence = false } = {}) {
+// ⚠️ UNUSED as of 2026-08-14 — the live clock-in path is inline in
+// clockin.html, and this helper has no callers anywhere in the repo. Kept
+// because it is the documented API shape, but `outsideFence` now defaults to
+// null rather than false: writing `false` on no evidence is what made the
+// geofence read as five months of clean punches. If you ever wire this up,
+// carry the location status and device id across too.
+async function clockIn(staffId, workDate, roomId = null, { lat = null, lon = null, outsideFence = null } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const now = new Date().toISOString();
     const row = { staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null, room_id: roomId || null };
     if (lat != null) { row.clock_in_lat = lat; row.clock_in_lon = lon; }
-    row.clock_in_outside_fence = outsideFence || false;
+    row.clock_in_outside_fence = outsideFence ?? null;
     const { error } = await sbClient.from('staff_clock_events').insert(row);
     if (error) throw error;
 }
@@ -2672,7 +2694,8 @@ async function clockIn(staffId, workDate, roomId = null, { lat = null, lon = nul
  * @param {string} workDate - ISO 8601 date (YYYY-MM-DD)
  * @returns {Promise<void>}
  */
-async function clockOut(staffId, workDate, { lat = null, lon = null, outsideFence = false } = {}) {
+// Unused, same as clockIn above — see that note before wiring either up.
+async function clockOut(staffId, workDate, { lat = null, lon = null, outsideFence = null } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const now = new Date().toISOString();
     const { data: open } = await sbClient
@@ -2687,7 +2710,7 @@ async function clockOut(staffId, workDate, { lat = null, lon = null, outsideFenc
     if (!open) throw new Error('No clock-in record found. Please clock in first.');
     const update = { clock_out: now };
     if (lat != null) { update.clock_out_lat = lat; update.clock_out_lon = lon; }
-    update.clock_out_outside_fence = outsideFence || false;
+    update.clock_out_outside_fence = outsideFence ?? null;
     const { error } = await sbClient.from('staff_clock_events').update(update).eq('id', open.id);
     if (error) throw error;
 }

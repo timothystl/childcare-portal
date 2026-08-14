@@ -1,12 +1,14 @@
 // ============================================================
-// admin-safety — staff injury reports and the fire drill log
+// admin-safety — injury reports, fire drills, clock-in integrity
 // ============================================================
-// Two director's desks, both added 2026-08-14, both about compliance rather
-// than care:
+// Three director's desks, all added 2026-08-14, all about compliance and
+// records rather than care:
 //
 //   Staff Injury Reports — workers' compensation. What staff file from the
 //   Account tab of the staff app lands here.
 //   Fire Drills — the record of every drill run from the head count screen.
+//   Clock-In Integrity — whether the geofence is recording anything, and
+//   whether two staff are punching from one phone.
 //
 // ⚠️ STAFF INJURIES ARE NOT CHILD INCIDENTS AND THE TWO QUEUES NEVER MIX.
 // Approving a child's incident report publishes it to that family. Nothing in
@@ -347,4 +349,200 @@ function _fdRosterList(title, list) {
             <span class="fd-roster-room">${escHtml(p.room || '—')}</span>
             ${p.accounted ? '' : '<span class="fd-roster-flag">not accounted for</span>'}
         </li>`).join('') + '</ul></div>';
+}
+
+// ============================================================
+// Clock-in integrity
+// ============================================================
+// Added 2026-08-14, answering "can we tie their login to their device so staff
+// can't log each other in?" The decision was to MEASURE BEFORE BLOCKING: this
+// screen refuses nobody and locks nobody out at 7am. It answers whether buddy
+// punching is actually happening, so the question of whether to spend a
+// director's mornings on device-approval requests can be settled with data.
+//
+// ⚠️ WHAT THE DEVICE ID CAN AND CANNOT SHOW. It is a random UUID in the
+// browser's localStorage, minted on first punch. Clearing site data mints a new
+// one. So:
+//
+//   two staff sharing one id   -> real evidence, worth a conversation
+//   a staff member's id changed -> proves nothing (new phone, cleared Safari,
+//                                  reinstalled the app, private window)
+//
+// The panels below are ordered by how much weight the signal carries, and the
+// second one says out loud that it is a prompt to ask, not a finding.
+
+let _ciRows  = [];
+let _ciStaff = [];
+let _ciDays  = 30;
+
+const CI_LOC_LABEL = {
+    ok: 'Location recorded', denied: 'Permission denied', timeout: 'Timed out',
+    unavailable: 'Position unavailable', unsupported: 'Browser cannot',
+    off: 'Geofence off', not_recorded: 'Before we tracked it',
+};
+
+async function renderClockIntegrityTool() {
+    const wrap = _sfEl('clockIntegrityBody');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="muted">Loading…</p>';
+    try {
+        const since = new Date(Date.now() - _ciDays * 86400000).toISOString().slice(0, 10);
+        [_ciRows, _ciStaff] = await Promise.all([
+            fetchClockIntegrity(since),
+            fetchAllStaff({ includeInactive: true }),
+        ]);
+    } catch (e) {
+        wrap.innerHTML = `<p class="muted">Could not load clock events: ${escHtml(e.message || e)}</p>`;
+        return;
+    }
+    _ciRender();
+}
+
+function _ciName(id) {
+    return _ciStaff.find(s => String(s.id) === String(id))?.name || 'Unknown';
+}
+
+// Short, readable stand-in for a UUID nobody needs to read in full.
+function _ciDevShort(id) { return id ? id.slice(0, 8) : '—'; }
+
+function _ciRender() {
+    const wrap = _sfEl('clockIntegrityBody');
+    if (!wrap) return;
+
+    const ranges = [7, 30, 90].map(d =>
+        `<button class="inc-tab ${_ciDays === d ? 'active' : ''}" data-cidays="${d}">Last ${d} days</button>`).join('');
+
+    if (!_ciRows.length) {
+        wrap.innerHTML = `<div class="inc-tabs">${ranges}</div>
+            <p class="muted" style="padding:18px 2px">No clock events in this window.</p>`;
+        _ciBind();
+        return;
+    }
+
+    wrap.innerHTML = `<div class="inc-tabs">${ranges}</div>`
+        + _ciCoveragePanel() + _ciSharedPanel() + _ciUnusualPanel();
+    _ciBind();
+}
+
+// ── Panel 1: is anything being recorded at all ──────────────
+function _ciCoveragePanel() {
+    const counts = {};
+    _ciRows.forEach(r => {
+        const k = r.clock_in_location_status || 'not_recorded';
+        counts[k] = (counts[k] || 0) + 1;
+    });
+    const withDevice = _ciRows.filter(r => r.clock_in_device_id).length;
+    const pct = n => Math.round((n / _ciRows.length) * 100);
+
+    // Until the updated clock-in page has been live for a while, everything in
+    // range is 'not_recorded' and both numbers are 0. Saying so beats showing a
+    // zero that looks like a finding.
+    const warming = counts.not_recorded === _ciRows.length;
+
+    return `<section class="ci-panel">
+        <h3>Are we recording anything?</h3>
+        ${warming ? `<div class="fd-nag fd-nag-warn">
+            <strong>Nothing recorded yet in this window.</strong>
+            Device and location capture went live 2026-08-14. Every punch before
+            that is marked "before we tracked it" — this panel fills in as staff
+            clock in from now on.
+        </div>` : ''}
+        <div class="ci-stats">
+            <div class="ci-stat"><span class="ci-num">${_ciRows.length}</span><span class="ci-lab">Punches</span></div>
+            <div class="ci-stat"><span class="ci-num">${pct(withDevice)}%</span><span class="ci-lab">With a device id</span></div>
+            <div class="ci-stat"><span class="ci-num">${pct(counts.ok || 0)}%</span><span class="ci-lab">With a location</span></div>
+        </div>
+        <ul class="ci-breakdown">
+            ${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
+                `<li><span>${escHtml(CI_LOC_LABEL[k] || k)}</span><strong>${n}</strong></li>`).join('')}
+        </ul>
+        ${counts.denied ? `<p class="ci-note">${counts.denied} ${counts.denied === 1 ? 'punch' : 'punches'}
+            had location refused on the phone. The geofence cannot see those at all —
+            it is worth asking staff to allow location for the clock-in page.</p>` : ''}
+    </section>`;
+}
+
+// ── Panel 2: two people, one phone ──────────────────────────
+function _ciSharedPanel() {
+    const byDevice = new Map();
+    _ciRows.filter(r => r.clock_in_device_id).forEach(r => {
+        if (!byDevice.has(r.clock_in_device_id)) byDevice.set(r.clock_in_device_id, new Map());
+        const m = byDevice.get(r.clock_in_device_id);
+        if (!m.has(r.staff_id)) m.set(r.staff_id, []);
+        m.get(r.staff_id).push(r);
+    });
+
+    const shared = [...byDevice.entries()].filter(([, m]) => m.size > 1);
+
+    if (!shared.length) {
+        return `<section class="ci-panel">
+            <h3>Two staff, one phone</h3>
+            <p class="ci-clear">✓ No device has been used by more than one staff member.</p>
+        </section>`;
+    }
+
+    return `<section class="ci-panel">
+        <h3>Two staff, one phone <span class="ci-flag">${shared.length}</span></h3>
+        <p class="ci-note">The strongest signal available: these punches came from the
+           same browser. Worth asking about.</p>
+        ${shared.map(([dev, m]) => `
+            <div class="ci-card">
+                <div class="ci-card-head">Device ${escHtml(_ciDevShort(dev))}…</div>
+                ${[...m.entries()].map(([sid, rows]) => `
+                    <div class="ci-row">
+                        <span class="ci-who">${escHtml(_ciName(sid))}</span>
+                        <span class="ci-count">${rows.length} ${rows.length === 1 ? 'punch' : 'punches'}</span>
+                        <span class="ci-dates">${escHtml(rows[rows.length - 1].work_date)} → ${escHtml(rows[0].work_date)}</span>
+                    </div>`).join('')}
+            </div>`).join('')}
+    </section>`;
+}
+
+// ── Panel 3: punched from somebody else's usual phone ───────
+function _ciUnusualPanel() {
+    const byStaff = new Map();
+    _ciRows.filter(r => r.clock_in_device_id).forEach(r => {
+        if (!byStaff.has(r.staff_id)) byStaff.set(r.staff_id, []);
+        byStaff.get(r.staff_id).push(r);
+    });
+
+    const odd = [];
+    byStaff.forEach((rows, sid) => {
+        // "Usual" = the device this person punches from most often. Anything
+        // else is worth a look, but a new phone looks identical to a borrowed
+        // one, which is why this panel asks rather than accuses.
+        const tally = {};
+        rows.forEach(r => { tally[r.clock_in_device_id] = (tally[r.clock_in_device_id] || 0) + 1; });
+        const usual = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+        if (!usual || Object.keys(tally).length < 2) return;
+        Object.entries(tally).filter(([d]) => d !== usual[0]).forEach(([dev, n]) => {
+            const on = rows.filter(r => r.clock_in_device_id === dev);
+            odd.push({ sid, dev, n, first: on[on.length - 1].work_date, last: on[0].work_date });
+        });
+    });
+
+    if (!odd.length) {
+        return `<section class="ci-panel">
+            <h3>Punched from a different phone than usual</h3>
+            <p class="ci-clear">✓ Everyone has clocked in from a single device.</p>
+        </section>`;
+    }
+
+    return `<section class="ci-panel">
+        <h3>Punched from a different phone than usual <span class="ci-flag">${odd.length}</span></h3>
+        <p class="ci-note">A new phone, a cleared browser and a borrowed handset all
+           look the same here. Treat this as a question, not a finding.</p>
+        ${odd.map(o => `
+            <div class="ci-row ci-row-standalone">
+                <span class="ci-who">${escHtml(_ciName(o.sid))}</span>
+                <span class="ci-count">${o.n} on device ${escHtml(_ciDevShort(o.dev))}…</span>
+                <span class="ci-dates">${escHtml(o.first)}${o.first === o.last ? '' : ' → ' + escHtml(o.last)}</span>
+            </div>`).join('')}
+    </section>`;
+}
+
+function _ciBind() {
+    document.querySelectorAll('[data-cidays]').forEach(b => {
+        b.onclick = () => { _ciDays = Number(b.dataset.cidays); renderClockIntegrityTool(); };
+    });
 }

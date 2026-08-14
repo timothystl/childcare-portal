@@ -212,6 +212,10 @@ const AP_TOOLS = [
     // belongs with pay data, not with the child incident queue.
     { key: 'staffInjury', pane: 'staffing', section: 'staffInjuriesSection',  tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.tang, icon: '🚑', name: 'Staff Injury Reports',
       blurb: "Work injuries staff filed, and the 30-day clock on the carrier's First Report." },
+    // Full-role only as well: it names who clocked in from whose phone, which
+    // is an HR conversation before it is anything else.
+    { key: 'clockIntegrity', pane: 'staffing', section: 'clockIntegritySection', tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.tang, icon: '📱', name: 'Clock-In Integrity',
+      blurb: 'Whether the geofence is recording anything, and whether two staff share a phone.' },
 
     // ── Planning · Family Communication ──
     { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'planning', group: 'Family Communication', tint: AP_TINT.gold, icon: '💬', name: 'Parent Messages',
@@ -384,7 +388,7 @@ const AP_FULL_ONLY_TABS = ['finance', 'market'];
 // staffInjury for the same reason as payroll but more so: the report names an
 // employee, the part of their body, and where they were treated. A `restricted`
 // admin who plans schedules has no business reading it.
-const AP_FULL_ONLY_KEYS = ['payroll', 'staffInjury'];
+const AP_FULL_ONLY_KEYS = ['payroll', 'staffInjury', 'clockIntegrity'];
 
 function apToolAvailable(tool) {
     const el = document.getElementById(tool.section);
@@ -621,6 +625,7 @@ function apOnToolOpened(tool) {
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
         if (tool.key === 'staffInjury' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();
+        if (tool.key === 'clockIntegrity' && typeof renderClockIntegrityTool === 'function') renderClockIntegrityTool();
         if (tool.key === 'threads' && typeof renderThreadsTool === 'function') renderThreadsTool();
         if (tool.key === 'schedule')  apRenderScheduleTimeOff();
         if (tool.key === 'staffreq')  apRenderStaffReq();

@@ -4769,3 +4769,49 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     margin-left: 6px; font-size: .82em; font-weight: 800;
     color: var(--tang-dark);
 }
+
+/* ── Clock-in integrity (admin-safety.js) ────────────────────
+   A measuring instrument, not an accusation screen. Panel 2 carries real
+   weight and panel 3 explicitly does not, so only panel 2's count is tinted
+   like a flag. */
+
+.ci-panel {
+    background: #fff; border: 1px solid #e3e9ee; border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 14px;
+}
+.ci-panel h3 {
+    margin: 0 0 10px; font-size: 1em; color: var(--navy);
+    display: flex; align-items: center; gap: 8px;
+}
+.ci-flag {
+    background: var(--tang-pale); color: var(--tang-dark);
+    border-radius: 999px; padding: 1px 10px; font-size: .8em; font-weight: 800;
+}
+.ci-note  { font-size: .86em; color: #78838f; line-height: 1.55; margin: 0 0 10px; }
+.ci-clear { font-size: .9em; color: var(--green-dark); font-weight: 700; margin: 0; }
+
+.ci-stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.ci-stat {
+    flex: 1; min-width: 110px; text-align: center;
+    background: #f5f8fa; border-radius: 10px; padding: 12px 8px;
+}
+.ci-num { display: block; font-family: 'Lora', Georgia, serif; font-size: 1.6em; font-weight: 700; color: var(--navy); }
+.ci-lab { display: block; margin-top: 2px; font-size: .72em; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #78838f; }
+
+.ci-breakdown { list-style: none; margin: 0; padding: 0; font-size: .88em; }
+.ci-breakdown li {
+    display: flex; justify-content: space-between;
+    padding: 5px 0; border-bottom: 1px solid #f0f4f7; color: #5a6673;
+}
+.ci-breakdown li:last-child { border-bottom: none; }
+
+.ci-card { border: 1px solid #e3e9ee; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.ci-card-head { font-weight: 800; font-size: .84em; color: var(--navy-table); margin-bottom: 6px; font-family: ui-monospace, monospace; }
+.ci-row {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding: 4px 0; font-size: .89em;
+}
+.ci-row-standalone { border-bottom: 1px solid #f0f4f7; padding: 7px 0; }
+.ci-who   { font-weight: 700; color: var(--navy); flex: 1; min-width: 140px; }
+.ci-count { color: #5a6673; }
+.ci-dates { color: #98a2ad; font-size: .92em; }
