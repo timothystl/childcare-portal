@@ -100,10 +100,12 @@
 
         <!-- ══ SCHEDULE ═══════════════════════════════════════ -->
         <!-- Booked days grouped by child and month with what each month costs
-             (design §7). Read-only: "Register for additional days" still leads
-             to calendar.html, which does NOT share this session and asks for
-             the email and PIN again. That second sign-in closes only when day
-             REQUESTS move in here, which is its own piece of work. -->
+             (design §7). Read-only: "Register for additional days" leads out to
+             /calendar, which now ADOPTS this session instead of asking for the
+             email and PIN again — app.js calls my_family_payload() on load and
+             resolves the family from parent_accounts off the JWT. Booking still
+             happens over there; moving day REQUESTS in here is its own piece of
+             work, but the second sign-in is gone. -->
         <section class="pt-tab hidden" data-tab="schedule">
             <div id="ptScheduleBody"></div>
         </section>

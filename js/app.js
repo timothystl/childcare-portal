@@ -157,6 +157,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupFormListeners();
     setupContactModal();
     setupForgotPinModal();
+
+    // After the listeners are wired, so "Change" works the moment the bar
+    // appears. Awaited rather than fired and forgotten: renderChildSection()
+    // runs inside it, and letting it race the rest of init was how the child
+    // list could paint before ROOMS had its admin rates merged in.
+    await tryPortalSessionFamily();
 });
 
 // ============================================================
@@ -359,7 +365,48 @@ function setupFamilyLookup() {
 }
 
 // Set on a successful family lookup, cleared when the family is reset.
+// Null on the portal-session path — there is no PIN in the browser there, and
+// loadSiblingBookedDays() reads _viaPortalSession instead.
 let _familyAuth = null;
+
+// True when the family came from a /portal session rather than email + PIN.
+let _viaPortalSession = false;
+
+// A parent who signed in at /portal already proved who they are. Rather than
+// asking for the same email and PIN a second time, adopt that session: the
+// family comes from parent_accounts via the JWT, exactly the way every parent
+// RLS policy resolves it.
+//
+// Silent by design. No session, an expired one, or an admin who is not a parent
+// all return null, and the email + PIN form stays exactly as it was — this is a
+// shortcut for people who have one, never a gate for people who don't.
+async function tryPortalSessionFamily() {
+    if (typeof fetchFamilyForSession !== 'function') return false;
+
+    const result = await fetchFamilyForSession();
+    if (!result?.family) return false;
+
+    // selectFamily() bails on a locked family with its own toast. Let it, but
+    // don't claim the session path worked — the PIN form is no better here, so
+    // the parent still needs to see why nothing happened.
+    _viaPortalSession = true;
+    _familySessionToken = await parentSessionToken();
+    selectFamily(result.family, result.isParent2);
+
+    if (!selectedFamily) { _viaPortalSession = false; return false; }
+
+    // Say whose session this is. A shared phone is the case that matters: the
+    // "Change" button beside it is how you get out, and it must not look like
+    // the form simply skipped a step.
+    const bar = document.querySelector('#familySelectedBar .family-selected-name');
+    if (bar) {
+        const who = result.isParent2
+            ? (result.family.parent2_name || result.family.parent_name)
+            : result.family.parent_name;
+        bar.textContent = who ? `Signed in as ${who}` : 'Signed in from your portal';
+    }
+    return true;
+}
 
 async function runEmailPinLookup() {
     const email  = document.getElementById('familyEmailInput')?.value.trim();
@@ -380,6 +427,7 @@ async function runEmailPinLookup() {
             return;
         }
         _familySessionToken = result.sessionToken ?? null;
+        _viaPortalSession   = false;   // this family came from a PIN, not a session
         // R1: the sibling-booked-days read is PIN-gated server-side now. Hold
         // the credential the parent just authenticated with for this session
         // only — it is never persisted, and clearing the family clears it.
@@ -435,6 +483,15 @@ function selectFamily(family, isParent2 = false) {
 }
 
 function resetFamilyLookup() {
+    // "Change" on the portal path means "this is not my account" — most likely
+    // on a shared phone. Ending the portal session too is the only honest
+    // reading: leaving it alive would re-adopt the same family on the next
+    // reload, and the button would look broken.
+    if (_viaPortalSession && typeof parentPortalLogout === 'function') {
+        parentPortalLogout().catch(() => {});
+    }
+    _viaPortalSession   = false;
+    _familyAuth         = null;
     selectedFamily      = null;
     _familySessionToken = null;
     _isParent2          = false;
@@ -1022,10 +1079,23 @@ async function loadSiblingBookedDays() {
     const inSession = new Set(selectedChildren.map(c => (c.name || '').toLowerCase()));
 
     try {
-        if (!_familyAuth) return;   // not authenticated — quote stays session-only
-        // One call: the RPC returns the whole family's registrations, both
-        // parents included, so there is nothing to merge or de-duplicate.
-        const results = await fetchRegistrationsByEmail(_familyAuth.email, _familyAuth.pin);
+        // One call either way: both RPCs return the whole family's
+        // registrations, both parents included, in the same shape — so there is
+        // nothing to merge or de-duplicate, and nothing below branches.
+        //
+        // The portal path has no PIN to pass; my_family_registrations() reads
+        // the family off the session instead. Without this branch a parent who
+        // came from /portal would silently lose the sibling discount from their
+        // quote — the invoice is recomputed server-side and would still be
+        // right, so the only symptom would be a quote higher than the bill.
+        let results;
+        if (_viaPortalSession && typeof fetchRegistrationsForSession === 'function') {
+            results = await fetchRegistrationsForSession();
+        } else if (_familyAuth) {
+            results = await fetchRegistrationsByEmail(_familyAuth.email, _familyAuth.pin);
+        } else {
+            return;   // not authenticated — quote stays session-only
+        }
 
         for (const reg of results) {
             if (reg.status && reg.status !== 'confirmed') continue;
