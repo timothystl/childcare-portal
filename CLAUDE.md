@@ -229,6 +229,71 @@ that day's registrations. No DELETE grant — a drill that happened cannot be
 un-held. `log_fire_drill` takes a jsonb payload with an **explicit column
 allow-list**; `drill_date` and the conductor are server-side (injection-tested).
 
+---
+
+## ⚠️ RLS DOES NOT STOP `TRUNCATE` (found and closed 2026-08-14)
+
+`anon` held `arwdDxtm` — **every** privilege, including `DELETE` and `TRUNCATE` —
+on eight tables: `staff_clock_events`, `registrations`, `registration_dates`,
+`staff`, `waitlist_applications`, `cacfp_menus`, `client_error_log`,
+`deletion_requests`. RLS is enabled on all eight, which is exactly what hid it.
+
+- **DELETE was not exploitable.** No table had a DELETE policy naming `anon`, so
+  the statement affected zero rows. Proven as the `anon` role in a rolled-back
+  transaction: `before=1547, deleted_by_anon=0, after=1547`.
+- **⚠️ TRUNCATE was.** TRUNCATE does not read rows, so **row-level security never
+  applies to it** — the grant alone is sufficient. Anyone holding the public anon
+  key, which ships in the browser on every page, could have erased every
+  registration, every care date, the staff roster, the waitlist, and five months
+  of payroll clock events. No soft delete, no application copy: recovery would
+  have been a database restore.
+
+Revoked from `anon` **and** `PUBLIC` on all eight in
+`revoke_anon_delete_truncate_clock_events.sql`. `SELECT`/`INSERT`/`UPDATE` were
+left untouched — several are load-bearing (registration submit, kiosk clock-out).
+
+**Never read "RLS is enabled" as "writes are controlled."** Check `relacl` for
+the `D` bit. R4's write-up said this table held "SELECT/INSERT/UPDATE" and it
+held everything; the write-up was believed for months because nobody re-read the
+catalog.
+
+---
+
+## Clock-in integrity — the geofence never worked (2026-08-14)
+
+`clock_device_and_location_truth.sql`, **applied and verified 2026-08-14.**
+
+**The geofence is enabled** in settings (300ft, alerts to mdo@) and
+`clockin.html` does call `getCurrentPosition`. Yet **all 1,547 clock events from
+2026-03-04 to 2026-08-14 carried a NULL coordinate and `outside_fence = false`.**
+Two causes, both fixed:
+
+1. The `getCurrentPosition` error callback resolved `outsideFence: false` — the
+   value meaning *"we checked and they were on site."* A denied location
+   permission was stored as a clean punch.
+2. Both fence columns carried `DEFAULT false`, so omitting the column lied too.
+
+Now: `outside_fence` is **NULL when unknown**, and `*_location_status` records
+which kind of unknown (`ok`/`denied`/`timeout`/`unavailable`/`unsupported`/`off`/
+`not_recorded`). The 1,547 historical rows were backfilled to NULL +
+`not_recorded` — left alone they would have read as 100% compliant in the very
+report built to measure compliance.
+
+**Device id** (`clock_in_device_id` / `clock_out_device_id`) is a random UUID in
+`localStorage`, minted per browser. Not a hardware fingerprint.
+⚠️ **Clearing site data mints a new one, so a shared id is evidence and differing
+ids prove nothing.** Never gate a clock-in on it — it is a report
+(**Staff → Pay & Policy → Clock-In Integrity**, `full` role only), and it
+deliberately blocks nobody. Device *binding* was considered and deferred: the
+recovery burden lands on the director at 7am, and there was no evidence of buddy
+punching to justify it — because location had never been recorded, so no
+evidence could exist either way.
+
+⚠️ **`staff_clock_events` grants LOOK per-column** in
+`information_schema.column_privileges` (that view enumerates every column for a
+table-level grant too). They are table-level. Verified the anon write path with
+the new columns end to end as `anon`, rolled back, before shipping.
+
 ### ⚠️ Revoking a function from `PUBLIC` does not revoke it from `anon`
 
 Supabase's default privileges grant EXECUTE on a new `public` function **directly

@@ -746,22 +746,72 @@ function _haversineDistanceFt(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.asin(Math.sqrt(a));
 }
 
+// ⚠️ THIS USED TO FAIL OPEN, AND IT FAILED OPEN FOR FIVE MONTHS.
+// The error branch resolved `outsideFence: false` — the value meaning "we
+// checked, they were here" — so a denied location permission was recorded as
+// a clean punch. All 1,547 events between 2026-03-04 and 2026-08-14 carry a
+// NULL coordinate and a `false` fence flag, and the geofence has therefore
+// never once done anything.
+//
+// `outsideFence` is now NULL whenever we do not know, and `status` says which
+// kind of not-knowing it was, so the director's report can tell "nobody has
+// granted location" apart from "everyone is on site".
+//
+// It still does NOT block the punch. Refusing to clock someone in because
+// their phone would not share a location strands a real staff member at the
+// door over a permission dialog; the honest record plus a report is the trade.
 async function _getGeoAndCheck() {
     const s = geofenceSettings || {};
-    if (!s.enabled || !s.lat || !s.lng || !navigator.geolocation) {
-        return { lat: null, lon: null, distanceFt: null, outsideFence: false };
+    if (!s.enabled || !s.lat || !s.lng) {
+        return { lat: null, lon: null, distanceFt: null, outsideFence: null, status: 'off' };
+    }
+    if (!navigator.geolocation) {
+        return { lat: null, lon: null, distanceFt: null, outsideFence: null, status: 'unsupported' };
     }
     return new Promise(resolve => {
         navigator.geolocation.getCurrentPosition(
             pos => {
                 const lat = pos.coords.latitude, lon = pos.coords.longitude;
                 const distanceFt = _haversineDistanceFt(lat, lon, Number(s.lat), Number(s.lng));
-                resolve({ lat, lon, distanceFt: Math.round(distanceFt), outsideFence: distanceFt > (s.radius_ft || 300) });
+                resolve({ lat, lon, distanceFt: Math.round(distanceFt),
+                          outsideFence: distanceFt > (s.radius_ft || 300), status: 'ok' });
             },
-            () => resolve({ lat: null, lon: null, distanceFt: null, outsideFence: false }),
+            err => {
+                // 1 PERMISSION_DENIED · 2 POSITION_UNAVAILABLE · 3 TIMEOUT.
+                // Kept apart because they mean different things to the director:
+                // denied is a conversation, timeout is a bad signal in the building.
+                const status = err && err.code === 1 ? 'denied'
+                             : err && err.code === 3 ? 'timeout'
+                             : 'unavailable';
+                resolve({ lat: null, lon: null, distanceFt: null, outsideFence: null, status });
+            },
             { timeout: 10000, enableHighAccuracy: true }
         );
     });
+}
+
+// ── Device identity ─────────────────────────────────────────
+// A random UUID minted once per browser, kept in localStorage, sent with each
+// punch. NOT a hardware fingerprint — no canvas tricks, no user-agent hashing,
+// nothing that follows anyone off this origin. It exists so the director can
+// see two staff clocking in from one phone.
+//
+// ⚠️ Clearing site data mints a new id. So a shared id is EVIDENCE, while
+// differing ids prove nothing. Do not gate a clock-in on this value.
+function _deviceId() {
+    try {
+        let id = localStorage.getItem('mdo_device_id');
+        if (!id) {
+            id = (crypto.randomUUID && crypto.randomUUID()) ||
+                 // randomUUID needs a secure context; this is only a fallback
+                 // so a stray http:// preview still records something stable.
+                 ('d-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10));
+            localStorage.setItem('mdo_device_id', id);
+        }
+        return id;
+    } catch {
+        return null;   // private mode / storage blocked — record nothing, punch anyway
+    }
 }
 
 function _notifyGeofence(eventType, distanceFt) {
@@ -1139,7 +1189,9 @@ document.getElementById('btnConfirmClockIn').addEventListener('click', async () 
         const geo = await _getGeoAndCheck();
         const now = new Date().toISOString();
         const row = { staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null, room_id: selectedRoomId,
-                      clock_in_outside_fence: geo.outsideFence };
+                      clock_in_outside_fence: geo.outsideFence,
+                      clock_in_location_status: geo.status,
+                      clock_in_device_id: _deviceId() };
         if (geo.lat != null) { row.clock_in_lat = geo.lat; row.clock_in_lon = geo.lon; }
         const { error } = await sb.from('staff_clock_events').insert(row);
         if (error) throw error;
@@ -1190,7 +1242,9 @@ document.getElementById('btnClockOut').addEventListener('click', async () => {
         if (!openEventId) throw new Error('No open clock-in found. Please try again.');
         const geo = await _getGeoAndCheck();
         const now = new Date().toISOString();
-        const upd = { clock_out: now, clock_out_outside_fence: geo.outsideFence };
+        const upd = { clock_out: now, clock_out_outside_fence: geo.outsideFence,
+                      clock_out_location_status: geo.status,
+                      clock_out_device_id: _deviceId() };
         if (geo.lat != null) { upd.clock_out_lat = geo.lat; upd.clock_out_lon = geo.lon; }
         // Update only the specific open event by ID — not all rows for this staff+day
         const { error } = await sb.from('staff_clock_events')
