@@ -2408,6 +2408,108 @@ async function fetchMyIncidentReports(studentId = null) {
     return data || [];
 }
 
+// ── Staff injury reports (workers' comp) ────────────────────
+// ⚠️ A SEPARATE TABLE FROM incident_reports, ON PURPOSE. That one carries a
+// parent-read policy keyed on the child; this one has no student and no family
+// that may ever read it. Do not merge them, and do not add a parent-facing read
+// here for any reason — see the migration header for the full reasoning.
+
+/**
+ * Staff file a work-injury report. PIN-gated; returns the new id, or null if
+ * refused (bad PIN, blank description, or a treatment value the DB rejects).
+ *
+ * `injuredStaffId` is optional and defaults to the PIN holder. It exists
+ * because the person who was hurt is often not the person who can type: a
+ * sprained wrist or a trip to urgent care both mean somebody else files.
+ */
+async function submitStaffInjuryReport(staffId, pin, r = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('submit_staff_injury_report', {
+        p_staff_id:           staffId,
+        p_pin:                parseInt(pin, 10),
+        p_description:        r.description,
+        p_action_taken:       r.actionTaken,
+        p_injured_staff_id:   r.injuredStaffId || null,
+        p_occurred_at:        r.occurredAt || null,
+        p_location:           r.location || null,
+        p_body_area:          r.bodyArea || null,
+        p_witness:            r.witness || null,
+        p_sought_treatment:   r.soughtTreatment || 'none',
+        p_treatment_facility: r.treatmentFacility || null,
+        p_lost_time:          r.lostTime === true,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** Admin: the injury queue. Pass status = null for every report. */
+async function fetchStaffInjuryReports({ status = 'reported', limit = 200 } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    let q = sbClient
+        .from('staff_injury_reports')
+        .select('*')
+        .order('reported_at', { ascending: false })
+        .limit(limit);
+    if (status) q = q.eq('status', status);
+    const { data, error } = await q;
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/** Admin: move a report along. The reviewer is stamped server-side from the JWT. */
+async function reviewStaffInjuryReport(id, status, notes = '', claimRef = '') {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('review_staff_injury_report', {
+        p_id: id, p_status: status, p_notes: notes || null, p_claim_ref: claimRef || null,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+// ── Head count & fire drills ────────────────────────────────
+
+/**
+ * Everyone in the building right now, for an evacuation count.
+ *
+ * ⚠️ `attendance_status` is 'present' / 'left' / 'not_arrived', derived from the
+ * LATEST attendance event of the day — not from "has a check-in", which stays
+ * true after a child goes home. Read that field, never `checked_in`, anywhere a
+ * count of bodies is the answer.
+ *
+ * @returns {Promise<object|null>} { as_of, care_date, children[], staff[] },
+ *   or null when the PIN was refused.
+ */
+async function centerHeadcount(staffId, pin, careDate = null) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('center_headcount', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10), p_care_date: careDate,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** Record a completed drill. PIN-gated; returns the new id, or null if refused. */
+async function logFireDrill(staffId, pin, payload = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('log_fire_drill', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10), p_payload: payload,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** Admin: the drill log, newest first. */
+async function fetchFireDrills(limit = 60) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('fire_drills')
+        .select('*')
+        .order('started_at', { ascending: false })
+        .limit(limit);
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
 // ── Messaging (Phase 2) ─────────────────────────────────────
 // ONE THREAD PER FAMILY. The `messages` table and its admin inbox are untouched
 // — that is still the public contact form, the only way a NON-family reaches

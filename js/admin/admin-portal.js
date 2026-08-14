@@ -96,6 +96,10 @@ const AP_TOOLS = [
     // here is a parent who has not been told yet.
     { key: 'incidents',   pane: 'daily',         section: 'incidentsSection',        tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '🩹', name: 'Incident Reports',
       blurb: 'Review what staff filed, then release it to the family.' },
+    // Drills sit under Classrooms with the incidents: same shelf, same
+    // inspector, and the count they record is a count of children.
+    { key: 'drills',      pane: 'daily',         section: 'fireDrillsSection',       tab: 'classrooms', group: 'Records', tint: AP_TINT.tang, icon: '🔥', name: 'Fire Drills',
+      blurb: 'Every drill run, who was in the building, and how long it took.' },
     // Separate from the Contact Us inbox: that is the public form, this is
     // families you already have. Teachers only see their own room's threads,
     // so the office is the only place the whole picture exists.
@@ -203,6 +207,11 @@ const AP_TOOLS = [
       blurb: 'Accrual rules and starting balances.' },
     { key: 'geofence',    pane: 'staffing', section: 'geofenceSection',       tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.sand, icon: '📍', name: 'Geofence & Clock Reminders',
       blurb: 'Where the time clock will accept a punch, and when to nudge.' },
+    // ⚠️ Under Staff, not Classrooms, and gated to `full` below. An injury
+    // report names an employee, their body and their medical treatment — it
+    // belongs with pay data, not with the child incident queue.
+    { key: 'staffInjury', pane: 'staffing', section: 'staffInjuriesSection',  tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.tang, icon: '🚑', name: 'Staff Injury Reports',
+      blurb: "Work injuries staff filed, and the 30-day clock on the carrier's First Report." },
 
     // ── Planning · Family Communication ──
     { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'planning', group: 'Family Communication', tint: AP_TINT.gold, icon: '💬', name: 'Parent Messages',
@@ -372,7 +381,10 @@ const AP_FULL_ONLY_TABS = ['finance', 'market'];
 // Financial tools that live outside the Finance tab, so the tab rule
 // above cannot catch them. Payroll sits under Staff because it is about
 // people, but it is still pay data.
-const AP_FULL_ONLY_KEYS = ['payroll'];
+// staffInjury for the same reason as payroll but more so: the report names an
+// employee, the part of their body, and where they were treated. A `restricted`
+// admin who plans schedules has no business reading it.
+const AP_FULL_ONLY_KEYS = ['payroll', 'staffInjury'];
 
 function apToolAvailable(tool) {
     const el = document.getElementById(tool.section);
@@ -607,6 +619,8 @@ function apOnToolOpened(tool) {
         }
         if (tool.key === 'invoices' && typeof renderInvoicesTool === 'function') renderInvoicesTool();
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
+        if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
+        if (tool.key === 'staffInjury' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();
         if (tool.key === 'threads' && typeof renderThreadsTool === 'function') renderThreadsTool();
         if (tool.key === 'schedule')  apRenderScheduleTimeOff();
         if (tool.key === 'staffreq')  apRenderStaffReq();

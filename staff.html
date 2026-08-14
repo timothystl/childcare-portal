@@ -99,6 +99,18 @@
             </div>
         </section>
 
+        <!-- ══ HEAD COUNT ═════════════════════════════════════ -->
+        <!-- A fifth tab, against the four in the design handoff. An evacuation
+             count is the one screen here with a hard time limit attached and it
+             cannot sit behind a menu — whoever needs it is standing outside
+             holding a phone in one hand. -->
+        <section class="sl-tab hidden" data-tab="count">
+            <header class="sl-header">
+                <span class="sl-room-title">Head Count</span>
+            </header>
+            <div id="hcBody" class="hc-body"></div>
+        </section>
+
         <!-- ══ ACCOUNT ════════════════════════════════════════ -->
         <section class="sl-tab hidden" data-tab="account">
             <div class="sl-account-head">
@@ -109,6 +121,9 @@
                 <p>Display name, mobile, PIN, and CPR / first-aid expiry dates.
                    Coming next — the office keeps these for now.</p>
             </div>
+            <!-- Workers' comp lives here rather than on a child's sheet: it is
+                 about the person holding the phone, not anyone on the roster. -->
+            <button type="button" id="slInjuryBtn" class="sl-injury-btn">🚑 Report a work injury</button>
             <button type="button" id="slSignOutBtn2" class="sl-signout">Sign out</button>
         </section>
 
@@ -182,6 +197,84 @@
                               placeholder="First aid given, who was told, how the child was afterwards."></textarea>
                 </label>
                 <button type="submit" id="slIncSubmitBtn" class="btn-primary sl-btn">Send to director</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Staff injury report (workers' comp) -->
+    <!-- ⚠️ NOT an incident report. That one is about a child and ends up in
+         front of that child's family; this is employee paperwork no parent ever
+         sees. Separate table, separate queue — do not merge the two forms. -->
+    <div id="slInjurySheet" class="sl-sheet hidden">
+        <div class="sl-sheet-inner">
+            <div class="sl-sheet-head">
+                <span class="sl-sheet-name">Work injury</span>
+                <button type="button" id="slInjuryCancel" class="sl-link-btn">Cancel</button>
+            </div>
+
+            <!-- Filing this IS the written notice of injury, and saying so is
+                 the point: someone who plans to "mention it Monday" has already
+                 started a clock they don't know about. -->
+            <div class="sl-inc-notice">
+                <strong>This is your written report of the injury.</strong>
+                It is date-stamped when you send it and goes straight to the
+                director for workers' compensation. Report it even if it seems
+                minor — a sore back next week is much harder to claim if nothing
+                was written down today.
+            </div>
+
+            <form id="slInjuryForm">
+                <label class="sl-field">
+                    <span>Who was hurt</span>
+                    <select id="slInjWho">
+                        <option value="">Me</option>
+                    </select>
+                </label>
+                <label class="sl-field">
+                    <span>When it happened</span>
+                    <input type="datetime-local" id="slInjWhen">
+                </label>
+                <label class="sl-field">
+                    <span>Where it happened</span>
+                    <input type="text" id="slInjLocation" placeholder="Playground, Bee Room, kitchen…">
+                </label>
+                <label class="sl-field">
+                    <span>Part of the body</span>
+                    <input type="text" id="slInjBodyArea" placeholder="Lower back, right wrist…">
+                </label>
+                <label class="sl-field">
+                    <span>What happened</span>
+                    <textarea id="slInjDescription" rows="4" required
+                              placeholder="Plain description — what you were doing and how it happened."></textarea>
+                </label>
+                <label class="sl-field">
+                    <span>What was done straight away</span>
+                    <textarea id="slInjAction" rows="3" required
+                              placeholder="First aid given, who was told, whether you kept working."></textarea>
+                </label>
+                <label class="sl-field">
+                    <span>Anyone who saw it <span class="sl-optional">(optional)</span></span>
+                    <input type="text" id="slInjWitness" placeholder="Name">
+                </label>
+                <label class="sl-field">
+                    <span>Medical treatment</span>
+                    <select id="slInjTreatment">
+                        <option value="none">None</option>
+                        <option value="onsite_first_aid">First aid here</option>
+                        <option value="clinic_er">Went to a clinic or ER</option>
+                        <option value="later">Plan to see a doctor</option>
+                        <option value="declined">Offered, declined</option>
+                    </select>
+                </label>
+                <label class="sl-field hidden" id="slInjFacilityField">
+                    <span>Where you were seen</span>
+                    <input type="text" id="slInjFacility" placeholder="Clinic or hospital name">
+                </label>
+                <label class="sl-check">
+                    <input type="checkbox" id="slInjLostTime">
+                    <span>I had to stop work or go home because of this</span>
+                </label>
+                <button type="submit" id="slInjSubmitBtn" class="btn-primary sl-btn">Report the injury</button>
             </form>
         </div>
     </div>

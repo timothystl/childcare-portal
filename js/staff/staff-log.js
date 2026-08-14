@@ -109,6 +109,9 @@ async function slSignIn() {
         // fallback for floaters and the director, not a toll gate.
         if (res.room_id) { slOpenRoom(res.room_id); } else { slShow('slRoomScreen'); }
         slFlushQueue();
+        // A drill recorded on the lawn with no signal is stashed rather than
+        // lost; this is the first moment there is a PIN to send it with.
+        if (typeof hcFlushPending === 'function') hcFlushPending();
     } catch (e) {
         console.warn('staff sign-in:', e);
         slToast('Could not reach the server.', 'err');
@@ -187,10 +190,20 @@ function slRenderRoster() {
     }
     wrap.innerHTML = slChildren.map(c => {
         const chips = slAllergyChips(c.allergies);
+        // ⚠️ attendance_status, NOT checked_in. `checked_in` is EXISTS(check_in)
+        // and stays true all afternoon after a child goes home; it is kept in
+        // the RPC only so an old cached bundle does not break. Three states,
+        // because "Out" and "Not in" are different facts and the head count
+        // screen distinguishes them — two screens must not disagree.
+        const st = c.attendance_status
+            || (c.checked_in ? 'present' : 'not_arrived');   // pre-upgrade payload
+        const state = st === 'present' ? { cls: 'in',   text: 'In' }
+                    : st === 'left'    ? { cls: 'out',  text: 'Out' }
+                    :                    { cls: '',     text: 'Not in' };
         return `<button type="button" class="sl-child" data-student="${slEsc(c.student_id)}">
             <span class="sl-child-top">
                 <span class="sl-child-name">${slEsc(c.child_name)}</span>
-                <span class="sl-child-state ${c.checked_in ? 'in' : ''}">${c.checked_in ? 'In' : 'Not in'}</span>
+                <span class="sl-child-state ${state.cls}">${state.text}</span>
             </span>
             ${chips ? `<span class="sl-child-chips">${chips}</span>` : ''}
         </button>`;
@@ -474,6 +487,96 @@ async function slSubmitIncident(e) {
     }
 }
 
+// ── Staff injury report (workers' comp) ─────────────────────
+// ⚠️ THIS IS NOT AN INCIDENT REPORT AND DOES NOT GO NEAR ONE. An incident
+// report is about a child and ends up in front of that child's family. This is
+// about an employee, it is workers' compensation paperwork, and no parent ever
+// sees it — separate table, separate RPC, separate queue. See the migration
+// header for why merging the two was rejected.
+//
+// ⚠️ Filing this IS the written notification of injury. Missouri gives an
+// employee 30 days to notify the employer in writing and the employer 30 days
+// to report to the carrier. The form says so, because someone who thinks
+// "I'll mention it Monday" has started a clock they do not know about.
+//
+// It lives in Account, not on a child's sheet, because it is about the person
+// holding the phone rather than anyone on the roster.
+
+async function slOpenInjury() {
+    const sel = slEl('slInjWho');
+    if (sel) {
+        // Who was hurt defaults to the signed-in person but must be
+        // changeable: someone with a hurt wrist cannot type, and someone who
+        // has left for urgent care is not going to file their own report.
+        sel.innerHTML = '<option value="">Me</option>';
+        try {
+            const staff = await listStaffForSignin();
+            sel.innerHTML += staff
+                .filter(s => String(s.id) !== String(slStaffId))
+                .map(s => `<option value="${slEsc(s.id)}">${slEsc(s.name)}</option>`).join('');
+        } catch (e) {
+            console.warn('staff list:', e);   // "Me" still works
+        }
+    }
+    slEl('slInjuryForm')?.reset();
+    slInjTreatmentChanged();
+    slEl('slInjurySheet')?.classList.remove('hidden');
+}
+
+function slCloseInjury() {
+    slEl('slInjurySheet')?.classList.add('hidden');
+}
+
+// Where they were treated only makes sense once they went somewhere.
+function slInjTreatmentChanged() {
+    const v = slEl('slInjTreatment')?.value;
+    slEl('slInjFacilityField')?.classList.toggle('hidden', v !== 'clinic_er');
+}
+
+async function slSubmitInjury(e) {
+    e.preventDefault();
+
+    const description = slEl('slInjDescription').value.trim();
+    const actionTaken = slEl('slInjAction').value.trim();
+    if (!description || !actionTaken) {
+        slToast('Describe what happened and what was done.', 'err');
+        return;
+    }
+
+    // A date-time the person types in, so an injury reported the next morning
+    // carries the time it actually happened. The RPC clamps a future value.
+    const whenRaw = slEl('slInjWhen').value;
+
+    const btn = slEl('slInjSubmitBtn');
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+        const id = await submitStaffInjuryReport(slStaffId, slPin, {
+            injuredStaffId:    slEl('slInjWho').value || null,
+            description,
+            actionTaken,
+            occurredAt:        whenRaw ? new Date(whenRaw).toISOString() : null,
+            location:          slEl('slInjLocation').value.trim(),
+            bodyArea:          slEl('slInjBodyArea').value.trim(),
+            witness:           slEl('slInjWitness').value.trim(),
+            soughtTreatment:   slEl('slInjTreatment').value,
+            treatmentFacility: slEl('slInjFacility').value.trim(),
+            lostTime:          slEl('slInjLostTime').checked,
+        });
+        if (!id) { slToast('The report was not accepted. Check your PIN.', 'err'); return; }
+
+        slCloseInjury();
+        slToast('Reported. The director has it, date-stamped.', 'ok');
+    } catch (err) {
+        console.warn('injury:', err);
+        // ⚠️ Deliberately NOT queued offline. A queued injury report would sit
+        // on a phone with a legal clock running against a date-stamp nobody
+        // has. Better to fail visibly and be re-typed than to look filed.
+        slToast('Could not send it. Try again — it has not been saved.', 'err');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Report the injury';
+    }
+}
+
 // ── Photos ──────────────────────────────────────────────────
 // Deliberately NOT part of the offline queue. A queued photo would mean holding
 // megabytes of a child's image in localStorage on a personal phone until the
@@ -619,6 +722,10 @@ document.addEventListener('DOMContentLoaded', () => {
     slEl('slIncidentBtn')?.addEventListener('click', slOpenIncident);
     slEl('slIncidentCancel')?.addEventListener('click', slCloseIncident);
     slEl('slIncidentForm')?.addEventListener('submit', slSubmitIncident);
+    slEl('slInjuryBtn')?.addEventListener('click', slOpenInjury);
+    slEl('slInjuryCancel')?.addEventListener('click', slCloseInjury);
+    slEl('slInjuryForm')?.addEventListener('submit', slSubmitInjury);
+    slEl('slInjTreatment')?.addEventListener('change', slInjTreatmentChanged);
 
     window.addEventListener('online', slFlushQueue);
 

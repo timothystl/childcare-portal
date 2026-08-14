@@ -114,6 +114,9 @@ const ENTRIES = [
             contents: [
                 'js/staff/staff-nav.js',
         'js/staff/staff-log.js',
+                // Last: the head count reads slStaffId/slPin/slRoomId and the
+                // toast helper from staff-log, and staff-nav calls into it.
+                'js/staff/staff-headcount.js',
             ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
         },
@@ -157,6 +160,7 @@ const ENTRIES = [
                 'js/admin/admin-settings.js',
                 'js/admin/admin-waitlist.js',
                 'js/admin/admin-incidents.js',
+                'js/admin/admin-safety.js',
                 'js/admin/admin-threads.js',
                 'js/admin/admin-cacfp.js',
                 'js/admin/admin-market.js',
