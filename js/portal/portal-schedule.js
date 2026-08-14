@@ -77,13 +77,13 @@ function psRender() {
             <h2>No care days booked yet</h2>
             <p>Once you register, your days and what they cost appear here.</p>
             <div class="tab-ph-links">
-                <a class="btn-secondary" href="calendar.html">Register for care days</a>
+                <a class="btn-secondary" href="/calendar">Register for care days</a>
             </div></div>`;
         return;
     }
 
     wrap.innerHTML = children.map(c => psChildCard(c, closed, invoiceByMonth)).join('') + `
-        <a class="ps-register" href="calendar.html">Register for additional days →</a>
+        <a class="ps-register" href="/calendar">Register for additional days →</a>
         <p class="ps-disclaimer">Amounts are worked out from the days booked and
            your room's rates. Your statement from the office is the bill —
            anything issued will show here as it happens.</p>`;

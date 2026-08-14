@@ -1030,6 +1030,59 @@ async function parentPortalLogout() {
     try { await sbClient.auth.signOut(); } catch (_) { /* already gone */ }
 }
 
+// The access token of the current parent session, or null if nobody is signed
+// in. Handed to /push-subscribe in place of the legacy HMAC family token: the
+// worker validates it against /auth/v1/user and DERIVES the family from
+// parent_accounts, so a session-signed-in parent cannot name a family that
+// isn't theirs (worker.js "Two ways in, because two logins exist").
+async function parentSessionToken() {
+    if (!sbClient) return null;
+    try {
+        const { data } = await sbClient.auth.getSession();
+        return data?.session?.access_token ?? null;
+    } catch (_) {
+        return null;
+    }
+}
+
+// The family behind the current parent session — the same { family, isParent2 }
+// that lookupFamilyForRegistration() returns for an email + PIN, minus the PIN.
+//
+// This is what lets calendar.html stop asking a parent who signed in at /portal
+// to sign in a second time. my_family_payload() reads parent_accounts off the
+// JWT, so the token picks the family; there is no family id on the wire to
+// tamper with. Returns null when nobody is signed in, when the signed-in user
+// is an admin rather than a parent, or when the session has expired — every
+// one of which should fall back to the email + PIN form rather than error.
+async function fetchFamilyForSession() {
+    if (!sbClient) return null;
+    try {
+        const { data: sess } = await sbClient.auth.getSession();
+        if (!sess?.session) return null;
+
+        const { data, error } = await sbClient.rpc('my_family_payload');
+        if (error) {
+            console.warn('my_family_payload:', error);
+            return null;
+        }
+        if (!data || data === 'null' || !data.family) return null;
+        return { family: data.family, isParent2: !!data.isParent2 };
+    } catch (_) {
+        return null;
+    }
+}
+
+// Session-authenticated twin of fetchRegistrationsByEmail(). Same row shape,
+// same join — my_family_registrations() is family_registrations' body with the
+// PIN check swapped for the parent_accounts lookup — so callers can use either
+// without branching on the shape.
+async function fetchRegistrationsForSession() {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient.rpc('my_family_registrations');
+    if (error) throw error;
+    return data || [];
+}
+
 // Looks up a family's waitlist status by email only (no PIN — see
 // waitlist-status.html). Goes through the waitlist-status edge function
 // (service-role) rather than a direct table query: waitlist_applications RLS

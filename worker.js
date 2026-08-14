@@ -206,9 +206,11 @@ export default {
     //      DERIVED from the token via parent_accounts — the caller does not get
     //      to say which family they are subscribing, which the old path allowed
     //      as long as the id matched the token.
-    //   2. The legacy HMAC family token (calendar.html). Kept because that page
-    //      still issues it; remove this branch when calendar.html moves to the
-    //      portal session.
+    //   2. The legacy HMAC family token (calendar.html). Still needed: that page
+    //      now ADOPTS a portal session when one exists and sends the access
+    //      token down path 1, but its email + PIN form is the only way in for a
+    //      parent who never opened the portal, and that path has no session to
+    //      send. This branch goes away when email + PIN itself does.
     if (url.pathname === '/push-subscribe' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       const { endpoint, p256dh, auth } = body;
