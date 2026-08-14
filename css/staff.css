@@ -169,8 +169,8 @@
 }
 .sl-safety-none { font-size: .85em; color: #78838f; }
 
-/* Not-yet-reviewed reads as a warning, not as the grey "nothing here" state —
-   grey is what the all-clear looks like, and these two must not be confusable
+/* Not-yet-reviewed reads as a warning, not as the gray "nothing here" state —
+   gray is what the all-clear looks like, and these two must not be confusable
    at a glance on a phone in a bright room. */
 .sl-safety-warn { background: #fdf3e7; border-left-color: #d98324; }
 .sl-safety-unknown {
@@ -336,4 +336,206 @@
     font-weight: 800;
     cursor: pointer;
     min-height: 44px;
+}
+
+/* ── Head count & drill sheet ─────────────────────────────────
+   Read at arm's length, outdoors, in sunlight, by someone who is also counting
+   children. So: big numbers, high contrast, tap targets well over the 44px
+   minimum, and no information that isn't the count. */
+
+.hc-body { padding-bottom: 24px; }
+
+/* The loudest thing on the page when it appears, deliberately. A count of zero
+   presented calmly during a fire drill reads as "the building is empty". */
+.hc-banner {
+    background: var(--tang-pale);
+    border: 2px solid var(--tang);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin: 12px 0 16px;
+    font-size: .92em;
+    line-height: 1.55;
+    color: var(--tang-dark);
+}
+.hc-banner strong { display: block; margin-bottom: 4px; font-size: 1.05em; }
+
+.hc-totals {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 12px 0 6px;
+}
+.hc-total {
+    background: #fff;
+    border: 1.5px solid #d7dee5;
+    border-radius: 14px;
+    padding: 14px 10px;
+    text-align: center;
+}
+.hc-total-sum {
+    grid-column: 1 / -1;
+    background: var(--navy);
+    border-color: var(--navy);
+}
+.hc-total-sum .hc-num, .hc-total-sum .hc-lab { color: #fff; }
+.hc-num {
+    display: block;
+    font-family: 'Lora', Georgia, serif;
+    font-size: 2.1em;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--navy);
+}
+.hc-lab {
+    display: block;
+    margin-top: 2px;
+    font-size: .74em;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #78838f;
+}
+.hc-asof { text-align: center; font-size: .8em; color: #78838f; margin: 4px 0 14px; }
+
+.hc-scopes { display: flex; gap: 8px; margin-bottom: 14px; }
+.hc-scope {
+    flex: 1;
+    min-height: 44px;
+    background: #fff;
+    border: 1.5px solid #d7dee5;
+    border-radius: 10px;
+    font: inherit;
+    font-weight: 800;
+    font-size: .9em;
+    color: var(--navy);
+    cursor: pointer;
+}
+.hc-scope.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+/* ── Start / run a drill ─────────────────────────────────── */
+
+.hc-start {
+    background: #fff;
+    border: 1.5px solid #d7dee5;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+.hc-hint { font-size: .82em; color: #78838f; line-height: 1.5; margin: 10px 0 0; }
+
+.hc-drillbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--navy);
+    color: #fff;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 18px rgba(1, 41, 74, .22);
+}
+.hc-drillbar.hc-all { background: var(--green-dark); }
+.hc-drill-top { display: flex; justify-content: space-between; align-items: baseline; }
+.hc-drill-name { font-weight: 800; font-size: .92em; letter-spacing: .04em; text-transform: uppercase; }
+.hc-clock { font-family: 'Lora', Georgia, serif; font-size: 1.9em; font-weight: 700; }
+.hc-progress { font-size: .95em; margin-top: 4px; }
+.hc-allclear { margin-left: 8px; font-weight: 800; }
+.hc-drill-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.hc-drill-actions .sl-btn { flex: 1; margin: 0; }
+.hc-drill-actions .sl-link-btn { color: #fff; opacity: .85; flex: none; }
+
+/* ── Rooms and people ────────────────────────────────────── */
+
+.hc-room {
+    background: #fff;
+    border: 1.5px solid #d7dee5;
+    border-radius: 14px;
+    padding: 12px 14px 14px;
+    margin-bottom: 12px;
+}
+.hc-room-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eef2f5;
+    margin-bottom: 10px;
+}
+.hc-room-name { font-weight: 800; color: var(--navy); }
+.hc-room-counts { display: flex; gap: 12px; font-size: .92em; color: #5a6673; flex: none; }
+
+.hc-people { display: grid; gap: 8px; }
+.hc-person {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1.5px solid #e3e9ee;
+    background: #fff;
+    font: inherit;
+    font-size: 1em;
+    text-align: left;
+    color: var(--navy);
+}
+.hc-person-tap { cursor: pointer; }
+.hc-person-name { flex: 1; font-weight: 600; }
+.hc-is-staff { background: var(--sun-pale); border-color: var(--sun-lt); }
+.hc-tag {
+    flex: none;
+    font-size: .7em; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+    color: #78838f; border: 1.5px solid #d7dee5; border-radius: 999px; padding: 2px 8px;
+}
+.hc-check {
+    flex: none;
+    width: 26px; height: 26px; border-radius: 7px;
+    border: 2px solid #cbd5dd;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 800; color: transparent;
+}
+.hc-ticked { background: var(--green-pale); border-color: var(--green-lt); }
+.hc-ticked .hc-check { background: var(--green-dark); border-color: var(--green-dark); color: #fff; }
+
+.hc-aside {
+    margin: 4px 0 12px;
+    padding: 12px 14px;
+    background: #f5f8fa;
+    border-radius: 12px;
+}
+.hc-aside h3 {
+    margin: 0 0 6px;
+    font-size: .76em; font-weight: 800; letter-spacing: .06em;
+    text-transform: uppercase; color: #78838f;
+}
+.hc-aside-n {
+    background: #fff; border: 1.5px solid #d7dee5; border-radius: 999px;
+    padding: 1px 8px; margin-left: 4px;
+}
+.hc-aside p { margin: 0; font-size: .88em; color: #5a6673; line-height: 1.6; }
+
+/* ── Work injury ─────────────────────────────────────────── */
+/* Same weight as the incident button, different color, because it is a
+   different kind of record about a different person. */
+.sl-injury-btn {
+    width: 100%; min-height: 48px; margin-top: 8px;
+    background: #fff; color: var(--tang-dark);
+    border: 1.5px solid var(--tang-soft); border-radius: 12px;
+    padding: 14px; font-size: 1em; font-weight: 800;
+    font-family: inherit; cursor: pointer;
+}
+.sl-check {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin: 4px 0 18px; font-size: .92em; line-height: 1.45; color: var(--navy);
+}
+.sl-check input { width: 22px; height: 22px; flex: none; margin-top: 1px; }
+
+/* Third attendance state. "Out" and "Not in" are different facts — a child who
+   has gone home is not a child who never arrived, and the head count screen
+   distinguishes them, so the roster must too. */
+.sl-child-state.out {
+    color: #5a6673; background: #eef2f5; border-color: #cbd5dd;
 }

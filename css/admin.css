@@ -4706,3 +4706,66 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .admin-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .admin-toast-err  { background: var(--tang-dark); }
 @media print { .admin-toast { display: none !important; } }
+
+/* ── Staff injury reports & fire drills (admin-safety.js) ─────
+   Reuses the .inc-card shell from the incident queue — same object on screen,
+   a filed report waiting on the director — and adds only what differs. */
+
+.si-claim {
+    width: 100%; box-sizing: border-box; margin-top: 8px;
+    padding: 9px 12px; font-family: inherit; font-size: .92em;
+    border: 1.5px solid #d7dee5; border-radius: 8px;
+}
+
+/* The 30-day First Report window. Louder than .inc-waiting on purpose: this is
+   a statutory deadline, not a courtesy. */
+.si-late {
+    background: var(--tang-pale); border-left: 3px solid var(--tang);
+    border-radius: 8px; padding: 10px 12px; margin: 8px 0;
+    font-size: .88em; color: var(--tang-dark); line-height: 1.5; font-weight: 600;
+}
+.si-losttime {
+    display: inline-block; margin: 6px 0;
+    background: var(--sun-badge); border-radius: 999px;
+    padding: 3px 12px; font-size: .8em; font-weight: 800; color: #6a5320;
+}
+
+.fd-nag {
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;
+    font-size: .92em; line-height: 1.55;
+}
+.fd-nag strong { display: block; margin-bottom: 2px; }
+.fd-nag-warn { background: var(--tang-pale); border-left: 4px solid var(--tang); color: var(--tang-dark); }
+.fd-nag-ok   { background: var(--green-pale); border-left: 4px solid var(--green-lt); color: var(--green-dark); }
+
+.fd-list { display: grid; gap: 12px; }
+.fd-card {
+    background: #fff; border: 1px solid #e3e9ee; border-radius: 12px;
+    padding: 14px 16px;
+}
+.fd-short { border-left: 4px solid var(--tang); }
+.fd-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.fd-type { font-weight: 800; color: var(--navy); }
+.fd-when { font-size: .86em; color: #78838f; }
+.fd-stats { display: flex; gap: 18px; flex-wrap: wrap; margin: 8px 0; font-size: .93em; color: #5a6673; }
+.fd-stats strong { color: var(--navy); }
+.fd-missing   { font-size: .9em; color: var(--tang-dark); font-weight: 600; line-height: 1.5; }
+.fd-allclear  { font-size: .9em; color: var(--green-dark); font-weight: 700; }
+.fd-meta      { font-size: .82em; color: #78838f; margin-top: 6px; }
+.fd-notes     { font-size: .9em; color: #5a6673; margin-top: 8px; line-height: 1.55; }
+
+.fd-roster { margin-top: 10px; }
+.fd-roster summary { cursor: pointer; font-size: .86em; font-weight: 700; color: var(--navy-table); }
+.fd-roster-body { display: flex; gap: 26px; flex-wrap: wrap; margin-top: 10px; }
+.fd-roster-group h4 {
+    margin: 0 0 6px; font-size: .74em; font-weight: 800; letter-spacing: .06em;
+    text-transform: uppercase; color: #78838f;
+}
+.fd-roster-group ul { list-style: none; margin: 0; padding: 0; font-size: .88em; }
+.fd-roster-group li { padding: 3px 0; color: #5a6673; }
+.fd-roster-room { color: #98a2ad; margin-left: 6px; font-size: .9em; }
+.fd-unaccounted { color: var(--tang-dark); font-weight: 700; }
+.fd-roster-flag {
+    margin-left: 6px; font-size: .82em; font-weight: 800;
+    color: var(--tang-dark);
+}

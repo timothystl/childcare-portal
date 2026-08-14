@@ -171,6 +171,75 @@ an `AP_TOOLS` entry, or it is unreachable.**
 
 ---
 
+## Safety & compliance — head count, fire drills, staff injuries (2026-08-14)
+
+`supabase/migrations/staff_injury_and_headcount.sql`, **applied and verified in
+production 2026-08-14**. Three additions, two director's tools
+(`js/admin/admin-safety.js`), one new staff-app tab (`js/staff/staff-headcount.js`).
+
+### ⚠️ "Present" is the LATEST attendance event, never `checked_in`
+
+`list_room_children.checked_in` is `EXISTS(check_in)` and **stays true after a
+child goes home**. On a roster that is cosmetic; on a fire drill sheet it sends a
+teacher back into a building for a child who left at noon. The RPC now also
+returns `attendance_status` — `present` / `left` / `not_arrived` — and that is
+what every count reads. `checked_in` is kept **only** so a stale cached bundle
+does not break; do not add a new caller.
+
+### ⚠️ Nobody has ever checked in
+
+At the time of building, `child_day_events` and `attendance_records` were both
+**empty** — zero check-ins ever, because the staff app shipped 2026-08-12 and the
+habit does not exist yet. So a literal "who is checked in" count says the
+building is empty. The head count screen therefore:
+
+- falls back to **who is booked today** and says so in the loudest banner on the
+  page (a calm `0` during a fire drill is the worst possible failure);
+- makes the **tick-off**, not the check-in data, what the drill record is built
+  from, so the drill works identically either way.
+
+**None of this can be deleted once check-ins start** — a day where nobody
+happened to tap Check in looks exactly the same.
+
+### Staff injuries are NOT child incidents
+
+`staff_injury_reports` is a **separate table from `incident_reports` on purpose**
+and the two must never be merged. `incident_reports` carries a `parent read
+approved` policy keyed on `parent_owns_student`; a staff injury has no student
+and no family that may ever read it. It has **no parent-facing policy at all**,
+no DELETE grant, and the tool is gated to the `full` admin role
+(`AP_FULL_ONLY_KEYS`) because the report names an employee, their body, and where
+they were treated.
+
+- `reported_at` is a **legal clock**, not a display timestamp: Missouri gives the
+  employer 30 days from knowledge to file the First Report (RSMo 287.380). The
+  director's queue ages from it and turns red at 30 days.
+- The injured person and the filer are **allowed to differ** — someone with a
+  hurt wrist cannot type, and someone at urgent care is not filing their own.
+- Deliberately **not** offline-queued: a queued injury report sits on a phone
+  with a legal clock running against a date-stamp nobody has. It fails visibly.
+
+### Fire drills
+
+`fire_drills.snapshot` stores the names and rooms **as they stood at the moment
+of the drill**, plus `source: 'checked_in' | 'booked'` so the record says how the
+count was known. Counts alone cannot answer "who was in the building on March
+3rd", and re-deriving it later changes the answer the first time somebody edits
+that day's registrations. No DELETE grant — a drill that happened cannot be
+un-held. `log_fire_drill` takes a jsonb payload with an **explicit column
+allow-list**; `drill_date` and the conductor are server-side (injection-tested).
+
+### ⚠️ Revoking a function from `PUBLIC` does not revoke it from `anon`
+
+Supabase's default privileges grant EXECUTE on a new `public` function **directly
+to `anon`**, so `REVOKE … FROM PUBLIC` leaves that grant standing. Caught here on
+`review_staff_injury_report`, which came out anon-executable after a textbook
+revoke. This is the R26/R27 trap inverted — there, revoking `anon` alone was
+insufficient because of an inherited PUBLIC grant. **Revoke from both, then
+verify with `has_function_privilege` rather than assuming.**
+
+---
+
 ## ⚠️ Current open queue — start here (updated 2026-08-03, v2.3.23)
 
 A fifth sweep (whole codebase + **live production verification**) was done 2026-08-02,
@@ -326,6 +395,14 @@ Verified post-apply: `anon` holds zero table grants and is denied SELECT/INSERT,
 RLS is on with a single `authenticated` policy, both RPCs are `SECURITY DEFINER`
 with pinned `search_path`, and an end-to-end submit/list round trip through the
 `anon` role stores the correct staff uuid and weekday.
+
+**Updated 2026-08-14:** `staff_injury_and_headcount.sql` was written **and
+applied** in the same session (see the Safety & compliance section above).
+Verified post-apply end to end in a rolled-back transaction: the PIN gate returns
+`NULL` on all three RPCs, `attendance_status` correctly reports a checked-in-then-
+out child as `left`, a future `occurred_at` is clamped, and a `log_fire_drill`
+payload carrying `drill_date: '1999-01-01'` and a forged conductor stored today's
+date and the PIN holder. `anon` has zero table grants on either new table.
 
 `add_attendance_records.sql` was also written **and applied**
 in the same session (child attendance capture). Verified post-apply: `anon` holds
@@ -607,6 +684,8 @@ Rates are stored in the `settings` table (key = `room_rates`) and merged into `R
 | `pin_reset_tokens` | One-time PIN reset tokens |
 | `push_subscriptions` | Web push subscriptions (family_id → endpoint) |
 | `attendance_records` | Child attendance per care date (`present`/`absent`); no row = not yet marked. Admin-only (anon has no grants) |
+| `staff_injury_reports` | Employee work injuries (workers' comp). Admin-only, **no parent policy, ever**; no DELETE for anyone |
+| `fire_drills` | One row per drill, with the roster snapshot taken at the time. Admin-read, written by a PIN-gated RPC; no DELETE |
 | `client_error_log` | Client-side JS errors |
 | `deletion_requests` | Family data deletion requests |
 

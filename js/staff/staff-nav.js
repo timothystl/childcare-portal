@@ -2,7 +2,13 @@
 // staff-nav — the staff app's tab shell
 // ============================================================
 // Design: docs/design_handoff/README.md, "Navigation". Four persistent tabs —
-// 👶 Room · 🗓 Schedule · 💬 Messages · 👤 Account.
+// 👶 Room · 🗓 Schedule · 💬 Messages · 👤 Account — plus 🔥 Count.
+//
+// ⚠️ The fifth tab is a deliberate departure from the handoff. An evacuation
+// count is the one thing in this app with a hard time limit attached, and it
+// cannot sit behind a menu or inside another tab: whoever needs it is standing
+// on the lawn holding a phone in one hand. Five tabs is tight on a small
+// screen; a drill sheet nobody can find in three seconds is worse.
 //
 // Same geometry as the parent bar (.tabbar in css/styles.css), different tab
 // list. Kept as two small modules rather than one shared router because the two
@@ -17,6 +23,7 @@ const SL_TABS = [
     { key: 'room',     icon: '👶', label: 'Room' },
     { key: 'schedule', icon: '🗓', label: 'Schedule' },
     { key: 'messages', icon: '💬', label: 'Messages' },
+    { key: 'count',    icon: '🔥', label: 'Count' },
     { key: 'account',  icon: '👤', label: 'Account' },
 ];
 
@@ -58,6 +65,11 @@ function slGoTab(key) {
     slRenderTabs();
     const route = slNavEl('slRoute');
     if (route) route.scrollTop = 0;
+
+    // ⚠️ The count re-reads on EVERY open, not just the first. A cached count
+    // is the exact failure this screen exists to prevent, and unlike the
+    // message list it is cheap — one round trip for the whole building.
+    if (key === 'count' && typeof slOpenHeadcountTab === 'function') slOpenHeadcountTab();
 
     if (!slOpened[key]) {
         slOpened[key] = true;
