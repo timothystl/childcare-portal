@@ -257,6 +257,39 @@ the `D` bit. R4's write-up said this table held "SELECT/INSERT/UPDATE" and it
 held everything; the write-up was believed for months because nobody re-read the
 catalog.
 
+### Whole-schema sweep (2026-08-14) — `anon_grant_sweep_2026-08-14.sql`
+
+All 51 tables audited. RLS on every one; no DELETE/TRUNCATE left anywhere. Dead
+grants (a grant with no policy that permits it) revoked on seven tables —
+`client_error_log` SELECT/UPDATE, `cacfp_menus` INSERT/UPDATE,
+`deletion_requests` SELECT/UPDATE, `registrations` UPDATE,
+`registration_dates` UPDATE, `students` SELECT, `waitlist_applications`
+SELECT/UPDATE. Views: one, `security_invoker` on, no anon SELECT. All 32
+anon-executable definer functions have `search_path` pinned.
+
+**⚠️ How to probe a grant, because three obvious methods lie:**
+
+| Wrong method | Why it lies |
+|---|---|
+| `UPDATE t SET col = col` | Needs SELECT to evaluate `col`, so it fails on missing SELECT and looks like RLS held. Use a blind `SET col = <constant>` with no WHERE. |
+| Probing an empty table | 0 rows updated whatever the policy says. Seed a row as `postgres` first. |
+| `'anon' = any(polroles)` | Misses `polroles = '{0}'` — that is **PUBLIC**, which includes anon. It hid the `Public insert` policies entirely. |
+
+Also: `RETURNING`, a subquery inside an INSERT, and an FK check all need SELECT
+on the table they touch. A `42501` from any of those says nothing about the
+privilege under test. Always run a **positive control** — the same probe against
+a grant known to be live.
+
+**⚠️ STILL OPEN: `staff_clock_events` is the last permissive anon policy.**
+SELECT/INSERT/UPDATE all `USING (true)`. Measured as `anon`:
+`UPDATE staff_clock_events SET room_id = 'probe'` → **1547 rows**, no WHERE
+needed. The public anon key can rewrite `clock_in`/`clock_out` across the whole
+payroll history, and the SELECT exposes every staff member's hours. FS24 called
+this "same-day cross-staff tampering"; it is the entire table. Cannot be fixed
+by a revoke — the kiosk clock-out depends on that UPDATE (~1,280 calls). Needs a
+PIN-gated definer clock-out RPC (same shape as `log_child_event`), after which
+both policies can be dropped.
+
 ---
 
 ## Clock-in integrity — the geofence never worked (2026-08-14)
