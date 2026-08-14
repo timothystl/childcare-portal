@@ -975,6 +975,11 @@ button:focus-visible,
    ============================================================ */
 .lookup-section { background: var(--linen); border-radius: 10px; padding: 24px; margin-bottom: 12px; }
 .lookup-section h2 { margin-bottom: 8px; }
+/* The parent arrived already signed in from the portal, so there is nothing to
+   look up. Only the "Signed in as ..." bar and its Change button remain — an
+   empty PIN box left on screen reads as being asked for it again. */
+.lookup-section.lookup-via-session .lookup-row,
+.lookup-section.lookup-via-session > .hint { display: none; }
 
 .lookup-row {
     display: flex;

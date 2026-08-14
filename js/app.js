@@ -398,6 +398,11 @@ async function tryPortalSessionFamily() {
     // Say whose session this is. A shared phone is the case that matters: the
     // "Change" button beside it is how you get out, and it must not look like
     // the form simply skipped a step.
+    // Hide the email and PIN inputs outright. Leaving an empty PIN box sitting
+    // above "Signed in as ..." still reads as being asked, which is the whole
+    // complaint — the bar alone is not enough.
+    document.querySelector('.lookup-section')?.classList.add('lookup-via-session');
+
     const bar = document.querySelector('#familySelectedBar .family-selected-name');
     if (bar) {
         const who = result.isParent2
@@ -492,6 +497,9 @@ function resetFamilyLookup() {
     }
     _viaPortalSession   = false;
     _familyAuth         = null;
+    // Put the email and PIN inputs back — "Change" has to land on a form the
+    // parent can actually use.
+    document.querySelector('.lookup-section')?.classList.remove('lookup-via-session');
     selectedFamily      = null;
     _familySessionToken = null;
     _isParent2          = false;
