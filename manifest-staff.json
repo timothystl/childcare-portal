@@ -1,0 +1,33 @@
+{
+  "id": "/staff",
+  "name": "myMDO Staff — Timothy Lutheran MDO",
+  "short_name": "MDO Staff",
+  "description": "Staff app — rooms, head count, schedule, incidents, and alerts",
+  "start_url": "/staff",
+  "scope": "/staff",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#01294A",
+  "theme_color": "#01294A",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/images/logo/icon-staff-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/logo/icon-staff-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/logo/icon-staff-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
