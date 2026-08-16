@@ -359,6 +359,18 @@
           none — it can place the pin on the wrong side of the street. "hasMap"
           hands Google the address lookup instead.
 
+          "sameAs" points at the Google Business Profile, claimed 2026-08-16.
+          ⚠️ Keep expectations honest about what this does: the load-bearing link
+          between this site and that listing is the **website field on the
+          profile itself** pointing back to https://mdo.timothystl.org/. This
+          property only corroborates it from our side. If the two ever disagree,
+          fix the profile, not this line.
+          ⚠️ It is a maps.app.goo.gl short link because that is what the profile's
+          share sheet produces; the ?g_st= tracking parameter is stripped. Replace
+          it with the canonical https://www.google.com/maps/place/?q=place_id:…
+          form if that ever becomes handy — a short link is opaque to the next
+          reader. Add the Nextdoor page here too once its URL is known.
+
        2. FAQPage — mirrors the visible FAQ below, word for word. Google narrowed
           FAQ *rich results* to government and health sites in 2023, so this will
           not draw accordions into the results page; it is here because the markup
@@ -389,6 +401,9 @@
           "addressCountry": "US"
         },
         "hasMap": "https://maps.google.com/?q=6704+Fyler+Ave+St+Louis+MO+63139",
+        "sameAs": [
+          "https://maps.app.goo.gl/w148C76AQG2hLVdm7"
+        ],
         "areaServed": [
           { "@type": "Place", "name": "Lindenwood Park, St. Louis, MO" },
           { "@type": "City", "name": "St. Louis, MO" }
