@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Incident Report — Timothy Lutheran Church MDO</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/logo/favicon-32.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:wght@400;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/incident-print.css">
+</head>
+<body class="ip-body">
+
+<!--
+  ============================================================
+  THE SIGNED INCIDENT REPORT — one US Letter page
+  ============================================================
+  ⚠️ THIS PAGE CANNOT RENDER A HALF-SIGNED REPORT, AND THAT IS THE POINT.
+  Every field below is filled from incident_print_record(), a SECURITY DEFINER
+  function that returns { ok:false, reason:'incomplete' } until the teacher, the
+  parent and the director have all signed — in that order. There is no local
+  copy of the record on this page to fall back to, no query parameter that
+  bypasses the check, and nothing an admin role can do to loosen it: the gate
+  was measured against a full admin and refused at zero, one and two signatures.
+
+  The handoff: "The document must be generated server-side from the record, not
+  from a client screenshot, and must refuse to render until all three signatures
+  exist." Do not add a client-side render path here for any reason.
+-->
+
+<div class="ip-bar noprint">
+  <span>One page · letter · licensing record</span>
+  <button type="button" id="ipPrint" class="ip-print-btn">🖨 Print</button>
+</div>
+
+<div id="ipState" class="ip-state">Loading the record…</div>
+
+<section class="ip-page hidden" id="ipPage">
+  <header class="ip-head">
+    <div>
+      <div class="ip-title">Incident / Injury Report</div>
+      <div class="ip-org">Timothy Lutheran Mother's Day Out · 6704 Fyler Ave, St. Louis, MO 63139 · (314) 781-8673</div>
+    </div>
+    <div class="ip-meta">
+      <div class="ip-num" id="ipNum"></div>
+      <div id="ipFiled"></div>
+      <div>Retain 3 years · Missouri licensing</div>
+    </div>
+  </header>
+
+  <div class="ip-child">
+    <div><div class="ip-label">Child</div><div class="ip-val" id="ipChild"></div></div>
+    <div><div class="ip-label">Date of birth</div><div class="ip-val" id="ipDob"></div></div>
+    <div><div class="ip-label">Room</div><div class="ip-val" id="ipRoom"></div></div>
+    <div><div class="ip-label">Time of incident</div><div class="ip-val" id="ipWhen"></div></div>
+  </div>
+
+  <div class="ip-cols">
+    <div class="ip-col">
+      <div class="ip-block">
+        <div class="ip-label">What happened</div>
+        <div class="ip-prose" id="ipWhat"></div>
+      </div>
+      <div class="ip-block">
+        <div class="ip-label">First aid given</div>
+        <div class="ip-prose" id="ipAid"></div>
+      </div>
+      <div class="ip-pair">
+        <div>
+          <div class="ip-label">Witnessed by</div>
+          <div class="ip-prose" id="ipWitnesses"></div>
+        </div>
+        <div>
+          <div class="ip-label">Since then</div>
+          <div class="ip-prose" id="ipAfter"></div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="ip-side">
+      <div class="ip-block">
+        <div class="ip-label">Location on body</div>
+        <div class="ip-bodywrap">
+          <div class="ip-figure" id="ipFigure"></div>
+          <div class="ip-bodytext">
+            <strong id="ipBodyPart"></strong>
+            <span class="ip-fine">Marked on the diagram by the teacher at the time of the report.</span>
+          </div>
+        </div>
+      </div>
+      <div class="ip-block">
+        <div class="ip-label">Where it happened</div>
+        <div class="ip-prose" id="ipWhere"></div>
+      </div>
+      <div class="ip-block">
+        <div class="ip-label">Type</div>
+        <div class="ip-prose" id="ipType"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="ip-notify">
+    <div class="ip-label">Parent notification</div>
+    <div class="ip-prose" id="ipNotify"></div>
+  </div>
+
+  <div class="ip-sigs">
+    <div class="ip-sigs-head">
+      <div class="ip-label">Signatures — teacher, then parent, then director</div>
+      <div class="ip-complete" id="ipComplete"></div>
+    </div>
+    <div class="ip-sig-lines" id="ipSigLines"></div>
+  </div>
+
+  <footer class="ip-foot">
+    <div id="ipFootNote"></div>
+    <div class="ip-foot-right" id="ipFootRight"></div>
+  </footer>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="dist/supabase.min.js"></script>
+    <script src="dist/incident-print.min.js"></script>
+</body>
+</html>

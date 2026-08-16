@@ -134,6 +134,7 @@ function hcRender() {
         hcRooms(scoped, scopedStaff),
         hcDrill ? '' : hcAside('Not arrived yet', notArrived),
         hcDrill ? '' : hcAside('Already signed out', left),
+        hcMissingBar(),
     ].join('');
 
     hcBind();
@@ -392,9 +393,28 @@ async function hcFlushPending() {
     } catch { /* still offline — keep it */ }
 }
 
+// The handoff puts this on the head count footer, and that placement is the
+// point: this screen is where somebody discovers a child is not there. Solid
+// coral, full width, and it sits below the room list so a thumb reaching for
+// "tick everyone off" cannot catch it by accident.
+function hcMissingBar() {
+    return `<div class="hc-missing">
+        <button type="button" id="hcMissingBtn" class="hc-missing-btn">🚨 Missing child</button>
+        <p class="hc-hint">Alerts every staff phone in the building at once, and the
+           office. Not a message to the director — everyone searches.</p>
+    </div>`;
+}
+
 // ── Wiring ──────────────────────────────────────────────────
 
 function hcBind() {
+    hcEl('hcMissingBtn')?.addEventListener('click', () => {
+        // Offer the children expected today, whatever the room filter is set
+        // to: a child who has wandered is by definition not where they should
+        // be, and a filtered list is the one that leaves them out.
+        const { expected } = hcSplit(hcData?.children || []);
+        mcOpenRaise(expected);
+    });
     hcEl('hcRefresh')?.addEventListener('click', hcLoad);
     hcEl('hcStartBtn')?.addEventListener('click', hcStartDrill);
     hcEl('hcFinishBtn')?.addEventListener('click', hcFinishDrill);

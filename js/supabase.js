@@ -2363,9 +2363,92 @@ async function submitIncidentReport(staffId, pin, r) {
         p_location:      r.location || null,
         p_body_area:     r.bodyArea || null,
         p_occurred_at:   r.occurredAt || null,
+        p_body_view:     r.bodyView || null,
+        p_body_part:     r.bodyPart || null,
+        p_witnesses:     r.witnesses?.length  ? r.witnesses  : null,
+        p_first_aid:     r.firstAid?.length   ? r.firstAid   : null,
+        p_after_notes:   r.afterNotes?.length ? r.afterNotes : null,
+        p_ratio_note:    r.ratioNote || null,
+        p_incident_kind: r.incidentKind || null,
     });
     if (error) throw friendlyError(error);
     return data ?? null;
+}
+
+/**
+ * Signature 2 — the parent, at pickup, on the teacher's phone.
+ *
+ * ⚠️ PIN-gated on the TEACHER, not the parent. The parent has no login standing
+ * at the pickup counter; what authorizes the write is the unlocked staff device,
+ * and the record stores whose phone it was. The database also refuses this if
+ * the teacher signature is missing, so the order cannot be inverted from here.
+ *
+ * Idempotent server-side: a double tap returns true rather than reporting a
+ * failure to someone who has in fact signed.
+ */
+async function signIncidentAsParent(staffId, pin, incidentId, signedName) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('sign_incident_parent', {
+        p_staff_id:    staffId,
+        p_pin:         parseInt(pin, 10),
+        p_incident_id: incidentId,
+        p_signed_name: signedName,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/**
+ * Signature 3 — the director, which closes the record and publishes it.
+ * Returns false if the parent has not signed yet; she is third, not second.
+ */
+async function signIncidentAsDirector(id, signedName = null, notes = '') {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('sign_incident_director', {
+        p_id: id, p_signed_name: signedName, p_notes: notes,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/**
+ * Stamps parent_notified_at. Telling the family is early — reading the report
+ * is not. See incident_three_signatures.sql for why those are separate.
+ */
+async function notifyParentOfIncident(staffId, pin, incidentId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('notify_parent_of_incident', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10), p_incident_id: incidentId,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/**
+ * The signed, printable copy — assembled in the database, never in the browser.
+ *
+ * Returns `{ ok:false, reason:'incomplete', have:[...] }` until all three
+ * signatures exist, `null` if the caller may not see this report at all, and
+ * the full record only when it is complete. Do not build a printable view from
+ * any other source: that refusal is the whole point of the function.
+ */
+async function fetchIncidentPrintRecord(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('incident_print_record', { p_id: id });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** The signatures on one report, for a queue row that needs to show progress. */
+async function fetchIncidentSignatures(ids) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    if (!ids?.length) return [];
+    const { data, error } = await sbClient
+        .from('incident_signatures')
+        .select('incident_id, role, signed_name, signed_at, signed_on_device_of')
+        .in('incident_id', ids);
+    if (error) throw friendlyError(error);
+    return data || [];
 }
 
 /** Admin: the review queue. Defaults to what is waiting on the director. */
@@ -2373,7 +2456,10 @@ async function fetchIncidentReports({ status = 'submitted', limit = 200 } = {}) 
     if (!sbClient) throw new Error('Supabase not configured.');
     let q = sbClient
         .from('incident_reports')
-        .select('*, students(child_name, family_id)')
+        // allergies and dob come along for the drawer: the allergy banner sits
+        // above the narrative, and the room is derived from the dob because
+        // students carries no room column (only an override).
+        .select('*, students(child_name, family_id, child_dob, room_override, allergies)')
         .order('occurred_at', { ascending: false })
         .limit(limit);
     if (status) q = q.eq('status', status);
@@ -2400,7 +2486,7 @@ async function fetchMyIncidentReports(studentId = null) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let q = sbClient
         .from('incident_reports')
-        .select('id, student_id, care_date, occurred_at, incident_type, location, body_area, description, action_taken, reported_by_name, reviewed_at')
+        .select('id, student_id, care_date, occurred_at, incident_type, incident_kind, location, body_area, body_part, description, action_taken, first_aid, after_notes, reported_by_name, reviewed_at')
         .order('occurred_at', { ascending: false });
     if (studentId) q = q.eq('student_id', studentId);
     const { data, error } = await q;
@@ -2486,6 +2572,77 @@ async function centerHeadcount(staffId, pin, careDate = null) {
     });
     if (error) throw friendlyError(error);
     return data ?? null;
+}
+
+/**
+ * The same head count the teachers see, for the office. Admin session instead
+ * of a PIN; identical body underneath (center_headcount_rows), so the board and
+ * the lawn cannot disagree about who is in the building.
+ */
+async function centerHeadcountAdmin(careDate = null) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('center_headcount_admin', { p_care_date: careDate });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+// ── Missing child ───────────────────────────────────────────
+// ⚠️ Raising one is a broadcast, not a message. There is no recipient argument
+// on any of these by design: the alert goes to every signed-in staff phone and
+// to the director's board at the same moment. Do not add one.
+
+/** Raise the alert. Returns { id, already } — `already` if it was live. */
+async function raiseMissingChild(staffId, pin, studentId, { lastSeen = '', wearing = '' } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('raise_missing_child', {
+        p_staff_id:   staffId,
+        p_pin:        parseInt(pin, 10),
+        p_student_id: studentId,
+        p_last_seen:  lastSeen || null,
+        p_wearing:    wearing || null,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** "I'm searching", with an optional area, so nobody covers the same room twice. */
+async function ackMissingChild(staffId, pin, alertId, searching = '') {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('ack_missing_child', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10),
+        p_alert_id: alertId, p_searching: searching || null,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/** Found and safe. Clears the banner on every phone at once. */
+async function resolveMissingChild(staffId, pin, alertId, note = '') {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('resolve_missing_child', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10),
+        p_alert_id: alertId, p_note: note || null,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/** What every staff phone polls. Includes who has answered and where. */
+async function fetchActiveMissingChild(staffId, pin) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('active_missing_child', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10),
+    });
+    if (error) throw friendlyError(error);
+    return Array.isArray(data) ? data : [];
+}
+
+/** The same picture for the director's board — admin session, no PIN. */
+async function fetchActiveMissingChildAdmin() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('active_missing_child_admin');
+    if (error) throw friendlyError(error);
+    return Array.isArray(data) ? data : [];
 }
 
 /** Record a completed drill. PIN-gated; returns the new id, or null if refused. */
@@ -2628,6 +2785,46 @@ async function sendAdminMessage(threadId, body, senderName) {
         thread_id: threadId, sender_type: 'admin',
         sender_name: senderName || 'The office', body: String(body || '').trim(),
     });
+    if (error) throw friendlyError(error);
+    return true;
+}
+
+/**
+ * Everything the office has written, drafts included. Admin-only by RLS — the
+ * "parent read published" policy does not match a draft, so a parent running
+ * this query gets the published subset regardless.
+ */
+async function fetchAllAnnouncements(limit = 40) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('announcements')
+        .select('id, title, body, kind, audience, audience_rooms, created_by, published_at, expires_at, created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
+ * Write one. `publish` false leaves published_at NULL, which is what makes it a
+ * draft — the parent-facing policy tests published_at IS NOT NULL, so an unsent
+ * announcement is invisible to families by the same rule that hides a future one.
+ */
+async function saveAnnouncement({ title, body, kind = 'general', audience = 'all_families',
+                                  rooms = [], expiresAt = null, publish = false }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const { error } = await sbClient.from('announcements').insert({
+        title, body, kind, audience,
+        audience_rooms: audience === 'room' ? rooms : [],
+        expires_at:     expiresAt,
+        published_at:   publish ? new Date().toISOString() : null,
+        created_by:     session?.user?.email || null,
+    });
+    // ⚠️ Bare .insert() with no .select(). Chaining one would need SELECT on
+    // announcements for the writing role, and RLS applies SELECT policies to
+    // RETURNING — the trap that took parent registration down for six hours on
+    // 2026-08-12. Nothing here needs the new row back.
     if (error) throw friendlyError(error);
     return true;
 }
@@ -3008,6 +3205,61 @@ async function submitTimeOffRequestByPin({ pin, dates, recurring = false, reason
     });
     if (error) throw friendlyError(error);
     return data;
+}
+
+/**
+ * The staff app's "My schedule" tab, in one round trip: own shifts, shifts
+ * given away, incoming/outgoing swap requests, time off, PTO used, and the
+ * coworker list the swap picker needs.
+ *
+ * ⚠️ There is no "everyone" variant of this and there must not be one. The RPC
+ * resolves the caller from their own PIN and filters on that id — a teacher's
+ * phone cannot see another teacher's hours, days off or pay. Passing a
+ * different staff id just fails the PIN check.
+ */
+async function fetchMyStaffSchedule(staffId, pin, fromISO, toISO) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('staff_my_schedule', {
+        p_staff_id: staffId,
+        p_pin:      parseInt(pin, 10),
+        p_from:     fromISO,
+        p_to:       toISO,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** Ask a coworker to cover one shift. Nothing moves until they accept. */
+async function proposeShiftSwap(staffId, pin, { workDate, shift, toStaffId, note = '' }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('propose_shift_swap', {
+        p_staff_id:    staffId,
+        p_pin:         parseInt(pin, 10),
+        p_work_date:   workDate,
+        p_shift:       shift,
+        // ⚠️ uuid — never Number()/parseInt() a staff id.
+        p_to_staff_id: toStaffId,
+        p_note:        note || null,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/**
+ * Accept or decline. Accepting moves the schedule row and stamps the swap in
+ * one database transaction, so there is no moment where the shift belongs to
+ * nobody. Returns false if the shift is already taken or the swap was answered.
+ */
+async function answerShiftSwap(staffId, pin, swapId, accept) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('answer_shift_swap', {
+        p_staff_id: staffId,
+        p_pin:      parseInt(pin, 10),
+        p_swap_id:  swapId,
+        p_accept:   !!accept,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
 }
 
 /** Kiosk: the PIN-holder's own recent/standing requests. */

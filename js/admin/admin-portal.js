@@ -77,6 +77,11 @@ const AP_TABS = {
 // to un-hide the pane before it can show the section).
 const AP_TOOLS = [
     // ── Classrooms · Today ──
+    // First in the group on purpose: it is the office mirror of the teachers'
+    // head count, and it is where a missing-child alert lights up for the
+    // director at the same instant it hits every staff phone.
+    { key: 'attBoard',    pane: 'daily',         section: 'attendanceBoardSection',  tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '🚸', name: 'Attendance Board',
+      blurb: 'Live — every room, who is in, who is expected, staff present, ratio.' },
     { key: 'roster',      pane: 'daily',         section: 'dailyRosterSection',      tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📋', name: 'Classroom Roster',
       blurb: 'Who is in each room today, this week, or this month.' },
     { key: 'capOverview', pane: 'daily',         section: 'capacityOverviewSection', tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📆', name: 'Capacity Overview',
@@ -100,6 +105,8 @@ const AP_TOOLS = [
     // inspector, and the count they record is a count of children.
     { key: 'drills',      pane: 'daily',         section: 'fireDrillsSection',       tab: 'classrooms', group: 'Records', tint: AP_TINT.tang, icon: '🔥', name: 'Fire Drills',
       blurb: 'Every drill run, who was in the building, and how long it took.' },
+    { key: 'announce',    pane: 'daily',         section: 'announcementsSection',    tab: 'classrooms', group: 'Records', tint: AP_TINT.tang, icon: '📣', name: 'Announcements',
+      blurb: 'Write once — closures, news, events — and see who gets it.' },
     // Separate from the Contact Us inbox: that is the public form, this is
     // families you already have. Teachers only see their own room's threads,
     // so the office is the only place the whole picture exists.
@@ -622,6 +629,8 @@ function apOnToolOpened(tool) {
             window._apArInit = true; setupBillingDashYear();
         }
         if (tool.key === 'invoices' && typeof renderInvoicesTool === 'function') renderInvoicesTool();
+        if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
+        if (tool.key === 'announce' && typeof renderAnnouncementsTool === 'function') renderAnnouncementsTool();
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
         if (tool.key === 'staffInjury' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();
@@ -652,6 +661,7 @@ async function apLoadLive() {
         waitlist:  [], unread: 0,
         billed:    0, billedKids: 0,
         families:  [], schedule: [], invoices: [], providers: [],
+        incidents: [], missing: [],
         nextClosure: null,
         monthKey:  new Date().toLocaleDateString('en-CA').slice(0, 7),
         today:     new Date().toLocaleDateString('en-CA'),
@@ -667,6 +677,11 @@ async function apLoadLive() {
         typeof fetchStaffScheduleWeek === 'function' ? fetchStaffScheduleWeek(weekDates[0], weekDates[4]) : [],
         typeof fetchAllBillingInvoices === 'function' ? fetchAllBillingInvoices() : [],
         typeof fetchMarketProviders === 'function' ? fetchMarketProviders() : [],
+        // Both feed the "Needs you" queue. An incident waiting on the director
+        // is a family that has not been told the whole story, and a live
+        // missing-child alert outranks literally everything else on the page.
+        typeof fetchIncidentReports === 'function' ? fetchIncidentReports({ status: 'submitted' }) : [],
+        typeof fetchActiveMissingChildAdmin === 'function' ? fetchActiveMissingChildAdmin() : [],
     ]);
     const val = i => settled[i].status === 'fulfilled' ? settled[i].value : null;
 
@@ -687,6 +702,28 @@ async function apLoadLive() {
     live.schedule  = val(4) || [];
     live.invoices  = val(5) || [];
     live.providers = val(6) || [];
+    live.missing   = val(8) || [];
+
+    // ⚠️ Only the reports she can actually close. status='submitted' is not
+    // enough — she is signature 3, so a report the parent has not signed at
+    // pickup is not hers yet, and a queue full of rows that cannot be cleared
+    // is a queue she learns to scroll past. Mark each one with whether the
+    // parent signature exists, then filter on that.
+    const submitted = val(7) || [];
+    live.incidents = submitted;
+    if (submitted.length && typeof fetchIncidentSignatures === 'function') {
+        try {
+            const sigs = await fetchIncidentSignatures(submitted.map(r => r.id));
+            const parentSigned = new Set(
+                sigs.filter(g => g.role === 'parent').map(g => g.incident_id));
+            live.incidents = submitted.map(r => ({ ...r, parentSigned: parentSigned.has(r.id) }));
+        } catch (e) {
+            // Degrade to showing none rather than showing all: a row she cannot
+            // action is worse than a row she has to find in the tool.
+            console.warn('apLoadLive incident signatures:', e);
+            live.incidents = [];
+        }
+    }
 
     // Billed this month — read from _buildFamilyBillingData(), the SAME function
     // that renders Family Billing Summary and generates draft invoices. This
@@ -772,6 +809,7 @@ function apRenderDashboard(page) {
                 <p>${escHtml(dash.stamp)}</p>
             </div>
         </div>
+        ${dash.needsYou && dash.needsYou.length ? apNeedsYouHtml(dash.needsYou) : ''}
         ${dash.kpis.length ? `<div class="ap-metrics">${dash.kpis.map(apKpiHtml).join('')}</div>` : ''}
         <div class="ap-body">
             <div class="ap-col">${(dash.left || []).join('')}</div>
@@ -793,6 +831,45 @@ function apRenderDashboard(page) {
                 </section>` : ''}
             </div>
         </div>`;
+}
+
+// ── "Needs you" (design handoff `1a`) ────────────────────────
+// A single action queue, not a list of links. Each row carries a status rail, a
+// glyph, a title and pill, one line of context, and THE ACTIONS INLINE — she
+// clears the row without leaving the page, and "Open" is the escape hatch to
+// the full record rather than the only route.
+//
+// ⚠️ The count in the header is the point of the whole component. The old
+// "Needs attention" panel sat in the right-hand column below the metrics, so
+// the number of things actually waiting on her was something she had to
+// assemble by reading. Sorted urgent-first, and urgent rows sit on the coral
+// tint so the split is visible before anything is read.
+function apNeedsYouHtml(rows) {
+    const urgent = rows.filter(r => r.urgent).length;
+    return `
+    <section class="ap-needs">
+        <header class="ap-needs-head">
+            <h3>Needs you</h3>
+            <span class="ap-needs-count">${rows.length} ${rows.length === 1 ? 'thing' : 'things'}</span>
+            ${urgent ? `<span class="ap-needs-urgent">${urgent} URGENT</span>` : ''}
+        </header>
+        ${rows.map(r => `
+        <div class="ap-needs-row${r.urgent ? ' is-urgent' : ''}">
+            <span class="ap-needs-rail" style="background:${r.rail || 'var(--border)'}"></span>
+            <span class="ap-needs-glyph" aria-hidden="true">${r.icon}</span>
+            <span class="ap-needs-main">
+                <span class="ap-needs-title">${escHtml(r.title)}
+                    ${r.pill ? `<span class="ap-needs-pill${r.urgent ? ' is-urgent' : ''}">${escHtml(r.pill)}</span>` : ''}
+                </span>
+                <span class="ap-needs-ctx">${escHtml(r.context)}</span>
+            </span>
+            <span class="ap-needs-acts">
+                ${(r.actions || []).map(a =>
+                    `<button class="ap-needs-btn${a.primary ? ' is-primary' : ''}" data-ap-go="${a.key}">${escHtml(a.label)}</button>`
+                ).join('')}
+            </span>
+        </div>`).join('')}
+    </section>`;
 }
 
 function apKpiHtml(k) {
@@ -923,6 +1000,13 @@ function apInvoiceState(live) {
     };
 }
 
+// Rooms sitting exactly at ratio on the busiest day. Pulled out because both
+// the queue and the older attention list ask the same question, and two copies
+// of this filter would answer it differently the first time one is edited.
+function edgeRoomsForQueue(sf, peakIx) {
+    return sf.rows.filter(r => r.cells[peakIx < 0 ? 0 : peakIx]?.atEdge);
+}
+
 function apDashDirector(live) {
     const sf     = live.staffing;
     const peak   = Math.max(0, ...sf.classroom);
@@ -998,12 +1082,96 @@ function apDashDirector(live) {
         };
     });
 
+    // ── The "Needs you" queue (handoff `1a`) ───────────────
+    // Ordered by what happens if she does not do it today. A child who cannot
+    // be found is first and has no competition; a family who has not been told
+    // their child was hurt is second. Everything below that is money and
+    // paperwork, which keeps.
+    const needsYou = [];
+
+    for (const m of (live.missing || [])) {
+        needsYou.push({
+            urgent: true, rail: AP_TONE.warn, icon: '🚨',
+            title: `${m.child_name} is missing`,
+            pill: 'SEARCH ON',
+            context: [
+                (ROOMS.find(r => r.id === m.room_id) || {}).label,
+                m.wearing ? `wearing ${m.wearing}` : '',
+                `${(m.searchers || []).length} searching`,
+            ].filter(Boolean).join(' · '),
+            actions: [{ key: 'attBoard', label: 'Open the board', primary: true }],
+        });
+    }
+
+    // Only the ones she can actually close. A report still waiting on the
+    // parent's pickup signature is not hers yet, and putting it in her queue
+    // teaches her the queue contains things she cannot clear.
+    const readyIncidents = (live.incidents || []).filter(r => r.parentSigned);
+    for (const r of readyIncidents.slice(0, 4)) {
+        const hrs = Math.max(0, Math.round((Date.now() - new Date(r.created_at).getTime()) / 3600000));
+        needsYou.push({
+            urgent: hrs >= 4, rail: AP_TONE.warn, icon: '🩹',
+            title: `Incident — ${r.students?.child_name || 'a child'}`,
+            pill: hrs >= 4 ? `${hrs}H WAITING` : 'AWAITING SIGN-OFF',
+            context: `${r.incident_kind || r.incident_type || 'Report'}` +
+                     `${r.location ? ' · ' + r.location : ''}` +
+                     `${r.reported_by_name ? ' · filed by ' + r.reported_by_name : ''}` +
+                     ' · the family cannot read it until you sign',
+            actions: [{ key: 'incidents', label: 'Sign off', primary: true }],
+        });
+    }
+
+    if (live.pending.length) needsYou.push({
+        urgent: false, rail: AP_TONE.gold, icon: '🚫',
+        title: `${live.pending.length} day-off request${live.pending.length > 1 ? 's' : ''}`,
+        pill: 'WAITING ON YOU',
+        context: waiting.length ? `${waiting.slice(0, 3).join(', ')} — nothing changes on the schedule until you answer`
+                                : 'nothing changes on the schedule until you answer',
+        actions: [{ key: 'schedule', label: 'Review', primary: true }],
+    });
+
+    if (inv.unsent) needsYou.push({
+        urgent: false, rail: AP_TONE.gold, icon: '🧾',
+        title: `${inv.unsent} invoice${inv.unsent === 1 ? '' : 's'} drafted, not sent`,
+        pill: 'THIS MONTH',
+        context: `${apMoney(inv.total)} sitting in draft — accounts receivable ages from the day you send.`,
+        actions: [{ key: 'invoices', label: 'Review and send', primary: true }],
+    });
+
+    if (live.unread) needsYou.push({
+        urgent: false, rail: AP_TONE.ok, icon: '✉️',
+        title: `${live.unread} unread message${live.unread > 1 ? 's' : ''}`,
+        pill: 'FROM FAMILIES',
+        context: 'sent through the parent portal',
+        actions: [{ key: 'msgHistory', label: 'Open', primary: true }],
+    });
+
+    const infantsWaiting = (byRoom.bear || 0) + (byRoom.bee || 0);
+    if (infantsWaiting) needsYou.push({
+        urgent: false, rail: AP_TONE.ok, icon: '🍼',
+        title: `${infantsWaiting} famil${infantsWaiting > 1 ? 'ies' : 'y'} waiting on an infant seat`,
+        pill: 'WAITLIST',
+        context: 'the rooms with the least give — worth an answer even when it is no',
+        actions: [{ key: 'wlPlanner', label: 'Open planner', primary: false }],
+    });
+
+    if (edgeRoomsForQueue(sf, peakIx).length) {
+        const rooms = edgeRoomsForQueue(sf, peakIx);
+        needsYou.push({
+            urgent: false, rail: AP_TONE.gold, icon: '⚖️',
+            title: `${rooms.map(r => r.label).join(', ')} at ratio on ${peakDay}`,
+            pill: 'RATIO',
+            context: 'one more child that day adds a staff member',
+            actions: [{ key: 'staffreq', label: 'Daily staffing', primary: false }],
+        });
+    }
+
     const attention = [];
     if (peak > 0) attention.push({ icon: '👥', key: 'staffreq',
         text: `${peakDay} needs ${peak} staff on the floor — the heaviest day of the week.`, cta: 'Open Daily Staffing' });
     if (live.pending.length) attention.push({ icon: '🚫', key: 'schedule', urgent: true,
         text: `${live.pending.length} time-off request${live.pending.length > 1 ? 's are' : ' is'} waiting on your approval.`, cta: 'Review requests' });
-    const edgeRooms = sf.rows.filter(r => r.cells[peakIx < 0 ? 0 : peakIx]?.atEdge);
+    const edgeRooms = edgeRoomsForQueue(sf, peakIx);
     if (edgeRooms.length) attention.push({ icon: '⚖️', key: 'ratios',
         text: `${edgeRooms.map(r => r.label).join(', ')} sit${edgeRooms.length > 1 ? '' : 's'} exactly at ratio on ${peakDay} — one more child adds a staff member.`, cta: 'Open Ratios' });
     if (inv.unsent) attention.push({ icon: '🧾', key: 'invoices', urgent: true,
@@ -1022,6 +1190,7 @@ function apDashDirector(live) {
 
     return {
         stamp: `Week of ${friendlyShort(live.weekOf)} · registrations as booked`,
+        needsYou,
         kpis,
         left: [
             apPanel({ title: 'Staff needed this week',

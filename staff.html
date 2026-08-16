@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#01294A">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:wght@400;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <meta charset="UTF-8">
     <meta name="robots" content="noindex, nofollow">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -67,18 +67,19 @@
         </section>
 
         <!-- ══ SCHEDULE ═══════════════════════════════════════ -->
-        <!-- Time off already works, but from the clock-in page. Pointing at it
-             rather than duplicating the flow — two places to request a day off
-             is how they drift apart. -->
+        <!-- ⚠️ YOUR shifts only. The RPC behind this resolves the caller from
+             their own PIN and filters on that id; there is no parameter that
+             widens it to the roster. Other teachers' hours, days off and pay
+             are deliberately not reachable from a staff phone. -->
         <section class="sl-tab hidden" data-tab="schedule">
-            <div class="tab-placeholder">
-                <h2>Your shifts are coming here</h2>
-                <p>This week and next, who you're paired with, and your time-off
-                   requests. For now, request a day off from the clock-in page.</p>
-                <div class="tab-ph-links">
-                    <a class="btn-secondary" href="clockin.html">Go to clock in / time off</a>
+            <header class="sl-sched-head">
+                <div>
+                    <span class="sl-room-title" id="slSchedName">My schedule</span>
+                    <span class="sl-sched-room" id="slSchedRoom"></span>
                 </div>
-            </div>
+                <span class="sl-hours-pill" id="slSchedHours">—</span>
+            </header>
+            <div id="slSchedBody" class="sl-sched-body"></div>
         </section>
 
         <!-- ══ MESSAGES ═══════════════════════════════════════ -->
@@ -152,52 +153,234 @@
     </div>
 
     <!-- Incident report -->
+    <!-- ⚠️ Three signatures, in order: teacher (filing IS signing) -> parent at
+         pickup on THIS phone -> director. The print button unlocks only when all
+         three exist, and that is enforced in the database by
+         incident_print_record(), not here — this markup only reflects it. -->
     <div id="slIncidentSheet" class="sl-sheet hidden">
-        <div class="sl-sheet-inner">
+        <div class="sl-sheet-inner sl-inc-sheet">
             <div class="sl-sheet-head">
                 <span class="sl-sheet-name">Incident — <span id="slIncidentChild"></span></span>
                 <button type="button" id="slIncidentCancel" class="sl-link-btn">Cancel</button>
             </div>
 
-            <!-- Staff are told plainly that filing is not telling. Someone who
-                 believes the parent has already been notified may not go and
-                 find them at pickup, and that conversation matters more than
-                 the record. -->
-            <div class="sl-inc-notice">
-                This goes to the director for review. <strong>The family is not
-                notified until she approves it</strong> — still speak to them at pickup.
+            <div class="sl-inc-banner">
+                Sign it yourself first, catch the parent at pickup, then the
+                director closes it. All three, in that order, before it prints.
             </div>
 
             <form id="slIncidentForm">
-                <label class="sl-field">
-                    <span>What kind</span>
-                    <select id="slIncType">
-                        <option value="injury">Injury</option>
-                        <option value="illness">Illness</option>
-                        <option value="behavior">Behavior</option>
-                        <option value="other">Other</option>
-                    </select>
-                </label>
-                <label class="sl-field">
-                    <span>Where it happened</span>
-                    <input type="text" id="slIncLocation" placeholder="Playground, Owl Room…">
-                </label>
-                <label class="sl-field">
-                    <span>Part of the body <span class="sl-optional">(if an injury)</span></span>
-                    <input type="text" id="slIncBodyArea" placeholder="Left knee, forehead…">
-                </label>
-                <label class="sl-field">
-                    <span>What happened</span>
+                <!-- ── Time &amp; place ─────────────────────────── -->
+                <!-- The stepper is the point of this block. A teacher writing
+                     up a 10:12 fall at 10:40 must be able to say 10:12, and the
+                     app records that it received it at 10:40 — two fields, both
+                     shown, never collapsed into one. -->
+                <section class="sl-inc-block">
+                    <div class="sl-inc-label">Time &amp; place</div>
+                    <div class="sl-step-row">
+                        <button type="button" class="sl-step-btn" id="slIncTimeDown"
+                                aria-label="One minute earlier">−</button>
+                        <span class="sl-step-val" id="slIncTimeVal" aria-live="polite">—</span>
+                        <button type="button" class="sl-step-btn" id="slIncTimeUp"
+                                aria-label="One minute later">+</button>
+                    </div>
+                    <div class="sl-inc-chips" id="slIncTimeChips"></div>
+                    <label class="sl-field sl-inc-date">
+                        <span>Day it happened</span>
+                        <input type="date" id="slIncDate">
+                    </label>
+                    <input type="text" id="slIncLocation" class="sl-inc-place"
+                           placeholder="Playground — climber">
+                    <p class="sl-inc-note">
+                        Set the exact time it happened — step by the minute or pick a
+                        different day. Nothing is locked; the app stamps when you
+                        <em>filed</em> it separately (<span id="slIncFiledAt">now</span>).
+                    </p>
+                </section>
+
+                <!-- ── Type ────────────────────────────────────── -->
+                <section class="sl-inc-block">
+                    <div class="sl-inc-label">Type</div>
+                    <div class="sl-inc-chips sl-inc-types" id="slIncTypeChips" role="radiogroup"
+                         aria-label="Type of incident"></div>
+                </section>
+
+                <!-- ── Where on the body ───────────────────────── -->
+                <section class="sl-inc-block" id="slIncBodyBlock">
+                    <div class="sl-inc-label">Where on the body</div>
+                    <div class="sl-body-map">
+                        <div class="sl-body-views" id="slIncBodyViews" role="radiogroup"
+                             aria-label="Front or back"></div>
+                        <div class="sl-body-figure" id="slIncBodyFigure"></div>
+                    </div>
+                    <span class="sl-body-part" id="slIncBodyPart">Not marked</span>
+                    <div class="sl-inc-chips" id="slIncBodyChips"></div>
+                    <p class="sl-inc-note">
+                        Tap the map or a common spot — either writes the same words onto
+                        the report. Side (left/right) comes from which half of the map you tap.
+                    </p>
+                </section>
+
+                <!-- ── What happened ───────────────────────────── -->
+                <section class="sl-inc-block">
+                    <div class="sl-inc-label">What happened</div>
                     <textarea id="slIncDescription" rows="4" required
                               placeholder="Plain description of what you saw."></textarea>
-                </label>
-                <label class="sl-field">
-                    <span>What you did</span>
+                </section>
+
+                <!-- ── First aid given ─────────────────────────── -->
+                <section class="sl-inc-block">
+                    <div class="sl-inc-label">First aid given</div>
+                    <div class="sl-inc-chips" id="slIncAidChips"></div>
                     <textarea id="slIncAction" rows="3" required
-                              placeholder="First aid given, who was told, how the child was afterwards."></textarea>
-                </label>
-                <button type="submit" id="slIncSubmitBtn" class="btn-primary sl-btn">Send to director</button>
+                              placeholder="Anything else you did, who was told, how the child was afterwards."></textarea>
+                </section>
+
+                <!-- ── After ───────────────────────────────────── -->
+                <section class="sl-inc-block">
+                    <div class="sl-inc-label">After</div>
+                    <div class="sl-inc-checks" id="slIncAfterChecks"></div>
+                </section>
+
+                <!-- ── Witnesses ───────────────────────────────── -->
+                <section class="sl-inc-block">
+                    <div class="sl-inc-label">Witnesses</div>
+                    <div class="sl-inc-chips" id="slIncWitnesses"></div>
+                </section>
+
+                <button type="submit" id="slIncSubmitBtn" class="btn-primary sl-btn">
+                    Sign &amp; file this report
+                </button>
+                <p class="sl-inc-note">
+                    Filing signs it in your name. The family is told to come and see
+                    you; they read the report once the director closes it.
+                </p>
             </form>
+
+            <!-- ── Signatures — shown once the report exists ───── -->
+            <div id="slIncSigned" class="hidden">
+                <div class="sl-inc-label">Signatures — in order</div>
+                <div class="sl-sig-list" id="slIncSigList"></div>
+                <div class="sl-sig-banner" id="slIncSigBanner"></div>
+                <div class="sl-inc-footer">
+                    <button type="button" class="sl-print-btn" id="slIncPrintBtn" disabled>🔒 Print</button>
+                    <button type="button" class="sl-parent-btn" id="slIncParentSignBtn">Parent signs now</button>
+                </div>
+                <button type="button" class="sl-link-btn sl-inc-done" id="slIncDoneBtn">Done for now</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Missing child — raise the broadcast.
+         ⚠️ No recipient picker, deliberately. This goes to every staff phone in
+         the building at once and to the office; it is not a message to the
+         director, and the only choice made here is which child. -->
+    <div id="mcRaiseSheet" class="sl-sheet hidden">
+        <div class="sl-sheet-inner">
+            <div class="sl-sheet-head">
+                <span class="sl-sheet-name">🚨 Missing child</span>
+                <button type="button" id="mcRaiseCancel" class="sl-link-btn">Cancel</button>
+            </div>
+            <div class="mc-raise-warn">
+                This alerts <strong>every staff phone in the building</strong> and the
+                office at the same moment. Everyone stops and searches. Use it as soon
+                as you cannot find a child — not after you have looked everywhere.
+            </div>
+            <label class="sl-field">
+                <span>What are they wearing? <span class="sl-optional">(helps everyone else)</span></span>
+                <input type="text" id="mcRaiseWearing" placeholder="Red shirt, blue shoes">
+            </label>
+            <label class="sl-field">
+                <span>Where did you last see them?</span>
+                <input type="text" id="mcRaiseLastSeen" placeholder="Playground, by the gate">
+            </label>
+            <div class="sl-inc-label" style="margin-top:16px">Tap the child</div>
+            <div id="mcRaiseList" class="mc-pick-list"></div>
+        </div>
+    </div>
+
+    <!-- Day off request — bottom sheet off the schedule tab. -->
+    <div id="slDayOffSheet" class="sl-sheet hidden">
+        <div class="sl-sheet-inner">
+            <div class="sl-sheet-head">
+                <span class="sl-sheet-name">Request a day off</span>
+                <button type="button" id="slDayOffCancel" class="sl-link-btn">Cancel</button>
+            </div>
+            <div class="sl-pto-note" id="slDayOffPto"></div>
+            <div class="sl-inc-block">
+                <div class="sl-inc-label">Which days</div>
+                <div class="sl-daterange">
+                    <label class="sl-field">
+                        <span>From</span>
+                        <input type="date" id="slDayOffFrom">
+                    </label>
+                    <label class="sl-field">
+                        <span>To</span>
+                        <input type="date" id="slDayOffTo">
+                    </label>
+                </div>
+                <p class="sl-inc-note" id="slDayOffCount">Pick a start day.</p>
+            </div>
+            <div class="sl-inc-block">
+                <div class="sl-inc-label">Reason</div>
+                <div class="sl-inc-chips" id="slDayOffReasons"></div>
+            </div>
+            <div class="sl-inc-block">
+                <div class="sl-inc-label">Anything the office should know</div>
+                <textarea id="slDayOffNote" rows="3" placeholder="Optional."></textarea>
+            </div>
+            <button type="button" id="slDayOffSubmit" class="btn-primary sl-btn">Send the request</button>
+            <p class="sl-inc-note">
+                You'll get a push when the director answers. Nothing changes on your
+                schedule until she approves it.
+            </p>
+        </div>
+    </div>
+
+    <!-- Ask a coworker to cover one shift. -->
+    <div id="slSwapSheet" class="sl-sheet hidden">
+        <div class="sl-sheet-inner">
+            <div class="sl-sheet-head">
+                <span class="sl-sheet-name">Ask someone to cover</span>
+                <button type="button" id="slSwapCancel" class="sl-link-btn">Cancel</button>
+            </div>
+            <p class="sl-inc-note" id="slSwapWhich"></p>
+            <label class="sl-field">
+                <span>Who are you asking?</span>
+                <select id="slSwapWho"></select>
+            </label>
+            <label class="sl-field">
+                <span>Note <span class="sl-optional">(optional)</span></span>
+                <textarea id="slSwapNote" rows="2" placeholder="Anything they should know."></textarea>
+            </label>
+            <button type="button" id="slSwapSubmit" class="btn-primary sl-btn">Send the request</button>
+            <p class="sl-inc-note">
+                Nothing moves until they accept. When they do, the shift leaves your
+                week and lands on theirs, and the director sees it in Build Staff
+                Schedule — nobody has to remember to tell anyone.
+            </p>
+        </div>
+    </div>
+
+    <!-- Parent signature capture — happens on the TEACHER's phone at pickup. -->
+    <div id="slParentSignSheet" class="sl-sheet hidden">
+        <div class="sl-sheet-inner">
+            <div class="sl-sheet-head">
+                <span class="sl-sheet-name">Parent signature</span>
+                <button type="button" id="slParentSignCancel" class="sl-link-btn">Cancel</button>
+            </div>
+            <p class="sl-inc-note" id="slParentSignIntro"></p>
+            <label class="sl-field">
+                <span>Parent or guardian — type your full name</span>
+                <input type="text" id="slParentSignName" autocomplete="off"
+                       placeholder="Your full name">
+            </label>
+            <p class="sl-sig-preview" id="slParentSignPreview" aria-hidden="true"></p>
+            <p class="sl-inc-note">
+                Typing your name signs this report. It records the time and that you
+                signed in person on this staff member's phone.
+            </p>
+            <button type="button" id="slParentSignBtn" class="btn-primary sl-btn">Sign</button>
         </div>
     </div>
 

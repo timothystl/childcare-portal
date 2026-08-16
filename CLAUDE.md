@@ -171,6 +171,80 @@ an `AP_TOOLS` entry, or it is unreachable.**
 
 ---
 
+## Design handoff build — staff, parent, director (2026-08-16)
+
+Built from `Parent_communication_expansion.zip` (staff app, parent app, director
+desktop, printed report). **Finance is deliberately untouched** — the handoff
+says twice that `2a`/`2b` are "an open decision, not a spec" and the client is
+iterating on it separately.
+
+### ⚠️ Incidents now take THREE signatures, in order, enforced in the database
+
+`incident_three_signatures.sql` + `incident_kind_and_after_notes.sql`, **applied
+and verified 2026-08-16.** Teacher (filing *is* signing) → parent at pickup on
+the teacher's phone → director. A `BEFORE INSERT` trigger on
+`incident_signatures` raises `23514` on any out-of-order signature, a second
+trigger makes them append-only, and `UNIQUE (incident_id, role)` stops a
+duplicate. Safe to enforce retroactively because `incident_reports` was **empty**
+— zero reports had ever been filed.
+
+- **`incident_print_record(id)` is the only way to a printable copy.** It returns
+  `{ok:false, reason:'incomplete'}` until all three exist — measured against a
+  *full admin*, refused at 0, 1 and 2 signatures. `incident-print.html` holds no
+  fallback copy of the record, so there is no client render path. Never add one.
+- ⚠️ **Notification and publication are deliberately different moments.** The
+  handoff says the parent is told as soon as the teacher signs; the applied
+  2026-08-12 decision says the readable report waits for the director. Both are
+  true: `notify_parent_of_incident()` stamps `parent_notified_at` early and the
+  push carries no detail, while the `parent read approved` policy still gates the
+  readable copy on sign-off. The pickup signature needs no portal read at all.
+- ⚠️ **One function, never two overloads.** supabase-js sends *named* params, so
+  a 9-arg and a 15-arg `submit_incident_report` both match nine named arguments
+  and PostgREST fails with "Could not choose the best candidate function". Create
+  the wider one, `DROP` the narrower one, restate the grants.
+- `incident_type` stays the four-value CHECK (`behavior` is a **stored value**);
+  the handoff's six chips live in the new `incident_kind`.
+
+### Also new
+
+| Thing | Where | Note |
+|---|---|---|
+| Staff **My schedule** | `js/staff/staff-schedule.js` | Two week strips, own shifts only. `staff_my_schedule()` resolves the caller from their own PIN — no parameter widens it to the roster. |
+| **Shift swaps** | `shift_swaps` | Accepting moves the `staff_schedules` row and stamps the swap in one transaction. An accepted swap is **never deleted** — the giver still sees it struck through, and that strikethrough is the record. |
+| **Missing child** | `js/staff/staff-missing.js` | A broadcast. **No recipient argument on any RPC, and there must never be one.** Banner on every tab with no dismiss control. |
+| **Attendance board** | `js/admin/admin-attendance.js` | Office mirror of the head count. |
+| Parent **Documents** | `js/portal/portal-documents.js` | Replaced the Billing *placeholder* tab, restoring the handoff's five. |
+| **Announcements** | `js/admin/admin-announcements.js` | `kind` is a branch: a closure is the only kind that should ignore quiet hours. |
+| **Needs you** queue | `apDashDirector` | Inline actions per row. Incident rows are filtered to `parentSigned` — she is signature 3, and a row she cannot clear teaches her to scroll past the queue. |
+
+⚠️ **`center_headcount_rows(date)` is a shared body with NO authorization.**
+`center_headcount()` gates it on a PIN, `center_headcount_admin()` on
+`is_admin()`, and it is revoked from `anon` *and* `authenticated`. Do not write a
+second admin-side query — the office and the lawn disagreeing about who is in the
+building during a drill is the worst failure this data has.
+
+⚠️ **`attendance_records` has no `student_id`** — it keys on `child_name` plus a
+`registration_id`. Joining on `student_id` cost a live outage of the staff head
+count here: the broken function replaced a working one, grants verified clean,
+and nobody executed it. **Verifying grants is not verifying a function.**
+
+### ⚠️ STILL OPEN: `/send-push` does not exist
+
+`admin-calendar.js`, `admin-settings.js` and `admin-incidents.js` have all been
+POSTing to `/send-push` with no such edge function deployed — every call fails
+silently into a `catch`. So **nothing in this app pushes to a phone today**: not
+an incident notice, not an announcement, and not the missing-child alert, which
+is why that alert ships as a 15-second in-app poll and the announcement composer
+says on screen that it will not buzz anyone. Writing the function and
+provisioning VAPID keys is its own piece of work and it is the highest-value
+thing left from this handoff.
+
+Also unwired: the closure composer's "block the day" / "credit the tuition"
+checkboxes record intent only. Wiring them must go through the recompute-only
+billing path — **never a delta**.
+
+---
+
 ## Safety & compliance — head count, fire drills, staff injuries (2026-08-14)
 
 `supabase/migrations/staff_injury_and_headcount.sql`, **applied and verified in

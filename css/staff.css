@@ -539,3 +539,416 @@
 .sl-child-state.out {
     color: #5a6673; background: #eef2f5; border-color: #cbd5dd;
 }
+
+/* ── Incident report ─────────────────────────────────────── */
+/* The longest screen in the app, and the only one someone fills in while
+   another adult waits at the counter. Every control is at least 44px, the
+   chip groups are two-state (border + fill, never color alone), and the
+   signature block is the last thing on the page because it is the last thing
+   that happens. */
+
+.sl-inc-sheet { padding-bottom: 28px; }
+
+.sl-inc-banner {
+    background: var(--tang-pale);
+    border: 1.5px solid var(--tang-soft);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: .88em; line-height: 1.45; color: var(--tang-dark);
+    margin-bottom: 18px;
+}
+
+.sl-inc-block { margin-bottom: 22px; }
+
+.sl-inc-label {
+    font-size: .75em; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;
+}
+
+.sl-inc-note {
+    margin: 8px 0 0; font-size: .82em; line-height: 1.5; color: var(--text-muted);
+}
+.sl-inc-note em { font-style: italic; }
+
+/* Time stepper. − and + are full tap targets in their own right; the value
+   between them is the thing being changed, so it carries the navy border. */
+.sl-step-row {
+    display: grid; grid-template-columns: 56px 1fr 56px;
+    align-items: stretch; gap: 8px;
+}
+.sl-step-btn {
+    min-height: 52px; font-size: 1.5em; font-weight: 800;
+    background: #fff; color: var(--navy);
+    border: 1.5px solid var(--navy); border-radius: 10px;
+    font-family: inherit; cursor: pointer;
+}
+.sl-step-btn:active { background: var(--sun-pale); }
+.sl-step-val {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 52px; padding: 0 10px;
+    background: var(--linen); border: 1.5px solid var(--navy); border-radius: 10px;
+    font-weight: 800; color: var(--navy); font-size: 1.02em; text-align: center;
+}
+.sl-inc-date { margin-top: 10px; }
+.sl-inc-place {
+    width: 100%; box-sizing: border-box; margin-top: 10px; padding: 13px;
+    border: 1px solid var(--border); border-radius: 10px;
+    font-family: inherit; font-size: 1em; color: var(--navy);
+}
+
+/* Chips. Selected is a 2px border plus a tint — never the fill alone, so it
+   survives a color-blind reader and a sunlit playground screen. */
+.sl-inc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sl-inc-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    min-height: 44px; padding: 10px 14px;
+    background: #fff; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 999px;
+    font-family: inherit; font-size: .88em; font-weight: 700; cursor: pointer;
+}
+.sl-inc-chip.is-on {
+    border: 2px solid var(--tang); background: var(--tang-pale);
+    color: var(--tang-dark); font-weight: 800;
+}
+.sl-inc-types .sl-inc-chip.is-on { border-color: var(--tang); }
+.sl-chip-x {
+    background: none; border: none; padding: 0 0 0 2px;
+    color: inherit; font-size: 1em; cursor: pointer; line-height: 1;
+}
+.sl-chip-add { border-style: dashed; color: var(--navy); }
+
+.sl-inc-checks { display: flex; flex-direction: column; gap: 4px; }
+.sl-inc-check {
+    display: flex; align-items: center; gap: 10px; min-height: 44px;
+    font-size: .93em; color: var(--navy); cursor: pointer;
+}
+.sl-inc-check input { width: 22px; height: 22px; flex: none; }
+
+.sl-inc-block textarea {
+    width: 100%; box-sizing: border-box; padding: 13px;
+    border: 1px solid var(--border); border-radius: 10px;
+    font-family: inherit; font-size: 1em; line-height: 1.5; color: var(--navy);
+    margin-top: 8px;
+}
+
+/* Body map. The figure box is a fixed aspect ratio so the percentage-positioned
+   tap zones stay over the right parts of the drawing at any width. */
+.sl-body-map { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.sl-body-views { display: flex; gap: 8px; }
+.sl-body-view {
+    min-height: 40px; padding: 9px 20px;
+    background: #fff; border: 1px solid var(--border); border-radius: 999px;
+    color: var(--text-muted); font-family: inherit; font-size: .86em;
+    font-weight: 700; cursor: pointer;
+}
+.sl-body-view.is-on { background: var(--navy); color: #fff; border-color: var(--navy); font-weight: 800; }
+
+.sl-body-figure {
+    position: relative; width: 190px; aspect-ratio: 1 / 1.7;
+    background: var(--linen); border: 1px solid var(--border); border-radius: 10px;
+}
+.sl-body-svg {
+    position: absolute; inset: 6%;
+    width: 88%; height: 88%;
+    fill: #fff; stroke: var(--navy); stroke-width: 1.1; stroke-linejoin: round;
+}
+.sl-body-svg line { stroke-dasharray: 3 3; }
+
+.sl-zone {
+    position: absolute; padding: 0;
+    background: transparent; border: none; border-radius: 6px; cursor: pointer;
+}
+.sl-zone:active { background: rgba(233, 125, 85, .18); }
+.sl-zone.is-on {
+    background: rgba(233, 125, 85, .30);
+    border: 2px solid var(--tang);
+}
+
+.sl-body-part {
+    display: inline-block; align-self: flex-start; margin: 10px 0 8px;
+    padding: 6px 13px; border-radius: 999px;
+    background: #fff; border: 1.5px dashed var(--border);
+    color: var(--text-muted); font-size: .86em; font-weight: 700;
+}
+.sl-body-part.is-set {
+    background: var(--tang-pale); border: 1.5px solid var(--tang-soft);
+    color: var(--tang-dark);
+}
+
+/* ── Signatures ──────────────────────────────────────────── */
+.sl-sig-list {
+    background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    padding: 4px 14px; margin-bottom: 14px;
+}
+.sl-sig-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 13px 0; border-bottom: 1px solid var(--linen);
+}
+.sl-sig-row:last-child { border-bottom: none; }
+.sl-sig-n {
+    width: 22px; height: 22px; flex: none; border-radius: 999px;
+    background: var(--warm-gray); color: var(--text-muted);
+    font-size: .74em; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+}
+.sl-sig-row.is-done .sl-sig-n { background: var(--green-lt); color: var(--green-dark); }
+.sl-sig-who   { flex: 1; min-width: 0; }
+.sl-sig-name  { display: block; font-size: .95em; font-weight: 800; color: var(--navy); }
+.sl-sig-status{ display: block; font-size: .8em; color: var(--text-muted); margin-top: 2px; }
+.sl-sig-row.is-done .sl-sig-status { color: var(--green-text); }
+
+/* The one place Dancing Script appears. It is a signature mark, not a font
+   choice — nothing else in the app uses it. */
+.sl-sig-mark, .sl-sig-preview {
+    font-family: 'Dancing Script', cursive;
+    font-size: 1.35em; color: var(--navy); white-space: nowrap;
+}
+.sl-sig-preview {
+    min-height: 44px; margin: 6px 0 0; padding: 8px 12px;
+    border-bottom: 1.5px solid var(--border); font-size: 1.6em;
+}
+.sl-sig-go {
+    min-height: 40px; padding: 9px 18px;
+    background: var(--navy); color: #fff; border: none; border-radius: 8px;
+    font-family: inherit; font-size: .84em; font-weight: 800; cursor: pointer;
+}
+.sl-sig-locked {
+    padding: 7px 16px; border: 1.5px dashed var(--border); border-radius: 6px;
+    color: #B8AC97; font-size: .84em; font-weight: 700;
+}
+
+.sl-sig-banner {
+    display: flex; gap: 10px;
+    background: var(--sun-pale); border: 1px solid var(--sun);
+    border-radius: 10px; padding: 12px 14px;
+    font-size: .85em; line-height: 1.5; color: var(--mustard-dark);
+}
+.sl-sig-banner.is-done {
+    background: var(--green-pale); border-color: var(--green-lt); color: var(--green-dark);
+}
+
+.sl-inc-footer { display: flex; gap: 10px; margin-top: 14px; }
+.sl-print-btn {
+    flex: 1; min-height: 48px;
+    background: #fff; border: 1.5px dashed var(--border); border-radius: 10px;
+    color: #B8AC97; font-family: inherit; font-size: .95em; font-weight: 800;
+    cursor: not-allowed;
+}
+.sl-print-btn:not(:disabled) {
+    border: 1.5px solid var(--navy); color: var(--navy); cursor: pointer;
+}
+.sl-parent-btn {
+    flex: 1; min-height: 48px;
+    background: var(--tang); color: #fff; border: none; border-radius: 10px;
+    font-family: inherit; font-size: .95em; font-weight: 800; cursor: pointer;
+}
+.sl-inc-done { display: block; margin: 14px auto 0; }
+
+/* ── My schedule ─────────────────────────────────────────── */
+/* Two week strips, own shifts only. A shift given away stays in place, struck
+   through — the schedule is the record of the swap, so removing the line would
+   erase the only trace of who was originally down for that room. */
+
+.sl-sched-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 2px 10px;
+}
+.sl-sched-room { display: block; font-size: .8em; color: var(--text-muted); margin-top: 2px; }
+.sl-hours-pill {
+    flex: none; background: var(--sun-pale); border: 1px solid var(--sun);
+    border-radius: 999px; padding: 6px 13px;
+    font-size: .78em; font-weight: 800; color: var(--mustard-dark);
+}
+.sl-sched-body { padding-bottom: 20px; }
+
+.sl-week { margin-bottom: 18px; }
+.sl-week-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 0 2px 8px;
+}
+.sl-week-head strong { font-size: .95em; color: var(--navy); }
+.sl-week-head span   { font-size: .8em; color: var(--text-muted); }
+
+.sl-week-grid {
+    background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden;
+}
+.sl-day {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--linen);
+}
+.sl-day:last-child { border-bottom: none; }
+.sl-day.is-today { background: var(--sun-pale); }
+.sl-day-label {
+    width: 54px; flex: none;
+    font-size: .78em; font-weight: 800; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--text-muted);
+}
+.sl-day-label span { display: block; font-size: 1.25em; color: var(--navy); letter-spacing: 0; }
+.sl-day-off { font-size: .85em; color: #B8AC97; }
+
+.sl-shift {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    min-height: 44px; padding: 8px 12px; margin: 3px 6px 3px 0;
+    background: var(--linen); border: 1px solid var(--border); border-radius: 9px;
+    font-family: inherit; text-align: left; cursor: pointer;
+}
+.sl-shift-when { font-size: .88em; font-weight: 800; color: var(--navy); }
+.sl-shift-room { font-size: .8em; color: var(--text-muted); }
+.sl-shift-tag {
+    font-size: .7em; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+    background: #fff; border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px;
+    color: var(--text-muted);
+}
+.sl-shift.is-gained {
+    background: var(--green-pale); border-color: var(--green-lt);
+}
+.sl-shift.is-gained .sl-shift-tag { color: var(--green-dark); border-color: var(--green-lt); }
+
+/* Struck through in place, not removed. */
+.sl-shift.is-gone { cursor: default; opacity: .65; }
+.sl-shift.is-gone .sl-shift-when,
+.sl-shift.is-gone .sl-shift-room { text-decoration: line-through; }
+
+/* Someone asking you to cover — coral, because it wants an answer. */
+.sl-swap-ask {
+    background: var(--tang-pale); border: 1.5px solid var(--tang-soft);
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 16px;
+}
+.sl-swap-ask-head {
+    font-size: .74em; font-weight: 800; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--tang-dark); margin-bottom: 8px;
+}
+.sl-swap-ask-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; flex-wrap: wrap; padding: 7px 0;
+}
+.sl-swap-ask-who { font-size: .92em; font-weight: 800; color: var(--navy); }
+.sl-swap-ask-sub { font-size: .8em; color: var(--tang-dark); margin-top: 2px; }
+.sl-swap-ask-btns { display: flex; gap: 8px; }
+.sl-swap-yes, .sl-swap-no {
+    min-height: 44px; padding: 10px 16px; border-radius: 8px;
+    font-family: inherit; font-size: .84em; font-weight: 800; cursor: pointer;
+}
+.sl-swap-yes { background: var(--navy); color: #fff; border: none; }
+.sl-swap-no  { background: #fff; color: var(--tang-dark); border: 1px solid var(--tang-soft); }
+
+/* Swap receipt — green header, ON THE SCHEDULE pill. */
+.sl-receipt {
+    background: #fff; border: 1px solid var(--green-lt); border-radius: 12px;
+    overflow: hidden; margin-bottom: 14px;
+}
+.sl-receipt-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: var(--green-pale); padding: 10px 14px;
+    font-size: .9em; font-weight: 800; color: var(--green-dark);
+}
+.sl-receipt-pill {
+    background: var(--green-text); color: #fff; border-radius: 999px;
+    padding: 3px 10px; font-size: .68em; letter-spacing: .06em;
+}
+.sl-receipt-body { padding: 12px 14px; font-size: .9em; color: var(--navy); line-height: 1.5; }
+.sl-receipt-body p { margin: 8px 0 0; font-size: .88em; color: var(--text-muted); }
+.sl-receipt.is-waiting { border-color: var(--sun); }
+.sl-receipt.is-waiting .sl-receipt-head { background: var(--sun-pale); color: var(--mustard-dark); }
+.sl-receipt.is-waiting .sl-receipt-pill { background: var(--mustard-dark); }
+
+.sl-sched-foot {
+    margin: 4px 2px 20px; font-size: .8em; line-height: 1.5; color: var(--text-muted);
+}
+
+/* Time off */
+.sl-off { margin-top: 6px; }
+.sl-off-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: #fff; border: 1px solid var(--border); border-left-width: 4px;
+    border-radius: 10px; padding: 11px 13px; margin-bottom: 8px;
+}
+.sl-off-row.is-pending { border-left-color: var(--sun); }
+.sl-off-row.is-ok      { border-left-color: var(--green); }
+.sl-off-row.is-no      { border-left-color: var(--tang); }
+.sl-off-when   { font-size: .92em; font-weight: 800; color: var(--navy); }
+.sl-off-why    { font-size: .8em; color: var(--text-muted); margin-top: 2px; }
+.sl-off-status { font-size: .76em; font-weight: 800; color: var(--text-muted); text-align: right; }
+.sl-off-row.is-ok      .sl-off-status { color: var(--green-text); }
+.sl-off-row.is-pending .sl-off-status { color: var(--mustard-dark); }
+.sl-off-row.is-no      .sl-off-status { color: var(--tang-dark); }
+
+.sl-pto-note {
+    background: var(--sun-pale); border: 1px solid var(--sun); border-radius: 10px;
+    padding: 11px 13px; margin-bottom: 16px;
+    font-size: .88em; font-weight: 700; color: var(--mustard-dark);
+}
+.sl-daterange { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ── Missing child ───────────────────────────────────────── */
+/* The loudest thing in the app, and the only element with no dismiss control.
+   It renders above the route on every tab and pushes the app down rather than
+   floating over it — a banner that overlaps content gets scrolled past. */
+
+.mc-banner { position: sticky; top: 0; z-index: 40; }
+
+.mc-alert {
+    background: var(--tang); color: #fff;
+    border-bottom: 3px solid var(--tang-dark);
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+}
+.mc-alert-top { display: flex; align-items: flex-start; gap: 12px; }
+.mc-siren {
+    font-size: 26px; line-height: 1; flex: none;
+    animation: mc-pulse 1.4s ease-in-out infinite;
+}
+@keyframes mc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .mc-siren { animation: none; } }
+
+.mc-alert-who  { flex: 1; min-width: 0; }
+.mc-alert-name {
+    font-family: 'Lora', Georgia, serif; font-size: 1.25em; font-weight: 700;
+    line-height: 1.2;
+}
+.mc-alert-meta { font-size: .84em; margin-top: 3px; opacity: .95; line-height: 1.4; }
+
+.mc-searchers {
+    margin-top: 10px; padding-top: 9px;
+    border-top: 1px solid rgba(255, 255, 255, .35);
+    font-size: .84em; line-height: 1.45;
+}
+
+.mc-alert-btns { display: flex; gap: 9px; margin-top: 12px; flex-wrap: wrap; }
+.mc-ack, .mc-found {
+    flex: 1; min-height: 46px; min-width: 130px;
+    border-radius: 9px; font-family: inherit; font-size: .9em; font-weight: 800;
+    cursor: pointer;
+}
+.mc-ack   { background: #fff; color: var(--tang-dark); border: none; }
+.mc-found { background: transparent; color: #fff; border: 1.5px solid #fff; }
+.mc-acked {
+    flex: 1; min-height: 46px; display: flex; align-items: center; justify-content: center;
+    background: rgba(255, 255, 255, .18); border-radius: 9px;
+    font-size: .88em; font-weight: 800;
+}
+
+/* Raise it — head count footer */
+.hc-missing { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+.hc-missing-btn {
+    width: 100%; min-height: 54px;
+    background: var(--tang); color: #fff; border: none; border-radius: 12px;
+    font-family: inherit; font-size: 1.05em; font-weight: 800; cursor: pointer;
+}
+.hc-missing-btn:active { background: var(--tang-dark); }
+
+.mc-raise-warn {
+    background: var(--tang-pale); border: 1.5px solid var(--tang);
+    border-radius: 10px; padding: 13px 15px; margin-bottom: 16px;
+    font-size: .9em; line-height: 1.5; color: var(--tang-dark);
+}
+.mc-pick-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.mc-pick {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    min-height: 52px; padding: 13px 15px;
+    background: #fff; border: 1.5px solid var(--border); border-radius: 10px;
+    font-family: inherit; font-size: 1em; font-weight: 800; color: var(--navy);
+    text-align: left; cursor: pointer;
+}
+.mc-pick span { font-size: .78em; font-weight: 700; color: var(--text-muted); }
+.mc-pick:active { background: var(--tang-pale); border-color: var(--tang); }

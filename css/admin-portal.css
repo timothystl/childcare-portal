@@ -731,3 +731,145 @@
 @media print {
     .ap-nav, .ap-detail-related { display: none !important; }
 }
+
+/* ============================================================
+   "Needs you" — the director's action queue (design handoff `1a`)
+   ============================================================
+   Full width, above the metrics, with a 4px coral top border. It is the first
+   thing on the page because it is the only thing on the page that is waiting
+   on her; everything below it is a number she can look at when she wants to. */
+
+.ap-needs {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--tang);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+    margin-bottom: 22px;
+}
+
+.ap-needs-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 15px 20px; border-bottom: 1px solid var(--border);
+}
+.ap-needs-head h3 {
+    margin: 0; font-family: var(--font-head); font-size: 1.3em;
+    font-weight: 700; color: var(--navy);
+}
+.ap-needs-count { font-size: .85em; color: var(--text-muted); }
+.ap-needs-urgent {
+    margin-left: auto;
+    background: var(--tang-pale); border: 1px solid var(--tang);
+    color: var(--tang-dark); border-radius: 999px; padding: 3px 11px;
+    font-size: .72em; font-weight: 800; letter-spacing: .06em;
+}
+
+.ap-needs-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px 14px 0; border-bottom: 1px solid var(--linen);
+}
+.ap-needs-row:last-child { border-bottom: none; }
+.ap-needs-row.is-urgent { background: var(--tang-pale); }
+
+/* The 6px status rail, flush to the card edge. */
+.ap-needs-rail { width: 6px; align-self: stretch; flex: none; }
+.ap-needs-glyph { font-size: 20px; flex: none; }
+
+.ap-needs-main  { flex: 1; min-width: 0; }
+.ap-needs-title {
+    display: block; font-size: .98em; font-weight: 800; color: var(--navy);
+}
+.ap-needs-pill {
+    margin-left: 8px; border-radius: 999px; padding: 2px 9px;
+    background: var(--warm-gray); color: var(--text-muted);
+    font-size: .66em; font-weight: 800; letter-spacing: .06em; vertical-align: middle;
+}
+.ap-needs-pill.is-urgent { background: var(--tang); color: #fff; }
+.ap-needs-ctx {
+    display: block; font-size: .85em; color: var(--text-muted);
+    margin-top: 3px; line-height: 1.45;
+}
+
+/* The actions live IN the row — she clears it without leaving the page. */
+.ap-needs-acts { display: flex; gap: 8px; flex: none; flex-wrap: wrap; }
+.ap-needs-btn {
+    min-height: 38px; padding: 9px 15px; border-radius: 8px;
+    background: #fff; border: 1px solid var(--border); color: var(--navy);
+    font-family: inherit; font-size: .82em; font-weight: 800; cursor: pointer;
+}
+.ap-needs-btn.is-primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+.ap-needs-btn:hover { border-color: var(--navy); }
+
+@media (max-width: 700px) {
+    .ap-needs-row { flex-wrap: wrap; padding-right: 14px; }
+    .ap-needs-acts { width: 100%; padding-left: 38px; }
+}
+
+/* ============================================================
+   Announcement composer (design handoff `1h`)
+   ============================================================ */
+
+.an-grid { display: grid; grid-template-columns: 1fr 300px; gap: 22px; align-items: start; }
+@media (max-width: 900px) { .an-grid { grid-template-columns: 1fr; } }
+
+.an-field { margin-bottom: 18px; }
+.an-label {
+    font-size: .74em; font-weight: 800; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--text-muted); margin-bottom: 7px;
+}
+.an-input {
+    width: 100%; box-sizing: border-box; padding: 11px 13px;
+    border: 1.5px solid var(--border); border-radius: 9px;
+    font-family: inherit; font-size: .95em; color: var(--navy); background: #fff;
+}
+.an-input:focus { outline: none; border-color: var(--navy); }
+textarea.an-input { line-height: 1.55; resize: vertical; }
+.an-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+
+.an-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.an-chip {
+    min-height: 42px; padding: 10px 15px; border-radius: 999px;
+    background: #fff; border: 1px solid var(--border); color: var(--text-muted);
+    font-family: inherit; font-size: .86em; font-weight: 700; cursor: pointer;
+}
+.an-chip.is-on { border-width: 2px; font-weight: 800; }
+.an-chip.tone-tang.is-on  { border-color: var(--tang);  background: var(--tang-pale);  color: var(--tang-dark); }
+.an-chip.tone-navy.is-on  { border-color: var(--navy);  background: var(--linen);      color: var(--navy); }
+.an-chip.tone-green.is-on { border-color: var(--green); background: var(--green-pale); color: var(--green-dark); }
+.an-chip.tone-sun.is-on   { border-color: var(--sun);   background: var(--sun-pale);   color: var(--mustard-dark); }
+.an-chip.is-on:not([class*="tone-"]) { border-color: var(--navy); background: var(--linen); color: var(--navy); }
+
+.an-check {
+    display: flex; align-items: center; gap: 9px; min-height: 40px;
+    font-size: .92em; color: var(--navy); cursor: pointer;
+}
+.an-check input { width: 19px; height: 19px; }
+.an-fine {
+    margin: 8px 0 0; font-size: .82em; line-height: 1.5; color: var(--text-muted);
+}
+
+.an-side-card {
+    background: var(--linen); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; position: sticky; top: 16px;
+}
+.an-audience { margin: 0 0 10px; font-size: .95em; font-weight: 800; color: var(--navy); line-height: 1.45; }
+.an-lands { margin: 0 0 10px; padding-left: 18px; font-size: .85em; color: var(--text-muted); line-height: 1.6; }
+.an-lands .is-alert { color: var(--tang-dark); font-weight: 700; }
+.an-send  { width: 100%; margin-top: 6px; }
+.an-draft { width: 100%; margin-top: 8px; }
+
+.an-history { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border); }
+.an-hist-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 0; border-bottom: 1px solid var(--linen);
+}
+.an-hist-row:last-child { border-bottom: none; }
+.an-hist-icon  { font-size: 18px; }
+.an-hist-main  { flex: 1; min-width: 0; }
+.an-hist-title { display: block; font-size: .93em; font-weight: 800; color: var(--navy); }
+.an-hist-sub   { display: block; font-size: .8em; color: var(--text-muted); margin-top: 2px; }
+.an-hist-draft {
+    background: var(--sun-pale); border: 1px solid var(--sun); color: var(--mustard-dark);
+    border-radius: 999px; padding: 3px 10px; font-size: .7em; font-weight: 800;
+}

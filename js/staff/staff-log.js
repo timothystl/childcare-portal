@@ -112,6 +112,11 @@ async function slSignIn() {
         // A drill recorded on the lawn with no signal is stashed rather than
         // lost; this is the first moment there is a PIN to send it with.
         if (typeof hcFlushPending === 'function') hcFlushPending();
+        // Start listening for a missing-child broadcast the moment there is a
+        // PIN to poll with. It runs on every tab, not just the head count —
+        // whoever is standing next to the child is not necessarily the person
+        // looking at the count screen.
+        if (typeof mcStartPolling === 'function') mcStartPolling();
     } catch (e) {
         console.warn('staff sign-in:', e);
         slToast('Could not reach the server.', 'err');
@@ -122,6 +127,9 @@ async function slSignIn() {
 
 function slSignOut() {
     slPin = null; slStaff = null; slStaffId = null; slRoomId = null; slChildren = [];
+    // Stop polling before clearing the screen: the alert RPC is PIN-gated and
+    // would start failing on every tick otherwise.
+    if (typeof mcStopPolling === 'function') mcStopPolling();
     slShow('slPinScreen');
 }
 
@@ -436,56 +444,10 @@ async function slSendThreadMessage() {
 }
 
 // ── Incident report ─────────────────────────────────────────
-// ⚠️ Filing does NOT notify the parent. The director reviews first, and her
-// approval is what reaches the family. Staff are told this on the form, because
-// someone who believes a parent has already been told may not go and find them
-// at pickup — and that conversation matters more than the record.
-
-function slOpenIncident() {
-    if (!slOpenChild) return;
-    slEl('slIncidentChild').textContent = slOpenChild.child_name;
-    slEl('slIncidentForm').reset();
-    slEl('slIncidentSheet').classList.remove('hidden');
-}
-
-function slCloseIncident() {
-    slEl('slIncidentSheet').classList.add('hidden');
-}
-
-async function slSubmitIncident(e) {
-    e.preventDefault();
-    if (!slOpenChild) return;
-
-    const description = slEl('slIncDescription').value.trim();
-    const actionTaken = slEl('slIncAction').value.trim();
-    if (!description || !actionTaken) {
-        slToast('Describe what happened and what you did.', 'err');
-        return;
-    }
-
-    const btn = slEl('slIncSubmitBtn');
-    btn.disabled = true; btn.textContent = 'Sending…';
-    try {
-        const id = await submitIncidentReport(slStaffId, slPin, {
-            studentId:    slOpenChild.student_id,
-            incidentType: slEl('slIncType').value,
-            description,
-            actionTaken,
-            location:     slEl('slIncLocation').value.trim(),
-            bodyArea:     slEl('slIncBodyArea').value.trim(),
-        });
-        if (!id) { slToast('The report was not accepted. Check your PIN.', 'err'); return; }
-
-        slCloseIncident();
-        slCloseSheet();
-        slToast('Report sent to the director for review.', 'ok');
-    } catch (err) {
-        console.warn('incident:', err);
-        slToast('Could not send the report. Try again.', 'err');
-    } finally {
-        btn.disabled = false; btn.textContent = 'Send to director';
-    }
-}
+// Moved to js/staff/staff-incident.js — the form grew a time stepper, a body
+// map, chip groups and the three-signature flow, and it is the longest screen
+// in the app. slOpenIncident / slSubmitIncident live there; this file still
+// owns slOpenChild and slToast, which that module reads.
 
 // ── Staff injury report (workers' comp) ─────────────────────
 // ⚠️ THIS IS NOT AN INCIDENT REPORT AND DOES NOT GO NEAR ONE. An incident
@@ -719,9 +681,10 @@ document.addEventListener('DOMContentLoaded', () => {
     slEl('slPhotoInput')?.addEventListener('change', e => slPhotoPicked(e.target.files?.[0]));
     slEl('slThreadBack')?.addEventListener('click', slRenderThreadList);
     slEl('slThreadSendBtn')?.addEventListener('click', slSendThreadMessage);
-    slEl('slIncidentBtn')?.addEventListener('click', slOpenIncident);
-    slEl('slIncidentCancel')?.addEventListener('click', slCloseIncident);
-    slEl('slIncidentForm')?.addEventListener('submit', slSubmitIncident);
+    // The incident form wires itself — it owns a dozen controls of its own.
+    if (typeof slSetupIncident === 'function') slSetupIncident();
+    if (typeof slSetupSchedule === 'function') slSetupSchedule();
+    if (typeof mcSetupMissing === 'function') mcSetupMissing();
     slEl('slInjuryBtn')?.addEventListener('click', slOpenInjury);
     slEl('slInjuryCancel')?.addEventListener('click', slCloseInjury);
     slEl('slInjuryForm')?.addEventListener('submit', slSubmitInjury);

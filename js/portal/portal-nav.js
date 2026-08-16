@@ -15,12 +15,18 @@
 // nothing yet asks for. When push deep links land (README: "Push → deep link"),
 // this is the function they call.
 
+// ⚠️ Documents replaced Billing here rather than becoming a sixth tab. The
+// handoff's five are Today · Scheduler · Messages · Documents · Account, and
+// Billing was a placeholder card reading "online billing is coming" — a live
+// tab spent on a promise. Six tabs at 390px gives each one 78px, which is under
+// the 44pt target once the label wraps. The billing promise moved into
+// Documents, which is where the handoff puts tax statements anyway.
 const PT_TABS = [
-    { key: 'today',    icon: '🏠', label: 'Today' },
-    { key: 'schedule', icon: '🗓', label: 'Schedule' },
-    { key: 'billing',  icon: '💳', label: 'Billing' },
-    { key: 'messages', icon: '💬', label: 'Messages' },
-    { key: 'account',  icon: '👤', label: 'Account' },
+    { key: 'today',     icon: '🏠', label: 'Today' },
+    { key: 'schedule',  icon: '🗓', label: 'Schedule' },
+    { key: 'messages',  icon: '💬', label: 'Messages' },
+    { key: 'documents', icon: '📄', label: 'Documents' },
+    { key: 'account',   icon: '👤', label: 'Account' },
 ];
 
 let ptRoute   = 'today';
@@ -74,6 +80,7 @@ function ptGoTab(key) {
         if (key === 'messages' && typeof pmLoad === 'function') pmLoad();
         if (key === 'account'  && typeof paLoad === 'function') paLoad();
         if (key === 'schedule' && typeof psLoad === 'function') psLoad();
+        if (key === 'documents' && typeof pdLoad === 'function') pdLoad();
     }
 }
 

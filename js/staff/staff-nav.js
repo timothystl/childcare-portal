@@ -71,6 +71,10 @@ function slGoTab(key) {
     // message list it is cheap — one round trip for the whole building.
     if (key === 'count' && typeof slOpenHeadcountTab === 'function') slOpenHeadcountTab();
 
+    // Same reasoning, weaker case: a swap somebody accepted while this tab sat
+    // in the background is exactly what the teacher opened it to find out.
+    if (key === 'schedule' && typeof slLoadSchedule === 'function') slLoadSchedule();
+
     if (!slOpened[key]) {
         slOpened[key] = true;
         // Same rule as the parent app: opening the tab is what reads the

@@ -94,6 +94,17 @@ const ENTRIES = [
         },
     },
     {
+        // The signed incident report. Standalone page: it is opened in a new
+        // tab from both the admin drawer and the parent's Documents tab, and it
+        // must not depend on either app's state — everything it draws comes
+        // from incident_print_record().
+        outfile: 'dist/incident-print.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/incident-print.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         outfile: 'dist/waitlist-status.min.js',
         stdin: {
             contents: fs.readFileSync(path.join(ROOT, 'js/waitlist-status.js'), 'utf8'),
@@ -114,9 +125,16 @@ const ENTRIES = [
             contents: [
                 'js/staff/staff-nav.js',
         'js/staff/staff-log.js',
+                // After staff-log: reads slStaffId/slPin/slOpenChild/slChildren
+                // and the toast helper from it.
+                'js/staff/staff-incident.js',
+                'js/staff/staff-schedule.js',
                 // Last: the head count reads slStaffId/slPin/slRoomId and the
                 // toast helper from staff-log, and staff-nav calls into it.
                 'js/staff/staff-headcount.js',
+                // Last: reads hcRoomLabel/hcSplit from the head count, and
+                // slToast/slStaffId from staff-log.
+                'js/staff/staff-missing.js',
             ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
         },
@@ -135,6 +153,9 @@ const ENTRIES = [
         'js/portal/portal-schedule.js',
         'js/portal/portal-today.js',
                 'js/portal/portal-messages.js',
+                // After portal-today: reads ptChildren for the child's name on
+                // an incident row and for singular/plural wording.
+                'js/portal/portal-documents.js',
                 'js/portal/portal-auth.js',
             ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
@@ -159,6 +180,8 @@ const ENTRIES = [
                 'js/admin/admin-staffing.js',
                 'js/admin/admin-settings.js',
                 'js/admin/admin-waitlist.js',
+                'js/admin/admin-attendance.js',
+                'js/admin/admin-announcements.js',
                 'js/admin/admin-incidents.js',
                 'js/admin/admin-safety.js',
                 'js/admin/admin-threads.js',
@@ -270,6 +293,17 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/waitlist-status.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'incident-print.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/incident-print\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/incident-print.min.js"></script>`,
         ],
     },
     {
