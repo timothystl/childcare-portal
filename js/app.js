@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetchClosures(),
         fetchSetting('registration_fee'),
         fetchSetting('new_family_fee'),
-        fetchSetting('staff_directory'),
+        fetchPublicStaffDirectory(),
     ]);
     if (rateRes.status     === 'rejected') console.error('loadRateSettings failed:', rateRes.reason);
     if (capRes.status      === 'rejected') console.error('loadCapacitySettings failed:', capRes.reason);
@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (closuresRes.status === 'rejected') console.error('fetchClosures failed:', closuresRes.reason);
     if (regFeeRes.status   === 'rejected') console.error('fetchSetting(registration_fee) failed:', regFeeRes.reason);
     if (newFamilyFeeRes.status === 'rejected') console.error('fetchSetting(new_family_fee) failed:', newFamilyFeeRes.reason);
-    if (staffRes.status    === 'rejected') console.error('fetchSetting(staff_directory) failed:', staffRes.reason);
+    if (staffRes.status    === 'rejected') console.error('fetchPublicStaffDirectory failed:', staffRes.reason);
 
     renderPublicRoomCards();
     renderFeeNotes(
