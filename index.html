@@ -287,6 +287,11 @@
     .contact-card-icon { font-size: 36px; margin-bottom: 12px; line-height: 1; }
     .contact-card-label { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
     .contact-card-value { font-size: 15px; font-weight: 700; color: var(--navy); line-height: 1.5; display: block; }
+    /* The map is lazy-loaded, so the frame has to hold its own height from the
+       start — otherwise the footer jumps up the page until the tiles arrive. */
+    .map-embed { margin-top: 28px; border-radius: var(--radius-lg); overflow: hidden; border: 1.5px solid var(--border); box-shadow: var(--shadow-card); line-height: 0; }
+    .map-embed iframe { display: block; width: 100%; height: 380px; border: 0; }
+    .map-note { margin-top: 14px; text-align: center; font-size: 14px; color: var(--text-muted); line-height: 1.7; }
 
     /* STAFF */
     .staff-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 20px; margin-top: 48px; }
@@ -780,6 +785,26 @@
       <a href="tel:+13147830523" class="contact-card"><div class="contact-card-icon">📞</div><div class="contact-card-label">Phone</div><div class="contact-card-value">314-783-0523</div></a>
       <a href="https://maps.google.com/?q=6704+Fyler+Ave+St+Louis+MO+63139" target="_blank" rel="noopener" class="contact-card"><div class="contact-card-icon">📍</div><div class="contact-card-label">Address</div><div class="contact-card-value">6704 Fyler Ave<br>St. Louis, MO 63139</div></a>
     </div>
+
+    <!-- loading="lazy" matters here: the Maps embed pulls roughly half a
+         megabyte of third-party script and tiles, and this sits at the bottom
+         of a long page. Lazy means visitors who never scroll this far never pay
+         for it, which keeps it off the Core Web Vitals that Google does score.
+         The embed itself is not a ranking signal — it is here for the parent
+         deciding whether we are a reasonable drive from home. -->
+    <div class="map-embed">
+      <iframe
+        src="https://maps.google.com/maps?q=6704+Fyler+Ave+St+Louis+MO+63139&amp;output=embed"
+        title="Map showing Timothy Lutheran Mother's Day Out at 6704 Fyler Ave, St. Louis, MO 63139"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        allowfullscreen></iframe>
+    </div>
+    <p class="map-note">
+      We're at the corner of Fyler &amp; Ivanhoe in <strong>Lindenwood Park</strong>, an easy drive from
+      Clifton Heights, Ellendale, Franz Park, Dogtown, The Hill, St. Louis Hills, and Southampton.
+      <br><a href="https://maps.google.com/?q=6704+Fyler+Ave+St+Louis+MO+63139" target="_blank" rel="noopener">Get driving directions →</a>
+    </p>
   </div>
 </section>
 
@@ -789,7 +814,7 @@
   <div class="footer-inner">
     <div class="footer-brand">
       <img src="/images/logo/myMDO_primary_logo_dark.png" alt="Timothy Lutheran Mother's Day Out" width="550" height="175" loading="lazy" style="width:auto;height:60px;">
-      <p>Mother's Day Out at Timothy Lutheran Church provides faith-based childcare for families in Lindenwood Park and the surrounding St. Louis area.</p>
+      <p>Mother's Day Out at Timothy Lutheran Church provides faith-based childcare for infants through preschoolers in Lindenwood Park, South City St. Louis — serving families across 63139, 63109, and 63110.</p>
     </div>
     <div class="footer-col">
       <h4>Program</h4>

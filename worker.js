@@ -623,6 +623,13 @@ export default {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com; " +
       "img-src 'self' data:; " +
+      // frame-src for the Google Maps embed on the home page contact section.
+      // There is no frame-src default: without this it falls back to
+      // `default-src 'self'` and the map renders as an empty box with only a
+      // console error to say why — the same silent-failure shape as R25 above.
+      // Both hosts are needed: the /maps?output=embed URL is served by
+      // maps.google.com and redirects to www.google.com/maps/embed.
+      "frame-src https://maps.google.com https://www.google.com; " +
       "font-src 'self' data: https://fonts.gstatic.com"
     );
     // Cache-Control (R9). Previously every asset was `no-store`, so each page
