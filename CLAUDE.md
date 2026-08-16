@@ -1047,6 +1047,39 @@ Google indexes — fix it in Settings → Rates, not in code.
 
 ---
 
+## ⚠️ Two staff lists, and the public one filters itself (2026-08-16)
+
+**`staff` (the roster) and `settings.staff_directory` (the public "Our Staff"
+cards) are separate and nothing linked them.** Marking an assistant director
+inactive in Staff → Staff Roster left her on the home page indefinitely, with
+nobody told. Found in production.
+
+`public_staff_directory_rpc.sql`, **applied and verified 2026-08-16.**
+`js/app.js` now calls `fetchPublicStaffDirectory()` → the
+`public_staff_directory()` SECURITY DEFINER RPC, which does the join and returns
+only what should be shown.
+
+- ⚠️ **The browser cannot do this filtering.** The anon policy on `staff` is
+  `USING (active = true)`, so anon sees *only* active staff and cannot tell
+  "left the center" from "never in the roster". Widening that policy would
+  publish a list of former employees — worse than the bug. **Do not replace the
+  RPC call with `fetchSetting('staff_directory')`.**
+- **The rule fails open:** shown if the roster does not know the person (a
+  directory-only entry) **or** any matching roster row is active; hidden only
+  when the roster knows them and no match is active. An unmatched entry is never
+  hidden by accident.
+- Names match loosely in one direction: the directory holds first names
+  (`Mary Ellen`), the roster holds full names (`Mary Ellen Scheetz`), so a
+  directory name matches a roster name it is a whole-word prefix of. Two staff
+  sharing a first name is safe — the card shows while *either* is active.
+- ⚠️ **`admin-settings.js` still reads the raw setting on purpose.** The editor
+  must see every entry including hidden ones; loading the filtered list there
+  would silently delete them on the next save.
+- Verified as `anon` in a rolled-back transaction: with the inactive employee
+  re-inserted, the RPC returns 6 entries and does not leak her name.
+
+---
+
 ## ⚠️ The `.insert().select()` trap — audited 2026-08-13
 
 **This took parent registration down for ~6 hours on 2026-08-12.** Worth reading
