@@ -2352,6 +2352,19 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     border-bottom: 1px solid var(--warm-gray);
 }
 .staff-dir-row:hover { background: var(--cream); }
+/* This person is in the directory but not on the public site, because their
+   Staff Roster row is inactive (see staff_directory_hidden_names()). Marked
+   rather than hidden — the row stays editable so a mistaken deactivation is
+   still findable here. */
+.staff-dir-row.is-off-site { box-shadow: inset 3px 0 0 var(--sun); }
+.staff-dir-row.is-off-site .staff-dir-photo { opacity: .55; }
+.tag.off-site {
+    background: var(--sun-pale);
+    color: var(--amber-dark);
+    border: 1px solid var(--sun-lt);
+    white-space: nowrap;
+    align-self: center;
+}
 .staff-dir-photo {
     position: relative;
     width: 64px;
