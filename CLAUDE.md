@@ -1013,6 +1013,18 @@ the edge, for `/` and `/index.html` only.
     made only in `worker.js` will silently do nothing. Keep both in sync.
   - Keep `run_worker_first` narrow. `true` would route every image, font and
     `dist/` bundle through the Worker for no benefit.
+- ⚠️ **Diagnose with the `x-ssr-rooms` response header on `/`,** which every exit
+  path stamps. **Absent** = the Worker never ran (routing). A **number** = cards
+  rendered. `nokey` / `fetchfail` / `http4xx` / `badjson` / `nodata` / `error` =
+  it ran and gave up there. Routing and data failures look identical in the HTML
+  — both just leave an empty grid — and telling them apart by guesswork cost
+  several deploy cycles before this header existed.
+- The settings fetch prefers the `SUPABASE_ANON_KEY` binding but falls back to
+  `PUBLIC_ANON_KEY` in `worker.js`. **The binding was in fact absent on the
+  Worker**, which is why the first two attempts rendered nothing. That key is
+  published in `index.html` already and every table it reaches is behind RLS, so
+  the fallback is safe. ⚠️ The **service role** key is not in source and never
+  may be.
 - **The client still re-renders over it.** That is deliberate, not waste: the
   server copy is what a crawler indexes, the client pass keeps a long-open tab
   honest if a rate changes mid-session.
