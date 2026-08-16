@@ -139,8 +139,178 @@ async function verifyFamilyToken(token, secret, expectedFamilyId) {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// SERVER-SIDE ROOM CARDS (home page "Classrooms & Rates")
+// ════════════════════════════════════════════════════════════════════════════
+// #roomInfoGrid shipped as an empty <div> that js/app.js filled from Supabase
+// after load. Google does execute JavaScript, but on a deferred second pass it
+// is not obliged to complete — so the ages, rates, capacities and ratios, which
+// are exactly what a parent searches for, were the least reliably indexed
+// content on the page. This renders them into the HTML before it leaves the
+// edge; the client still re-renders afterward.
+//
+// It reads the LIVE settings rather than baking a snapshot at build time,
+// because the two genuinely disagree: as of writing, the defaults below say the
+// Goose Room is 30–36 months and the Owl Room is 36+, while the saved settings
+// say 36–60 and 24–36. A build-time snapshot would have published the wrong
+// ages and capacities to Google with no way to notice.
+//
+// ⚠️ ROOM_CAPACITY_NOUNS / getSortedRooms / buildPublicRoomCardsHtml / ROOMS
+// below are byte-identical copies of js/supabase.js and js/app.js. A cross-file
+// drift guard in js/tests/business-logic.test.js fails CI if they diverge —
+// which is what makes the duplication safe. Edit both sides, or neither.
+
+const ROOM_CAPACITY_NOUNS = { bear: 'infants', bee: 'toddlers' };
+
+const _ESC_HTML_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function escHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => _ESC_HTML_MAP[c]);
+}
+
+function getSortedRooms(rooms = ROOMS) {
+    return rooms
+        .map((room, i) => ({ room, i }))
+        .sort((a, b) => {
+            const aMin = a.room.ageMinMonths;
+            const bMin = b.room.ageMinMonths;
+            if (aMin == null && bMin == null) return a.i - b.i;
+            if (aMin == null) return 1;
+            if (bMin == null) return -1;
+            if (aMin !== bMin) return aMin - bMin;
+            return a.i - b.i;
+        })
+        .map(({ room }) => room);
+}
+
+function buildPublicRoomCardsHtml(rooms) {
+    return rooms.map(room => {
+        const spaceIdx = room.label.indexOf(' ');
+        const emoji    = spaceIdx === -1 ? room.label : room.label.slice(0, spaceIdx);
+        const name     = spaceIdx === -1 ? room.label : room.label.slice(spaceIdx + 1);
+        const noun     = ROOM_CAPACITY_NOUNS[room.id] || 'children';
+        const halfDayRow = (room.fullDayOnly || room.halfDayRate == null)
+            ? `<div class="room-rate-row room-rate-note">Full Day Only</div>`
+            : `<div class="room-rate-row"><span>Half Day</span><strong>$${room.halfDayRate}</strong></div>`;
+        return `<div class="room-card"><div class="room-header"><span class="room-emoji">${escHtml(emoji)}</span><div class="room-name">${escHtml(name)}</div><div class="room-ages">${escHtml(room.ages || '')}</div></div><div class="room-body"><div class="room-rate-row"><span>Full Day</span><strong>$${room.fullDayRate}</strong></div>${halfDayRow}<div class="room-capacity">Max ${room.capacity ?? '—'} ${noun} · 1:${room.staffRatio ?? '—'} ratio</div></div></div>`;
+    }).join('');
+}
+
+// settings.value is a TEXT column even when it holds JSON, so a row can arrive
+// as a JSON string or as an already-parsed object depending on the key. This is
+// the T3 trap; do not assume a parsed object.
+function ssrParseSetting(raw) {
+  if (raw == null) return null;
+  if (typeof raw !== 'string') return raw;
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+
+// Fetched once every 5 minutes per edge location rather than on every page view.
+// Returns null on any failure, and every caller treats null as "serve the page
+// exactly as it is today" — a Supabase outage must not take the marketing page
+// down for a nice-to-have.
+async function ssrFetchSettings(env, ctx) {
+  const cacheKey = new Request('https://ssr.internal/room-settings-v1');
+  const cache    = caches.default;
+
+  const hit = await cache.match(cacheKey);
+  if (hit) { try { return await hit.json(); } catch { /* fall through and refetch */ } }
+
+  if (!env.SUPABASE_ANON_KEY) return null;
+  const keys = 'room_rates,room_capacity,staff_ratios,registration_fee,new_family_fee';
+  let res;
+  try {
+    res = await Promise.race([
+      fetch(`${SUPABASE_URL}/rest/v1/settings?key=in.(${keys})&select=key,value`, {
+        headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${env.SUPABASE_ANON_KEY}` },
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('ssr settings timeout')), 2000)),
+    ]);
+  } catch { return null; }
+  if (!res || !res.ok) return null;
+
+  const body = await res.text();
+  ctx?.waitUntil?.(cache.put(cacheKey, new Response(body, {
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=300' },
+  })));
+  try { return JSON.parse(body); } catch { return null; }
+}
+
+// Mirrors loadRateSettings/loadCapacitySettings/loadRatioSettings in
+// js/supabase.js: start from the defaults, overlay whatever admin has saved.
+async function ssrRoomState(env, ctx) {
+  const rows = await ssrFetchSettings(env, ctx);
+  if (!Array.isArray(rows)) return null;
+
+  const byKey = {};
+  for (const row of rows) byKey[row.key] = ssrParseSetting(row.value);
+
+  const rooms = ROOMS.map(r => ({ ...r }));
+  const rates = byKey.room_rates, caps = byKey.room_capacity, ratios = byKey.staff_ratios;
+
+  for (const room of rooms) {
+    const r = rates && typeof rates === 'object' ? rates[room.id] : null;
+    if (r) {
+      if (r.fullDayRate  != null) room.fullDayRate  = r.fullDayRate;
+      if (r.halfDayRate  != null) room.halfDayRate  = r.halfDayRate;
+      if ('ageMinMonths' in r)    room.ageMinMonths = r.ageMinMonths;
+      if ('ageMaxMonths' in r)    room.ageMaxMonths = r.ageMaxMonths;
+      if (r.ages         != null) room.ages         = r.ages;
+    }
+    if (caps   && caps[room.id]   != null) room.capacity   = caps[room.id];
+    if (ratios && ratios[room.id] != null) room.staffRatio = ratios[room.id];
+  }
+
+  const num = v => (typeof v === 'number' ? v : Number(v));
+  return {
+    rooms,
+    regFee:       num(byKey.registration_fee),
+    newFamilyFee: num(byKey.new_family_fee),
+    summerRate:   rooms.find(r => r.id === 'summer')?.fullDayRate ?? null,
+  };
+}
+
+// Mirrors renderFeeNotes() in js/app.js. Kept as prose rather than a guarded
+// copy because that function writes to two elements via the DOM; the sentence
+// it produces is what is reproduced here.
+function ssrFeeNote(regFee, newFamilyFee) {
+  const parts = [];
+  if (Number.isFinite(newFamilyFee) && newFamilyFee > 0) parts.push(`a one-time new family fee of $${newFamilyFee.toFixed(2)}`);
+  if (Number.isFinite(regFee)       && regFee       > 0) parts.push(`an annual supply fee of $${regFee.toFixed(2)} per child`);
+  return parts.length ? `Registration includes ${parts.join(' and ')}.` : '';
+}
+
+async function ssrRenderHomePage(response, env, ctx) {
+  let state = null;
+  try { state = await ssrRoomState(env, ctx); } catch { state = null; }
+  if (!state) return response;   // fail open — serve the page untouched
+
+  const cardsHtml = buildPublicRoomCardsHtml(
+    getSortedRooms(state.rooms).filter(r => r.id !== 'summer' && !r.hidden)
+  );
+  const feeNote = ssrFeeNote(state.regFee, state.newFamilyFee);
+
+  return new HTMLRewriter()
+    .on('#roomInfoGrid', { element(el) { el.setInnerContent(cardsHtml, { html: true }); } })
+    .on('#regFeeNote',   { element(el) { el.setInnerContent(feeNote); } })
+    .on('#summerDailyFeeNote', {
+      element(el) {
+        if (state.summerRate != null) el.setInnerContent(` (<strong>$${state.summerRate}/day</strong>)`, { html: true });
+      },
+    })
+    .transform(response);
+}
+
+const ROOMS = [
+    { id: 'bear',   label: '🐻 Bear Room',   ages: 'Birth – 12 months', ageMinMonths: 0,    capacity: 8,  status: 'active',   fullDayOnly: true,  fullDayRate: 80, halfDayRate: null, staffRatio: 4 },
+    { id: 'bee',    label: '🐝 Bee Room',    ages: '12 – 24 months',    ageMinMonths: 12,   capacity: 16, status: 'active',   fullDayOnly: false, fullDayRate: 75, halfDayRate: 55,   staffRatio: 4 },
+    { id: 'turtle', label: '🐢 Turtle Room', ages: '24 – 30 months',    ageMinMonths: 24,   capacity: 11, status: 'active',   fullDayOnly: false, fullDayRate: 75, halfDayRate: 45,   staffRatio: 8 },
+    { id: 'goose',  label: '🪿 Goose Room',  ages: '30 – 36 months',    ageMinMonths: 30,   capacity: 12, status: 'active',   fullDayOnly: false, fullDayRate: 75, halfDayRate: 45,   staffRatio: 8 },
+    { id: 'owl',    label: '🦉 Owl Room',    ages: '36+ months',        ageMinMonths: 36,   capacity: 11, status: 'active',   fullDayOnly: false, fullDayRate: 75, halfDayRate: 45,   staffRatio: 8 },
+    { id: 'summer', label: '☀️ Summer Camp', ages: '4–9 years',         ageMinMonths: null, capacity: 25, status: 'seasonal', fullDayOnly: true,  fullDayRate: 75, halfDayRate: null, staffRatio: 11, hidden: false },
+];
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     const allowedOrigin = ALLOWED_ORIGINS.has(url.origin) ? url.origin : null;
@@ -658,10 +828,20 @@ export default {
       newHeaders.set('Service-Worker-Allowed', '/');
     }
 
-    return new Response(response.body, {
+    const out = new Response(response.body, {
       status:     response.status,
       statusText: response.statusText,
       headers:    newHeaders,
     });
+
+    // Server-render the classroom cards into the home page — see SERVER-SIDE
+    // ROOM CARDS at the top of this file. Home page only, 200 only: an error
+    // page has no #roomInfoGrid to fill and would just pay for a settings
+    // fetch. ssrRenderHomePage fails open, returning `out` untouched.
+    if ((p === '/' || p === '/index.html') && out.status === 200) {
+      return ssrRenderHomePage(out, env, ctx);
+    }
+
+    return out;
   },
 };
