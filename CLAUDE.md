@@ -1075,6 +1075,19 @@ only what should be shown.
 - ⚠️ **`admin-settings.js` still reads the raw setting on purpose.** The editor
   must see every entry including hidden ones; loading the filtered list there
   would silently delete them on the next save.
+- **The editor badges hidden rows** ("Not on website", gold rail, dimmed photo)
+  so a hidden person is not indistinguishable from a shown one.
+  `staff_directory_hidden_names.sql` (**applied 2026-08-16**) moved the rule into
+  `_staff_directory_annotated()` and both callers now read it:
+  `public_staff_directory()` filters on it, `staff_directory_hidden_names()`
+  reports it. ⚠️ **Never re-derive "is this entry hidden" in JS** — two copies of
+  the rule that drift would label the wrong people as off-site, which is worse
+  than no badge. The badge is keyed on name, so the save handler re-fetches:
+  renaming a row can change whether it matches the roster.
+  - `_staff_directory_annotated()` has **no EXECUTE for anon or authenticated**;
+    the two definer wrappers call it as owner. `staff_directory_hidden_names()`
+    is `authenticated` only *and* self-gates on `is_admin()`, because R20 means
+    the browser's role check cannot be trusted.
 - Verified as `anon` in a rolled-back transaction: with the inactive employee
   re-inserted, the RPC returns 6 entries and does not leak her name.
 

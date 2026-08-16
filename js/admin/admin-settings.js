@@ -719,8 +719,36 @@ async function onSaveCapacity() {
 // ============================================================
 let _staffDirectory = null; // loaded once, edited in the DOM, synced back before save
 
+// Lowercased names the public site is currently NOT showing, because the
+// person's staff-roster row is inactive. Kept in a SEPARATE structure from
+// _staffDirectory on purpose: that array is written straight back to the
+// settings row on save, so anything stashed on its entries would be persisted.
+let _staffDirectoryHidden = new Set();
+
+// The list comes from staff_directory_hidden_names(), which shares its rule with
+// the public_staff_directory() RPC that actually hides them. Do NOT re-derive
+// "is this entry hidden" here — a second copy of the rule that drifts would
+// label the wrong people as off-site, which is worse than no badge at all.
+async function loadStaffDirectoryHidden() {
+    _staffDirectoryHidden = new Set();
+    try {
+        const { data, error } = await sbClient.rpc('staff_directory_hidden_names');
+        if (error) { console.error('staff_directory_hidden_names:', error); return; }
+        const names = typeof data === 'string' ? parseJsonOr(data, null) : data;
+        if (Array.isArray(names)) {
+            names.forEach(n => _staffDirectoryHidden.add(String(n || '').trim().toLowerCase()));
+        }
+    } catch (err) {
+        // No badge is a fine degradation; a broken Staff Directory screen is not.
+        console.error('loadStaffDirectoryHidden:', err);
+    }
+}
+
 async function setupStaffDirectory() {
-    const raw = await fetchSetting('staff_directory');
+    const [raw] = await Promise.all([
+        fetchSetting('staff_directory'),
+        loadStaffDirectoryHidden(),
+    ]);
     _staffDirectory = Array.isArray(raw) ? raw : [];
     renderStaffDirectory();
     document.getElementById('addStaffDirectoryBtn')?.addEventListener('click', () => {
@@ -750,14 +778,20 @@ function renderStaffDirectory() {
     const roomOptions = getSortedRooms().filter(r => r.id !== 'summer')
         .map(r => `<option value="${r.id}">${escHtml(r.label)}</option>`).join('');
 
-    wrap.innerHTML = _staffDirectory.length ? _staffDirectory.map(s => `
-        <div class="staff-dir-row">
+    wrap.innerHTML = _staffDirectory.length ? _staffDirectory.map(s => {
+        // Badge, not a filter: the row stays fully editable. Someone marked
+        // inactive by mistake needs to be findable here, and the fix is in the
+        // Staff Roster, so the tag says where to go rather than just "hidden".
+        const offSite = _staffDirectoryHidden.has(String(s.name || '').trim().toLowerCase());
+        return `
+        <div class="staff-dir-row${offSite ? ' is-off-site' : ''}">
             <div class="staff-dir-photo">
                 ${s.photoUrl ? `<img src="${escHtml(s.photoUrl)}" alt="">` : '<span class="staff-dir-photo-empty">No photo</span>'}
                 <input type="file" accept="image/jpeg,image/png,image/webp" class="staff-dir-file-input" title="Click to upload a photo">
             </div>
             <div class="staff-dir-fields">
                 <input type="text" class="staff-dir-name" placeholder="Name" value="${escHtml(s.name || '')}">
+                ${offSite ? '<span class="tag off-site" title="Inactive in Staff Roster, so the public site does not show this card. Reactivate them in Staff → Staff Roster to put it back.">Not on website</span>' : ''}
                 <select class="staff-dir-role">
                     <option value="Director" ${s.role === 'Director' ? 'selected' : ''}>Director</option>
                     <option value="Assistant Director" ${s.role === 'Assistant Director' ? 'selected' : ''}>Assistant Director</option>
@@ -769,7 +803,8 @@ function renderStaffDirectory() {
                 </select>
             </div>
             <button type="button" class="staff-dir-remove" title="Remove">✕</button>
-        </div>`).join('') : '<p class="empty-hint">No staff added yet — click "Add Staff Member" below.</p>';
+        </div>`;
+    }).join('') : '<p class="empty-hint">No staff added yet — click "Add Staff Member" below.</p>';
 
     wrap.querySelectorAll('.staff-dir-row').forEach((row, i) => {
         const roomSel = row.querySelector('.staff-dir-room');
@@ -816,6 +851,12 @@ async function onSaveStaffDirectory() {
         syncStaffDirectoryFromDom();
         await upsertSetting('staff_directory', _staffDirectory);
         await logAdminAction('update', 'staff_directory', null, { count: _staffDirectory.length });
+
+        // Re-check after saving: the badge is keyed on the name, so correcting a
+        // typo ("Amy" -> "Aimee") can change whether a row matches the roster.
+        // Without this the tag would keep describing the pre-save names.
+        await loadStaffDirectoryHidden();
+        renderStaffDirectory();
 
         if (statusEl) {
             statusEl.textContent = '✓ Saved!';
