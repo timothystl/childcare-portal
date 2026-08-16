@@ -983,6 +983,45 @@ Set as Cloudflare Pages environment variables and Supabase Edge Function secrets
 
 ---
 
+## Home page classroom cards are server-rendered in `worker.js` (2026-08-16)
+
+`#roomInfoGrid` used to ship as an empty `<div>` that `js/app.js` filled from
+Supabase after load. Google does run JavaScript, but on a deferred second pass it
+is not obliged to finish — so the ages, rates, capacities and ratios, which are
+exactly what a parent searches for, were the *least* reliably indexed content on
+the page. `worker.js` now fills them with `HTMLRewriter` before the HTML leaves
+the edge, for `/` and `/index.html` only.
+
+- **It reads live settings, not a build-time snapshot, because the two disagree.**
+  The `ROOMS` defaults in `js/supabase.js` say Goose is 30–36 months and Owl is
+  36+; the saved `room_rates` setting says 36–60 and 24–36. Baking the defaults
+  into the HTML would have published wrong ages and capacities to Google with
+  nothing to notice it. Settings are fetched with the anon key and cached in
+  `caches.default` for 5 minutes per edge location.
+- **It fails open.** Any error, timeout (2s) or missing key returns the page
+  untouched — a Supabase outage must not take the marketing page down.
+- **The client still re-renders over it.** That is deliberate, not waste: the
+  server copy is what a crawler indexes, the client pass keeps a long-open tab
+  honest if a rate changes mid-session.
+- ⚠️ **`worker.js` holds byte-identical copies of `escHtml`, `getSortedRooms`,
+  `buildPublicRoomCardsHtml`, `ROOM_CAPACITY_NOUNS` and `ROOMS`.** It cannot
+  import from `js/` — those are classic browser scripts with top-level side
+  effects, and the pages load them unbundled in local dev. A **cross-file drift
+  guard** in `js/tests/business-logic.test.js` fails CI if any copy diverges. It
+  already earned its keep: it caught Summer Camp's rate and ratio being copied
+  from the live settings instead of the source defaults. **Add a room, rename a
+  room, or change the card markup → update both sides.**
+- `renderPublicRoomCards()` in `js/app.js` was split so the string builder
+  (`buildPublicRoomCardsHtml`) is pure and the DOM write is separate. Keep it
+  that way — the guard compares that function.
+
+⚠️ **The Owl and Turtle rooms both read "24 – 36 months" in the live
+`room_rates` setting**, and Goose reads 36–60. That contradicts the Rooms table
+below. Since these are now server-rendered, whatever is in Settings is what
+Google indexes — fix it in Settings → Rates, not in code.
+
+---
+
 ## ⚠️ The `.insert().select()` trap — audited 2026-08-13
 
 **This took parent registration down for ~6 hours on 2026-08-12.** Worth reading
