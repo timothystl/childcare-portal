@@ -77,6 +77,11 @@ const AP_TABS = {
 // to un-hide the pane before it can show the section).
 const AP_TOOLS = [
     // ── Classrooms · Today ──
+    // First in the group on purpose: it is the office mirror of the teachers'
+    // head count, and it is where a missing-child alert lights up for the
+    // director at the same instant it hits every staff phone.
+    { key: 'attBoard',    pane: 'daily',         section: 'attendanceBoardSection',  tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '🚸', name: 'Attendance Board',
+      blurb: 'Live — every room, who is in, who is expected, staff present, ratio.' },
     { key: 'roster',      pane: 'daily',         section: 'dailyRosterSection',      tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📋', name: 'Classroom Roster',
       blurb: 'Who is in each room today, this week, or this month.' },
     { key: 'capOverview', pane: 'daily',         section: 'capacityOverviewSection', tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📆', name: 'Capacity Overview',
@@ -622,6 +627,7 @@ function apOnToolOpened(tool) {
             window._apArInit = true; setupBillingDashYear();
         }
         if (tool.key === 'invoices' && typeof renderInvoicesTool === 'function') renderInvoicesTool();
+        if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
         if (tool.key === 'staffInjury' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();

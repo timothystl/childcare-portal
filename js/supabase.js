@@ -2574,6 +2574,18 @@ async function centerHeadcount(staffId, pin, careDate = null) {
     return data ?? null;
 }
 
+/**
+ * The same head count the teachers see, for the office. Admin session instead
+ * of a PIN; identical body underneath (center_headcount_rows), so the board and
+ * the lawn cannot disagree about who is in the building.
+ */
+async function centerHeadcountAdmin(careDate = null) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('center_headcount_admin', { p_care_date: careDate });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
 // ── Missing child ───────────────────────────────────────────
 // ⚠️ Raising one is a broadcast, not a message. There is no recipient argument
 // on any of these by design: the alert goes to every signed-in staff phone and

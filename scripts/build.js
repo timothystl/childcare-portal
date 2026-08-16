@@ -180,6 +180,7 @@ const ENTRIES = [
                 'js/admin/admin-staffing.js',
                 'js/admin/admin-settings.js',
                 'js/admin/admin-waitlist.js',
+                'js/admin/admin-attendance.js',
                 'js/admin/admin-incidents.js',
                 'js/admin/admin-safety.js',
                 'js/admin/admin-threads.js',

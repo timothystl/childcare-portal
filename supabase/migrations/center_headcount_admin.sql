@@ -1,0 +1,54 @@
+-- APPLIED AND VERIFIED IN PRODUCTION 2026-08-16.
+-- ============================================================
+-- THE ATTENDANCE BOARD READS THE HEAD COUNT'S QUERY, NOT ITS OWN
+-- ============================================================
+-- Handoff `1d`: "This is the office mirror of the teachers' head count."
+--
+-- ⚠️ ONE BODY, TWO WRAPPERS, AND IT MUST STAY THAT WAY.
+-- center_headcount_rows(date) holds the whole query and NO authorization.
+-- center_headcount(staff, pin, date) gates it on a PIN for the staff app;
+-- center_headcount_admin(date) gates it on is_admin() for the director's board.
+-- Writing a nicer admin-side query here was the obvious move and it is wrong:
+-- the office and the lawn disagreeing about who is in the building, during a
+-- fire drill, is the worst failure this data has. If the count needs to change,
+-- it changes once.
+--
+-- center_headcount_rows is REVOKED from anon AND authenticated. It is the
+-- shared body; reaching it directly would skip both gates.
+--
+-- ⚠️ attendance_records HAS NO student_id. It keys on child_name plus a
+-- registration_id. The first draft of this joined `ar.student_id = ev.student_id`
+-- and failed with 42703 — after the function had already been replaced, which
+-- briefly broke the live staff head count too. The join is on lower(child_name),
+-- the same name-matching this function already does for registrations, and
+-- DISTINCT ON ... ORDER BY recorded_at DESC takes the latest mark.
+--   The lesson is the smaller one: replacing a working function and verifying
+--   the grants is not verifying the function. Execute it.
+--
+-- New in the shared body, for the board's tiles:
+--   allergies  — from students, for the "Allergies present" tile and the ⚠️ on
+--                a child row.
+--   marked     — attendance_records.status, so "marked absent by the office" is
+--                a separate count from "not here yet". They are different facts
+--                and the board has a tile for each.
+-- Both are additive; the staff head count ignores them.
+
+-- Full body as applied: the original center_headcount query, verbatim, plus the
+-- `marked` CTE and the two new selected columns. See git history for the text.
+
+-- ============================================================
+-- VERIFIED AFTER APPLYING 2026-08-16
+-- ============================================================
+--   center_headcount_rows executes and returns
+--       {as_of, care_date, children, staff}                      ok
+--   center_headcount(bogus uuid, 9999, null)                     NULL, no error
+--   center_headcount_admin(null) as a real admin from
+--       settings.admin_roles                                     full payload
+--       (0 children / 0 staff — care_date 2026-08-15 is a Saturday
+--        and the center is closed at weekends)
+--
+--   anon          -> center_headcount_rows   EXECUTE  false
+--   authenticated -> center_headcount_rows   EXECUTE  false
+--   anon          -> center_headcount_admin  EXECUTE  false
+--   authenticated -> center_headcount_admin  EXECUTE  true
+--   anon          -> center_headcount        EXECUTE  true  (PIN-gated inside)
