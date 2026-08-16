@@ -14,12 +14,17 @@
 // hours. Everything else waits until 7am. Those are stated as behavior, so the
 // kind chip is a real branch and not a label.
 //
-// ⚠️ WHAT ACTUALLY SENDS TODAY: the row is written and published, and the
-// parent portal reads published announcements on its Today tab. The push
-// notification does NOT go out, for the same reason as the missing-child alert
-// — `/send-push` is called in three places in this codebase and no such edge
-// function exists. The composer says so on the send panel rather than implying
-// a phone will buzz. Do not remove that line until the function is deployed.
+// ⚠️ PUBLISHING PUSHES, BY REFERENCE. An earlier version of this file said push
+// did not exist here; it does — worker.js /send-push has been live and
+// admin-gated for months, with 62 family subscriptions on it. Posting an
+// announcement sends its **id** to the worker, which re-reads the row with the
+// service role and composes the notification itself. Never send the title and
+// body: what lands on a lock screen must be what is actually stored and
+// readable in the portal, and no wording should travel from a browser.
+//
+// A draft does not push. The worker refuses one, because a draft is not
+// readable in the portal — the notification would send a parent to a page that
+// shows them nothing.
 
 let _anList  = [];
 let _anDraft = null;
@@ -154,9 +159,9 @@ function _anRender() {
                 ${isClosure ? '<li class="is-alert">A closure ignores quiet hours. Everything else waits until 7am.</li>' : ''}
             </ul>
             <p class="an-fine">
-                ⚠️ It will <strong>not</strong> push to anyone's phone yet — the
-                push function this app calls has never been deployed. Parents see
-                it next time they open the portal.
+                Posting sends a notification to every family with alerts turned
+                on, and shows in the portal for everyone else. Saving a draft
+                sends nothing.
             </p>
             <button class="btn-primary an-send" id="anSend">Post it</button>
             <button class="btn-ghost an-draft" id="anSaveDraft">Save as a draft</button>
@@ -255,7 +260,7 @@ async function _anSave(publish) {
     const label = btn.textContent;
     btn.textContent = publish ? 'Posting…' : 'Saving…';
     try {
-        await saveAnnouncement({
+        const id = await saveAnnouncement({
             title:     d.title.trim(),
             body:      d.body.trim(),
             kind:      d.kind,
@@ -264,9 +269,21 @@ async function _anSave(publish) {
             expiresAt: d.expiresAt || null,
             publish,
         });
-        await logAdminAction(publish ? 'publish' : 'create', 'announcement', null,
+        await logAdminAction(publish ? 'publish' : 'create', 'announcement', id,
                              { kind: d.kind, audience: d.audience });
-        showToast(publish ? 'Posted.' : 'Saved as a draft.');
+
+        // The announcement is saved and readable either way. A failed push must
+        // not read as a failed post — that is how the same notice gets written
+        // twice.
+        let sent = 0;
+        if (publish && id) {
+            try { sent = await pushAnnouncement(id); }
+            catch (e) { console.warn('announcement push (non-fatal):', e); }
+        }
+        showToast(publish
+            ? (sent ? `Posted — ${sent} device${sent === 1 ? '' : 's'} notified.`
+                    : 'Posted. It is in the portal; no phones were reachable.')
+            : 'Saved as a draft.');
         _anDraft = _anFreshDraft();
         await renderAnnouncementsTool();
     } catch (e) {

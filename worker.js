@@ -305,6 +305,109 @@ export default {
       return new Response(null, { status: res.ok ? 201 : 500 });
     }
 
+    // ── POST /send-staff-broadcast — every staff phone at once ───────────────
+    // The missing-child alert. /send-staff-push next door sends to ONE staff_id
+    // and demands the service role key, so neither half of it fits: this has to
+    // reach everybody, and it is triggered from a teacher's phone, which holds
+    // the public anon key and a PIN and must never hold the service role key.
+    //
+    // ⚠️ THE CLIENT SENDS AN ALERT ID, NEVER A MESSAGE. No title, no body, no
+    // recipient — the worker reads the alert with the service role and composes
+    // the text itself. This is the send-invoice posture, and it is the whole
+    // reason T1/FS6/FS11 do not apply here: there is no field in this request
+    // that can aim a notification at anybody or put words in it.
+    //
+    // ⚠️ NOT ADMIN-GATED, DELIBERATELY. The person who discovers a child is
+    // missing is a teacher on the floor, not the director at a desk. Requiring
+    // an admin session would mean the alert waits for the office, which is
+    // exactly what the handoff says it must not do.
+    if (url.pathname === '/send-staff-broadcast' && request.method === 'POST') {
+      const reqOrigin = request.headers.get('Origin');
+      if (reqOrigin && !ALLOWED_ORIGINS.has(reqOrigin)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      const { staff_id: claimedStaffId, pin, kind, alert_id } = await request.json().catch(() => ({}));
+      if (!claimedStaffId || !pin || !alert_id) return new Response('Missing fields', { status: 400 });
+      if (!/^\d{4,8}$/.test(String(pin))) return new Response('Unauthorized', { status: 401 });
+      if (kind !== 'missing_child' && kind !== 'missing_child_cleared') {
+        return new Response('Unknown kind', { status: 400 });
+      }
+
+      // Same credential check as /staff-push-subscribe: named account plus PIN,
+      // resolved server-side. A PIN alone was dropped everywhere else in this
+      // app because it tested a guess against every staff hash.
+      const pinRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/staff_id_for_pin`, {
+        method: 'POST',
+        headers: {
+          'apikey':        env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({ p_staff_id: claimedStaffId, p_pin: parseInt(String(pin), 10) }),
+      });
+      if (!pinRes.ok) return new Response('Unauthorized', { status: 401 });
+      const callerStaffId = await pinRes.json().catch(() => null);
+      if (!callerStaffId) return new Response('Unauthorized', { status: 401 });
+
+      // Read the alert. Everything the notification says comes from this row.
+      const alertRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/missing_child_alerts?id=eq.${encodeURIComponent(alert_id)}&select=id,child_name,room_id,wearing,last_seen,status&limit=1`,
+        { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      );
+      if (!alertRes.ok) return new Response('Failed to read alert', { status: 500 });
+      const [alert] = await alertRes.json();
+      if (!alert) return new Response('No such alert', { status: 404 });
+
+      // The message. Deliberately NOT the no-detail wording used for incident
+      // notices: that one protects a child's privacy on a lock screen read in
+      // public, and this one is read by staff who need the description to
+      // search. Different audience, opposite requirement.
+      const cleared = kind === 'missing_child_cleared' || alert.status === 'found';
+      const payload = cleared
+        ? {
+            title: `✅ Found — ${alert.child_name}`,
+            body:  'All clear. Stop searching and go back to your room.',
+            tag:   `missing-${alert.id}`,
+          }
+        : {
+            title: `🚨 MISSING CHILD — ${alert.child_name}`,
+            body:  [
+              alert.room_id ? `Room: ${alert.room_id}` : '',
+              alert.wearing ? `Wearing ${alert.wearing}` : '',
+              alert.last_seen ? `Last seen ${alert.last_seen}` : '',
+              'Open the app and search.',
+            ].filter(Boolean).join(' · '),
+            tag:   `missing-${alert.id}`,
+          };
+
+      const subsRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/staff_push_subscriptions?select=*`,
+        { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      );
+      if (!subsRes.ok) return new Response('Failed to fetch subscriptions', { status: 500 });
+      const subs = await subsRes.json();
+      if (!subs.length) return new Response(JSON.stringify({ sent: 0 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+
+      const results = await Promise.allSettled(subs.map(sub => sendWebPush(sub, payload, env)));
+
+      const expired = subs
+        .filter((_, i) => results[i].status === 'fulfilled' && results[i].value.status === 410)
+        .map(s => s.id);
+      if (expired.length) {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/staff_push_subscriptions?id=in.(${expired.join(',')})`,
+          { method: 'DELETE', headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+        );
+      }
+
+      return new Response(JSON.stringify({ sent: subs.length - expired.length }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // ── POST /send-staff-push — send a notification to a staff member ────────
     if (url.pathname === '/send-staff-push' && request.method === 'POST') {
       // Require service role key or internal key to prevent abuse
@@ -386,7 +489,35 @@ export default {
       if (isAdmin !== true) return new Response('Forbidden', { status: 403 });
       }
 
-      const { family_id, parent_email, broadcast, title, body: msgBody } = await request.json().catch(() => ({}));
+      const reqJson = await request.json().catch(() => ({}));
+      let { family_id, parent_email, broadcast, title, body: msgBody } = reqJson;
+
+      // ── Reference mode ──────────────────────────────────────
+      // `{ announcement_id }` instead of `{ broadcast, title, body }`. The
+      // worker reads the row with the service role and composes the text, so
+      // what parents receive is what is actually stored and readable in the
+      // portal — the two cannot drift, and no wording travels from a browser.
+      // The older free-text shape still works for the call sites that predate
+      // this; new senders should reference a row.
+      if (reqJson.announcement_id) {
+        const annRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/announcements?id=eq.${encodeURIComponent(reqJson.announcement_id)}&select=id,title,body,kind,published_at&limit=1`,
+          { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+        );
+        if (!annRes.ok) return new Response('Failed to read announcement', { status: 500 });
+        const [ann] = await annRes.json();
+        if (!ann) return new Response('No such announcement', { status: 404 });
+        // A draft is not readable in the portal, so pushing one would send
+        // parents to a page that shows them nothing.
+        if (!ann.published_at) return new Response('Announcement is a draft', { status: 400 });
+
+        broadcast = true;
+        family_id = null; parent_email = null;
+        title   = ann.kind === 'closure' ? `🚨 ${ann.title}` : ann.title;
+        // Trimmed: a lock screen shows two lines, and the portal has the rest.
+        msgBody = String(ann.body || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+      }
+
       if (!title) return new Response('Missing title', { status: 400 });
 
       // Resolve family_id from parent_email if needed

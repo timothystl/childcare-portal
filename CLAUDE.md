@@ -211,10 +211,10 @@ duplicate. Safe to enforce retroactively because `incident_reports` was **empty*
 |---|---|---|
 | Staff **My schedule** | `js/staff/staff-schedule.js` | Two week strips, own shifts only. `staff_my_schedule()` resolves the caller from their own PIN — no parameter widens it to the roster. |
 | **Shift swaps** | `shift_swaps` | Accepting moves the `staff_schedules` row and stamps the swap in one transaction. An accepted swap is **never deleted** — the giver still sees it struck through, and that strikethrough is the record. |
-| **Missing child** | `js/staff/staff-missing.js` | A broadcast. **No recipient argument on any RPC, and there must never be one.** Banner on every tab with no dismiss control. |
+| **Missing child** | `js/staff/staff-missing.js` | A broadcast on two channels: in-app banner (poll) + push (`/send-staff-broadcast`). **No recipient argument on any RPC, and there must never be one.** Banner on every tab with no dismiss control. |
 | **Attendance board** | `js/admin/admin-attendance.js` | Office mirror of the head count. |
 | Parent **Documents** | `js/portal/portal-documents.js` | Replaced the Billing *placeholder* tab, restoring the handoff's five. |
-| **Announcements** | `js/admin/admin-announcements.js` | `kind` is a branch: a closure is the only kind that should ignore quiet hours. |
+| **Announcements** | `js/admin/admin-announcements.js` | `kind` is a branch: a closure is the only kind that should ignore quiet hours. Publishing pushes **by id**; a draft never pushes. |
 | **Needs you** queue | `apDashDirector` | Inline actions per row. Incident rows are filtered to `parentSigned` — she is signature 3, and a row she cannot clear teaches her to scroll past the queue. |
 
 ⚠️ **`center_headcount_rows(date)` is a shared body with NO authorization.**
@@ -228,18 +228,52 @@ building during a drill is the worst failure this data has.
 count here: the broken function replaced a working one, grants verified clean,
 and nobody executed it. **Verifying grants is not verifying a function.**
 
-### ⚠️ STILL OPEN: `/send-push` does not exist
+### ⚠️ Push works, and it is in `worker.js` — NOT `supabase/functions/`
 
-`admin-calendar.js`, `admin-settings.js` and `admin-incidents.js` have all been
-POSTing to `/send-push` with no such edge function deployed — every call fails
-silently into a `catch`. So **nothing in this app pushes to a phone today**: not
-an incident notice, not an announcement, and not the missing-child alert, which
-is why that alert ships as a 15-second in-app poll and the announcement composer
-says on screen that it will not buzz anyone. Writing the function and
-provisioning VAPID keys is its own piece of work and it is the highest-value
-thing left from this handoff.
+**A note here previously claimed `/send-push` did not exist and that nothing in
+this app pushes to a phone. That was wrong**, and it was wrong because it was
+concluded from `ls supabase/functions/` alone. Push is a **Cloudflare Worker
+route**, and the whole thing has been live for months:
 
-Also unwired: the closure composer's "block the day" / "credit the tuition"
+| Route (`worker.js`) | Auth | Notes |
+|---|---|---|
+| `/push-subscribe` | family session | 62 live family subscriptions |
+| `/staff-push-subscribe` | **named staff + PIN** | staff_id derived server-side, never from the body |
+| `/send-push` | `is_admin()` RPC, or service role | CSRF origin check, 410 cleanup |
+| `/send-staff-broadcast` | **named staff + PIN** | every staff phone; missing-child |
+| `/send-staff-push` | service role only | one staff_id; used by `check-missed-clocks` |
+
+`sendWebPush()` does real VAPID JWT signing (ES256) and RFC 8291 `aes128gcm`
+payload encryption. Keys are wrangler secrets: `VAPID_PRIVATE_KEY` (JWK),
+`VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`, minted by `scripts/generate-vapid-keys.js`.
+`docs/PROCARE_FEATURE_ANALYSIS.md` already recorded it as "plumbing already
+built" — **read that table before concluding a capability is missing.**
+
+**The real gap was subscriptions, not code.** Only `clockin.html` ever asked
+staff to subscribe, so there were **3 subscriptions against 31 active staff** —
+a "broadcast to every phone in the building" would have reached three. The staff
+app now asks too (`js/staff/staff-push.js`), and the ask names the
+missing-child alert rather than "notifications", because somebody who declines
+shift reminders should still be asked about the alert that gets a child found.
+
+⚠️ **Send by reference, never by wording.** `/send-staff-broadcast` takes an
+`alert_id` and `/send-push` takes an `announcement_id`; the worker re-reads the
+row with the service role and composes the text. No title, no body, no recipient
+from a browser — this is the `send-invoice` posture and it is what keeps
+T1/FS6/FS11 from applying. The older free-text shape on `/send-push` still works
+for the call sites that predate this; **new senders reference a row.**
+
+⚠️ **The two channels are not interchangeable.** The missing-child in-app banner
+polls every 15s and needs no permission grant, no subscription and no push
+service to be up; the push reaches a pocket. Push is fired best-effort *after*
+the alert is raised and its failure never blocks the raise. Do not delete either.
+
+⚠️ **Incident pushes carry no detail on purpose** (a lock screen is read in
+public) — but the missing-child push carries the description deliberately,
+because the audience is staff who need it to search. Opposite requirements; do
+not "fix" one to match the other.
+
+Still unwired: the closure composer's "block the day" / "credit the tuition"
 checkboxes record intent only. Wiring them must go through the recompute-only
 billing path — **never a delta**.
 
@@ -915,7 +949,11 @@ and has a handler for the `P0001` error a database trigger would raise.
 Set as Cloudflare Pages environment variables and Supabase Edge Function secrets:
 - `SUPABASE_URL` / `SUPABASE_ANON_KEY` — injected into HTML at build time or via `_headers`
 - `SUPABASE_SERVICE_ROLE_KEY` — used by edge functions only (never exposed to browser)
-- Push notification VAPID keys — set as edge function secrets
+- `VAPID_PRIVATE_KEY` (JWK) / `VAPID_PUBLIC_KEY` / `VAPID_SUBJECT` — **wrangler
+  secrets on the Worker**, not edge function secrets. Web push is served by
+  `worker.js`, not by anything in `supabase/functions/`. Mint with
+  `scripts/generate-vapid-keys.js`; the public key is also pasted into
+  `js/push-notifications.js` and `js/staff/staff-push.js`.
 - `FINANCE_API_KEY` — shared secret for the `finance-summary` edge function (see below); same value must be set as `DAYCARE_API_KEY` on the ChMS side
 
 ---

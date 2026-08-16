@@ -135,6 +135,10 @@ const ENTRIES = [
                 // Last: reads hcRoomLabel/hcSplit from the head count, and
                 // slToast/slStaffId from staff-log.
                 'js/staff/staff-missing.js',
+                // Reads slStaffId/slPin/slToast; slBroadcastMissing is called
+                // by staff-missing, so it only has to exist by the time a
+                // teacher taps, not at parse time.
+                'js/staff/staff-push.js',
             ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
         },

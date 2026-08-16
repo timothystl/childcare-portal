@@ -25,14 +25,17 @@
 -- that happened is a licensing event whether or not it ended well, and the
 -- record has to survive the relief of finding the child.
 --
--- ⚠️ THE PUSH LEG IS NOT BUILT. This ships the broadcast as an in-app banner
--- that every phone picks up within 15 seconds, which covers a phone with the
--- app open. It does NOT reach a phone asleep in a pocket. The blocker is
--- pre-existing and worth fixing on its own: three call sites in this codebase
--- already POST to `/send-push` (admin-calendar.js, admin-settings.js,
--- admin-incidents.js) and no such edge function exists — every one of those
--- calls has been failing silently into a catch block. Until that function and
--- its VAPID keys exist, do not describe this alert to staff as a push.
+-- ⚠️ TWO CHANNELS. (An earlier version of this header said the push leg was not
+-- built and that `/send-push` did not exist. That was wrong — push lives in
+-- worker.js, not supabase/functions/, and has been live for months.)
+--   * In-app banner, polled every 15s. Needs no permission grant and no push
+--     service to be up; this is the reliable one.
+--   * Web push via worker.js `/send-staff-broadcast`, added 2026-08-16. Reaches
+--     a phone in a pocket. PIN-gated, and it takes an ALERT ID rather than any
+--     wording — the worker reads this table with the service role and composes
+--     the message, so nothing about the notification comes from a browser.
+-- Push is fired best-effort after the row is written; its failure never blocks
+-- the raise. Neither channel may be removed in favor of the other.
 
 CREATE TABLE IF NOT EXISTS public.missing_child_alerts (
     id              bigserial PRIMARY KEY,

@@ -2814,19 +2814,46 @@ async function saveAnnouncement({ title, body, kind = 'general', audience = 'all
                                   rooms = [], expiresAt = null, publish = false }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: { session } } = await sbClient.auth.getSession();
-    const { error } = await sbClient.from('announcements').insert({
+    // ⚠️ .insert().select() — safe HERE and nowhere near an anon path. RLS
+    // applies SELECT policies to RETURNING, so this chain needs SELECT on
+    // announcements; the writer is an admin and the "admin any role" policy is
+    // FOR ALL, so it holds. That is the check to make before adding a .select()
+    // anywhere: the same chain on an anon write took parent registration down
+    // for six hours on 2026-08-12. The id is needed to push the announcement by
+    // reference rather than by shipping its text to the worker.
+    const { data, error } = await sbClient.from('announcements').insert({
         title, body, kind, audience,
         audience_rooms: audience === 'room' ? rooms : [],
         expires_at:     expiresAt,
         published_at:   publish ? new Date().toISOString() : null,
         created_by:     session?.user?.email || null,
-    });
-    // ⚠️ Bare .insert() with no .select(). Chaining one would need SELECT on
-    // announcements for the writing role, and RLS applies SELECT policies to
-    // RETURNING — the trap that took parent registration down for six hours on
-    // 2026-08-12. Nothing here needs the new row back.
+    }).select('id').single();
     if (error) throw friendlyError(error);
-    return true;
+    return data?.id ?? null;
+}
+
+/**
+ * Push a published announcement to every subscribed family.
+ *
+ * ⚠️ Sends the id, never the words. The worker re-reads the row with the
+ * service role and composes the notification, so what lands on a lock screen
+ * is what is actually stored and readable in the portal — and no wording or
+ * recipient travels from a browser. Same posture as send-invoice.
+ */
+async function pushAnnouncement(announcementId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const res = await fetch('/send-push', {
+        method:  'POST',
+        headers: {
+            'Content-Type':  'application/json',
+            'Authorization': `Bearer ${session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ announcement_id: announcementId }),
+    });
+    if (!res.ok) throw new Error(`push failed (${res.status})`);
+    const { sent } = await res.json().catch(() => ({ sent: 0 }));
+    return sent || 0;
 }
 
 /** Published, unexpired announcements. The policy filters drafts, not this. */

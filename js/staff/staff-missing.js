@@ -18,17 +18,19 @@
 // searching" and "Found". A missing-child alert you can swipe away is a
 // missing-child alert somebody swipes away.
 //
-// ⚠️ WHAT IS NOT BUILT YET, AND WHY IT MATTERS: the actual push notification.
-// The handoff says "broadcast push to all staff devices", and this ships the
-// broadcast as an in-app banner that every phone picks up within HC_POLL_MS.
-// That covers a phone with the app open, which during a drill or a search is
-// most of them — but NOT a phone in a pocket with the screen off.
-//   The blocker is real and pre-existing: three places in this codebase already
-//   POST to `/send-push` (admin-calendar.js, admin-settings.js,
-//   admin-incidents.js) and no such edge function exists — those calls have been
-//   failing silently into a catch block. Wiring push here would mean writing
-//   that function and provisioning VAPID keys, which is its own piece of work.
-//   Until it exists, do not describe this alert to staff as a push.
+// ⚠️ TWO CHANNELS, AND BOTH MATTER. An earlier version of this comment claimed
+// push did not exist in this app. That was wrong — worker.js has had VAPID JWT
+// signing, RFC 8291 encryption and /staff-push-subscribe for months. What was
+// missing was a broadcast route and, more to the point, subscriptions: only
+// clockin.html ever asked staff to subscribe, so 3 phones out of 31 were
+// registered. See js/staff/staff-push.js.
+//   * PUSH reaches a phone in a pocket with the screen off, which is most of
+//     them at the moment somebody notices a child is gone.
+//   * The IN-APP BANNER polls every HC_POLL_MS and is the reliable one: it
+//     needs no permission grant, no subscription and no third-party push
+//     service to be up.
+// Neither is allowed to be the only one. The push is fired best-effort and its
+// failure never blocks the raise.
 
 const HC_POLL_MS = 15000;
 
@@ -166,6 +168,9 @@ async function mcResolve(id, btn) {
         if (!ok) { slToast('That did not clear. Try again.', 'err'); btn.disabled = false; return; }
         mcLastSeen.delete(id);
         await mcPoll();
+        // The all-clear matters as much as the alarm: without it, people who
+        // got the push and then put the phone away keep searching.
+        await slBroadcastMissing(id, true);
         slToast('All clear. Everyone else’s phone has cleared too.', 'ok');
     } catch (err) {
         console.warn('resolve:', err);
@@ -212,7 +217,18 @@ async function mcRaise(studentId, name) {
         // The raiser is searching by definition — they are the one who noticed.
         if (res.id) { try { await ackMissingChild(slStaffId, slPin, res.id, 'raised it'); } catch { /* non-fatal */ } }
         await mcPoll();
-        slToast(res.already ? 'Already raised — everyone has it.' : 'Sent to every phone in the building.', 'ok');
+
+        // Push second, and never in the way. The banner is already up on every
+        // phone that has the app open; this reaches the ones that do not. A
+        // failed push must not read as a failed raise, so it only ever adds to
+        // the message.
+        const sent = await slBroadcastMissing(res.id);
+        slToast(res.already
+            ? 'Already raised — everyone has it.'
+            : sent
+                ? `Sent to every phone in the building (${sent} alerted).`
+                : 'Raised. Everyone with the app open has it — go and tell the office too.',
+            'ok');
     } catch (err) {
         console.warn('raise:', err);
         slToast('That did not go out. Shout for help and try again.', 'err');
