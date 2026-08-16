@@ -1,0 +1,33 @@
+{
+  "id": "/admin",
+  "name": "myMDO Admin — Timothy Lutheran MDO",
+  "short_name": "MDO Admin",
+  "description": "Director and office tools — scheduling, classrooms, staff, billing, and reports",
+  "start_url": "/admin",
+  "scope": "/admin",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#01294A",
+  "theme_color": "#01294A",
+  "categories": ["education", "business", "productivity"],
+  "icons": [
+    {
+      "src": "/images/logo/icon-admin-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/logo/icon-admin-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/logo/icon-admin-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

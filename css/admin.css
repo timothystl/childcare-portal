@@ -429,6 +429,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .roster-field select:focus { outline: none; border-color: var(--navy); }
 .roster-btns {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     align-items: flex-end;
 }
@@ -1998,6 +1999,22 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
     /* Report tables — allow horizontal scroll on narrow screens */
     .report-table-wrap { overflow-x: auto; }
+
+    /* Tool control bars (Build Staff Schedule, Payroll, Classrooms, …).
+       .roster-btns is a nowrap flex row, so three buttons — Save Schedule /
+       Export Excel / Email Schedules — ran 130px past the right edge of a
+       390px phone and pushed the whole page into horizontal scroll. Stack the
+       bar and let the buttons share the row instead. */
+    .roster-controls { gap: 12px; }
+    .roster-field,
+    .roster-btns { flex: 1 1 100%; min-width: 0; }
+    .roster-field input,
+    .roster-field select { width: 100%; min-width: 0; }
+    .roster-btns { flex-wrap: wrap; }
+    .roster-btns > button { flex: 1 1 auto; min-width: 0; }
+    /* The stats chips sit after the buttons with an inline margin-left:auto
+       that means nothing once the bar is stacked. */
+    .roster-controls .ap-stats { flex: 1 1 100%; margin-left: 0 !important; }
 }
 
 .mobile-menu-btn {
