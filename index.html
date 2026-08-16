@@ -145,7 +145,10 @@
     }
     .hero-inner { max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto; gap: 48px; align-items: center; }
     .hero-eyebrow { display: inline-block; background: var(--sun-pale); color: var(--navy); border: 1.5px solid var(--sun); font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; padding: 5px 14px; border-radius: 4px; margin-bottom: 18px; }
-    .hero h1 { font-family: var(--font-head); font-size: clamp(32px,4.5vw,52px); font-weight: 700; color: var(--navy); line-height: 1.15; margin-bottom: 20px; }
+    /* balance, not a hard <br>: the headline is now long enough to wrap to three
+       lines, and a fixed break left "to grow." orphaned on its own line at some
+       widths. Letting the browser even out the lines reads better at every size. */
+    .hero h1 { font-family: var(--font-head); font-size: clamp(32px,4.5vw,52px); font-weight: 700; color: var(--navy); line-height: 1.15; margin-bottom: 20px; text-wrap: balance; }
     .hero h1 em { font-style: italic; color: var(--tang); }
     .hero-body { font-size: 17px; color: var(--text-muted); max-width: 520px; line-height: 1.75; margin-bottom: 32px; }
     .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; }
@@ -297,7 +300,11 @@
     .staff-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 20px; margin-top: 48px; }
     .staff-card { background: var(--white); border-radius: var(--radius-md); padding: 28px 20px 24px; box-shadow: var(--shadow-card); text-align: center; border: 1px solid var(--border); border-top: 4px solid var(--sun); }
     .staff-card--leadership { border-top-color: var(--green); }
-    .staff-card-photo { width: 160px; height: 204px; border-radius: 12px; border: 3px solid var(--sun); margin: 0 auto 14px; overflow: hidden; background-color: var(--sun-pale); }
+    /* min() not a bare 160px: below 620px the staff grid is two columns, and a
+       rigid 160px photo plus the card's 40px of padding forced each column to
+       200px — so two of them overflowed any phone under ~440px and the whole
+       page scrolled sideways. Above that width nothing changes. */
+    .staff-card-photo { width: min(160px, 100%); height: 204px; border-radius: 12px; border: 3px solid var(--sun); margin: 0 auto 14px; overflow: hidden; background-color: var(--sun-pale); }
     .staff-card-photo img { display: none; }
     .staff-card--leadership .staff-card-photo { background: var(--green-pale); border-color: var(--green-lt); border-width: 3px; }
     .staff-card--placeholder { opacity: .8; border-style: dashed; }
@@ -555,7 +562,10 @@
   <div class="hero-inner">
     <div class="hero-content">
       <span class="hero-eyebrow">Lindenwood Park · St. Louis, MO</span>
-      <h1>A warm, safe place<br>for your child to <em>grow.</em></h1>
+      <!-- The program name and the city lead the <h1> deliberately: this is the
+           page's main heading, and it previously opened with words no parent
+           would ever type into a search box. The warmth is kept, just second. -->
+      <h1>Mother's Day Out in St. Louis &mdash; a warm, safe place for your child to <em>grow.</em></h1>
       <p class="hero-body">Timothy Lutheran's Mother's Day Out program provides loving, faith-centered care for children from birth through preschool — flexible days, small classrooms, and a community that feels like family.</p>
       <div class="hero-actions">
         <a href="#enroll" class="btn btn-primary">📋 Enroll Your Child</a>
