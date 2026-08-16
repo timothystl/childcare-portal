@@ -176,7 +176,7 @@ async function mcResolve(id, btn) {
 
 // ── Raising one ─────────────────────────────────────────────
 // Two taps, and the second is a confirm. Deliberately short: the handoff puts
-// this button on the head count screen because that is where someone realises a
+// this button on the head count screen because that is where someone realizes a
 // child is not there, and a form at that moment is a form nobody fills in.
 
 function mcOpenRaise(children) {

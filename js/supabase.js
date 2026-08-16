@@ -2789,6 +2789,46 @@ async function sendAdminMessage(threadId, body, senderName) {
     return true;
 }
 
+/**
+ * Everything the office has written, drafts included. Admin-only by RLS — the
+ * "parent read published" policy does not match a draft, so a parent running
+ * this query gets the published subset regardless.
+ */
+async function fetchAllAnnouncements(limit = 40) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('announcements')
+        .select('id, title, body, kind, audience, audience_rooms, created_by, published_at, expires_at, created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
+ * Write one. `publish` false leaves published_at NULL, which is what makes it a
+ * draft — the parent-facing policy tests published_at IS NOT NULL, so an unsent
+ * announcement is invisible to families by the same rule that hides a future one.
+ */
+async function saveAnnouncement({ title, body, kind = 'general', audience = 'all_families',
+                                  rooms = [], expiresAt = null, publish = false }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const { error } = await sbClient.from('announcements').insert({
+        title, body, kind, audience,
+        audience_rooms: audience === 'room' ? rooms : [],
+        expires_at:     expiresAt,
+        published_at:   publish ? new Date().toISOString() : null,
+        created_by:     session?.user?.email || null,
+    });
+    // ⚠️ Bare .insert() with no .select(). Chaining one would need SELECT on
+    // announcements for the writing role, and RLS applies SELECT policies to
+    // RETURNING — the trap that took parent registration down for six hours on
+    // 2026-08-12. Nothing here needs the new row back.
+    if (error) throw friendlyError(error);
+    return true;
+}
+
 /** Published, unexpired announcements. The policy filters drafts, not this. */
 async function fetchAnnouncements() {
     if (!sbClient) throw new Error('Supabase not configured.');
