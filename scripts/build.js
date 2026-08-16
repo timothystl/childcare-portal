@@ -94,6 +94,17 @@ const ENTRIES = [
         },
     },
     {
+        // The signed incident report. Standalone page: it is opened in a new
+        // tab from both the admin drawer and the parent's Documents tab, and it
+        // must not depend on either app's state — everything it draws comes
+        // from incident_print_record().
+        outfile: 'dist/incident-print.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/incident-print.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         outfile: 'dist/waitlist-status.min.js',
         stdin: {
             contents: fs.readFileSync(path.join(ROOT, 'js/waitlist-status.js'), 'utf8'),
@@ -274,6 +285,17 @@ const HTML_PATCHES = [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
             `    <script src="dist/waitlist-status.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'incident-print.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/incident-print\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/incident-print.min.js"></script>`,
         ],
     },
     {

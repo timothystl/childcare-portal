@@ -2456,7 +2456,10 @@ async function fetchIncidentReports({ status = 'submitted', limit = 200 } = {}) 
     if (!sbClient) throw new Error('Supabase not configured.');
     let q = sbClient
         .from('incident_reports')
-        .select('*, students(child_name, family_id)')
+        // allergies and dob come along for the drawer: the allergy banner sits
+        // above the narrative, and the room is derived from the dob because
+        // students carries no room column (only an override).
+        .select('*, students(child_name, family_id, child_dob, room_override, allergies)')
         .order('occurred_at', { ascending: false })
         .limit(limit);
     if (status) q = q.eq('status', status);
