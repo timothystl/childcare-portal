@@ -112,6 +112,11 @@ async function slSignIn() {
         // A drill recorded on the lawn with no signal is stashed rather than
         // lost; this is the first moment there is a PIN to send it with.
         if (typeof hcFlushPending === 'function') hcFlushPending();
+        // Start listening for a missing-child broadcast the moment there is a
+        // PIN to poll with. It runs on every tab, not just the head count —
+        // whoever is standing next to the child is not necessarily the person
+        // looking at the count screen.
+        if (typeof mcStartPolling === 'function') mcStartPolling();
     } catch (e) {
         console.warn('staff sign-in:', e);
         slToast('Could not reach the server.', 'err');
@@ -122,6 +127,9 @@ async function slSignIn() {
 
 function slSignOut() {
     slPin = null; slStaff = null; slStaffId = null; slRoomId = null; slChildren = [];
+    // Stop polling before clearing the screen: the alert RPC is PIN-gated and
+    // would start failing on every tick otherwise.
+    if (typeof mcStopPolling === 'function') mcStopPolling();
     slShow('slPinScreen');
 }
 
@@ -676,6 +684,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // The incident form wires itself — it owns a dozen controls of its own.
     if (typeof slSetupIncident === 'function') slSetupIncident();
     if (typeof slSetupSchedule === 'function') slSetupSchedule();
+    if (typeof mcSetupMissing === 'function') mcSetupMissing();
     slEl('slInjuryBtn')?.addEventListener('click', slOpenInjury);
     slEl('slInjuryCancel')?.addEventListener('click', slCloseInjury);
     slEl('slInjuryForm')?.addEventListener('submit', slSubmitInjury);

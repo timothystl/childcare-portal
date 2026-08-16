@@ -271,6 +271,34 @@
         </div>
     </div>
 
+    <!-- Missing child — raise the broadcast.
+         ⚠️ No recipient picker, deliberately. This goes to every staff phone in
+         the building at once and to the office; it is not a message to the
+         director, and the only choice made here is which child. -->
+    <div id="mcRaiseSheet" class="sl-sheet hidden">
+        <div class="sl-sheet-inner">
+            <div class="sl-sheet-head">
+                <span class="sl-sheet-name">🚨 Missing child</span>
+                <button type="button" id="mcRaiseCancel" class="sl-link-btn">Cancel</button>
+            </div>
+            <div class="mc-raise-warn">
+                This alerts <strong>every staff phone in the building</strong> and the
+                office at the same moment. Everyone stops and searches. Use it as soon
+                as you cannot find a child — not after you have looked everywhere.
+            </div>
+            <label class="sl-field">
+                <span>What are they wearing? <span class="sl-optional">(helps everyone else)</span></span>
+                <input type="text" id="mcRaiseWearing" placeholder="Red shirt, blue shoes">
+            </label>
+            <label class="sl-field">
+                <span>Where did you last see them?</span>
+                <input type="text" id="mcRaiseLastSeen" placeholder="Playground, by the gate">
+            </label>
+            <div class="sl-inc-label" style="margin-top:16px">Tap the child</div>
+            <div id="mcRaiseList" class="mc-pick-list"></div>
+        </div>
+    </div>
+
     <!-- Day off request — bottom sheet off the schedule tab. -->
     <div id="slDayOffSheet" class="sl-sheet hidden">
         <div class="sl-sheet-inner">

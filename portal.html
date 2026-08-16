@@ -110,14 +110,13 @@
             <div id="ptScheduleBody"></div>
         </section>
 
-        <!-- ══ BILLING ════════════════════════════════════════ -->
-        <section class="pt-tab hidden" data-tab="billing">
-            <div class="tab-placeholder">
-                <h2>Online billing is coming</h2>
-                <p>Statements, saved card or bank account, autopay and receipts.
-                   Until then, bills come from the office by email exactly as
-                   they do today — nothing about how you pay has changed.</p>
-            </div>
+        <!-- ══ DOCUMENTS ══════════════════════════════════════ -->
+        <!-- Replaced the Billing placeholder rather than becoming a sixth tab
+             — see the note on PT_TABS in portal-nav.js. The signed incident
+             report lands here when the director closes it, which is the only
+             place a family can get the three-signature copy. -->
+        <section class="pt-tab hidden" data-tab="documents">
+            <div id="pdBody" class="pd-body"></div>
         </section>
 
         <!-- ══ MESSAGES ═══════════════════════════════════════ -->

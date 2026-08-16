@@ -880,3 +880,75 @@
     font-size: .88em; font-weight: 700; color: var(--mustard-dark);
 }
 .sl-daterange { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ── Missing child ───────────────────────────────────────── */
+/* The loudest thing in the app, and the only element with no dismiss control.
+   It renders above the route on every tab and pushes the app down rather than
+   floating over it — a banner that overlaps content gets scrolled past. */
+
+.mc-banner { position: sticky; top: 0; z-index: 40; }
+
+.mc-alert {
+    background: var(--tang); color: #fff;
+    border-bottom: 3px solid var(--tang-dark);
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+}
+.mc-alert-top { display: flex; align-items: flex-start; gap: 12px; }
+.mc-siren {
+    font-size: 26px; line-height: 1; flex: none;
+    animation: mc-pulse 1.4s ease-in-out infinite;
+}
+@keyframes mc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .mc-siren { animation: none; } }
+
+.mc-alert-who  { flex: 1; min-width: 0; }
+.mc-alert-name {
+    font-family: 'Lora', Georgia, serif; font-size: 1.25em; font-weight: 700;
+    line-height: 1.2;
+}
+.mc-alert-meta { font-size: .84em; margin-top: 3px; opacity: .95; line-height: 1.4; }
+
+.mc-searchers {
+    margin-top: 10px; padding-top: 9px;
+    border-top: 1px solid rgba(255, 255, 255, .35);
+    font-size: .84em; line-height: 1.45;
+}
+
+.mc-alert-btns { display: flex; gap: 9px; margin-top: 12px; flex-wrap: wrap; }
+.mc-ack, .mc-found {
+    flex: 1; min-height: 46px; min-width: 130px;
+    border-radius: 9px; font-family: inherit; font-size: .9em; font-weight: 800;
+    cursor: pointer;
+}
+.mc-ack   { background: #fff; color: var(--tang-dark); border: none; }
+.mc-found { background: transparent; color: #fff; border: 1.5px solid #fff; }
+.mc-acked {
+    flex: 1; min-height: 46px; display: flex; align-items: center; justify-content: center;
+    background: rgba(255, 255, 255, .18); border-radius: 9px;
+    font-size: .88em; font-weight: 800;
+}
+
+/* Raise it — head count footer */
+.hc-missing { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+.hc-missing-btn {
+    width: 100%; min-height: 54px;
+    background: var(--tang); color: #fff; border: none; border-radius: 12px;
+    font-family: inherit; font-size: 1.05em; font-weight: 800; cursor: pointer;
+}
+.hc-missing-btn:active { background: var(--tang-dark); }
+
+.mc-raise-warn {
+    background: var(--tang-pale); border: 1.5px solid var(--tang);
+    border-radius: 10px; padding: 13px 15px; margin-bottom: 16px;
+    font-size: .9em; line-height: 1.5; color: var(--tang-dark);
+}
+.mc-pick-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.mc-pick {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    min-height: 52px; padding: 13px 15px;
+    background: #fff; border: 1.5px solid var(--border); border-radius: 10px;
+    font-family: inherit; font-size: 1em; font-weight: 800; color: var(--navy);
+    text-align: left; cursor: pointer;
+}
+.mc-pick span { font-size: .78em; font-weight: 700; color: var(--text-muted); }
+.mc-pick:active { background: var(--tang-pale); border-color: var(--tang); }

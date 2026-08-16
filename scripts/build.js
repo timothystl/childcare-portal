@@ -132,6 +132,9 @@ const ENTRIES = [
                 // Last: the head count reads slStaffId/slPin/slRoomId and the
                 // toast helper from staff-log, and staff-nav calls into it.
                 'js/staff/staff-headcount.js',
+                // Last: reads hcRoomLabel/hcSplit from the head count, and
+                // slToast/slStaffId from staff-log.
+                'js/staff/staff-missing.js',
             ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
         },
@@ -150,6 +153,9 @@ const ENTRIES = [
         'js/portal/portal-schedule.js',
         'js/portal/portal-today.js',
                 'js/portal/portal-messages.js',
+                // After portal-today: reads ptChildren for the child's name on
+                // an incident row and for singular/plural wording.
+                'js/portal/portal-documents.js',
                 'js/portal/portal-auth.js',
             ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,

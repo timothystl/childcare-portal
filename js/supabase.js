@@ -2486,7 +2486,7 @@ async function fetchMyIncidentReports(studentId = null) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let q = sbClient
         .from('incident_reports')
-        .select('id, student_id, care_date, occurred_at, incident_type, location, body_area, description, action_taken, reported_by_name, reviewed_at')
+        .select('id, student_id, care_date, occurred_at, incident_type, incident_kind, location, body_area, body_part, description, action_taken, first_aid, after_notes, reported_by_name, reviewed_at')
         .order('occurred_at', { ascending: false });
     if (studentId) q = q.eq('student_id', studentId);
     const { data, error } = await q;
@@ -2572,6 +2572,65 @@ async function centerHeadcount(staffId, pin, careDate = null) {
     });
     if (error) throw friendlyError(error);
     return data ?? null;
+}
+
+// ── Missing child ───────────────────────────────────────────
+// ⚠️ Raising one is a broadcast, not a message. There is no recipient argument
+// on any of these by design: the alert goes to every signed-in staff phone and
+// to the director's board at the same moment. Do not add one.
+
+/** Raise the alert. Returns { id, already } — `already` if it was live. */
+async function raiseMissingChild(staffId, pin, studentId, { lastSeen = '', wearing = '' } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('raise_missing_child', {
+        p_staff_id:   staffId,
+        p_pin:        parseInt(pin, 10),
+        p_student_id: studentId,
+        p_last_seen:  lastSeen || null,
+        p_wearing:    wearing || null,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** "I'm searching", with an optional area, so nobody covers the same room twice. */
+async function ackMissingChild(staffId, pin, alertId, searching = '') {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('ack_missing_child', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10),
+        p_alert_id: alertId, p_searching: searching || null,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/** Found and safe. Clears the banner on every phone at once. */
+async function resolveMissingChild(staffId, pin, alertId, note = '') {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('resolve_missing_child', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10),
+        p_alert_id: alertId, p_note: note || null,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/** What every staff phone polls. Includes who has answered and where. */
+async function fetchActiveMissingChild(staffId, pin) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('active_missing_child', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10),
+    });
+    if (error) throw friendlyError(error);
+    return Array.isArray(data) ? data : [];
+}
+
+/** The same picture for the director's board — admin session, no PIN. */
+async function fetchActiveMissingChildAdmin() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('active_missing_child_admin');
+    if (error) throw friendlyError(error);
+    return Array.isArray(data) ? data : [];
 }
 
 /** Record a completed drill. PIN-gated; returns the new id, or null if refused. */

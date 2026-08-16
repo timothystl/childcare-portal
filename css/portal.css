@@ -774,3 +774,47 @@
     color: var(--text-muted);
     margin: 10px 2px 6px;
 }
+
+/* ── Documents ───────────────────────────────────────────── */
+/* Cards rather than one long list: the four kinds of paperwork have very
+   different sources, and a parent looking for an immunization record should
+   not have to scan past six incident reports to find out it is on paper in
+   the office. */
+
+.pd-body { padding-bottom: 24px; }
+
+.pd-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow-card); margin-bottom: 14px; overflow: hidden;
+}
+.pd-card-head {
+    display: flex; align-items: center; gap: 9px;
+    background: var(--linen); border-bottom: 1px solid var(--border);
+    padding: 13px 16px;
+    font-size: .95em; font-weight: 800; color: var(--navy);
+}
+.pd-card-body { padding: 6px 16px 14px; }
+
+.pd-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 14px 0; border-bottom: 1px solid var(--linen);
+    text-decoration: none; color: inherit;
+}
+.pd-row:last-child { border-bottom: none; }
+.pd-row-main  { flex: 1; min-width: 0; }
+.pd-row-title { font-size: .95em; font-weight: 800; color: var(--navy); }
+.pd-row-sub   { font-size: .82em; color: var(--text-muted); margin-top: 2px; }
+.pd-row-body  { margin: 8px 0 0; font-size: .88em; line-height: 1.55; color: var(--text); }
+
+.pd-print {
+    flex: none; min-height: 44px; display: inline-flex; align-items: center;
+    background: var(--navy); color: #fff; border: none; border-radius: 8px;
+    padding: 10px 15px; font-family: inherit; font-size: .8em; font-weight: 800;
+    cursor: pointer; white-space: nowrap;
+}
+.pd-row-link:hover .pd-print { background: var(--navy-lt); }
+
+.pd-none { margin: 12px 0 0; font-size: .92em; line-height: 1.55; color: var(--text); }
+.pd-fine {
+    margin: 10px 0 2px; font-size: .82em; line-height: 1.55; color: var(--text-muted);
+}
