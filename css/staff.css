@@ -952,3 +952,36 @@
 }
 .mc-pick span { font-size: .78em; font-weight: 700; color: var(--text-muted); }
 .mc-pick:active { background: var(--tang-pale); border-color: var(--tang); }
+
+/* ── Push permission prompt ──────────────────────────────────── */
+/* A soft in-page ask, not the raw browser dialog. It names what the alert is
+   for — a teacher who declines "notifications" in the abstract will accept
+   the one that gets a child found. */
+
+.sl-push-prompt {
+    position: fixed; left: 12px; right: 12px;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    z-index: 60;
+    display: flex; align-items: flex-start; gap: 11px;
+    background: #fff; border: 1.5px solid var(--tang-soft);
+    border-left: 4px solid var(--tang);
+    border-radius: 12px; padding: 13px 14px;
+    box-shadow: 0 6px 28px rgba(1, 41, 74, .18);
+    max-width: 460px; margin: 0 auto;
+}
+.sl-push-icon { font-size: 20px; line-height: 1.2; flex: none; }
+.sl-push-text {
+    flex: 1; min-width: 0; font-size: .86em; line-height: 1.45; color: var(--navy);
+}
+.sl-push-text strong { display: block; margin-bottom: 2px; }
+.sl-push-btns { display: flex; align-items: center; gap: 4px; flex: none; }
+.sl-push-allow {
+    min-height: 40px; padding: 9px 14px;
+    background: var(--navy); color: #fff; border: none; border-radius: 8px;
+    font-family: inherit; font-size: .84em; font-weight: 800; cursor: pointer;
+}
+.sl-push-no {
+    min-height: 40px; min-width: 36px;
+    background: none; border: none; color: var(--text-muted);
+    font-size: 1em; cursor: pointer;
+}

@@ -117,6 +117,10 @@ async function slSignIn() {
         // whoever is standing next to the child is not necessarily the person
         // looking at the count screen.
         if (typeof mcStartPolling === 'function') mcStartPolling();
+        // Ask this phone to register for the missing-child alert. Passing the
+        // PIN explicitly: slPin is cleared on a screen change, and by the time
+        // somebody taps Allow the global is often already empty.
+        if (typeof slInitPush === 'function') slInitPush(res.id, pin);
     } catch (e) {
         console.warn('staff sign-in:', e);
         slToast('Could not reach the server.', 'err');
