@@ -2363,9 +2363,92 @@ async function submitIncidentReport(staffId, pin, r) {
         p_location:      r.location || null,
         p_body_area:     r.bodyArea || null,
         p_occurred_at:   r.occurredAt || null,
+        p_body_view:     r.bodyView || null,
+        p_body_part:     r.bodyPart || null,
+        p_witnesses:     r.witnesses?.length  ? r.witnesses  : null,
+        p_first_aid:     r.firstAid?.length   ? r.firstAid   : null,
+        p_after_notes:   r.afterNotes?.length ? r.afterNotes : null,
+        p_ratio_note:    r.ratioNote || null,
+        p_incident_kind: r.incidentKind || null,
     });
     if (error) throw friendlyError(error);
     return data ?? null;
+}
+
+/**
+ * Signature 2 — the parent, at pickup, on the teacher's phone.
+ *
+ * ⚠️ PIN-gated on the TEACHER, not the parent. The parent has no login standing
+ * at the pickup counter; what authorizes the write is the unlocked staff device,
+ * and the record stores whose phone it was. The database also refuses this if
+ * the teacher signature is missing, so the order cannot be inverted from here.
+ *
+ * Idempotent server-side: a double tap returns true rather than reporting a
+ * failure to someone who has in fact signed.
+ */
+async function signIncidentAsParent(staffId, pin, incidentId, signedName) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('sign_incident_parent', {
+        p_staff_id:    staffId,
+        p_pin:         parseInt(pin, 10),
+        p_incident_id: incidentId,
+        p_signed_name: signedName,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/**
+ * Signature 3 — the director, which closes the record and publishes it.
+ * Returns false if the parent has not signed yet; she is third, not second.
+ */
+async function signIncidentAsDirector(id, signedName = null, notes = '') {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('sign_incident_director', {
+        p_id: id, p_signed_name: signedName, p_notes: notes,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/**
+ * Stamps parent_notified_at. Telling the family is early — reading the report
+ * is not. See incident_three_signatures.sql for why those are separate.
+ */
+async function notifyParentOfIncident(staffId, pin, incidentId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('notify_parent_of_incident', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10), p_incident_id: incidentId,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/**
+ * The signed, printable copy — assembled in the database, never in the browser.
+ *
+ * Returns `{ ok:false, reason:'incomplete', have:[...] }` until all three
+ * signatures exist, `null` if the caller may not see this report at all, and
+ * the full record only when it is complete. Do not build a printable view from
+ * any other source: that refusal is the whole point of the function.
+ */
+async function fetchIncidentPrintRecord(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('incident_print_record', { p_id: id });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** The signatures on one report, for a queue row that needs to show progress. */
+async function fetchIncidentSignatures(ids) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    if (!ids?.length) return [];
+    const { data, error } = await sbClient
+        .from('incident_signatures')
+        .select('incident_id, role, signed_name, signed_at, signed_on_device_of')
+        .in('incident_id', ids);
+    if (error) throw friendlyError(error);
+    return data || [];
 }
 
 /** Admin: the review queue. Defaults to what is waiting on the director. */
@@ -3008,6 +3091,61 @@ async function submitTimeOffRequestByPin({ pin, dates, recurring = false, reason
     });
     if (error) throw friendlyError(error);
     return data;
+}
+
+/**
+ * The staff app's "My schedule" tab, in one round trip: own shifts, shifts
+ * given away, incoming/outgoing swap requests, time off, PTO used, and the
+ * coworker list the swap picker needs.
+ *
+ * ⚠️ There is no "everyone" variant of this and there must not be one. The RPC
+ * resolves the caller from their own PIN and filters on that id — a teacher's
+ * phone cannot see another teacher's hours, days off or pay. Passing a
+ * different staff id just fails the PIN check.
+ */
+async function fetchMyStaffSchedule(staffId, pin, fromISO, toISO) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('staff_my_schedule', {
+        p_staff_id: staffId,
+        p_pin:      parseInt(pin, 10),
+        p_from:     fromISO,
+        p_to:       toISO,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** Ask a coworker to cover one shift. Nothing moves until they accept. */
+async function proposeShiftSwap(staffId, pin, { workDate, shift, toStaffId, note = '' }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('propose_shift_swap', {
+        p_staff_id:    staffId,
+        p_pin:         parseInt(pin, 10),
+        p_work_date:   workDate,
+        p_shift:       shift,
+        // ⚠️ uuid — never Number()/parseInt() a staff id.
+        p_to_staff_id: toStaffId,
+        p_note:        note || null,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/**
+ * Accept or decline. Accepting moves the schedule row and stamps the swap in
+ * one database transaction, so there is no moment where the shift belongs to
+ * nobody. Returns false if the shift is already taken or the swap was answered.
+ */
+async function answerShiftSwap(staffId, pin, swapId, accept) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('answer_shift_swap', {
+        p_staff_id: staffId,
+        p_pin:      parseInt(pin, 10),
+        p_swap_id:  swapId,
+        p_accept:   !!accept,
+    });
+    if (error) throw friendlyError(error);
+    return data === true;
 }
 
 /** Kiosk: the PIN-holder's own recent/standing requests. */

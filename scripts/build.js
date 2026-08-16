@@ -114,6 +114,10 @@ const ENTRIES = [
             contents: [
                 'js/staff/staff-nav.js',
         'js/staff/staff-log.js',
+                // After staff-log: reads slStaffId/slPin/slOpenChild/slChildren
+                // and the toast helper from it.
+                'js/staff/staff-incident.js',
+                'js/staff/staff-schedule.js',
                 // Last: the head count reads slStaffId/slPin/slRoomId and the
                 // toast helper from staff-log, and staff-nav calls into it.
                 'js/staff/staff-headcount.js',
