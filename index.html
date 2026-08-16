@@ -4,8 +4,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Timothy Lutheran Church Mother's Day Out — faith-based childcare for families in Lindenwood Park and St. Louis. Enroll today or request your care days online.">
-  <title>Mother's Day Out — Timothy Lutheran Church</title>
+  <meta name="description" content="Flexible full- and half-day childcare for infants through preschool in Lindenwood Park, St. Louis. Enroll in Timothy Lutheran's Mother's Day Out program.">
+  <title>Mother's Day Out Childcare in St. Louis | Timothy Lutheran</title>
+
+  <!-- SEO — the home page is the only page of this site we actively want ranked
+       for local childcare searches. Clean (extensionless) URLs are canonical:
+       worker.js 301s every /*.html to the extensionless form, so pointing a
+       canonical or a sitemap entry at the .html would name a URL that redirects. -->
+  <link rel="canonical" href="https://mdo.timothystl.org/">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+
+  <!-- Open Graph — this is what a link looks like when a parent shares it in a
+       neighborhood Facebook group, which is where most of our referrals start.
+       Without these it shares as a bare URL with no title, text, or image. -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Timothy Lutheran Mother's Day Out">
+  <meta property="og:title" content="Mother's Day Out Childcare in St. Louis">
+  <meta property="og:description" content="Flexible full- and half-day childcare for infants through preschool in Lindenwood Park, St. Louis. Small classrooms, experienced teachers, and online care day scheduling.">
+  <meta property="og:url" content="https://mdo.timothystl.org/">
+  <meta property="og:image" content="https://mdo.timothystl.org/images/logo/og-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="myMDO — Mother's Day Out at Timothy Lutheran Church, Lindenwood Park, St. Louis">
+  <meta property="og:locale" content="en_US">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Mother's Day Out Childcare in St. Louis">
+  <meta name="twitter:description" content="Flexible full- and half-day childcare for infants through preschool in Lindenwood Park, St. Louis.">
+  <meta name="twitter:image" content="https://mdo.timothystl.org/images/logo/og-card.png">
+
   <link rel="icon" type="image/png" sizes="32x32" href="/images/logo/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/images/logo/favicon-16.png">
   <link rel="apple-touch-icon" href="/images/logo/apple-touch-icon.png">
@@ -309,13 +335,193 @@
       .highlights-grid,.contact-grid{grid-template-columns:1fr;}
     }
   </style>
+
+  <!-- Structured data. Two things are described here:
+
+       1. ChildCare (a schema.org LocalBusiness subtype) — name, address, phone,
+          hours and age range, so a search engine can corroborate the center as a
+          real local business rather than inferring it from page text. This is the
+          piece that matters for "mother's day out near me" style local searches.
+          NOTE: there is deliberately no "geo" block. We do not have surveyed
+          coordinates for 6704 Fyler Ave, and a guessed lat/long is worse than
+          none — it can place the pin on the wrong side of the street. "hasMap"
+          hands Google the address lookup instead.
+
+       2. FAQPage — mirrors the visible FAQ below, word for word. Google narrowed
+          FAQ *rich results* to government and health sites in 2023, so this will
+          not draw accordions into the results page; it is here because the markup
+          still feeds entity understanding and the AI answer surfaces, which do
+          quote it. If the visible FAQ copy is edited, edit it here too — markup
+          that disagrees with the page is a manual-action risk, not just dead weight. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "ChildCare",
+        "@id": "https://mdo.timothystl.org/#childcare",
+        "name": "Timothy Lutheran Mother's Day Out",
+        "alternateName": ["myMDO", "Timothy Lutheran MDO"],
+        "description": "Faith-based Mother's Day Out childcare in Lindenwood Park, St. Louis, serving children from birth through preschool with flexible full-day and half-day scheduling.",
+        "url": "https://mdo.timothystl.org/",
+        "logo": "https://mdo.timothystl.org/images/logo/myMDO_primary_logo_light.png",
+        "image": "https://mdo.timothystl.org/images/logo/og-card.png",
+        "telephone": "+1-314-783-0523",
+        "email": "mdo@timothystl.org",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "6704 Fyler Ave",
+          "addressLocality": "St. Louis",
+          "addressRegion": "MO",
+          "postalCode": "63139",
+          "addressCountry": "US"
+        },
+        "hasMap": "https://maps.google.com/?q=6704+Fyler+Ave+St+Louis+MO+63139",
+        "areaServed": [
+          { "@type": "Place", "name": "Lindenwood Park, St. Louis, MO" },
+          { "@type": "City", "name": "St. Louis, MO" }
+        ],
+        "openingHoursSpecification": [
+          {
+            "@type": "OpeningHoursSpecification",
+            "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+            "opens": "08:15",
+            "closes": "17:00"
+          }
+        ],
+        "audience": {
+          "@type": "PeopleAudience",
+          "suggestedMinAge": 0,
+          "suggestedMaxAge": 5
+        },
+        "parentOrganization": {
+          "@type": "Church",
+          "name": "Timothy Lutheran Church",
+          "url": "https://www.timothystl.org"
+        },
+        "isAccessibleForFree": false
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://mdo.timothystl.org/#website",
+        "url": "https://mdo.timothystl.org/",
+        "name": "Timothy Lutheran Mother's Day Out",
+        "inLanguage": "en-US",
+        "publisher": { "@id": "https://mdo.timothystl.org/#childcare" }
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://mdo.timothystl.org/#faq",
+        "isPartOf": { "@id": "https://mdo.timothystl.org/#website" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Do I have to commit to the same days every week?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No — that's one of the things families love about MDO. You request days month by month based on what works for your schedule. There's no fixed weekly requirement. Note: infants in the Bear Room use a set-day schedule."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do full days and half days work?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Full Day is 8:15 am to 5:00 pm. Half Day is 8:15 am to 1:00 pm. You can mix and match on a day-by-day basis when you request your dates online."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What if a day is full when I try to book?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The portal shows live availability. Fully booked days will appear as unavailable. You can join the online waitlist through the care day portal for the fastest notification when a spot opens."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is the program open to families outside the church?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Absolutely. Timothy Lutheran MDO welcomes all families, regardless of religious affiliation. Our faith values shape our culture of care — all children and parents are welcome here."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I get my 4-digit family PIN?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Your PIN is assigned when you enroll and shared with you by the office. If you can't remember it, you can also look up your family by name or email address in the portal."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "My child is on the waitlist. What happens next?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "When a spot opens in your child's age group, the office will reach out directly. You can also join the online waitlist through the care day portal for the fastest notification, or check your waitlist status anytime using the email you applied with."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does scheduling work for infants?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The infant program uses a set-day schedule rather than our flexible monthly request system. At initial enrollment you choose the specific days of the week your child will attend, and those days remain fixed for as long as your child is in the Bear Room. A minimum of two set days per week is required — this allows infants to build familiarity with their caregivers and daily routine. Once your child turns one and moves to the next classroom, they transition to the standard flexible schedule."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I add extra days beyond my set schedule?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "You may request additional days in a given month if space is available in the infant room — just reach out to the office. Additional days are not guaranteed and are offered on a space-available basis only."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What do I need to bring for feeding?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Families are asked to send premade bottles each day to ensure feeding routines are smooth and tailored to your baby's needs. Formula must arrive premixed and ready to serve. Breast milk must be brought in labeled bottles or storage bags with your child's name and the date. Please label every bottle clearly with your child's full name. Staff will not mix or prepare formula on-site."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What diapering supplies should I send?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Please supply an adequate number of diapers for the day as well as any diaper cream your child uses. Wipes are provided by the center — you do not need to bring those."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does nap time work in the infant room?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "All infants in the Bear Room follow a center-set nap schedule. Every baby naps at the same time each day, on the schedule established by our staff. Individual on-demand nap schedules are not accommodated, as a consistent routine supports the development of all infants in the room."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "When does my child move out of the infant room?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Children transition out of the Bear Room when they turn one year old. At that point they move to the Bee Room (12–24 months) and gain access to the flexible monthly scheduling system used throughout the rest of the MDO program."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
 
 <nav class="nav">
   <div class="nav-inner">
     <a href="/" class="nav-brand" aria-label="myMDO — Timothy Lutheran Church">
-      <img src="/images/logo/myMDO_playful_primary.png" alt="myMDO" height="40">
+      <img src="/images/logo/myMDO_playful_primary.png" alt="myMDO — Mother's Day Out at Timothy Lutheran Church" width="890" height="380" style="width:auto;height:40px;">
     </a>
     <!-- Everything that used to live behind the "☰ More pages" dropdown is
          now a direct link here — nothing hidden behind an extra click. The
@@ -333,6 +539,11 @@
     </div>
   </div>
 </nav>
+
+<!-- Everything between the nav and the footer is the page's own content. The
+     <main> landmark is what lets a screen reader jump past the nav, and it is
+     also the region search engines treat as the primary content of the page. -->
+<main>
 
 <!-- HERO — warm linen, light and open -->
 <section class="hero">
@@ -532,7 +743,7 @@
       <div class="faq-item"><div class="faq-q">What if a day is full when I try to book?</div><div class="faq-a">The portal shows live availability. Fully booked days will appear as unavailable. You can join the online waitlist through the care day portal for the fastest notification when a spot opens.</div></div>
       <div class="faq-item"><div class="faq-q">Is the program open to families outside the church?</div><div class="faq-a">Absolutely. Timothy Lutheran MDO welcomes all families, regardless of religious affiliation. Our faith values shape our culture of care — all children and parents are welcome here.</div></div>
       <div class="faq-item"><div class="faq-q">How do I get my 4-digit family PIN?</div><div class="faq-a">Your PIN is assigned when you enroll and shared with you by the office. If you can't remember it, you can also look up your family by name or email address in the portal.</div></div>
-      <div class="faq-item"><div class="faq-q">My child is on the waitlist. What happens next?</div><div class="faq-a">When a spot opens in your child's age group, the office will reach out directly. You can also join the online waitlist through the care day portal for the fastest notification, or <a href="waitlist-status.html">check your waitlist status</a> anytime using the email you applied with.</div></div>
+      <div class="faq-item"><div class="faq-q">My child is on the waitlist. What happens next?</div><div class="faq-a">When a spot opens in your child's age group, the office will reach out directly. You can also join the online waitlist through the care day portal for the fastest notification, or <a href="/waitlist-status">check your waitlist status</a> anytime using the email you applied with.</div></div>
     </div>
 
     <!-- Infant subsection -->
@@ -572,10 +783,12 @@
   </div>
 </section>
 
+</main>
+
 <footer class="site-footer">
   <div class="footer-inner">
     <div class="footer-brand">
-      <img src="/images/logo/myMDO_primary_logo_dark.png" alt="myMDO" height="60">
+      <img src="/images/logo/myMDO_primary_logo_dark.png" alt="Timothy Lutheran Mother's Day Out" width="550" height="175" loading="lazy" style="width:auto;height:60px;">
       <p>Mother's Day Out at Timothy Lutheran Church provides faith-based childcare for families in Lindenwood Park and the surrounding St. Louis area.</p>
     </div>
     <div class="footer-col">
@@ -606,7 +819,7 @@
     <p>
       <a href="https://www.timothystl.org">timothystl.org</a>
       &nbsp;·&nbsp;
-      <a href="privacy.html">Privacy Policy</a>
+      <a href="/privacy">Privacy Policy</a>
     </p>
   </div>
 </footer>

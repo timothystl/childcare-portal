@@ -1,5 +1,9 @@
-# Disallow all crawlers from the parent portal, admin, and clock-in pages.
+# Disallow all crawlers from the parent portal, admin, clock-in and staff pages.
 # These pages require authentication and should never appear in search results.
+#
+# Both forms of every path are listed. worker.js 301s /lookup.html to /lookup,
+# but a crawler still has to fetch the .html URL to learn that, and Disallow is
+# matched against the requested path — so dropping either form leaks the page.
 User-agent: *
 Disallow: /calendar
 Disallow: /calendar.html
@@ -11,3 +15,27 @@ Disallow: /clockin
 Disallow: /clockin.html
 Disallow: /notice
 Disallow: /notice.html
+Disallow: /portal
+Disallow: /portal.html
+Disallow: /staff
+Disallow: /staff.html
+Disallow: /payroll
+Disallow: /payroll.html
+Disallow: /reset-pin
+Disallow: /reset-pin.html
+Disallow: /incident-print
+Disallow: /incident-print.html
+Disallow: /confirm-interest
+Disallow: /confirm-interest.html
+
+# Internal design mockups. Not linked from anywhere, but they are served as
+# static assets and are reachable by anyone who guesses the URL — which means
+# they can be indexed and rank against the real pages.
+Disallow: /logo-mockup
+Disallow: /logo-mockup.html
+Disallow: /logo-preview
+Disallow: /logo-preview.html
+Disallow: /payroll-mockup
+Disallow: /payroll-mockup.html
+
+Sitemap: https://mdo.timothystl.org/sitemap.xml

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Only the public, indexable pages belong here. The parent portal, admin,
+  clock-in and staff pages are authenticated and are excluded in robots.txt;
+  listing a Disallow'd URL here is a Search Console warning, not a shortcut.
+
+  URLs are the extensionless form on purpose — worker.js 301s every /*.html to
+  the clean URL, so a sitemap entry ending in .html would point at a redirect.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://mdo.timothystl.org/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://mdo.timothystl.org/enroll</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://mdo.timothystl.org/inquiry</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://mdo.timothystl.org/menu</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://mdo.timothystl.org/waitlist-status</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://mdo.timothystl.org/privacy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.2</priority>
+  </url>
+</urlset>
