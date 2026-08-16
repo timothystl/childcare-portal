@@ -786,10 +786,16 @@ export default {
       "default-src 'self'; " +
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; " +
       // R25: style-src/font-src previously omitted the Google Fonts hosts that
-      // every page links (Lora, Nunito, Dancing Script). This header is set on
-      // the static-asset response and so overrides _headers — which *does* list
-      // them — meaning the brand typography was being blocked in production and
-      // silently falling back to Georgia / system-ui. Kept in sync with _headers.
+      // every page links (Lora, Nunito, Dancing Script), and the brand
+      // typography fell back to Georgia / system-ui in production.
+      //
+      // ⚠️ This block previously claimed the header here "overrides _headers".
+      // That is wrong for any path backed by a real file: Workers Assets serves
+      // those without running this script at all, so `_headers` is what actually
+      // applied. Only paths listed in `run_worker_first` (wrangler.jsonc) plus
+      // paths with no matching file reach this code. `_headers` remains the
+      // effective policy for everything else — so the two MUST stay in sync,
+      // and a change made only here will silently do nothing.
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com; " +
       "img-src 'self' data:; " +

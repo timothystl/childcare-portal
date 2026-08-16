@@ -1000,6 +1000,19 @@ the edge, for `/` and `/index.html` only.
   `caches.default` for 5 minutes per edge location.
 - **It fails open.** Any error, timeout (2s) or missing key returns the page
   untouched — a Supabase outage must not take the marketing page down.
+- ⚠️ **It only runs because `wrangler.jsonc` now sets
+  `assets.run_worker_first: ["/", "/index.html"]`.** Workers Assets serves any
+  request matching a file on disk **without invoking `worker.js` at all**, so
+  the first deploy of this feature shipped and did nothing — the grid stayed
+  empty and the fail-open path hid it. **Proof technique:** `Service-Worker-Allowed`
+  is set only by `worker.js`, and it was absent from the live `/sw.js` response.
+  Use that header, not the CSP, to test whether the Worker ran — `_headers`
+  sets a matching CSP, so the CSP looking right proves nothing.
+  - Corollary: **`_headers` is the effective policy for every other path**, and
+    `worker.js`'s Cache-Control/CSP block is dead code there. A header change
+    made only in `worker.js` will silently do nothing. Keep both in sync.
+  - Keep `run_worker_first` narrow. `true` would route every image, font and
+    `dist/` bundle through the Worker for no benefit.
 - **The client still re-renders over it.** That is deliberate, not waste: the
   server copy is what a crawler indexes, the client pass keeps a long-open tab
   honest if a rate changes mid-session.

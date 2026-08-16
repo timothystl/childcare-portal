@@ -8,7 +8,20 @@
   },
   "assets": {
     "directory": ".",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    // ⚠️ Workers Assets serves any request that matches a file on disk WITHOUT
+    // invoking worker.js at all. Everything in the fetch handler below the
+    // `env.ASSETS.fetch(request)` line — the Cache-Control rules, the CSP, the
+    // Service-Worker-Allowed header, the home page's server-rendered classroom
+    // cards — was therefore dead code for every path backed by a real file.
+    // Proof: `Service-Worker-Allowed` is set only by worker.js and was absent
+    // from the live /sw.js response.
+    //
+    // Scoped to the home page on purpose. `true` would route every image, font
+    // and dist/ bundle through the Worker, paying an invocation for assets that
+    // want to be served straight off the edge. Only "/" needs the rewriter.
+    // Requires Wrangler >= 4.20.0 for the array form.
+    "run_worker_first": ["/", "/index.html"]
   },
   "compatibility_flags": [
     "nodejs_compat"
