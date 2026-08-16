@@ -1,4 +1,12 @@
 const SUPABASE_URL = 'https://dahdstopsumxnqvdclmy.supabase.co';
+
+// The Supabase *publishable* (anon) key. Not a secret: it is inlined in
+// index.html and shipped to every browser that loads any page of this site, and
+// every table it can reach is governed by RLS. It exists here only as a fallback
+// for the public home-page render when the SUPABASE_ANON_KEY binding is absent
+// — prefer the binding, so rotating the key stays a secrets change.
+// ⚠️ Never put SUPABASE_SERVICE_ROLE_KEY here or anywhere in source.
+const PUBLIC_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
 const ALLOWED_ORIGINS = new Set(['https://mdo.timothystl.org']);
 
 // ── Web Push helpers (RFC 8291 / RFC 8188) ───────────────────────────────────
@@ -212,34 +220,46 @@ async function ssrFetchSettings(env, ctx) {
   const cacheKey = new Request('https://ssr.internal/room-settings-v1');
   const cache    = caches.default;
 
-  const hit = await cache.match(cacheKey);
+  let hit = null;
+  try { hit = await cache.match(cacheKey); } catch { /* cache unavailable; just fetch */ }
   if (hit) { try { return await hit.json(); } catch { /* fall through and refetch */ } }
 
-  if (!env.SUPABASE_ANON_KEY) return null;
+  // The anon key is public by design — it ships in the browser on every page,
+  // and index.html has it inline. The binding is preferred so key rotation is a
+  // secret change, but falling back to the published constant means a missing
+  // binding degrades to "works" rather than to a silently empty grid.
+  const anonKey = env.SUPABASE_ANON_KEY || PUBLIC_ANON_KEY;
+  if (!anonKey) return 'nokey';
+
   const keys = 'room_rates,room_capacity,staff_ratios,registration_fee,new_family_fee';
   let res;
   try {
     res = await Promise.race([
       fetch(`${SUPABASE_URL}/rest/v1/settings?key=in.(${keys})&select=key,value`, {
-        headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${env.SUPABASE_ANON_KEY}` },
+        headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('ssr settings timeout')), 2000)),
     ]);
-  } catch { return null; }
-  if (!res || !res.ok) return null;
+  } catch { return 'fetchfail'; }
+  if (!res) return 'fetchfail';
+  if (!res.ok) return 'http' + res.status;
 
   const body = await res.text();
-  ctx?.waitUntil?.(cache.put(cacheKey, new Response(body, {
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=300' },
-  })));
-  try { return JSON.parse(body); } catch { return null; }
+  // cache.put can reject on a synthetic key in some runtimes; never let that
+  // failure reach the page, which is only trying to render a rate table.
+  try {
+    ctx?.waitUntil?.(cache.put(cacheKey, new Response(body, {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=300' },
+    })).catch(() => {}));
+  } catch { /* ignore */ }
+  try { return JSON.parse(body); } catch { return 'badjson'; }
 }
 
 // Mirrors loadRateSettings/loadCapacitySettings/loadRatioSettings in
 // js/supabase.js: start from the defaults, overlay whatever admin has saved.
 async function ssrRoomState(env, ctx) {
   const rows = await ssrFetchSettings(env, ctx);
-  if (!Array.isArray(rows)) return null;
+  if (!Array.isArray(rows)) return typeof rows === 'string' ? rows : 'nodata';
 
   const byKey = {};
   for (const row of rows) byKey[row.key] = ssrParseSetting(row.value);
@@ -279,17 +299,29 @@ function ssrFeeNote(regFee, newFamilyFee) {
   return parts.length ? `Registration includes ${parts.join(' and ')}.` : '';
 }
 
+// Every exit path stamps `x-ssr-rooms`. A fail-open feature that says nothing
+// when it fails open is indistinguishable from a feature that was never
+// deployed — which is exactly how this shipped empty once already. The header
+// is the cheapest possible answer to "did this run, and if not, why":
+//   absent  -> worker never ran for this path (check assets.run_worker_first)
+//   <n>     -> rendered n cards
+//   nokey / fetchfail / http4xx / badjson / nodata / error -> ran, gave up here
 async function ssrRenderHomePage(response, env, ctx) {
-  let state = null;
-  try { state = await ssrRoomState(env, ctx); } catch { state = null; }
-  if (!state) return response;   // fail open — serve the page untouched
+  const stamp = (res, value) => {
+    const h = new Headers(res.headers);
+    h.set('x-ssr-rooms', value);
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+  };
 
-  const cardsHtml = buildPublicRoomCardsHtml(
-    getSortedRooms(state.rooms).filter(r => r.id !== 'summer' && !r.hidden)
-  );
-  const feeNote = ssrFeeNote(state.regFee, state.newFamilyFee);
+  let state;
+  try { state = await ssrRoomState(env, ctx); } catch { state = 'error'; }
+  if (typeof state === 'string' || !state) return stamp(response, String(state || 'nodata'));
 
-  return new HTMLRewriter()
+  const cards = getSortedRooms(state.rooms).filter(r => r.id !== 'summer' && !r.hidden);
+  const cardsHtml = buildPublicRoomCardsHtml(cards);
+  const feeNote   = ssrFeeNote(state.regFee, state.newFamilyFee);
+
+  const transformed = new HTMLRewriter()
     .on('#roomInfoGrid', { element(el) { el.setInnerContent(cardsHtml, { html: true }); } })
     .on('#regFeeNote',   { element(el) { el.setInnerContent(feeNote); } })
     .on('#summerDailyFeeNote', {
@@ -298,6 +330,8 @@ async function ssrRenderHomePage(response, env, ctx) {
       },
     })
     .transform(response);
+
+  return stamp(transformed, String(cards.length));
 }
 
 const ROOMS = [
