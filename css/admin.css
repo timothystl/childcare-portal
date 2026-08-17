@@ -5079,3 +5079,15 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     border-top: 1px solid rgba(255, 255, 255, .35);
     font-size: .86em; line-height: 1.45;
 }
+
+/* Scholarship label hint (Family Directory child editor). A scholarship alone
+   charges nothing — the dollar reduction still comes from a Custom % discount
+   or a billing override; this just tracks the name and expiry for the Finance
+   exception engine. */
+.fm-scholarship-hint {
+    margin: 4px 0 0;
+    font-size: .78em;
+    line-height: 1.4;
+    color: var(--text-muted);
+    font-style: italic;
+}

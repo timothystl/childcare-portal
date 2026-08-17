@@ -100,6 +100,13 @@
     text-wrap: pretty;
     margin: 0;
 }
+.ap-nav-note.ap-nav-dashed {
+    margin: 14px 8px 0;
+    padding: 10px 10px 12px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--warm-gray);
+}
 
 /* The tool's own heading, so a tool page starts at the same left edge as
    a dashboard heading and nothing shifts when you move between them. The
@@ -873,3 +880,210 @@ textarea.an-input { line-height: 1.55; resize: vertical; }
     background: var(--sun-pale); border: 1px solid var(--sun); color: var(--mustard-dark);
     border-radius: 999px; padding: 3px 10px; font-size: .7em; font-weight: 800;
 }
+
+/* ============================================================
+   Finance — Bill the Month, Billing Report, Who Owes, Finance home
+   (design handoff: Finance.dc.html — 1c, 2a, 1e, 1a)
+   ============================================================ */
+
+/* Shared: a segmented pill pair (2a's By room / By name toggle). */
+.ap-seg {
+    display: inline-flex; background: var(--cream); border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px; gap: 2px;
+}
+.ap-seg-btn {
+    border: none; background: transparent; color: var(--text-muted);
+    font-family: inherit; font-size: .85em; font-weight: 700;
+    padding: 7px 16px; border-radius: 999px; cursor: pointer;
+}
+.ap-seg-btn.is-on { background: var(--navy); color: #fff; font-weight: 800; }
+
+/* ── Bill the Month (1c) ─────────────────────────────────── */
+.bm-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 18px;
+}
+.bm-head h2 { margin: 0; font-family: var(--font-head); font-size: 1.5em; color: var(--navy); }
+.bm-sub { margin: 4px 0 0; color: var(--text-muted); font-size: .92em; }
+.bm-head-actions { display: flex; align-items: center; gap: 12px; }
+
+.bm-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .bm-grid { grid-template-columns: 1fr; } }
+
+.bm-empty {
+    background: var(--green-pale); border: 1px solid var(--green-lt); border-radius: var(--radius-md);
+    padding: 20px; color: var(--green-dark); font-weight: 700;
+}
+
+.bm-card {
+    background: #fff; border: 1px solid var(--sun); border-left: 5px solid var(--sun);
+    border-radius: var(--radius-md); padding: 16px 18px; margin-bottom: 14px;
+    box-shadow: var(--shadow-card);
+}
+.bm-card-head { display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.bm-card-name { font-weight: 800; color: var(--navy); font-size: 1.05em; }
+.bm-card-kids { font-size: .85em; color: var(--text-muted); margin-top: 2px; }
+.bm-card-causes { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.bm-cause {
+    font-size: .78em; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+    background: var(--sun-pale); color: var(--mustard-dark); white-space: nowrap;
+}
+.bm-cause-credit { background: var(--green-pale); color: var(--green-dark); }
+.bm-cause-withdrawn { background: var(--tang-pale); color: var(--tang-dark); }
+
+.bm-card-math { display: flex; align-items: baseline; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
+.bm-new { font-family: var(--font-head); font-size: 1.3em; font-weight: 700; color: var(--navy); }
+.bm-old { font-size: .85em; color: var(--text-muted); text-decoration: line-through; }
+.bm-lines { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .82em; color: var(--text-muted); }
+
+.bm-card-actions { display: flex; gap: 10px; margin-top: 12px; }
+.bm-nofamily { font-size: .85em; color: var(--tang-dark); font-style: italic; }
+
+.bm-clean-card {
+    background: var(--green-pale); border: 1px solid var(--green-lt); border-radius: var(--radius-md);
+    padding: 20px; position: sticky; top: 16px;
+}
+.bm-clean-head { font-size: .78em; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--green-dark); }
+.bm-clean-amt { font-family: var(--font-head); font-size: 1.8em; font-weight: 700; color: var(--navy); margin: 6px 0; }
+.bm-clean-note { margin: 0 0 10px; color: var(--green-dark); font-size: .88em; }
+.bm-clean-lines { margin: 0 0 16px; padding-left: 18px; font-size: .85em; color: var(--text-muted); }
+.bm-release-btn { width: 100%; }
+.bm-open-list { width: 100%; margin-top: 8px; }
+
+.bm-tracker { display: flex; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
+.bm-track-step {
+    display: flex; align-items: center; gap: 8px;
+    background: #fff; border: 1px solid var(--border); border-radius: 999px;
+    padding: 7px 14px; font-size: .85em; color: var(--text-muted);
+}
+.bm-track-step span {
+    width: 20px; height: 20px; border-radius: 999px; background: var(--warm-gray);
+    display: flex; align-items: center; justify-content: center; font-size: .78em; font-weight: 800;
+}
+.bm-track-step.is-done { border-color: var(--green-lt); color: var(--green-dark); }
+.bm-track-step.is-done span { background: var(--green-lt); color: var(--green-dark); }
+.bm-track-step.is-open { border-color: var(--sun); color: var(--mustard-dark); font-weight: 700; }
+.bm-track-step.is-open span { background: var(--sun); color: #fff; }
+
+.bm-list-exc td { background: var(--sun-pale); }
+
+/* ── Billing report (2a) ─────────────────────────────────── */
+.br-head h2 { margin: 0; font-family: var(--font-head); font-size: 1.6em; color: var(--navy); }
+.br-sub { margin: 4px 0 18px; color: var(--text-muted); font-size: .9em; }
+
+.br-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.br-stat {
+    background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 13px 16px;
+}
+.br-stat-label { font-size: .74em; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); }
+.br-stat-val { font-family: var(--font-head); font-size: 1.4em; font-weight: 700; color: var(--navy); margin-top: 4px; }
+.br-stat-val.br-neg { color: var(--tang-dark); }
+.br-stat-total { background: var(--navy); border-color: var(--navy); }
+.br-stat-total .br-stat-label, .br-stat-total .br-stat-val { color: #fff; }
+.br-stat-sub { font-size: .78em; color: rgba(255,255,255,.75); margin-top: 3px; }
+
+.br-room-table tr.br-room-bar td { background: var(--warm-gray); font-weight: 800; text-transform: uppercase; font-size: .82em; letter-spacing: .04em; color: var(--navy); }
+tr.br-exc td { background: var(--sun-pale); }
+tr.br-withdrawn td { opacity: .62; }
+tr.br-grand-total td { background: var(--navy); color: #fff; font-weight: 800; }
+tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15em; }
+
+.br-ties {
+    margin-top: 16px; padding: 12px 16px; background: var(--linen); border: 1px solid var(--border);
+    border-radius: var(--radius-md); font-size: .85em; color: var(--text-muted);
+}
+
+/* ── Who owes (1e) ───────────────────────────────────────── */
+.wo-summary { margin-bottom: 18px; }
+.wo-bar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--warm-gray); }
+.wo-seg-paid   { background: var(--green); }
+.wo-seg-unpaid { background: var(--tang); }
+.wo-summary-line { margin-top: 8px; font-size: .9em; color: var(--text-muted); }
+
+.wo-card {
+    background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 14px 18px; margin-bottom: 10px;
+}
+.wo-card.band-watch  { background: var(--sun-pale); border-color: var(--sun-lt); }
+.wo-card.band-severe { background: var(--tang-pale); border-color: var(--tang-soft); border-left: 4px solid var(--tang); }
+
+.wo-card-main { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.wo-card-name { font-weight: 800; color: var(--navy); font-size: 1.02em; }
+.wo-locked { margin-left: 6px; font-size: .85em; }
+.wo-card-days { font-size: .8em; color: var(--text-muted); margin-top: 2px; }
+.wo-card.band-severe .wo-card-days { color: var(--tang-dark); font-weight: 700; }
+.wo-card.band-watch  .wo-card-days { color: var(--mustard-dark); font-weight: 700; }
+.wo-card-amt { font-family: var(--font-head); font-size: 1.25em; font-weight: 700; color: var(--navy); }
+.wo-card-why { font-size: .86em; color: var(--text-muted); margin-top: 6px; }
+.wo-nudge-trail { color: var(--text-muted); font-style: italic; }
+.wo-card-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+.wo-paid-toggle {
+    width: 100%; text-align: left; background: var(--linen); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 12px 16px; margin: 14px 0 8px;
+    font-weight: 700; color: var(--navy); cursor: pointer;
+}
+.wo-paid-row {
+    display: grid; grid-template-columns: 1.4fr 110px 2fr; gap: 12px; align-items: center;
+    padding: 9px 16px; border-bottom: 1px solid var(--linen); font-size: .88em;
+}
+.wo-paid-amt { color: var(--green-text); font-weight: 700; text-align: right; }
+.wo-paid-via { color: var(--text-muted); }
+
+/* ── Finance home (1a) ───────────────────────────────────── */
+.afh-clean-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--green-pale); border: 1px solid var(--green-lt); border-radius: var(--radius-sm);
+    padding: 11px 14px; margin-bottom: 12px; font-size: .88em; color: var(--green-dark); font-weight: 700;
+}
+.afh-exc-band {
+    background: var(--sun-pale); border: 1px solid var(--sun-lt); border-radius: var(--radius-sm);
+    padding: 8px 12px; font-size: .8em; font-weight: 800; color: var(--mustard-dark);
+    text-transform: uppercase; letter-spacing: .03em; margin-bottom: 8px;
+}
+.afh-exc-row {
+    display: grid; grid-template-columns: 1.2fr 1.6fr 80px auto; gap: 10px; align-items: center;
+    padding: 8px 4px; border-bottom: 1px solid var(--linen); font-size: .86em;
+}
+.afh-exc-name { font-weight: 700; color: var(--navy); }
+.afh-exc-cause { color: var(--text-muted); }
+.afh-exc-amt { font-weight: 700; color: var(--navy); text-align: right; }
+.afh-review {
+    background: none; border: none; color: var(--green-text); font-weight: 800;
+    font-size: .85em; cursor: pointer; padding: 0;
+}
+.afh-none { color: var(--text-muted); font-size: .88em; }
+
+.afh-stack-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--warm-gray); }
+.afh-seg-paid { background: var(--green); }
+.afh-seg-partial { background: var(--sun); }
+.afh-seg-unpaid { background: var(--tang); }
+.afh-stack-legend { display: flex; gap: 14px; margin-top: 6px; font-size: .8em; color: var(--text-muted); }
+.afh-stack-legend .is-paid { color: var(--green-text); font-weight: 700; }
+.afh-stack-legend .is-partial { color: var(--mustard-dark); font-weight: 700; }
+.afh-stack-legend .is-unpaid { color: var(--tang-dark); font-weight: 700; }
+
+.afh-recent { margin-top: 12px; }
+.afh-recent-row { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; font-size: .84em; border-bottom: 1px solid var(--linen); }
+.afh-recent-note { color: var(--text-muted); }
+
+.afh-owes-card { border: 1.5px solid var(--tang); }
+.afh-owes-head {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--tang-pale); margin: -18px -18px 14px; padding: 12px 18px;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    font-weight: 800; color: var(--tang-dark); font-size: .92em;
+}
+.afh-owes-total { font-family: var(--font-head); font-size: 1.2em; }
+.afh-owe-block { padding: 10px 0; border-bottom: 1px solid var(--linen); }
+.afh-owe-block:last-of-type { border-bottom: none; }
+.afh-owe-top { display: flex; justify-content: space-between; gap: 10px; }
+.afh-owe-name { font-weight: 700; color: var(--navy); }
+.afh-owe-amt { font-weight: 800; color: var(--navy); }
+.afh-owe-days { font-size: .78em; color: var(--text-muted); margin-top: 2px; }
+.afh-owe-days.is-watch { color: var(--mustard-dark); font-weight: 700; }
+.afh-owe-days.is-severe { color: var(--tang-dark); font-weight: 700; }
+.afh-owe-why { font-size: .84em; color: var(--text-muted); margin-top: 2px; }
+.afh-owe-decide { display: flex; gap: 8px; margin-top: 8px; }
+.afh-owes-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; }

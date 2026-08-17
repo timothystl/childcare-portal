@@ -1512,6 +1512,60 @@ async function backfillAllInvoices() {
     }
 }
 
+/**
+ * Billed / collected / outstanding per family for one month. Pure — no
+ * fetching, no DOM. This is what "who owes" answers, and it is answered here
+ * exactly once: loadArView() (below) and the Who Owes screen
+ * (admin-who-owes.js) both call this with the same three inputs so the two
+ * screens cannot disagree about a number. Do not add a second computation of
+ * outstanding balance anywhere else in the app.
+ *
+ * @param {string} month - 'YYYY-MM'
+ * @param {Array} families - fetchAllFamilies() rows
+ * @param {Array} invoices - fetchInvoicesForCycle() rows for this month's cycle
+ * @param {Array} monthPayments - fetchPaymentsForMonth() rows for this month
+ */
+function _buildArRows(month, families, invoices, monthPayments) {
+    const invoiceByFamily = new Map(invoices.map(inv => [String(inv.family_id), inv]));
+
+    const paymentsByFamily = {};
+    monthPayments.forEach(p => {
+        const fid = String(p.family_id);
+        if (!paymentsByFamily[fid]) paymentsByFamily[fid] = [];
+        paymentsByFamily[fid].push(p);
+    });
+
+    return families.map(family => {
+        const inv      = invoiceByFamily.get(String(family.id));
+        const payments = paymentsByFamily[String(family.id)] || [];
+
+        const billed      = parseFloat(inv?.final_amount || 0);
+        const collected   = payments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+        const outstanding = Math.max(0, billed - collected);
+
+        let status;
+        if (billed === 0 && collected === 0) status = 'no_invoice';
+        else if (outstanding <= 0 && billed > 0) status = 'paid';
+        else if (collected > 0)                  status = 'partial';
+        else                                     status = 'overdue';
+
+        return {
+            familyId:    family.id,
+            familyName:  family.parent_name || '(unnamed)',
+            familyEmail: family.parent_email || '',
+            invoiceId:   inv?.id || null,
+            sentAt:      inv?.sent_at || null,
+            billed,
+            collected,
+            outstanding,
+            status,
+            payments,
+            isLocked:    !!family.registration_locked,
+            lockReason:  family.registration_lock_reason || '',
+        };
+    });
+}
+
 async function loadArView() {
     const wrap = document.getElementById('arTableWrap');
     if (wrap) wrap.innerHTML = '<p class="empty-hint">Loading…</p>';
@@ -1538,43 +1592,7 @@ async function loadArView() {
             fetchPaymentsForMonth(month).catch(() => []),
         ]);
 
-        const invoiceByFamily = new Map(invoices.map(inv => [String(inv.family_id), inv]));
-
-        const paymentsByFamily = {};
-        monthPayments.forEach(p => {
-            const fid = String(p.family_id);
-            if (!paymentsByFamily[fid]) paymentsByFamily[fid] = [];
-            paymentsByFamily[fid].push(p);
-        });
-
-        _arData = families.map(family => {
-            const inv      = invoiceByFamily.get(String(family.id));
-            const payments = paymentsByFamily[String(family.id)] || [];
-
-            const billed      = parseFloat(inv?.final_amount || 0);
-            const collected   = payments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
-            const outstanding = Math.max(0, billed - collected);
-
-            let status;
-            if (billed === 0 && collected === 0) status = 'no_invoice';
-            else if (outstanding <= 0 && billed > 0) status = 'paid';
-            else if (collected > 0)                  status = 'partial';
-            else                                     status = 'overdue';
-
-            return {
-                familyId:    family.id,
-                familyName:  family.parent_name || '(unnamed)',
-                familyEmail: family.parent_email || '',
-                invoiceId:   inv?.id || null,
-                billed,
-                collected,
-                outstanding,
-                status,
-                isLocked:    !!family.registration_locked,
-                lockReason:  family.registration_lock_reason || '',
-            };
-        });
-
+        _arData = _buildArRows(month, families, invoices, monthPayments);
         _arLoaded = true;
         renderArTable(_arData);
     } catch (err) {

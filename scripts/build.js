@@ -181,6 +181,15 @@ const ENTRIES = [
                 'js/admin/admin-reports.js',
                 'js/admin/admin-finance.js',
                 'js/admin/admin-billing.js',
+                // Finance handoff screens — after admin-billing.js (reads
+                // _buildArRows) and admin-reports.js (reads
+                // _buildFamilyBillingData). Load order doesn't gate function
+                // calls in one concatenated script (hoisting), but matching
+                // the real dependency keeps the list honest to read.
+                'js/admin/admin-bill-month.js',
+                'js/admin/admin-billing-report.js',
+                'js/admin/admin-who-owes.js',
+                'js/admin/admin-finance-home.js',
                 'js/admin/admin-staffing.js',
                 'js/admin/admin-settings.js',
                 'js/admin/admin-waitlist.js',

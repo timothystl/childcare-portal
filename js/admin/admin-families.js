@@ -794,20 +794,32 @@ function renderModalChildRows() {
                     <div class="fm-field">
                         <label>Discount</label>
                         <select class="fmc-discount-type">
-                            <option value="none"   ${dt === 'none'   ? 'selected' : ''}>None</option>
-                            <option value="staff"  ${dt === 'staff'  ? 'selected' : ''}>Staff (100% free)</option>
-                            <option value="custom" ${dt === 'custom' ? 'selected' : ''}>Custom %</option>
+                            <option value="none"       ${dt === 'none'       ? 'selected' : ''}>None</option>
+                            <option value="staff"      ${dt === 'staff'      ? 'selected' : ''}>Staff (100% free)</option>
+                            <option value="custom"     ${dt === 'custom'     ? 'selected' : ''}>Custom %</option>
+                            <option value="scholarship" ${dt === 'scholarship' ? 'selected' : ''}>Scholarship</option>
                         </select>
                     </div>
                     <div class="fm-field discount-value-wrap" ${dt !== 'custom' ? 'style="display:none"' : ''}>
                         <label>% Off</label>
                         <input type="number" class="fmc-discount-value" value="${dv}" min="0" max="100" step="1" style="width:70px">
                     </div>
+                    <!-- ⚠️ A scholarship's actual dollar reduction still comes from
+                         a % (Custom) discount or a billing override — this label
+                         alone charges nothing (effectiveAdminRate() only special-
+                         cases 'staff' and 'custom'). It exists so "Bill the
+                         month" and the billing report can flag it by name and
+                         track when it expires. -->
+                    <div class="fm-field discount-expires-wrap" ${dt === 'none' ? 'style="display:none"' : ''}>
+                        <label>Expires</label>
+                        <input type="date" class="fmc-discount-expires" value="${child.discount_expires_at || ''}" style="width:150px">
+                    </div>
                     <div class="fm-field fm-field-grow">
                         <label>Note</label>
                         <input type="text" class="fmc-discount-note" value="${escHtml(child.discount_note || '')}" placeholder="Optional note">
                     </div>
                 </div>
+                ${dt === 'scholarship' ? `<p class="fm-scholarship-hint">A scholarship label alone charges nothing — set a Custom % above (or a billing override) for the actual reduction. This just tracks the name and the expiry.</p>` : ''}
                 <div class="fm-child-safety">
                     <label style="font-size:.82em;color:#555;font-weight:600;display:block;margin-bottom:4px">
                         Allergies &amp; Care Notes
@@ -849,11 +861,31 @@ function renderModalChildRows() {
             </div>`;
     }).join('');
 
-    // Bind discount-type toggles
+    // Bind discount-type toggles. DOM-only, deliberately: renderModalChildRows()
+    // rebuilds every row from familyModalChildren, and that array is only
+    // synced from the inputs at Save time (see the allergy-chip comment above
+    // for why) — calling it here would wipe whatever the director had half
+    // typed into the name/DOB/room fields of every other row.
     container.querySelectorAll('.fmc-discount-type').forEach(sel => {
         sel.addEventListener('change', () => {
-            const wrap = sel.closest('.fm-child-discount').querySelector('.discount-value-wrap');
-            if (wrap) wrap.style.display = sel.value === 'custom' ? '' : 'none';
+            const row = sel.closest('.fm-child-row');
+            const discountBlock = sel.closest('.fm-child-discount');
+            const valueWrap   = discountBlock.querySelector('.discount-value-wrap');
+            const expiresWrap = discountBlock.querySelector('.discount-expires-wrap');
+            if (valueWrap)   valueWrap.style.display   = sel.value === 'custom' ? '' : 'none';
+            if (expiresWrap) expiresWrap.style.display = sel.value === 'none'   ? 'none' : '';
+
+            let hint = row.querySelector('.fm-scholarship-hint');
+            if (sel.value === 'scholarship') {
+                if (!hint) {
+                    hint = document.createElement('p');
+                    hint.className = 'fm-scholarship-hint';
+                    hint.textContent = 'A scholarship label alone charges nothing — set a Custom % above (or a billing override) for the actual reduction. This just tracks the name and the expiry.';
+                    discountBlock.after(hint);
+                }
+            } else {
+                hint?.remove();
+            }
         });
     });
 
@@ -919,6 +951,7 @@ function addModalChildRow() {
             familyModalChildren[idx].discount_type  = row.querySelector('.fmc-discount-type')?.value || 'none';
             familyModalChildren[idx].discount_value = parseFloat(row.querySelector('.fmc-discount-value')?.value) || 0;
             familyModalChildren[idx].discount_note  = row.querySelector('.fmc-discount-note')?.value.trim() || null;
+            familyModalChildren[idx].discount_expires_at = row.querySelector('.fmc-discount-expires')?.value || null;
             familyModalChildren[idx].recurring_days = [...row.querySelectorAll('.fmc-recurring-day:checked')].map(cb => cb.value);
             familyModalChildren[idx].care_notes     = row.querySelector('.fmc-care-notes')?.value.trim() || null;
             familyModalChildren[idx].photo_release  = row.querySelector('.fmc-photo-release')?.checked !== false;
@@ -929,6 +962,7 @@ function addModalChildRow() {
     familyModalChildren.push({
         id: null, child_name: '', child_dob: null,
         room_override: null, discount_type: 'none', discount_value: 0, discount_note: null,
+        discount_expires_at: null,
         recurring_days: [], allergies: [], care_notes: null, photo_release: true,
     });
     renderModalChildRows();
@@ -988,6 +1022,7 @@ function readModalChildrenFromDom() {
             discount_type:  row.querySelector('.fmc-discount-type').value || 'none',
             discount_value: parseFloat(row.querySelector('.fmc-discount-value').value) || 0,
             discount_note:  row.querySelector('.fmc-discount-note').value.trim() || null,
+            discount_expires_at: row.querySelector('.fmc-discount-expires')?.value || null,
             recurring_days: [...row.querySelectorAll('.fmc-recurring-day:checked')].map(cb => cb.value),
             // Allergies live on familyModalChildren rather than in the DOM —
             // they are chips, not inputs.
@@ -1046,6 +1081,7 @@ async function saveFamilyModal() {
                     discountType:  child.discount_type,
                     discountValue: child.discount_value,
                     discountNote:  child.discount_note,
+                    discountExpiresAt: child.discount_expires_at,
                 });
             }
         } else {
@@ -1081,6 +1117,7 @@ async function saveFamilyModal() {
                         discount_type:  child.discount_type,
                         discount_value: child.discount_value,
                         discount_note:  child.discount_note,
+                        discount_expires_at: child.discount_expires_at,
                         recurring_days: child.recurring_days?.length ? child.recurring_days : null,
                         allergies:      child.allergies || [],
                         care_notes:     child.care_notes,
@@ -1100,6 +1137,7 @@ async function saveFamilyModal() {
                         discountType:  child.discount_type,
                         discountValue: child.discount_value,
                         discountNote:  child.discount_note,
+                        discountExpiresAt: child.discount_expires_at,
                         recurringDays: child.recurring_days?.length ? child.recurring_days : null,
                         allergies:     child.allergies || [],
                         careNotes:     child.care_notes,

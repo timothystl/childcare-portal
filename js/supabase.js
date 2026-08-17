@@ -1188,7 +1188,7 @@ async function createFamily({ parentName, parentEmail, parentPhone, pin: provide
  * @param {string|null} [params.childDob] - ISO 8601 date or null
  * @returns {Promise<Student>}
  */
-async function addStudent({ familyId, childName, childDob, roomOverride = null, discountType = null, discountValue = null, discountNote = null, recurringDays = null, allergies = [], careNotes = null, photoRelease = true }) {
+async function addStudent({ familyId, childName, childDob, roomOverride = null, discountType = null, discountValue = null, discountNote = null, discountExpiresAt = null, recurringDays = null, allergies = [], careNotes = null, photoRelease = true }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: existing } = await sbClient
         .from('students').select('id')
@@ -1204,6 +1204,7 @@ async function addStudent({ familyId, childName, childDob, roomOverride = null, 
             discount_type:  discountType || null,
             discount_value: discountValue ?? null,
             discount_note:  discountNote || null,
+            discount_expires_at: discountExpiresAt || null,
             recurring_days: recurringDays || null,
             // Child safety + consent. The DB enforces the allergies shape
             // (allergies_shape_ok), so a malformed write fails loudly here
@@ -1367,7 +1368,7 @@ async function fetchStudents() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
         .from('students')
-        .select('id, child_name, child_dob, family_id, room_override, reg_fee_paid_year')
+        .select('id, child_name, child_dob, family_id, room_override, reg_fee_paid_year, discount_type, discount_value, discount_expires_at')
         .order('child_name');
     if (error) throw error;
     return data || [];
@@ -4181,6 +4182,99 @@ async function fetchAllBillingInvoices() {
         .order('generated_at', { ascending: false });
     if (error) throw error;
     return data || [];
+}
+
+// ── Finance: credits, nudges, payment plans, write-offs ─────
+// Bookkeeping on top of the billing engine, never a second way to compute what
+// a family owes. See finance_exceptions_and_actions.sql.
+
+/** Unapplied credits for one family, or every unapplied credit if familyId is omitted. */
+async function fetchBillingCredits({ familyId = null, unappliedOnly = true } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    let q = sbClient.from('billing_credits').select('*').order('created_at', { ascending: false });
+    if (familyId) q = q.eq('family_id', familyId);
+    if (unappliedOnly) q = q.is('applied_invoice_id', null);
+    const { data, error } = await q;
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+async function insertBillingCredit(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.from('billing_credits').insert(row).select().single();
+    if (error) throw friendlyError(error);
+    await logAdminAction('create', 'billing_credit', data.id, { family_id: row.family_id, amount: row.amount });
+    return data;
+}
+
+/** Stamps a credit as consumed by an invoice, so it cannot be applied twice. */
+async function applyBillingCredit(id, invoiceId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('billing_credits')
+        .update({ applied_invoice_id: invoiceId, applied_at: new Date().toISOString() })
+        .eq('id', id)
+        .is('applied_invoice_id', null);
+    if (error) throw friendlyError(error);
+}
+
+async function fetchNudgesForFamily(familyId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_nudges').select('*').eq('family_id', familyId).order('sent_at', { ascending: false });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/** Every family's nudge history for a month in one query, keyed by family_id. */
+async function fetchAllNudgesSince(sinceIso) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_nudges').select('*').gte('sent_at', sinceIso).order('sent_at', { ascending: false });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+async function insertNudge(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.from('billing_nudges').insert(row).select().single();
+    if (error) throw friendlyError(error);
+    return data;
+}
+
+async function fetchPaymentPlans({ familyId = null, activeOnly = true } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    let q = sbClient.from('billing_payment_plans').select('*').order('created_at', { ascending: false });
+    if (familyId) q = q.eq('family_id', familyId);
+    if (activeOnly) q = q.eq('status', 'active');
+    const { data, error } = await q;
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+async function insertPaymentPlan(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.from('billing_payment_plans').insert(row).select().single();
+    if (error) throw friendlyError(error);
+    await logAdminAction('create', 'payment_plan', data.id, { family_id: row.family_id, total_amount: row.total_amount });
+    return data;
+}
+
+async function fetchWriteOffs({ familyId = null } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    let q = sbClient.from('billing_write_offs').select('*').order('created_at', { ascending: false });
+    if (familyId) q = q.eq('family_id', familyId);
+    const { data, error } = await q;
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+async function insertWriteOff(row) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.from('billing_write_offs').insert(row).select().single();
+    if (error) throw friendlyError(error);
+    await logAdminAction('create', 'write_off', data.id, { family_id: row.family_id, amount: row.amount });
+    return data;
 }
 
 async function fetchAllBillingPayments() {
