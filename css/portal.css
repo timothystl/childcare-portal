@@ -557,6 +557,15 @@
 /* ============================================================
    ACCOUNT TAB (design §10b)
    ============================================================ */
+/* Marks where Documents (portal-documents.js, its own .pd-card sections)
+   starts inside Account — a plain label, not another card, so it reads as
+   a subsection break rather than one more boxed row in the list above it. */
+.pt-subhead {
+    font-family: var(--font-head);
+    font-size: 1.1em;
+    color: var(--navy);
+    margin: 22px 2px 4px;
+}
 .pa-card {
     background: var(--white);
     border: 1px solid var(--border);

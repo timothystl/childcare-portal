@@ -1,13 +1,13 @@
 // ============================================================
 // portal-nav — the parent app's tab shell
 // ============================================================
-// Design: docs/design_handoff/README.md, "Navigation". Five persistent tabs —
-// 🏠 Today · 🗓 Schedule · 💳 Billing · 💬 Messages · 👤 Account — on every
-// non-modal screen. The bar never scrolls; the route body above it does.
+// Design: docs/design_handoff/README.md, "Navigation". Four persistent tabs —
+// 🏠 Today · 🗓 Schedule · 💬 Messages · 👤 Account — on every non-modal
+// screen. The bar never scrolls; the route body above it does.
 //
 // Why this exists at all: the portal shipped as a single scrolling page while
-// the design is a five-tab app. Everything already built becomes the Today tab,
-// and every screen still to come becomes additive instead of a restructure.
+// the design is a multi-tab app. Everything already built becomes the Today
+// tab, and every screen still to come becomes additive instead of a restructure.
 //
 // "Tab state is a single `route` value" (README, Interactions). Deliberately
 // NOT a router with URLs: these are panes of one signed-in app, and a
@@ -15,17 +15,17 @@
 // nothing yet asks for. When push deep links land (README: "Push → deep link"),
 // this is the function they call.
 
-// ⚠️ Documents replaced Billing here rather than becoming a sixth tab. The
-// handoff's five are Today · Scheduler · Messages · Documents · Account, and
-// Billing was a placeholder card reading "online billing is coming" — a live
-// tab spent on a promise. Six tabs at 390px gives each one 78px, which is under
-// the 44pt target once the label wraps. The billing promise moved into
-// Documents, which is where the handoff puts tax statements anyway.
+// ⚠️ Documents is NOT its own tab. It shipped briefly as a fifth tab
+// (replacing a Billing placeholder), but paperwork a parent opens once a
+// season doesn't earn a permanent slot in the bar a parent taps every day —
+// it now renders inside the Account tab (portal.html, #pdBody nested under
+// #ptAccountBody), the "everything about my family" tab, right alongside the
+// pickup list and notification prefs. See portal-account.js / paLoad, which
+// loads it together with the rest of Account on first visit.
 const PT_TABS = [
     { key: 'today',     icon: '🏠', label: 'Today' },
     { key: 'schedule',  icon: '🗓', label: 'Schedule' },
     { key: 'messages',  icon: '💬', label: 'Messages' },
-    { key: 'documents', icon: '📄', label: 'Documents' },
     { key: 'account',   icon: '👤', label: 'Account' },
 ];
 
@@ -78,9 +78,10 @@ function ptGoTab(key) {
     if (!ptOpened[key]) {
         ptOpened[key] = true;
         if (key === 'messages' && typeof pmLoad === 'function') pmLoad();
+        // Documents lives inside Account now — load both together.
         if (key === 'account'  && typeof paLoad === 'function') paLoad();
+        if (key === 'account'  && typeof pdLoad === 'function') pdLoad();
         if (key === 'schedule' && typeof psLoad === 'function') psLoad();
-        if (key === 'documents' && typeof pdLoad === 'function') pdLoad();
     }
 }
 
