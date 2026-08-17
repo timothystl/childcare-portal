@@ -3542,6 +3542,11 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     border-radius: 6px; padding: 4px 8px; font-size: 13.5px; cursor: pointer; white-space: nowrap;
 }
 .wlp-chevron { color: var(--text-muted); font-size: 14.5px; width: 14px; text-align: center; }
+/* Groups the trailing controls so the mobile breakpoint can wrap them onto
+   their own line as a unit instead of three separate flex items fighting
+   the fixed-width name text for space. Matches wlp-row-main's old 12px gap
+   on desktop, so this is a no-op there. */
+.wlp-row-tail { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 
 .wlp-expand { padding: 0 24px 16px 58px; }
 .wlp-month-strip { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -4320,13 +4325,48 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     .billing-sub-nav { padding: 8px 12px 0; }
     .billing-sub-btn { padding: 6px 12px; font-size: .82em; }
     .bl-charts-row { flex-direction: column; }
-    .wlp-queue-cols { grid-template-columns: 1fr; }
+    .wlp-queue-cols { grid-template-columns: 1fr; padding: 0 14px; }
     .wlp-row:nth-child(2n) { padding-left: 0; border-left: none; }
     .wlp-grid-wrap { flex-direction: column; }
     .wlp-board-wrap { flex-direction: column; }
     .wlp-sidebar { width: auto; border-left: none; border-top: 1px solid var(--border); }
     .wlp-moving-timeline { grid-template-columns: repeat(4, 1fr); }
     .wlp-moving-drawer-grid { grid-template-columns: 1fr; }
+
+    /* Queue row: the 230px fixed name width and three nowrap trailing
+       controls (status pill / Edit / chevron) don't fit a phone-width row
+       without overflowing off-screen. Switch to a 2-row grid — position
+       badge spanning both rows, name+chips+meta on row 1, the tail group
+       wrapping onto row 2 under it — instead of one unbroken flex line. */
+    .wlp-row-main {
+        display: grid;
+        grid-template-columns: 24px 1fr;
+        grid-template-areas: "pos body" "pos tail";
+        column-gap: 12px; row-gap: 8px;
+        align-items: start;
+    }
+    .wlp-pos { grid-area: pos; }
+    .wlp-row-body { grid-area: body; }
+    .wlp-row-tail { grid-area: tail; flex-wrap: wrap; }
+    /* flex: 1 1 0 (not just width:auto) so it actually shrinks to the space
+       left after the nowrap room-label/day-type-tag siblings, which is what
+       lets the existing overflow:hidden + text-ellipsis take effect instead
+       of the text bleeding past the row at its full nowrap width. */
+    .wlp-row-name-text { width: auto; max-width: 100%; flex: 1 1 0%; min-width: 0; }
+    .wlp-expand { padding-left: 36px; }
+
+    /* Larger tap targets — 28px/13.5px controls are under the ~44px
+       recommended touch target size. */
+    .wlp-edit-btn { padding: 8px 12px; font-size: 14px; }
+    .wlp-month-nav-btn { width: 36px; height: 36px; }
+
+    /* Header/toolbar/filter bar carried 24px of padding per side, meant for
+       a desktop-width card — that's real width lost on a ~375px viewport. */
+    .wlp-header { padding: 12px 14px; }
+    .wlp-toolbar { padding: 8px 14px; }
+    .wlp-filter-bar { padding: 10px 14px 0; }
+    .wlp-queue-hint { padding: 10px 14px 0; }
+    #wlpSearch { min-width: 0 !important; flex: 1 1 100%; }
 }
 
 /* ── Historical Payroll Import ─────────────────────────────── */

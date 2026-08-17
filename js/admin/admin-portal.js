@@ -45,6 +45,10 @@ const AP_TABS = {
         icon: '🧭', label: 'Director',
         blurb: "Staffing and enrollment in one place — who's coming, who you need on the floor, and who's waiting for a seat.",
     },
+    messages: {
+        icon: '💬', label: 'Messages',
+        blurb: 'Everything a family has sent through the portal — the Contact Us form and waitlist questions — in one inbox.',
+    },
     classrooms: {
         icon: '📋', label: 'Classrooms',
         blurb: 'Who is here, in which room, on which day — and the family records behind them.',
@@ -249,8 +253,14 @@ const AP_TOOLS = [
     { key: 'clockIntegrity', pane: 'staffing', section: 'clockIntegritySection', tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.tang, icon: '📱', name: 'Clock-In Integrity',
       blurb: 'Whether the geofence is recording anything, and whether two staff share a phone.' },
 
-    // ── Planning · Family Communication ──
-    { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'planning', group: 'Family Communication', tint: AP_TINT.gold, icon: '💬', name: 'Parent Messages',
+    // ── Messages ──
+    // Its own top-level tab, not a group buried under Planning: this is the
+    // Contact Us / waitlist inbox and it needs to be found without knowing
+    // it lives downstream of the waitlist. (Distinct from `threads` under
+    // Classrooms, which is two-way conversation with already-enrolled
+    // families — that one keeps its own "Parent Messages" name too; they
+    // are genuinely different inboxes, not a duplicate.)
+    { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '💬', name: 'Parent Messages',
       blurb: 'Everything families have sent through the portal.' },
 
     // ── Market Analysis ──
