@@ -983,6 +983,116 @@ Set as Cloudflare Pages environment variables and Supabase Edge Function secrets
 
 ---
 
+## Home page classroom cards are server-rendered in `worker.js` (2026-08-16)
+
+`#roomInfoGrid` used to ship as an empty `<div>` that `js/app.js` filled from
+Supabase after load. Google does run JavaScript, but on a deferred second pass it
+is not obliged to finish — so the ages, rates, capacities and ratios, which are
+exactly what a parent searches for, were the *least* reliably indexed content on
+the page. `worker.js` now fills them with `HTMLRewriter` before the HTML leaves
+the edge, for `/` and `/index.html` only.
+
+- **It reads live settings, not a build-time snapshot, because the two disagree.**
+  The `ROOMS` defaults in `js/supabase.js` say Goose is 30–36 months and Owl is
+  36+; the saved `room_rates` setting says 36–60 and 24–36. Baking the defaults
+  into the HTML would have published wrong ages and capacities to Google with
+  nothing to notice it. Settings are fetched with the anon key and cached in
+  `caches.default` for 5 minutes per edge location.
+- **It fails open.** Any error, timeout (2s) or missing key returns the page
+  untouched — a Supabase outage must not take the marketing page down.
+- ⚠️ **It only runs because `wrangler.jsonc` now sets
+  `assets.run_worker_first: ["/", "/index.html"]`.** Workers Assets serves any
+  request matching a file on disk **without invoking `worker.js` at all**, so
+  the first deploy of this feature shipped and did nothing — the grid stayed
+  empty and the fail-open path hid it. **Proof technique:** `Service-Worker-Allowed`
+  is set only by `worker.js`, and it was absent from the live `/sw.js` response.
+  Use that header, not the CSP, to test whether the Worker ran — `_headers`
+  sets a matching CSP, so the CSP looking right proves nothing.
+  - Corollary: **`_headers` is the effective policy for every other path**, and
+    `worker.js`'s Cache-Control/CSP block is dead code there. A header change
+    made only in `worker.js` will silently do nothing. Keep both in sync.
+  - Keep `run_worker_first` narrow. `true` would route every image, font and
+    `dist/` bundle through the Worker for no benefit.
+- ⚠️ **Diagnose with the `x-ssr-rooms` response header on `/`,** which every exit
+  path stamps. **Absent** = the Worker never ran (routing). A **number** = cards
+  rendered. `nokey` / `fetchfail` / `http4xx` / `badjson` / `nodata` / `error` =
+  it ran and gave up there. Routing and data failures look identical in the HTML
+  — both just leave an empty grid — and telling them apart by guesswork cost
+  several deploy cycles before this header existed.
+- The settings fetch prefers the `SUPABASE_ANON_KEY` binding but falls back to
+  `PUBLIC_ANON_KEY` in `worker.js`. **The binding was in fact absent on the
+  Worker**, which is why the first two attempts rendered nothing. That key is
+  published in `index.html` already and every table it reaches is behind RLS, so
+  the fallback is safe. ⚠️ The **service role** key is not in source and never
+  may be.
+- **The client still re-renders over it.** That is deliberate, not waste: the
+  server copy is what a crawler indexes, the client pass keeps a long-open tab
+  honest if a rate changes mid-session.
+- ⚠️ **`worker.js` holds byte-identical copies of `escHtml`, `getSortedRooms`,
+  `buildPublicRoomCardsHtml`, `ROOM_CAPACITY_NOUNS` and `ROOMS`.** It cannot
+  import from `js/` — those are classic browser scripts with top-level side
+  effects, and the pages load them unbundled in local dev. A **cross-file drift
+  guard** in `js/tests/business-logic.test.js` fails CI if any copy diverges. It
+  already earned its keep: it caught Summer Camp's rate and ratio being copied
+  from the live settings instead of the source defaults. **Add a room, rename a
+  room, or change the card markup → update both sides.**
+- `renderPublicRoomCards()` in `js/app.js` was split so the string builder
+  (`buildPublicRoomCardsHtml`) is pure and the DOM write is separate. Keep it
+  that way — the guard compares that function.
+
+⚠️ **The Owl and Turtle rooms both read "24 – 36 months" in the live
+`room_rates` setting**, and Goose reads 36–60. That contradicts the Rooms table
+below. Since these are now server-rendered, whatever is in Settings is what
+Google indexes — fix it in Settings → Rates, not in code.
+
+---
+
+## ⚠️ Two staff lists, and the public one filters itself (2026-08-16)
+
+**`staff` (the roster) and `settings.staff_directory` (the public "Our Staff"
+cards) are separate and nothing linked them.** Marking an assistant director
+inactive in Staff → Staff Roster left her on the home page indefinitely, with
+nobody told. Found in production.
+
+`public_staff_directory_rpc.sql`, **applied and verified 2026-08-16.**
+`js/app.js` now calls `fetchPublicStaffDirectory()` → the
+`public_staff_directory()` SECURITY DEFINER RPC, which does the join and returns
+only what should be shown.
+
+- ⚠️ **The browser cannot do this filtering.** The anon policy on `staff` is
+  `USING (active = true)`, so anon sees *only* active staff and cannot tell
+  "left the center" from "never in the roster". Widening that policy would
+  publish a list of former employees — worse than the bug. **Do not replace the
+  RPC call with `fetchSetting('staff_directory')`.**
+- **The rule fails open:** shown if the roster does not know the person (a
+  directory-only entry) **or** any matching roster row is active; hidden only
+  when the roster knows them and no match is active. An unmatched entry is never
+  hidden by accident.
+- Names match loosely in one direction: the directory holds first names
+  (`Mary Ellen`), the roster holds full names (`Mary Ellen Scheetz`), so a
+  directory name matches a roster name it is a whole-word prefix of. Two staff
+  sharing a first name is safe — the card shows while *either* is active.
+- ⚠️ **`admin-settings.js` still reads the raw setting on purpose.** The editor
+  must see every entry including hidden ones; loading the filtered list there
+  would silently delete them on the next save.
+- **The editor badges hidden rows** ("Not on website", gold rail, dimmed photo)
+  so a hidden person is not indistinguishable from a shown one.
+  `staff_directory_hidden_names.sql` (**applied 2026-08-16**) moved the rule into
+  `_staff_directory_annotated()` and both callers now read it:
+  `public_staff_directory()` filters on it, `staff_directory_hidden_names()`
+  reports it. ⚠️ **Never re-derive "is this entry hidden" in JS** — two copies of
+  the rule that drift would label the wrong people as off-site, which is worse
+  than no badge. The badge is keyed on name, so the save handler re-fetches:
+  renaming a row can change whether it matches the roster.
+  - `_staff_directory_annotated()` has **no EXECUTE for anon or authenticated**;
+    the two definer wrappers call it as owner. `staff_directory_hidden_names()`
+    is `authenticated` only *and* self-gates on `is_admin()`, because R20 means
+    the browser's role check cannot be trusted.
+- Verified as `anon` in a rolled-back transaction: with the inactive employee
+  re-inserted, the RPC returns 6 entries and does not leak her name.
+
+---
+
 ## ⚠️ The `.insert().select()` trap — audited 2026-08-13
 
 **This took parent registration down for ~6 hours on 2026-08-12.** Worth reading

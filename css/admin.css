@@ -429,6 +429,7 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .roster-field select:focus { outline: none; border-color: var(--navy); }
 .roster-btns {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     align-items: flex-end;
 }
@@ -1998,6 +1999,22 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 
     /* Report tables — allow horizontal scroll on narrow screens */
     .report-table-wrap { overflow-x: auto; }
+
+    /* Tool control bars (Build Staff Schedule, Payroll, Classrooms, …).
+       .roster-btns is a nowrap flex row, so three buttons — Save Schedule /
+       Export Excel / Email Schedules — ran 130px past the right edge of a
+       390px phone and pushed the whole page into horizontal scroll. Stack the
+       bar and let the buttons share the row instead. */
+    .roster-controls { gap: 12px; }
+    .roster-field,
+    .roster-btns { flex: 1 1 100%; min-width: 0; }
+    .roster-field input,
+    .roster-field select { width: 100%; min-width: 0; }
+    .roster-btns { flex-wrap: wrap; }
+    .roster-btns > button { flex: 1 1 auto; min-width: 0; }
+    /* The stats chips sit after the buttons with an inline margin-left:auto
+       that means nothing once the bar is stacked. */
+    .roster-controls .ap-stats { flex: 1 1 100%; margin-left: 0 !important; }
 }
 
 .mobile-menu-btn {
@@ -2335,6 +2352,19 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     border-bottom: 1px solid var(--warm-gray);
 }
 .staff-dir-row:hover { background: var(--cream); }
+/* This person is in the directory but not on the public site, because their
+   Staff Roster row is inactive (see staff_directory_hidden_names()). Marked
+   rather than hidden — the row stays editable so a mistaken deactivation is
+   still findable here. */
+.staff-dir-row.is-off-site { box-shadow: inset 3px 0 0 var(--sun); }
+.staff-dir-row.is-off-site .staff-dir-photo { opacity: .55; }
+.tag.off-site {
+    background: var(--sun-pale);
+    color: var(--amber-dark);
+    border: 1px solid var(--sun-lt);
+    white-space: nowrap;
+    align-self: center;
+}
 .staff-dir-photo {
     position: relative;
     width: 64px;
@@ -2883,6 +2913,217 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 }
 .payroll-legend-item { display: flex; align-items: center; gap: 6px; }
 .payroll-legend-bar  { width: 3px; height: 14px; border-radius: 2px; flex-shrink: 0; }
+
+/* ============================================================
+   PAYROLL ON A PHONE — table reflows to cards
+   ============================================================
+   The payroll table needs 820px and the day table inside it another ~600px, so
+   on a 390px phone you saw about a third of it at a time and scrolled sideways
+   to reach Hours, Notes and the status tick. Below 860px (phones and iPad
+   portrait) both tables become stacked cards instead.
+
+   ⚠️ This is deliberately CSS-only. Every live-update path in
+   admin-reports.js — _recalcPayrollStaff, _updatePayrollDayRowState,
+   _savePayrollTimeInline, _refreshPayrollDayRow — finds its targets with
+   querySelector on classes and `tr.payroll-day-row[data-date=…]`. Reflowing
+   with `display:block/grid` leaves every element, class and dataset exactly
+   where the JS expects it, so auto-save, the ≠ mismatch marker, the room
+   warning and the save ticks all keep working with no JS change. Do not
+   "simplify" this into a separate mobile renderer — that would fork the
+   editing logic, which is the part that must not drift.
+
+   The column headers disappear when cells stack, so each figure carries its
+   own label via ::before. Those are CSS-generated, so the JS rewriting a
+   cell's innerHTML never wipes the label. */
+@media (max-width: 860px) {
+    /* ── Outer staff table → one card per staff member ───────────── */
+    .payroll-table,
+    .payroll-table > tbody,
+    .payroll-table > tfoot,
+    .payroll-table > tbody > tr,
+    .payroll-table > tfoot > tr,
+    .payroll-table > tbody > tr > td,
+    .payroll-table > tfoot > tr > td { display: block; width: auto; }
+    .payroll-table { min-width: 0; }
+    .payroll-table > thead { display: none; }
+    .payroll-table-wrap { overflow-x: visible; box-shadow: none; background: transparent; }
+
+    .payroll-table.report-table tbody tr.payroll-staff-row,
+    .payroll-staff-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2px 10px;
+        background: var(--white);
+        border: 1px solid var(--admin-border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    }
+    /* Explicit placement — the source order is name, rate, period hrs, period
+       pay, YTD hrs, YTD pay, PTO, completion, which is not the order that
+       reads best stacked. */
+    .payroll-staff-name-cell  { grid-column: 1 / -1; grid-row: 1; padding: 0 0 8px !important; }
+    .payroll-rate-cell        { grid-column: 1;      grid-row: 2; }
+    .payroll-completion-cell  { grid-column: 2;      grid-row: 2; }
+    .payroll-period-hrs-cell  { grid-column: 1;      grid-row: 3; }
+    .payroll-period-pay-cell  { grid-column: 2;      grid-row: 3; }
+    .payroll-ytd-cell         { grid-column: 1;      grid-row: 4; }
+    .payroll-ytd-pay-cell     { grid-column: 2;      grid-row: 4; }
+    .payroll-pto-main-cell    { grid-column: 1 / -1; grid-row: 5; }
+
+    .payroll-staff-row > td {
+        text-align: left !important;
+        white-space: normal;
+        padding: 4px 0 !important;
+        border: none !important;
+        font-size: 13px;
+    }
+    .payroll-staff-row > td::before {
+        display: block;
+        font-size: 9.5px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .07em;
+        color: var(--text-muted);
+        margin-bottom: 1px;
+    }
+    .payroll-rate-cell::before       { content: 'Rate'; }
+    .payroll-period-hrs-cell::before { content: 'Period hours'; }
+    .payroll-period-pay-cell::before { content: 'Period pay'; }
+    .payroll-ytd-cell::before        { content: 'YTD hours'; }
+    .payroll-ytd-pay-cell::before    { content: 'YTD pay'; }
+    .payroll-completion-cell::before { content: 'Days entered'; }
+    .payroll-staff-row .report-revenue { font-weight: 700; color: var(--navy); }
+
+    /* Salaried staff have no hours and no PTO accrual — the renderer emits "—"
+       for all three. On a wide table that is a quiet dash in a column; on a
+       card it is three labeled rows of nothing. Drop them and let the two pay
+       figures sit side by side. */
+    .payroll-staff-row[data-pay-type="salary"] .payroll-period-hrs-cell,
+    .payroll-staff-row[data-pay-type="salary"] .payroll-ytd-cell,
+    .payroll-staff-row[data-pay-type="salary"] .payroll-pto-main-cell { display: none; }
+    .payroll-staff-row[data-pay-type="salary"] .payroll-period-pay-cell { grid-column: 1; grid-row: 3; }
+    .payroll-staff-row[data-pay-type="salary"] .payroll-ytd-pay-cell    { grid-column: 2; grid-row: 3; }
+
+    /* PTO block spans the card and lays its label / field / balance out flat. */
+    .payroll-pto-main-cell {
+        border-top: 1px solid var(--admin-border) !important;
+        margin-top: 6px;
+        padding-top: 8px !important;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+    }
+    .payroll-pto-main-cell::before { content: 'PTO'; flex: 1 1 100%; }
+    .payroll-pto-main-cell .payroll-pto-requested { justify-content: flex-start; }
+    .payroll-pto-main-cell .payroll-pto-label { display: inline; margin-bottom: 0; }
+
+    /* Total Payroll footer — the empty spacer cells become empty blocks once
+       stacked, so hide them by position and label the two that carry money.
+       Positional because the footer's cells have no distinguishing classes. */
+    #payrollTotalRow { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: baseline;
+                       padding: 10px 12px; border-radius: 10px; }
+    #payrollTotalRow td:nth-child(2),
+    #payrollTotalRow td:nth-child(3),
+    #payrollTotalRow td:nth-child(5),
+    #payrollTotalRow td:nth-child(7),
+    #payrollTotalRow td:nth-child(8) { display: none; }
+    #payrollTotalRow td { padding: 0 !important; border: none !important; text-align: left !important; }
+    #payrollTotalRow td:nth-child(4)::before { content: 'Period '; color: var(--text-muted); font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+    #payrollTotalRow td:nth-child(6)::before { content: 'YTD '; color: var(--text-muted); font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+
+    /* ── Detail panel: day table → one card per day ──────────────── */
+    .payroll-detail-panel { margin: -6px 0 12px; }
+    .payroll-panel-cell { border-bottom: none !important; }
+    .payroll-day-table,
+    .payroll-day-table > tbody,
+    .payroll-day-table > tfoot,
+    .payroll-day-table > tbody > tr,
+    .payroll-day-table > tfoot > tr,
+    .payroll-day-table > tbody > tr > td,
+    .payroll-day-table > tfoot > tr > td { display: block; width: auto; }
+    .payroll-day-table { table-layout: auto; }
+    .payroll-day-table > thead,
+    .payroll-day-table > colgroup { display: none; }
+
+    .payroll-day-table > tbody > tr.payroll-day-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        align-items: center;
+        gap: 4px 8px;
+        padding: 8px 10px;
+        /* The state color lived on td:first-child, which is only the date
+           cell once the row is a grid. Move the stripe to the whole card. */
+        border-left: 3px solid transparent;
+        border-bottom: 1px solid var(--admin-border);
+    }
+    /* ⚠ Keep the full `.payroll-day-table > tbody > tr` prefix on these four.
+       The rule above that paints the transparent stripe carries it too, and a
+       bare `.payroll-day-row[data-state=…]` loses to it on specificity — which
+       silently left every day card with an uncolored stripe, i.e. no
+       needs-attention signal at all. */
+    .payroll-day-table > tbody > tr.payroll-day-row[data-state="complete"] { border-left-color: #4CAF50; }
+    .payroll-day-table > tbody > tr.payroll-day-row[data-state="mismatch"],
+    .payroll-day-table > tbody > tr.payroll-day-row[data-state="missing"]  { border-left-color: #E9A020; }
+    .payroll-day-table > tbody > tr.payroll-day-row[data-state="flash"]    { border-left-color: #4CAF50; }
+    .payroll-day-row > td:first-child { border-left: none; }
+    .payroll-day-row > td { padding: 0 !important; border-bottom: none; overflow: visible; }
+
+    .payroll-day-date     { grid-column: 1; grid-row: 1; font-weight: 700; color: var(--navy); }
+    .payroll-day-calc-hrs { grid-column: 2; grid-row: 1; text-align: right; }
+    .payroll-day-status   { grid-column: 3; grid-row: 1; min-width: 16px; }
+    .payroll-day-events   { grid-column: 1 / -1; grid-row: 2; }
+    .payroll-day-notes    { grid-column: 1 / -1; grid-row: 3; }
+
+    /* A clock pair is room / in / out / delete — far too wide for one line.
+       Room takes its own row, then the two times share the next. */
+    .payroll-clk-pair,
+    .payroll-manual-pair { flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+    .payroll-pair-room   { width: 100%; flex: 1 1 100%; }
+    .payroll-pair-clk-ref { flex: 1 1 100%; margin: 0; }
+    /* Stacked, the read-only clock record sits directly above the editable
+       copy of the same times and reads as a duplicate. Name it so the two are
+       telling different stories — what the clock recorded vs. what is being
+       paid. Empty on manual-entry days, hence :not(:empty). */
+    .payroll-pair-clk-ref:not(:empty)::before {
+        content: 'Clocked ';
+        font-weight: 800;
+        text-transform: uppercase;
+        font-size: .85em;
+        letter-spacing: .05em;
+    }
+    /* The ✎ button is a bare glyph — fine beside a column header that explains
+       it, unreadable on its own line in a card. */
+    .payroll-edit-clk-btn::after { content: ' Add / edit clock times'; }
+    .payroll-edit-clk-btn {
+        font-size: .95em !important;
+        padding: 6px 10px !important;
+        margin-top: 2px !important;
+        border: 1px dashed var(--admin-border);
+        border-radius: 6px;
+        color: var(--text-muted);
+    }
+    .payroll-pair-time-in,
+    .payroll-pair-time-out,
+    .payroll-time-input { flex: 1 1 0; width: auto; min-width: 0; }
+    .payroll-clk-delete-btn { flex: 0 0 auto; }
+
+    /* Fingers, not a mouse — the inline fields were 22px tall. */
+    .payroll-time-input,
+    .payroll-pair-time-in,
+    .payroll-pair-time-out,
+    .payroll-notes-input,
+    .payroll-room-select,
+    .payroll-pto-input { min-height: 38px; font-size: 16px; padding: 6px 8px; }
+    .payroll-edit-clk-btn,
+    .payroll-clk-delete-btn { min-height: 32px; min-width: 32px; opacity: 1 !important; }
+
+    .payroll-period-total-inner { justify-content: space-between; padding: 8px 10px; gap: 10px; }
+    .payroll-pto-bar { flex-wrap: wrap; }
+    .payroll-legend { gap: 10px 18px; }
+}
 
 /* Clock Event Editor — inline (expands below day row) */
 .payroll-clk-editor-row > td { padding: 0 !important; }

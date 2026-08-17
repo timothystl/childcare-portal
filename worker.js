@@ -1,4 +1,12 @@
 const SUPABASE_URL = 'https://dahdstopsumxnqvdclmy.supabase.co';
+
+// The Supabase *publishable* (anon) key. Not a secret: it is inlined in
+// index.html and shipped to every browser that loads any page of this site, and
+// every table it can reach is governed by RLS. It exists here only as a fallback
+// for the public home-page render when the SUPABASE_ANON_KEY binding is absent
+// — prefer the binding, so rotating the key stays a secrets change.
+// ⚠️ Never put SUPABASE_SERVICE_ROLE_KEY here or anywhere in source.
+const PUBLIC_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaGRzdG9wc3VteG5xdmRjbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMzM3NDYsImV4cCI6MjA4NzcwOTc0Nn0.PGuSZcnwGaG0Tes6li04JeNBAKDP4oJ6eGwhuYYXO_E';
 const ALLOWED_ORIGINS = new Set(['https://mdo.timothystl.org']);
 
 // ── Web Push helpers (RFC 8291 / RFC 8188) ───────────────────────────────────
@@ -139,8 +147,204 @@ async function verifyFamilyToken(token, secret, expectedFamilyId) {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// SERVER-SIDE ROOM CARDS (home page "Classrooms & Rates")
+// ════════════════════════════════════════════════════════════════════════════
+// #roomInfoGrid shipped as an empty <div> that js/app.js filled from Supabase
+// after load. Google does execute JavaScript, but on a deferred second pass it
+// is not obliged to complete — so the ages, rates, capacities and ratios, which
+// are exactly what a parent searches for, were the least reliably indexed
+// content on the page. This renders them into the HTML before it leaves the
+// edge; the client still re-renders afterward.
+//
+// It reads the LIVE settings rather than baking a snapshot at build time,
+// because the two genuinely disagree: as of writing, the defaults below say the
+// Goose Room is 30–36 months and the Owl Room is 36+, while the saved settings
+// say 36–60 and 24–36. A build-time snapshot would have published the wrong
+// ages and capacities to Google with no way to notice.
+//
+// ⚠️ ROOM_CAPACITY_NOUNS / getSortedRooms / buildPublicRoomCardsHtml / ROOMS
+// below are byte-identical copies of js/supabase.js and js/app.js. A cross-file
+// drift guard in js/tests/business-logic.test.js fails CI if they diverge —
+// which is what makes the duplication safe. Edit both sides, or neither.
+
+const ROOM_CAPACITY_NOUNS = { bear: 'infants', bee: 'toddlers' };
+
+const _ESC_HTML_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function escHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => _ESC_HTML_MAP[c]);
+}
+
+function getSortedRooms(rooms = ROOMS) {
+    return rooms
+        .map((room, i) => ({ room, i }))
+        .sort((a, b) => {
+            const aMin = a.room.ageMinMonths;
+            const bMin = b.room.ageMinMonths;
+            if (aMin == null && bMin == null) return a.i - b.i;
+            if (aMin == null) return 1;
+            if (bMin == null) return -1;
+            if (aMin !== bMin) return aMin - bMin;
+            return a.i - b.i;
+        })
+        .map(({ room }) => room);
+}
+
+function buildPublicRoomCardsHtml(rooms) {
+    return rooms.map(room => {
+        const spaceIdx = room.label.indexOf(' ');
+        const emoji    = spaceIdx === -1 ? room.label : room.label.slice(0, spaceIdx);
+        const name     = spaceIdx === -1 ? room.label : room.label.slice(spaceIdx + 1);
+        const noun     = ROOM_CAPACITY_NOUNS[room.id] || 'children';
+        const halfDayRow = (room.fullDayOnly || room.halfDayRate == null)
+            ? `<div class="room-rate-row room-rate-note">Full Day Only</div>`
+            : `<div class="room-rate-row"><span>Half Day</span><strong>$${room.halfDayRate}</strong></div>`;
+        return `<div class="room-card"><div class="room-header"><span class="room-emoji">${escHtml(emoji)}</span><div class="room-name">${escHtml(name)}</div><div class="room-ages">${escHtml(room.ages || '')}</div></div><div class="room-body"><div class="room-rate-row"><span>Full Day</span><strong>$${room.fullDayRate}</strong></div>${halfDayRow}<div class="room-capacity">Max ${room.capacity ?? '—'} ${noun} · 1:${room.staffRatio ?? '—'} ratio</div></div></div>`;
+    }).join('');
+}
+
+// settings.value is a TEXT column even when it holds JSON, so a row can arrive
+// as a JSON string or as an already-parsed object depending on the key. This is
+// the T3 trap; do not assume a parsed object.
+function ssrParseSetting(raw) {
+  if (raw == null) return null;
+  if (typeof raw !== 'string') return raw;
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+
+// Fetched once every 5 minutes per edge location rather than on every page view.
+// Returns null on any failure, and every caller treats null as "serve the page
+// exactly as it is today" — a Supabase outage must not take the marketing page
+// down for a nice-to-have.
+async function ssrFetchSettings(env, ctx) {
+  const cacheKey = new Request('https://ssr.internal/room-settings-v1');
+  const cache    = caches.default;
+
+  let hit = null;
+  try { hit = await cache.match(cacheKey); } catch { /* cache unavailable; just fetch */ }
+  if (hit) { try { return await hit.json(); } catch { /* fall through and refetch */ } }
+
+  // The anon key is public by design — it ships in the browser on every page,
+  // and index.html has it inline. The binding is preferred so key rotation is a
+  // secret change, but falling back to the published constant means a missing
+  // binding degrades to "works" rather than to a silently empty grid.
+  const anonKey = env.SUPABASE_ANON_KEY || PUBLIC_ANON_KEY;
+  if (!anonKey) return 'nokey';
+
+  const keys = 'room_rates,room_capacity,staff_ratios,registration_fee,new_family_fee';
+  let res;
+  try {
+    res = await Promise.race([
+      fetch(`${SUPABASE_URL}/rest/v1/settings?key=in.(${keys})&select=key,value`, {
+        headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('ssr settings timeout')), 2000)),
+    ]);
+  } catch { return 'fetchfail'; }
+  if (!res) return 'fetchfail';
+  if (!res.ok) return 'http' + res.status;
+
+  const body = await res.text();
+  // cache.put can reject on a synthetic key in some runtimes; never let that
+  // failure reach the page, which is only trying to render a rate table.
+  try {
+    ctx?.waitUntil?.(cache.put(cacheKey, new Response(body, {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=300' },
+    })).catch(() => {}));
+  } catch { /* ignore */ }
+  try { return JSON.parse(body); } catch { return 'badjson'; }
+}
+
+// Mirrors loadRateSettings/loadCapacitySettings/loadRatioSettings in
+// js/supabase.js: start from the defaults, overlay whatever admin has saved.
+async function ssrRoomState(env, ctx) {
+  const rows = await ssrFetchSettings(env, ctx);
+  if (!Array.isArray(rows)) return typeof rows === 'string' ? rows : 'nodata';
+
+  const byKey = {};
+  for (const row of rows) byKey[row.key] = ssrParseSetting(row.value);
+
+  const rooms = ROOMS.map(r => ({ ...r }));
+  const rates = byKey.room_rates, caps = byKey.room_capacity, ratios = byKey.staff_ratios;
+
+  for (const room of rooms) {
+    const r = rates && typeof rates === 'object' ? rates[room.id] : null;
+    if (r) {
+      if (r.fullDayRate  != null) room.fullDayRate  = r.fullDayRate;
+      if (r.halfDayRate  != null) room.halfDayRate  = r.halfDayRate;
+      if ('ageMinMonths' in r)    room.ageMinMonths = r.ageMinMonths;
+      if ('ageMaxMonths' in r)    room.ageMaxMonths = r.ageMaxMonths;
+      if (r.ages         != null) room.ages         = r.ages;
+    }
+    if (caps   && caps[room.id]   != null) room.capacity   = caps[room.id];
+    if (ratios && ratios[room.id] != null) room.staffRatio = ratios[room.id];
+  }
+
+  const num = v => (typeof v === 'number' ? v : Number(v));
+  return {
+    rooms,
+    regFee:       num(byKey.registration_fee),
+    newFamilyFee: num(byKey.new_family_fee),
+    summerRate:   rooms.find(r => r.id === 'summer')?.fullDayRate ?? null,
+  };
+}
+
+// Mirrors renderFeeNotes() in js/app.js. Kept as prose rather than a guarded
+// copy because that function writes to two elements via the DOM; the sentence
+// it produces is what is reproduced here.
+function ssrFeeNote(regFee, newFamilyFee) {
+  const parts = [];
+  if (Number.isFinite(newFamilyFee) && newFamilyFee > 0) parts.push(`a one-time new family fee of $${newFamilyFee.toFixed(2)}`);
+  if (Number.isFinite(regFee)       && regFee       > 0) parts.push(`an annual supply fee of $${regFee.toFixed(2)} per child`);
+  return parts.length ? `Registration includes ${parts.join(' and ')}.` : '';
+}
+
+// Every exit path stamps `x-ssr-rooms`. A fail-open feature that says nothing
+// when it fails open is indistinguishable from a feature that was never
+// deployed — which is exactly how this shipped empty once already. The header
+// is the cheapest possible answer to "did this run, and if not, why":
+//   absent  -> worker never ran for this path (check assets.run_worker_first)
+//   <n>     -> rendered n cards
+//   nokey / fetchfail / http4xx / badjson / nodata / error -> ran, gave up here
+async function ssrRenderHomePage(response, env, ctx) {
+  const stamp = (res, value) => {
+    const h = new Headers(res.headers);
+    h.set('x-ssr-rooms', value);
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+  };
+
+  let state;
+  try { state = await ssrRoomState(env, ctx); } catch { state = 'error'; }
+  if (typeof state === 'string' || !state) return stamp(response, String(state || 'nodata'));
+
+  const cards = getSortedRooms(state.rooms).filter(r => r.id !== 'summer' && !r.hidden);
+  const cardsHtml = buildPublicRoomCardsHtml(cards);
+  const feeNote   = ssrFeeNote(state.regFee, state.newFamilyFee);
+
+  const transformed = new HTMLRewriter()
+    .on('#roomInfoGrid', { element(el) { el.setInnerContent(cardsHtml, { html: true }); } })
+    .on('#regFeeNote',   { element(el) { el.setInnerContent(feeNote); } })
+    .on('#summerDailyFeeNote', {
+      element(el) {
+        if (state.summerRate != null) el.setInnerContent(` (<strong>$${state.summerRate}/day</strong>)`, { html: true });
+      },
+    })
+    .transform(response);
+
+  return stamp(transformed, String(cards.length));
+}
+
+const ROOMS = [
+    { id: 'bear',   label: '🐻 Bear Room',   ages: 'Birth – 12 months', ageMinMonths: 0,    capacity: 8,  status: 'active',   fullDayOnly: true,  fullDayRate: 80, halfDayRate: null, staffRatio: 4 },
+    { id: 'bee',    label: '🐝 Bee Room',    ages: '12 – 24 months',    ageMinMonths: 12,   capacity: 16, status: 'active',   fullDayOnly: false, fullDayRate: 75, halfDayRate: 55,   staffRatio: 4 },
+    { id: 'turtle', label: '🐢 Turtle Room', ages: '24 – 30 months',    ageMinMonths: 24,   capacity: 11, status: 'active',   fullDayOnly: false, fullDayRate: 75, halfDayRate: 45,   staffRatio: 8 },
+    { id: 'goose',  label: '🪿 Goose Room',  ages: '30 – 36 months',    ageMinMonths: 30,   capacity: 12, status: 'active',   fullDayOnly: false, fullDayRate: 75, halfDayRate: 45,   staffRatio: 8 },
+    { id: 'owl',    label: '🦉 Owl Room',    ages: '36+ months',        ageMinMonths: 36,   capacity: 11, status: 'active',   fullDayOnly: false, fullDayRate: 75, halfDayRate: 45,   staffRatio: 8 },
+    { id: 'summer', label: '☀️ Summer Camp', ages: '4–9 years',         ageMinMonths: null, capacity: 25, status: 'seasonal', fullDayOnly: true,  fullDayRate: 75, halfDayRate: null, staffRatio: 11, hidden: false },
+];
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     const allowedOrigin = ALLOWED_ORIGINS.has(url.origin) ? url.origin : null;
@@ -616,13 +820,26 @@ export default {
       "default-src 'self'; " +
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; " +
       // R25: style-src/font-src previously omitted the Google Fonts hosts that
-      // every page links (Lora, Nunito, Dancing Script). This header is set on
-      // the static-asset response and so overrides _headers — which *does* list
-      // them — meaning the brand typography was being blocked in production and
-      // silently falling back to Georgia / system-ui. Kept in sync with _headers.
+      // every page links (Lora, Nunito, Dancing Script), and the brand
+      // typography fell back to Georgia / system-ui in production.
+      //
+      // ⚠️ This block previously claimed the header here "overrides _headers".
+      // That is wrong for any path backed by a real file: Workers Assets serves
+      // those without running this script at all, so `_headers` is what actually
+      // applied. Only paths listed in `run_worker_first` (wrangler.jsonc) plus
+      // paths with no matching file reach this code. `_headers` remains the
+      // effective policy for everything else — so the two MUST stay in sync,
+      // and a change made only here will silently do nothing.
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com; " +
       "img-src 'self' data:; " +
+      // frame-src for the Google Maps embed on the home page contact section.
+      // There is no frame-src default: without this it falls back to
+      // `default-src 'self'` and the map renders as an empty box with only a
+      // console error to say why — the same silent-failure shape as R25 above.
+      // Both hosts are needed: the /maps?output=embed URL is served by
+      // maps.google.com and redirects to www.google.com/maps/embed.
+      "frame-src https://maps.google.com https://www.google.com; " +
       "font-src 'self' data: https://fonts.gstatic.com"
     );
     // Cache-Control (R9). Previously every asset was `no-store`, so each page
@@ -651,10 +868,20 @@ export default {
       newHeaders.set('Service-Worker-Allowed', '/');
     }
 
-    return new Response(response.body, {
+    const out = new Response(response.body, {
       status:     response.status,
       statusText: response.statusText,
       headers:    newHeaders,
     });
+
+    // Server-render the classroom cards into the home page — see SERVER-SIDE
+    // ROOM CARDS at the top of this file. Home page only, 200 only: an error
+    // page has no #roomInfoGrid to fill and would just pay for a settings
+    // fetch. ssrRenderHomePage fails open, returning `out` untouched.
+    if ((p === '/' || p === '/index.html') && out.status === 200) {
+      return ssrRenderHomePage(out, env, ctx);
+    }
+
+    return out;
   },
 };

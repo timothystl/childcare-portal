@@ -718,6 +718,38 @@ async function fetchSetting(key) {
 }
 
 /**
+ * The public "Our Staff" cards, with anyone who has left the center already
+ * filtered out.
+ *
+ * ⚠️ Do NOT replace this with fetchSetting('staff_directory'). That setting is
+ * maintained by hand and is not linked to the staff roster, so reading it
+ * directly is what left a departed assistant director on the home page. The
+ * filtering cannot be done here either: the anon policy on `staff` is
+ * USING (active = true), so the browser sees only active staff and cannot tell
+ * "left the center" from "never in the roster". The join happens inside the
+ * SECURITY DEFINER RPC, which returns only what should be shown.
+ *
+ * Falls back to the raw setting if the RPC is unavailable — an unfiltered
+ * staff section is a much smaller failure than an empty one, and this is a
+ * marketing page.
+ *
+ * @returns {Promise<Array>} Directory entries to render, newest schema as saved.
+ */
+async function fetchPublicStaffDirectory() {
+    if (!sbClient) return null;
+    const { data, error } = await sbClient.rpc('public_staff_directory');
+    if (error) {
+        console.error('public_staff_directory RPC failed, falling back unfiltered:', error);
+        const raw = await fetchSetting('staff_directory');
+        return Array.isArray(raw) ? raw : null;
+    }
+    // Returned as jsonb; supabase-js hands it back parsed, but the same
+    // string-vs-object defensiveness as fetchSetting applies if it ever changes.
+    const arr = typeof data === 'string' ? parseJsonOr(data, null) : data;
+    return Array.isArray(arr) ? arr : null;
+}
+
+/**
  * Creates or updates a setting in the settings key/value table.
  * UPDATE first; if nothing was updated (row didn't exist), INSERT.
  * This avoids duplicate rows regardless of whether the key column has

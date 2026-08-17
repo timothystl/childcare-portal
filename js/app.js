@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetchClosures(),
         fetchSetting('registration_fee'),
         fetchSetting('new_family_fee'),
-        fetchSetting('staff_directory'),
+        fetchPublicStaffDirectory(),
     ]);
     if (rateRes.status     === 'rejected') console.error('loadRateSettings failed:', rateRes.reason);
     if (capRes.status      === 'rejected') console.error('loadCapacitySettings failed:', capRes.reason);
@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (closuresRes.status === 'rejected') console.error('fetchClosures failed:', closuresRes.reason);
     if (regFeeRes.status   === 'rejected') console.error('fetchSetting(registration_fee) failed:', regFeeRes.reason);
     if (newFamilyFeeRes.status === 'rejected') console.error('fetchSetting(new_family_fee) failed:', newFamilyFeeRes.reason);
-    if (staffRes.status    === 'rejected') console.error('fetchSetting(staff_directory) failed:', staffRes.reason);
+    if (staffRes.status    === 'rejected') console.error('fetchPublicStaffDirectory failed:', staffRes.reason);
 
     renderPublicRoomCards();
     renderFeeNotes(
@@ -175,11 +175,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 // actually saved in Settings, not a snapshot baked into the HTML.
 const ROOM_CAPACITY_NOUNS = { bear: 'infants', bee: 'toddlers' };
 
-function renderPublicRoomCards() {
-    const grid = document.getElementById('roomInfoGrid');
-    if (!grid) return;
-    const rooms = getSortedRooms().filter(r => r.id !== 'summer' && !r.hidden);
-    grid.innerHTML = rooms.map(room => {
+// ⚠️ worker.js holds a byte-identical copy of this function so the classroom
+// cards can be rendered server-side — see "SERVER-SIDE ROOM CARDS" there and the
+// cross-file drift guard in js/tests/business-logic.test.js, which fails CI if
+// the two stop matching. It is split out from the DOM write below precisely so
+// the copy can be a pure string builder. Edit both, or edit neither.
+function buildPublicRoomCardsHtml(rooms) {
+    return rooms.map(room => {
         const spaceIdx = room.label.indexOf(' ');
         const emoji    = spaceIdx === -1 ? room.label : room.label.slice(0, spaceIdx);
         const name     = spaceIdx === -1 ? room.label : room.label.slice(spaceIdx + 1);
@@ -189,6 +191,17 @@ function renderPublicRoomCards() {
             : `<div class="room-rate-row"><span>Half Day</span><strong>$${room.halfDayRate}</strong></div>`;
         return `<div class="room-card"><div class="room-header"><span class="room-emoji">${escHtml(emoji)}</span><div class="room-name">${escHtml(name)}</div><div class="room-ages">${escHtml(room.ages || '')}</div></div><div class="room-body"><div class="room-rate-row"><span>Full Day</span><strong>$${room.fullDayRate}</strong></div>${halfDayRow}<div class="room-capacity">Max ${room.capacity ?? '—'} ${noun} · 1:${room.staffRatio ?? '—'} ratio</div></div></div>`;
     }).join('');
+}
+
+// Re-renders over whatever the worker already server-rendered into this grid.
+// That is intentional and not wasted work: the server copy is what a crawler
+// indexes, and this pass is what keeps a long-open tab honest if the director
+// changes a rate mid-session.
+function renderPublicRoomCards() {
+    const grid = document.getElementById('roomInfoGrid');
+    if (!grid) return;
+    const rooms = getSortedRooms().filter(r => r.id !== 'summer' && !r.hidden);
+    grid.innerHTML = buildPublicRoomCardsHtml(rooms);
 }
 
 // Fills in the annual registration fee note under the room cards and the

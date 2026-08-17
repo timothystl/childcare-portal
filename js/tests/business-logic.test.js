@@ -1216,6 +1216,92 @@ describe('source-drift guard — copies must match js/ source', () => {
     }
 });
 
+describe('cross-file drift guard — worker.js SSR copies must match js/ source', () => {
+    const repoRoot   = path.resolve(__dirname, '..', '..');
+    const read       = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const workerText = read('worker.js');
+
+    // worker.js server-renders the home page's classroom cards so a crawler sees
+    // ages/rates/capacity in the HTML instead of an empty <div>. It cannot import
+    // from js/ — those files are classic browser scripts with top-level side
+    // effects, and the pages load them unbundled in local dev — so it holds
+    // copies. These tests are what keep the copies honest.
+    const PAIRS = [
+        ['escHtml',                 'js/supabase.js'],
+        ['getSortedRooms',          'js/supabase.js'],
+        ['buildPublicRoomCardsHtml', 'js/app.js'],
+    ];
+
+    for (const [fnName, relPath] of PAIRS) {
+        test(`worker.js ${fnName} matches ${relPath}`, () => {
+            const fromSource = extractFunction(read(relPath), fnName);
+            const fromWorker = extractFunction(workerText, fnName);
+            if (!fromSource) throw new Error(`${fnName} not found in ${relPath} — renamed or removed?`);
+            if (!fromWorker) throw new Error(`${fnName} not found in worker.js — the SSR copy was removed?`);
+            if (normalize(fromSource) !== normalize(fromWorker)) {
+                throw new Error(
+                    `${fnName} has drifted between worker.js and ${relPath}.\n` +
+                    `      The server-rendered classroom cards no longer match what the browser renders,\n` +
+                    `      so Google would index different markup than a visitor sees.\n` +
+                    `      --- ${relPath} ---\n      ${normalize(fromSource)}\n` +
+                    `      --- worker.js ---\n      ${normalize(fromWorker)}`
+                );
+            }
+        });
+    }
+
+    // Pull an array/object literal out of a source file and evaluate it. These
+    // are plain data literals with no identifier references, so there is nothing
+    // to resolve — but compare VALUES rather than text, because worker.js keeps
+    // its copy on one line per room and js/supabase.js spreads it over twelve.
+    function extractLiteral(sourceText, name, openCh, closeCh) {
+        const start = sourceText.search(new RegExp(`^const\\s+${name}\\s*=\\s*\\${openCh}`, 'm'));
+        if (start === -1) return null;
+        const open = sourceText.indexOf(openCh, start);
+        let depth = 0, i = open;
+        for (; i < sourceText.length; i++) {
+            const c = sourceText[i];
+            if (c === openCh) depth++;
+            else if (c === closeCh) { depth--; if (depth === 0) { i++; break; } }
+        }
+        // eslint-disable-next-line no-eval
+        return eval(`(${sourceText.slice(open, i)})`);
+    }
+
+    test('worker.js ROOM_CAPACITY_NOUNS matches js/app.js', () => {
+        const a = extractLiteral(read('js/app.js'), 'ROOM_CAPACITY_NOUNS', '{', '}');
+        const b = extractLiteral(workerText,        'ROOM_CAPACITY_NOUNS', '{', '}');
+        if (!a || !b) throw new Error('ROOM_CAPACITY_NOUNS not found in one of the two files');
+        expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+    });
+
+    // Only the fields the server-side renderer actually reads. worker.js
+    // deliberately does not carry the rest of the ROOMS shape (seasons, status
+    // metadata it never consults), so a whole-object compare would fail for no
+    // reason a reader could act on.
+    test('worker.js ROOMS matches the SSR-relevant fields of js/supabase.js ROOMS', () => {
+        const SSR_FIELDS = ['id', 'label', 'ages', 'ageMinMonths', 'capacity',
+                            'fullDayOnly', 'fullDayRate', 'halfDayRate', 'staffRatio'];
+        const pick = list => list.map(r => Object.fromEntries(SSR_FIELDS.map(f => [f, r[f] ?? null])));
+
+        const source = extractLiteral(read('js/supabase.js'), 'ROOMS', '[', ']');
+        const worker = extractLiteral(workerText,             'ROOMS', '[', ']');
+        if (!source || !worker) throw new Error('ROOMS not found in one of the two files');
+
+        const want = JSON.stringify(pick(source), null, 1);
+        const got  = JSON.stringify(pick(worker), null, 1);
+        if (want !== got) {
+            throw new Error(
+                'ROOMS has drifted between worker.js and js/supabase.js.\n' +
+                '      A room added, renamed or re-priced in js/supabase.js must be mirrored in\n' +
+                "      worker.js's SSR copy, or the server-rendered cards will be wrong.\n" +
+                `      --- js/supabase.js ---\n      ${want}\n` +
+                `      --- worker.js ---\n      ${got}`
+            );
+        }
+    });
+});
+
 // ---- Summary ----
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;

@@ -3,8 +3,12 @@
 <head>
   <link rel="icon" type="image/png" sizes="32x32" href="/images/logo/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/images/logo/favicon-16.png">
-  <link rel="apple-touch-icon" href="/images/logo/apple-touch-icon.png">
-  <link rel="manifest" href="/manifest.json">
+  <!-- Admin gets its OWN manifest, icon and home-screen name. The shared
+       /manifest.json has start_url "/portal", so a phone that installed this
+       page from it opened the PARENT portal instead of the admin portal. -->
+  <link rel="apple-touch-icon" href="/images/logo/apple-touch-icon-admin.png">
+  <link rel="manifest" href="/manifest-admin.json">
+  <meta name="apple-mobile-web-app-title" content="MDO Admin">
   <meta name="theme-color" content="#01294A">
   <!-- Fonts: Sunlit Neighborhood brand system -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,7 +22,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=14">
+    <link rel="stylesheet" href="css/admin.css?v=16">
     <link rel="stylesheet" href="css/admin-portal.css?v=1">
 </head>
 <body class="admin-body">
