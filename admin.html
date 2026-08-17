@@ -1754,6 +1754,67 @@
                  Renders via renderInvoicesTool() in js/admin/admin-billing.js,
                  over the same _buildFamilyBillingData() the Family Billing
                  Summary uses. No second calculation. -->
+            <!-- Bill the month (design handoff 1c — exceptions-only). The
+                 approval front door: drafts every family from registrations,
+                 surfaces only the ones that changed since last month, and
+                 releases the rest in one tap. Draft/send reuse the exact same
+                 calls the Invoices tool below uses — see admin-bill-month.js. -->
+            <section class="admin-section" id="billThisMonthSection">
+                <h2>🧾 Bill This Month</h2>
+                <p class="section-desc">Drafts build from registrations automatically. Review the families that changed since last month; release the rest in one tap.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="bmMonth">Month</label>
+                        <input type="month" id="bmMonth">
+                    </div>
+                </div>
+                <div id="bmBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
+            <!-- Who owes (design handoff 1e — one list, worst first). Reuses
+                 the exact same billed/collected/outstanding computation as
+                 Accounts Receivable (_buildArRows in admin-billing.js) so the
+                 two screens cannot disagree about a number. -->
+            <section class="admin-section" id="whoOwesSection">
+                <h2>📋 Who Owes</h2>
+                <p class="section-desc">Unpaid families, worst first. Paid-in-full collapses below with how and when each one paid.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="woMonth">Month</label>
+                        <input type="month" id="woMonth">
+                    </div>
+                    <div class="roster-btns">
+                        <button id="woRecordCheckBtn" class="btn-secondary">💳 Record a check</button>
+                        <button id="woNudgeAllBtn" class="btn-primary">Nudge the unpaid</button>
+                    </div>
+                </div>
+                <div id="woBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
+            <!-- The billing report (design handoff 2a) — the screen behind
+                 "Bill This Month". Preserved as a first-class, printable
+                 screen per the client's own constraint, not replaced by
+                 summary cards. -->
+            <section class="admin-section collapsible-section" id="billingReportSection">
+                <h2>📊 Billing Report</h2>
+                <p class="section-desc">Every registration for the month, its rate, what changed it, and a total that ties to the invoices. Prints two pages, grouped by room.</p>
+                <div class="roster-controls">
+                    <div class="roster-field">
+                        <label for="brMonth">Month</label>
+                        <input type="month" id="brMonth">
+                    </div>
+                    <div class="ap-seg" id="brGroupToggle" role="group" aria-label="Group by">
+                        <button type="button" class="ap-seg-btn is-on" data-group="room">By room</button>
+                        <button type="button" class="ap-seg-btn" data-group="name">By name</button>
+                    </div>
+                    <div class="roster-btns">
+                        <button id="brPrintBtn" class="btn-secondary">🖨️ Print</button>
+                        <button id="brCsvBtn" class="btn-secondary">&#8595; Export CSV</button>
+                    </div>
+                </div>
+                <div id="brBody"><p class="empty-hint">Loading…</p></div>
+            </section>
+
             <section class="admin-section" id="invoicesSection">
                 <h2>🧾 Invoices</h2>
                 <p class="section-desc">Draft, adjust, and issue this month's family invoices. Amounts come from the same calculation as Family Billing Summary — days actually booked, discounts, sibling credit and change fees.</p>

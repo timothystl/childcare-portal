@@ -1,0 +1,292 @@
+// ============================================================
+// admin-billing-report — the billing report (design handoff `2a`)
+// ============================================================
+// "This report is the existing monthly registration report, preserved as a
+// first-class screen — not replaced by summary cards." The client already
+// runs a version of this every month; the ask was to keep it, not swap it for
+// a dashboard. Reached from Bill This Month's "See all" link, and useful on
+// its own for a parent phone call or the board packet.
+//
+// ⚠️ SAME MATH AS EVERY OTHER BILLING SCREEN. _buildFamilyBillingData() plus
+// the fee logic in computeBillMonthExceptions() (admin-bill-month.js) are the
+// only two things this reads. Exception highlighting reuses the exact `causes`
+// array Bill the Month computes — a row flagged here and a row flagged there
+// are, by construction, the same row.
+
+let _brMonth  = '';
+let _brGroup  = 'room';
+let _brRows   = [];      // per-child rows, always computed; grouped at render time
+let _brFamilyRows = [];  // per-family rows for "by name"
+let _brSummary = null;
+
+function _brEl(id) { return document.getElementById(id); }
+
+function _brDefaultMonth() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+async function renderBillingReportTool() {
+    const monthEl = _brEl('brMonth');
+    if (monthEl && !monthEl.value) monthEl.value = _brMonth || _brDefaultMonth();
+    _brMonth = monthEl?.value || _brDefaultMonth();
+
+    const body = _brEl('brBody');
+    if (body) body.innerHTML = '<p class="empty-hint">Building the report…</p>';
+    try {
+        await _brBuild(_brMonth);
+    } catch (err) {
+        console.error('renderBillingReportTool:', err);
+        if (body) body.innerHTML = `<p class="empty-hint">Could not build the report — ${escHtml(err.message || err)}</p>`;
+        return;
+    }
+    _brRenderTable();
+    _brBindToggle();
+}
+
+async function _brBuild(month) {
+    const { rows: famRows } = await computeBillMonthExceptions(month);
+    _brFamilyRows = famRows;
+
+    // Per-child rows, one per registered child, carrying the same cause text
+    // its family-level exception computed — the family causes list already
+    // names the child ("Ellie: days changed 5→3"), so a child inherits any
+    // cause that mentions their name, or the family-wide ones (fee, credit,
+    // sibling) on every child in that family.
+    const rows = [];
+    famRows.forEach(fam => {
+        if (fam.withdrawn) {
+            rows.push({
+                childName: '(withdrawn)', roomLabel: '—', roomId: 'zzz',
+                familyName: fam.name, payer: fam.email, days: 0, rate: 0,
+                adjustments: 'No days booked this month', amount: 0, withdrawn: true,
+            });
+            return;
+        }
+        // Re-derive per-child figures from the same source computeBillMonthExceptions
+        // used, so a room subtotal and the family total it rolls up into can
+        // never disagree — no second pass over registrations here.
+        const overridesMap = new Map();
+        const perChild = _buildFamilyBillingData(month, overridesMap)
+            .find(f => (f.parentEmail || '').toLowerCase() === (fam.email || '').toLowerCase());
+        (perChild?.children || []).forEach(c => {
+            const billed = c.hasOverride ? c.overrideAmount : c.subtotal;
+            const days   = c.fullDays + c.halfDays;
+            const childCauses = fam.causes.filter(cz => !cz.child || cz.child === c.childName);
+            rows.push({
+                childName: c.childName, roomLabel: c.roomLabel, roomId: c.roomId,
+                familyName: fam.name, payer: fam.email,
+                days, rate: days ? Math.round((billed / days) * 100) / 100 : 0,
+                adjustments: childCauses.map(cz => cz.text.replace(/^.*?: /, '')).join(' · '),
+                amount: Math.round((billed + (c.changeFees || 0)) * 100) / 100,
+                isException: fam.isException,
+            });
+        });
+    });
+    _brRows = rows;
+
+    const baseTuition = rows.reduce((s, r) => s + (r.amount || 0), 0);
+    const discounts    = famRows.reduce((s, f) => s + (f.discount || 0), 0);
+    const fees         = famRows.reduce((s, f) => s + (f.regFee || 0) + (f.familyNewFee || 0), 0);
+    const credits      = famRows.reduce((s, f) => s + (f.creditTotal || 0), 0);
+    const total        = famRows.reduce((s, f) => s + f.total, 0);
+
+    // "Ties to": cross-check against what actually got issued this month, and
+    // what last month settled at, so the report is never read in isolation.
+    let invoiceCount = 0, heldCount = 0, prevBilled = 0, prevCollected = 0;
+    try {
+        const cycle = await getOrCreateBillingCycle(month);
+        const invoices = await fetchInvoicesForCycle(cycle.id);
+        invoiceCount = invoices.length;
+        heldCount    = invoices.filter(i => !i.sent_at).length;
+
+        const prevMonth = _bmPrevMonth(month);
+        const prevCycle = await getOrCreateBillingCycle(prevMonth);
+        const [prevInv, prevPay] = await Promise.all([
+            fetchInvoicesForCycle(prevCycle.id),
+            fetchPaymentsForMonth(prevMonth).catch(() => []),
+        ]);
+        prevBilled    = prevInv.reduce((s, i) => s + parseFloat(i.final_amount || 0), 0);
+        prevCollected = prevPay.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+    } catch (e) { console.warn('br ties-to:', e); }
+
+    _brSummary = {
+        baseTuition: Math.round(baseTuition * 100) / 100,
+        discounts:   Math.round(discounts * 100) / 100,
+        fees:        Math.round(fees * 100) / 100,
+        credits:     Math.round(credits * 100) / 100,
+        total:       Math.round(total * 100) / 100,
+        childCount:  rows.filter(r => !r.withdrawn).length,
+        familyCount: famRows.filter(f => !f.withdrawn).length,
+        invoiceCount, heldCount, prevBilled, prevCollected,
+    };
+}
+
+function _brRenderTable() {
+    const body = _brEl('brBody');
+    if (!body || !_brSummary) return;
+    const s = _brSummary;
+    const [y, m] = _brMonth.split('-').map(Number);
+    const monthLabel = m ? `${MONTH_NAMES[m - 1]} ${y}` : _brMonth;
+
+    body.innerHTML = `
+    <div class="br-head">
+        <h2>${escHtml(monthLabel)} billing report</h2>
+        <p class="br-sub">All active registrations as of ${escHtml(friendlyShort(new Date().toISOString().slice(0, 10)))} ·
+            grouped ${_brGroup === 'room' ? 'by room' : 'by family name, A–Z'} · ${s.childCount} children · ${s.familyCount} families</p>
+    </div>
+
+    <div class="br-summary">
+        <div class="br-stat"><div class="br-stat-label">Base tuition</div><div class="br-stat-val">$${s.baseTuition.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+        <div class="br-stat"><div class="br-stat-label">Discounts</div><div class="br-stat-val br-neg">−$${s.discounts.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+        <div class="br-stat"><div class="br-stat-label">Fees &amp; credits</div><div class="br-stat-val">${s.fees - s.credits >= 0 ? '+' : '−'}$${Math.abs(s.fees - s.credits).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+        <div class="br-stat br-stat-total"><div class="br-stat-label">Total to bill</div><div class="br-stat-val">$${s.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            <div class="br-stat-sub">${s.familyCount} invoices · avg $${s.familyCount ? Math.round(s.total / s.familyCount).toLocaleString() : 0}</div></div>
+    </div>
+
+    <div id="brTableWrap">${_brGroup === 'room' ? _brRoomTable() : _brNameTable()}</div>
+
+    <div class="br-ties">
+        <strong>Ties to:</strong> ${s.invoiceCount} invoice${s.invoiceCount === 1 ? '' : 's'} for this cycle
+        ${s.heldCount ? `, ${s.heldCount} still held` : ', all issued'} ·
+        last month billed $${s.prevBilled.toLocaleString(undefined, { maximumFractionDigits: 0 })},
+        collected $${s.prevCollected.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+    </div>`;
+}
+
+function _brRoomTable() {
+    const byRoom = new Map();
+    _brRows.forEach(r => {
+        const key = r.roomId || 'zzz';
+        if (!byRoom.has(key)) byRoom.set(key, { label: r.roomLabel, rows: [] });
+        byRoom.get(key).rows.push(r);
+    });
+    const roomOrder = (typeof ROOMS !== 'undefined' ? ROOMS.map(x => x.id) : []);
+    const keys = [...byRoom.keys()].sort((a, b) => {
+        const ia = roomOrder.indexOf(a), ib = roomOrder.indexOf(b);
+        if (a === 'zzz') return 1; if (b === 'zzz') return -1;
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+
+    // The room-subtotal bar has to be a <tr> — a <div> inside <tbody> is
+    // invalid HTML and the browser silently hoists it out of the table,
+    // which un-groups every row the moment this renders.
+    const sections = keys.map(key => {
+        const g = byRoom.get(key);
+        const subtotal = g.rows.reduce((s, r) => s + (r.amount || 0), 0);
+        const rows = g.rows.map(_brChildRow).join('');
+        return `
+        <tr class="br-room-bar"><td colspan="4">${escHtml(g.label)} · ${g.rows.length} children</td><td></td><td style="text-align:right">$${subtotal.toFixed(2)}</td></tr>
+        ${rows}`;
+    }).join('');
+
+    return `<div class="table-wrapper"><table class="report-table br-room-table">
+        <thead><tr><th>Child</th><th>Family &amp; payer</th><th>Days</th><th>Rate</th><th>Adjustments</th><th>Amount</th></tr></thead>
+        <tbody>${sections}${_brGrandTotalRow(6)}</tbody>
+    </table></div>`;
+}
+
+function _brChildRow(r) {
+    return `<tr class="br-row${r.isException ? ' br-exc' : ''}${r.withdrawn ? ' br-withdrawn' : ''}">
+        <td>${escHtml(r.childName)}</td>
+        <td>${escHtml(r.familyName)}<br><small style="color:var(--text-muted)">${escHtml(r.payer)}</small></td>
+        <td style="text-align:center">${r.days || '—'}</td>
+        <td style="text-align:right">${r.rate ? '$' + r.rate.toFixed(2) : '—'}</td>
+        <td>${escHtml(r.adjustments || '—')}</td>
+        <td style="text-align:right"><strong>$${(r.amount || 0).toFixed(2)}</strong></td>
+    </tr>`;
+}
+
+function _brNameTable() {
+    const rows = _brFamilyRows.map(f => {
+        const kids = f.children.map((name, i) => `${escHtml(name)} <small>(${escHtml(_brRows.find(r => r.childName === name)?.roomLabel || '')})</small>`).join(', ');
+        return `<tr class="br-row${f.isException ? ' br-exc' : ''}${f.withdrawn ? ' br-withdrawn' : ''}">
+            <td>${escHtml(f.name)}<br><small style="color:var(--text-muted)">${escHtml(f.email)}</small></td>
+            <td>${kids || '—'}</td>
+            <td style="text-align:center">${f.children.length}</td>
+            <td style="text-align:right">$${f.base.toFixed(2)}</td>
+            <td>${escHtml(f.causes.map(c => c.text).join(' · ') || '—')}</td>
+            <td style="text-align:right"><strong>$${f.total.toFixed(2)}</strong></td>
+        </tr>`;
+    }).join('');
+
+    return `<div class="table-wrapper"><table class="report-table">
+        <thead><tr><th>Family &amp; payer</th><th>Children &amp; room</th><th>Kids</th><th>Base</th><th>Adjustments</th><th>Amount</th></tr></thead>
+        <tbody>${rows}${_brGrandTotalRow(6)}</tbody>
+    </table></div>`;
+}
+
+function _brGrandTotalRow(cols) {
+    const s = _brSummary;
+    return `<tr class="br-grand-total">
+        <td colspan="2">Total · ${_brMonth}</td>
+        <td style="text-align:center">${s.childCount}</td>
+        <td style="text-align:right">$${s.baseTuition.toFixed(2)}</td>
+        <td>Discounts −$${s.discounts.toFixed(2)} · Fees +$${s.fees.toFixed(2)}</td>
+        <td style="text-align:right" class="br-grand-amt">$${s.total.toFixed(2)}</td>
+    </tr>`;
+}
+
+function _brBindToggle() {
+    document.querySelectorAll('#brGroupToggle .ap-seg-btn').forEach(b => {
+        b.onclick = () => {
+            _brGroup = b.dataset.group;
+            document.querySelectorAll('#brGroupToggle .ap-seg-btn').forEach(x => x.classList.toggle('is-on', x === b));
+            _brRenderTable();
+        };
+    });
+    _brEl('brPrintBtn')?.addEventListener('click', _brPrint);
+    _brEl('brCsvBtn')?.addEventListener('click', _brExportCsv);
+}
+
+// Always prints the room grouping — "so it can go in the binder or to the
+// board the way the current report does" — regardless of which toggle is
+// active on screen.
+function _brPrint() {
+    if (!_brSummary) return;
+    const [y, m] = _brMonth.split('-').map(Number);
+    const monthLabel = m ? `${MONTH_NAMES[m - 1]} ${y}` : _brMonth;
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+        <title>Billing Report — ${escHtml(monthLabel)}</title>
+        <style>
+            body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 24px; }
+            h1 { font-size: 16px; margin: 0 0 2px; }
+            p.subtitle { font-size: 10px; color: #666; margin: 0 0 16px; }
+            table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
+            th { background: #01294A; color: #fff; padding: 6px 10px; text-align: left; font-size: 11px; }
+            th:nth-child(3), th:nth-child(4), th:nth-child(6) { text-align: right; }
+            td { padding: 5px 10px; font-size: 11px; border-bottom: 1px solid #eee; vertical-align: top; }
+            tr.br-room-bar td { background: #F5F0E4; font-weight: bold; border-top: 2px solid #ccc; }
+            tr.br-grand-total td { background: #01294A; color: #fff; font-weight: bold; }
+            tr.br-exc td { background: #FFF8E1; }
+            tr.br-withdrawn td { opacity: .62; }
+            @media print { body { margin: 0; } tr { page-break-inside: avoid; } }
+        </style></head><body>
+        <h1>${escHtml(monthLabel)} billing report</h1>
+        <p class="subtitle">Printed ${new Date().toLocaleDateString()} · grouped by room</p>
+        ${_brRoomTable()}
+        </body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
+}
+
+function _brExportCsv() {
+    if (!_brRows.length && !_brFamilyRows.length) { alert('Nothing to export.'); return; }
+    let header, lines;
+    if (_brGroup === 'room') {
+        header = ['Child', 'Family', 'Payer', 'Room', 'Days', 'Rate', 'Adjustments', 'Amount'];
+        lines = _brRows.map(r => [
+            csvCell(r.childName), csvCell(r.familyName), csvCell(r.payer), csvCell(r.roomLabel),
+            r.days, r.rate.toFixed(2), csvCell(r.adjustments), (r.amount || 0).toFixed(2),
+        ].join(','));
+    } else {
+        header = ['Family', 'Payer', 'Children', 'Kids', 'Base', 'Adjustments', 'Amount'];
+        lines = _brFamilyRows.map(f => [
+            csvCell(f.name), csvCell(f.email), csvCell(f.children.join('; ')), f.children.length,
+            f.base.toFixed(2), csvCell(f.causes.map(c => c.text).join('; ')), f.total.toFixed(2),
+        ].join(','));
+    }
+    downloadFile(`billing-report-${_brMonth}-${_brGroup}.csv`, 'text/csv', [header.join(','), ...lines].join('\n'));
+}

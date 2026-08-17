@@ -113,56 +113,81 @@ const AP_TOOLS = [
     { key: 'threads',     pane: 'families',      section: 'threadsSection',          tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '💬', name: 'Parent Messages',
       blurb: 'Conversations with enrolled families — reply as the office.' },
 
-    // ── Finance · Money In ──
-    // Invoices comes first: you create the bill before you chase it.
-    { key: 'invoices',    pane: 'finance', section: 'invoicesSection',       tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🧾', name: 'Invoices',
-      blurb: "Draft, adjust, and issue this month's family invoices." },
+    // ── Finance · Money In (design handoff: Finance.dc.html) ──
+    // Bill This Month is the approval front door — she opens this, not
+    // Invoices, when the month needs billing. Invoices stays as the register
+    // of what has actually been issued (edit, adjust, resend one).
+    { key: 'billMonth',   pane: 'finance', section: 'billThisMonthSection',   tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🧾', name: 'Bill This Month',
+      blurb: 'Drafts build themselves; review what changed, release the rest.' },
+    { key: 'invoices',    pane: 'finance', section: 'invoicesSection',       tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📨', name: 'Invoices',
+      blurb: "Every invoice this month — edit, adjust, resend one." },
+    { key: 'whoOwes',     pane: 'finance', section: 'whoOwesSection',        tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📋', name: 'Who Owes',
+      blurb: 'Unpaid families, worst first — nudge, plan, or write off.' },
+    { key: 'billingReport', pane: 'finance', section: 'billingReportSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📊', name: 'Billing Report',
+      blurb: 'Every registration and its rate — printable, ties to the invoices.' },
     { key: 'ar',          pane: 'finance', section: 'billingArSection',      tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📋', name: 'Accounts Receivable',
       blurb: 'Payment status per family for a month — overdue, partial, paid.' },
-    { key: 'procare',     pane: 'finance', section: 'billingPaymentsSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📂', name: 'ProCare Import',
-      blurb: 'Upload a ProCare transaction export and review the aging report.' },
-    { key: 'revdash',     pane: 'finance', section: 'billingDashSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📊', name: 'Revenue Dashboard',
-      blurb: 'Collection rate, YTD trends, and scholarship summary.' },
-    { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Kids Discount Pricing',
-      blurb: 'Children on a staff or custom discount, with days and price tag.' },
+    { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
+      blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
     { key: 'famBilling',  pane: 'reports', section: 'familyBillingSection',  tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '👨‍👩‍👧', name: 'Family Billing Summary',
       blurb: 'Per-family totals for a month, ready to invoice.' },
 
-    // ── Finance · How We're Doing ──
-    { key: 'dash',        pane: 'finance', section: 'financeDashSection',    tab: 'finance', group: "How We're Doing", tint: AP_TINT.green, icon: '💰', name: 'Financial Dashboard',
-      blurb: 'Year-to-date revenue, labor, and margin with monthly charts.' },
-    { key: 'yoy',         pane: 'finance', section: 'financeYoySection',     tab: 'finance', group: "How We're Doing", tint: AP_TINT.green, icon: '📈', name: 'Year-over-Year',
-      blurb: 'Revenue and labor month-by-month against the prior year.' },
-    { key: 'pnl',         pane: 'finance', section: 'roomPnlSection',        tab: 'finance', group: "How We're Doing", tint: AP_TINT.green, icon: '🏫', name: 'Room Profitability (P&L)',
-      blurb: 'Monthly revenue vs. labor cost per classroom.' },
-    { key: 'arrev',       pane: 'finance', section: 'attendanceRevenueSection', tab: 'finance', group: "How We're Doing", tint: AP_TINT.green, icon: '📊', name: 'Attendance & Revenue',
-      blurb: 'Monthly attendance and net revenue across all rooms.' },
-
-    // ── Finance · Plan & Model ──
-    { key: 'budget',      pane: 'finance', section: 'financeBudgetSection',  tab: 'finance', group: 'Plan & Model', tint: AP_TINT.tang, icon: '🎯', name: 'Annual Budget & Actuals',
-      blurb: "Set yearly targets and record what you've actually spent." },
-    { key: 'expense',     pane: 'finance', section: 'financeExpenseSection', tab: 'finance', group: 'Plan & Model', tint: AP_TINT.tang, icon: '📋', name: 'Expense Lines',
-      blurb: 'Fixed monthly costs and annual one-time expenses.' },
-    { key: 'model',       pane: 'finance', section: 'financeModelSection',   tab: 'finance', group: 'Plan & Model', tint: AP_TINT.tang, icon: '🔧', name: 'Rate & Wage Modeling',
-      blurb: 'Project the impact of tuition and wage changes before you make them.' },
-    { key: 'scenario',    pane: 'finance', section: 'rateScenarioSection',   tab: 'finance', group: 'Plan & Model', tint: AP_TINT.tang, icon: '🧮', name: 'Rate Increase Scenarios',
+    // ── Finance · Bookkeeper ──
+    // "The director does not do the monthly close-out and does not need room
+    // profitability" (client constraint, Finance.dc.html README). These tools
+    // are not deleted — reconciliation, room P&L and YoY are real and stay
+    // reachable — they are simply no longer on HER shelf. Nothing on the
+    // Finance dashboard (1a) links here; she opens this group on purpose.
+    { key: 'procare',     pane: 'finance', section: 'billingPaymentsSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📂', name: 'Reconcile Payments',
+      blurb: 'Import a bank/ProCare export and match it against what was billed.' },
+    { key: 'scenario',    pane: 'finance', section: 'rateScenarioSection',   tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🧮', name: 'Rate Increase Scenarios',
       blurb: 'What-if a rate, registration, or supply fee change — annual net, before you commit.' },
-    { key: 'api',         pane: 'finance', section: 'financeApiTesterSection', tab: 'finance', group: 'Plan & Model', tint: AP_TINT.sand, icon: '🔌', name: 'ChMS Finance API',
+    { key: 'revdash',     pane: 'finance', section: 'billingDashSection',    tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📊', name: 'Revenue Dashboard',
+      blurb: 'Collection rate, YTD trends, and scholarship summary.' },
+    { key: 'dash',        pane: 'finance', section: 'financeDashSection',    tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '💰', name: 'Financial Dashboard',
+      blurb: 'Year-to-date revenue, labor, and margin with monthly charts.' },
+    { key: 'yoy',         pane: 'finance', section: 'financeYoySection',     tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📈', name: 'Year-over-Year',
+      blurb: 'Revenue and labor month-by-month against the prior year.' },
+    { key: 'pnl',         pane: 'finance', section: 'roomPnlSection',        tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🏫', name: 'Room Profitability (P&L)',
+      blurb: 'Monthly revenue vs. labor cost per classroom — confirmed headcount and revenue only, no expense allocation.' },
+    { key: 'arrev',       pane: 'finance', section: 'attendanceRevenueSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📊', name: 'Attendance & Revenue',
+      blurb: 'Monthly attendance and net revenue across all rooms.' },
+    { key: 'budget',      pane: 'finance', section: 'financeBudgetSection',  tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🎯', name: 'Annual Budget & Actuals',
+      blurb: "Set yearly targets and record what you've actually spent." },
+    { key: 'expense',     pane: 'finance', section: 'financeExpenseSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📋', name: 'Expense Lines',
+      blurb: 'Fixed monthly costs and annual one-time expenses.' },
+    { key: 'model',       pane: 'finance', section: 'financeModelSection',   tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🔧', name: 'Rate & Wage Modeling',
+      blurb: 'Project the impact of tuition and wage changes before you make them.' },
+    { key: 'api',         pane: 'finance', section: 'financeApiTesterSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.sand, icon: '🔌', name: 'ChMS Finance API',
       blurb: 'Test the connection the church accounting system uses.' },
 
     // Historical Payroll Records is commented out in admin.html ("hidden
     // 2026-07, may bring back later") — same for New Family Enrollment,
     // Enrollment Forms, and Offer Email Links. They are not registered here;
     // uncomment the section and add an entry to bring the tool back.
+    //
+    // ⚠️ Payroll is deliberately NOT duplicated into a Finance-sidebar
+    // "Payroll" group. The handoff's nav sketch shows one ("Pay Runs · Wages
+    // & Rates") but its own open-decisions list marks payroll depth
+    // unconfirmed ("were not designed... confirm whether in scope"), and
+    // apGroupsForTab() filters strictly on a tool's own `tab` — a second
+    // AP_TOOLS entry pointing at the existing Staff-tab payroll section would
+    // be a real duplicate object, not a link, the first time its role gating
+    // or its section markup changed independently on one side. The Finance
+    // sidebar's dashed note (apNavHtml) points to Staff → Pay & Policy
+    // instead of inventing two undesigned screens.
 
-    // ── Finance · Food Program ──
-    { key: 'cacfpMeal',   pane: 'cacfp', section: 'cacfpMealSection',   tab: 'finance', group: 'Food Program', tint: AP_TINT.gold, icon: '🍽️', name: 'Daily Meal Counts',
+    // ── Classrooms · Food Program ──
+    // Moved out of Finance entirely per the handoff: "a program to run, not
+    // money to manage." Its claim total still posts into Money In — nothing
+    // about what the claim computes changed, only which tab opens it.
+    { key: 'cacfpMeal',   pane: 'cacfp', section: 'cacfpMealSection',   tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '🍽️', name: 'Daily Meal Counts',
       blurb: 'Record meals served for the CACFP claim.' },
-    { key: 'cacfpMenu',   pane: 'cacfp', section: 'cacfpMenuSection',   tab: 'finance', group: 'Food Program', tint: AP_TINT.gold, icon: '📋', name: 'Menu Planner',
+    { key: 'cacfpMenu',   pane: 'cacfp', section: 'cacfpMenuSection',   tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '📋', name: 'Menu Planner',
       blurb: 'Plan compliant menus week by week.' },
-    { key: 'cacfpIncome', pane: 'cacfp', section: 'cacfpIncomeSection', tab: 'finance', group: 'Food Program', tint: AP_TINT.gold, icon: '💵', name: 'Income Eligibility',
+    { key: 'cacfpIncome', pane: 'cacfp', section: 'cacfpIncomeSection', tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '💵', name: 'Income Eligibility',
       blurb: 'Household eligibility forms and tiering.' },
-    { key: 'cacfpClaims', pane: 'cacfp', section: 'cacfpClaimsSection', tab: 'finance', group: 'Food Program', tint: AP_TINT.gold, icon: '🧾', name: 'Monthly Claim',
+    { key: 'cacfpClaims', pane: 'cacfp', section: 'cacfpClaimsSection', tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '🧾', name: 'Monthly Claim',
       blurb: 'Assemble and export the monthly reimbursement claim.' },
 
     // ── Planning · Waitlist ──
@@ -529,7 +554,17 @@ function apNavHtml(where) {
               ? 'Director is an overview. Every tool lives under its own tab — links on the dashboard take you straight there.'
               : 'No tools here for your access level.'}</p>`;
 
-    return `<div class="ap-nav-tabs">${tabs}</div>${body}`;
+    // Finance handoff (`1a`, "Navigation"): a dashed note under the groups
+    // states the split in plain words rather than leaving the director to
+    // infer it from where things aren't. Payroll genuinely lives under Staff
+    // — see the note at AP_TOOLS about why it is not duplicated into a
+    // Finance-sidebar "Payroll" group of its own.
+    const financeNote = apState.tab === 'finance' ? `
+        <p class="ap-nav-note ap-nav-dashed">Payroll — under Staff → Pay &amp; Policy.
+        The close, bank matching and room P&amp;L live under Bookkeeper below;
+        nothing here pushes them at you.</p>` : '';
+
+    return `<div class="ap-nav-tabs">${tabs}</div>${body}${financeNote}`;
 }
 
 /** Show exactly one section (and the pane containing it); hide everything else. */
@@ -631,6 +666,9 @@ function apOnToolOpened(tool) {
         if (tool.key === 'invoices' && typeof renderInvoicesTool === 'function') renderInvoicesTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'announce' && typeof renderAnnouncementsTool === 'function') renderAnnouncementsTool();
+        if (tool.key === 'billMonth' && typeof renderBillMonthTool === 'function') renderBillMonthTool();
+        if (tool.key === 'whoOwes' && typeof renderWhoOwesTool === 'function') renderWhoOwesTool();
+        if (tool.key === 'billingReport' && typeof renderBillingReportTool === 'function') renderBillingReportTool();
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
         if (tool.key === 'staffInjury' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();
@@ -662,6 +700,7 @@ async function apLoadLive() {
         billed:    0, billedKids: 0,
         families:  [], schedule: [], invoices: [], providers: [],
         incidents: [], missing: [],
+        billException: null, whoOwesRows: [],
         nextClosure: null,
         monthKey:  new Date().toLocaleDateString('en-CA').slice(0, 7),
         today:     new Date().toLocaleDateString('en-CA'),
@@ -765,6 +804,33 @@ async function apLoadLive() {
         console.warn('apLoadLive billed:', err); // rates or registrations not loaded yet
     }
 
+    // Finance home (1a) needs two more things the rest of the dashboard
+    // doesn't: which families are exceptions this month (Bill the Month's
+    // engine), and who still owes (Accounts Receivable's engine). Both are
+    // the SAME functions the Bill the Month and Who Owes screens themselves
+    // call — computed once here, read synchronously by apDashFinanceHome(),
+    // never recomputed a third way.
+    try {
+        live.billException = typeof computeBillMonthExceptions === 'function'
+            ? await computeBillMonthExceptions(monthKey) : null;
+    } catch (err) {
+        console.warn('apLoadLive billException:', err);
+        live.billException = null;
+    }
+    try {
+        if (typeof _buildArRows === 'function' && typeof getOrCreateBillingCycle === 'function') {
+            const cycle = await getOrCreateBillingCycle(monthKey);
+            const [invoices, payments] = await Promise.all([
+                fetchInvoicesForCycle(cycle.id),
+                fetchPaymentsForMonth(monthKey).catch(() => []),
+            ]);
+            live.whoOwesRows = _buildArRows(monthKey, live.families, invoices, payments);
+        }
+    } catch (err) {
+        console.warn('apLoadLive whoOwesRows:', err);
+        live.whoOwesRows = [];
+    }
+
     const today = new Date().toLocaleDateString('en-CA');
     const upcoming = [...allClosureDates].filter(d => d >= today).sort();
     live.nextClosure = upcoming[0] || null;
@@ -795,7 +861,7 @@ function apRenderDashboard(page) {
         director:   apDashDirector,
         classrooms: apDashClassrooms,
         staff:      apDashStaff,
-        finance:    apDashFinance,
+        finance:    apDashFinanceHome,
         planning:   apDashPlanning,
         market:     apDashMarket,
         settings:   apDashSettings,
@@ -1218,49 +1284,9 @@ function apDashDirector(live) {
     };
 }
 
-function apDashFinance(live) {
-    const sf  = live.staffing;
-    const inv = apInvoiceState(live);
-
-    const rateRows = sf.rows.map(r => ({
-        label: r.label,
-        note:  `full day ${apMoney(r.room.fullDayRate || 0)}${r.room.fullDayOnly ? '' : ' · half day ' + apMoney(r.room.halfDayRate || 0)}`,
-        value: `${r.cells.reduce((a, c) => a + c.kids, 0)} care days`,
-    }));
-
-    const kpis = [
-        { label: 'Billed this month', tone: inv.sent ? 'ok' : 'warn', value: apMoney(live.billed),
-          sub: inv.drafted ? `${inv.drafted} drafted, ${inv.sent ? inv.sent + ' sent' : 'none sent'}` : 'nothing drafted yet',
-          link: 'invoices', linkIcon: '🧾', linkLabel: 'Review and send' },
-        { label: 'Children billed', tone: 'ok', value: live.billedKids, sub: 'with at least one day this month' },
-        { label: 'Care days booked', tone: 'gold', value: sf.kids.reduce((a, b) => a + b, 0), sub: 'this week, all rooms' },
-    ];
-    if (inv.drafted) kpis.push({ label: 'Invoiced value', tone: 'navy', value: apMoney(inv.total),
-                                 sub: 'across drafted invoices' });
-
-    const attention = [];
-    if (inv.unsent) attention.push({ icon: '🧾', key: 'invoices', urgent: true,
-        text: `${inv.unsent} invoice${inv.unsent === 1 ? '' : 's'} for this month ${inv.unsent === 1 ? 'is' : 'are'} drafted but not sent.`,
-        cta: 'Review and send invoices' });
-    else if (!inv.drafted && live.billed > 0) attention.push({ icon: '🧾', key: 'invoices', urgent: true,
-        text: `${apMoney(live.billed)} is billable this month and no invoices are drafted.`, cta: 'Open invoices' });
-    attention.push({ icon: '📋', key: 'ar',       text: 'Accounts receivable ages overdue from the date an invoice was sent.', cta: 'Open accounts receivable' });
-    attention.push({ icon: '🧮', key: 'scenario', text: 'Model a rate change against real care-day volume before you commit.', cta: 'Open rate scenarios' });
-    attention.push({ icon: '🎯', key: 'budget',   text: 'Check this year\u2019s budget targets against the actuals.', cta: 'Open annual budget' });
-
-    return {
-        stamp: `${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} · billed from care days actually booked`,
-        kpis,
-        left: [
-            apPanel({ title: 'Where the volume is', sub: 'Care days booked this week per room — what the tuition line is made of.',
-                body: apRowsHtml(rateRows), tools: ['invoices', 'ar', 'famBilling'] }),
-            apPanel({ title: 'How full each room is', sub: 'Average booked children per day against capacity.',
-                body: apBarsHtml(apFillBars(sf)), tools: ['pnl', 'arrev', 'budget'] }),
-        ],
-        right: [],
-        attention,
-    };
-}
+// apDashFinance (the old Finance-home dashboard) is retired in favor of
+// apDashFinanceHome() in admin-finance-home.js -- design handoff `1a`. Kept
+// out of this file entirely rather than left dead beside its replacement.
 
 function apDashPlanning(live) {
     const sf     = live.staffing;
