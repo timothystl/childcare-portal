@@ -721,22 +721,30 @@
     .ap-body { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* The sidebar is desktop chrome. Below 900px it collapses into the
-   hamburger drawer, which renders the same content. */
+/* The sidebar is desktop chrome. Below 900px it's replaced entirely by
+   #apTabbar — a fixed bottom tab bar, the same seven tabs and the same
+   .tabbar pattern (css/styles.css) the parent app uses in portal.html. */
 @media (max-width: 900px) {
     .ap-nav  { display: none; }
-    .ap-page { padding: 20px 16px 56px; max-width: 100%; }
+    .ap-page { padding: 20px 16px 88px; max-width: 100%; }
     .ap-metric.span-2 { flex: 1 1 160px; max-width: 420px; }
     .ap-list-blurb { display: none; }
+    /* Clear the fixed tab bar so the toast isn't covered by it. */
+    .admin-toast { bottom: 90px; }
 }
 
-/* Above 900px the sidebar has replaced the hamburger entirely. */
-@media (min-width: 901px) {
-    .admin-header .mobile-menu-btn { display: none; }
+.ap-tabbar { display: none; }
+@media (max-width: 900px) {
+    .ap-tabbar {
+        display: grid;
+        position: fixed;
+        left: 0; right: 0; bottom: 0;
+        z-index: 500;
+    }
 }
 
 @media print {
-    .ap-nav, .ap-detail-related { display: none !important; }
+    .ap-nav, .ap-tabbar, .ap-detail-related { display: none !important; }
 }
 
 /* ============================================================

@@ -62,7 +62,7 @@ const AP_TABS = {
         blurb: "The waitlist and everything downstream of it — who's waiting, what's opening up, and how full we'll be.",
     },
     market: {
-        icon: '📈', label: 'Market Analysis',
+        icon: '📈', label: 'Market Analysis', short: 'Market',
         blurb: 'How we compare to other providers on price, flexibility, and cost — and the provider set behind those numbers.',
     },
     settings: {
@@ -504,14 +504,19 @@ function apRender() {
     if (chipIcon)  chipIcon.textContent  = meta.icon;
     if (chipLabel) chipLabel.textContent = meta.label;
 
-    // Menu drawer — rebuilt on every render so a role that cannot reach a
-    // tab never sees an inert button for it.
-    const navList = document.querySelector('.mobile-nav-list');
-    if (navList) navList.innerHTML = apNavHtml('mobile');
-
-    // The sidebar is permanent chrome, on the dashboard and inside a tool.
+    // The sidebar is permanent chrome, on the dashboard and inside a tool
+    // (900px+); the bottom tab bar is its mobile equivalent, same pattern as
+    // the parent app. Both rebuilt on every render so a role that cannot
+    // reach a tab never sees a button for it.
     const nav = document.getElementById('apNav');
-    if (nav) nav.innerHTML = apNavHtml('side');
+    if (nav) nav.innerHTML = apNavHtml();
+
+    const tabbar = document.getElementById('apTabbar');
+    if (tabbar) {
+        const visible = Object.keys(AP_TABS).filter(apTabAvailable);
+        tabbar.style.gridTemplateColumns = `repeat(${visible.length},1fr)`;
+        tabbar.innerHTML = apTabbarHtml();
+    }
 
     if (apState.view) {
         page.classList.add('hidden');
@@ -527,26 +532,24 @@ function apRender() {
 }
 
 /**
- * The tool index. Rendered twice with the same content: as the permanent
- * desktop sidebar, and inside the hamburger drawer below 900px.
+ * The tool index — the permanent desktop sidebar (900px+). Below that, the
+ * bottom tab bar (apTabbarHtml) takes over navigation entirely and this
+ * tool-group listing isn't shown; the dashboard's own contextual pills are
+ * the mobile way to reach a tool, same as the sidebar highlights it above.
  */
-function apNavHtml(where) {
-    const tabCls  = where === 'mobile' ? 'mobile-nav-item' : 'ap-nav-tab';
-    const groupCls = where === 'mobile' ? 'mobile-nav-group-label' : 'ap-nav-group';
-    const itemCls = where === 'mobile' ? 'mobile-nav-item' : 'ap-nav-item';
-
+function apNavHtml() {
     const tabs = Object.keys(AP_TABS).filter(apTabAvailable).map(k => `
-        <button class="${tabCls}${k === apState.tab ? ' active is-active' : ''}" data-ap-tab="${k}">
-            <span class="${where === 'mobile' ? 'mni-icon' : ''}">${AP_TABS[k].icon}</span><span>${escHtml(AP_TABS[k].label)}</span>
+        <button class="ap-nav-tab${k === apState.tab ? ' active is-active' : ''}" data-ap-tab="${k}">
+            <span>${AP_TABS[k].icon}</span><span>${escHtml(AP_TABS[k].label)}</span>
         </button>`).join('');
 
     const groups = apGroupsForTab(apState.tab);
     const body = groups.length
         ? groups.map(g => `
-            <div class="${groupCls}">${escHtml(g.label)}</div>
+            <div class="ap-nav-group">${escHtml(g.label)}</div>
             ${g.tools.map(t => `
-            <button class="${itemCls}${t.key === apState.view ? ' active is-active' : ''}" data-ap-go="${t.key}">
-                <span class="${where === 'mobile' ? 'mni-icon' : ''}">${t.icon}</span><span>${escHtml(t.name)}</span>
+            <button class="ap-nav-item${t.key === apState.view ? ' active is-active' : ''}" data-ap-go="${t.key}">
+                <span>${t.icon}</span><span>${escHtml(t.name)}</span>
             </button>`).join('')}`).join('')
         // Director is the one tab with no tools of its own — say so rather
         // than leaving a bare gap under it.
@@ -565,6 +568,23 @@ function apNavHtml(where) {
         nothing here pushes them at you.</p>` : '';
 
     return `<div class="ap-nav-tabs">${tabs}</div>${body}${financeNote}`;
+}
+
+/**
+ * The bottom tab bar — the mobile (<900px) equivalent of the sidebar, same
+ * seven tabs and same visual pattern (.tabbar) as the parent app's own
+ * bottom nav in portal.html. Unlike the sidebar it carries no tool
+ * sub-list — a tool is one tap further, via the dashboard's own pills.
+ */
+function apTabbarHtml() {
+    return Object.keys(AP_TABS).filter(apTabAvailable).map(k => {
+        const t = AP_TABS[k];
+        return `<button type="button" class="tabbar-item${k === apState.tab ? ' is-active' : ''}"
+                    data-ap-tab="${k}" role="tab" aria-selected="${k === apState.tab}">
+            <span class="tabbar-icon" aria-hidden="true">${t.icon}</span>
+            <span class="tabbar-label">${escHtml(t.short || t.label)}</span>
+        </button>`;
+    }).join('');
 }
 
 /** Show exactly one section (and the pane containing it); hide everything else. */
@@ -2025,9 +2045,9 @@ function setupAdminPortal() {
     // One delegated handler for every navigation affordance the shell renders.
     document.addEventListener('click', e => {
         const go = e.target.closest('[data-ap-go]');
-        if (go) { apGo(go.dataset.apGo); apCloseMenu(); return; }
+        if (go) { apGo(go.dataset.apGo); return; }
         const tab = e.target.closest('[data-ap-tab]');
-        if (tab) { apGoTab(tab.dataset.apTab); apCloseMenu(); return; }
+        if (tab) { apGoTab(tab.dataset.apTab); return; }
         const decide = e.target.closest('[data-ap-off-decide]');
         if (decide) { apDecideOff(decide.dataset.apOffDecide, decide.dataset.verdict); return; }
         const remove = e.target.closest('[data-ap-off-remove]');
@@ -2089,9 +2109,4 @@ function setupAdminPortal() {
 
     _apReady = true;
     apRender();
-}
-
-function apCloseMenu() {
-    document.getElementById('mobileNavOverlay')?.classList.remove('open');
-    document.getElementById('mobileMenuBtn')?.setAttribute('aria-expanded', 'false');
 }
