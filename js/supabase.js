@@ -2758,7 +2758,35 @@ async function sendParentMessage(threadId, body, senderName) {
         sender_name: senderName || null, body: String(body || '').trim(),
     });
     if (error) throw friendlyError(error);
+    // Best-effort. A parent's message is already saved above regardless of
+    // whether any admin has push turned on — this must never make the send
+    // itself fail.
+    notifyAdminsOfNewMessage(threadId);
     return true;
+}
+
+/**
+ * Pushes every full admin subscribed to push (Settings → toggle in the admin
+ * portal) that a parent wrote in. Sends only the thread id — the worker
+ * re-reads the thread and the message with the service role and composes the
+ * notification itself, so no wording travels from the parent's browser.
+ */
+async function notifyAdminsOfNewMessage(threadId) {
+    if (!sbClient) return;
+    try {
+        const { data: { session } } = await sbClient.auth.getSession();
+        if (!session?.access_token) return;
+        await fetch('/notify-admin-message', {
+            method:  'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ thread_id: threadId }),
+        });
+    } catch (err) {
+        console.warn('notify admins:', err);
+    }
 }
 
 /** Clears the OTHER side's messages. Used by the parent view and admin inbox. */

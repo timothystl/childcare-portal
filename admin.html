@@ -897,6 +897,19 @@
         <!-- ── Tab: Settings ──────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-settings">
 
+            <!-- Push Notifications -->
+            <section class="admin-section collapsible-section" id="adminPushSection">
+                <h2>🔔 My Notifications</h2>
+                <p class="section-desc">Get a push notification on this device when a parent sends a message in the app.</p>
+                <div id="apPushToggleWrap" style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+                    <label style="display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer;">
+                        <input type="checkbox" id="apPushToggle" style="width:18px;height:18px;cursor:pointer;">
+                        Notify me of new parent messages on this device
+                    </label>
+                    <span id="apPushStatus" class="rates-status"></span>
+                </div>
+            </section>
+
             <!-- Registration Window Override -->
             <section class="admin-section collapsible-section" id="regWindowSection">
                 <h2>🔓 Registration Window Override</h2>

@@ -198,6 +198,7 @@ const ENTRIES = [
                 'js/admin/admin-incidents.js',
                 'js/admin/admin-safety.js',
                 'js/admin/admin-threads.js',
+                'js/admin/admin-push.js',
                 'js/admin/admin-cacfp.js',
                 'js/admin/admin-market.js',
                 // Last: the portal shell indexes the sections the modules above
