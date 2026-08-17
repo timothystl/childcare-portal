@@ -90,6 +90,18 @@ document.addEventListener('DOMContentLoaded', () => {
             // confirmation email fails to send.
             sendWaitlistConfirmationEmail(result.id).catch(() => {});
 
+            // A note left on the inquiry form is a message, not just a waitlist
+            // field — route it into the same Contact Us inbox (`messages` table)
+            // the "Message the Office" button on waitlist-status.html uses, so
+            // office staff see it without having to open the waitlist queue.
+            if (payload.notes) {
+                addMessage({
+                    parentName: `${childName}'s family`,
+                    parentEmail: parentEmail,
+                    message: `[Waitlist Inquiry] ${payload.notes}`,
+                }).catch(() => {});
+            }
+
             document.getElementById('inquiryFormScreen').classList.add('hidden');
             document.getElementById('inquirySuccessScreen').classList.remove('hidden');
             document.getElementById('inquirySuccessDetails').textContent =

@@ -969,9 +969,11 @@ function wlpRenderQueueRow(k, alloc) {
                     <div class="wlp-chip-row">${chips}</div>
                     <div class="wlp-row-meta">${k.sibling ? '👨‍👩‍👧 sibling · ' : ''}${k.flexible ? `🔀 any ${k.flexibleCount} days/wk · ` : ''}waiting ${escHtml(wlDaysWaiting(k.appliedAt))} · desired start ${escHtml(alloc.months[k.desiredStartM].label)}${bestFitNote}</div>
                 </div>
-                <div class="wlp-status-pill ${fitCls}">${fitLabel}</div>
-                <button type="button" class="wlp-edit-btn" data-wlp-edit="${k.id}" title="Edit child">✎ Edit</button>
-                <div class="wlp-chevron">${expanded ? '▲' : '▼'}</div>
+                <div class="wlp-row-tail">
+                    <div class="wlp-status-pill ${fitCls}">${fitLabel}</div>
+                    <button type="button" class="wlp-edit-btn" data-wlp-edit="${k.id}" title="Edit child">✎ Edit</button>
+                    <div class="wlp-chevron">${expanded ? '▲' : '▼'}</div>
+                </div>
             </div>
             ${expanded ? wlpRenderQueueExpand(k, alloc) : ''}
         </div>`;
