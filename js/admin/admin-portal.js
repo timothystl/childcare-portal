@@ -274,6 +274,8 @@ const AP_TOOLS = [
       blurb: 'The full comparable set — edit a row or add a provider.' },
 
     // ── Settings ──
+    { key: 'adminPush',   pane: 'settings', section: 'adminPushSection',     tab: 'settings', group: 'Access & Oversight', tint: AP_TINT.tang, icon: '🔔', name: 'My Notifications',
+      blurb: 'Turn on push notifications for new parent messages.' },
     { key: 'regWindow',   pane: 'settings', section: 'regWindowSection',     tab: 'settings', group: 'Registration', tint: AP_TINT.gold, icon: '🔓', name: 'Registration Window',
       blurb: 'Force the registration window open or closed.' },
     { key: 'closedDays',  pane: 'settings', section: 'closedDaysSection',    tab: 'settings', group: 'Registration', tint: AP_TINT.gold, icon: '🚫', name: 'Closed Days',
@@ -430,7 +432,10 @@ const AP_FULL_ONLY_TABS = ['finance', 'market'];
 // staffInjury for the same reason as payroll but more so: the report names an
 // employee, the part of their body, and where they were treated. A `restricted`
 // admin who plans schedules has no business reading it.
-const AP_FULL_ONLY_KEYS = ['payroll', 'staffInjury', 'clockIntegrity'];
+// adminPush: a 'restricted'/'staff' login never sees the office-wide Parent
+// Messages inbox (admin-threads.js is unscoped to full admins), so offering
+// them a toggle for it would alert someone with nowhere to act on it.
+const AP_FULL_ONLY_KEYS = ['payroll', 'staffInjury', 'clockIntegrity', 'adminPush'];
 
 function apToolAvailable(tool) {
     const el = document.getElementById(tool.section);

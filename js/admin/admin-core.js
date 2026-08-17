@@ -156,6 +156,8 @@ async function applySessionRole() {
     // Restrictions hide sections with inline display:none, and the portal
     // index is built from what is visible — so it has to be rebuilt after.
     if (typeof apRender === 'function') apRender();
+    // The push toggle is 'full'-admin-only and currentAdminRole just changed.
+    if (typeof apPushRefreshToggle === 'function') apPushRefreshToggle();
 }
 
 // Undo any restrictions from a previous session before applying new ones.

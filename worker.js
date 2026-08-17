@@ -509,6 +509,148 @@ export default {
       return new Response(null, { status: res.ok ? 201 : 500 });
     }
 
+    // ── POST /admin-push-subscribe — save a push subscription for a director/admin ──
+    // Gated to 'full' admins only: they're the ones who read the Parent
+    // Messages inbox (admin-threads.js) unscoped to a room, so they're the
+    // ones who should be interrupted when a parent writes in.
+    if (url.pathname === '/admin-push-subscribe' && request.method === 'POST') {
+      const reqOrigin = request.headers.get('Origin');
+      if (reqOrigin && !ALLOWED_ORIGINS.has(reqOrigin)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      const { endpoint, p256dh, auth } = await request.json().catch(() => ({}));
+      if (!endpoint || !p256dh || !auth) return new Response('Missing fields', { status: 400 });
+
+      const bearer = (request.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+      if (!bearer) return new Response('Unauthorized', { status: 401 });
+
+      // Ask the database whether the caller is a full admin, the same way
+      // /send-push asks is_admin() — never trust a client claim about its own
+      // role.
+      const roleRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_role`, {
+        method: 'POST',
+        headers: {
+          'apikey':        env.SUPABASE_ANON_KEY ?? '',
+          'Authorization': `Bearer ${bearer}`,           // the CALLER's token
+          'Content-Type':  'application/json',
+        },
+        body: '{}',
+      });
+      if (!roleRes.ok) return new Response('Unauthorized', { status: 401 });
+      if ((await roleRes.json().catch(() => null)) !== 'full') {
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        headers: { 'apikey': env.SUPABASE_ANON_KEY ?? '', 'Authorization': `Bearer ${bearer}` },
+      });
+      if (!userRes.ok) return new Response('Unauthorized', { status: 401 });
+      const email = (await userRes.json().catch(() => null))?.email;
+      if (!email) return new Response('Unauthorized', { status: 401 });
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/admin_push_subscriptions`, {
+        method:  'POST',
+        headers: {
+          'apikey':        env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type':  'application/json',
+          'Prefer':        'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({ admin_email: email.toLowerCase(), endpoint, p256dh, auth }),
+      });
+      return new Response(null, { status: res.ok ? 201 : 500 });
+    }
+
+    // ── POST /notify-admin-message — push full admins when a parent writes in ──
+    // Fired from the parent portal right after sendParentMessage() inserts
+    // successfully (js/supabase.js: notifyAdminsOfNewMessage). Same
+    // send-invoice / send-staff-broadcast posture as everywhere else in this
+    // app: THE CLIENT SENDS A THREAD ID, NEVER A MESSAGE. No title, no body, no
+    // recipient travels from a browser — the worker re-reads the thread and
+    // the parent's own latest message with the service role and composes the
+    // text itself.
+    if (url.pathname === '/notify-admin-message' && request.method === 'POST') {
+      const reqOrigin = request.headers.get('Origin');
+      if (reqOrigin && !ALLOWED_ORIGINS.has(reqOrigin)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      const { thread_id } = await request.json().catch(() => ({}));
+      if (!thread_id) return new Response('Missing fields', { status: 400 });
+
+      const bearer = (request.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+      if (!bearer) return new Response('Unauthorized', { status: 401 });
+
+      // Resolve the caller to a family the same way /push-subscribe does, then
+      // confirm the thread they named is actually theirs — a parent must not
+      // be able to trigger a push by pointing at somebody else's thread id.
+      const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        headers: { 'apikey': env.SUPABASE_ANON_KEY ?? '', 'Authorization': `Bearer ${bearer}` },
+      });
+      if (!userRes.ok) return new Response('Unauthorized', { status: 401 });
+      const user = await userRes.json().catch(() => null);
+      if (!user?.id) return new Response('Unauthorized', { status: 401 });
+
+      const paRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/parent_accounts?user_id=eq.${encodeURIComponent(user.id)}&select=family_id&limit=1`,
+        { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      );
+      const paRows = paRes.ok ? await paRes.json().catch(() => []) : [];
+      const familyId = paRows[0]?.family_id;
+      if (!familyId) return new Response('Unauthorized', { status: 401 });
+
+      const threadRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/message_threads?id=eq.${encodeURIComponent(thread_id)}&select=id,family_id,families(parent_name)&limit=1`,
+        { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      );
+      if (!threadRes.ok) return new Response('Failed to read thread', { status: 500 });
+      const [thread] = await threadRes.json();
+      if (!thread || thread.family_id !== familyId) return new Response('Forbidden', { status: 403 });
+
+      // The most recent PARENT message in the thread — composed server-side so
+      // the pushed text is always what is actually stored, never client input.
+      const msgRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/message_items?thread_id=eq.${encodeURIComponent(thread_id)}&sender_type=eq.parent&order=created_at.desc&select=body&limit=1`,
+        { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      );
+      const [lastMsg] = msgRes.ok ? await msgRes.json().catch(() => []) : [];
+
+      const parentName = thread.families?.parent_name || 'A parent';
+      const payload = {
+        title: `💬 ${parentName}`,
+        body:  (lastMsg?.body || 'sent a new message.').slice(0, 180),
+        tag:   `thread-${thread_id}`,
+      };
+
+      const subsRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/admin_push_subscriptions?select=*`,
+        { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      );
+      if (!subsRes.ok) return new Response('Failed to fetch subscriptions', { status: 500 });
+      const subs = await subsRes.json();
+      if (!subs.length) return new Response(JSON.stringify({ sent: 0 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+
+      const results = await Promise.allSettled(subs.map(sub => sendWebPush(sub, payload, env)));
+
+      // Remove expired (410 Gone) subscriptions
+      const expired = subs
+        .filter((_, i) => results[i].status === 'fulfilled' && results[i].value.status === 410)
+        .map(s => s.id);
+      if (expired.length) {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/admin_push_subscriptions?id=in.(${expired.join(',')})`,
+          { method: 'DELETE', headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+        );
+      }
+
+      return new Response(JSON.stringify({ sent: subs.length - expired.length }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // ── POST /send-staff-broadcast — every staff phone at once ───────────────
     // The missing-child alert. /send-staff-push next door sends to ONE staff_id
     // and demands the service role key, so neither half of it fits: this has to

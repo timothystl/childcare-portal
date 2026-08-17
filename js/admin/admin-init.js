@@ -33,6 +33,7 @@ async function initDashboard() {
     setupFilters();
     setupRoster();
     setupClosures();
+    if (typeof apPushInit === 'function') apPushInit();
     setupAttendanceRevenue();
     setupFamilyBilling();
     setupMissingCalendarReport();
