@@ -155,6 +155,7 @@ const ENTRIES = [
                 'js/portal/portal-nav.js',
         'js/portal/portal-account.js',
         'js/portal/portal-schedule.js',
+        'js/portal/portal-billing.js',
         'js/portal/portal-today.js',
                 'js/portal/portal-messages.js',
                 // After portal-today: reads ptChildren for the child's name on

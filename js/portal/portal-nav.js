@@ -1,9 +1,9 @@
 // ============================================================
 // portal-nav — the parent app's tab shell
 // ============================================================
-// Design: docs/design_handoff/README.md, "Navigation". Four persistent tabs —
-// 🏠 Today · 🗓 Schedule · 💬 Messages · 👤 Account — on every non-modal
-// screen. The bar never scrolls; the route body above it does.
+// Design: docs/design_handoff/README.md, "Navigation". Five persistent tabs —
+// 🏠 Today · 🗓 Schedule · 💳 Billing · 💬 Messages · 👤 Account — on every
+// non-modal screen. The bar never scrolls; the route body above it does.
 //
 // Why this exists at all: the portal shipped as a single scrolling page while
 // the design is a multi-tab app. Everything already built becomes the Today
@@ -14,17 +14,22 @@
 // deep-linkable /portal#billing would need auth-gated route restoration that
 // nothing yet asks for. When push deep links land (README: "Push → deep link"),
 // this is the function they call.
-
-// ⚠️ Documents is NOT its own tab. It shipped briefly as a fifth tab
-// (replacing a Billing placeholder), but paperwork a parent opens once a
-// season doesn't earn a permanent slot in the bar a parent taps every day —
-// it now renders inside the Account tab (portal.html, #pdBody nested under
-// #ptAccountBody), the "everything about my family" tab, right alongside the
-// pickup list and notification prefs. See portal-account.js / paLoad, which
-// loads it together with the rest of Account on first visit.
+//
+// ⚠️ Billing had already been through two shapes before this one — a real
+// tab that was a "coming soon" placeholder, then removed in favor of
+// Documents, which was itself later folded into Account. It's a tab again
+// because a parent needs to see what's billed and what's owed, which is real
+// data now (portal-billing.js, off the same my_schedule() invoices the
+// Schedule tab already reads) — only the "Pay" button is still a
+// placeholder, because no payment processor is wired into this app yet.
+//
+// ⚠️ Documents is NOT its own tab. It renders inside the Account tab
+// (portal.html, #pdBody nested under #ptAccountBody) — see portal-account.js
+// / paLoad, which loads it together with the rest of Account on first visit.
 const PT_TABS = [
     { key: 'today',     icon: '🏠', label: 'Today' },
     { key: 'schedule',  icon: '🗓', label: 'Schedule' },
+    { key: 'billing',   icon: '💳', label: 'Billing' },
     { key: 'messages',  icon: '💬', label: 'Messages' },
     { key: 'account',   icon: '👤', label: 'Account' },
 ];
@@ -82,6 +87,7 @@ function ptGoTab(key) {
         if (key === 'account'  && typeof paLoad === 'function') paLoad();
         if (key === 'account'  && typeof pdLoad === 'function') pdLoad();
         if (key === 'schedule' && typeof psLoad === 'function') psLoad();
+        if (key === 'billing'  && typeof pbLoad === 'function') pbLoad();
     }
 }
 

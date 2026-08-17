@@ -827,3 +827,31 @@
 .pd-fine {
     margin: 10px 0 2px; font-size: .82em; line-height: 1.55; color: var(--text-muted);
 }
+
+/* ============================================================
+   BILLING TAB (portal-billing.js) — reuses .pd-card for its own cards;
+   these rules are just the row layout and the placeholder Pay button.
+   ============================================================ */
+.pb-summary .pd-card-body { padding-top: 10px; }
+.pb-total { font-family: var(--font-head); font-size: 1.7em; color: var(--navy); margin: 0; }
+.pb-fine  { margin: 8px 0 0; font-size: .82em; line-height: 1.55; color: var(--text-muted); }
+
+.pb-row {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; padding: 6px 0; font-size: .9em;
+}
+.pb-row-label { color: var(--text-muted); }
+.pb-row-value { font-weight: 700; color: var(--navy); display: flex; align-items: center; gap: 8px; }
+.pb-row-strong {
+    border-top: 1px solid var(--linen); margin-top: 4px; padding-top: 10px;
+    font-size: .95em;
+}
+.pb-row-strong .pb-row-label { color: var(--navy); font-weight: 800; }
+.pb-row-strong .pb-row-value { font-size: 1.05em; }
+
+.pb-pay-btn {
+    width: 100%; margin-top: 12px; min-height: 44px;
+    background: var(--linen); border: 1px dashed var(--border); border-radius: 10px;
+    color: var(--text-muted); font-family: inherit; font-size: .88em; font-weight: 700;
+    cursor: not-allowed;
+}
