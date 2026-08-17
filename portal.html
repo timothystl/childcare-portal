@@ -110,6 +110,16 @@
             <div id="ptScheduleBody"></div>
         </section>
 
+        <!-- ══ BILLING ════════════════════════════════════════ -->
+        <!-- Real invoices (js/portal/portal-billing.js, off the same
+             my_schedule() data the Schedule tab reads), but no online
+             payment yet — nothing in this app talks to a payment
+             processor, so "Pay" is a placeholder that says so rather than
+             pretending a card can be charged. -->
+        <section class="pt-tab hidden" data-tab="billing">
+            <div id="pbBody"></div>
+        </section>
+
         <!-- ══ MESSAGES ═══════════════════════════════════════ -->
         <!-- Its own tab per the design. Loaded on first open, never on sign-in:
              reading the thread marks it read, so loading eagerly would clear a

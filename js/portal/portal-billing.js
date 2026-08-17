@@ -1,0 +1,119 @@
+// ============================================================
+// portal-billing — the parent's Billing tab
+// ============================================================
+// Real invoices, no online payment yet. Reuses fetchMySchedule() (the same
+// call the Schedule tab makes) rather than a second RPC — my_schedule()
+// already returns this family's own billing_invoices rows via the
+// SECURITY DEFINER / parent_family_ids() path (see
+// supabase/migrations/parent_billing_tab_and_grant_fix.sql), and Billing
+// only needs the `invoices` array out of that same payload.
+//
+// ⚠️ A DRAFT INVOICE IS NOT A BILL. my_schedule() includes every
+// non-void invoice, draft or otherwise, but a draft is the office still
+// working the month out — nothing has been billed yet. Only a row with
+// sent_at is shown here, same rule the Schedule tab's status pill already
+// follows (portal-schedule.js, psStatusPill).
+//
+// ⚠️ THERE IS NO PAYMENT PROCESSOR WIRED INTO THIS APP, ANYWHERE. The old
+// Billing tab (replaced by Documents, then folded into Account, see
+// portal-nav.js) was a placeholder for the same reason. "Pay" here is
+// still a placeholder — it tells a parent how much is owed and that online
+// payment is coming, rather than pretending a card can be charged. When a
+// processor is chosen, this is the one place a Pay button needs to change.
+
+let pbData = null;
+
+function pbEl(id) { return document.getElementById(id); }
+function pbEsc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+}
+function pbMoney(n) { return '$' + (Number(n) || 0).toFixed(2); }
+
+function pbMonthLabel(monthKey) {
+    const [y, m] = monthKey.split('-').map(Number);
+    const names = (typeof MONTH_NAMES !== 'undefined' && MONTH_NAMES) ||
+        ['January','February','March','April','May','June','July','August',
+         'September','October','November','December'];
+    return `${names[m - 1]} ${y}`;
+}
+
+function pbIssuedInvoices() {
+    return (pbData?.invoices || []).filter(i => i.sent_at).sort((a, b) => b.month.localeCompare(a.month));
+}
+
+function pbRender() {
+    const body = pbEl('pbBody');
+    if (!body) return;
+    if (!pbData) {
+        body.innerHTML = '<p class="pa-empty">Could not load your billing. Pull down to retry.</p>';
+        return;
+    }
+
+    const invoices = pbIssuedInvoices();
+    if (!invoices.length) {
+        body.innerHTML = `<div class="tab-placeholder">
+            <h2>No bills issued yet</h2>
+            <p>Once the office issues a bill for a month, it will show up here
+               with what's owed. Until then, nothing has changed about how you pay.</p>
+        </div>`;
+        return;
+    }
+
+    const totalDue = invoices.reduce((sum, i) =>
+        sum + Math.max(0, (Number(i.final_amount) || 0) - (Number(i.paid_amount) || 0)), 0);
+
+    body.innerHTML = `
+        <section class="pd-card pb-summary">
+            <div class="pd-card-head"><span aria-hidden="true">💳</span>Total balance due</div>
+            <div class="pd-card-body">
+                <p class="pb-total">${pbMoney(totalDue)}</p>
+                <p class="pb-fine">Online payment is coming soon. For now, bills are paid
+                   the same way they are today — contact the office if you have questions
+                   about a balance.</p>
+            </div>
+        </section>
+        ${invoices.map(pbInvoiceCard).join('')}
+    `;
+}
+
+function pbInvoiceCard(inv) {
+    const due = Math.max(0, (Number(inv.final_amount) || 0) - (Number(inv.paid_amount) || 0));
+    const paid = inv.status === 'paid';
+    const pill = paid
+        ? '<span class="ps-status ps-paid">PAID</span>'
+        : `<span class="ps-status ps-due">${inv.status === 'partial' ? 'PARTIAL' : 'DUE'}</span>`;
+
+    return `<section class="pd-card">
+        <div class="pd-card-head"><span aria-hidden="true">🧾</span>${pbEsc(pbMonthLabel(inv.month))}</div>
+        <div class="pd-card-body">
+            <div class="pb-row">
+                <span class="pb-row-label">Billed</span>
+                <span class="pb-row-value">${pbMoney(inv.final_amount)}</span>
+            </div>
+            ${inv.paid_amount > 0 ? `<div class="pb-row">
+                <span class="pb-row-label">Paid</span>
+                <span class="pb-row-value">${pbMoney(inv.paid_amount)}</span>
+            </div>` : ''}
+            <div class="pb-row pb-row-strong">
+                <span class="pb-row-label">${paid ? 'Balance' : 'Balance due'}</span>
+                <span class="pb-row-value">${pbMoney(due)} ${pill}</span>
+            </div>
+            ${!paid ? `<button type="button" class="pb-pay-btn" disabled
+                title="Online payment is coming soon">Pay online — coming soon</button>` : ''}
+        </div>
+    </section>`;
+}
+
+async function pbLoad() {
+    const body = pbEl('pbBody');
+    if (body) body.innerHTML = '<p class="pa-empty">Loading…</p>';
+    try {
+        pbData = await fetchMySchedule();
+    } catch (e) {
+        console.warn('billing:', e);
+        pbData = null;
+    }
+    pbRender();
+}
