@@ -5,6 +5,10 @@
 // three-signature copy lands here), immunization records, policies, tax
 // statements."
 //
+// Renders into #pdBody, which lives inside the Account tab (not a tab of its
+// own — see the note on PT_TABS in portal-nav.js). Loaded by ptGoTab
+// alongside paLoad() the first time a parent opens Account.
+//
 // ⚠️ AN INCIDENT REPORT IS ONLY LISTED HERE ONCE IT IS CLOSED, and that is
 // enforced by RLS rather than by this file. The "parent read approved" policy
 // on incident_reports filters to status = 'approved' AND the family's own
@@ -56,9 +60,9 @@ function pdRender() {
     const body = pdEl('pdBody');
     if (!body) return;
 
+    // No page-level heading here — #pdBody renders inside the Account tab
+    // (portal.html), under the "Documents" <h2> that already sits above it.
     body.innerHTML = `
-        <h1 class="portal-greeting">Documents</h1>
-        <p class="portal-sub">Everything the center has on file for your family.</p>
         ${pdIncidentSection()}
         ${pdFormsSection()}
         ${pdImmunizationSection()}
