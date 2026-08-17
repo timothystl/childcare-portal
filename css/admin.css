@@ -1960,11 +1960,11 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     .admin-header { padding: 12px 16px; gap: 8px; flex-wrap: nowrap; }
     .admin-header h1 { font-size: 1.1em; }
     .filters, .capacity-section, .table-section { padding: 16px; }
-    /* On mobile the header is just logo + active tab + hamburger — title,
-       version badge, signed-in-as badge, and Logout (still reachable via
-       the drawer footer) are all dropped so the header stays one row. */
+    /* On mobile the header is just logo + active tab + Logout — title,
+       version badge, and signed-in-as badge are dropped so the header
+       stays one row. Logout has no other affordance now that navigation
+       moved to the bottom tab bar, so it stays visible here. */
     .admin-header-left > div { display: none; }
-    #logoutBtn { display: none; }
     .header-actions { gap: 8px; flex-wrap: nowrap; }
     .families-import-row { gap: 8px; }
     .families-list { max-height: none; }
@@ -2016,102 +2016,6 @@ tr.pending-approval:hover { background: var(--sun-pale); }
        that means nothing once the bar is stacked. */
     .roster-controls .ap-stats { flex: 1 1 100%; margin-left: 0 !important; }
 }
-
-.mobile-menu-btn {
-    display: flex;
-    -webkit-appearance: none;
-    appearance: none;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    background: transparent;
-    border: 2px solid var(--border);
-    border-radius: 8px;
-    padding: 0;
-    cursor: pointer;
-    flex-shrink: 0;
-}
-.mobile-menu-btn:hover { background: var(--warm-gray); }
-
-.hamburger-bars { position: relative; width: 20px; height: 14px; display: block; }
-.hamburger-bars span {
-    position: absolute; left: 0; width: 20px; height: 2.5px;
-    border-radius: 2px; background: var(--navy);
-    transition: transform .22s ease, opacity .18s ease;
-}
-.hamburger-bars span:nth-child(1) { top: 0; }
-.hamburger-bars span:nth-child(2) { top: 6px; }
-.hamburger-bars span:nth-child(3) { top: 12px; }
-.mobile-menu-btn[aria-expanded="true"] .hamburger-bars span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
-.mobile-menu-btn[aria-expanded="true"] .hamburger-bars span:nth-child(2) { opacity: 0; }
-.mobile-menu-btn[aria-expanded="true"] .hamburger-bars span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
-
-.mobile-nav-overlay {
-    display: none;
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%;
-    z-index: 9999;
-    background: rgba(1,41,74,0);
-    align-items: flex-start; justify-content: flex-start;
-    transition: background .25s ease;
-}
-.mobile-nav-overlay.open { display: flex; background: rgba(1,41,74,.55); }
-
-.mobile-nav-drawer {
-    background: var(--white);
-    width: 78%; max-width: 300px; height: 100%;
-    overflow-y: auto; -webkit-overflow-scrolling: touch;
-    box-shadow: 6px 0 30px rgba(1,41,74,.35);
-    display: flex; flex-direction: column; flex-shrink: 0;
-    border-top-right-radius: 20px; border-bottom-right-radius: 20px;
-    transform: translateX(-105%);
-    transition: transform .3s cubic-bezier(.4,0,.2,1);
-}
-.mobile-nav-overlay.open .mobile-nav-drawer { transform: translateX(0); }
-
-.mobile-nav-drawer-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0;
-}
-.mobile-nav-drawer-header span {
-    font-weight: 800; color: var(--navy); font-size: .72em;
-    text-transform: uppercase; letter-spacing: .08em;
-}
-.mobile-nav-close {
-    -webkit-appearance: none; appearance: none; background: none; border: none;
-    font-size: 1.6em; line-height: 1; cursor: pointer; color: var(--text-muted); padding: 4px 6px;
-}
-.mobile-nav-close:hover { color: var(--text); }
-
-.mobile-nav-list { flex: 1; overflow-y: auto; padding: 6px 0; }
-.mobile-nav-group-label {
-    padding: 14px 20px 6px; font-size: .66em; font-weight: 800;
-    color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em;
-}
-.mobile-nav-group-label:first-child { padding-top: 10px; }
-
-.mobile-nav-item {
-    -webkit-appearance: none; appearance: none;
-    display: flex; align-items: center; gap: 12px;
-    width: 100%; box-sizing: border-box; text-align: left;
-    padding: 11px 20px 11px 17px; font-size: .92em; font-weight: 600; color: var(--text);
-    background: none; border: none; border-left: 3px solid transparent; border-radius: 0;
-    cursor: pointer; font-family: var(--font-body); transition: background .1s;
-}
-.mobile-nav-item .mni-icon { font-size: 1.1em; line-height: 1; width: 22px; text-align: center; flex-shrink: 0; }
-.mobile-nav-item:hover, .mobile-nav-item:active { background: var(--linen); }
-.mobile-nav-item.active { color: var(--navy); font-weight: 800; background: var(--green-lt); border-left-color: var(--sun); }
-
-.mobile-nav-footer {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
-}
-.mobile-nav-footer .mnf-version { font-size: .68em; color: var(--text-muted); font-weight: 700; }
-.mobile-nav-footer .mnf-logout {
-    background: none; border: none; color: var(--tang); font-weight: 700;
-    font-size: .82em; cursor: pointer; font-family: var(--font-body);
-}
-.mobile-nav-footer .mnf-logout:hover { text-decoration: underline; }
 
 /* ============================================================
    ROOM CALENDAR — CLICKABLE DAY CELLS

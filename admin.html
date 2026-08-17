@@ -63,50 +63,18 @@
                     <span class="ctc-icon" id="currentTabIcon">🧭</span><span id="currentTabLabel">Director</span>
                 </span>
                 <button id="logoutBtn" class="btn-ghost">Logout</button>
-                <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open navigation menu" aria-expanded="false">
-                    <span class="hamburger-bars" aria-hidden="true"><span></span><span></span><span></span></span>
-                </button>
             </div>
         </header>
-
-        <!-- Mobile navigation drawer overlay -->
-        <div id="mobileNavOverlay" class="mobile-nav-overlay">
-            <div class="mobile-nav-drawer">
-                <div class="mobile-nav-drawer-header">
-                    <span>Admin Menu</span>
-                    <button id="mobileNavClose" class="mobile-nav-close" aria-label="Close menu">&times;</button>
-                </div>
-                <div class="mobile-nav-list">
-                    <div class="mobile-nav-group-label">Daily Ops</div>
-                    <button class="mobile-nav-item" data-tab="daily"><span class="mni-icon">🏫</span><span>Classrooms</span></button>
-                    <button class="mobile-nav-item" data-tab="registrations"><span class="mni-icon">📅</span><span>Care Calendar</span></button>
-
-                    <div class="mobile-nav-group-label">People</div>
-                    <button class="mobile-nav-item" data-tab="families"><span class="mni-icon">👨‍👩‍👧</span><span>Families</span></button>
-                    <button class="mobile-nav-item" data-tab="staffing"><span class="mni-icon">👷</span><span>Staffing</span></button>
-                    <button class="mobile-nav-item" data-tab="messages"><span class="mni-icon">💬</span><span>Messages</span></button>
-
-                    <div class="mobile-nav-group-label">Admin</div>
-                    <button class="mobile-nav-item" data-tab="waitlist"><span class="mni-icon">🗓️</span><span>Planning</span></button>
-                    <button class="mobile-nav-item" data-tab="cacfp"><span class="mni-icon">🍎</span><span>Food Program</span></button>
-                    <button class="mobile-nav-item" data-tab="market"><span class="mni-icon">📈</span><span>Market Analysis</span></button>
-                    <button class="mobile-nav-item" data-tab="finance"><span class="mni-icon">💰</span><span>Finance</span></button>
-                    <button class="mobile-nav-item" data-tab="reports"><span class="mni-icon">📊</span><span>Billing</span></button>
-                    <button class="mobile-nav-item" data-tab="settings"><span class="mni-icon">⚙️</span><span>Settings</span></button>
-                </div>
-                <div class="mobile-nav-footer">
-                    <span class="mnf-version" id="mobileNavVersion"></span>
-                    <button class="mnf-logout" id="mobileNavLogout">Logout</button>
-                </div>
-            </div>
-        </div>
 
         <!-- ══ Portal shell ═══════════════════════════════════════
              Two levels, no modes (js/admin/admin-portal.js):
                #apNav    — the permanent sidebar: tabs, then the active
                            tab's tool groups. It is the tool index and the
                            way back; there is no layout toggle and no
-                           separate list-of-everything screen.
+                           separate list-of-everything screen. Desktop only
+                           (900px+) — below that, #apTabbar (bottom tab bar,
+                           same seven tabs, same pattern as the parent app)
+                           replaces it entirely.
                #apPage   — the active tab's dashboard (the default landing
                            state for every tab).
                #apDetail — one open tool: its heading, the tool's own
@@ -114,6 +82,10 @@
                            .tab-pane lives inside it and the shell shows
                            exactly one section at a time.
              ══════════════════════════════════════════════════════ -->
+        <!-- Below 900px this replaces the sidebar entirely — same seven
+             tabs, same bottom tab-bar pattern as the parent app. -->
+        <nav class="tabbar ap-tabbar" id="apTabbar" aria-label="Sections"></nav>
+
         <div class="ap-shell" id="apShell">
         <nav class="ap-nav" id="apNav" aria-label="Tools"></nav>
         <div class="ap-main">

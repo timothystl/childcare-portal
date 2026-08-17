@@ -323,63 +323,11 @@ const TAB_META = {
 };
 
 function setupTabs() {
-    const panes    = document.querySelectorAll('.tab-pane');
-    const menuBtn  = document.getElementById('mobileMenuBtn');
-    const overlay  = document.getElementById('mobileNavOverlay');
-    const closeBtn = document.getElementById('mobileNavClose');
-    const navItems = document.querySelectorAll('.mobile-nav-item');
-    const chipIcon  = document.getElementById('currentTabIcon');
-    const chipLabel = document.getElementById('currentTabLabel');
-
-    // Move overlay to <body> so position:fixed is relative to the viewport,
-    // not to any transformed/stacking-context ancestor.
-    if (overlay && overlay.parentNode !== document.body) {
-        document.body.appendChild(overlay);
-    }
-
-    function openMenu()  { if (overlay) overlay.classList.add('open'); if (menuBtn) menuBtn.setAttribute('aria-expanded', 'true'); }
-    function closeMenu() { if (overlay) overlay.classList.remove('open'); if (menuBtn) menuBtn.setAttribute('aria-expanded', 'false'); }
-
-    function activate(tab) {
-        navItems.forEach(i => i.classList.toggle('active', i.dataset.tab === tab));
-        panes.forEach(p    => p.classList.toggle('hidden', p.id !== 'tab-' + tab));
-        localStorage.setItem('adminActiveTab', tab);
-        closeMenu();
-
-        const meta = TAB_META[tab];
-        if (meta && chipIcon && chipLabel) { chipIcon.textContent = meta.icon; chipLabel.textContent = meta.label; }
-
-        if (tab === 'families'  && allFamiliesData.length === 0) loadFamilies();
-        if (tab === 'staffing'  && allStaffData.length === 0)    loadStaffList();
-        if (tab === 'staffing')                                  loadGeofenceSettings();
-        if (tab === 'messages'  && !_messagesLoaded)             { _messagesLoaded = true; loadMessages(); }
-        if (tab === 'billing'   && !_arLoaded)                   { setupBillingDashYear(); }
-        if (tab === 'cacfp'     && !_cacfpLoaded)                { _cacfpLoaded = true; initCacfpTab(); }
-        if (tab === 'market'    && !_marketLoaded)               { _marketLoaded = true; initMarketTab(); }
-        // Audit Log lives inside Settings (see #auditLogSection) rather than
-        // its own tab — reload on every visit to Settings, not just once, so
-        // an admin who takes an action elsewhere and comes back sees it.
-        // Cheap, capped query; the Refresh button covers staying on the tab.
-        if (tab === 'settings')                                  loadAuditLogTab();
-    }
-
-    navItems.forEach(item => item.addEventListener('click', () => activate(item.dataset.tab)));
-
-    if (menuBtn)  menuBtn.addEventListener('click', openMenu);
-    if (closeBtn) closeBtn.addEventListener('click', closeMenu);
-    // Tap the dark backdrop (not the drawer) to close
-    if (overlay)  overlay.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
-    document.getElementById('mobileNavLogout')?.addEventListener('click', () => document.getElementById('logoutBtn').click());
-
-    // The portal shell owns navigation now: five role tabs, a layout toggle,
-    // and one tool on screen at a time. It replaces the drawer's contents and
-    // decides which pane/section is visible, so the legacy tab activation
-    // below must not also run — it would un-hide a whole pane at once.
-    // The menu open/close wiring above is still needed and is kept.
-    if (typeof setupAdminPortal === 'function') { setupAdminPortal(); return; }
-
-    const saved = localStorage.getItem('adminActiveTab') || 'daily';
-    activate(saved);
+    // The portal shell (js/admin/admin-portal.js) owns navigation: seven
+    // role tabs, a permanent sidebar at 900px+, and the same bottom tab bar
+    // pattern as the parent app below it. It decides which pane/section is
+    // visible and rebuilds both nav surfaces on every render.
+    setupAdminPortal();
 }
 
 // ============================================================
@@ -1111,15 +1059,12 @@ function applyRoleRestrictions() {
     }
 
     if (currentAdminRole === 'staff') {
-        // Hide all tabs except Classrooms and force it active
-        document.querySelectorAll('.mobile-nav-item').forEach(item => {
-            if (item.dataset.tab !== 'daily') item.style.display = 'none';
-        });
+        // Hide all tabs except Classrooms and force it active. The portal
+        // shell's own apTabAvailable() re-derives this from section
+        // visibility on every render, so the sidebar and bottom tab bar
+        // stay correct without any nav-element bookkeeping here.
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
         document.getElementById('tab-daily')?.classList.remove('hidden');
-        document.querySelectorAll('.mobile-nav-item').forEach(item => {
-            item.classList.toggle('active', item.dataset.tab === 'daily');
-        });
         const chipIcon  = document.getElementById('currentTabIcon');
         const chipLabel = document.getElementById('currentTabLabel');
         if (chipIcon && chipLabel) { chipIcon.textContent = TAB_META.daily.icon; chipLabel.textContent = TAB_META.daily.label; }

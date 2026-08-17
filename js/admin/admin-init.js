@@ -11,8 +11,6 @@ async function initDashboard() {
     dashboardInitDone = true;
     const versionBadge = document.getElementById('versionBadge');
     if (versionBadge) versionBadge.textContent = window.__BUILD_VERSION__ || 'dev';
-    const mobileNavVersion = document.getElementById('mobileNavVersion');
-    if (mobileNavVersion) mobileNavVersion.textContent = window.__BUILD_VERSION__ || 'dev';
     populateRoomFilter();
     populateRosterRoomFilter();
     try {
