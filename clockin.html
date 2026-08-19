@@ -839,45 +839,97 @@ function _urlBase64ToUint8Array(b64url) {
 // and is cleared when the screen changes, so reading it inside the async
 // click handler below would often find an empty string by the time the staff
 // member taps Allow.
+// Post this device's subscription. staff_id is derived server-side from the
+// PIN — the endpoint no longer accepts a caller-supplied id, because it used to
+// accept one with no authentication at all.
+async function _savePushSubscription(sub, id, staffPin) {
+    try {
+        const { endpoint, keys: { p256dh, auth } } = sub.toJSON();
+        const res = await fetch('/staff-push-subscribe', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ staff_id: id, pin: staffPin, endpoint, p256dh, auth }),
+        });
+        if (res.ok) localStorage.setItem('push_subscribed_' + id, '1');
+        return res.ok;
+    } catch (err) {
+        console.warn('Staff push subscription failed:', err);
+        return false;
+    }
+}
+
 async function _maybeShowPushPrompt(id, staffPin) {
     if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
     if (Notification.permission === 'denied') return;
-    if (localStorage.getItem('push_subscribed_' + id)) return;
+    if (!id || !staffPin) return;
     if (document.getElementById('staff-push-prompt')) return;
+
+    let reg;
+    try { reg = await navigator.serviceWorker.ready; } catch { return; }
+
+    // ⚠️ Already subscribed on this device: re-post it rather than trusting the
+    // localStorage flag. Push endpoints rotate, and this page used to skip the
+    // whole path on the flag alone — so a rotated endpoint left a phone that
+    // looked registered and received nothing, permanently and silently.
+    // getSubscription() is also what makes the two apps agree: staff.html
+    // registers the same /sw.js at the same scope on the same origin, so
+    // whoever turned alerts on there is not asked again here.
+    const existing = await reg.pushManager.getSubscription().catch(() => null);
+    if (existing) { _savePushSubscription(existing, id, staffPin); return; }
+
+    // Session-scoped, not permanent. Asking on every single clock-in teaches
+    // people to tap the ✕ without reading it; never asking again loses the one
+    // notification worth asking about tomorrow.
+    if (sessionStorage.getItem('mdo_staff_push_dismissed')) return;
+    if (localStorage.getItem('push_subscribed_' + id)) return;
 
     const banner = document.createElement('div');
     banner.id = 'staff-push-prompt';
     banner.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#fff;border:1px solid #e0d8c8;border-radius:12px;padding:14px 18px;box-shadow:0 4px 20px rgba(0,0,0,.18);z-index:9999;display:flex;align-items:center;gap:12px;max-width:360px;font-family:var(--font-body,sans-serif);font-size:.93em;';
+    // ⚠️ The ask names the missing-child alert, not "notifications". This page
+    // used to ask about shift reminders — a perfectly reasonable thing to
+    // decline — and declining it silently opted the phone out of the alert too.
+    // This is the surface that matters for it: 30 of 31 staff clock in on a
+    // given month, far more than open the staff app. Wording kept in step with
+    // js/staff/staff-push.js; change both or neither.
     banner.innerHTML = `
-        <span style="font-size:1.3em">🔔</span>
-        <span style="flex:1;color:#2E2A22">Get shift reminders on this device?</span>
-        <button id="staff-push-allow"   style="background:#01294A;color:#fff;border:none;border-radius:7px;padding:6px 12px;cursor:pointer;font-weight:700">Allow</button>
-        <button id="staff-push-dismiss" style="background:none;border:none;color:#7A6E5A;cursor:pointer;font-size:1.1em;padding:4px 8px">✕</button>
+        <span style="font-size:1.3em" aria-hidden="true">🚨</span>
+        <span style="flex:1;color:#2E2A22">
+            <strong style="display:block">Turn on alerts for this phone?</strong>
+            If a child goes missing, every staff phone gets it at once — including
+            when this page is closed.
+        </span>
+        <button id="staff-push-allow"   style="background:#01294A;color:#fff;border:none;border-radius:7px;padding:8px 14px;cursor:pointer;font-weight:700;white-space:nowrap">Turn on</button>
+        <button id="staff-push-dismiss" aria-label="Not now" style="background:none;border:none;color:#7A6E5A;cursor:pointer;font-size:1.1em;padding:4px 8px">✕</button>
     `;
     document.body.appendChild(banner);
 
     document.getElementById('staff-push-allow').addEventListener('click', async () => {
-        banner.remove();
+        // The outcome is reported in the banner itself, not through setMsg():
+        // setMsg writes to #clockMsg on the clock screen, and this prompt fires
+        // while the ROOM screen is usually the one showing, so the confirmation
+        // would have been written into a hidden element. The banner is
+        // position:fixed and readable on whichever screen is up.
+        const say = (text) => {
+            banner.innerHTML = '<span style="flex:1;color:#2E2A22">' + text + '</span>';
+            setTimeout(() => banner.remove(), 3000);
+        };
         try {
-            const reg = await navigator.serviceWorker.ready;
             const sub = await reg.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: _urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
             });
-            const { endpoint, keys: { p256dh, auth } } = sub.toJSON();
-            await fetch('/staff-push-subscribe', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                // staff_id is derived server-side from the PIN — the endpoint
-                // no longer accepts a caller-supplied id, because it used to
-                // accept one with no authentication at all.
-                body:    JSON.stringify({ staff_id: id, pin: staffPin, endpoint, p256dh, auth }),
-            });
-            localStorage.setItem('push_subscribed_' + id, '1');
-        } catch (err) { console.warn('Staff push subscription failed:', err); }
+            say(await _savePushSubscription(sub, id, staffPin)
+                ? '🚨 Alerts are on for this phone.'
+                : 'Could not turn alerts on. Try again from the staff app.');
+        } catch (err) {
+            console.warn('Staff push subscribe:', err);
+            say('Could not turn alerts on. Try again from the staff app.');
+        }
     });
     document.getElementById('staff-push-dismiss').addEventListener('click', () => {
         banner.remove();
+        sessionStorage.setItem('mdo_staff_push_dismissed', '1');
     });
 }
 
