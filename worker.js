@@ -960,6 +960,13 @@ export default {
     newHeaders.set(
       'Content-Security-Policy',
       "default-src 'self'; " +
+      // SX4: frame-ancestors has NO fallback to default-src, so `default-src
+      // 'self'` above does not cover it and admin.html was framable by any
+      // origin — clickjacking against the portal that holds children's records.
+      // Note this is the opposite direction from frame-src below: frame-src is
+      // what THIS page may embed (the Maps iframe), frame-ancestors is who may
+      // embed this page.
+      "frame-ancestors 'self'; " +
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; " +
       // R25: style-src/font-src previously omitted the Google Fonts hosts that
       // every page links (Lora, Nunito, Dancing Script), and the brand
@@ -984,6 +991,18 @@ export default {
       "frame-src https://maps.google.com https://www.google.com; " +
       "font-src 'self' data: https://fonts.gstatic.com"
     );
+    // SX4: the rest of the baseline security headers. Kept byte-identical to
+    // `_headers` — that file is the effective policy for every path backed by a
+    // real file, because Workers Assets serves those without running this
+    // script at all. A change made only here silently does nothing.
+    newHeaders.set('X-Content-Type-Options', 'nosniff');
+    newHeaders.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    // Scoped, not blanket-denied: clockin.html legitimately calls
+    // getCurrentPosition for the geofence. Nothing in this app uses
+    // getUserMedia, so camera and microphone are denied outright.
+    newHeaders.set('Permissions-Policy',
+      'geolocation=(self), camera=(), microphone=(), payment=()');
+
     // Cache-Control (R9). Previously every asset was `no-store`, so each page
     // view re-downloaded the whole stack — dist/admin.min.js alone is ~600 KB.
     //

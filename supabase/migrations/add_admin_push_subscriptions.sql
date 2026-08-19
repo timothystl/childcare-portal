@@ -32,3 +32,19 @@ CREATE POLICY "service role only"
   ON admin_push_subscriptions
   USING (false)
   WITH CHECK (false);
+
+-- ⚠️ SX1 (added 2026-08-19, after this migration shipped without it).
+-- CREATE TABLE + ENABLE ROW LEVEL SECURITY + a policy is NOT a closed table.
+-- Supabase's default privileges grant ALL on any new `public` table directly to
+-- anon and authenticated at creation time, and they are invisible in the
+-- migration. RLS never applies to TRUNCATE, so the grant alone let anyone
+-- holding the public anon key erase every admin push subscription.
+--
+-- This file's header says it "mirrors staff_push_subscriptions" — which is
+-- clean only because the 2026-08-14 sweep stripped its grants later. It
+-- mirrored the file, not the live state. Every new-table migration needs this
+-- line, and the check is `relacl`, not `pg_policies`.
+--
+-- Safe for both roles: the table is reached only with the service role key
+-- (worker.js /admin-push-subscribe, /send-push, and the 410 cleanup).
+REVOKE ALL ON admin_push_subscriptions FROM anon, authenticated, PUBLIC;
