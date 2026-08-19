@@ -789,6 +789,237 @@ Listed so nothing is lost, **not** asserted as current. Re-verify before acting.
 sweep's edits to this file.
 
 
+### Re-verification of every carried-forward item (2026-08-19)
+
+The 📄 block below was resolved against source and the live catalog. **13 of the
+44 items were already fixed** and had been carried as open, in some cases for a
+year. Two looked fixed and are not. One has silently widened.
+
+⚠️ **`daysSince` is the lesson of this pass.** FS29's CSV column reads
+`r.daysSince != null ? String(r.daysSince) : ''` — which looks like a considered
+null-guard, and is why it scanned as fixed. `daysSince` is never assigned
+anywhere in the codebase, so the guard renders `''` every time. **A defensive
+expression around a field is not evidence the field exists.** Grep for the
+producer, not the consumer.
+
+#### ✅ Verified fixed — closed, removed from the punch list
+
+| Code | Evidence |
+|---|---|
+| **FS8** | `js/app.js:654-660` — the cross-parent name match is now a non-blocking `showToast` ("may already be registered… Verify before submitting"), exactly the recommended fix. Unrelated families sharing a child's name can both register. |
+| **FS15** | `capacitySection` is in the `_resetRoleRestrictions()` array (`admin-core.js:170`), with a comment explaining why. |
+| **FS17** | The `Math.max(0, …)` floor is gone; non-promised seating now does `working[target.id][mm][d] -= 1` (`admin-waitlist.js:635`), matching the promised path, so later-month overbooking surfaces. |
+| **FS28** | `_recomputeInvoice()`'s catch now raises an error toast — "Day saved, but the invoice could not be recalculated" (`admin-calendar.js:672-678`). No longer swallowed. |
+| **T5** | `waitlist-status` reads ages and capacities live from `settings` (`room_rates` / `room_capacity`) and merges them over the defaults. The hard-coded numbers are fallbacks, not the source of truth. |
+| **T9** | `--theirs` is no longer blind: it is scoped to `dist/*.min.js` build artifacts, and the version conflict resolves to `sort -V | tail -1` (the **higher** version) rather than whichever side won. |
+| **T16** | `offered_days` is read by the allocator (`admin-waitlist.js:568, 627`), not just written. |
+| **T18** | `file.name.replace(/[^a-zA-Z0-9._-]/g, '_')` (`admin-settings.js:133`). |
+| **SS9** | `submit_registration(jsonb)` does both inserts in one transaction — no orphaned `registrations` row is possible. |
+| **SS11** | **Fully closed and well built.** `verify_staff_pin()` does per-account lockout (5 tries → 15 min), an IP throttle *and* a global backstop, and a correct PIN clears the counter so old fumbles cannot accumulate. The IP comes from `pin_client_ip()` server-side, never a parameter. ⚠️ A literal grep for `pin_attempts_blocked` in `staff_id_for_pin` returns nothing and reads as unprotected — it **delegates** to `verify_staff_pin`, so all 21 PIN-gated RPCs inherit the throttle. Check the call chain, not the function body. |
+| **SS17** | Superseded. The `work_date = CURRENT_DATE` anon clock-out policy no longer exists — `staff_clock_pin_gated_rpcs.sql` dropped the anon policies entirely. |
+| **P4** | `escHtml` is a single `/[&<>"']/g` pass against `_ESC_HTML_MAP`. |
+| **V2** | ~300 inline `style=` attributes → **50** (index 23, calendar 24, lookup 3). |
+
+#### ❌ Verified still open
+
+| Code | Evidence |
+|---|---|
+| **FS7** | `js/app.js:709-716` pre-populates every matching weekday with `{dayType:'full', locked:true}` and **no** check against `closureMap`, capacity or `today`. A recurring Monday on a holiday is still force-booked, billed, and unremovable. |
+| **FS9** | `js/lookup.js:61` is still `/^\d{4}$/`. A parent with a 5–8 digit PIN logs in on `index.html` and cannot log in on `lookup.html`. One-character fix. |
+| **FS12** | `_normalizeImportDate` (`admin-billing.js:2358-2363`) still does `new Date(raw)` first, so an ISO date lands a day early in Central time and an Excel serial silently becomes today. |
+| **FS13** | `_calcYtdPeriods` (`admin-reports.js:1734-1741`) still counts every 14-day period from Jan 1; there is no `hire_date` anywhere in the file. |
+| **FS14** | Narrowed but open. `applyRoleRestrictions()` now also hides finance, cacfp, market and `auditLogSection` — but `restricted` still sees **Families (full PII, PINs, discounts), Billing, Reports and Messages**, and `staffDirectorySection` / `geofenceSection` / `enrollmentFormsSection` / `enrollmentCapacitySection`. |
+| **FS16** | `wlpEnrollFromWaitlist` prompts for a missing phone but passes `parentEmail: k.parentEmail` straight through with no check (`admin-waitlist.js:1828`). |
+| **FS18** | `wlpOpenOfferModal()` is defined at `admin-waitlist.js:1838` and **called from nowhere** — the only other mention is a comment. Still unreachable dead code. |
+| **FS20** | The in-modal edit path calls `renderTable(allRegistrations)` (`admin-calendar.js:487`), not `applyFilters()`, so the list re-renders unfiltered and unsorted. |
+| **FS21** | ⚠️ **Widened.** The CREATE branch of `saveFamilyModal()` (`admin-families.js:1075-1085`) passes only name/dob/room/discount to `addStudent()`. The UPDATE branch passes `recurring_days`, `allergies`, `care_notes` and `photo_release` — the create branch drops all four. **`allergies` is now among them**, so a child added at family-creation time starts with no allergy record and no `allergies_reviewed_at`. That is a safety field, not a convenience field; this is no longer a Medium. |
+| **FS23** | 5 `.ilike()` sites still pass `%` / `_` unescaped. |
+| **FS25** | The catch now falls back to `mailto:`, but `wlsToast` (success) is still shown unconditionally after the `try/catch` (`waitlist-status.js:116-117`) — so a failure shows a mail client *and* "sent". |
+| **FS27** | Month nav clears `_arPickDate` and hides the picker only (`admin-calendar.js:1385-1396`); accumulated selections from the previous month survive. |
+| **FS29** | Open, and disguised. See the ⚠️ note above — `daysSince` has no producer. |
+| **FS30** | `reports: { icon: '📊', label: 'Billing' }` in `TAB_META` (`admin-settings.js:321`) — two tabs both read "Billing". |
+| **T13** | `${{ github.ref_name }}` is still interpolated directly into `run:` blocks (`auto-merge-claude.yml:62, 91`). |
+| **T15** | `auth.includes(serviceRoleKey)` (`send-waitlist-reminders/index.ts:37`) — still a substring match. |
+| **T17** | No `status = 'cancelled'` filter in `wlpBaseBooked()`. Dormant while cancellation hard-deletes. |
+| **T19** | `admin-classrooms.js:309` renders `${roomLabel}` raw in the `<h3>` while **line 311 of the same template** wraps it in `escHtml()`. |
+| **T20** | Structurally open — the suite still exercises hand-maintained copies (`business-logic.test.js:523`). **Materially mitigated**: the source-drift and cross-file guards re-read the real sources and fail CI on divergence, so the copies cannot drift silently. Priority drops accordingly. |
+| **SS3** | `submit_registration` contains no capacity check (verified against the live function body). Oversubscription is still only prevented in the browser. |
+| **SS16** | `login_attempts` resets on success or admin unlock, never on elapsed time. |
+| **SS18** | `cleanup_pin_reset_tokens()` exists but **`pg_cron` is not installed**, so nothing ever calls it. |
+| **S6** | `request-pin-reset` has no IP throttle and does not call `pin_attempts_blocked`. |
+| **R21** | `family_login` still returns `login_locked` / `registration_locked` and the `parent2_*` block (S7's over-return, and the existence oracle behind R21). |
+| **M1** | `js/supabase.js` 2,497 → **4,721** lines. |
+| **U3** | Partial — `:disabled` rules exist in a handful of components (15 across both stylesheets), but there is no shared spinner/loading state. |
+| **U4** | Breakpoints still inconsistent: 520, 600, 640, 700, 860, 900px all in use. |
+| **V4** | `:root` palette still duplicated in `index.html`, `enroll.html`, `clockin.html`. |
+| **V5** | `.btn-secondary` defined 4× in `styles.css` and 4× in `admin.css`. |
+| **V6** | No typography scale. |
+| **P1** | `renderCalendar()` still does per-cell `cal.appendChild(el)` (`app.js:848, 855`). |
+| **P2** | `getChildDayAmounts()` still recomputed per call site (`app.js:1282, 1313`), unmemoized. |
+| **P3** | Per-cell capacity lookups uncached. |
+
+#### 🆕 SX13 — families get a weaker login defense than staff, and the parts to fix it already exist
+
+Found while re-verifying SS11/SS16. The two PIN systems are not equally defended:
+
+| | per-account lockout | IP throttle | global backstop |
+|---|---|---|---|
+| `verify_staff_pin` (staff) | ✅ 5 tries → 15 min | ✅ | ✅ |
+| `family_login` (parents) | ✅ `login_attempts` / `login_locked` | ❌ | ❌ |
+
+`pin_attempts_blocked()` and `record_pin_attempt()` are already written, already
+`SECURITY DEFINER`, already deriving the IP server-side — `family_login` simply
+does not call them. Neither does `request-pin-reset` (**S6**). So a parent PIN
+can be walked across many accounts at full speed, and the per-account counter
+never decays (**SS16**) so it only ever locks the legitimate parent out.
+
+SX13, S6 and SS16 are one fix, not three: call the existing throttle from
+`family_login` and `request-pin-reset`, and decay `login_attempts` on elapsed
+time the way `verify_staff_pin` clears on success.
+
+#### Not re-verified — needs product judgment, not a catalog query
+
+These are policy or numeric-correctness questions that cannot be settled by
+grep, and each needs the director in the room: **T4** (admin vs parent waitlist
+position), **T6** (ProCare import dedup), **T7** (weekly-rate days in the per-day
+preview), **T8** (sibling discount dropped), **T10** (waitlist-status PII rate
+limit), **T11** (allocation logic duplicated in the edge function), **T12** (DOB
+month off-by-one), **SS19** (weekly discount on partial weeks), **S8** (anon-key
+rotation), **V3** (palette consolidation).
+
+
+### Proposed phased work plan (drafted 2026-08-19)
+
+Sequenced so that each phase is independently shippable and nothing later
+depends on a decision that has not been made yet. Phases 0–2 are unambiguous
+engineering; phase 3 onward needs the director's input on at least one item.
+
+**Two sequencing rules, both learned the hard way here:**
+
+1. **Grants before behavior.** SX1 is a live data-destruction grant. It is one
+   `REVOKE` and it should not wait behind a sprint of UI work.
+2. **Never run two `claude/**` branches over shared files.** `js/supabase.js`,
+   `admin.html` and `dist/` are touched by most phases below. Land them in
+   order, syncing with `main` between each, or repeat the silent-revert that
+   already cost this repo a `supabase.js` line.
+
+---
+
+#### Phase 0 — Same day. Stop the bleeding. (~1 hour)
+
+No product decisions, no UI, no regression surface worth speaking of.
+
+| Item | Work |
+|---|---|
+| **SX1** | `REVOKE ALL ON admin_push_subscriptions FROM anon, PUBLIC;` Then re-run the `relacl` sweep across all tables to confirm it is the only one, and add the revoke to `add_admin_push_subscriptions.sql` so a replay of the migration is safe. |
+| **SX4** | Add `frame-ancestors 'self'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a scoped `Permissions-Policy` to **both** `_headers` and `worker.js`. ⚠️ Test with the `Service-Worker-Allowed` header technique — a CSP that looks right in `_headers` proves nothing about what the Worker serves. |
+| **SX9, SX10, SX11** | Pin `prevent_duplicate_care_date`'s `search_path`; turn on leaked-password protection; move `pg_trgm` out of `public`. |
+| **SX3** | Delete the `dynamic-function` edge function. |
+
+**Exit check:** `relacl` sweep clean on all tables; `curl -I` shows the four new
+headers on `/` **and** on `/admin.html`; deployed slug list matches
+`supabase/functions/` exactly.
+
+#### Phase 1 — This week. The two silent failures. (~1 day)
+
+Both are cases where the app reports success and something real does not happen.
+
+| Item | Work |
+|---|---|
+| **SX2** | Rewrite `send-schedule-change` to take registration ids and read recipient, dates, amounts and the change fee server-side — copy `send-schedule-confirmation`'s shape exactly. Deploy it. Then **stop swallowing the failure** in `admin-calendar.js:1141`: a change notice that did not send should toast like `_recomputeInvoice` now does. ⚠️ Do not deploy the current source; it would reintroduce T1 on a new function. |
+| **FS29** | Compute `daysSince` in `_buildArRows` (from `invoice.sent_at`, per the AR aging rule already documented for `add_invoice_send_stamp.sql`) — or delete the column. A permanently blank column is worse than no column. |
+| **FS25** | Move the success toast inside the `try`, so the `mailto:` fallback does not also claim the message was sent. |
+
+**Exit check:** add a day on a test family and confirm the email arrives; export
+the AR CSV and confirm the column has numbers.
+
+#### Phase 2 — Next. One migration closes four findings. (~1 day)
+
+**SX13 + S6 + SS16 + R21/S7 are a single piece of work.** The throttle already
+exists and is already correct; it is simply not called on the family side.
+
+- Call `pin_attempts_blocked()` / `record_pin_attempt()` from `family_login` and
+  from `request-pin-reset`.
+- Decay `login_attempts` on elapsed time, mirroring how `verify_staff_pin`
+  clears on success — today the counter only ever locks out the real parent.
+- While in that function, trim `family_login`'s projection (drop
+  `registration_locked` and the unused `parent2_*` fields) — that is R21/S7, and
+  it is a two-line change once the function is already open.
+
+Also in this phase, because they are one-liners in files nobody else is touching:
+
+| **FS9** | `/^\d{4}$/` → `/^\d{4,8}$/` in `lookup.js`, plus the label text. Parents with a 6-digit PIN currently cannot use that page at all. |
+| **T19** | Wrap `roomLabel` in `escHtml()` at `admin-classrooms.js:309`. |
+| **T15** | `auth === \`Bearer ${key}\``. |
+| **FS30** | `reports` label → "Reports". |
+| **SS18** | Either install `pg_cron` and schedule `cleanup_pin_reset_tokens()`, or make it opportunistic the way `record_pin_attempt` prunes (~1% of calls) and drop the cron idea entirely. The second is less infrastructure. |
+
+**Exit check:** live rolled-back test as `anon` — wrong family PIN 10× from one
+IP returns throttled; a 6-digit PIN logs in on `lookup.html`.
+
+#### Phase 3 — The data-integrity set. (~2–3 days, one decision needed)
+
+| Item | Note |
+|---|---|
+| **FS21** | ⚠️ **Treat as the priority of this phase.** Pass `recurringDays`, `allergies`, `careNotes`, `photoRelease` in the CREATE branch of `saveFamilyModal()`. Allergies silently not saving on a newly created child is a safety defect, not a Medium bug. Then backfill: find children created through that path with `allergies_reviewed_at IS NULL` and have the office confirm them. |
+| **FS7** | Skip closed, past and full dates when pre-populating recurring days, and let a locked day be removed. Currently a holiday Monday is force-booked and billed. |
+| **FS16** | Validate `parentEmail` in `wlpEnrollFromWaitlist` the way phone already is. |
+| **FS12** | Parse `^\d{4}-\d{2}-\d{2}$` as local (`+'T00:00:00'`) and handle Excel serials explicitly. |
+| **SS3** | Enforce capacity inside `submit_registration`. It already owns the transaction, so this is where it belongs. **Decision needed:** hard-reject an over-capacity submission, or auto-waitlist the overflow day? The second matches what the admin planner already assumes. |
+| **FS20, FS27** | Re-render through `applyFilters()`; clear accumulated selections on month nav. |
+
+#### Phase 4 — Performance. (~2–3 days, biggest user-visible win)
+
+Do **R12 first** — it is the one with a clock on it.
+
+1. **R12.** Give `fetchAllRegistrations()` a default month window and page beyond
+   it explicitly. 22 call sites, so land it as one change with a shared default
+   rather than per-caller. This removes ~923 kB per admin load and takes the
+   8s `statement_timeout` risk off the table. It also shrinks the PII footprint,
+   which is worth stating in the compliance doc afterward.
+2. **R9 (remaining half).** Emit a content hash or a `?v=` from
+   `js/build-version.js` in `patchHtml`, then serve `dist/*` `immutable`.
+   Currently every deploy re-downloads 816 KB.
+3. **R11.** One `.in('key', [...])` for the six settings loads in `initDashboard`.
+4. **R10.** Pin `@supabase/supabase-js` to an exact version and add SRI to all 16
+   CDN tags.
+5. **SX12, P1, P2, P3.** `Promise.all` the month loop; build the calendar in one
+   fragment; memoize `getChildDayAmounts`.
+
+**Exit check:** admin dashboard cold-load transfer and time-to-interactive,
+before and after, recorded in the PR.
+
+#### Phase 5 — Access control hardening. (~1–2 days)
+
+| **SX6** | Move `staff_injury_reports` and `staff_clock_events` to `admin_role() = 'full'`, matching their own UI gate. |
+| **SX5** | Convert `send-staff-schedule` to send-by-reference and require `full`. This retires the last free-text mailer. |
+| **FS14** | Hide Families, Billing, Reports, Messages and the four Settings sub-sections from `restricted`. ⚠️ Browser-side only — it is the *rule set* being wrong, distinct from SX6. |
+| **SX7** | Confirm the `payroll_*` shared secret with the ChMS owner. Not this repo's code, but it is on this repo's PostgREST endpoint. |
+
+#### Phase 6 — Cleanup, no urgency
+
+**FS13** (label the salaried YTD an estimate, or add `hire_date` — the label is
+the honest cheap fix), **FS18** (delete the dead offer flow or wire it up —
+decide which), **FS23**, **T13**, **T17**, **T20**, **M1**, **R18**, **U3**,
+**U4**, **V4**, **V5**, **V6**.
+
+**R13 deserves its own scoped pass**, not a slot in a cleanup list: 198 `alert()`
+and 46 `confirm()`. The `confirm()` half needs a promise-based modal before a
+single call site can move, and 54 of the alerts are in `admin-reports.js` alone.
+Do the modal first, convert one file per PR, and treat it as UI work with a
+reviewer — a find-and-replace across 244 call sites is how a confirm-guard gets
+dropped on a delete button.
+
+#### Still needs the director, before anything above depends on it
+
+**T4** (whose waitlist "position" is the real one — the parent's per-room number
+or the admin's global one), **T8** (should the sibling discount survive the case
+that currently drops it), **SS19** (weekly discount on a closure-shortened week),
+**T6** (what counts as a duplicate payment import), **FS18** (is the formal
+email-offer flow wanted at all). Each changes what money a family owes or what
+the office tells them on the phone, so none should be settled from the code.
+
+
 ### Nothing found in these
 
 Checked and clean, recorded so the next sweep can skip them: no committed secrets
