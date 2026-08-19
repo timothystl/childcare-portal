@@ -339,6 +339,57 @@ allow-list**; `drill_date` and the conductor are server-side (injection-tested).
 
 ---
 
+## ⚠️ A PIN-gated RPC must be VOLATILE, never STABLE (outage 2026-08-19)
+
+Staff clock-in went down with `25006: cannot execute INSERT in a read-only
+transaction`. Fixed by `fix_pin_gated_rpcs_must_be_volatile.sql`, **applied and
+verified in production 2026-08-19.**
+
+**PostgREST runs a `STABLE` or `IMMUTABLE` function in a read-only transaction.**
+`staff_clock_status`, `staff_my_schedule` and `active_missing_child` were each
+declared `STABLE` — correct for their own bodies, wrong for the PIN gate they
+call:
+
+```
+staff_clock_status -> staff_id_for_pin -> verify_staff_pin
+                   -> record_pin_attempt  => INSERT INTO pin_attempt_log
+                   -> UPDATE staff        (lockout counter)
+```
+
+`throttle_staff_pin_attempts_APPLIED.sql` (2026-08-12) made `verify_staff_pin`
+**write on every call, success and failure alike**. From that moment every
+`STABLE` caller of the PIN gate raised `25006` on every call. Neither change was
+wrong on its own; the combination was.
+
+⚠️ **`VOLATILE` here is the honest declaration, not a workaround.**
+Authenticating by recording the attempt is a side effect. **Every one of the 21
+PIN-gated RPCs must be `VOLATILE`** — if a new one reads and you are tempted to
+mark it `STABLE` because "it only selects", it does not: it writes an attempt row
+through `staff_id_for_pin` before it reads anything.
+
+**Two of the three had never worked at all**, and this is the part worth
+remembering:
+
+| Function | Created | Symptom |
+|---|---|---|
+| `staff_clock_status` | 2026-08-19 | Broke the day it shipped. Noticed within hours because **0 clock events were recorded that day against 13 the day before** — staff standing at the door unable to clock in. |
+| `staff_my_schedule` | 2026-08-16 | Born broken. Staff "My schedule" had never once loaded. |
+| `active_missing_child` | 2026-08-16 | Born broken. **The missing-child in-app banner has never worked** — it polls every 15s and threw every time. |
+
+⚠️ **The missing-child banner is the one to sit with.** This file describes it as
+the resilient half of a two-channel alert — the channel that "needs no permission
+grant, no subscription and no push service to be up." It was dead for three days
+and nothing said so, because **no alert had ever been raised**, so the failure
+had no way to surface. A safety feature that is only exercised in an emergency
+is one that has to be tested on purpose; nobody will report it broken.
+
+**How to catch this class:** a PIN-gated RPC returning `NULL` for a wrong PIN and
+`25006` for a *correct* one looks like "bad PIN" from the browser. Test the
+happy path, not just the rejection. `select provolatile from pg_proc` is the
+one-line check — see the verification query at the bottom of the migration.
+
+---
+
 ## ⚠️ RLS DOES NOT STOP `TRUNCATE` (found and closed 2026-08-14)
 
 `anon` held `arwdDxtm` — **every** privilege, including `DELETE` and `TRUNCATE` —
