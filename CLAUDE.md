@@ -584,7 +584,7 @@ T1/FS6/FS11 on a new function: an arbitrary recipient with arbitrary figures.
 Rewrite it to take registration ids and read everything server-side — the
 `send-invoice` / `send-schedule-confirmation` posture — *then* deploy.
 
-### 🟠 NEW-3 — an orphan edge function is deployed under the slug `dynamic-function`
+### 🟢 NEW-3 — an orphan edge function was deployed under the slug `dynamic-function` — CLOSED 2026-08-19
 
 `list_edge_functions` returns 20 functions. One has slug **`dynamic-function`**
 and name `send-staff-schedule`, and **has no source anywhere in this repo.** It is
@@ -598,6 +598,12 @@ repo — it will not be found by a grep, will not be patched when
 `send-staff-schedule` is, and does not appear in any deploy checklist. Delete it,
 and check the deployed slug list against `supabase/functions/` whenever a function
 is deployed, because the dashboard's default slug does not match the folder name.
+
+**Deleted 2026-08-19.** `list_edge_functions` now returns 19 functions — the
+`dynamic-function` slug is gone, and `send-staff-schedule` (slug
+`send-staff-schedule`, v4) is confirmed still `ACTIVE`. Deleted by hand in the
+dashboard since the MCP server exposes no delete-function tool; verified
+programmatically afterward rather than trusted from the dashboard UI.
 
 ### 🟠 NEW-4 — no `frame-ancestors`, no `nosniff`, no `Referrer-Policy`
 
@@ -785,15 +791,15 @@ applied at the root.
 | **SX4** | **CLOSED** | `frame-ancestors 'self'` + `nosniff` + `Referrer-Policy: strict-origin-when-cross-origin` + `Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=()`, added to **both** `_headers` and `worker.js`. Geolocation is scoped rather than denied because `clockin.html:764` calls `getCurrentPosition` for the geofence; nothing in the app uses `getUserMedia`, so camera/microphone are denied outright. CSP parity between the two files was checked directive-by-directive after the edit. |
 | **SX9** | **CLOSED** | `prevent_duplicate_care_date()` search_path pinned to `public, pg_temp`. 0 functions in the schema now have a mutable search_path. |
 | **SX11** | **CLOSED** | `pg_trgm` moved `public` → `extensions`. Verified safe first: **0 indexes** use trgm operator classes and the only functions referencing `similarity()`/`<->` are pg_trgm's own — nothing in this app uses it. ⚠️ If trigram search is ever wanted, our definer functions pin `search_path` to `public`/`public, pg_temp` and will not find `similarity()` in `extensions` without adding it. |
-| **SX3** | **OPEN — needs a hand** | The MCP server has no delete-function tool, so the orphan `dynamic-function` slug could not be removed from here. Run `supabase functions delete dynamic-function`, or delete it in the dashboard. |
+| **SX3** | **CLOSED 2026-08-19** | Deleted by hand in the dashboard (no delete-function tool available here). Verified: `list_edge_functions` now returns 19 functions, `dynamic-function` is gone, `send-staff-schedule` is still `ACTIVE`. |
 | **SX10** | **OPEN — needs a hand** | Leaked-password protection is a dashboard auth setting with no API exposed here. Authentication → Providers → Email → "Prevent use of leaked passwords". |
 | **FS29** | **CLOSED** | `daysSince` is now computed in `_buildArRows()` from `invoice.sent_at`. ⚠️ **The column will still read blank today, and that is correct**: all **515** invoices have `sent_at IS NULL` because nothing has ever been issued. It fills in as soon as the Invoices tool's *Email invoices* or *Mark sent* is used. Aging deliberately runs from `sent_at`, not the start of the month — an invoice nobody has sent is not overdue. |
 | **FS25** | **CLOSED** | The success toast moved inside the `try`. A failed send now opens the `mailto:` fallback **without** also claiming the message was sent. |
 
 ### Punch list — everything unresolved as of 2026-08-19
 
-> **Phase 0 is applied** — see the table just above. SX1, SX4, SX9, SX11, FS29 and
-> FS25 are closed; SX3 and SX10 need a dashboard/CLI action. The rows below are
+> **Phase 0 is applied** — see the table just above. SX1, SX3, SX4, SX9, SX11,
+> FS29 and FS25 are closed; SX10 needs a dashboard action. The rows below are
 > otherwise unchanged.
 
 Codes are stable: cite them in commits and PRs. `SX` = sixth sweep (this one).
@@ -813,7 +819,7 @@ a day on it.
 |---|---|---|---|
 | **SX1** | **P1** | `admin_push_subscriptions` grants `anon` DELETE **and TRUNCATE**. RLS never applies to TRUNCATE, so the public anon key can erase every admin push subscription. Only such table in the schema. | `REVOKE ALL ON admin_push_subscriptions FROM anon, PUBLIC;` — then add an explicit revoke to every new-table migration and re-run the `relacl` sweep. |
 | **SX2** | **P1** | `send-schedule-change` is invoked on every admin Add-a-Day and **is not deployed**; the caller swallows it in a `console.warn`, so the day is booked and billed and the parent is never emailed. | Rewrite to take registration ids and read recipient/amounts server-side (the `send-invoice` posture), **then** deploy. Do not deploy the current source. |
-| **SX3** | P2 | Orphan edge function live under slug `dynamic-function` — a stale copy of the staff-schedule mailer with no source in this repo. | Delete it. Diff deployed slugs against `supabase/functions/` after every deploy. |
+| ~~**SX3**~~ | ~~P2~~ | ~~Orphan edge function live under slug `dynamic-function`~~ **CLOSED 2026-08-19** — deleted, verified via `list_edge_functions`. | Diff deployed slugs against `supabase/functions/` after every future deploy — the dashboard's default slug does not match the folder name. |
 | **SX4** | P2 | No `frame-ancestors` / `X-Frame-Options` → `admin.html` is framable by any origin (clickjacking). Also missing `nosniff`, `Referrer-Policy`, `Permissions-Policy`. | Add `frame-ancestors 'self'` first. ⚠️ Must go in **both** `_headers` and `worker.js`; `frame-ancestors` has no fallback to `default-src`. |
 | **SX5** | P3 | `send-staff-schedule` checks a session but **no admin role**, and takes `staffEmail` + content from the request body (FS11 residual; last free-text mailer). | Send by reference + require `admin_role() = 'full'`. |
 | **SX6** | P3 | `staff_injury_reports` and `staff_clock_events` gate on `is_admin()` while their UI gates to `full` via `AP_FULL_ONLY_KEYS` (R20 residual). | Move both policies to `admin_role() = 'full'`. |
@@ -982,7 +988,7 @@ No product decisions, no UI, no regression surface worth speaking of.
 | **SX1** | `REVOKE ALL ON admin_push_subscriptions FROM anon, PUBLIC;` Then re-run the `relacl` sweep across all tables to confirm it is the only one, and add the revoke to `add_admin_push_subscriptions.sql` so a replay of the migration is safe. |
 | **SX4** | Add `frame-ancestors 'self'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a scoped `Permissions-Policy` to **both** `_headers` and `worker.js`. ⚠️ Test with the `Service-Worker-Allowed` header technique — a CSP that looks right in `_headers` proves nothing about what the Worker serves. |
 | **SX9, SX10, SX11** | Pin `prevent_duplicate_care_date`'s `search_path`; turn on leaked-password protection; move `pg_trgm` out of `public`. |
-| **SX3** | Delete the `dynamic-function` edge function. |
+| ~~**SX3**~~ | ~~Delete the `dynamic-function` edge function.~~ **Done 2026-08-19.** |
 
 **Exit check:** `relacl` sweep clean on all tables; `curl -I` shows the four new
 headers on `/` **and** on `/admin.html`; deployed slug list matches
