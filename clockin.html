@@ -1109,16 +1109,15 @@ async function verifyPin() {
 let openEventId = null; // ID of the current open clock-in event
 
 async function refreshClockStatus() {
-    // Fetch ALL events for this staff+day (supports multiple shifts)
-    const { data: events, error } = await sb
-        .from('staff_clock_events')
-        .select('id, clock_in, clock_out')
-        .eq('staff_id', staffId)
-        .eq('work_date', workDate)
-        .order('clock_in', { ascending: true });
+    // Fetch ALL events for this staff+day (supports multiple shifts). PIN-gated
+    // RPC, not a direct table read — anon has no SELECT on staff_clock_events,
+    // so this is the only way to see it, and it only ever returns the
+    // signed-in staff member's own rows.
+    const { data: status, error } = await sb.rpc('staff_clock_status',
+        { p_staff_id: staffId, p_pin: parseInt(pin, 10), p_work_date: workDate });
     if (error) throw error;
 
-    const all = events || [];
+    const all = status || [];
 
     // Find the most recent open event (clocked in, not yet out)
     const openEvent = [...all].reverse().find(e => e.clock_in && !e.clock_out) || null;
@@ -1189,14 +1188,14 @@ document.getElementById('btnConfirmClockIn').addEventListener('click', async () 
     btn.disabled = true; btn.textContent = 'Clocking in…';
     try {
         const geo = await _getGeoAndCheck();
-        const now = new Date().toISOString();
-        const row = { staff_id: staffId, work_date: workDate, clock_in: now, clock_out: null, room_id: selectedRoomId,
-                      clock_in_outside_fence: geo.outsideFence,
-                      clock_in_location_status: geo.status,
-                      clock_in_device_id: _deviceId() };
-        if (geo.lat != null) { row.clock_in_lat = geo.lat; row.clock_in_lon = geo.lon; }
-        const { error } = await sb.from('staff_clock_events').insert(row);
+        const { data: result, error } = await sb.rpc('staff_clock_in', {
+            p_staff_id: staffId, p_pin: parseInt(pin, 10), p_work_date: workDate,
+            p_room_id: selectedRoomId, p_outside_fence: geo.outsideFence,
+            p_location_status: geo.status, p_device_id: _deviceId(),
+            p_lat: geo.lat, p_lon: geo.lon,
+        });
         if (error) throw error;
+        if (!result) throw new Error('Could not verify PIN. Please try again.');
         if (geo.outsideFence) {
             _notifyGeofence('clock_in', geo.distanceFt);
             document.getElementById('roomMsg').textContent =
@@ -1243,16 +1242,15 @@ document.getElementById('btnClockOut').addEventListener('click', async () => {
     try {
         if (!openEventId) throw new Error('No open clock-in found. Please try again.');
         const geo = await _getGeoAndCheck();
-        const now = new Date().toISOString();
-        const upd = { clock_out: now, clock_out_outside_fence: geo.outsideFence,
-                      clock_out_location_status: geo.status,
-                      clock_out_device_id: _deviceId() };
-        if (geo.lat != null) { upd.clock_out_lat = geo.lat; upd.clock_out_lon = geo.lon; }
-        // Update only the specific open event by ID — not all rows for this staff+day
-        const { error } = await sb.from('staff_clock_events')
-            .update(upd)
-            .eq('id', openEventId);
+        // PIN-gated RPC: it re-checks the event belongs to this staff id
+        // server-side, so openEventId authorizes nothing by itself.
+        const { data: result, error } = await sb.rpc('staff_clock_out', {
+            p_staff_id: staffId, p_pin: parseInt(pin, 10), p_event_id: openEventId,
+            p_outside_fence: geo.outsideFence, p_location_status: geo.status,
+            p_device_id: _deviceId(), p_lat: geo.lat, p_lon: geo.lon,
+        });
         if (error) throw error;
+        if (!result) throw new Error('Could not verify PIN. Please try again.');
         if (geo.outsideFence) {
             _notifyGeofence('clock_out', geo.distanceFt);
             setMsg(`⚠️ Clocked out — but you appear to be ${geo.distanceFt} ft from school. The director has been notified.`, 'warn');

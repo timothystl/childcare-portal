@@ -93,7 +93,28 @@ kiosk RPC as `anon` and the admin roster query as `authenticated` afterwards.
 |---|---|
 | **Fixed in production** | R2, R3, **R5**, **R26**, **R27** (all verified against the live catalog) |
 | **Fixed in code** | R6, R7, R8, R9, R10 (partial), R14, R15, R16, R17, R19, R22, R23, R25 |
-| **Open** | **R1, R4, R24**, R11, R12, R13, R18, R20, R21 |
+| **Open** | R24, R11, R12, R13, R18, R20, R21 |
+
+> **⚠️ Update 2026-08-19 — R1 and R4 are now closed; the table above and the R1/R4
+> write-ups below (as originally found) are historical, not current state.** Re-verified
+> directly against `information_schema.role_table_grants` and `pg_policies` rather than
+> trusted from this doc:
+> - `families`, `students`, `registrations`, `registration_dates` — `anon` holds INSERT
+>   only, no SELECT policy on any of the four. `registrations`/`registration_dates` were
+>   closed by routing the client through the `registration_conflict()` and
+>   `capacity_counts()` RPCs (not by the `ss1_public_read_rpcs.sql` staged in the plan
+>   below — that file's functions were never deployed).
+> - `staff` — `anon` SELECT is row-filtered (`active = true`) and column-limited to six
+>   display fields (R26, already noted above).
+> - `staff_clock_events` — was the one item in this table still fully open (SELECT/
+>   INSERT/UPDATE all `USING (true)`, no scoping at all). Closed 2026-08-19 by
+>   `staff_clock_pin_gated_rpcs.sql`: three PIN-gated `SECURITY DEFINER` RPCs replace the
+>   kiosk's direct table reads/writes in `clockin.html`, and the anon policies + table
+>   grants are dropped. Verified live as `anon` in a rolled-back transaction.
+>
+> See `CLAUDE.md`'s open-queue section for the full detail. Treat this as the standing
+> reminder from that file: a fix that lands without updating this doc in the same
+> session is how R1/R4 read as open for two weeks after they weren't.
 
 **R5 closed 2026-08-03.** `add_audit_log_hardened.sql` applied — the audit log is live
 and recording. Three hardening changes were made versus the committed migration, which

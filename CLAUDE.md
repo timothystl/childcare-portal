@@ -388,15 +388,18 @@ on the table they touch. A `42501` from any of those says nothing about the
 privilege under test. Always run a **positive control** — the same probe against
 a grant known to be live.
 
-**⚠️ STILL OPEN: `staff_clock_events` is the last permissive anon policy.**
-SELECT/INSERT/UPDATE all `USING (true)`. Measured as `anon`:
-`UPDATE staff_clock_events SET room_id = 'probe'` → **1547 rows**, no WHERE
-needed. The public anon key can rewrite `clock_in`/`clock_out` across the whole
-payroll history, and the SELECT exposes every staff member's hours. FS24 called
-this "same-day cross-staff tampering"; it is the entire table. Cannot be fixed
-by a revoke — the kiosk clock-out depends on that UPDATE (~1,280 calls). Needs a
-PIN-gated definer clock-out RPC (same shape as `log_child_event`), after which
-both policies can be dropped.
+**✅ CLOSED 2026-08-19: `staff_clock_events` was the last permissive anon policy.**
+It carried SELECT/INSERT/UPDATE all `USING (true)` — measured as `anon`,
+`UPDATE staff_clock_events SET room_id = 'probe'` touched **1547 rows**, no WHERE
+needed. The public anon key could rewrite `clock_in`/`clock_out` across the whole
+payroll history, and the SELECT exposed every staff member's hours. FS24 called
+this "same-day cross-staff tampering"; it was the entire table. Fixed by
+`staff_clock_pin_gated_rpcs.sql`: three PIN-gated `SECURITY DEFINER` RPCs
+(`staff_clock_status`/`staff_clock_in`/`staff_clock_out`, same shape as
+`log_child_event`) replace the direct table ops in `clockin.html`, and the anon
+SELECT/INSERT/UPDATE policies plus table grants are dropped. Verified live as
+`anon` in a rolled-back transaction — see the open-queue section below for the
+full test.
 
 ---
 
@@ -572,28 +575,51 @@ have used an identical query shape and be invisible.
   SECURITY INVOKER is **wrong** — it is and was DEFINER, so the real cause of the
   2026-06-05 login regression is **unknown**. Don't plan around that note.
 
-**Still open and serious — see the review doc:**
-- **R1 (remainder)** — `anon` can still read all of `registrations` / `registration_dates`
-  (child names, parent emails, full schedules) and `staff`. Both are genuinely
-  load-bearing: registrations SELECT drives capacity counts and the duplicate check
-  (~5,700 calls). Fix = apply `ss1_public_read_rpcs.sql`, cut the 4 read helpers over,
-  then drop the policies.
-- **R4 (remainder)** — `anon` holds SELECT/INSERT/**UPDATE** on `staff_clock_events`.
-  ⚠️ Contrary to R4's write-up, that UPDATE is **not** safe to drop — it is how the kiosk
-  clocks staff **out** (~1,280 calls). Needs a definer RPC keyed on the kiosk session,
-  not a policy drop.
+**R1 / R4 anon-grant remainder — CLOSED, verified live 2026-08-19.** The two bullets that
+stood here (claiming `anon` could still read `registrations`/`registration_dates`/`staff`,
+and still held SELECT/INSERT/UPDATE on `staff_clock_events`) were stale — re-checked
+against `information_schema.role_table_grants` and `pg_policies` directly rather than
+trusted from the doc, per the R5/R24 lesson below:
+
+- `registrations` / `registration_dates` — `anon` holds **INSERT only**, no SELECT policy
+  at all. This was **not** `ss1_public_read_rpcs.sql` (that file's functions don't exist
+  live) — the actual fix routed the client through `registration_conflict()` and
+  `capacity_counts()`, two other anon-executable RPCs already wired into
+  `checkExistingRegistration()`/`checkExistingRegistrationByChild()`/
+  `fetchCapacityForDates()` in `js/supabase.js`. `ss1_public_read_rpcs.sql` can be deleted
+  or left as dead groundwork — nothing depends on it.
+- `staff` — `anon` SELECT is `USING (active = true)` plus an explicit 6-column grant
+  (`id, name, role, room_id, active, has_staff_pin` — no wages, no PIN hash). This is the
+  R26 fix (2026-08-03), already documented above; the "still open" bullet here was
+  describing a state that hadn't been true for two weeks.
+- `staff_clock_events` — **fixed this session.** `staff_clock_pin_gated_rpcs.sql` applied
+  and verified live (rolled-back end-to-end test as `anon`: wrong PIN → NULL, correct PIN
+  → status/clock-in/clock-out all succeed, double clock-in blocked by the SS12 unique
+  index with a friendly message, closing another staff id's event blocked, direct
+  `SELECT`/`UPDATE` on the table confirmed `permission denied`). The kiosk
+  (`clockin.html`) now calls `staff_clock_status` / `staff_clock_in` / `staff_clock_out` —
+  all PIN-gated `SECURITY DEFINER`, same `staff_id_for_pin()` helper as
+  `log_child_event`/`staff_my_schedule` — and the `anon select/insert/update clock events`
+  policies plus the raw table grants are dropped. This was the **last** fully-permissive
+  (`USING (true)`) anon policy on the schema.
+
+**Still open — unrelated to anon table grants:**
 - **R24** — the registration window is **not** enforced server-side (see below).
 - **R20** — `restricted`/`staff` admin roles are enforced only in the browser.
 
-**Migration reconciliation (2026-08-02, updated 2026-08-03).** All files in
-`supabase/migrations/` were diffed against the live catalog. Three were unapplied;
-`add_audit_log.sql` has since been superseded and applied as
-`add_audit_log_hardened.sql`. Still unapplied: `enforce_registration_window.sql`
-(R24), and `ss1_public_read_rpcs.sql` (known staged
-groundwork). Everything else is applied, including
-`add_staff_time_off_requests.sql` and `add_invoice_send_stamp.sql`
-(both 2026-08-11). **Re-run this diff after any migration work — a committed migration
-is not a deployed one, and that is exactly how R5 and R24 hid.**
+**Migration reconciliation (2026-08-02, updated 2026-08-19).** All files in
+`supabase/migrations/` were diffed against the live catalog. `add_audit_log.sql` was
+superseded and applied as `add_audit_log_hardened.sql`. Still unapplied:
+`enforce_registration_window.sql` (R24). `ss1_public_read_rpcs.sql` is now known
+**dead** — R1's registrations/registration_dates SELECT was independently closed via
+`registration_conflict()`/`capacity_counts()` (see above), so this file's functions were
+never deployed and nothing calls them. `staff_clock_pin_gated_rpcs.sql`
+(**applied 2026-08-19**) is new. Everything else is applied, including
+`add_staff_time_off_requests.sql` and `add_invoice_send_stamp.sql` (both 2026-08-11).
+**Re-run this diff after any migration work — a committed migration is not a deployed
+one, and that is exactly how R5 and R24 hid.** Also: a fix landing without a matching doc
+update is exactly how the R1/R4 bullets above went stale for two weeks — update this file
+in the same session as the migration, not after.
 
 **Updated 2026-08-11:** `add_staff_time_off_requests.sql` was written **and applied**
 in the same session (admin portal redesign — the kiosk→director time-off flow).
@@ -717,8 +743,9 @@ remain to triage.
   FS21 recurring days dropped when **creating** a family;
   FS22 CSV exports allow spreadsheet formula injection.
 - **Low** — FS23 `.ilike()` `%`/`_` wildcard over-match (new SS13/T1-class sites +
-  `request-pin-reset`); FS24 anon UPDATE on `staff_clock_events` allows same-day
-  cross-staff tampering; FS25 waitlist "Message the Office" shows success toast on
+  `request-pin-reset`); ~~FS24 anon UPDATE on `staff_clock_events` allows same-day
+  cross-staff tampering~~ **fixed 2026-08-19**, see the RLS section above; FS25
+  waitlist "Message the Office" shows success toast on
   failure; FS26 graduation index merges distinct same-name children; FS27 admin-reg
   calendar keeps days across month nav (only first month invoiced); FS28 add-a-day
   billing failure swallowed while date is written; FS29 AR CSV "Days Since Invoice"
