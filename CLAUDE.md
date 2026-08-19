@@ -449,7 +449,294 @@ verify with `has_function_privilege` rather than assuming.**
 
 ---
 
-## ⚠️ Current open queue — start here (updated 2026-08-03, v2.3.23)
+## Sixth sweep — full code review (2026-08-19, v2.5.x)
+
+Whole codebase (~41k lines JS, 20 edge functions, 114 migrations, 17 HTML pages)
+**plus live verification against the production catalog** (`dahdstopsumxnqvdclmy`)
+and against the deployed edge-function list. Read-only: no code was changed.
+
+Every claim below was checked against the live catalog or the deployed function
+list, **not inferred from the docs** — which is how three of the "still open"
+items in this file turned out to be closed already, and one closed item turned
+out to have reopened on a new table.
+
+---
+
+### 🔴 NEW-1 — `admin_push_subscriptions` grants `anon` DELETE **and TRUNCATE**
+
+**This is the 2026-08-14 TRUNCATE finding, reopened on a table created three days
+after the sweep that closed it.**
+
+```sql
+select relacl from pg_class where relname = 'admin_push_subscriptions';
+-- {postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,...}   -- ← anon holds everything
+select has_table_privilege('anon','admin_push_subscriptions','TRUNCATE');  -- true
+```
+
+It is the **only** table in the schema where `anon` holds DELETE or TRUNCATE —
+verified by sweeping all tables with `has_table_privilege`. Every other table is
+clean, and RLS is enabled on all of them.
+
+- **DELETE is not exploitable.** The single policy is
+  `"service role only" … USING (false)`, so a row-level statement matches nothing.
+- **⚠️ TRUNCATE is.** TRUNCATE does not read rows, so **RLS never applies to it** —
+  the grant alone is sufficient. Anyone holding the public anon key, which ships in
+  the browser on every page, can erase every admin push subscription.
+- **Impact is silence, which is why it would not be noticed.** The director stops
+  receiving push for new parent messages and incidents. Nothing errors, no banner
+  appears, and the fix requires every admin to re-subscribe from their own phone —
+  after somebody first works out that the notifications stopped.
+
+**Root cause — and it is a documented one.** `add_admin_push_subscriptions.sql`
+creates the table, enables RLS and adds the `USING (false)` policy, but **never
+revokes Supabase's default grants**, which hand `ALL` on any new `public` table
+directly to `anon` and `authenticated`. Its own header comment says it "mirrors
+`staff_push_subscriptions`" — and `staff_push_subscriptions` has no anon grant,
+but only because the 2026-08-14 sweep stripped it later. The migration mirrored
+the file, not the live state.
+
+| | date |
+|---|---|
+| `anon_grant_sweep_2026-08-14.sql` — all 51 tables audited, "no DELETE/TRUNCATE left anywhere" | 2026-08-14 |
+| `add_admin_push_subscriptions.sql` added (commit `7946a8f`) | **2026-08-17** |
+
+⚠️ **`CREATE TABLE` + `ENABLE ROW LEVEL SECURITY` + a policy is not a closed table.**
+Supabase's default privileges are applied at creation and are invisible in the
+migration. Every new-table migration needs an explicit
+`REVOKE ALL ON <table> FROM anon, PUBLIC;`, and the check is `relacl`, not
+`pg_policies`. The sweep is not a one-time task — it has to run after any session
+that adds a table.
+
+### 🔴 NEW-2 — `send-schedule-change` is called on every Add-a-Day and **is not deployed**
+
+`js/supabase.js:3668` invokes `send-schedule-change`. That slug is **absent from
+the 20 deployed edge functions** (`list_edge_functions`, verified 2026-08-19);
+the source exists only in `supabase/functions/`.
+
+The single caller is the admin Add-a-Day modal (`js/admin/admin-calendar.js:1133`),
+and it is wrapped in `try { … } catch (emailErr) { console.warn(…) }` — so:
+
+- the care date is written, billing is recomputed, the audit entry is logged,
+  the modal reports success and closes;
+- **the parent is never emailed that their schedule changed or that a change fee
+  was added**, and no admin has ever had a reason to notice.
+
+The push notification fires on a separate path, so families with push enabled got
+*a* notice — which is very likely why this has gone unreported. There is no email
+record of any schedule change for the life of the feature.
+
+⚠️ **Do not simply deploy it as-is.** Its body still carries `parentEmail`,
+`existingDates`, `addedDate` and `changeFee` **from the browser** — the exact
+pre-T1 shape that `send-schedule-confirmation` was rewritten to eliminate
+(see T1 below, now closed). Deploying the current source would reintroduce
+T1/FS6/FS11 on a new function: an arbitrary recipient with arbitrary figures.
+Rewrite it to take registration ids and read everything server-side — the
+`send-invoice` / `send-schedule-confirmation` posture — *then* deploy.
+
+### 🟠 NEW-3 — an orphan edge function is deployed under the slug `dynamic-function`
+
+`list_edge_functions` returns 20 functions. One has slug **`dynamic-function`**
+and name `send-staff-schedule`, and **has no source anywhere in this repo.** It is
+an earlier deploy of the staff-schedule mailer that went out under Supabase's
+default slug, was redeployed two days later under the correct name
+(`send-staff-schedule`), and was never deleted. It is still `ACTIVE`, still
+routable at `/functions/v1/dynamic-function`, and has never been updated since.
+
+So there are two live copies of the same mailer, one of them invisible to this
+repo — it will not be found by a grep, will not be patched when
+`send-staff-schedule` is, and does not appear in any deploy checklist. Delete it,
+and check the deployed slug list against `supabase/functions/` whenever a function
+is deployed, because the dashboard's default slug does not match the folder name.
+
+### 🟠 NEW-4 — no `frame-ancestors`, no `nosniff`, no `Referrer-Policy`
+
+`_headers` sets only `Strict-Transport-Security` and `Content-Security-Policy`
+(`worker.js` matches it — they are in sync, see R25 below). Missing:
+
+| Header | Consequence |
+|---|---|
+| `frame-ancestors` / `X-Frame-Options` | **`admin.html` can be framed by any origin — clickjacking** against the portal that manages children's records. ⚠️ `frame-ancestors` has **no fallback to `default-src`**, so the existing `default-src 'self'` does *not* cover this. The CSP's `frame-src` is the opposite direction (what this page may embed — the Maps iframe) and gives no protection here. |
+| `X-Content-Type-Options: nosniff` | MIME sniffing on uploaded/served content. |
+| `Referrer-Policy` | Full admin URLs leak in the `Referer` to `fonts.googleapis.com` and `cdn.jsdelivr.net`. |
+| `Permissions-Policy` | Geolocation/camera/microphone are not restricted — the clock-in page legitimately uses geolocation, so scope rather than blanket-deny. |
+
+`frame-ancestors 'self'` is the one worth doing first, and it must be added to
+**both** `_headers` and `worker.js`.
+
+### 🟡 NEW-5 — FS11 confirmed still open, and it is the last free-text mailer
+
+`send-staff-schedule` calls `auth.getUser()` and returns 401 without a session —
+but it checks **no admin role**, and takes `staffEmail`, `staffName` and `shifts`
+straight from the request body (`index.ts:59`, `to: [staffEmail]` at `:169`).
+Any signed-in admin at *any* level — including `restricted` and `staff`, whose
+restrictions are browser-only (R20) — can send arbitrary content to an arbitrary
+address from the center's domain. Supabase signups are disabled (S4), so the
+population is admins rather than the internet, which is what keeps this at medium.
+
+This is the FS6/FS11 shape. `send-invoice`, `send-schedule-confirmation` and the
+worker's `/send-push` / `/send-staff-broadcast` have all been converted to
+**send by reference** — ids in, recipient and text read server-side. These two
+(`send-staff-schedule` and the undeployed `send-schedule-change`) are what remain.
+
+### 🟡 NEW-6 — the most sensitive tables are gated at `is_admin()`, not by role
+
+R20's browser-only role enforcement is **largely closed for money and wages** —
+18 policies now call `admin_role()` server-side, covering `billing_*`,
+`payroll_periods`, `staff`, `staff_hours`, `staff_pto_entries`, `family_rates`,
+`church_staff*`, `cacfp_*`, `market_providers` and `admin_audit_log`. That is real
+progress and it covers exactly the surface R20 named.
+
+Two tables the UI treats as the *most* restricted did not come along:
+
+```sql
+staff_injury_reports  →  "admin only"     ALL  {authenticated}  USING (is_admin())
+staff_clock_events    →  "admin any role" ALL  {authenticated}  USING (is_admin())
+```
+
+Both sit in `AP_FULL_ONLY_KEYS` (`staffInjury`, `clockIntegrity`), so the browser
+hides them from `restricted` and `staff` — but the policy admits any admin. A
+`staff`-role account can read, over the REST API, the injury reports that this
+file describes as naming "an employee, their body, and where they were treated",
+and the full clock history the geofence report is built from. These two should
+move to `admin_role() = 'full'` to match their own UI gate.
+
+### 🔵 Lower severity, noted not chased
+
+- **`payroll_*` — an 11-function admin API reachable with the public anon key**,
+  gated only by `private.check_payroll_secret(p_secret)`. It belongs to the church
+  ChMS payroll app, not this repo (nothing here calls it; `payroll.html` is a
+  mockup), but it is exposed on the same PostgREST endpoint and covers
+  `payroll_save_staff`, `payroll_save_hours`, `payroll_approve_period` and
+  `payroll_deactivate_staff`. There is no attempt log and no throttle on the
+  secret. Worth confirming with whoever owns that app that the secret is long,
+  rotated, and not in any client bundle.
+- `prevent_duplicate_care_date` has a mutable `search_path` (the only such
+  function; it is SECURITY INVOKER, so the risk is small). **Every SECURITY
+  DEFINER function in the schema has `search_path` pinned** — verified.
+- Supabase Auth's leaked-password protection (HaveIBeenPwned) is **off**. Admin
+  logins are the only passwords in the system; turning it on is a dashboard toggle.
+- `pg_trgm` is installed in the `public` schema.
+- `parent_accounts`, `pin_reset_tokens` and `staff_clock_notifications` have RLS on
+  with **no policy at all** — the advisor flags this as INFO, but it is deliberate
+  and correct here: deny-all to everyone except the service role. Leave them.
+
+---
+
+### ✅ Flagged in earlier sweeps, verified **resolved** — stop carrying these
+
+Checked against the live catalog and deployed functions, not against the doc.
+
+| Item | Was | Now |
+|---|---|---|
+| **R24** registration window | "never applied; `P0001` handler in `app.js` can never fire" — stated as open in *both* this file and `CODE_REVIEW_2026-08.md` | **APPLIED.** `check_registration_window()` and the `enforce_registration_window` trigger both exist live. The window is enforced server-side and the handler works. |
+| **T1** `send-schedule-confirmation` | no auth check, trusted client-supplied amounts; this file says it "still needs deploying" | **CLOSED and DEPLOYED** (v14, `verify_jwt=true`). Body carries `registrationIds` only; recipient, dates and every amount read server-side. |
+| **R25** Google Fonts blocked by worker CSP | brand fonts silently falling back | **FIXED.** `worker.js` and `_headers` CSP are byte-for-byte in sync, both allow `fonts.googleapis.com` / `fonts.gstatic.com`. |
+| **R17 / FS22** CSV formula injection | open | **CLOSED.** `csvCell()` prefixes `= + - @ TAB CR` and is applied to every user-controlled field across all 32 export sites — including the two exports that build rows inline (`admin-billing-report.js`, `admin-billing.js`), which I checked field by field. |
+| **FS10** `admin-users` fails **open** on empty `admin_roles` | open | **CLOSED.** Parses defensively and fails **closed**; invalid JSON denies. |
+| **R15** pinch-zoom blocked | `maximum-scale=1.0` on `clockin.html` | **FIXED.** Gone; only the explanatory comment remains. |
+| **R16** no focus styling in admin | open | **FIXED.** 26 focus rules in `css/admin.css`. |
+| **R20** roles enforced browser-only | open | **Largely closed** for the money/wage surface — 18 role-scoped policies. Residual is NEW-6 above. |
+| **R5** audit log never recorded | table absent | **Recording.** 39 rows live. |
+| **FS4** stored XSS via names in `onclick` | fixed | **Held.** Zero unescaped interpolations into any inline handler across `js/`. |
+| **R9** everything `no-store` | ~1.5 MB re-downloaded per view | **Substantially fixed** — media `immutable`/1yr, `dist`+`css` `no-cache` (304, empty body), HTML `no-store`. See below for the half that remains. |
+| **R10** render-blocking CDN | `xlsx` + `chart.js` blocking first paint | **Partly fixed** — both now carry `defer`. SRI still absent everywhere; `@supabase/supabase-js@2` is still an unpinned floating major on 14 pages. |
+| `.insert().select()` trap | audited at 11 chains | **Re-audited: 15 chains, all safe.** The two on anon-INSERT tables (`families`, `students`) are admin-only paths and `authenticated` holds SELECT on both (checked with `has_table_privilege`). The new chains are all on `billing_*` / `cacfp_*`, which `anon` cannot INSERT at all. |
+| Parent-session RPCs | — | **Well built.** `add_pickup_contact`, `remove_pickup_contact`, `set_my_notification_prefs` and `confirm_child_allergies` look unauthenticated from their signatures (no PIN, no id), but every one resolves the family from `my_parent_context()` → `auth.uid()`, and `remove_pickup_contact` puts `family_id` in the `WHERE` so another family's row simply does not match. Do not "fix" these by adding a caller id parameter — that would be the regression. |
+
+Also healthy: `npm test` passes **161/161** including both drift guards, and
+`npm run build` produces **no diff** — `dist/` is in sync with `js/`.
+
+---
+
+### Performance — R12 is the one that will actually break something
+
+**R12 has gotten worse and now has a measurable ceiling.** `fetchAllRegistrations()`
+is called from **22 sites** with no bounds (the one call passing
+`sinceDate: '2000-01-01'` bounds nothing), and it fans out to:
+
+| | at R12 (2026-08-02) | now (2026-08-19) |
+|---|---|---|
+| `registrations` | 552 | **608** |
+| `registration_dates` | 5,502 | **6,081** |
+| JSON per call | — | **923 kB** (measured) |
+
+Growth is roughly **100 registrations a month** and nothing ages out. Two limits
+to plan against, not one:
+
+1. **PostgREST `db-max-rows`.** If it is the 1,000 default, truncation is about
+   four months away — and it is **silent**: no error, just registrations missing
+   from the admin calendar and the capacity overview. It is not set as a role-level
+   override, so confirm the value in the project's API settings.
+2. **`statement_timeout = 8s` on `authenticated`** (confirmed in `pg_roles`). This
+   is the one that bites first and hardest, because it turns a slow dashboard into
+   a failed one.
+
+Every one of those 923 kB is also **parent name, email and phone for all 608
+registrations, pulled into the browser on every admin page load** regardless of
+which tool the director actually opened. A default month window would fix the
+ceiling and shrink the PII footprint at the same time.
+
+**The admin bundle grew 34% since R9 was written.**
+
+| | at R9 | now |
+|---|---|---|
+| `dist/admin.min.js` | 611 KB | **816 KB** (207 KB gzipped) |
+
+Admin critical path is ~**294 KB gzipped** (`admin.html` 29 + `admin.min.js` 207 +
+`admin.css` 32 + `styles.css` 11 + `supabase.min.js` 18), before the CDN scripts
+and before the 923 kB of registration JSON.
+
+⚠️ **The remaining half of R9 is blocked on filenames, not on headers.** `dist/*`
+is `no-cache` rather than `immutable` *because the bundles are not content-hashed*
+— the HTML references `dist/admin.min.js` literally and the deploy has no build
+step, so caching it hard would serve stale JS after a deploy. Every load is
+therefore still a conditional request, and every deploy is a full 816 KB
+re-download (which is every PR, since `npm run bump` changes the bundle). The fix
+is a content hash or a `?v=` from `js/build-version.js` in `patchHtml`, which
+would let `dist/*` go `immutable`. That is the largest remaining load-time win and
+it carries no security cost.
+
+**R11 is untouched:** 12 separate single-key `settings` queries
+(`.eq('key', …)`) and **zero** uses of `.in('key', [...])`. `initDashboard()` still
+fans out `loadRateSettings` / `loadRatioSettings` / `loadCapacitySettings` /
+`loadOfferLinks` / `loadSummerCampSetting` / `loadGeofenceSettings` as separate
+round-trips to the same table. One `.in()` replaces all six.
+
+Minor: `admin-billing.js:788/902/1445` await `fetchBillingOverrides(month)` serially
+inside a `for…of` over months — 12 sequential round-trips where `Promise.all` would
+do one wave, plus an O(n×m) `families.find()` inside the per-family loop.
+
+### Design consistency — R13 is moving the wrong way
+
+| | at R13 (2026-08-02) | now |
+|---|---|---|
+| `alert()` | 163 | **198** |
+| `confirm()` | — | **46** |
+| `showToast()` | 25 | **51** |
+
+Toast usage doubled, but blocking native dialogs grew faster, so the styled system
+still covers only about a fifth of user feedback. The concentration is worth
+knowing before anyone tries to fix it in one pass: `admin-reports.js` (54),
+`admin-billing.js` (37) and `admin-families.js` (17) hold more than half of them.
+`confirm()` is the harder half — replacing it needs a promise-based modal, not a
+toast, and 46 call sites currently depend on its synchronous return value.
+
+The rest of the design system is in good shape: `--green-text` (#3A7B60) is
+correctly documented as the foreground-only token with `--green` reserved for
+surfaces, and `a { color: var(--green-text) }` means R14's contrast fix is
+applied at the root.
+
+### Nothing found in these
+
+Checked and clean, recorded so the next sweep can skip them: no committed secrets
+(the only key in the tree is the public anon key, which is expected and is behind
+RLS); no unescaped interpolation into any inline event handler; every SECURITY
+DEFINER function has `search_path` pinned; RLS is enabled on every table in the
+schema; `dist/` in sync; 161/161 tests green.
+
+---
+
+## ⚠️ Current open queue — start here (updated 2026-08-03, v2.3.23 — see the sixth sweep above for what has since closed)
 
 A fifth sweep (whole codebase + **live production verification**) was done 2026-08-02,
 with remediation continuing 2026-08-03.
@@ -604,13 +891,25 @@ trusted from the doc, per the R5/R24 lesson below:
   (`USING (true)`) anon policy on the schema.
 
 **Still open — unrelated to anon table grants:**
-- **R24** — the registration window is **not** enforced server-side (see below).
+- ~~**R24** — the registration window is **not** enforced server-side.~~ **CLOSED —
+  re-verified live 2026-08-19:** `check_registration_window()` and the
+  `enforce_registration_window` trigger both exist in production. See the sixth sweep.
 - **R20** — `restricted`/`staff` admin roles are enforced only in the browser.
+  **Largely closed 2026-08-19** — 18 policies now gate on `admin_role()` server-side,
+  covering billing, payroll, wages and the audit log. Residual: `staff_injury_reports`
+  and `staff_clock_events` are still `is_admin()` only while their UI gates to `full`
+  (sixth sweep, NEW-6).
 
 **Migration reconciliation (2026-08-02, updated 2026-08-19).** All files in
 `supabase/migrations/` were diffed against the live catalog. `add_audit_log.sql` was
-superseded and applied as `add_audit_log_hardened.sql`. Still unapplied:
-`enforce_registration_window.sql` (R24). `ss1_public_read_rpcs.sql` is now known
+superseded and applied as `add_audit_log_hardened.sql`. `enforce_registration_window.sql`
+(R24) is **now applied** — re-checked against `pg_proc`/`pg_trigger` 2026-08-19, both the
+function and the trigger exist, so nothing is left unapplied.
+⚠️ But this diff no longer covers everything: it compares *files* to the catalog and so
+cannot see a table whose **grants** drifted. `admin_push_subscriptions` was created
+2026-08-17 with Supabase's default `anon` grants intact and this reconciliation did not
+flag it (sixth sweep, NEW-1). Re-run the `relacl` sweep too, not just the file diff.
+`ss1_public_read_rpcs.sql` is now known
 **dead** — R1's registrations/registration_dates SELECT was independently closed via
 `registration_conflict()`/`capacity_counts()` (see above), so this file's functions were
 never deployed and nothing calls them. `staff_clock_pin_gated_rpcs.sql`
@@ -768,8 +1067,11 @@ note is now **disproven** — they are live.
   `send-waitlist-confirmation`/T14), S8 (anon-key rotation), and the browser-verified
   UX/perf items (U3/U4, V2–V6, P1–P3, M1). (S2 ✅, S4 ✅ closed by disabling Supabase
   signups, S7 reviewed-as-moot.)
-- **`send-schedule-confirmation`** edge fn still needs deploying — and per T1 above,
-  needs an auth-check fix before/alongside that deploy.
+- ~~**`send-schedule-confirmation`** edge fn still needs deploying.~~ **DEPLOYED and
+  T1-fixed** (v14, verified against the live function list 2026-08-19): the body carries
+  registration ids only. ⚠️ The genuinely undeployed one is **`send-schedule-change`**,
+  which the Add-a-Day modal calls on every use and which fails silently — see the sixth
+  sweep, NEW-2, and do not deploy it in its current client-trusting shape.
 
 ### Hard-won operational notes (don't repeat these)
 - **`supabase/migrations/` is NOT auto-applied** — run migrations by hand in the SQL
@@ -961,13 +1263,17 @@ Staff can be `hourly` (rate × hours) or `salary` (fixed biweekly amount). The p
 The window is defined by the `registration_window` setting. `app.js` gates the UI on it
 and has a handler for the `P0001` error a database trigger would raise.
 
-> **⚠️ NOT ACTUALLY ENFORCED SERVER-SIDE (R24, found 2026-08-02).**
-> `enforce_registration_window.sql` was **never applied to production** — neither
-> `check_registration_window()` nor the `enforce_registration_window` trigger exists
-> in the live database (verified against `information_schema`). The `P0001` handler in
-> `app.js:1383` can never fire. Since `anon` holds INSERT on `registrations`, the window
-> is enforced **only by client-side JavaScript** and can be bypassed by anyone posting
-> directly to the API. Apply the migration to make the documented behavior real.
+> **✅ ENFORCED SERVER-SIDE — R24 closed, verified live 2026-08-19.**
+> `enforce_registration_window.sql` **has been applied**: both `check_registration_window()`
+> and the `enforce_registration_window` trigger exist in production (checked against
+> `pg_proc` / `pg_trigger`). The `P0001` handler in `app.js` can now fire, and a direct
+> POST to the REST API outside the window is rejected by the database rather than only by
+> client-side JavaScript.
+>
+> ⚠️ **This note previously said the opposite**, and stayed wrong long enough to be quoted
+> as open in `docs/CODE_REVIEW_2026-08.md` too. R24 was originally *found* by re-checking
+> the catalog instead of trusting this file; it was *closed* the same way. Re-verify
+> against `pg_proc`/`pg_trigger` before citing either state.
 
 ---
 
