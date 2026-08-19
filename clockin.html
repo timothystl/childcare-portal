@@ -23,31 +23,20 @@
         /* ── Name step ──────────────────────────────────────────
            Big tiles rather than a dropdown: this is a wall tablet tapped by
            someone holding a bag and a coffee. */
-        .name-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-            gap: 10px;
-            margin: 6px auto 0;
-            max-width: 460px;
+        /* Matches .sl-staff-select in css/staff.css so the two sign-in screens
+           read as the same product. Kept as a local rule because clockin.html
+           does not load staff.css. */
+        .staff-select {
+            display: block; width: 100%; max-width: 460px;
+            box-sizing: border-box; margin: 6px auto 16px;
+            padding: 14px 16px; font-size: 1.05em; font-family: inherit;
+            font-weight: 700; color: var(--navy);
+            border: 1.5px solid #d7dee5; border-radius: 12px;
+            background: #fff; min-height: 52px;
         }
-        .name-btn {
-            min-height: 60px;
-            padding: 14px 12px;
-            background: #fff;
-            border: 1.5px solid #d7dee5;
-            border-radius: 14px;
-            font-family: inherit;
-            font-size: 1.02em;
-            font-weight: 800;
-            color: var(--navy);
-            cursor: pointer;
-        }
-        .name-btn:active { background: var(--sun-pale); transform: scale(.98); }
-        .change-name-btn {
-            background: none; border: none; color: var(--green-text);
-            font-family: inherit; font-size: .92em; font-weight: 700;
-            cursor: pointer; padding: 10px; min-height: 44px;
-            display: block; margin: 0 auto 6px;
+        .staff-select:focus {
+            outline: none; border-color: var(--navy);
+            box-shadow: 0 0 0 3px rgba(1, 41, 74, .12);
         }
         /* ── Sunlit Neighborhood — Variation B: Staff Clock-In ── */
         :root {
@@ -579,16 +568,17 @@
     <!-- PIN Entry -->
     <!-- Who are you? Identity before the PIN: a PIN alone was tested against
          every staff hash, so one guess had ~33 chances to land and there was no
-         account to lock. Big name tiles suit a wall tablet better than a
-         dropdown. -->
-    <div id="nameScreen">
-        <div class="pin-label">Tap your name</div>
-        <div id="nameGrid" class="name-grid"></div>
-    </div>
-
+         account to lock.
+         The name step used to be a separate screen of tiles, chosen for "a wall
+         tablet" — but there is no wall tablet, and never has been: staff clock
+         in on their own phones. On a phone, 31 tiles is a scroll and a second
+         screen for one decision. One dropdown over the numpad matches the staff
+         app (`slStaffSelect`) and puts name and PIN in one place, so correcting
+         the name is reopening a menu rather than backing out a screen. -->
     <div id="pinScreen">
-        <div class="pin-label"><span id="pinWho"></span> — your PIN</div>
-        <button type="button" id="changeNameBtn" class="change-name-btn">← Not you?</button>
+        <select id="staffSelect" class="staff-select" aria-label="Your name">
+            <option value="">Loading…</option>
+        </select>
         <div class="pin-display">
             <div class="pin-dot" id="d0"></div>
             <div class="pin-dot" id="d1"></div>
@@ -894,11 +884,10 @@ async function _maybeShowPushPrompt(id, staffPin) {
 // Load geofence settings on page start
 _loadGeofenceSettings();
 
-// The kiosk opens on the name step, not the numpad. Without this the page
-// booted to a PIN pad with nobody selected, and the first four taps would have
-// bounced straight back here.
-loadNameGrid();
-showScreen('name');
+// Name and PIN are one screen. The numpad refuses to accept a digit until a
+// name is chosen, so there is no way to spend four taps on nobody.
+loadStaffSelect();
+showScreen('pin');
 
 // ── Helpers ───────────────────────────────────────────────────
 function todayStr() {
@@ -934,73 +923,79 @@ function showError(msg) {
 }
 
 function showScreen(name) {
-    document.getElementById('nameScreen').style.display    = name === 'name'    ? 'block' : 'none';
-    document.getElementById('pinScreen').style.display     = name === 'pin'     ? 'block' : 'none';
+    // 'name' and 'pin' are the same screen now — the dropdown and the numpad
+    // sit together. 'name' is still accepted so every sign-out path reads the
+    // same as it did before.
+    const signIn = (name === 'name' || name === 'pin');
+    document.getElementById('pinScreen').style.display     = signIn           ? 'block' : 'none';
     document.getElementById('loadingScreen').style.display = name === 'loading' ? 'block' : 'none';
     document.getElementById('roomScreen').style.display    = name === 'room'    ? 'block' : 'none';
     document.getElementById('clockScreen').style.display   = name === 'clock'   ? 'block' : 'none';
     document.getElementById('timeOffScreen').style.display = name === 'timeoff' ? 'block' : 'none';
     document.getElementById('sentScreen').style.display    = name === 'sent'    ? 'block' : 'none';
     // The PIN prompt only makes sense on the PIN screen.
-    const onSignIn = (name === 'pin' || name === 'name');
     const sub = document.querySelector('.subtitle');
-    sub.style.display = onSignIn ? '' : 'none';
-    if (onSignIn) {
-        sub.textContent = name === 'name'
-            ? 'Tap your name to begin'
-            : 'Enter your 4-digit PIN to continue';
-    }
-    document.querySelector('h1').style.display             = onSignIn ? '' : 'none';
+    sub.style.display = signIn ? '' : 'none';
+    if (signIn) sub.textContent = 'Choose your name, then enter your 4-digit PIN';
+    document.querySelector('h1').style.display             = signIn ? '' : 'none';
 }
 
 // ── Name step ─────────────────────────────────────────────────
 let selectedStaffId = null;
 
-async function loadNameGrid() {
-    const grid = document.getElementById('nameGrid');
+const _escOpt = str => String(str ?? '').replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+async function loadStaffSelect() {
+    const sel = document.getElementById('staffSelect');
     try {
         const { data, error } = await sb.rpc('list_staff_for_signin');
         if (error) throw error;
         const staff = data || [];
         if (!staff.length) {
-            grid.innerHTML = '<p class="pin-error">No staff are set up to sign in. Ask the office.</p>';
+            sel.innerHTML = '<option value="">No staff are set up — ask the office</option>';
             return;
         }
-        grid.innerHTML = staff.map(s =>
-            '<button class="name-btn" data-id="' + s.id + '" data-name="' +
-            String(s.name || '').replace(/"/g, '&quot;') + '">' +
-            String(s.name || '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])) +
-            '</button>').join('');
-        grid.querySelectorAll('.name-btn').forEach(b => {
-            b.addEventListener('click', () => {
-                selectedStaffId = b.dataset.id;
-                document.getElementById('pinWho').textContent = b.dataset.name;
-                pin = ''; updateDots();
-                document.getElementById('pinError').textContent = '';
-                showScreen('pin');
-            });
-        });
+        sel.innerHTML = '<option value="">Choose your name…</option>' +
+            staff.map(s => '<option value="' + _escOpt(s.id) + '">' +
+                           _escOpt(s.name) + '</option>').join('');
     } catch (e) {
         console.warn('staff list:', e);
-        grid.innerHTML = '<p class="pin-error">Could not load the staff list.</p>';
+        sel.innerHTML = '<option value="">Could not load the staff list</option>';
     }
 }
 
-document.getElementById('changeNameBtn').addEventListener('click', () => {
-    selectedStaffId = null; pin = ''; updateDots();
+// Signing out has to clear the visible name too. Leaving the last person
+// selected meant the next staff member arrived at a numpad already showing
+// somebody else's name, and four taps would have been checked against them.
+function _resetStaffSelect() {
+    const sel = document.getElementById('staffSelect');
+    if (sel) sel.value = '';
+}
+
+// Changing the name mid-entry clears the digits already tapped, so a half-typed
+// PIN can never be submitted against whoever is picked next.
+document.getElementById('staffSelect').addEventListener('change', e => {
+    selectedStaffId = e.target.value || null;
+    pin = ''; updateDots();
     document.getElementById('pinError').textContent = '';
-    showScreen('name');
 });
 
 // Numpad handlers
 document.querySelectorAll('.num-btn[data-n]').forEach(btn => {
     btn.addEventListener('click', async () => {
+        // Refuse the first digit rather than the fourth. Previously four taps
+        // were accepted with nobody selected and then silently thrown away.
+        if (!selectedStaffId) {
+            document.getElementById('pinError').textContent = 'Choose your name first.';
+            document.getElementById('staffSelect').focus();
+            return;
+        }
         if (pin.length >= 4) return;
         pin += btn.dataset.n;
         document.getElementById('pinError').textContent = '';
         updateDots();
         if (pin.length === 4) {
-            if (!selectedStaffId) { pin = ''; updateDots(); showScreen('name'); return; }
             if (checkLockout()) { pin = ''; updateDots(); return; }
             await verifyPin();
         }
@@ -1208,6 +1203,7 @@ document.getElementById('btnConfirmClockIn').addEventListener('click', async () 
         await refreshClockStatus();
         setTimeout(() => {
             staffId = null; staffRoomId = null; selectedRoomId = null; pin = ''; selectedStaffId = null;
+            _resetStaffSelect();
             updateDots();
             document.getElementById('pinError').textContent = '';
             document.getElementById('roomMsg').textContent = '';
@@ -1222,6 +1218,7 @@ document.getElementById('btnConfirmClockIn').addEventListener('click', async () 
 
 document.getElementById('btnRoomCancel').addEventListener('click', () => {
     staffId = null; staffRoomId = null; selectedRoomId = null; pin = ''; selectedStaffId = null;
+    _resetStaffSelect();
     updateDots();
     document.getElementById('pinError').textContent = '';
     showScreen('name');
@@ -1266,6 +1263,7 @@ document.getElementById('btnClockOut').addEventListener('click', async () => {
 // ── Sign Out ──────────────────────────────────────────────────
 document.getElementById('btnSignOut').addEventListener('click', () => {
     staffId = null; staffRoomId = null; selectedRoomId = null; pin = ''; selectedStaffId = null;
+    _resetStaffSelect();
     updateDots();
     document.getElementById('pinError').textContent = '';
     document.getElementById('clockMsg').textContent = '';
