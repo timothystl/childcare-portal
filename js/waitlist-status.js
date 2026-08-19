@@ -102,16 +102,22 @@ async function sendMessage() {
             parentEmail: email,
             message: `[Waitlist Status] ${msgText}`,
         });
+        // FS25: the success toast used to sit AFTER the try/catch, so a failed
+        // send opened the parent's mail client AND told them the message was
+        // sent. Only the path that actually reached the database says so.
+        closeMessageForm();
+        document.getElementById('wlsToast').classList.remove('hidden');
     } catch (_) {
         // Fallback: open mailto if the DB insert fails, matching the existing
-        // Contact Us modal's behavior in js/app.js.
+        // Contact Us modal's behavior in js/app.js. No toast here — the mail
+        // client opening IS the feedback, and the message is not sent until
+        // they press send in it.
         const subject = encodeURIComponent('Waitlist Status Question');
         const body = encodeURIComponent(`Email: ${email}\n\n${msgText}`);
         window.location.href = `mailto:?subject=${subject}&body=${body}`;
+        closeMessageForm();
     } finally {
         btn.disabled = false;
         btn.textContent = 'Send';
     }
-    closeMessageForm();
-    document.getElementById('wlsToast').classList.remove('hidden');
 }

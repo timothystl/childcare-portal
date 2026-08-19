@@ -1549,12 +1549,27 @@ function _buildArRows(month, families, invoices, monthPayments) {
         else if (collected > 0)                  status = 'partial';
         else                                     status = 'overdue';
 
+        // FS29: the AR CSV has carried a "Days Since Invoice" column since the
+        // export shipped and it has been blank every single time, because
+        // nothing ever produced this field. The export's
+        // `r.daysSince != null ? … : ''` reads like a considered null-guard,
+        // which is exactly why it scanned as working.
+        //
+        // Aging runs from `sent_at`, not from the start of the month — see
+        // add_invoice_send_stamp.sql. An invoice nobody has issued yet is not
+        // overdue, so it stays blank rather than counting days against a bill
+        // the family has never been shown.
+        const daysSince = inv?.sent_at
+            ? Math.max(0, Math.floor((Date.now() - new Date(inv.sent_at).getTime()) / 86400000))
+            : null;
+
         return {
             familyId:    family.id,
             familyName:  family.parent_name || '(unnamed)',
             familyEmail: family.parent_email || '',
             invoiceId:   inv?.id || null,
             sentAt:      inv?.sent_at || null,
+            daysSince,
             billed,
             collected,
             outstanding,

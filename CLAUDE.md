@@ -777,7 +777,24 @@ correctly documented as the foreground-only token with `--green` reserved for
 surfaces, and `a { color: var(--green-text) }` means R14's contrast fix is
 applied at the root.
 
+### ✅ Phase 0 applied 2026-08-19 (+ FS29, FS25)
+
+| Code | State | Detail |
+|---|---|---|
+| **SX1** | **CLOSED** | `REVOKE ALL ON admin_push_subscriptions FROM anon, authenticated, PUBLIC`. Revoked from `authenticated` too — it also held TRUNCATE, and the table is reached only with the service role key (`worker.js` `/admin-push-subscribe`, `/send-push`, the 410 cleanup). Verified: anon DELETE/TRUNCATE false, authenticated TRUNCATE false, service_role unaffected. **Whole-schema sweep re-run: 0 tables where `anon` holds DELETE or TRUNCATE.** The revoke was also backfilled into `add_admin_push_subscriptions.sql` so replaying it is safe. |
+| **SX4** | **CLOSED** | `frame-ancestors 'self'` + `nosniff` + `Referrer-Policy: strict-origin-when-cross-origin` + `Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=()`, added to **both** `_headers` and `worker.js`. Geolocation is scoped rather than denied because `clockin.html:764` calls `getCurrentPosition` for the geofence; nothing in the app uses `getUserMedia`, so camera/microphone are denied outright. CSP parity between the two files was checked directive-by-directive after the edit. |
+| **SX9** | **CLOSED** | `prevent_duplicate_care_date()` search_path pinned to `public, pg_temp`. 0 functions in the schema now have a mutable search_path. |
+| **SX11** | **CLOSED** | `pg_trgm` moved `public` → `extensions`. Verified safe first: **0 indexes** use trgm operator classes and the only functions referencing `similarity()`/`<->` are pg_trgm's own — nothing in this app uses it. ⚠️ If trigram search is ever wanted, our definer functions pin `search_path` to `public`/`public, pg_temp` and will not find `similarity()` in `extensions` without adding it. |
+| **SX3** | **OPEN — needs a hand** | The MCP server has no delete-function tool, so the orphan `dynamic-function` slug could not be removed from here. Run `supabase functions delete dynamic-function`, or delete it in the dashboard. |
+| **SX10** | **OPEN — needs a hand** | Leaked-password protection is a dashboard auth setting with no API exposed here. Authentication → Providers → Email → "Prevent use of leaked passwords". |
+| **FS29** | **CLOSED** | `daysSince` is now computed in `_buildArRows()` from `invoice.sent_at`. ⚠️ **The column will still read blank today, and that is correct**: all **515** invoices have `sent_at IS NULL` because nothing has ever been issued. It fills in as soon as the Invoices tool's *Email invoices* or *Mark sent* is used. Aging deliberately runs from `sent_at`, not the start of the month — an invoice nobody has sent is not overdue. |
+| **FS25** | **CLOSED** | The success toast moved inside the `try`. A failed send now opens the `mailto:` fallback **without** also claiming the message was sent. |
+
 ### Punch list — everything unresolved as of 2026-08-19
+
+> **Phase 0 is applied** — see the table just above. SX1, SX4, SX9, SX11, FS29 and
+> FS25 are closed; SX3 and SX10 need a dashboard/CLI action. The rows below are
+> otherwise unchanged.
 
 Codes are stable: cite them in commits and PRs. `SX` = sixth sweep (this one).
 Earlier prefixes keep their original meaning (`R` fifth, `FS` fourth, `T` third,
