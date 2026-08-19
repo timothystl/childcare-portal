@@ -726,6 +726,69 @@ correctly documented as the foreground-only token with `--green` reserved for
 surfaces, and `a { color: var(--green-text) }` means R14's contrast fix is
 applied at the root.
 
+### Punch list — everything unresolved as of 2026-08-19
+
+Codes are stable: cite them in commits and PRs. `SX` = sixth sweep (this one).
+Earlier prefixes keep their original meaning (`R` fifth, `FS` fourth, `T` third,
+`SS` second, `S`/`U`/`V`/`P`/`M` first review).
+
+**Verification status is part of each row and is not decoration.** Rows marked
+🔬 were checked against the live catalog, the deployed function list or the
+source this session. Rows marked 📄 are carried from the older docs and were
+**not** re-checked — after R24, T1 and R22 all turned out to be closed while the
+docs still called them open, a 📄 row should be re-verified before anyone spends
+a day on it.
+
+#### SX — sixth sweep (all 🔬 verified live)
+
+| Code | Pri | Item | Fix |
+|---|---|---|---|
+| **SX1** | **P1** | `admin_push_subscriptions` grants `anon` DELETE **and TRUNCATE**. RLS never applies to TRUNCATE, so the public anon key can erase every admin push subscription. Only such table in the schema. | `REVOKE ALL ON admin_push_subscriptions FROM anon, PUBLIC;` — then add an explicit revoke to every new-table migration and re-run the `relacl` sweep. |
+| **SX2** | **P1** | `send-schedule-change` is invoked on every admin Add-a-Day and **is not deployed**; the caller swallows it in a `console.warn`, so the day is booked and billed and the parent is never emailed. | Rewrite to take registration ids and read recipient/amounts server-side (the `send-invoice` posture), **then** deploy. Do not deploy the current source. |
+| **SX3** | P2 | Orphan edge function live under slug `dynamic-function` — a stale copy of the staff-schedule mailer with no source in this repo. | Delete it. Diff deployed slugs against `supabase/functions/` after every deploy. |
+| **SX4** | P2 | No `frame-ancestors` / `X-Frame-Options` → `admin.html` is framable by any origin (clickjacking). Also missing `nosniff`, `Referrer-Policy`, `Permissions-Policy`. | Add `frame-ancestors 'self'` first. ⚠️ Must go in **both** `_headers` and `worker.js`; `frame-ancestors` has no fallback to `default-src`. |
+| **SX5** | P3 | `send-staff-schedule` checks a session but **no admin role**, and takes `staffEmail` + content from the request body (FS11 residual; last free-text mailer). | Send by reference + require `admin_role() = 'full'`. |
+| **SX6** | P3 | `staff_injury_reports` and `staff_clock_events` gate on `is_admin()` while their UI gates to `full` via `AP_FULL_ONLY_KEYS` (R20 residual). | Move both policies to `admin_role() = 'full'`. |
+| **SX7** | P3 | `PRIVACY-AND-SECURITY-OVERVIEW.md` §3.3 now **understates** security: it still tells the reader the anon key can read the family and student tables. R1/R4 closed that. | Update §3.3 and §3.5 — a compliance document that describes a fixed hole is its own liability. |
+| **SX8** | P4 | `payroll_*` — an 11-function admin API (save staff, save hours, approve period, deactivate staff) reachable with the public anon key, gated only by `private.check_payroll_secret()`. No throttle, no attempt log. Owned by the church ChMS app, not this repo. | Confirm with that app's owner that the secret is long, rotated, and absent from any client bundle. |
+| **SX9** | P4 | `prevent_duplicate_care_date` has a mutable `search_path` — the only such function (SECURITY INVOKER, so low risk). | Pin it. |
+| **SX10** | P4 | Supabase Auth leaked-password protection (HaveIBeenPwned) is off. | Dashboard toggle. |
+| **SX11** | P4 | `pg_trgm` installed in the `public` schema. | Move to `extensions`. |
+| **SX12** | P4 | `admin-billing.js:788/902/1445` await `fetchBillingOverrides(month)` serially in a `for…of`, plus an O(n×m) `families.find()` per family. | `Promise.all` the months; index families by email in a `Map`. |
+
+#### Carried forward — 🔬 re-verified still open this session
+
+| Code | Pri | Item | Note |
+|---|---|---|---|
+| **R12** | **P1** | `fetchAllRegistrations()` unbounded from **22** call sites. | Now **923 kB** of parent PII per call (608 regs / 6,081 dates), growing ~100 regs/month, against a **`statement_timeout = 8s`** on `authenticated`. The timeout bites before the PostgREST row ceiling. Add a default month window. |
+| **R9** | P2 | Bundles still cannot be cached `immutable`. | Headers half is **done**; the blocker is that `dist/*` filenames are not content-hashed. Add a hash or a `?v=` from `js/build-version.js` in `patchHtml`. `admin.min.js` is now 816 KB (was 611 KB). |
+| **R10** | P3 | No SRI on any CDN tag; `@supabase/supabase-js@2` is an unpinned floating major on 14 pages. | The blocking half is fixed — `xlsx` and `chart.js` now carry `defer`. |
+| **R11** | P3 | 12 single-key `settings` queries, **zero** uses of `.in('key', [...])`. | One `.in()` replaces six round-trips in `initDashboard()`. |
+| **R13** | P3 | `alert()` 163 → **198**, plus **46** `confirm()`, against `showToast()` 25 → **51**. | Moving the wrong way. Half sit in `admin-reports.js` (54), `admin-billing.js` (37), `admin-families.js` (17). The `confirm()` half needs a promise-based modal, not a toast. |
+| **S6** | P3 | PIN-reset throttle is **per family, 15 minutes** — not the per-IP throttle this was raised for. | Still enumerable/abusable from many IPs against many families. |
+| **FS23** | P4 | 5 `.ilike()` sites still pass user input with `%` / `_` unescaped. | |
+| **R18** | P4 | `admin-reports.js` is **6,685** lines (was 5,910 when flagged). | Growing. |
+
+#### 📄 Carried from the older docs — NOT re-verified this session
+
+Listed so nothing is lost, **not** asserted as current. Re-verify before acting.
+
+- **Fourth sweep:** FS7, FS8, FS9, FS12, FS13, FS14, FS15, FS16, FS17, FS18,
+  FS19, FS20, FS21, FS25, FS26, FS27, FS28, FS29, FS30.
+- **Third sweep:** T3, T4, T5, T6–T20.
+- **Second sweep:** SS3, SS9, SS11, SS16, SS17, SS18, SS19.
+- **First review:** S8 (anon-key rotation), U3, U4, V2–V6, P1–P3, M1.
+- **Fifth sweep:** R21 (`family_login` leaks account existence).
+
+#### Closed — do not re-open without re-checking the catalog first
+
+🔬 verified closed this session: **R1, R4, R5, R7** (CI now runs `npm test` in a
+`verify` job that the merge `needs:`), **R15, R16, R17/FS22, R22** (no
+`.DS_Store` tracked), **R23, R24, R25, FS4, FS10, FS24, T1**, and the bulk of
+**R20** (18 policies now gate on `admin_role()`). **R19** is addressed by this
+sweep's edits to this file.
+
+
 ### Nothing found in these
 
 Checked and clean, recorded so the next sweep can skip them: no committed secrets
