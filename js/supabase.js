@@ -3094,6 +3094,46 @@ async function upsertStaffPtoEntry(staffId, periodStart, ptoUsed, ptoEarned) {
     if (error) throw error;
 }
 
+// ============================================================
+// MDO PAYROLL APPROVAL
+// ============================================================
+// A separate fact from anything on the church admin app's own side: this is
+// the MDO director saying "I have reviewed these staff's hours for this
+// period." The church app reads it (over its own payroll_get_mdo_period_approval
+// RPC, gated by a shared secret this app never holds) to show alongside its
+// own payroll_periods approval — the two are never merged. Gated by RLS to
+// admin_role() = 'full', matching the Payroll report's own AP_FULL_ONLY_KEYS gate.
+async function fetchMdoPayrollApproval(periodStart) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('mdo_payroll_approvals')
+        .select('period_start, approved_at, approved_by')
+        .eq('period_start', periodStart)
+        .maybeSingle();
+    if (error) throw error;
+    return data || null;
+}
+
+async function approveMdoPayrollPeriod(periodStart, approvedBy) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('mdo_payroll_approvals')
+        .upsert({ period_start: periodStart, approved_by: approvedBy, approved_at: new Date().toISOString() },
+                { onConflict: 'period_start' });
+    if (error) throw error;
+    await logAdminAction('approve', 'mdo_payroll_period', null, { period_start: periodStart });
+}
+
+async function unapproveMdoPayrollPeriod(periodStart) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('mdo_payroll_approvals')
+        .delete()
+        .eq('period_start', periodStart);
+    if (error) throw error;
+    await logAdminAction('unapprove', 'mdo_payroll_period', null, { period_start: periodStart });
+}
+
 // Every PTO entry from `sinceDate` forward (YTD), for computing each staff member's running PTO balance.
 async function fetchStaffPtoUsedSince(sinceDate) {
     if (!sbClient) throw new Error('Supabase not configured.');

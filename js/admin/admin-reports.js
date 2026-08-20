@@ -1336,6 +1336,7 @@ function setupPayrollReport() {
     document.getElementById('generatePayrollBtn')?.addEventListener('click', generatePayrollReport);
     document.getElementById('exportPayrollBtn')?.addEventListener('click', exportPayrollReport);
     document.getElementById('printPayrollBtn')?.addEventListener('click', printPayrollSummary);
+    document.getElementById('approveMdoPayrollBtn')?.addEventListener('click', _onToggleMdoPayrollApproval);
 
     const sel = document.getElementById('payrollPeriod');
     if (!sel) return;
@@ -1520,8 +1521,65 @@ async function generatePayrollReport() {
     try {
         const { staff, periodMap, ytdMap, cutoffAccruedMap, periodDetailMap, periodPtoMap, cutoffPtoUsedMap, ptoCurrentRate } = await _buildPayrollData(startVal, endVal);
         renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodDetailMap, periodPtoMap, cutoffAccruedMap, cutoffPtoUsedMap, ptoCurrentRate);
+        await _refreshMdoPayrollApprovalUI(startVal);
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+// Reads mdo_payroll_approvals for the loaded period and updates the button +
+// status line. This is a signal read by the church admin app's own combined
+// payroll report over its payroll_get_mdo_period_approval RPC — it says
+// nothing about, and is never affected by, that app's own payroll_periods
+// approval. Only visible/actionable to a 'full' admin, since the section
+// itself is AP_FULL_ONLY_KEYS-gated, but checked again here in case a stale
+// tab tries anyway — the RLS policy is the real backstop.
+async function _refreshMdoPayrollApprovalUI(periodStart) {
+    const btn    = document.getElementById('approveMdoPayrollBtn');
+    const status = document.getElementById('mdoPayrollApprovalStatus');
+    if (!btn || !status) return;
+    btn.dataset.periodStart = periodStart;
+    btn.style.display = currentAdminRole === 'full' ? '' : 'none';
+    status.style.display = 'none';
+    try {
+        const approval = await fetchMdoPayrollApproval(periodStart);
+        if (approval) {
+            btn.textContent = 'Unapprove MDO Payroll';
+            const when = new Date(approval.approved_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+            status.textContent = `✓ MDO payroll approved by ${approval.approved_by} on ${when}`;
+            status.style.display = '';
+        } else {
+            btn.textContent = 'Approve MDO Payroll';
+        }
+    } catch (err) {
+        console.error('Could not load MDO payroll approval status:', err);
+        // Non-fatal — the report itself already rendered. Leave the button
+        // showing "Approve" rather than guessing a state we couldn't read.
+        btn.textContent = 'Approve MDO Payroll';
+    }
+}
+
+async function _onToggleMdoPayrollApproval() {
+    const btn = document.getElementById('approveMdoPayrollBtn');
+    const periodStart = btn?.dataset.periodStart;
+    if (!periodStart) return;
+    const isApproving = btn.textContent.trim().startsWith('Approve');
+    if (!confirm(isApproving
+        ? 'Mark this pay period’s MDO hours as approved? The church office will see this when they build the combined payroll.'
+        : 'Remove the MDO approval for this pay period?')) return;
+    btn.disabled = true;
+    try {
+        if (isApproving) {
+            const email = (window._adminSession?.user?.email || '').trim() || 'unknown';
+            await approveMdoPayrollPeriod(periodStart, email);
+        } else {
+            await unapproveMdoPayrollPeriod(periodStart);
+        }
+        await _refreshMdoPayrollApprovalUI(periodStart);
+    } catch (err) {
+        alert(`Could not update the MDO payroll approval: ${err.message}`);
+    } finally {
+        btn.disabled = false;
     }
 }
 
