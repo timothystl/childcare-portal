@@ -2601,7 +2601,6 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 /* Don't let the base report-table row-hover tint override payroll state backgrounds */
 .payroll-table.report-table tbody tr:hover { background: inherit; }
 .payroll-table.report-table tbody tr.payroll-staff-row:hover td { background: #EDE6D6; }
-.payroll-report-title { font-size: 19px; font-weight: 700; color: #1C3C52; margin: 0 0 3px; }
 
 /* Staff summary rows */
 .payroll-staff-row { cursor: pointer; transition: background 0.15s; }
@@ -2671,9 +2670,14 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .82rem;
     table-layout: fixed;
 }
-/* Date 85px | Clock Events (auto) | Hours 52px | Notes (auto) | Status 38px */
+/* Date 85px | Clock Events (gets whatever is left — it holds a room select,
+   two time inputs and a delete button per pair, so it needs the most room) |
+   Hours 52px | Notes 130px (fixed — was unset, so fixed layout split the
+   remaining width 50/50 with Clock Events and cut the time inputs off) |
+   Status 38px */
 .payroll-day-table colgroup col:nth-child(1) { width: 85px; }
 .payroll-day-table colgroup col:nth-child(3) { width: 52px; }
+.payroll-day-table colgroup col:nth-child(4) { width: 130px; }
 .payroll-day-table colgroup col:nth-child(5) { width: 38px; }
 .payroll-day-th {
     text-align: left;
