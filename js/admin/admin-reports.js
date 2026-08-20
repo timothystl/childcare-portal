@@ -1335,6 +1335,7 @@ function _payrollPeriodLabel(start, end) {
 function setupPayrollReport() {
     document.getElementById('generatePayrollBtn')?.addEventListener('click', generatePayrollReport);
     document.getElementById('exportPayrollBtn')?.addEventListener('click', exportPayrollReport);
+    document.getElementById('printPayrollBtn')?.addEventListener('click', printPayrollSummary);
 
     const sel = document.getElementById('payrollPeriod');
     if (!sel) return;
@@ -1639,7 +1640,22 @@ async function _savePayrollTimeInline(staffId, workDate, container, force = fals
             if (tick)   { tick.style.display = 'none'; if (iconEl) iconEl.style.display = ''; }
             _updatePayrollDayRowState(container, staffId, workDate);
         }, 1800);
-    } catch(e) { console.error('Time save error', e); }
+        const staffName = container.querySelector(`.payroll-staff-row[data-staff-id="${staffId}"] .payroll-expand-icon + span`)
+            ?.childNodes[0]?.textContent?.trim() || 'entry';
+        showToast(`Saved ${staffName} — ${dateLabelFor(workDate)}`);
+    } catch(e) {
+        console.error('Time save error', e);
+        // A failed save used to be silent past this console.error — the only
+        // feedback was a green check that simply never appeared. That reads
+        // identically to "nothing happened yet," which is exactly the
+        // "I entered it and it didn't save" report this toast is for.
+        showToast('Could not save that entry — check your connection and try again', 'error');
+    }
+}
+
+function dateLabelFor(workDate) {
+    const [, m, d] = workDate.split('-').map(Number);
+    return `${MONTH_NAMES[m - 1]} ${d}`;
 }
 
 function _recalcPayrollStaff(container, staffId) {
@@ -2019,8 +2035,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
     }).join('');
 
     container.innerHTML = `
-        <h2 class="payroll-report-title">Pay Period: ${periodLabel}</h2>
-        <p style="font-size:12.5px;color:#6B7280;margin:0 0 16px">Click a staff row to expand daily hours. Time entries auto-save on blur.</p>
+        <p style="font-size:12.5px;color:#6B7280;margin:0 0 16px">${periodLabel} — click a staff row to expand daily hours. Time entries auto-save on blur.</p>
         <div class="table-wrapper report-table-wrap payroll-table-wrap">
             <table class="report-table payroll-table">
                 <thead>
@@ -2516,6 +2531,81 @@ async function exportPayrollReport() {
         wch: Math.max(k.length, ...rows.map(r => String(r[k] || '').length))
     }));
     XLSX.writeFile(wb, `payroll-${startVal}-to-${endVal}.xlsx`);
+}
+
+// Pulls the same numbers a director already loaded on screen and lays them
+// out as a paper record she can check off against — the thing to hand her
+// instead of asking her to trust a small green checkmark that a save landed.
+async function printPayrollSummary() {
+    const sel = document.getElementById('payrollPeriod');
+    if (!sel?.value) { alert('Please select a pay period first.'); return; }
+    const [startVal, endVal] = sel.value.split('|');
+    const periodLabel = sel.options[sel.selectedIndex].textContent;
+
+    const { staff, periodMap, ytdMap, periodPtoMap } = await _buildPayrollData(startVal, endVal);
+    if (!staff.length) { alert('No staff data to print.'); return; }
+
+    let totPeriodPay = 0;
+    const rowsHtml = staff.map(s => {
+        const isSalary = s.pay_type === 'salary';
+        const roomLabel = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
+        const ptoUsed = (periodPtoMap.get(s.id) || {}).used || 0;
+        let hrsStr, payStr;
+        if (isSalary) {
+            const sal = s.salary_biweekly || 0;
+            totPeriodPay += sal;
+            hrsStr = '—';
+            payStr = `$${sal.toFixed(2)}`;
+        } else {
+            const pHrs = periodMap.get(s.id) || 0;
+            const rate = s.hourly_rate || 0;
+            totPeriodPay += pHrs * rate;
+            hrsStr = `${pHrs.toFixed(2)}h`;
+            payStr = `$${(pHrs * rate).toFixed(2)}`;
+        }
+        return `<tr>
+            <td>${escHtml(s.name)}</td>
+            <td>${escHtml(s.role || '')} · ${escHtml(roomLabel)}</td>
+            <td class="num">${isSalary ? 'Salary' : `$${(s.hourly_rate || 0).toFixed(2)}/hr`}</td>
+            <td class="num">${hrsStr}</td>
+            <td class="num">${ptoUsed > 0 ? ptoUsed.toFixed(2) + 'h' : '—'}</td>
+            <td class="num">${payStr}</td>
+            <td class="ok-col"></td>
+        </tr>`;
+    }).join('');
+
+    const win = window.open('', '_blank');
+    if (!win) { alert('Please allow popups to print the payroll summary.'); return; }
+    win.document.write(`<!doctype html><html><head><title>Payroll — ${escHtml(periodLabel)}</title>
+        <style>
+            body { font-family: -apple-system, Arial, sans-serif; padding: 24px; color: #1C3C52; }
+            h1 { font-size: 18px; margin: 0 0 2px; }
+            .sub { font-size: 12px; color: #6B7280; margin: 0 0 18px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+            th, td { border: 1px solid #D8D2C6; padding: 6px 8px; text-align: left; }
+            th { background: #DDD5C3; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+            .num { text-align: right; font-variant-numeric: tabular-nums; }
+            .ok-col { width: 70px; }
+            tfoot td { font-weight: 700; background: #E4DCCB; }
+            .sign { margin-top: 36px; display: flex; gap: 60px; }
+            .sign div { flex: 1; border-top: 1px solid #1C3C52; padding-top: 4px; font-size: 11px; color: #6B7280; }
+            @media print { body { padding: 0; } }
+        </style></head><body>
+        <h1>Payroll Summary — ${escHtml(periodLabel)}</h1>
+        <p class="sub">Printed ${new Date().toLocaleString('en-US')} — check each row against the admin screen before approving.</p>
+        <table>
+            <thead><tr><th>Staff</th><th>Role / Room</th><th>Rate</th><th>Hours</th><th>PTO Used</th><th>Gross Pay</th><th>OK</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+            <tfoot><tr><td colspan="5">Total Payroll</td><td class="num">$${totPeriodPay.toFixed(2)}</td><td></td></tr></tfoot>
+        </table>
+        <div class="sign">
+            <div>Director signature</div>
+            <div>Date approved</div>
+        </div>
+        </body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
 }
 
 // ============================================================
