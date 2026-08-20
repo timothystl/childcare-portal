@@ -1627,6 +1627,40 @@ All search fields check **child name first**, then parent name(s), then email. F
 ### Pay types
 Staff can be `hourly` (rate × hours) or `salary` (fixed biweekly amount). The payroll report handles both. Clock events are ignored for salary staff.
 
+### Approving a payroll period for the church's combined reader (2026-08-20)
+
+The church admin app (`timothystl/website`, `admin.timothystl.org/payroll`) combines
+this app's staff/hours with its own church staff into one biweekly report, reading
+MDO data over a set of `payroll_get_mdo_*` RPCs (see that repo's CLAUDE.md,
+"Payroll & Supabase"). It had a period-approval concept of its own
+(`payroll_periods`, one row per period_start, written from that screen) but nothing
+that let *this* app's director say "I've reviewed my staff's hours for this period"
+independently of whatever the church side has done.
+
+**"Approve MDO Payroll"** on the Staff → Payroll report screen (`admin.html` /
+`js/admin/admin-reports.js`) writes to a new `mdo_payroll_approvals` table
+(`period_start` PK, `approved_at`, `approved_by`) — a **separate fact** from the
+website's `payroll_periods`, never merged with it. The button is visible only to
+`full`-role admins, matching the tool's own `AP_FULL_ONLY_KEYS` gate, and RLS on
+the table is `admin_role() = 'full'` — no anon grant at all, the corrected pattern
+NEW-6/SX6 elsewhere in this file argues for on payroll-adjacent tables.
+
+- **Written directly by this app** (`fetchMdoPayrollApproval` /
+  `approveMdoPayrollPeriod` / `unapproveMdoPayrollPeriod` in `js/supabase.js`) —
+  this app has its own Supabase Auth session, so unlike the website's `/sb/`
+  proxy there is no shared secret involved on this side.
+- **Read by the website** through a new `payroll_get_mdo_period_approval(p_secret,
+  p_period_start)` RPC, the same shared-secret-gated shape as the other
+  `payroll_get_mdo_*` functions — `anon` holds `EXECUTE` on it and nothing else,
+  and it is `SECURITY DEFINER` with `search_path` pinned like its siblings.
+- **`period_start` has to line up with the website's own biweekly boundaries** —
+  both sides already agree on them, since `payroll_get_mdo_hours`/
+  `payroll_get_mdo_clock_events` are already queried by the same start/end a
+  church period uses.
+- **Deliberately two independent approvals.** Approving here does not touch, gate,
+  or require the website's own `payroll_periods` approval, and vice versa —
+  neither app should assume anything about the other's decision.
+
 ### Registration window
 The window is defined by the `registration_window` setting. `app.js` gates the UI on it
 and has a handler for the `P0001` error a database trigger would raise.
