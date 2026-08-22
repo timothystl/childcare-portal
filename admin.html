@@ -27,6 +27,26 @@
 </head>
 <body class="admin-body">
 
+    <!-- Splash/loading screen shown while the admin portal's own JS boots.
+         Hidden on window 'load' with a fallback timeout so it never sticks
+         around if something else stalls. -->
+    <div id="mdoSplash" class="mdo-splash" aria-hidden="true">
+        <img src="/images/logo/splash/splash-admin.svg" alt="" width="1290" height="2796">
+    </div>
+    <script>
+      (function () {
+        var el = document.getElementById('mdoSplash');
+        if (!el) return;
+        function hide() {
+          el.classList.add('mdo-splash-hidden');
+          setTimeout(function () { el.remove(); }, 400);
+        }
+        if (document.readyState === 'complete') hide();
+        else window.addEventListener('load', hide);
+        setTimeout(hide, 4000);
+      })();
+    </script>
+
     <!-- Login Screen -->
     <div id="loginScreen" class="login-screen">
         <div class="login-card">

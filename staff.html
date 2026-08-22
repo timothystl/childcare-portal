@@ -23,6 +23,26 @@
 </head>
 <body class="sl-body">
 
+    <!-- Splash/loading screen shown while the staff app's own JS boots. Hidden
+         on window 'load' with a fallback timeout so it never sticks around if
+         something else stalls. -->
+    <div id="mdoSplash" class="mdo-splash" aria-hidden="true">
+        <img src="/images/logo/splash/splash-staff.svg" alt="" width="1290" height="2796">
+    </div>
+    <script>
+      (function () {
+        var el = document.getElementById('mdoSplash');
+        if (!el) return;
+        function hide() {
+          el.classList.add('mdo-splash-hidden');
+          setTimeout(function () { el.remove(); }, 400);
+        }
+        if (document.readyState === 'complete') hide();
+        else window.addEventListener('load', hide);
+        setTimeout(hide, 4000);
+      })();
+    </script>
+
     <!-- PIN -->
     <div id="slPinScreen" class="sl-screen sl-center">
         <div class="sl-card">
