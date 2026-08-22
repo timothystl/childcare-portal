@@ -2670,12 +2670,13 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     font-size: .82rem;
     table-layout: fixed;
 }
-/* Date 85px | Clock Events (gets whatever is left — it holds a room select,
-   two time inputs and a delete button per pair, so it needs the most room) |
-   Hours 52px | Notes 130px (fixed — was unset, so fixed layout split the
-   remaining width 50/50 with Clock Events and cut the time inputs off) |
-   Status 38px */
-.payroll-day-table colgroup col:nth-child(1) { width: 85px; }
+/* Date 115px (wide enough for "Mon August 24" with the row's overflow:hidden +
+   nowrap — 85px was clipping it to "Mon Augus") | Clock Events (gets whatever
+   is left — it holds a room select, two time inputs and a delete button per
+   pair, so it needs the most room) | Hours 52px | Notes 130px (fixed — was
+   unset, so fixed layout split the remaining width 50/50 with Clock Events
+   and cut the time inputs off) | Status 38px */
+.payroll-day-table colgroup col:nth-child(1) { width: 115px; }
 .payroll-day-table colgroup col:nth-child(3) { width: 52px; }
 .payroll-day-table colgroup col:nth-child(4) { width: 130px; }
 .payroll-day-table colgroup col:nth-child(5) { width: 38px; }

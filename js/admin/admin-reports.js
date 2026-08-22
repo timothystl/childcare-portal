@@ -2059,7 +2059,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
                 <td colspan="7" class="payroll-panel-cell">
                     <table class="payroll-day-table">
                         <colgroup>
-                            <col style="width:85px">
+                            <col style="width:115px">
                             <col>
                             <col style="width:52px">
                             <col>
