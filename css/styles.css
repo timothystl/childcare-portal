@@ -1764,3 +1764,19 @@ input.prefilled {
     .app-route { overflow: visible !important; }
     .app-shell { display: block !important; }
 }
+
+/* Branded splash/loading screen shown while a page's own JS boots.
+   Markup + the show/hide script live inline near <body> on each page;
+   this is just the shared visual. */
+.mdo-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: #FDFAF0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity .35s ease;
+}
+.mdo-splash img { width: 100%; height: 100%; object-fit: cover; }
+.mdo-splash.mdo-splash-hidden { opacity: 0; pointer-events: none; }
