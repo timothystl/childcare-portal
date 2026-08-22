@@ -157,6 +157,9 @@ const ENTRIES = [
         'js/portal/portal-schedule.js',
         'js/portal/portal-billing.js',
         'js/portal/portal-today.js',
+                // After portal-today: reuses its PT_EVENT label map, ptEsc/ptTime/
+                // ptToday helpers, and ptChildren/ptActiveId.
+                'js/portal/portal-recap.js',
                 'js/portal/portal-messages.js',
                 // After portal-today: reads ptChildren for the child's name on
                 // an incident row and for singular/plural wording.

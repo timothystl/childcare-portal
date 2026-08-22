@@ -98,6 +98,32 @@
         </div>
         </section>
 
+        <!-- ══ RECAP ══════════════════════════════════════════ -->
+        <!-- The browsable record behind Today: the same daily-sheet events,
+             photos and incidents, for any date the parent picks rather than
+             only the current one. js/portal/portal-recap.js. -->
+        <section class="pt-tab hidden" data-tab="daily">
+        <div id="prBody" class="pt-feed hidden">
+            <div id="prSwitcher" class="pt-switcher hidden"></div>
+            <div class="pr-daynav">
+                <button type="button" id="prPrevBtn" class="pr-nav-btn" aria-label="Previous day">‹</button>
+                <div class="pr-daynav-mid">
+                    <span id="prDateLabel" class="pt-child-name"></span>
+                    <input type="date" id="prDateInput" class="pr-date-input" aria-label="Pick a date">
+                </div>
+                <button type="button" id="prNextBtn" class="pr-nav-btn" aria-label="Next day">›</button>
+            </div>
+            <div id="prQuickDays" class="pr-quick-days"></div>
+            <div id="prIncidents" class="pt-incidents hidden"></div>
+            <ul id="prTimeline" class="pt-timeline"></ul>
+            <div id="prPhotos" class="pt-photos hidden"></div>
+        </div>
+        <div id="prNoChildren" class="portal-soon hidden">
+            <strong>No children on file yet.</strong> Once your registration is
+            processed, your child's daily record will appear here.
+        </div>
+        </section>
+
         <!-- ══ SCHEDULE ═══════════════════════════════════════ -->
         <!-- Booked days grouped by child and month with what each month costs
              (design §7). Read-only: "Register for additional days" leads out to
