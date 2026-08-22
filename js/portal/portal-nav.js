@@ -1,9 +1,10 @@
 // ============================================================
 // portal-nav — the parent app's tab shell
 // ============================================================
-// Design: docs/design_handoff/README.md, "Navigation". Five persistent tabs —
-// 🏠 Today · 🗓 Schedule · 💳 Billing · 💬 Messages · 👤 Account — on every
-// non-modal screen. The bar never scrolls; the route body above it does.
+// Design: docs/design_handoff/README.md, "Navigation" — as extended by the
+// Recap tab below. Six persistent tabs — 🏠 Today · 📔 Recap · 🗓 Schedule ·
+// 💳 Billing · 💬 Messages · 👤 Account — on every non-modal screen. The bar
+// never scrolls; the route body above it does.
 //
 // Why this exists at all: the portal shipped as a single scrolling page while
 // the design is a multi-tab app. Everything already built becomes the Today
@@ -26,8 +27,17 @@
 // ⚠️ Documents is NOT its own tab. It renders inside the Account tab
 // (portal.html, #pdBody nested under #ptAccountBody) — see portal-account.js
 // / paLoad, which loads it together with the rest of Account on first visit.
+//
+// ⚠️ Recap IS its own tab, unlike Documents — a parent asking "how did today
+// go" wants the browsable record (daily-sheet events, photos, incidents) for
+// ANY day, not just the printable copy of one. Today already renders all of
+// this live for the current day (js/portal/portal-today.js); Recap
+// (js/portal/portal-recap.js) is the same three sections, for a date the
+// parent picks, and reuses Today's rendering vocabulary rather than keeping a
+// second copy of "how an event reads."
 const PT_TABS = [
     { key: 'today',     icon: '🏠', label: 'Today' },
+    { key: 'daily',     icon: '📔', label: 'Recap' },
     { key: 'schedule',  icon: '🗓', label: 'Schedule' },
     { key: 'billing',   icon: '💳', label: 'Billing' },
     { key: 'messages',  icon: '💬', label: 'Messages' },
@@ -88,6 +98,7 @@ function ptGoTab(key) {
         if (key === 'account'  && typeof pdLoad === 'function') pdLoad();
         if (key === 'schedule' && typeof psLoad === 'function') psLoad();
         if (key === 'billing'  && typeof pbLoad === 'function') pbLoad();
+        if (key === 'daily'    && typeof prLoad === 'function') prLoad();
     }
 }
 
