@@ -47,6 +47,13 @@ function expect(actual) {
     };
 }
 
+// Date-only values in the application are local civil dates, not UTC instants.
+// `new Date('YYYY-MM-DD')` is UTC by specification and becomes the previous day
+// in America/Chicago, which made these tests depend on the machine timezone.
+function localDate(isoDate) {
+    return new Date(`${isoDate}T00:00:00`);
+}
+
 // ============================================================
 // STUBS — mirror the real ROOMS config from supabase.js
 // ============================================================
@@ -203,7 +210,7 @@ function escHtml(str) {
 // ============================================================
 
 describe('calcAgeMonths', () => {
-    const ref = new Date('2026-03-24');
+    const ref = localDate('2026-03-24');
 
     test('returns correct month count for a 6-month-old', () => {
         expect(calcAgeMonths('2025-09-24', ref)).toBe(6);
@@ -218,7 +225,7 @@ describe('calcAgeMonths', () => {
         expect(calcAgeMonths('')).toBeNull();
     });
     test('handles month-boundary crossings (e.g., born Oct 31, ref Mar 1)', () => {
-        const r = new Date('2026-03-01');
+        const r = localDate('2026-03-01');
         // Oct→Nov→Dec→Jan→Feb→Mar = 5 calendar months, but the 1st is still
         // 30 days short of the 31st-of-the-month mark, so only 4 are complete.
         expect(calcAgeMonths('2025-10-31', r)).toBe(4);
@@ -227,17 +234,17 @@ describe('calcAgeMonths', () => {
         // Born Mar 28, 2025; as of Mar 24, 2026 they are 11 months old, not 12 —
         // their 12-month "birthday" is 4 days away. A year/month-only diff
         // (ignoring day-of-month) would wrongly report 12 here.
-        expect(calcAgeMonths('2025-03-28', new Date('2026-03-24'))).toBe(11);
+        expect(calcAgeMonths('2025-03-28', localDate('2026-03-24'))).toBe(11);
     });
 });
 
 describe('getRoomIdFromDob — age-based room assignment', () => {
-    const ref = new Date('2026-03-24');
+    const ref = localDate('2026-03-24');
     // Helper: produce DOB that gives exactly N months of age on ref date
     const dobAtMonths = m => {
         const d = new Date(ref);
         d.setMonth(d.getMonth() - m);
-        return d.toISOString().slice(0, 10);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
     test('newborn (0 months) → bear room', () => {
@@ -311,39 +318,39 @@ describe('effectiveRate — discount calculation', () => {
 
 describe('getRegistrationWindow — registration open/close logic', () => {
     test('day 1 at 9 AM → open (mode: confirmed)', () => {
-        expect(getRegistrationWindow(new Date('2026-03-01'), 'auto', 9).mode).toBe('confirmed');
+        expect(getRegistrationWindow(localDate('2026-03-01'), 'auto', 9).mode).toBe('confirmed');
     });
     test('day 1 at 8:59 AM → closed (before 9 AM)', () => {
-        expect(getRegistrationWindow(new Date('2026-03-01'), 'auto', 8).mode).toBe('closed');
+        expect(getRegistrationWindow(localDate('2026-03-01'), 'auto', 8).mode).toBe('closed');
     });
     test('day 1 at midnight → closed (before 9 AM)', () => {
-        expect(getRegistrationWindow(new Date('2026-03-01'), 'auto', 0).mode).toBe('closed');
+        expect(getRegistrationWindow(localDate('2026-03-01'), 'auto', 0).mode).toBe('closed');
     });
     test('day 15 → open (boundary)', () => {
-        expect(getRegistrationWindow(new Date('2026-03-15')).mode).toBe('confirmed');
+        expect(getRegistrationWindow(localDate('2026-03-15')).mode).toBe('confirmed');
     });
     test('day 16 → closed', () => {
-        expect(getRegistrationWindow(new Date('2026-03-16')).mode).toBe('closed');
+        expect(getRegistrationWindow(localDate('2026-03-16')).mode).toBe('closed');
     });
     test('day 31 → closed', () => {
-        expect(getRegistrationWindow(new Date('2026-01-31')).mode).toBe('closed');
+        expect(getRegistrationWindow(localDate('2026-01-31')).mode).toBe('closed');
     });
     test('override "open" forces mode to confirmed even after day 15', () => {
-        expect(getRegistrationWindow(new Date('2026-03-20'), 'open').mode).toBe('confirmed');
+        expect(getRegistrationWindow(localDate('2026-03-20'), 'open').mode).toBe('confirmed');
     });
     test('override "open" forces mode to confirmed even before 9 AM on the 1st', () => {
-        expect(getRegistrationWindow(new Date('2026-03-01'), 'open', 7).mode).toBe('confirmed');
+        expect(getRegistrationWindow(localDate('2026-03-01'), 'open', 7).mode).toBe('confirmed');
     });
     test('override "closed" forces mode to closed even on day 1 at 9 AM', () => {
-        expect(getRegistrationWindow(new Date('2026-03-01'), 'closed', 9).mode).toBe('closed');
+        expect(getRegistrationWindow(localDate('2026-03-01'), 'closed', 9).mode).toBe('closed');
     });
     test('target month is always next calendar month', () => {
-        const win = getRegistrationWindow(new Date('2026-03-10'));
+        const win = getRegistrationWindow(localDate('2026-03-10'));
         expect(win.targetDate.getMonth()).toBe(3);  // April (0-indexed)
         expect(win.targetDate.getFullYear()).toBe(2026);
     });
     test('target month wraps to January next year in December', () => {
-        const win = getRegistrationWindow(new Date('2026-12-10'));
+        const win = getRegistrationWindow(localDate('2026-12-10'));
         expect(win.targetDate.getMonth()).toBe(0);  // January
         expect(win.targetDate.getFullYear()).toBe(2027);
     });
@@ -1299,6 +1306,52 @@ describe('cross-file drift guard — worker.js SSR copies must match js/ source'
                 `      --- worker.js ---\n      ${got}`
             );
         }
+    });
+});
+
+describe('billing invoice integrity guards', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const migration = read('supabase/migrations/20260824_billing_invoice_integrity.sql');
+    const billingUi = read('js/admin/admin-billing.js');
+    const billMonth = read('js/admin/admin-bill-month.js');
+
+    test('database calculator constrains care dates to the requested month', () => {
+        expect(migration.includes('rd.care_date >= v_month_start')).toBe(true);
+        expect(migration.includes('rd.care_date <  v_month_end')).toBe(true);
+    });
+
+    test('finalized imports count as issued invoices', () => {
+        expect(migration.includes("status IN ('sent', 'finalized', 'paid', 'partial')")).toBe(true);
+    });
+
+    test('zero-booking reconciliation removes stale drafts', () => {
+        expect(/v_base = 0 AND v_final = 0[\s\S]*?DELETE FROM billing_invoices[\s\S]*?status = 'draft'/.test(migration)).toBe(true);
+    });
+
+    test('private reconciler is not executable by browser roles', () => {
+        expect(/REVOKE EXECUTE ON FUNCTION public\._reconcile_billing_invoice_internal[\s\S]*?PUBLIC, anon, authenticated/.test(migration)).toBe(true);
+    });
+
+    test('normal admin generation no longer writes caller-calculated amounts', () => {
+        expect(billingUi.includes('upsertBillingInvoice(')).toBe(false);
+        expect(billMonth.includes('upsertBillingInvoice(')).toBe(false);
+        expect(billingUi.includes('reconcileBillingInvoice(')).toBe(true);
+        expect(billMonth.includes('reconcileBillingInvoice(')).toBe(true);
+    });
+
+    test('admin pricing honors per-date room promotions and weekly rates', () => {
+        const reports = read('js/admin/admin-reports.js');
+        expect(reports.includes('date.room_id || reg.room_id')).toBe(true);
+        expect(reports.includes('weeklyFullRate')).toBe(true);
+        expect(reports.includes('weeklyHalfRate')).toBe(true);
+    });
+
+    test('post-registration invoice failures are durably reported', () => {
+        const app = read('js/app.js');
+        const monitor = read('js/error-monitor.js');
+        expect(app.includes('window.reportClientError?.(')).toBe(true);
+        expect(monitor.includes('window.reportClientError = reportError')).toBe(true);
     });
 });
 

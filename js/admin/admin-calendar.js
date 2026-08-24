@@ -671,6 +671,11 @@ async function _recomputeInvoice(parentEmail, monthKey) {
         return await fetchBillingInvoiceById(invoiceId);
     } catch (err) {
         console.error('Invoice recompute failed:', parentEmail, monthKey, err);
+        window.reportClientError?.(
+            `Invoice recompute failed: ${err?.message || err}`,
+            err?.stack || null,
+            { type: 'billing_reconcile', month: monthKey, source: 'admin_calendar' },
+        );
         if (typeof showToast === 'function') {
             showToast('Day saved, but the invoice could not be recalculated. Regenerate invoices for this month.', 'error');
         }
@@ -1960,7 +1965,14 @@ async function _arSubmit() {
         try {
             const monthKey = [..._arDates.keys()][0].substring(0, 7);
             await createInvoiceByEmail(_arFamily.parent_email, monthKey);
-        } catch (_) { /* non-blocking */ }
+        } catch (err) {
+            console.error('Invoice draft failed after admin registration:', err);
+            window.reportClientError?.(
+                `Invoice draft failed after admin registration: ${err?.message || err}`,
+                err?.stack || null,
+                { type: 'billing_reconcile', source: 'admin_registration' },
+            );
+        }
 
         if (_arWaitlistAppId) {
             try { await updateWaitlistApplication(_arWaitlistAppId, { status: 'enrolled' }); } catch (_) { /* non-blocking — registration is already created */ }

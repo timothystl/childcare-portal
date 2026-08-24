@@ -255,36 +255,11 @@ async function generateDraftInvoices(cycleId) {
             );
             if (!fam) { skippedCnt++; continue; }
 
-            // Compute totals from children
-            let baseAmount = 0;
-            let discountAmount = 0;
-            let finalAmount = 0;
-
-            (result.children || []).forEach(child => {
-                const childBase = (child.subtotal || 0) + (child.changeFees || 0) + (child.discountDollar || 0) + (child.sibDiscount || 0);
-                const childDisc = (child.discountDollar || 0) + (child.sibDiscount || 0);
-                const childFinal = child.hasOverride
-                    ? parseFloat(child.overrideAmount || 0)
-                    : (child.subtotal || 0) + (child.changeFees || 0);
-                baseAmount    += childBase;
-                discountAmount += childDisc;
-                finalAmount   += childFinal;
-            });
-
-            baseAmount     = Math.round(baseAmount * 100) / 100;
-            discountAmount = Math.round(discountAmount * 100) / 100;
-            finalAmount    = Math.round(Math.max(0, finalAmount) * 100) / 100;
-
-            const row = await upsertBillingInvoice({
-                cycle_id:         cycleId,
-                family_id:        fam.id,
-                base_amount:      baseAmount,
-                discount_amount:  discountAmount,
-                adjustment_amount: 0,
-                adjustment_note:  '',
-                final_amount:     finalAmount,
-                status:           'draft',
-            });
+            // The preview remains itemized client-side, but the stored money is
+            // always recomputed from database facts. This also preserves an
+            // issued invoice and creates an adjustment when appropriate.
+            const row = await reconcileBillingInvoice(fam.id, monthVal);
+            if (!row) continue;
 
             invoices.push({
                 ...row,
@@ -767,14 +742,7 @@ async function _confirmProCareImport(rows, wrap) {
         const invoiceIdMap = new Map(); // key: `${familyId}|${month}` -> invoice id
         for (const { familyId, month, amount } of invoiceMap.values()) {
             try {
-                const cycle = await getOrCreateBillingCycle(month);
-                const invoice = await upsertBillingInvoice({
-                    cycle_id:     cycle.id,
-                    family_id:    familyId,
-                    base_amount:  amount,
-                    final_amount: amount,
-                    status:       'finalized',
-                });
+                const invoice = await importFinalizedBillingInvoice(familyId, month, amount);
                 if (invoice?.id) invoiceIdMap.set(`${familyId}|${month}`, invoice.id);
                 ok++;
             } catch (_) { fail++; }
@@ -1464,28 +1432,7 @@ async function backfillAllInvoices() {
                 );
                 if (!fam || existingByFamily.has(String(fam.id))) { totalSkipped++; continue; }
 
-                let baseAmount = 0, discountAmount = 0, finalAmount = 0;
-                (result.children || []).forEach(child => {
-                    baseAmount     += (child.subtotal || 0) + (child.changeFees || 0) + (child.discountDollar || 0) + (child.sibDiscount || 0);
-                    discountAmount += (child.discountDollar || 0) + (child.sibDiscount || 0);
-                    finalAmount    += child.hasOverride
-                        ? parseFloat(child.overrideAmount || 0)
-                        : (child.subtotal || 0) + (child.changeFees || 0);
-                });
-                baseAmount     = Math.round(baseAmount * 100) / 100;
-                discountAmount = Math.round(discountAmount * 100) / 100;
-                finalAmount    = Math.round(Math.max(0, finalAmount) * 100) / 100;
-
-                await upsertBillingInvoice({
-                    cycle_id:          cycle.id,
-                    family_id:         fam.id,
-                    base_amount:       baseAmount,
-                    discount_amount:   discountAmount,
-                    adjustment_amount: 0,
-                    adjustment_note:   '',
-                    final_amount:      finalAmount,
-                    status:            'draft',
-                });
+                await reconcileBillingInvoice(fam.id, month);
                 totalCreated++;
             }
         }
@@ -1700,16 +1647,7 @@ async function saveBilledAmount(familyId, rawVal) {
     const month = _blArMonth;
     if (!month) return;
     try {
-        const cycle = await getOrCreateBillingCycle(month);
-        await upsertBillingInvoice({
-            cycle_id:         cycle.id,
-            family_id:        familyId,
-            base_amount:      amount,
-            discount_amount:  0,
-            adjustment_amount: 0,
-            final_amount:     amount,
-            status:           'draft',
-        });
+        await setBillingInvoiceDraftAmount(familyId, month, amount);
         _arLoaded = false;
         await loadArView();
     } catch (err) {
@@ -2685,16 +2623,8 @@ async function saveInvoiceDrafts() {
             if (r.invoice?.sent_at) continue;
             // Never revive a frozen pre-system month.
             if (r.invoice?.status === 'void') continue;
-            const row = await upsertBillingInvoice({
-                cycle_id:          _invCycleId,
-                family_id:         r.familyId,
-                base_amount:       r.base,
-                discount_amount:   r.discount,
-                adjustment_amount: 0,
-                adjustment_note:   '',
-                final_amount:      r.total,
-                status:            'draft',
-            });
+            const row = await reconcileBillingInvoice(r.familyId, _invMonth);
+            if (!row) continue;
             r.invoice = row;
             saved++;
         }

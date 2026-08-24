@@ -115,7 +115,7 @@ ${tableClone.outerHTML}
 }
 
 // ============================================================
-// THE billing calculation. Single source of truth for money.
+// Admin itemization of the billing calculation.
 // ============================================================
 // Used by: Family Billing Summary (this file), draft-invoice generation
 // (admin-billing.js), and the Director dashboard's "Billed this month"
@@ -123,6 +123,8 @@ ${tableClone.outerHTML}
 // to have its own per-registration sum and disagreed with this one by
 // thousands of dollars, because a per-registration calculation structurally
 // cannot apply the sibling discount and does not see change fees or overrides.
+// The database compute_family_month_charges() function is authoritative for
+// stored invoice money; this function mirrors it for previews and reports.
 function _buildFamilyBillingData(monthVal, overridesMap = new Map()) {
     const dmap      = getDiscountMap();
     const famKeyMap = getFamilyKeyMap();
@@ -161,13 +163,57 @@ function _buildFamilyBillingData(monthVal, overridesMap = new Map()) {
     for (const fam of familyMap.values()) {
         const { regs } = fam;
 
+        const roomForDate = (reg, date) =>
+            ROOMS.find(r => r.id === (date.room_id || reg.room_id))
+            || ROOMS.find(r => r.id === reg.room_id);
+        const weekMonday = dateStr => {
+            const dt = new Date(`${dateStr}T00:00:00Z`);
+            const daysSinceMonday = (dt.getUTCDay() + 6) % 7;
+            dt.setUTCDate(dt.getUTCDate() - daysSinceMonday);
+            return dt.toISOString().slice(0, 10);
+        };
+
+        // Identify each child's complete, same-room Monday-Friday weeks.
+        // Those dates are billed once at the weekly rate and are excluded from
+        // daily sibling discounts, matching the parent quote and SQL ledger.
+        const weekGroups = new Map();
+        regs.forEach(({ reg, disc, dates }) => dates.forEach(date => {
+            const room = roomForDate(reg, date);
+            const childKey = (reg.child_name || '').toLowerCase().trim();
+            const key = `${childKey}:${weekMonday(date.care_date)}`;
+            if (!weekGroups.has(key)) weekGroups.set(key, []);
+            weekGroups.get(key).push({ reg, disc, date, room });
+        }));
+        const weeklyEntries = new Map();
+        for (const entries of weekGroups.values()) {
+            const uniqueDates = new Set(entries.map(e => e.date.care_date));
+            const roomIds = new Set(entries.map(e => e.room?.id || ''));
+            const dayTypes = new Set(entries.map(e => e.date.day_type));
+            const weekdaysOnly = entries.every(e => {
+                const day = new Date(`${e.date.care_date}T00:00:00Z`).getUTCDay();
+                return day >= 1 && day <= 5;
+            });
+            if (uniqueDates.size !== 5 || roomIds.size !== 1 || dayTypes.size !== 1 || !weekdaysOnly) continue;
+            const first = [...entries].sort((a, b) => a.date.care_date.localeCompare(b.date.care_date))[0];
+            const weeklyRate = first.date.day_type === 'half'
+                ? first.room?.weeklyHalfRate
+                : first.room?.weeklyFullRate;
+            if (weeklyRate == null) continue;
+            const group = { first, weeklyRate: Number(weeklyRate) || 0 };
+            entries.forEach(e => weeklyEntries.set(`${e.reg.id}:${e.date.care_date}`, group));
+        }
+
         // Build map: care_date → array of { childName, effRate, hasIndividualDiscount }
         // used to figure out which days have multiple siblings
         const dateChildMap = new Map();
-        regs.forEach(({ reg, room, disc, dates }) => {
+        regs.forEach(({ reg, disc, dates }) => {
             const hasIndividualDiscount = disc.type === 'staff' || (disc.type === 'custom' && disc.value > 0);
             dates.forEach(d => {
-                const base    = d.day_type === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+                if (weeklyEntries.has(`${reg.id}:${d.care_date}`)) return;
+                const room    = roomForDate(reg, d);
+                const base    = d.day_type === 'half'
+                    ? (room?.halfDayRate ?? room?.fullDayRate ?? 0)
+                    : (room?.fullDayRate || 0);
                 const effRate = effectiveAdminRate(base, disc.type, disc.value);
                 if (!dateChildMap.has(d.care_date)) dateChildMap.set(d.care_date, []);
                 dateChildMap.get(d.care_date).push({ childName: reg.child_name, effRate, hasIndividualDiscount });
@@ -197,9 +243,16 @@ function _buildFamilyBillingData(monthVal, overridesMap = new Map()) {
         regs.forEach(({ reg, room, disc, dates }) => {
             let fullDays = 0, halfDays = 0, subtotal = 0, changeFees = 0, sibDiscount = 0, discountDollar = 0;
             dates.forEach(d => {
-                const base    = d.day_type === 'half' ? (room?.halfDayRate || 0) : (room?.fullDayRate || 0);
+                const dateRoom = roomForDate(reg, d);
+                const weekly = weeklyEntries.get(`${reg.id}:${d.care_date}`);
+                const isWeeklyFirst = weekly?.first.reg.id === reg.id
+                    && weekly?.first.date.care_date === d.care_date;
+                const base = weekly
+                    ? (isWeeklyFirst ? weekly.weeklyRate : 0)
+                    : d.day_type === 'half' ? (dateRoom?.halfDayRate ?? dateRoom?.fullDayRate ?? 0)
+                                            : (dateRoom?.fullDayRate || 0);
                 const effRate = effectiveAdminRate(base, disc.type, disc.value);
-                const sib     = siblingDiscMap.get(`${reg.child_name}:${d.care_date}`) || 0;
+                const sib     = weekly ? 0 : (siblingDiscMap.get(`${reg.child_name}:${d.care_date}`) || 0);
                 subtotal      += Math.max(0, effRate - sib);
                 sibDiscount   += sib;
                 discountDollar += Math.max(0, base - effRate);

@@ -67,6 +67,9 @@
         } catch (_) { /* non-fatal */ }
     }
 
+    // Deliberately caught, non-fatal failures can still leave durable evidence.
+    window.reportClientError = reportError;
+
     // Uncaught synchronous errors
     window.addEventListener('error', function (event) {
         reportError(

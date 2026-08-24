@@ -4135,15 +4135,39 @@ async function fetchInvoicesForFamily(familyId) {
     return data || [];
 }
 
-async function upsertBillingInvoice(row) {
+/** Recompute a family/month from database facts without accepting an amount. */
+async function reconcileBillingInvoice(familyId, month) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
-        .from('billing_invoices')
-        .upsert(row, { onConflict: 'cycle_id,family_id' })
-        .select()
-        .single();
-    if (error) throw error;
-    return data;
+    const { data: invoiceId, error } = await sbClient.rpc('reconcile_billing_invoice', {
+        p_family_id: familyId,
+        p_month: month,
+    });
+    if (error) throw friendlyError(error);
+    return invoiceId ? fetchBillingInvoiceById(invoiceId) : null;
+}
+
+/** Save an admin-entered amount only while the original invoice is still a draft. */
+async function setBillingInvoiceDraftAmount(familyId, month, amount) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: invoiceId, error } = await sbClient.rpc('set_billing_invoice_draft_amount', {
+        p_family_id: familyId,
+        p_month: month,
+        p_amount: amount,
+    });
+    if (error) throw friendlyError(error);
+    return invoiceId ? fetchBillingInvoiceById(invoiceId) : null;
+}
+
+/** Idempotently import one historical invoice without replacing an issued row. */
+async function importFinalizedBillingInvoice(familyId, month, amount) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: invoiceId, error } = await sbClient.rpc('import_finalized_billing_invoice', {
+        p_family_id: familyId,
+        p_month: month,
+        p_amount: amount,
+    });
+    if (error) throw friendlyError(error);
+    return invoiceId ? fetchBillingInvoiceById(invoiceId) : null;
 }
 
 async function updateBillingInvoice(id, fields) {

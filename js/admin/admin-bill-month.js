@@ -5,16 +5,17 @@
 // she does not read 38 rows to find the 5 that changed — the engine finds them
 // and she reviews only those. The other 33 release in one tap.
 //
-// ⚠️ THIS COMPUTES NOTHING NEW. Every dollar figure comes from
+// ⚠️ THIS COMPUTES NOTHING NEW FOR THE PREVIEW. Every displayed figure comes from
 // _buildFamilyBillingData() in admin-reports.js, the same function behind
 // Family Billing Summary, the Invoices tool and the Director dashboard's
 // "Billed this month" card. This file adds exactly one thing on top: which
 // families changed since last month, and why. If a number here ever disagrees
 // with Family Billing Summary for the same month, the bug is in the exception
-// diff below, never in a second money calculation — there is only one.
+// diff below. The database independently recomputes the stored invoice amount
+// when it is drafted, so this screen never submits a caller-calculated dollar.
 //
 // ⚠️ RELEASING WRITES THROUGH THE SAME PATH AS THE INVOICES TOOL.
-// upsertBillingInvoice() + emailInvoices() are the exact calls
+// reconcileBillingInvoice() + emailInvoices() are the exact calls
 // saveInvoiceDrafts()/emailAllInvoices() already make in admin-billing.js —
 // this file does not reimplement drafting or sending, it scopes those two
 // calls to a chosen subset of families (the clean 33, or one approved
@@ -432,20 +433,11 @@ async function _bmReleaseClean() {
  * month. Returns the invoice ids that were sent.
  */
 async function _bmDraftAndSend(month, rows) {
-    const cycle = await getOrCreateBillingCycle(month);
     const drafted = [];
     for (const r of rows) {
         if (!r.familyId) continue;
-        const inv = await upsertBillingInvoice({
-            cycle_id:          cycle.id,
-            family_id:         r.familyId,
-            base_amount:       r.base,
-            discount_amount:   r.discount,
-            adjustment_amount: 0,
-            adjustment_note:   '',
-            final_amount:      r.total,
-            status:            'draft',
-        });
+        const inv = await reconcileBillingInvoice(r.familyId, month);
+        if (!inv) continue;
         drafted.push({ id: inv.id, email: r.email });
     }
     if (!drafted.length) return [];

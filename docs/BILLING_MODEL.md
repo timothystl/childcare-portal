@@ -1,6 +1,6 @@
 # Billing Model — one channel, immutable invoices, reviewed adjustments
 
-**Status:** design, agreed 2026-08-11. Not yet built.
+**Status:** implemented. Adjustment schema agreed 2026-08-11; invoice-integrity consolidation added 2026-08-24.
 **Supersedes:** the ad-hoc invoice writes described in `docs/CODE_REVIEW.md` (FS3, FS5).
 
 ---
@@ -15,17 +15,17 @@ recomputes from live registration data every time it is opened. Its numbers are
 correct. What was missing is not accuracy — it is *the record*: what was sent, when,
 and what has been paid against it.
 
-**Half of that is now built.** The **Invoices** tool (Finance → Invoices,
+The **Invoices** tool (Finance → Invoices,
 `#invoicesSection`, `renderInvoicesTool()` in `js/admin/admin-billing.js`) added the
 draft → issued path that never existed, and `add_invoice_send_stamp.sql` (applied
 2026-08-11) gave `billing_invoices` the `sent_at` / `sent_to` columns. Marking sent
 sets `status = 'sent'`, and `saveInvoiceDrafts()` skips any row that already has
 `sent_at` — so issued bills are already protected from being rewritten.
 
-That establishes the **issued boundary** this model needs. What is still missing is
-what happens on the far side of it: today, changing a child's days in a month whose
-invoice has been sent does nothing at all, because the recompute only writes
-`status = 'draft'` rows. The change is real and the bill never reflects it.
+That establishes the **issued boundary** this model needs. Schedule changes after
+that boundary are reconciled against everything already issued and produce one
+reviewable draft adjustment. Normal invoice tools call the database reconciler and
+do not submit a browser-calculated amount.
 
 That record is also the precondition for taking card payments. You cannot charge a
 saved card for "what this family owes" when nothing durably states what they owe.
