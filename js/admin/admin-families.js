@@ -600,8 +600,8 @@ function renderFamiliesList(families) {
                                     const photoUrl = s.profile_photo_path ? _familyListPhotoUrlCache.get(s.profile_photo_path) : null;
                                     return `<li class="family-student-item${sIssues.length ? ' student-has-issues' : ''}" data-student-id="${s.id}">
                                         ${photoUrl
-                                            ? `<img src="${escHtml(photoUrl)}" alt="" class="student-photo-thumb">`
-                                            : '<span class="student-photo-thumb student-photo-thumb-empty" aria-hidden="true"></span>'}
+                                            ? `<img src="${escHtml(photoUrl)}" alt="" class="roster-photo-thumb">`
+                                            : '<span class="roster-photo-thumb roster-photo-thumb-empty" aria-hidden="true"></span>'}
                                         <span class="student-bullet">Child</span>
                                         <span class="student-name">${escHtml(s.child_name)}</span>
                                         <span class="student-dob">${dobStr}</span>

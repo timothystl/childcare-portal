@@ -1270,6 +1270,13 @@
                 <div id="staffEditForm" class="staff-edit-form hidden">
                     <h4 id="staffFormTitle">Add Staff Member</h4>
                     <div class="staff-form-row">
+                        <div class="fm-field fm-child-photo-field">
+                            <label>Photo</label>
+                            <div class="fmc-photo" id="sfPhotoWrap">
+                                <span class="fmc-photo-empty">No photo</span>
+                                <input type="file" accept="image/jpeg,image/png,image/webp" class="fmc-photo-file" id="sfPhotoFile" title="Upload a profile picture">
+                            </div>
+                        </div>
                         <div class="fm-field fm-field-grow">
                             <label>Name *</label>
                             <input type="text" id="sfName" placeholder="Full name" autocomplete="off">
