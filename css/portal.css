@@ -647,6 +647,38 @@
 .pa-mono-sm { width: 34px; height: 34px; font-size: 15px; background: var(--warm-gray); }
 .pa-mono-photo { object-fit: cover; }
 
+/* Children row: avatar (with its own edit control) + a separate tappable
+   area that opens the Today tab — two controls, so the edit button never
+   fights the row's navigation tap target. */
+.pa-child-row { padding: 12px 0; }
+.pa-avatar-wrap { position: relative; flex: none; }
+.pa-avatar-edit {
+    position: absolute;
+    right: -4px; bottom: -4px;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    padding: 0;
+}
+.pa-child-open {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: none;
+    font: inherit;
+    text-align: left;
+    padding: 0;
+}
+.pa-hidden-file-input { display: none; }
+.pa-photo-status { font-size: 12px; color: var(--text-muted); min-height: 1em; margin: 4px 0 0; }
+
 .pa-you {
     font-size: 10px; font-weight: 800; letter-spacing: .06em;
     text-transform: uppercase; color: var(--green-text);
