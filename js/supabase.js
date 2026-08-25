@@ -1220,7 +1220,7 @@ async function createFamily({ parentName, parentEmail, parentPhone, pin: provide
  * @param {string|null} [params.childDob] - ISO 8601 date or null
  * @returns {Promise<Student>}
  */
-async function addStudent({ familyId, childName, childDob, roomOverride = null, discountType = null, discountValue = null, discountNote = null, discountExpiresAt = null, recurringDays = null, allergies = [], careNotes = null, photoRelease = true }) {
+async function addStudent({ familyId, childName, childDob, roomOverride = null, discountType = null, discountValue = null, discountNote = null, discountExpiresAt = null, recurringDays = null, allergies = [], careNotes = null, photoRelease = true, profilePhotoPath = null }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: existing } = await sbClient
         .from('students').select('id')
@@ -1244,6 +1244,7 @@ async function addStudent({ familyId, childName, childDob, roomOverride = null, 
             allergies:      Array.isArray(allergies) ? allergies : [],
             care_notes:     careNotes || null,
             photo_release:  photoRelease !== false,
+            profile_photo_path: profilePhotoPath || null,
         })
         .select().single();
     if (error) throw error;
@@ -1260,7 +1261,7 @@ async function fetchAllFamilies({ includeArchived = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, created_at, active, group, registration_locked, registration_lock_reason, login_locked, new_family_fee_charged, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days, allergies, care_notes, photo_release)')
+        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, created_at, active, group, registration_locked, registration_lock_reason, login_locked, new_family_fee_charged, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days, allergies, care_notes, photo_release, profile_photo_path)')
         .order('parent_name');
     if (!includeArchived) query = query.eq('active', true);
     const { data, error } = await query;
@@ -1727,6 +1728,110 @@ async function uploadStaffPhoto(file, filename) {
     return data.publicUrl;
 }
 
+// Upload a child's profile picture to the PRIVATE child-profile-photos
+// bucket and return the storage path (not a URL — the bucket is private,
+// unlike staff-photos, because this is a photograph of someone else's
+// child). Display it via fetchChildProfilePhotoUrls().
+async function uploadChildProfilePhoto(file, filename) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.storage.from('child-profile-photos').upload(filename, file, {
+        contentType: file.type || 'image/jpeg',
+        upsert: true,
+    });
+    if (error) throw error;
+    return filename;
+}
+
+// Delete a child's profile picture from storage (e.g. replacing/removing it).
+async function deleteChildProfilePhoto(path) {
+    if (!sbClient || !path) return;
+    const { error } = await sbClient.storage.from('child-profile-photos').remove([path]);
+    if (error) throw error;
+}
+
+// Resolve a batch of profile-photo storage paths to signed, displayable
+// URLs. Signing goes through RLS, same as fetchChildPhotos() — an admin can
+// sign any of them, a parent only their own child's.
+async function fetchChildProfilePhotoUrls(paths, ttlSeconds = 3600) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const clean = [...new Set((paths || []).filter(Boolean))];
+    if (!clean.length) return new Map();
+    const { data: signed, error } = await sbClient
+        .storage.from('child-profile-photos')
+        .createSignedUrls(clean, ttlSeconds);
+    if (error) throw friendlyError(error);
+    const urlByPath = new Map();
+    (signed || []).forEach(s => { if (s.signedUrl) urlByPath.set(s.path, s.signedUrl); });
+    return urlByPath;
+}
+
+// ── Parent-editable child profile photo (portal.html Account tab) ─────────
+// A parent may replace or remove their own child's picture, but the
+// students table has no parent-facing UPDATE policy — only
+// set_child_profile_photo() can point profile_photo_path at something, and
+// it re-checks ownership server-side. The storage write itself is only
+// authorized inside "<student_id>/..." (see parent_edit_child_profile_photo.sql),
+// which is why the path is built from studentId here rather than reusing
+// uploadChildProfilePhoto()'s admin-side flat naming.
+async function uploadChildProfilePhotoAsParent(studentId, file) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const ext = (file.name.split('.').pop() || 'jpg').replace(/[^a-zA-Z0-9]/g, '') || 'jpg';
+    const path = `${studentId}/${Date.now()}.${ext}`;
+    const { error } = await sbClient.storage.from('child-profile-photos').upload(path, file, {
+        contentType: file.type || 'image/jpeg',
+        upsert: true,
+    });
+    if (error) throw error;
+    return path;
+}
+
+// Points (or clears, with path = null) a child's profile_photo_path. Returns
+// false rather than throwing when the RPC's ownership check fails, so the
+// caller can show a normal error instead of an unhandled rejection.
+async function setChildProfilePhoto(studentId, path) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('set_child_profile_photo', {
+        p_student_id: studentId,
+        p_path:       path,
+    });
+    if (error) throw friendlyError(error);
+    return !!data;
+}
+
+// Upload a staff member's own profile picture (Staff Roster, admin-only) to
+// the PRIVATE staff-profile-photos bucket and return the storage path. This
+// is NOT the public staff-photos bucket used by the marketing "Our Staff"
+// directory (settings.staff_directory) — that one is deliberately public and
+// keyed by name-matching; this one is a per-row admin roster photo.
+async function uploadStaffProfilePhoto(file, filename) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.storage.from('staff-profile-photos').upload(filename, file, {
+        contentType: file.type || 'image/jpeg',
+        upsert: true,
+    });
+    if (error) throw error;
+    return filename;
+}
+
+async function deleteStaffProfilePhoto(path) {
+    if (!sbClient || !path) return;
+    const { error } = await sbClient.storage.from('staff-profile-photos').remove([path]);
+    if (error) throw error;
+}
+
+async function fetchStaffProfilePhotoUrls(paths, ttlSeconds = 3600) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const clean = [...new Set((paths || []).filter(Boolean))];
+    if (!clean.length) return new Map();
+    const { data: signed, error } = await sbClient
+        .storage.from('staff-profile-photos')
+        .createSignedUrls(clean, ttlSeconds);
+    if (error) throw friendlyError(error);
+    const urlByPath = new Map();
+    (signed || []).forEach(s => { if (s.signedUrl) urlByPath.set(s.path, s.signedUrl); });
+    return urlByPath;
+}
+
 // Load staff-to-child ratios from Supabase and merge into ROOMS array.
 async function loadRatioSettings() {
     if (!sbClient) return false;
@@ -1836,7 +1941,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('staff')
-        .select('id, name, email, phone, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at, pto_starting_balance')
+        .select('id, name, email, phone, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at, pto_starting_balance, profile_photo_path')
         .order('name');
     if (!includeInactive) query = query.eq('active', true);
     const { data, error } = await query;
@@ -1844,7 +1949,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     return data || [];
 }
 
-async function upsertStaffMember({ id = null, name, email, phone, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin, ptoStartingBalance }) {
+async function upsertStaffMember({ id = null, name, email, phone, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin, ptoStartingBalance, profilePhotoPath }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const record = {
         name,
@@ -1857,6 +1962,7 @@ async function upsertStaffMember({ id = null, name, email, phone, role, payType,
         room_id:          roomId || null,
         hire_date:        hireDate || null,
         pto_starting_balance: ptoStartingBalance || 0,
+        profile_photo_path: profilePhotoPath || null,
     };
     let staffId = id;
     if (id) {

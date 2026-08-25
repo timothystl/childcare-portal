@@ -20,7 +20,7 @@
       · Replace the QR placeholder with a real QR code image
         generated at qr-code-generator.com or similar
       · The logo path assumes this file is in marketing/
-        — adjust ../images/logo.png if moved
+        — adjust ../images/logo/myMDO_primary_wordmark_dark.svg if moved
     ══════════════════════════════════════════════════════
   -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
@@ -73,12 +73,9 @@
       background: #f5c518;
     }
     .poster-logo {
-      width: 90px;
-      height: 90px;
-      border-radius: 50%;
+      height: 72px;
+      width: auto;
       flex-shrink: 0;
-      background: white;
-      padding: 3px;
     }
     .poster-header-text {}
     .poster-header-text h1 {
@@ -350,7 +347,7 @@
 
   <!-- Header -->
   <div class="poster-header">
-    <img src="../images/logo.png" alt="Timothy Lutheran MDO" class="poster-logo">
+    <img src="../images/logo/myMDO_primary_wordmark_dark.svg" alt="Timothy Lutheran MDO" class="poster-logo">
     <div class="poster-header-text">
       <h1>Mother's Day Out<br><span>Now accepting care day requests online.</span></h1>
       <p>Timothy Lutheran Church · Lindenwood Park, St. Louis, MO</p>

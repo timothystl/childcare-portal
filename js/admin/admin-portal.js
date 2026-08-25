@@ -111,12 +111,6 @@ const AP_TOOLS = [
       blurb: 'Every drill run, who was in the building, and how long it took.' },
     { key: 'announce',    pane: 'daily',         section: 'announcementsSection',    tab: 'classrooms', group: 'Records', tint: AP_TINT.tang, icon: '📣', name: 'Announcements',
       blurb: 'Write once — closures, news, events — and see who gets it.' },
-    // Separate from the Contact Us inbox: that is the public form, this is
-    // families you already have. Teachers only see their own room's threads,
-    // so the office is the only place the whole picture exists.
-    { key: 'threads',     pane: 'families',      section: 'threadsSection',          tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '💬', name: 'Parent Messages',
-      blurb: 'Conversations with enrolled families — reply as the office.' },
-
     // ── Finance · Money In (design handoff: Finance.dc.html) ──
     // Bill This Month is the approval front door — she opens this, not
     // Invoices, when the month needs billing. Invoices stays as the register
@@ -254,14 +248,18 @@ const AP_TOOLS = [
       blurb: 'Whether the geofence is recording anything, and whether two staff share a phone.' },
 
     // ── Messages ──
-    // Its own top-level tab, not a group buried under Planning: this is the
-    // Contact Us / waitlist inbox and it needs to be found without knowing
-    // it lives downstream of the waitlist. (Distinct from `threads` under
-    // Classrooms, which is two-way conversation with already-enrolled
-    // families — that one keeps its own "Parent Messages" name too; they
-    // are genuinely different inboxes, not a duplicate.)
-    { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '💬', name: 'Parent Messages',
-      blurb: 'Everything families have sent through the portal.' },
+    // Its own top-level tab, not a group buried under Planning: parents reach
+    // the office two different ways (an ongoing thread from an enrolled
+    // family, or a one-off Contact Us submission from anyone), and both used
+    // to be named "Parent Messages" in two different tabs — a director
+    // reported a message "not showing up" that was sitting in the other one
+    // the whole time. Keeping both tools under one tab with distinct names
+    // is the fix; they stay separate tools (different tables, different
+    // lifecycles) rather than one merged inbox.
+    { key: 'threads',     pane: 'messages', section: 'threadsSection',  tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '💬', name: 'Family Conversations',
+      blurb: 'Two-way conversations with enrolled families — reply as the office.' },
+    { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '📮', name: 'Contact Us Messages',
+      blurb: 'One-off messages sent via the Contact Us button on the registration portal.' },
 
     // ── Market Analysis ──
     { key: 'mktPos',      pane: 'market', section: 'marketOverviewSection',  tab: 'market', group: 'Where We Stand', tint: AP_TINT.green, icon: '📈', name: 'Market Position',
@@ -1280,7 +1278,7 @@ function apDashDirector(live) {
     else if (!inv.drafted && live.billed > 0) attention.push({ icon: '🧾', key: 'invoices',
         text: `${apMoney(live.billed)} is billable this month but no invoices have been drafted.`, cta: 'Open invoices' });
     if (live.unread) attention.push({ icon: '✉️', key: 'msgHistory',
-        text: `${live.unread} parent message${live.unread > 1 ? 's have' : ' has'} not been read.`, cta: 'Open Parent Messages' });
+        text: `${live.unread} Contact Us message${live.unread > 1 ? 's have' : ' has'} not been read.`, cta: 'Open Contact Us Messages' });
     if (live.nextClosure) attention.push({ icon: '🚫', key: 'closedDays',
         text: `Next closure is ${friendlyShort(live.nextClosure)} — ${live.closuresAhead} on the calendar ahead.`, cta: 'Open Closed Days' });
     else attention.push({ icon: '🚫', key: 'closedDays',
@@ -1441,8 +1439,13 @@ function apDashClassrooms(live) {
           sub: atRatio.length ? atRatio.map(r => r.label.replace(/^\S+\s/, '')).join(', ') : 'all rooms have headroom' },
     ];
     if (live.families.length) {
+        // ⚠️ Below 900px the sidebar's tool-group listing is hidden entirely
+        // (apNavHtml's comment) and a dashboard pill is the ONLY way to reach
+        // a tool on mobile. Without `link` here, Family Directory had no path
+        // in from the Classrooms dashboard on a phone at all.
         kpis.push({ label: 'Children on file', tone: 'ok', value: onFile,
-                    sub: `${live.families.length} families` });
+                    sub: `${live.families.length} families`,
+                    link: 'families', linkIcon: '👨‍👩‍👧', linkLabel: 'Open Family Directory' });
         if (missing) kpis.push({ label: 'No days this month', tone: 'gold', value: missing,
                                  sub: 'children with nothing booked',
                                  link: 'missingCal', linkIcon: '⚠️', linkLabel: 'Review them' });

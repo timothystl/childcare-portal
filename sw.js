@@ -1,7 +1,7 @@
 // Service Worker for Timothy Lutheran MDO
 // Cache-first for static assets, network-only for API calls
 
-const CACHE_NAME = 'tl-mdo-v7';
+const CACHE_NAME = 'tl-mdo-v8';
 
 // Static assets to pre-cache on install
 // Uses clean URLs (no .html) to match how Cloudflare Assets serves them.
@@ -41,7 +41,7 @@ const PRECACHE_URLS = [
   '/js/supabase.js',
   '/js/error-monitor.js',
   '/js/lookup.js',
-  '/images/logo.png',
+  '/images/logo/icon-192.png',
 ];
 
 // ── Install: pre-cache static assets ────────────────────────────────────────
@@ -124,8 +124,8 @@ self.addEventListener('push', event => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body:  data.body,
-      icon:  '/images/logo.png',
-      badge: '/images/logo.png',
+      icon:  '/images/logo/icon-192.png',
+      badge: '/images/logo/icon-192.png',
       tag:   data.tag || 'mdo',
     })
   );

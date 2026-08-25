@@ -32,6 +32,7 @@ const PT_NOTIF_ROWS = [
 ];
 
 let paData = null;
+let _paPhotoUrlCache = new Map(); // profile_photo_path -> signed URL
 
 function paEl(id) { return document.getElementById(id); }
 function paEsc(s) {
@@ -45,11 +46,24 @@ function paPref(key) {
     return v === undefined || v === null ? PT_NOTIF_DEFAULTS[key] : !!v;
 }
 
-// A monogram, never a photo. The design is explicit: avatars under 64px are
-// monogram circles, so there is nothing to load and nothing to leak.
+// A monogram fallback for anyone without a photo on file (always true for
+// parents/guardians — only children have a profile picture).
 function paMonogram(name, cls = '') {
     const letter = (String(name || '?').trim()[0] || '?').toUpperCase();
     return `<span class="pa-mono ${cls}">${paEsc(letter)}</span>`;
+}
+
+// A child's profile picture if one is on file and signed, else the monogram
+// fallback. The bucket is private, so a bare path is never enough — paLoad()
+// signs every child's photo up front via fetchChildProfilePhotoUrls(), which
+// itself goes through the "Parent read own child profile photo" storage
+// policy (parent_owns_student()): this parent gets a URL only for their own
+// children, same as every other child-photo path in this app.
+function paChildAvatar(c, cls = '') {
+    const url = c.profile_photo_path ? _paPhotoUrlCache.get(c.profile_photo_path) : null;
+    return url
+        ? `<img src="${paEsc(url)}" alt="" class="pa-mono pa-mono-photo ${cls}">`
+        : paMonogram(c.child_name, cls);
 }
 
 function paAge(dob) {
@@ -82,15 +96,22 @@ function paRender() {
 
     wrap.innerHTML = `
         ${paCard('Children', (paData.children || []).map(c => `
-            <button type="button" class="pa-row pa-row-tap" data-child="${paEsc(c.id)}">
-                ${paMonogram(c.child_name)}
-                <span class="pa-row-main">
-                    <span class="pa-row-name">${paEsc(c.child_name)}</span>
-                    <span class="pa-row-sub">${paEsc(paRoomLabel(c))}${c.child_dob ? ' · ' + paEsc(paAge(c.child_dob)) : ''}</span>
+            <div class="pa-row pa-child-row">
+                <span class="pa-avatar-wrap">
+                    ${paChildAvatar(c)}
+                    <button type="button" class="pa-avatar-edit" data-child="${paEsc(c.id)}" title="Change photo">📷</button>
                 </span>
-                ${paAllergyBadge(c)}
-                <span class="pa-chev" aria-hidden="true">›</span>
-            </button>`).join('') || '<p class="pa-empty">No children on file yet.</p>')}
+                <button type="button" class="pa-row-tap pa-child-open" data-child="${paEsc(c.id)}">
+                    <span class="pa-row-main">
+                        <span class="pa-row-name">${paEsc(c.child_name)}</span>
+                        <span class="pa-row-sub">${paEsc(paRoomLabel(c))}${c.child_dob ? ' · ' + paEsc(paAge(c.child_dob)) : ''}</span>
+                    </span>
+                    ${paAllergyBadge(c)}
+                    <span class="pa-chev" aria-hidden="true">›</span>
+                </button>
+            </div>`).join('') || '<p class="pa-empty">No children on file yet.</p>')}
+        <input type="file" id="paChildPhotoInput" accept="image/jpeg,image/png,image/webp" class="pa-hidden-file-input">
+        <p class="pa-photo-status" id="paPhotoStatus" aria-live="polite"></p>
 
         ${paCard('Parents &amp; guardians', parents.map(p => `
             <div class="pa-row">
@@ -201,6 +222,39 @@ function paWire() {
             if (typeof ptSelectChild === 'function') ptSelectChild(b.dataset.child);
         });
     });
+    document.querySelectorAll('#ptAccountBody .pa-avatar-edit').forEach(b => {
+        b.addEventListener('click', () => {
+            _paEditingChildId = b.dataset.child;
+            paEl('paChildPhotoInput')?.click();
+        });
+    });
+    paEl('paChildPhotoInput')?.addEventListener('change', paChangeChildPhoto);
+}
+
+let _paEditingChildId = null;
+
+// Uploads the picked file into that child's own storage folder, then points
+// the record at it via set_child_profile_photo() — the students table has
+// no parent-facing UPDATE policy, so this RPC is the only door.
+async function paChangeChildPhoto(e) {
+    const file = e.target.files[0];
+    const childId = _paEditingChildId;
+    e.target.value = ''; // let picking the same file twice re-fire change
+    if (!file || !childId) return;
+    const statusEl = paEl('paPhotoStatus');
+    if (statusEl) statusEl.textContent = 'Uploading…';
+    try {
+        const path = await uploadChildProfilePhotoAsParent(childId, file);
+        const ok = await setChildProfilePhoto(childId, path);
+        if (!ok) throw new Error('That photo could not be saved to this child’s record.');
+        const child = (paData?.children || []).find(c => String(c.id) === String(childId));
+        if (child) child.profile_photo_path = path;
+        _paPhotoUrlCache.set(path, URL.createObjectURL(file));
+        if (statusEl) statusEl.textContent = '';
+        paRender(); // re-wires internally
+    } catch (err) {
+        if (statusEl) statusEl.textContent = 'Could not update that photo: ' + (err.message || err);
+    }
 }
 
 async function paEditPhone() {
@@ -275,6 +329,8 @@ async function paLoad() {
     if (wrap) wrap.innerHTML = '<p class="pa-empty">Loading…</p>';
     try {
         paData = await fetchMyAccount();
+        const paths = (paData?.children || []).map(c => c.profile_photo_path).filter(Boolean);
+        _paPhotoUrlCache = paths.length ? await fetchChildProfilePhotoUrls(paths).catch(() => new Map()) : new Map();
     } catch (e) {
         console.warn('account:', e);
         paData = null;
