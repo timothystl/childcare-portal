@@ -1765,6 +1765,39 @@ async function fetchChildProfilePhotoUrls(paths, ttlSeconds = 3600) {
     return urlByPath;
 }
 
+// ── Parent-editable child profile photo (portal.html Account tab) ─────────
+// A parent may replace or remove their own child's picture, but the
+// students table has no parent-facing UPDATE policy — only
+// set_child_profile_photo() can point profile_photo_path at something, and
+// it re-checks ownership server-side. The storage write itself is only
+// authorized inside "<student_id>/..." (see parent_edit_child_profile_photo.sql),
+// which is why the path is built from studentId here rather than reusing
+// uploadChildProfilePhoto()'s admin-side flat naming.
+async function uploadChildProfilePhotoAsParent(studentId, file) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const ext = (file.name.split('.').pop() || 'jpg').replace(/[^a-zA-Z0-9]/g, '') || 'jpg';
+    const path = `${studentId}/${Date.now()}.${ext}`;
+    const { error } = await sbClient.storage.from('child-profile-photos').upload(path, file, {
+        contentType: file.type || 'image/jpeg',
+        upsert: true,
+    });
+    if (error) throw error;
+    return path;
+}
+
+// Points (or clears, with path = null) a child's profile_photo_path. Returns
+// false rather than throwing when the RPC's ownership check fails, so the
+// caller can show a normal error instead of an unhandled rejection.
+async function setChildProfilePhoto(studentId, path) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('set_child_profile_photo', {
+        p_student_id: studentId,
+        p_path:       path,
+    });
+    if (error) throw friendlyError(error);
+    return !!data;
+}
+
 // Upload a staff member's own profile picture (Staff Roster, admin-only) to
 // the PRIVATE staff-profile-photos bucket and return the storage path. This
 // is NOT the public staff-photos bucket used by the marketing "Our Staff"
