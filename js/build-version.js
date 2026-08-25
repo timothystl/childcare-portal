@@ -1,1 +1,1 @@
-window.__BUILD_VERSION__ = "v2.5.105";
+window.__BUILD_VERSION__ = "v2.5.106";
