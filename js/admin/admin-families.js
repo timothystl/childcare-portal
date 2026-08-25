@@ -48,8 +48,14 @@ let importRows        = [];
 let allFamiliesData   = [];
 let editingFamilyId   = null;   // null = adding new, string = editing existing
 let familyModalChildren = [];   // working copy of children in the modal
+let _fmPhotoUrlCache = new Map(); // profile_photo_path -> displayable URL (signed or blob:), modal-scoped
+// Storage paths replaced/removed in the modal, deleted only once Save
+// succeeds — deleting eagerly would orphan the DB's remaining path reference
+// if the admin cancels instead of saving.
+let _fmPhotosToDelete = [];
 let showArchivedFamilies = false;
 let showIssuesOnly = false;
+let _familyListPhotoUrlCache = new Map(); // profile_photo_path -> signed URL, for the family list
 
 function setupFamilies() {
     const fileInput  = document.getElementById('familiesFileInput');
@@ -387,6 +393,10 @@ async function loadFamilies() {
     try {
         allFamiliesData = await fetchAllFamilies({ includeArchived: showArchivedFamilies });
         _discountMap = null; // invalidate cached discount map
+        const photoPaths = allFamiliesData.flatMap(f => (f.students || []).map(s => s.profile_photo_path)).filter(Boolean);
+        _familyListPhotoUrlCache = photoPaths.length
+            ? await fetchChildProfilePhotoUrls(photoPaths).catch(() => new Map())
+            : new Map();
         const searchEl = document.getElementById('familyChildSearch');
         if (searchEl) searchEl.value = '';
         familiesPage = 0;
@@ -587,7 +597,11 @@ function renderFamiliesList(families) {
                                     const dt = s.discount_type || 'none';
                                     const dv = s.discount_value || 0;
                                     const sIssues = getStudentIssues(s);
+                                    const photoUrl = s.profile_photo_path ? _familyListPhotoUrlCache.get(s.profile_photo_path) : null;
                                     return `<li class="family-student-item${sIssues.length ? ' student-has-issues' : ''}" data-student-id="${s.id}">
+                                        ${photoUrl
+                                            ? `<img src="${escHtml(photoUrl)}" alt="" class="student-photo-thumb">`
+                                            : '<span class="student-photo-thumb student-photo-thumb-empty" aria-hidden="true"></span>'}
                                         <span class="student-bullet">Child</span>
                                         <span class="student-name">${escHtml(s.child_name)}</span>
                                         <span class="student-dob">${dobStr}</span>
@@ -688,7 +702,7 @@ function generateLocalPin() {
     return Math.floor(1000 + Math.random() * 9000);
 }
 
-function openFamilyModal(family = null) {
+async function openFamilyModal(family = null) {
     editingFamilyId = family ? family.id : null;
 
     // Set title
@@ -722,6 +736,11 @@ function openFamilyModal(family = null) {
             ...s,
             allergies: Array.isArray(s.allergies) ? s.allergies.map(a => ({ ...a })) : [],
         }));
+        // Sign existing profile photos so the modal can preview them. The
+        // bucket is private, so a path alone is not a displayable URL.
+        const photoPaths = familyModalChildren.map(c => c.profile_photo_path).filter(Boolean);
+        _fmPhotoUrlCache = photoPaths.length ? await fetchChildProfilePhotoUrls(photoPaths).catch(() => new Map()) : new Map();
+        _fmPhotosToDelete = [];
     } else {
         // Clear all fields
         ['fmParentName','fmParentEmail','fmParentPhone',
@@ -737,6 +756,8 @@ function openFamilyModal(family = null) {
             r.checked = (r.value === 'regular');
         });
         familyModalChildren = [];
+        _fmPhotoUrlCache = new Map();
+        _fmPhotosToDelete = [];
     }
 
     renderModalChildRows();
@@ -754,6 +775,8 @@ function closeFamilyModal() {
     document.body.style.overflow = '';
     editingFamilyId     = null;
     familyModalChildren = [];
+    _fmPhotoUrlCache    = new Map();
+    _fmPhotosToDelete   = []; // discard — nothing was actually deleted from storage yet
 }
 
 function renderModalChildRows() {
@@ -771,9 +794,18 @@ function renderModalChildRows() {
         const dt = child.discount_type || 'none';
         const dv = (child.discount_value != null) ? child.discount_value : 0;
         const selectedRoom = child.room_override || '';
+        const photoUrl = child.profile_photo_path ? _fmPhotoUrlCache.get(child.profile_photo_path) : null;
         return `
             <div class="fm-child-row" data-index="${i}">
                 <div class="fm-child-main">
+                    <div class="fm-field fm-child-photo-field">
+                        <label>Photo</label>
+                        <div class="fmc-photo">
+                            ${photoUrl ? `<img src="${escHtml(photoUrl)}" alt="" class="fmc-photo-img">` : '<span class="fmc-photo-empty">No photo</span>'}
+                            <input type="file" accept="image/jpeg,image/png,image/webp" class="fmc-photo-file" title="Upload a profile picture">
+                            ${child.profile_photo_path ? '<button type="button" class="fmc-photo-remove btn-secondary btn-sm" title="Remove photo">✕</button>' : ''}
+                        </div>
+                    </div>
                     <div class="fm-field fm-field-grow">
                         <label>Name *</label>
                         <input type="text" class="fmc-name" value="${escHtml(child.child_name || '')}" placeholder="Child's full name">
@@ -937,6 +969,56 @@ function renderModalChildRows() {
     container.querySelectorAll('.fmc-remove-btn').forEach(btn => {
         btn.addEventListener('click', () => removeModalChildRow(parseInt(btn.dataset.index)));
     });
+
+    container.querySelectorAll('.fm-child-row').forEach(row => _fmBindPhotoRow(row));
+}
+
+// Uploads/removes a profile picture for the row's child. Repaints only the
+// `.fmc-photo` cell — a full renderModalChildRows() would wipe whatever the
+// admin has half-typed in the row's other fields (same reasoning as the
+// allergy chips above).
+function _fmBindPhotoRow(row) {
+    const idx = parseInt(row.dataset.index);
+    row.querySelector('.fmc-photo-file')?.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const child = familyModalChildren[idx];
+        if (!child) return;
+        try {
+            const ext = (file.name.split('.').pop() || 'jpg').replace(/[^a-zA-Z0-9]/g, '') || 'jpg';
+            const filename = `${editingFamilyId || 'new'}-${child.id || idx}-${Date.now()}.${ext}`;
+            const oldPath = child.profile_photo_path;
+            const newPath = await uploadChildProfilePhoto(file, filename);
+            child.profile_photo_path = newPath;
+            // We already hold the file, so preview it locally rather than
+            // round-tripping to sign a URL for what we just uploaded.
+            _fmPhotoUrlCache.set(newPath, URL.createObjectURL(file));
+            if (oldPath && oldPath !== newPath) _fmPhotosToDelete.push(oldPath);
+            _fmRepaintPhoto(row, idx);
+        } catch (err) {
+            alert('Photo upload failed: ' + err.message);
+        }
+    });
+    row.querySelector('.fmc-photo-remove')?.addEventListener('click', () => {
+        const child = familyModalChildren[idx];
+        if (!child || !child.profile_photo_path) return;
+        _fmPhotosToDelete.push(child.profile_photo_path);
+        child.profile_photo_path = null;
+        _fmRepaintPhoto(row, idx);
+    });
+}
+
+function _fmRepaintPhoto(row, idx) {
+    const wrap = row?.querySelector('.fmc-photo');
+    if (!wrap) return;
+    const child = familyModalChildren[idx];
+    const photoUrl = child?.profile_photo_path ? _fmPhotoUrlCache.get(child.profile_photo_path) : null;
+    wrap.innerHTML = `
+        ${photoUrl ? `<img src="${escHtml(photoUrl)}" alt="" class="fmc-photo-img">` : '<span class="fmc-photo-empty">No photo</span>'}
+        <input type="file" accept="image/jpeg,image/png,image/webp" class="fmc-photo-file" title="Upload a profile picture">
+        ${child?.profile_photo_path ? '<button type="button" class="fmc-photo-remove btn-secondary btn-sm" title="Remove photo">✕</button>' : ''}
+    `;
+    _fmBindPhotoRow(row);
 }
 
 function addModalChildRow() {
@@ -964,6 +1046,7 @@ function addModalChildRow() {
         room_override: null, discount_type: 'none', discount_value: 0, discount_note: null,
         discount_expires_at: null,
         recurring_days: [], allergies: [], care_notes: null, photo_release: true,
+        profile_photo_path: null,
     });
     renderModalChildRows();
     // Focus the new name input
@@ -1030,6 +1113,9 @@ function readModalChildrenFromDom() {
                                 ? familyModalChildren[idx].allergies : [],
             care_notes:     row.querySelector('.fmc-care-notes')?.value.trim() || null,
             photo_release:  row.querySelector('.fmc-photo-release')?.checked !== false,
+            // Not a DOM input — set/cleared directly on familyModalChildren by
+            // the photo upload/remove handlers.
+            profile_photo_path: familyModalChildren[idx]?.profile_photo_path || null,
         });
     });
     return children;
@@ -1082,6 +1168,7 @@ async function saveFamilyModal() {
                     discountValue: child.discount_value,
                     discountNote:  child.discount_note,
                     discountExpiresAt: child.discount_expires_at,
+                    profilePhotoPath: child.profile_photo_path,
                 });
             }
         } else {
@@ -1122,6 +1209,7 @@ async function saveFamilyModal() {
                         allergies:      child.allergies || [],
                         care_notes:     child.care_notes,
                         photo_release:  child.photo_release,
+                        profile_photo_path: child.profile_photo_path,
                         // Saving the child IS the review. An empty list stamped
                         // here means a real "no allergies"; unstamped means
                         // nobody has looked, and the staff app says exactly that
@@ -1142,9 +1230,19 @@ async function saveFamilyModal() {
                         allergies:     child.allergies || [],
                         careNotes:     child.care_notes,
                         photoRelease:  child.photo_release,
+                        profilePhotoPath: child.profile_photo_path,
                     });
                 }
             }
+        }
+
+        // Only now, with the DB rows saved successfully, is it safe to drop
+        // replaced/removed photo objects — deleting earlier would orphan a
+        // path the DB still referenced if this save had failed or been
+        // cancelled.
+        if (_fmPhotosToDelete.length) {
+            await Promise.all(_fmPhotosToDelete.map(p => deleteChildProfilePhoto(p).catch(() => {})));
+            _fmPhotosToDelete = [];
         }
 
         closeFamilyModal();
