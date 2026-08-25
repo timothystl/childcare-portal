@@ -265,12 +265,6 @@
                  family, so anything sitting here is a parent who has not been
                  told yet. Registered in AP_TOOLS as `incidents`; without that
                  entry this section would be unreachable. -->
-            <!-- Parent messaging (Phase 2). Registered in AP_TOOLS as
-                 `threads`; without that entry this section is unreachable. -->
-            <section class="admin-section collapsible-section" id="threadsSection">
-                <h2>💬 Parent Messages</h2>
-                <div id="threadsBody"></div>
-            </section>
 
             <!-- Announcement composer (design handoff `1h`). Write once, and
                  see exactly who gets it and where it lands. -->
@@ -357,11 +351,23 @@
         </div><!-- /#tab-families -->
 
         <!-- ── Tab: Messages ─────────────────────────────────── -->
+        <!-- Two separate tools, deliberately not merged into one inbox: different
+             tables, different lifecycles (see the AP_TOOLS comment above `threads`
+             and `msgHistory`). Both live under this one tab, with distinct names,
+             so nobody mistakes one empty inbox for the other again. -->
         <div class="tab-pane hidden" id="tab-messages">
 
+            <!-- Parent messaging (Phase 2) — two-way conversation with enrolled
+                 families. Registered in AP_TOOLS as `threads`; without that entry
+                 this section is unreachable. -->
+            <section class="admin-section collapsible-section" id="threadsSection">
+                <h2>💬 Family Conversations</h2>
+                <div id="threadsBody"></div>
+            </section>
+
             <section class="admin-section collapsible-section" id="messagesSection">
-                <h2>💬 Parent Messages</h2>
-                <p class="section-desc">Messages sent by parents via the Contact Us button on the registration portal.</p>
+                <h2>📮 Contact Us Messages</h2>
+                <p class="section-desc">One-off messages sent by parents via the Contact Us button on the registration portal.</p>
                 <div class="messages-header">
                     <button id="refreshMessagesBtn" class="btn-secondary">&#8635; Refresh</button>
                     <button id="toggleArchivedBtn" class="btn-secondary">Show Archived</button>
