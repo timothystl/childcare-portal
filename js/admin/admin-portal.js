@@ -1352,9 +1352,16 @@ function apDashPlanning(live) {
                 body: apStaffGridHtml(sf), tools: ['staffreq', 'schedule'] }),
             apPanel({ title: 'Waitlist pressure by room',
                 sub: 'Active applications against the seats actually open this week.',
-                body: apRowsHtml(pressure), tools: ['wlPlanner', 'wlDemand', 'planner', 'promotions'] }),
+                body: apRowsHtml(pressure), tools: ['wlPlanner', 'wlDemand', 'planner', 'promotions', 'wlImport'] }),
         ],
-        right: [],
+        // Enrollment Outlook's own pills — otherwise trends/forecast/ratioStep
+        // had no path in from a phone at all (fte and seatDay are reachable
+        // from the Staff dashboard's capacity panel, but these three weren't
+        // linked anywhere).
+        right: [
+            apPanel({ title: 'Enrollment outlook', sub: 'Trends, demand forecast, and the next ratio step.',
+                body: '', tools: ['trends', 'forecast', 'ratioStep'] }),
+        ],
         attention: [
             { icon: '👥', key: 'staffreq',   text: `The heaviest day this week needs ${peak} staff on the floor.`, cta: 'Open Daily Staffing' },
             { icon: '🎂', key: 'promotions', text: 'Check who ages up out of their room next — those days reopen.', cta: 'See Room Promotions' },
@@ -1386,7 +1393,12 @@ function apDashSettings(live) {
                 }))),
                 tools: ['capacity', 'ratios', 'rates'] }),
         ],
-        right: [],
+        // regWindow and summerCamp had no path in from a phone at all; adminPush
+        // (a full admin's own push toggle) was unreachable even for a full admin.
+        right: [
+            apPanel({ title: 'Registration & notifications', sub: '',
+                body: '', tools: ['regWindow', 'summerCamp', 'adminPush'] }),
+        ],
         attention: [
             { icon: '🔐', key: 'adminRoles', text: 'Review who holds full access to the portal.', cta: 'Open Admin Access' },
             { icon: '🧾', key: 'auditLog',   text: 'The audit log records every significant admin action.', cta: 'Open Audit Log' },
@@ -1467,7 +1479,12 @@ function apDashClassrooms(live) {
                 sub: 'Headcount against capacity. A room at ratio needs another staff member before the next child.',
                 body: apBarsHtml(bars), tools: ['roster', 'roomSched', 'capOverview'] }),
         ],
-        right: [],
+        // Below 900px this is the only path in to the whole Food Program
+        // group — nothing else on this dashboard mentioned CACFP at all.
+        right: [
+            apPanel({ title: 'Food Program', sub: 'CACFP meal counts, menus, income, and claims.',
+                body: '', tools: ['cacfpMeal', 'cacfpMenu', 'cacfpIncome', 'cacfpClaims'] }),
+        ],
         attention,
     };
 }
@@ -1543,7 +1560,7 @@ function apDashStaff(live) {
         left: [
             apPanel({ title: 'Coverage against requirement',
                 sub: 'What the saved schedule puts on the floor, against what the ratios ask for that day.',
-                body: apBarsHtml(bars), tools: ['schedule', 'staffreq', 'staffRoster'] }),
+                body: apBarsHtml(bars), tools: ['schedule', 'staffreq', 'staffRoster', 'pto'] }),
         ],
         right: offRows.length ? [
             apPanel({ title: 'Time off this week', tone: 'gold',
