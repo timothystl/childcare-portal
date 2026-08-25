@@ -1312,7 +1312,7 @@ describe('cross-file drift guard — worker.js SSR copies must match js/ source'
 describe('billing invoice integrity guards', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const migration = read('supabase/migrations/20260824_billing_invoice_integrity.sql');
+    const migration = read('supabase/migrations/20260825040000_billing_invoice_integrity.sql');
     const billingUi = read('js/admin/admin-billing.js');
     const billMonth = read('js/admin/admin-bill-month.js');
 
