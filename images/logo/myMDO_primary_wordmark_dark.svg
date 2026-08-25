@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 500">
-<g id="myMDO-wordmark">
-<g fill="none" stroke="#F5B731" stroke-width="18" stroke-linecap="round"><path d="M115 130 L80 100"/><path d="M150 110 L145 65"/><path d="M90 165 L45 158"/></g>
-<text x="95" y="300" font-family="Nunito, Arial Rounded MT Bold, sans-serif" font-size="260" font-style="italic" fill="#5BAD8B">my</text>
-<text x="430" y="300" font-family="Nunito, Arial Rounded MT Bold, sans-serif" font-size="245" font-weight="900" fill="#FFFFFF">MDO</text>
-<path d="M430 345 H1110" stroke="#F5B731" stroke-width="24" stroke-linecap="round"/>
-<circle cx="1150" cy="345" r="14" fill="#F5B731"/>
-<text x="430" y="425" font-family="Nunito, Arial, sans-serif" font-size="66" fill="#FFFFFF">Timothy Lutheran Church</text>
-</g></svg>
