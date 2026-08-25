@@ -92,7 +92,7 @@ function _afhWhoToBill(be) {
                 </div>`).join('')}
         </div>` : '<p class="afh-none">Nothing needs a look.</p>'}`;
 
-    return apPanel({ title: 'Who to bill', sub: `${be.rows.length} families this month`, body, tools: ['billMonth'] });
+    return apPanel({ title: 'Who to bill', sub: `${be.rows.length} families this month`, body, tools: ['billMonth', 'discount'] });
 }
 
 // ── Invoices ────────────────────────────────────────────────
