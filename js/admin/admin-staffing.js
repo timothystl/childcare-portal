@@ -88,6 +88,11 @@ let allStaffData       = [];
 let showInactiveStaff  = false;
 let editingStaffId     = null;
 let staffAvailability  = {};   // { staffId: { days: [...], maxHours: 40 } }
+let _staffPhotoUrlCache = new Map(); // profile_photo_path -> signed URL, for the roster table
+// A photo replaced/removed in the edit form, deleted only once the save
+// succeeds (see the identical reasoning in admin-families.js).
+let _sfPhotoToDelete = null;
+let _sfPendingPhotoPath = null; // uploaded-but-unsaved path for the currently open form
 
 function setupStaffRoster() {
     document.getElementById('addStaffBtn')?.addEventListener('click', () => openStaffForm());
@@ -124,6 +129,10 @@ async function loadStaffList() {
             fetchAllStaff({ includeInactive: showInactiveStaff }),
             fetchStaffAvailability(),
         ]);
+        const photoPaths = allStaffData.map(s => s.profile_photo_path).filter(Boolean);
+        _staffPhotoUrlCache = photoPaths.length
+            ? await fetchStaffProfilePhotoUrls(photoPaths).catch(() => new Map())
+            : new Map();
         renderStaffList(allStaffData);
     } catch (err) {
         container.innerHTML = `<p class="import-error">Failed to load staff: ${escHtml(err.message)}</p>`;
@@ -173,6 +182,7 @@ function renderStaffList(staff) {
         <table class="report-table staff-roster-table">
             <thead>
                 <tr>
+                    <th class="sr-col-photo"></th>
                     <th class="sr-col-name">Name</th>
                     <th class="sr-col-role">Role</th>
                     <th class="sr-col-room">Room</th>
@@ -191,8 +201,12 @@ function renderStaffList(staff) {
                     const payDisplay = isSalary
                         ? `<span class="pay-type-chip pay-salary">Salary</span> $${(s.salary_biweekly || 0).toFixed(2)}/period`
                         : `$${(s.hourly_rate || 0).toFixed(2)}/hr`;
+                    const photoUrl = s.profile_photo_path ? _staffPhotoUrlCache.get(s.profile_photo_path) : null;
                     return `
                         <tr class="${s.active ? '' : 'staff-inactive-row'}" data-staff-id="${s.id}">
+                            <td>${photoUrl
+                                ? `<img src="${escHtml(photoUrl)}" alt="" class="roster-photo-thumb">`
+                                : '<span class="roster-photo-thumb roster-photo-thumb-empty" aria-hidden="true"></span>'}</td>
                             <td><strong>${escHtml(s.name)}</strong></td>
                             <td>${escHtml(s.role || '—')}</td>
                             <td>${escHtml(roomLabel)}</td>
@@ -261,6 +275,10 @@ function openStaffForm(staff = null) {
     }
 
     editingStaffId = staff?.id || null;
+    _sfPhotoToDelete = null;
+    _sfPendingPhotoPath = staff?.profile_photo_path || null;
+    _renderStaffFormPhoto(staff?.profile_photo_path
+        ? _staffPhotoUrlCache.get(staff.profile_photo_path) : null);
     document.getElementById('staffFormTitle').textContent = staff ? 'Edit Staff Member' : 'Add Staff Member';
     document.getElementById('sfName').value      = staff?.name || '';
     document.getElementById('sfEmail').value     = staff?.email || '';
@@ -306,6 +324,41 @@ function openStaffForm(staff = null) {
     document.getElementById('sfName').focus();
 }
 
+// Repaints the staff form's photo cell and (re)binds its upload/remove
+// controls. Mirrors _fmRepaintPhoto() in admin-families.js — the storage
+// delete for a replaced/removed photo is deferred to save-success, so
+// cancelling the form never orphans a path the DB still references.
+function _renderStaffFormPhoto(photoUrl) {
+    const wrap = document.getElementById('sfPhotoWrap');
+    if (!wrap) return;
+    wrap.innerHTML = `
+        ${photoUrl ? `<img src="${escHtml(photoUrl)}" alt="" class="fmc-photo-img">` : '<span class="fmc-photo-empty">No photo</span>'}
+        <input type="file" accept="image/jpeg,image/png,image/webp" class="fmc-photo-file" id="sfPhotoFile" title="Upload a profile picture">
+        ${_sfPendingPhotoPath ? '<button type="button" class="fmc-photo-remove btn-secondary btn-sm" id="sfPhotoRemove" title="Remove photo">✕</button>' : ''}
+    `;
+    document.getElementById('sfPhotoFile')?.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const ext = (file.name.split('.').pop() || 'jpg').replace(/[^a-zA-Z0-9]/g, '') || 'jpg';
+            const filename = `${editingStaffId || 'new'}-${Date.now()}.${ext}`;
+            const oldPath = _sfPendingPhotoPath;
+            const newPath = await uploadStaffProfilePhoto(file, filename);
+            _sfPendingPhotoPath = newPath;
+            _staffPhotoUrlCache.set(newPath, URL.createObjectURL(file));
+            if (oldPath && oldPath !== newPath) _sfPhotoToDelete = oldPath;
+            _renderStaffFormPhoto(_staffPhotoUrlCache.get(newPath));
+        } catch (err) {
+            alert('Photo upload failed: ' + err.message);
+        }
+    });
+    document.getElementById('sfPhotoRemove')?.addEventListener('click', () => {
+        if (_sfPendingPhotoPath) _sfPhotoToDelete = _sfPendingPhotoPath;
+        _sfPendingPhotoPath = null;
+        _renderStaffFormPhoto(null);
+    });
+}
+
 function _togglePayFields(payType) {
     const hourlyRow = document.getElementById('sfHourlyRow');
     const salaryRow = document.getElementById('sfSalaryRow');
@@ -321,6 +374,11 @@ function _togglePayFields(payType) {
 function closeStaffForm() {
     document.getElementById('staffEditForm').classList.add('hidden');
     editingStaffId = null;
+    // Discard — nothing was actually deleted from storage yet, and an
+    // uploaded-but-unsaved photo (if any) is simply left orphaned in storage,
+    // same tradeoff as admin-families.js.
+    _sfPhotoToDelete = null;
+    _sfPendingPhotoPath = null;
     // Reset the Save button — the success path closes the form without re-enabling
     // it, so without this it would stay disabled ("Saving…") on the next open.
     const saveBtn = document.getElementById('saveStaffBtn');
@@ -365,6 +423,9 @@ async function onSaveStaffMember() {
         if (cb.checked) excluded_rooms.push(cb.dataset.roomId);
     });
     const savingId     = editingStaffId;
+    // Captured before closeStaffForm() clears them.
+    const photoToDelete  = _sfPhotoToDelete;
+    const pendingPhotoPath = _sfPendingPhotoPath;
 
     try {
         const returnedId = await upsertStaffMember({
@@ -380,7 +441,12 @@ async function onSaveStaffMember() {
             hireDate:        document.getElementById('sfHireDate').value || null,
             staffPin:        pinVal || null,
             ptoStartingBalance: parseFloat(document.getElementById('sfPtoStartingBalance').value) || 0,
+            profilePhotoPath: pendingPhotoPath,
         });
+
+        // Only now, with the DB row saved successfully, is it safe to drop a
+        // replaced/removed photo object (same reasoning as admin-families.js).
+        if (photoToDelete) deleteStaffProfilePhoto(photoToDelete).catch(() => {});
 
         // Close immediately — don't make the user wait for the list to reload
         closeStaffForm();

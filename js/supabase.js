@@ -1765,6 +1765,40 @@ async function fetchChildProfilePhotoUrls(paths, ttlSeconds = 3600) {
     return urlByPath;
 }
 
+// Upload a staff member's own profile picture (Staff Roster, admin-only) to
+// the PRIVATE staff-profile-photos bucket and return the storage path. This
+// is NOT the public staff-photos bucket used by the marketing "Our Staff"
+// directory (settings.staff_directory) — that one is deliberately public and
+// keyed by name-matching; this one is a per-row admin roster photo.
+async function uploadStaffProfilePhoto(file, filename) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient.storage.from('staff-profile-photos').upload(filename, file, {
+        contentType: file.type || 'image/jpeg',
+        upsert: true,
+    });
+    if (error) throw error;
+    return filename;
+}
+
+async function deleteStaffProfilePhoto(path) {
+    if (!sbClient || !path) return;
+    const { error } = await sbClient.storage.from('staff-profile-photos').remove([path]);
+    if (error) throw error;
+}
+
+async function fetchStaffProfilePhotoUrls(paths, ttlSeconds = 3600) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const clean = [...new Set((paths || []).filter(Boolean))];
+    if (!clean.length) return new Map();
+    const { data: signed, error } = await sbClient
+        .storage.from('staff-profile-photos')
+        .createSignedUrls(clean, ttlSeconds);
+    if (error) throw friendlyError(error);
+    const urlByPath = new Map();
+    (signed || []).forEach(s => { if (s.signedUrl) urlByPath.set(s.path, s.signedUrl); });
+    return urlByPath;
+}
+
 // Load staff-to-child ratios from Supabase and merge into ROOMS array.
 async function loadRatioSettings() {
     if (!sbClient) return false;
@@ -1874,7 +1908,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('staff')
-        .select('id, name, email, phone, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at, pto_starting_balance')
+        .select('id, name, email, phone, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at, pto_starting_balance, profile_photo_path')
         .order('name');
     if (!includeInactive) query = query.eq('active', true);
     const { data, error } = await query;
@@ -1882,7 +1916,7 @@ async function fetchAllStaff({ includeInactive = false } = {}) {
     return data || [];
 }
 
-async function upsertStaffMember({ id = null, name, email, phone, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin, ptoStartingBalance }) {
+async function upsertStaffMember({ id = null, name, email, phone, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin, ptoStartingBalance, profilePhotoPath }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const record = {
         name,
@@ -1895,6 +1929,7 @@ async function upsertStaffMember({ id = null, name, email, phone, role, payType,
         room_id:          roomId || null,
         hire_date:        hireDate || null,
         pto_starting_balance: ptoStartingBalance || 0,
+        profile_photo_path: profilePhotoPath || null,
     };
     let staffId = id;
     if (id) {

@@ -32,6 +32,7 @@ const PT_NOTIF_ROWS = [
 ];
 
 let paData = null;
+let _paPhotoUrlCache = new Map(); // profile_photo_path -> signed URL
 
 function paEl(id) { return document.getElementById(id); }
 function paEsc(s) {
@@ -45,11 +46,24 @@ function paPref(key) {
     return v === undefined || v === null ? PT_NOTIF_DEFAULTS[key] : !!v;
 }
 
-// A monogram, never a photo. The design is explicit: avatars under 64px are
-// monogram circles, so there is nothing to load and nothing to leak.
+// A monogram fallback for anyone without a photo on file (always true for
+// parents/guardians — only children have a profile picture).
 function paMonogram(name, cls = '') {
     const letter = (String(name || '?').trim()[0] || '?').toUpperCase();
     return `<span class="pa-mono ${cls}">${paEsc(letter)}</span>`;
+}
+
+// A child's profile picture if one is on file and signed, else the monogram
+// fallback. The bucket is private, so a bare path is never enough — paLoad()
+// signs every child's photo up front via fetchChildProfilePhotoUrls(), which
+// itself goes through the "Parent read own child profile photo" storage
+// policy (parent_owns_student()): this parent gets a URL only for their own
+// children, same as every other child-photo path in this app.
+function paChildAvatar(c, cls = '') {
+    const url = c.profile_photo_path ? _paPhotoUrlCache.get(c.profile_photo_path) : null;
+    return url
+        ? `<img src="${paEsc(url)}" alt="" class="pa-mono pa-mono-photo ${cls}">`
+        : paMonogram(c.child_name, cls);
 }
 
 function paAge(dob) {
@@ -83,7 +97,7 @@ function paRender() {
     wrap.innerHTML = `
         ${paCard('Children', (paData.children || []).map(c => `
             <button type="button" class="pa-row pa-row-tap" data-child="${paEsc(c.id)}">
-                ${paMonogram(c.child_name)}
+                ${paChildAvatar(c)}
                 <span class="pa-row-main">
                     <span class="pa-row-name">${paEsc(c.child_name)}</span>
                     <span class="pa-row-sub">${paEsc(paRoomLabel(c))}${c.child_dob ? ' · ' + paEsc(paAge(c.child_dob)) : ''}</span>
@@ -275,6 +289,8 @@ async function paLoad() {
     if (wrap) wrap.innerHTML = '<p class="pa-empty">Loading…</p>';
     try {
         paData = await fetchMyAccount();
+        const paths = (paData?.children || []).map(c => c.profile_photo_path).filter(Boolean);
+        _paPhotoUrlCache = paths.length ? await fetchChildProfilePhotoUrls(paths).catch(() => new Map()) : new Map();
     } catch (e) {
         console.warn('account:', e);
         paData = null;
