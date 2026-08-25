@@ -1439,8 +1439,13 @@ function apDashClassrooms(live) {
           sub: atRatio.length ? atRatio.map(r => r.label.replace(/^\S+\s/, '')).join(', ') : 'all rooms have headroom' },
     ];
     if (live.families.length) {
+        // ⚠️ Below 900px the sidebar's tool-group listing is hidden entirely
+        // (apNavHtml's comment) and a dashboard pill is the ONLY way to reach
+        // a tool on mobile. Without `link` here, Family Directory had no path
+        // in from the Classrooms dashboard on a phone at all.
         kpis.push({ label: 'Children on file', tone: 'ok', value: onFile,
-                    sub: `${live.families.length} families` });
+                    sub: `${live.families.length} families`,
+                    link: 'families', linkIcon: '👨‍👩‍👧', linkLabel: 'Open Family Directory' });
         if (missing) kpis.push({ label: 'No days this month', tone: 'gold', value: missing,
                                  sub: 'children with nothing booked',
                                  link: 'missingCal', linkIcon: '⚠️', linkLabel: 'Review them' });
