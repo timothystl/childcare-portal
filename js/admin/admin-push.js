@@ -3,15 +3,17 @@
 // ============================================================
 // Push plumbing (worker.js VAPID signing + RFC 8291 encryption) has existed
 // for parents and named staff for months, but nothing ever subscribed an
-// admin login — a new message in the Parent Messages inbox (admin-threads.js)
-// just sat there until someone happened to open that tab. This is the
-// Settings toggle that closes that gap.
+// admin login — a new message in the Messages inbox just sat there until
+// someone happened to open that tab. This is the "Notify me" toggle that
+// closes that gap — it lives in the Messages tab header now (moved there
+// from Settings in the Messages & Settings consolidation, 2026-08-26; see
+// admin-messages-unified.js), the markup and this logic unchanged.
 //
 // ⚠️ Gated to 'full' admins only, both here and server-side
 // (/admin-push-subscribe checks admin_role() itself — never trust this
 // client-side check alone). A 'restricted' or 'staff' login never sees the
-// office-wide Parent Messages inbox, so pushing them would alert someone who
-// has nowhere to act on it.
+// office-wide Messages inbox, so pushing them would alert someone who has
+// nowhere to act on it.
 
 const AP_PUSH_VAPID_PUBLIC_KEY =
     'BBIxNz5wAh3wt5Rb3OXdirHU8_25JKle9pTDtWRHmFNkv5gLuTOX5lckdNdV0pNPaXx-qj6N9lFwrdW8auBnAhk';

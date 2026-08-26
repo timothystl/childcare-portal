@@ -1490,25 +1490,44 @@ async function fetchMessages(showArchived = false) {
     // Try with is_archived column; fall back gracefully if it hasn't been added yet
     let query = sbClient
         .from('messages')
-        .select('id, parent_name, parent_email, message, created_at, is_read, is_archived')
+        .select('id, parent_name, parent_email, message, created_at, is_read, is_archived, needs_email_followup, replied_by_email, replied_by_email_at')
         .order('created_at', { ascending: false })
         .limit(75);
     if (!showArchived) query = query.eq('is_archived', false);
     const { data, error } = await query;
     if (error) {
-        // Column doesn't exist yet — fetch without it and default is_archived to false
-        if (error.message && error.message.includes('is_archived')) {
+        // Columns don't exist yet (e.g. add_message_email_followup.sql not
+        // applied) — fall back to the older column set rather than fail the
+        // whole inbox.
+        if (error.message && /is_archived|needs_email_followup|replied_by_email/.test(error.message)) {
             const fallback = await sbClient
                 .from('messages')
                 .select('id, parent_name, parent_email, message, created_at, is_read')
                 .order('created_at', { ascending: false })
                 .limit(75);
             if (fallback.error) throw fallback.error;
-            return (fallback.data || []).map(m => ({ ...m, is_archived: false }));
+            return (fallback.data || []).map(m => ({
+                ...m, is_archived: false,
+                needs_email_followup: false, replied_by_email: false, replied_by_email_at: null,
+            }));
         }
         throw error;
     }
     return data || [];
+}
+
+/** Toggle the "needs an email" flag and/or the "replied by email" checkbox on a
+ *  Contact Us message. Setting repliedByEmail=true stamps replied_by_email_at. */
+async function setMessageEmailFollowup(id, { needsEmail, repliedByEmail } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const patch = {};
+    if (needsEmail !== undefined) patch.needs_email_followup = !!needsEmail;
+    if (repliedByEmail !== undefined) {
+        patch.replied_by_email = !!repliedByEmail;
+        patch.replied_by_email_at = repliedByEmail ? new Date().toISOString() : null;
+    }
+    const { error } = await sbClient.from('messages').update(patch).eq('id', id);
+    if (error) throw error;
 }
 
 async function markMessageRead(id, isRead = true) {
