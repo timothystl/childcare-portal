@@ -111,24 +111,20 @@ const AP_TOOLS = [
       blurb: 'Every drill run, who was in the building, and how long it took.' },
     { key: 'announce',    pane: 'daily',         section: 'announcementsSection',    tab: 'classrooms', group: 'Records', tint: AP_TINT.tang, icon: '📣', name: 'Announcements',
       blurb: 'Write once — closures, news, events — and see who gets it.' },
-    // ── Finance · Money In (design handoff: Finance.dc.html) ──
-    // Bill This Month is the approval front door — she opens this, not
-    // Invoices, when the month needs billing. Invoices stays as the register
-    // of what has actually been issued (edit, adjust, resend one).
-    { key: 'billMonth',   pane: 'finance', section: 'billThisMonthSection',   tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🧾', name: 'Bill This Month',
-      blurb: 'Drafts build themselves; review what changed, release the rest.' },
-    { key: 'invoices',    pane: 'finance', section: 'invoicesSection',       tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📨', name: 'Invoices',
-      blurb: "Every invoice this month — edit, adjust, resend one." },
-    { key: 'whoOwes',     pane: 'finance', section: 'whoOwesSection',        tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📋', name: 'Who Owes',
-      blurb: 'Unpaid families, worst first — nudge, plan, or write off.' },
-    { key: 'billingReport', pane: 'finance', section: 'billingReportSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📊', name: 'Billing Report',
-      blurb: 'Every registration and its rate — printable, ties to the invoices.' },
+    // ── Finance · Money In (design handoff: Finance Hub, 2026-08-26) ──
+    // Bill This Month, Invoices, Who Owes, and Family Billing Summary are
+    // consolidated into one ledger screen — the director's own complaint was
+    // too many screens with numbers that didn't visibly agree ("111 to bill"
+    // vs. "96 drafted" vs. "84 owe", no explanation of the gap). Billing
+    // Report survives as this tool's own second tab (Ledger / Billing
+    // Report), not a separate nav entry — see admin-finance-hub.js and the
+    // nested #billingReportSection markup in admin.html.
+    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance',
+      blurb: 'Billing, invoices, and who owes — one ledger, one number for each.' },
     { key: 'ar',          pane: 'finance', section: 'billingArSection',      tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📋', name: 'Accounts Receivable',
       blurb: 'Payment status per family for a month — overdue, partial, paid.' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
-    { key: 'famBilling',  pane: 'reports', section: 'familyBillingSection',  tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '👨‍👩‍👧', name: 'Family Billing Summary',
-      blurb: 'Per-family totals for a month, ready to invoice.' },
 
     // ── Finance · Bookkeeper ──
     // "The director does not do the monthly close-out and does not need room
@@ -696,12 +692,9 @@ function apOnToolOpened(tool) {
         if (tool.key === 'ar' && typeof setupBillingDashYear === 'function' && !window._apArInit) {
             window._apArInit = true; setupBillingDashYear();
         }
-        if (tool.key === 'invoices' && typeof renderInvoicesTool === 'function') renderInvoicesTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'announce' && typeof renderAnnouncementsTool === 'function') renderAnnouncementsTool();
-        if (tool.key === 'billMonth' && typeof renderBillMonthTool === 'function') renderBillMonthTool();
-        if (tool.key === 'whoOwes' && typeof renderWhoOwesTool === 'function') renderWhoOwesTool();
-        if (tool.key === 'billingReport' && typeof renderBillingReportTool === 'function') renderBillingReportTool();
+        if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
         if (tool.key === 'staffInjury' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();
@@ -1160,7 +1153,7 @@ function apDashDirector(live) {
             label: 'Billed this month', tone: sentThisMonth ? 'ok' : 'warn', value: apMoney(live.billed),
             sub: invSub,
             check: 'Billing completed',
-            link: 'invoices', linkIcon: '🧾', linkLabel: 'Review and send',
+            link: 'financeHub', linkIcon: '🧾', linkLabel: 'Review and send',
         },
     ];
 
@@ -1234,7 +1227,7 @@ function apDashDirector(live) {
         title: `${inv.unsent} invoice${inv.unsent === 1 ? '' : 's'} drafted, not sent`,
         pill: 'THIS MONTH',
         context: `${apMoney(inv.total)} sitting in draft — accounts receivable ages from the day you send.`,
-        actions: [{ key: 'invoices', label: 'Review and send', primary: true }],
+        actions: [{ key: 'financeHub', label: 'Review and send', primary: true }],
     });
 
     if (live.unread) needsYou.push({
@@ -1273,9 +1266,9 @@ function apDashDirector(live) {
     const edgeRooms = edgeRoomsForQueue(sf, peakIx);
     if (edgeRooms.length) attention.push({ icon: '⚖️', key: 'ratios',
         text: `${edgeRooms.map(r => r.label).join(', ')} sit${edgeRooms.length > 1 ? '' : 's'} exactly at ratio on ${peakDay} — one more child adds a staff member.`, cta: 'Open Ratios' });
-    if (inv.unsent) attention.push({ icon: '🧾', key: 'invoices', urgent: true,
+    if (inv.unsent) attention.push({ icon: '🧾', key: 'financeHub', urgent: true,
         text: `${inv.unsent} invoice${inv.unsent === 1 ? ' is' : 's are'} drafted for this month but not marked sent.`, cta: 'Review and send invoices' });
-    else if (!inv.drafted && live.billed > 0) attention.push({ icon: '🧾', key: 'invoices',
+    else if (!inv.drafted && live.billed > 0) attention.push({ icon: '🧾', key: 'financeHub',
         text: `${apMoney(live.billed)} is billable this month but no invoices have been drafted.`, cta: 'Open invoices' });
     if (live.unread) attention.push({ icon: '✉️', key: 'msgHistory',
         text: `${live.unread} Contact Us message${live.unread > 1 ? 's have' : ' has'} not been read.`, cta: 'Open Contact Us Messages' });
