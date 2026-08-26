@@ -35,7 +35,7 @@ function apDashFinanceHome(live) {
     const kpis = [
         { label: `To bill · ${_afhMonthLabel(live.monthKey)}`, tone: 'gold', value: apMoney(toBill),
           sub: be ? `${be.rows.length} families` : '—',
-          link: 'billMonth', linkIcon: '🧾', linkLabel: 'Bill the month' },
+          link: 'financeHub', linkIcon: '🧾', linkLabel: 'Bill the month' },
         { label: 'Invoices out', tone: 'navy', value: apMoney(inv.total),
           sub: `${inv.sent} sent${inv.unsent ? `, ${inv.unsent} held` : ''}` },
         { label: 'Collected', tone: 'ok', value: apMoney(collected),
@@ -43,7 +43,7 @@ function apDashFinanceHome(live) {
               ? `${methodCounts.autopay} autopay, ${methodCounts.check} check` : 'this month' },
         { label: 'Still owed', tone: 'warn', value: apMoney(stillOwed),
           sub: `${unpaidFamilies.length} famil${unpaidFamilies.length === 1 ? 'y' : 'ies'}`,
-          link: 'whoOwes', linkIcon: '📋', linkLabel: 'Open Who Owes' },
+          link: 'financeHub', linkIcon: '📋', linkLabel: 'Open Who Owes' },
     ];
 
     return {
@@ -70,7 +70,7 @@ function _afhMonthLabel(monthKey) {
 // ── Who to bill ─────────────────────────────────────────────
 function _afhWhoToBill(be) {
     if (!be) {
-        return apPanel({ title: 'Who to bill', body: '<p class="empty-hint">Could not load this month’s drafts.</p>', tools: ['billMonth'] });
+        return apPanel({ title: 'Who to bill', body: '<p class="empty-hint">Could not load this month’s drafts.</p>', tools: ['financeHub'] });
     }
     const clean = be.clean.filter(r => !r.withdrawn);
     const exceptions = be.exceptions.filter(r => !r.withdrawn);
@@ -78,7 +78,7 @@ function _afhWhoToBill(be) {
     const body = `
         <div class="afh-clean-row">
             <span>Same rooms, same days, same discounts — $${be.cleanTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            <button class="btn-primary btn-sm" data-ap-go="billMonth">Release all ${clean.length}</button>
+            <button class="btn-primary btn-sm" data-ap-go="financeHub">Release all ${clean.length}</button>
         </div>
         ${exceptions.length ? `
         <div class="afh-exc-band">${exceptions.length} need${exceptions.length === 1 ? 's' : ''} a look before they send</div>
@@ -88,11 +88,11 @@ function _afhWhoToBill(be) {
                     <span class="afh-exc-name">${escHtml(r.name)}</span>
                     <span class="afh-exc-cause">${escHtml(r.causes[0]?.text || '')}</span>
                     <span class="afh-exc-amt">$${r.total.toFixed(2)}</span>
-                    <button class="afh-review" data-ap-go="billMonth">Review →</button>
+                    <button class="afh-review" data-ap-go="financeHub">Review →</button>
                 </div>`).join('')}
         </div>` : '<p class="afh-none">Nothing needs a look.</p>'}`;
 
-    return apPanel({ title: 'Who to bill', sub: `${be.rows.length} families this month`, body, tools: ['billMonth', 'discount'] });
+    return apPanel({ title: 'Who to bill', sub: `${be.rows.length} families this month`, body, tools: ['financeHub', 'discount'] });
 }
 
 // ── Invoices ────────────────────────────────────────────────
@@ -124,9 +124,9 @@ function _afhInvoices(wo, inv) {
                 <span class="afh-recent-note">${escHtml(_afhProvenance(p))}</span>
             </div>`).join('')}
         </div>` : ''}
-        <button class="ap-pill" data-ap-go="invoices">Show all ${wo.length || inv.drafted}</button>`;
+        <button class="ap-pill" data-ap-go="financeHub">Show all ${wo.length || inv.drafted}</button>`;
 
-    return apPanel({ title: 'Invoices', sub: 'Status and where each payment came from', body, tools: ['invoices'] });
+    return apPanel({ title: 'Invoices', sub: 'Status and where each payment came from', body, tools: ['financeHub'] });
 }
 
 function _afhProvenance(p) {
@@ -155,8 +155,8 @@ function _afhWhoStillOwes(unpaid) {
             <div class="afh-owe-days ${ageCls}">${days == null ? 'Not sent yet' : `${days} day${days === 1 ? '' : 's'} late`}</div>
             <div class="afh-owe-why">${escHtml(why)}</div>
             ${worst ? `<div class="afh-owe-decide">
-                <button class="btn-xs" data-ap-go="whoOwes">Payment plan</button>
-                <button class="btn-xs" data-ap-go="whoOwes">Write off</button>
+                <button class="btn-xs" data-ap-go="financeHub">Payment plan</button>
+                <button class="btn-xs" data-ap-go="financeHub">Write off</button>
             </div>` : ''}
         </div>`;
     }).join('');
@@ -168,8 +168,8 @@ function _afhWhoStillOwes(unpaid) {
         </div>
         ${blocks || '<p class="afh-none">Nobody owes anything right now.</p>'}
         <div class="afh-owes-foot">
-            <button class="ap-pill" data-ap-go="whoOwes">Open Who Owes →</button>
-            ${sorted.length ? `<button class="btn-primary btn-sm" data-ap-go="whoOwes">Nudge all ${sorted.length}</button>` : ''}
+            <button class="ap-pill" data-ap-go="financeHub">Open Who Owes →</button>
+            ${sorted.length ? `<button class="btn-primary btn-sm" data-ap-go="financeHub">Nudge all ${sorted.length}</button>` : ''}
         </div>
     </section>`;
 }
@@ -195,6 +195,6 @@ function _afhComingUp(live) {
     return apPanel({
         title: 'Coming up',
         body: rows.length ? apRowsHtml(rows) : '<p class="afh-none">Nothing scheduled.</p>',
-        tools: ['famBilling', 'scenario'],
+        tools: ['financeHub', 'scenario'],
     });
 }

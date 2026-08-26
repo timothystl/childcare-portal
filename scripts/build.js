@@ -194,6 +194,7 @@ const ENTRIES = [
                 'js/admin/admin-billing-report.js',
                 'js/admin/admin-who-owes.js',
                 'js/admin/admin-finance-home.js',
+                'js/admin/admin-finance-hub.js',
                 'js/admin/admin-staffing.js',
                 'js/admin/admin-settings.js',
                 'js/admin/admin-waitlist.js',

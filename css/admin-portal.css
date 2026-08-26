@@ -1095,3 +1095,204 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .afh-owe-why { font-size: .84em; color: var(--text-muted); margin-top: 2px; }
 .afh-owe-decide { display: flex; gap: 8px; margin-top: 8px; }
 .afh-owes-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; }
+
+/* ============================================================
+   FINANCE HUB — Ledger (design handoff: Finance Hub, 2026-08-26)
+   ============================================================
+   Consolidates Bill This Month, Who Owes, Invoices, and Family Billing
+   Summary. See js/admin/admin-finance-hub.js. The family drawer reuses
+   .inc-drawer/.inc-scrim (css/admin.css) rather than a second component. */
+
+.fh-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.fh-head-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fh-month-switch {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--linen); border: 1px solid var(--border); border-radius: 999px;
+    padding: 6px 12px; font-weight: 700; color: var(--navy);
+}
+.fh-month-arrow {
+    background: none; border: none; cursor: pointer; color: var(--navy);
+    font-size: .9em; padding: 2px 4px; border-radius: 6px;
+    transition: background .15s;
+}
+.fh-month-arrow:hover:not(:disabled) { background: var(--warm-gray); }
+.fh-month-arrow:disabled { opacity: .35; cursor: default; }
+.fh-month-label { min-width: 8ch; text-align: center; }
+.fh-search {
+    background: var(--linen); border: 1px solid var(--border); border-radius: 999px;
+    padding: 7px 14px; font-family: var(--font-body); font-size: .9em; width: 180px;
+}
+
+.fh-tabs { display: flex; gap: 2px; margin: 16px 0 0; border-bottom: 1px solid var(--border); }
+.fh-tab {
+    border: none; cursor: pointer; font-family: var(--font-body); font-weight: 700; font-size: .92em;
+    padding: 10px 18px; border-radius: 9px 9px 0 0;
+    background: var(--linen); color: var(--navy);
+    transition: background .15s, color .15s;
+}
+.fh-tab:hover:not(.is-on) { background: var(--warm-gray); }
+.fh-tab.is-on { background: var(--navy); color: #fff; }
+
+#fhLedgerPane { padding-top: 18px; }
+.fh-report-pane { padding-top: 18px; }
+.fh-report-pane > h3 { margin: 0 0 4px; font-family: var(--font-head); color: var(--navy); }
+
+/* Reconciliation strip */
+.fh-strip {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 14px 0 18px;
+}
+.fh-stat { min-width: 96px; }
+.fh-stat-num { font-family: var(--font-head); font-size: 26px; font-weight: 800; color: var(--navy); line-height: 1; }
+.fh-stat-tang .fh-stat-num { color: var(--tang); }
+.fh-stat-label { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; }
+.fh-underline { text-decoration: underline; text-decoration-color: var(--tang); }
+.fh-arrow { color: var(--border); font-size: 20px; }
+.fh-stat.is-clickable { cursor: pointer; border-radius: 8px; padding: 4px 6px; margin: -4px -6px; transition: background .15s; }
+.fh-stat.is-clickable:hover { background: var(--linen); }
+#fhReleaseBtn { margin-left: auto; }
+
+/* Owed banner */
+.fh-owed-banner {
+    display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--sun-pale); border: 1px solid var(--sun-lt); border-radius: var(--radius-md);
+    padding: 14px 18px; margin-bottom: 14px;
+}
+.fh-owed-main strong { font-size: 1.1em; color: var(--navy); }
+.fh-owed-sub { font-size: .82em; color: var(--text-muted); margin-top: 3px; }
+.fh-owed-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.fh-aging { display: flex; gap: 12px; margin-bottom: 14px; }
+.fh-aging-col { flex: 1; background: var(--linen); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; text-align: center; }
+.fh-aging-col.fh-aging-watch { background: var(--sun-pale); border-color: var(--sun-lt); }
+.fh-aging-col.fh-aging-severe { background: var(--tang-pale); border-color: var(--tang); }
+.fh-aging-label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.fh-aging-amt { font-family: var(--font-head); font-size: 20px; font-weight: 800; color: var(--navy); margin-top: 2px; }
+.fh-aging-count { font-size: .8em; color: var(--text-muted); }
+
+/* Filter chips */
+.fh-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.fh-chip {
+    border: 1px solid var(--border); background: #fff; border-radius: 999px;
+    padding: 6px 14px; font-family: var(--font-body); font-weight: 700; font-size: .84em;
+    color: var(--navy); cursor: pointer; transition: background .15s, color .15s;
+}
+.fh-chip:hover { background: var(--linen); }
+.fh-chip-count { color: var(--text-muted); font-weight: 700; }
+.fh-chip.is-on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.fh-chip.is-on .fh-chip-count { color: rgba(255,255,255,.75); }
+.fh-chip-needs_review.is-on, .fh-chip-owing.is-on { background: var(--tang); border-color: var(--tang); }
+.fh-chip-paid.is-on { background: var(--green); border-color: var(--green); }
+
+/* Table */
+.fh-table td { vertical-align: middle; }
+.fh-row-open { cursor: pointer; }
+.fh-row-open:hover strong { text-decoration: underline; }
+.fh-note { color: var(--text-muted); font-size: .88em; max-width: 32ch; }
+.fh-bal-owed { color: var(--tang-dark); font-weight: 700; }
+.fh-bal-clear { color: var(--green-text); font-weight: 700; }
+.fh-row-actions { white-space: nowrap; text-align: right; }
+.fh-row-actions .btn-xs { margin-left: 6px; }
+
+.fh-pill { display: inline-block; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 3px 9px; }
+.fh-pill-review    { background: #FDEEE8; color: #7a2a18; }
+.fh-pill-drafted   { background: var(--linen); color: var(--navy); border: 1px solid var(--border); }
+.fh-pill-sent      { background: #FFF8E1; color: #7a5a00; border: 1px solid #FDE598; }
+.fh-pill-paid      { background: #EAF5EF; color: #3A7B60; border: 1px solid #C9E6DC; }
+.fh-pill-declined  { background: #FDEEE8; color: #7a2a18; border: 1.5px solid var(--tang); }
+.fh-pill-withdrawn { background: #F5F0E4; color: var(--text-muted); }
+
+/* Month history (read-only) */
+.fh-history-banner {
+    background: var(--linen); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 14px 18px; margin-bottom: 16px;
+}
+.fh-history-banner strong { color: var(--navy); font-family: var(--font-head); font-size: 1.05em; }
+.fh-history-banner p { margin: 6px 0 0; font-size: .88em; color: var(--text-muted); }
+.fh-history-foot { text-align: center; margin-top: 16px; }
+
+/* Note editor footer */
+.fh-note-editor { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); max-width: 76ch; }
+.fh-note-editor label { display: block; font-weight: 600; font-size: .9em; margin-bottom: 6px; }
+.fh-note-hint { font-weight: 400; color: var(--text-muted); }
+.fh-note-editor textarea {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-family: var(--font-body); font-size: .92em; background: #fff;
+}
+.fh-note-row { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.fh-note-status { font-size: .85em; color: var(--green-text); font-weight: 700; }
+
+/* Family drawer content — hosted inside the shared .inc-drawer chrome */
+.fh-dr-card-title { font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+.fh-dr-card-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.fh-dr-line { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: .92em; }
+.fh-dr-line-sub { font-size: 11px; color: var(--text-muted); margin: -2px 0 6px; }
+.fh-dr-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; font-weight: 700; }
+.fh-dr-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
+.fh-dr-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.fh-btn-green { color: var(--green-text); border-color: var(--green-lt); }
+.fh-btn-green:hover { background: var(--green-pale); }
+
+.fh-override-btn {
+    background: #fff; border: 1px solid var(--border); color: var(--tang-dark);
+    border-radius: var(--radius-sm); padding: 8px 14px; font-family: var(--font-body);
+    font-weight: 700; font-size: .86em; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.fh-override-btn:hover { background: var(--tang-pale); border-color: var(--tang); }
+.fh-required { color: var(--tang-dark); font-weight: 400; font-size: .85em; }
+
+.btn-approve {
+    background: var(--green); border: none; color: #fff; border-radius: var(--radius-sm);
+    padding: 8px 14px; font-family: var(--font-body); font-weight: 700; font-size: .86em;
+    cursor: pointer; transition: background .15s;
+}
+.btn-approve:hover { background: var(--green-dark); }
+
+.fh-mini-form {
+    background: var(--linen); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 12px 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.fh-mini-form-caution { background: var(--tang-pale); border-color: var(--tang-soft, var(--tang)); }
+.fh-mini-form label { font-size: .82em; font-weight: 700; color: var(--navy); display: flex; flex-direction: column; gap: 3px; }
+.fh-mini-form input, .fh-mini-form select {
+    font-family: var(--font-body); font-size: .92em; padding: 6px 10px;
+    border: 1px solid var(--border); border-radius: 6px; font-weight: 400;
+}
+.fh-mini-form-btns { display: flex; gap: 8px; margin-top: 2px; }
+
+.fh-link-btn { background: none; border: none; color: var(--navy-lt); font-weight: 700; font-size: .86em; cursor: pointer; text-decoration: underline; }
+.fh-pay-method { font-size: .8em; color: var(--text-muted); }
+.fh-remind-btn {
+    background: none; border: none; color: var(--tang); font-weight: 700; font-size: .88em; cursor: pointer;
+}
+.fh-remind-btn:hover { text-decoration: underline; }
+
+/* Print statement overlay — in-DOM, not window.open() (popups get blocked
+   in sandboxed/embedded contexts). @media print hides everything else. */
+.fh-print-scrim {
+    position: fixed; inset: 0; background: #fff; z-index: 200;
+    display: flex; flex-direction: column; align-items: center; overflow-y: auto; padding: 40px 20px;
+}
+.fh-print-sheet {
+    max-width: 680px; width: 100%; font-family: Arial, Helvetica, sans-serif; color: #222;
+}
+.fh-print-sheet h1 { font-size: 22px; margin: 0 0 4px; }
+.fh-print-sheet h2 { font-size: 15px; margin: 22px 0 8px; }
+.fh-print-sheet table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fh-print-sheet th, .fh-print-sheet td { border-bottom: 1px solid #ddd; padding: 6px 4px; text-align: left; }
+.fh-print-close {
+    margin-top: 24px; background: var(--navy); color: #fff; border: none; border-radius: var(--radius-sm);
+    padding: 9px 18px; font-family: var(--font-body); font-weight: 700; cursor: pointer;
+}
+@media print {
+    body > *:not(.fh-print-scrim) { display: none !important; }
+    .fh-print-scrim { position: static; padding: 0; }
+    .no-print { display: none !important; }
+}
+
+@media (max-width: 720px) {
+    .fh-strip { gap: 8px; }
+    .fh-arrow { display: none; }
+    #fhReleaseBtn { margin-left: 0; width: 100%; }
+    .fh-search { width: 100%; }
+}

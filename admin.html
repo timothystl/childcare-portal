@@ -1780,106 +1780,85 @@
                 </div>
             </section>
 
-            <!-- Accounts Receivable -->
-            <!-- Invoices — the step between computing a bill and chasing it.
-                 Renders via renderInvoicesTool() in js/admin/admin-billing.js,
-                 over the same _buildFamilyBillingData() the Family Billing
-                 Summary uses. No second calculation. -->
-            <!-- Bill the month (design handoff 1c — exceptions-only). The
-                 approval front door: drafts every family from registrations,
-                 surfaces only the ones that changed since last month, and
-                 releases the rest in one tap. Draft/send reuse the exact same
-                 calls the Invoices tool below uses — see admin-bill-month.js. -->
-            <section class="admin-section" id="billThisMonthSection">
-                <h2>🧾 Bill This Month</h2>
-                <p class="section-desc">Drafts build from registrations automatically. Review the families that changed since last month; release the rest in one tap.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="bmMonth">Month</label>
-                        <input type="month" id="bmMonth">
+            <!-- Finance Hub — consolidates Bill This Month, Who Owes, Invoices,
+                 and Family Billing Summary into one ledger (design handoff:
+                 Finance Hub, 2026-08-26). "One computed dataset, no second
+                 calculation": every stat, filter count, and row here reads
+                 computeBillMonthExceptions() / _buildArRows() /
+                 reconcileBillingInvoice() — the exact functions those four
+                 retired screens already called — via
+                 js/admin/admin-finance-hub.js. Nothing here computes a dollar
+                 amount itself.
+                 Billing Report (design handoff 2a) is nested below as this
+                 screen's second tab — same section id, same render function
+                 (renderBillingReportTool() in admin-billing-report.js), only
+                 the surrounding chrome moved. It deliberately does NOT carry
+                 .admin-section — apShowSection() in admin-portal.js toggles
+                 every .admin-section inside the open tab-pane, and a nested
+                 one would fight the Ledger/Report tab switch for visibility. -->
+            <section class="admin-section" id="financeHubSection">
+                <div class="fh-head">
+                    <div>
+                        <h2>Finance</h2>
+                        <p class="section-desc">One place for billing, invoices, and who owes.</p>
+                    </div>
+                    <div class="fh-head-controls">
+                        <div class="fh-month-switch">
+                            <button type="button" id="fhMonthPrev" class="fh-month-arrow" aria-label="Previous month">&#9664;</button>
+                            <span id="fhMonthLabel" class="fh-month-label">&mdash;</span>
+                            <button type="button" id="fhMonthNext" class="fh-month-arrow" aria-label="Next month">&#9654;</button>
+                        </div>
+                        <input type="text" id="fhSearch" class="fh-search" placeholder="Find a family&hellip;">
                     </div>
                 </div>
-                <div id="bmBody"><p class="empty-hint">Loading…</p></div>
-            </section>
 
-            <!-- Who owes (design handoff 1e — one list, worst first). Reuses
-                 the exact same billed/collected/outstanding computation as
-                 Accounts Receivable (_buildArRows in admin-billing.js) so the
-                 two screens cannot disagree about a number. -->
-            <section class="admin-section" id="whoOwesSection">
-                <h2>📋 Who Owes</h2>
-                <p class="section-desc">Unpaid families, worst first. Paid-in-full collapses below with how and when each one paid.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="woMonth">Month</label>
-                        <input type="month" id="woMonth">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="woRecordCheckBtn" class="btn-secondary">💳 Record a check</button>
-                        <button id="woNudgeAllBtn" class="btn-primary">Nudge the unpaid</button>
-                    </div>
+                <div class="fh-tabs" id="fhTabs" role="tablist">
+                    <button type="button" class="fh-tab is-on" data-fh-tab="ledger" role="tab" aria-selected="true">Ledger</button>
+                    <button type="button" class="fh-tab" data-fh-tab="report" role="tab" aria-selected="false">Billing Report</button>
                 </div>
-                <div id="woBody"><p class="empty-hint">Loading…</p></div>
-            </section>
 
-            <!-- The billing report (design handoff 2a) — the screen behind
-                 "Bill This Month". Preserved as a first-class, printable
-                 screen per the client's own constraint, not replaced by
-                 summary cards. -->
-            <section class="admin-section collapsible-section" id="billingReportSection">
-                <h2>📊 Billing Report</h2>
-                <p class="section-desc">Every registration for the month, its rate, what changed it, and a total that ties to the invoices. Prints two pages, grouped by room.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="brMonth">Month</label>
-                        <input type="month" id="brMonth">
-                    </div>
-                    <div class="ap-seg" id="brGroupToggle" role="group" aria-label="Group by">
-                        <button type="button" class="ap-seg-btn is-on" data-group="room">By room</button>
-                        <button type="button" class="ap-seg-btn" data-group="name">By name</button>
-                    </div>
-                    <div class="roster-btns">
-                        <button id="brPrintBtn" class="btn-secondary">🖨️ Print</button>
-                        <button id="brCsvBtn" class="btn-secondary">&#8595; Export CSV</button>
-                    </div>
+                <div id="fhLedgerPane">
+                    <div id="fhRoot"><p class="empty-hint">Loading&hellip;</p></div>
                 </div>
-                <div id="brBody"><p class="empty-hint">Loading…</p></div>
-            </section>
 
-            <section class="admin-section" id="invoicesSection">
-                <h2>🧾 Invoices</h2>
-                <p class="section-desc">Draft, adjust, and issue this month's family invoices. Amounts come from the same calculation as Family Billing Summary — days actually booked, discounts, sibling credit and change fees.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="invMonth">Month</label>
-                        <input type="month" id="invMonth">
+                <div class="fh-report-pane" id="billingReportSection" style="display:none">
+                    <h3>📊 Billing Report</h3>
+                    <p class="section-desc">Every registration for the month, its rate, what changed it, and a total that ties to the invoices. Prints two pages, grouped by room.</p>
+                    <div class="roster-controls">
+                        <div class="roster-field">
+                            <label for="brMonth">Month</label>
+                            <input type="month" id="brMonth">
+                        </div>
+                        <div class="ap-seg" id="brGroupToggle" role="group" aria-label="Group by">
+                            <button type="button" class="ap-seg-btn is-on" data-group="room">By room</button>
+                            <button type="button" class="ap-seg-btn" data-group="name">By name</button>
+                        </div>
+                        <div class="roster-btns">
+                            <button id="brPrintBtn" class="btn-secondary">🖨️ Print</button>
+                            <button id="brCsvBtn" class="btn-secondary">&#8595; Export CSV</button>
+                        </div>
                     </div>
-                    <div class="roster-btns">
-                        <button id="invDraftBtn" class="btn-primary">💾 Save drafts</button>
-                        <button id="invTestBtn"  class="btn-secondary">✉️ Send me a test</button>
-                        <button id="invEmailBtn" class="btn-primary">✉️ Email invoices</button>
-                        <button id="invSendBtn"  class="btn-secondary">🧾 Mark sent (no email)</button>
-                        <button id="invCsvBtn"   class="btn-secondary">&#8595; Export CSV</button>
-                    </div>
+                    <div id="brBody"><p class="empty-hint">Loading…</p></div>
                 </div>
-                <div class="ap-stats" id="invSummary" style="margin-bottom:16px"></div>
-                <p id="invNote" class="ap-note" style="min-height:1.2em;color:var(--green-text);font-weight:700"></p>
-                <!-- Adjustments drafted when days changed after an invoice was
-                     sent. Reviewed and issued by the director; never automatic. -->
-                <div id="invAdjustments" style="display:none"></div>
-                <div id="invBody"><p class="empty-hint">Loading…</p></div>
-                <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);max-width:76ch">
-                    <label for="invNoteText" style="display:block;font-weight:600;font-size:.9em;margin-bottom:6px">Note on every invoice email <span style="font-weight:400;color:var(--text-muted)">(how to pay, when it's due — optional)</span></label>
-                    <textarea id="invNoteText" rows="2" placeholder="e.g. Payment is due by the 10th. Cheques to Timothy Lutheran MDO, or pay in the office."
-                              style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-body);font-size:.92em;background:#fff"></textarea>
-                    <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+
+                <div class="fh-note-editor">
+                    <label for="invNoteText">Note on every invoice email <span class="fh-note-hint">(how to pay, when it's due — optional)</span></label>
+                    <textarea id="invNoteText" rows="2" placeholder="e.g. Payment is due by the 10th. Cheques to Timothy Lutheran MDO, or pay in the office."></textarea>
+                    <div class="fh-note-row">
                         <button id="invNoteSaveBtn" class="btn-secondary">💾 Save note</button>
-                        <span id="invNoteStatus" style="font-size:.85em;color:var(--green-text);font-weight:700"></span>
+                        <button id="invTestBtn" class="btn-secondary">✉️ Send me a test</button>
+                        <span id="invNoteStatus" class="fh-note-status"></span>
                     </div>
                 </div>
-                <p class="ap-note" style="margin-top:14px;max-width:76ch">
-                    <strong>Email invoices</strong> sends each family their statement and stamps the invoice as sent. <strong>Mark sent (no email)</strong> records the issue date only, for bills you handed over or sent another way. Either way, Accounts Receivable ages “overdue” from that date rather than from the start of the month, and the action is written to the audit log.
-                </p>
+
+                <!-- Print statement overlay (design handoff #5) — an in-page
+                     overlay rather than window.open(), which sandboxed/embedded
+                     contexts silently block. @media print hides everything else
+                     on the page and prints only this. -->
+                <div class="fh-print-scrim" id="fhPrintScrim" style="display:none">
+                    <div class="fh-print-sheet" id="fhPrintSheet"></div>
+                    <button type="button" class="fh-print-close no-print" id="fhPrintCloseBtn">&#10005; Close</button>
+                </div>
             </section>
 
             <section class="admin-section collapsible-section" id="billingArSection">
