@@ -22,20 +22,19 @@
 //      charge-stax-payment, called AFTER the browser has a
 //      payment_method id, never with raw card fields.
 //
-// ⚠️ UNTESTED — Stax sandbox merchant not yet activated (2026-08-26).
-//   `GET /merchant/{id}` for our sandbox merchant returns `gateways: []`,
-//   `gateway_type: null`, `vendor_keys: null`, `activated_at: null` —
-//   Stax's own Core API cannot vault a payment method until a gateway is
-//   attached to the merchant record server-side. Confirmed live:
-//   POST /payment-method (both card and ACH) fails with
-//   {"errors":{"vaultLookup":["Failed to determine vault vendor for
-//   merchant account"]}} regardless of request shape. Support was emailed
-//   2026-08-26 re: merchant id 15904290-f3c8-4c6d-8d4d-fd2a953ce869. Do NOT
-//   deploy this to production, and re-verify the customer-lookup/create
-//   shape and the Stax.js public-key field name against
-//   https://docs.staxpayments.com/reference once the merchant is active —
-//   they were written from the Core API reference, not from a working
-//   sandbox call.
+// ✅ Merchant activated 2026-08-26 (gateway_type: "TEST", gateways
+//   non-empty) — Stax's activations team turned on the sandbox gateway
+//   after support was emailed. The earlier `vaultLookup` block is gone.
+//   The /customer create call in this file was verified live against the
+//   real sandbox: POST /customer with {firstname, lastname, email,
+//   reference} returns 200 with an `id` exactly as this code expects.
+//
+// ⚠️ STILL UNVERIFIED — only the Stax.js/Bolt side, not the server side:
+//   whether the same STAX_API_KEY doubles as Stax.js's public/tokenization
+//   key, or whether Stax issues a separate one for client-side use. No
+//   client-side Stax.js/Bolt wiring exists yet in portal-billing.js — that
+//   is the next thing to confirm and build now that the merchant is live.
+//   Do not deploy this to production until that's resolved.
 //
 // Deploy:  supabase functions deploy create-stax-charge
 // Secrets: STAX_API_KEY, STAX_ENVIRONMENT ('sandbox' | 'production',
