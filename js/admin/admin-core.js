@@ -162,14 +162,14 @@ async function applySessionRole() {
 
 // Undo any restrictions from a previous session before applying new ones.
 function _resetRoleRestrictions() {
-    // capacitySection is in this list because applyRoleRestrictions() hides it
-    // for `restricted` — without it here, a full admin logging in after a
-    // restricted one on the same page would keep Classroom Capacity hidden
-    // (and the portal, which indexes by visibility, would drop the tool).
+    // setRoomsCard/setAccessCard/etc. are in this list because
+    // applyRoleRestrictions() hides them for `restricted` — without this, a
+    // full admin logging in after a restricted one on the same page would
+    // keep Rooms & rates hidden (and the portal, which indexes by
+    // visibility, would drop the whole Settings tool).
     ['logHoursSection', 'payrollSection', 'staffRosterToggleWrap',
-     'staffRosterSection', 'adminRolesSection', 'auditLogSection',
-     'closedDaysSection', 'ratesSection', 'ratiosSection', 'capacitySection',
-     'offerLinksSection', 'summerCampSection']
+     'staffRosterSection', 'setAccessCard', 'setRoomsCard',
+     'setClosedDaysBlock', 'setSummerCampBlock', 'offerLinksSection']
         .forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = '';
