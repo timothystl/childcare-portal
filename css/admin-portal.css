@@ -1412,4 +1412,11 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .set-fee-fields input { width: 90px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; }
 @media (max-width: 560px) { .set-fee-fields { grid-template-columns: 1fr; } }
 .set-access-grid { padding: 16px 22px 20px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+/* The admin-users table (email/role/last-login/actions, width:100% with
+   table-layout:auto) still renders wider than its column's content when
+   the natural column widths don't fit — width:100% caps the *target*
+   width, not the table's minimum content width, so it visually overflows
+   into the audit-log column next to it rather than affecting the grid's
+   own track sizing. Scroll it inside its own box instead. */
+#adminRolesTableWrap { overflow-x: auto; }
 @media (max-width: 900px) { .set-access-grid { grid-template-columns: minmax(0, 1fr); } }
