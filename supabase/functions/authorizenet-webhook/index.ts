@@ -77,11 +77,22 @@ async function verifySignature(rawBody: string, headerSig: string | null, signat
 }
 
 serve(async (req) => {
+    // Authorize.net's own Merchant Interface pings the URL (GET/HEAD, no
+    // signature) to confirm it's reachable BEFORE the webhook is saved and a
+    // signature key is even issued — a 405/500 here reads as "invalid
+    // endpoint" and blocks creation. A bare 200 costs nothing: nothing
+    // downstream of this line is reachable without a valid POST + signature.
+    if (req.method === "GET" || req.method === "HEAD") return json({ ok: true }, 200);
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
     const rawBody = await req.text();
     const signatureKey = Deno.env.get("AUTHORIZENET_SIGNATURE_KEY");
-    if (!signatureKey) return json({ error: "Webhook not configured" }, 500);
+    // Same reachability-check problem can arrive as a POST with no/blank
+    // signature before the key exists. Acknowledge rather than 500, so
+    // webhook creation isn't blocked on a secret that can only be set AFTER
+    // creation returns it. Once the secret is set, an unsigned POST still
+    // never reaches the signature check below — this only fires pre-setup.
+    if (!signatureKey) return json({ received: true, ignored: "webhook not configured yet" }, 200);
 
     const sigHeader = req.headers.get("X-ANET-Signature");
     const ok = await verifySignature(rawBody, sigHeader, signatureKey).catch(() => false);
