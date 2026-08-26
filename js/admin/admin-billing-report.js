@@ -48,6 +48,15 @@ async function _brBuild(month) {
     const { rows: famRows } = await computeBillMonthExceptions(month);
     _brFamilyRows = famRows;
 
+    // A free-text note per family, separate from the causes below — causes
+    // are the engine telling you what it noticed changed since last month;
+    // a note is what you know ("confirmed with mom, this is right") and has
+    // nothing to do with a diff.
+    let noteRows = [];
+    try { noteRows = await fetchBillingNotes(month); } catch (e) { console.warn('br notes:', e); }
+    const notesMap = new Map(noteRows.map(r => [(r.parent_email || '').toLowerCase(), r.note || '']));
+    famRows.forEach(fam => { fam.note = notesMap.get((fam.email || '').toLowerCase()) || ''; });
+
     // Per-child rows, one per registered child, carrying the same cause text
     // its family-level exception computed — the family causes list already
     // names the child ("Ellie: days changed 5→3"), so a child inherits any
@@ -231,23 +240,30 @@ function _brNameTable() {
             <td style="text-align:center">${f.children.length}</td>
             <td style="text-align:right">$${f.base.toFixed(2)}</td>
             <td>${escHtml(f.causes.map(c => c.text).join(' · ') || '—')}</td>
+            <td onclick="event.stopPropagation()"><input type="text" class="br-note-input" data-email="${escHtml(f.email || '')}" value="${escHtml(f.note || '')}" placeholder="Add a note…"></td>
             <td style="text-align:right"><strong>$${f.total.toFixed(2)}</strong></td>
         </tr>`;
     }).join('');
 
     return `<div class="table-wrapper"><table class="report-table">
-        <thead><tr><th>Family &amp; payer</th><th>Children &amp; room</th><th>Kids</th><th>Base</th><th>Adjustments</th><th>Amount</th></tr></thead>
-        <tbody>${rows}${_brGrandTotalRow(6)}</tbody>
+        <thead><tr><th>Family &amp; payer</th><th>Children &amp; room</th><th>Kids</th><th>Base</th><th>Adjustments</th><th>Notes</th><th>Amount</th></tr></thead>
+        <tbody>${rows}${_brGrandTotalRow(7)}</tbody>
     </table></div>`;
 }
 
 function _brGrandTotalRow(cols) {
     const s = _brSummary;
+    // The row body below fills 6 columns (the first cell spans 2). Any
+    // column beyond that — e.g. the name table's Notes column — gets a
+    // blank cell here so the Amount total stays in the table's last column
+    // instead of sliding left under whatever column follows Adjustments.
+    const filler = '<td></td>'.repeat(Math.max(0, cols - 6));
     return `<tr class="br-grand-total">
         <td colspan="2">Total · ${_brMonth}</td>
         <td style="text-align:center">${s.childCount}</td>
         <td style="text-align:right">$${s.baseTuition.toFixed(2)}</td>
         <td>Discounts −$${s.discounts.toFixed(2)} · Fees +$${s.fees.toFixed(2)}</td>
+        ${filler}
         <td style="text-align:right" class="br-grand-amt">$${s.total.toFixed(2)}</td>
     </tr>`;
 }
@@ -262,6 +278,36 @@ function _brBindToggle() {
     });
     _brEl('brPrintBtn')?.addEventListener('click', _brPrint);
     _brEl('brCsvBtn')?.addEventListener('click', _brExportCsv);
+    _brBindNotes();
+}
+
+// Delegated on #brBody (which survives every re-render — only its innerHTML
+// is replaced) so this only needs binding once per tool open, not once per
+// render. The dataset flag guards against a second renderBillingReportTool()
+// call double-binding onto the same node.
+function _brBindNotes() {
+    const body = _brEl('brBody');
+    if (!body || body.dataset.notesBound) return;
+    body.dataset.notesBound = '1';
+    body.addEventListener('change', e => {
+        const input = e.target.closest('.br-note-input');
+        if (input) _brSaveNote(input.dataset.email, input.value);
+    });
+}
+
+async function _brSaveNote(email, value) {
+    if (!email) return;
+    const fam = _brFamilyRows.find(f => (f.email || '').toLowerCase() === email.toLowerCase());
+    if (fam && (fam.note || '') === value) return; // unchanged
+    try {
+        const adminEmail = await getAdminEmail();
+        await upsertBillingNote(_brMonth, email, value, adminEmail);
+        if (fam) fam.note = value;
+        logAdminAction('update', 'billing_note', null, { month: _brMonth, parent_email: email });
+    } catch (err) {
+        console.error('_brSaveNote:', err);
+        showToast('Could not save the note — try again.', 'error');
+    }
 }
 
 // Always prints the room grouping — "so it can go in the binder or to the
@@ -307,10 +353,10 @@ function _brExportCsv() {
             r.days, r.rate.toFixed(2), csvCell(r.adjustments), (r.amount || 0).toFixed(2),
         ].join(','));
     } else {
-        header = ['Family', 'Payer', 'Children', 'Kids', 'Base', 'Adjustments', 'Amount'];
+        header = ['Family', 'Payer', 'Children', 'Kids', 'Base', 'Adjustments', 'Notes', 'Amount'];
         lines = _brFamilyRows.map(f => [
             csvCell(f.name), csvCell(f.email), csvCell(f.children.join('; ')), f.children.length,
-            f.base.toFixed(2), csvCell(f.causes.map(c => c.text).join('; ')), f.total.toFixed(2),
+            f.base.toFixed(2), csvCell(f.causes.map(c => c.text).join('; ')), csvCell(f.note || ''), f.total.toFixed(2),
         ].join(','));
     }
     downloadFile(`billing-report-${_brMonth}-${_brGroup}.csv`, 'text/csv', [header.join(','), ...lines].join('\n'));
