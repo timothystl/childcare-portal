@@ -969,7 +969,16 @@ export default {
       "frame-ancestors 'self'; " +
       // staxjs.staxpayments.com: Stax.js (Bolt), the embedded-checkout
       // comparison in portal-billing.js — see its pbLoadStaxJs().
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://staxjs.staxpayments.com; " +
+      // core.spreedly.com: Stax.js itself loads Spreedly's iframe tokenization
+      // library (core.spreedly.com/iframe/iframe-v1.min.js) to actually
+      // collect the card number/CVV — found by grepping staxjs-captcha.js's
+      // own bundled source, not documented anywhere Stax publishes. Without
+      // this the number/CVV fields render as a refused-iframe placeholder
+      // (a blank gray box with a broken-page icon) even though the outer
+      // Stax.js library itself loads fine — a second, separate CSP miss from
+      // the first one (staxjs.staxpayments.com), caught only by actually
+      // clicking through the flow.
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://staxjs.staxpayments.com https://core.spreedly.com; " +
       // R25: style-src/font-src previously omitted the Google Fonts hosts that
       // every page links (Lora, Nunito, Dancing Script), and the brand
       // typography fell back to Georgia / system-ui in production.
@@ -986,7 +995,7 @@ export default {
       // Stax.js itself calls, read directly out of its own bundled source
       // (grepped staxjs-captcha.js for fattlabs.com/fattmerchant.com/
       // staxpayments.com references) rather than guessed from docs.
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com https://apiprod.fattlabs.com https://fattqueryprod.fattlabs.com https://transactions.fattlabs.com; " +
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com https://apiprod.fattlabs.com https://fattqueryprod.fattlabs.com https://transactions.fattlabs.com https://core.spreedly.com; " +
       "img-src 'self' data:; " +
       // frame-src for the Google Maps embed on the home page contact section.
       // There is no frame-src default: without this it falls back to
@@ -1001,7 +1010,9 @@ export default {
       // card-number/CVV fields as small iframes from one of these — the
       // charge response's own merchant_location_descriptor names
       // omni.fattmerchant.com, so both are allowed rather than guessed at.
-      "frame-src https://maps.google.com https://www.google.com https://test.authorize.net https://accept.authorize.net https://staxjs.staxpayments.com https://omni.fattmerchant.com; " +
+      // core.spreedly.com is the actual card-number/CVV iframe host — see
+      // the script-src comment above for how this was found.
+      "frame-src https://maps.google.com https://www.google.com https://test.authorize.net https://accept.authorize.net https://staxjs.staxpayments.com https://omni.fattmerchant.com https://core.spreedly.com; " +
       "font-src 'self' data: https://fonts.gstatic.com"
     );
     // SX4: the rest of the baseline security headers. Kept byte-identical to
