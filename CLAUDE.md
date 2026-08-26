@@ -1690,6 +1690,57 @@ Set as Cloudflare Pages environment variables and Supabase Edge Function secrets
   `scripts/generate-vapid-keys.js`; the public key is also pasted into
   `js/push-notifications.js` and `js/staff/staff-push.js`.
 - `FINANCE_API_KEY` — shared secret for the `finance-summary` edge function (see below); same value must be set as `DAYCARE_API_KEY` on the ChMS side
+- `STAX_API_KEY` / `STAX_ENVIRONMENT` — Stax (fattmerchant) Core API bearer key, scaffolding only, see below
+- `STAX_WEBHOOK_SECRET` — placeholder shared secret for `stax-webhook`; **not** Stax's real signature scheme, see below
+
+---
+
+## Stax payment processor — sandbox blocked, scaffolding only (2026-08-26)
+
+The center is evaluating Stax alongside the already-live Authorize.net integration
+(`create-payment-session` / `authorizenet-webhook` / `admin-refund-payment` /
+`reconcile-anet-payments`) — **both stay in place; this is not a replacement.**
+Nothing about the Anet flow changed in this session.
+
+**Blocked on Stax's side, not ours.** `GET /merchant/{id}` for the sandbox merchant
+(`15904290-f3c8-4c6d-8d4d-fd2a953ce869`) returns `gateways: []`, `gateway_type: null`,
+`vendor_keys: null`, `activated_at: null`, `underwriting_status: null` — the merchant
+record has never been activated with a payment gateway, even though onboarding said a
+test gateway had been assigned. `POST /payment-method` (both card and ACH, using the
+documented test Visa `4111 1111 1111 1111`) fails identically every time with
+`{"errors":{"vaultLookup":["Failed to determine vault vendor for merchant account"]}}`
+— confirmed twice, hours apart, so not a provisioning-delay fluke. Support was emailed
+2026-08-26; re-check `GET /merchant/{id}` for a non-empty `gateways` array before
+trying the flow again.
+
+**Scaffolding is in place** (`create-stax-charge`, `charge-stax-payment`,
+`stax-webhook` in `supabase/functions/`, plus `add_stax_payment_tracking.sql` adding
+`families.stax_customer_id`). It mirrors the Authorize.net posture exactly — request
+body carries only an invoice id, the amount charged is always recomputed server-side
+from `billing_invoices`/`billing_payments`, ownership is checked via
+`parent_family_ids()`, and raw card data is meant to never reach this server (Stax.js/
+Bolt tokenizes client-side into a `payment_method` id, same PCI-SAQ-A goal as Accept
+Hosted). `billing_payments.processor`/`processor_transaction_id` are already
+processor-agnostic (added for Anet), so Stax payments just use `processor = 'stax'` —
+no new payment-table columns needed.
+
+⚠️ **None of this has touched a working Stax API call and several specifics are
+unverified against real responses**, flagged inline with ⚠️ in each file:
+- `create-stax-charge`'s `/customer` create shape and whether the same API key doubles
+  as Stax.js's public/tokenization key, or whether Stax issues a separate one.
+- `charge-stax-payment`'s `/charge` request/response field names (success flag,
+  transaction id location).
+- `stax-webhook`'s actual signature/auth scheme (it currently checks a placeholder
+  shared-secret header, `X-Stax-Webhook-Secret` / `STAX_WEBHOOK_SECRET` — **not**
+  Stax's real webhook signing method) and its refund/void event payload shape.
+- No client-side Stax.js/Bolt wiring exists yet in `portal-billing.js` — the browser
+  half of the flow (rendering hosted card fields, calling `create-stax-charge` then
+  `charge-stax-payment`) is not built. Do this once the merchant is activated and the
+  two edge functions above have been exercised against real sandbox responses.
+
+**Do not deploy any of the three `stax-*`/`charge-stax-*` functions to production**,
+and do not register `stax-webhook`'s URL with Stax, until the merchant is activated
+and each ⚠️ above has been checked against a real request/response.
 
 ---
 
