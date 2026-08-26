@@ -1103,63 +1103,78 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
    Summary. See js/admin/admin-finance-hub.js. The family drawer reuses
    .inc-drawer/.inc-scrim (css/admin.css) rather than a second component. */
 
-.fh-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
-.fh-head-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fh-toolbar {
+    display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: -6px 0 4px;
+}
 .fh-month-switch {
     display: flex; align-items: center; gap: 8px;
     background: var(--linen); border: 1px solid var(--border); border-radius: 999px;
-    padding: 6px 12px; font-weight: 700; color: var(--navy);
+    padding: 6px 14px; font-weight: 700; color: var(--navy); font-family: var(--font-head);
 }
 .fh-month-arrow {
     background: none; border: none; cursor: pointer; color: var(--navy);
-    font-size: .9em; padding: 2px 4px; border-radius: 6px;
+    font-size: .85em; width: 22px; height: 22px; line-height: 1; border-radius: 50%;
     transition: background .15s;
 }
 .fh-month-arrow:hover:not(:disabled) { background: var(--warm-gray); }
-.fh-month-arrow:disabled { opacity: .35; cursor: default; }
-.fh-month-label { min-width: 8ch; text-align: center; }
+.fh-month-arrow:disabled { opacity: .3; cursor: default; }
+.fh-month-label { min-width: 9ch; text-align: center; }
 .fh-search {
-    background: var(--linen); border: 1px solid var(--border); border-radius: 999px;
-    padding: 7px 14px; font-family: var(--font-body); font-size: .9em; width: 180px;
+    background: #fff; border: 1px solid var(--border); border-radius: 999px;
+    padding: 7px 16px; font-family: var(--font-body); font-size: .9em; width: 190px;
+    transition: border-color .15s, box-shadow .15s;
 }
+.fh-search:focus { outline: none; border-color: var(--navy-lt); box-shadow: 0 0 0 3px rgba(1,41,74,.08); }
 
-.fh-tabs { display: flex; gap: 2px; margin: 16px 0 0; border-bottom: 1px solid var(--border); }
+.fh-tabs { display: flex; gap: 4px; margin: 18px 0 0; border-bottom: 1.5px solid var(--border); }
 .fh-tab {
-    border: none; cursor: pointer; font-family: var(--font-body); font-weight: 700; font-size: .92em;
-    padding: 10px 18px; border-radius: 9px 9px 0 0;
+    border: none; cursor: pointer; font-family: var(--font-head); font-weight: 700; font-size: .96em;
+    padding: 10px 20px; border-radius: 10px 10px 0 0;
     background: var(--linen); color: var(--navy);
     transition: background .15s, color .15s;
+    position: relative; top: 1px;
 }
 .fh-tab:hover:not(.is-on) { background: var(--warm-gray); }
 .fh-tab.is-on { background: var(--navy); color: #fff; }
 
-#fhLedgerPane { padding-top: 18px; }
-.fh-report-pane { padding-top: 18px; }
+#fhLedgerPane { padding-top: 20px; }
+.fh-report-pane { padding-top: 20px; }
 .fh-report-pane > h3 { margin: 0 0 4px; font-family: var(--font-head); color: var(--navy); }
 
-/* Reconciliation strip */
+/* Reconciliation strip — each stage is its own card so the "flow" of the
+   month (families → need a look → drafted → issued) reads as a sequence of
+   real things, not four numbers loose on the page. */
 .fh-strip {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    padding: 14px 0 18px;
+    display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap;
+    padding: 4px 0 20px;
 }
-.fh-stat { min-width: 96px; }
-.fh-stat-num { font-family: var(--font-head); font-size: 26px; font-weight: 800; color: var(--navy); line-height: 1; }
-.fh-stat-tang .fh-stat-num { color: var(--tang); }
-.fh-stat-label { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; }
-.fh-underline { text-decoration: underline; text-decoration-color: var(--tang); }
-.fh-arrow { color: var(--border); font-size: 20px; }
-.fh-stat.is-clickable { cursor: pointer; border-radius: 8px; padding: 4px 6px; margin: -4px -6px; transition: background .15s; }
-.fh-stat.is-clickable:hover { background: var(--linen); }
-#fhReleaseBtn { margin-left: auto; }
+.fh-stat {
+    background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: 0 2px 10px rgba(1,41,74,.05);
+    padding: 14px 20px; min-width: 118px;
+    transition: box-shadow .15s, transform .15s;
+}
+.fh-stat-tang { background: var(--tang-pale); border-color: #f6d3c2; }
+.fh-stat-num { font-family: var(--font-head); font-size: 28px; font-weight: 800; color: var(--navy); line-height: 1; }
+.fh-stat-tang .fh-stat-num { color: var(--tang-dark); }
+.fh-stat-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin-top: 6px; }
+.fh-stat-tang .fh-stat-label { color: var(--tang-dark); }
+.fh-underline { text-decoration: underline; text-decoration-color: currentColor; text-underline-offset: 2px; }
+.fh-arrow { color: var(--border); font-size: 18px; align-self: center; }
+.fh-stat.is-clickable { cursor: pointer; }
+.fh-stat.is-clickable:hover { box-shadow: 0 6px 18px rgba(1,41,74,.10); transform: translateY(-1px); }
+.fh-strip-spacer { flex: 1; min-width: 8px; }
+#fhReleaseBtn { align-self: center; white-space: nowrap; }
 
 /* Owed banner */
 .fh-owed-banner {
     display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
     background: var(--sun-pale); border: 1px solid var(--sun-lt); border-radius: var(--radius-md);
-    padding: 14px 18px; margin-bottom: 14px;
+    padding: 16px 20px; margin-bottom: 16px;
 }
-.fh-owed-main strong { font-size: 1.1em; color: var(--navy); }
-.fh-owed-sub { font-size: .82em; color: var(--text-muted); margin-top: 3px; }
+.fh-owed-main strong { font-family: var(--font-head); font-size: 1.3em; color: var(--navy); font-weight: 800; }
+.fh-owed-sub { font-size: .82em; color: var(--mustard-dark); margin-top: 4px; }
 .fh-owed-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .fh-aging { display: flex; gap: 12px; margin-bottom: 14px; }
@@ -1185,14 +1200,30 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fh-chip-paid.is-on { background: var(--green); border-color: var(--green); }
 
 /* Table */
-.fh-table td { vertical-align: middle; }
+.fh-table { border-radius: var(--radius-md); overflow: hidden; box-shadow: 0 2px 10px rgba(1,41,74,.05); }
+.fh-table td, .fh-table th { vertical-align: middle; }
+.fh-table tbody tr { transition: background .1s; }
+.fh-table tbody tr:hover { background: var(--linen); }
 .fh-row-open { cursor: pointer; }
 .fh-row-open:hover strong { text-decoration: underline; }
-.fh-note { color: var(--text-muted); font-size: .88em; max-width: 32ch; }
+.fh-note { color: var(--text-muted); font-size: .88em; max-width: 30ch; }
+.fh-money-col { text-align: right; font-variant-numeric: tabular-nums; }
 .fh-bal-owed { color: var(--tang-dark); font-weight: 700; }
 .fh-bal-clear { color: var(--green-text); font-weight: 700; }
-.fh-row-actions { white-space: nowrap; text-align: right; }
+/* Fixed width so a row with zero actions (a $0 balance, an already-issued
+   invoice) leaves matching empty space instead of the column collapsing and
+   throwing every row's right edge out of alignment. */
+.fh-row-actions { white-space: nowrap; text-align: right; width: 190px; }
 .fh-row-actions .btn-xs { margin-left: 6px; }
+/* .btn-xs alone sets a white background with no color of its own — combined
+   with .btn-primary's white text (styles.css) that reads as an empty box.
+   This is Finance Hub's own small primary action, fully self-contained. */
+.fh-send-btn {
+    display: inline-block; margin-left: 6px; border: none; border-radius: 6px;
+    background: var(--navy); color: #fff; font-family: var(--font-body); font-weight: 700;
+    font-size: .8em; padding: 4px 11px; cursor: pointer; transition: background .15s;
+}
+.fh-send-btn:hover { background: var(--navy-lt); }
 
 .fh-pill { display: inline-block; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 3px 9px; }
 .fh-pill-review    { background: #FDEEE8; color: #7a2a18; }
@@ -1291,10 +1322,13 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 }
 
 @media (max-width: 720px) {
+    .fh-toolbar { justify-content: flex-start; }
     .fh-strip { gap: 8px; }
     .fh-arrow { display: none; }
-    #fhReleaseBtn { margin-left: 0; width: 100%; }
+    .fh-strip-spacer { display: none; }
+    #fhReleaseBtn { width: 100%; }
     .fh-search { width: 100%; }
+    .fh-row-actions { width: auto; }
 }
 
 /* ============================================================
