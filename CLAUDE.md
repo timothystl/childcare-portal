@@ -1832,11 +1832,45 @@ lesson to keep: a third-party embedded-payments library can itself depend on a f
 third party for the actual sensitive-field vaulting, and that dependency has to be
 found by reading the library's own bundle, not by trusting its documentation.
 
-**Still not re-tested after this second fix** — the next click-through should get past
-the placeholder and actually show usable card-number/CVV fields. If it still fails,
-check the browser console for a CSP violation naming a host neither fix covers, rather
-than assuming a code bug — this integration has now missed CSP twice in a row before
-finding the complete host list.
+**Re-tested — Spreedly wasn't even the real problem.** The card fields still failed the
+same way ("flash of what might be real fields, then reverts to a blocked placeholder"),
+but this time the browser console was captured directly, and it told the actual story
+`core.spreedly.com` never could:
+
+```
+Vendor lookup complete: using BlockChyp
+Failed to execute 'postMessage' on 'DOMWindow': The target origin provided
+('https://test.blockchyp.com') does not match the recipient window's origin ('null').
+```
+
+⚠️ **Stax.js bundles support for several possible vault backends (BlockChyp, Spreedly,
+NMI, Spreedly-adjacent others), and which one a given merchant's gateway actually uses
+is a runtime fact, not something readable from the library's source or from Stax's
+docs.** `core.spreedly.com` was a reasonable-looking find from grepping the bundle, and
+it was even real — it's genuinely one of the vendors Stax.js supports — it just is not
+the one *this* merchant's TEST gateway happens to route through. The iframe's real
+target was `https://test.blockchyp.com`; blocked by `frame-src`, it never navigated
+there and stayed at origin `'null'`, which is exactly why `postMessage` to it failed
+and why the field visually "flashed" (Chrome briefly shows the frame shell) before
+reverting to the blocked-content placeholder.
+
+A secondary finding from the same console capture: Stax.js also unconditionally loads
+Google's reCAPTCHA (`www.google.com/recaptcha/api.js`) for fraud prevention, also
+blocked by `script-src` (handled gracefully by the library so far, but still a real CSP
+violation worth fixing).
+
+Added `https://test.blockchyp.com` + `https://api.blockchyp.com` to `frame-src` and
+`connect-src`, and `https://www.google.com` to `script-src`, in both `_headers` and
+`worker.js` (re-verified byte-identical). Left the Spreedly entries in place — harmless
+if unused, and this vendor selection could plausibly differ for another environment
+this project runs in.
+
+**The real lesson: for a vendored library whose actual runtime behavior depends on
+server-side merchant configuration, static analysis of its bundle can only ever
+propose candidates — the definitive host list has to come from watching a live
+browser session actually attempt the flow.** Two fixes based on reading the bundle
+both missed; the one based on the browser console got it in one. Still not re-tested
+after this third fix.
 
 ---
 
