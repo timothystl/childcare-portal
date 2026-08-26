@@ -980,7 +980,15 @@ export default {
       // clicking through the flow.
       // www.google.com (recaptcha/api.js): Stax.js's own fraud-prevention
       // captcha, loaded unconditionally by the library itself.
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://staxjs.staxpayments.com https://core.spreedly.com https://www.google.com; " +
+      // www.gstatic.com: a THIRD, separate CSP miss on the same captcha —
+      // google.com's api.js loader was allowed above, but it then loads the
+      // actual recaptcha payload (recaptcha__en.js) from gstatic.com, which
+      // wasn't. Without this, tokenize() doesn't error — it just hangs on
+      // "Processing payment…" forever, because the library is waiting on a
+      // captcha script that silently never finishes loading. Caught live
+      // from a real Pay attempt that never completed; the console showed a
+      // blocked script-src request for gstatic.com and nothing else.
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://staxjs.staxpayments.com https://core.spreedly.com https://www.google.com https://www.gstatic.com; " +
       // R25: style-src/font-src previously omitted the Google Fonts hosts that
       // every page links (Lora, Nunito, Dancing Script), and the brand
       // typography fell back to Georgia / system-ui in production.
