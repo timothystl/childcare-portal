@@ -4376,6 +4376,33 @@ async function createPaymentSession(invoiceId) {
     return data;
 }
 
+/**
+ * Ask Authorize.net to void or refund one online card payment (admin only,
+ * full role). Only a billing_payments row id travels — the amount and
+ * whether it's a void or refund are both decided server-side from the
+ * transaction's own state. Does NOT itself mark anything reversed; the
+ * authorizenet-webhook function does that once Authorize.net confirms it.
+ *
+ * @param {number} paymentId
+ * @returns {Promise<{submitted: boolean, kind: 'void'|'refund', processorTransactionId: string}>}
+ */
+async function adminRefundPayment(paymentId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated.');
+    const { data, error } = await sbClient.functions.invoke('admin-refund-payment', {
+        body: { paymentId },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) {
+        let detail = '';
+        try { detail = (await error.context?.json())?.error || ''; } catch (_) { /* ignore */ }
+        throw new Error(detail || error.message || 'Refund failed.');
+    }
+    return data;
+}
+
 /** Undo a send stamp — for a bill marked issued by mistake. */
 async function unmarkInvoiceSent(id) {
     if (!sbClient) throw new Error('Supabase not configured.');
