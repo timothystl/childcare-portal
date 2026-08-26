@@ -16,14 +16,23 @@
 //
 // ⚠️ PROCESSOR: Authorize.net Accept Hosted, wired for evaluation against
 // their SANDBOX credentials — nothing here has moved real money yet. "Pay"
-// redirects the whole page to Authorize.net's own hosted payment page
-// (create-payment-session gets the token; this file never touches card
-// data, keeping the app at PCI SAQ A) and Authorize.net redirects back to
-// this same page afterward. That return trip is COSMETIC ONLY: the
-// authorizenet-webhook edge function is the one thing that actually marks
-// an invoice paid, so a parent who closes the tab mid-payment leaves
-// nothing in an inconsistent state. See portal-auth.js for the return-URL
-// handling (there is no router here, so it's handled by hand).
+// opens #pbPayModal and loads Authorize.net's own hosted payment page into
+// an iframe INSIDE it (create-payment-session gets the token; this file
+// never touches card data, keeping the app at PCI SAQ A) rather than
+// redirecting the whole page — paying stays inside the portal.
+//
+// Authorize.net relays the result back to us via iframe-communicator.html
+// (a small page hosted on our own domain, required by their
+// hostedPaymentIFrameCommunicatorUrl setting — see create-payment-session)
+// calling window.CommunicationHandler.onReceiveCommunication, defined below.
+// That relay is COSMETIC ONLY, same as the old full-page return trip was:
+// the authorizenet-webhook edge function is the one thing that actually
+// marks an invoice paid, so a parent who closes the modal mid-payment, or
+// whose browser never delivers the message, leaves nothing in an
+// inconsistent state — the invoice list simply still shows what's owed.
+// portal-auth.js's location.search handling (?paid=/?cancelled=) stays in
+// place as a fallback for the rare case Authorize.net falls back to
+// navigating the return URL instead of using the communicator.
 
 let pbData = null;
 let pbReturnState = null;   // 'paid' | 'cancelled' | null — set by portal-auth.js
@@ -150,19 +159,23 @@ function pbInvoiceCard(inv) {
 /**
  * Start an Accept Hosted payment: get a one-time token from
  * create-payment-session (server-computed amount, ownership already
- * checked there), then navigate the whole page to Authorize.net's hosted
- * form. Nothing here ever sees a card number.
+ * checked there), then POST it into the #pbPayFrame iframe inside
+ * #pbPayModal. Nothing here ever sees a card number — the iframe's
+ * document is Authorize.net's own, on their own domain.
  */
 async function pbStartPayment(invoiceId) {
     if (pbPaying) return;
     pbPaying = invoiceId;
     pbRender();
-    const errEl = pbEl(`pbPayError-${invoiceId}`);
     try {
         const { token, formUrl } = await createPaymentSession(invoiceId);
+        pbEnsureCommunicationHandler();
+        pbOpenPayModal();
+
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = formUrl;
+        form.target = 'pbPayFrame';
         form.style.display = 'none';
         const input = document.createElement('input');
         input.type = 'hidden';
@@ -171,21 +184,117 @@ async function pbStartPayment(invoiceId) {
         form.appendChild(input);
         document.body.appendChild(form);
         form.submit();
-        // Page is navigating away now; leave pbPaying set so the button
-        // stays disabled for whatever moment remains before the redirect.
+        form.remove();
+        // pbPaying stays set — and the modal stays open — until the
+        // communicator reports a result or the parent closes it by hand.
     } catch (e) {
         pbPaying = null;
         pbRender();
-        const retryErrEl = pbEl(`pbPayError-${invoiceId}`);
-        if (retryErrEl) {
-            retryErrEl.textContent = e.message || 'Could not start payment. Please try again.';
-            retryErrEl.hidden = false;
-        } else if (errEl) {
+        const errEl = pbEl(`pbPayError-${invoiceId}`);
+        if (errEl) {
             errEl.textContent = e.message || 'Could not start payment. Please try again.';
             errEl.hidden = false;
         }
     }
 }
+
+function pbOpenPayModal() {
+    const modal = pbEl('pbPayModal');
+    const status = pbEl('pbPayModalStatus');
+    const frame = pbEl('pbPayFrame');
+    if (status) { status.hidden = false; status.textContent = 'Loading secure payment form…'; }
+    if (frame) {
+        frame.style.height = '';
+        frame.addEventListener('load', pbHidePayModalStatusOnce, { once: true });
+    }
+    if (modal) modal.classList.remove('hidden');
+    document.body.classList.add('pb-modal-open');
+}
+
+function pbHidePayModalStatusOnce() {
+    const status = pbEl('pbPayModalStatus');
+    if (status) status.hidden = true;
+}
+
+/** success=true only for a completed transactResponse; false for cancel/close. */
+function pbClosePayModal(success) {
+    const modal = pbEl('pbPayModal');
+    const frame = pbEl('pbPayFrame');
+    if (modal) modal.classList.add('hidden');
+    document.body.classList.remove('pb-modal-open');
+    // Drop the hosted form out of the DOM's live document rather than just
+    // hiding it — leaving Authorize.net's page loaded in a hidden iframe
+    // would keep its card-entry JS running for no reason.
+    if (frame) frame.src = 'about:blank';
+    pbPaying = null;
+    if (success) pbSetReturnState('paid');
+    pbRender();
+}
+
+/**
+ * Wired once, at module load — the modal lives outside #pbBody so it
+ * survives every pbRender() re-paint, and this must too. Authorize.net's
+ * iframe-communicator.html (loaded on our own domain, inside the hosted
+ * form's own inner iframe) calls this directly via
+ * window.parent.parent.CommunicationHandler.onReceiveCommunication — see
+ * that file for why the parent.parent hop is required.
+ */
+function pbEnsureCommunicationHandler() {
+    if (window.__pbCommHandlerInstalled) return;
+    window.__pbCommHandlerInstalled = true;
+    window.CommunicationHandler = window.CommunicationHandler || {};
+    window.CommunicationHandler.onReceiveCommunication = function (argument) {
+        const params = pbParseCommQueryString(argument && argument.qstr);
+        switch (params.action) {
+            case 'resizeWindow': {
+                const h = parseInt(params.height, 10);
+                const frame = pbEl('pbPayFrame');
+                if (frame && Number.isFinite(h) && h > 0) frame.style.height = Math.max(h, 300) + 'px';
+                break;
+            }
+            case 'cancel':
+                pbClosePayModal(false);
+                break;
+            case 'transactResponse':
+            case 'successfulSave':
+                // The webhook — not this message — is what actually marks the
+                // invoice paid; see the file header. This just closes the
+                // modal and lets pbRender()'s existing return-banner /
+                // reload-after-3s logic take it from here.
+                pbClosePayModal(true);
+                break;
+            case 'errorResponse':
+                // Authorize.net's own hosted form already shows the decline
+                // or validation error inline, inside the iframe — nothing to
+                // add here, and the modal stays open so the parent can retry.
+                break;
+        }
+    };
+}
+
+/**
+ * Authorize.net's own communicator passes a query-string-shaped payload
+ * (action=...&response=...&height=...). Mirrors the parsing in their
+ * reference app (accept-sample-app/index.php's parseQueryString) — the
+ * `response` value is a bare JSON object with no & or = in it, so a plain
+ * split-then-decode is safe.
+ */
+function pbParseCommQueryString(str) {
+    const out = {};
+    String(str || '').split('&').forEach(pair => {
+        if (!pair) return;
+        const idx = pair.indexOf('=');
+        const key = idx === -1 ? pair : pair.slice(0, idx);
+        const val = idx === -1 ? '' : pair.slice(idx + 1);
+        try { out[decodeURIComponent(key)] = decodeURIComponent(val); }
+        catch (_) { out[key] = val; }
+    });
+    return out;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    pbEl('pbPayModalClose')?.addEventListener('click', () => pbClosePayModal(false));
+});
 
 async function pbLoad() {
     const body = pbEl('pbBody');
