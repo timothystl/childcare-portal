@@ -1448,6 +1448,7 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
    ============================================================ */
 
 /* ── Messages ─────────────────────────────────────────────── */
+.msg-toolbar-top { display: flex; justify-content: flex-end; margin: -6px 0 4px; }
 .msg-notify-toggle {
     display: inline-flex; align-items: center; gap: 8px;
     background: var(--white); border: 1px solid var(--border); border-radius: 999px;
