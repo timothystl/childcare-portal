@@ -222,6 +222,19 @@
       <nav id="ptTabs" class="tabbar" role="tablist" aria-label="Parent portal"></nav>
     </div>
 
+    <!-- Online payment (Authorize.net Accept Hosted), embedded via iframe so
+         paying tuition never leaves the portal — see portal-billing.js and
+         iframe-communicator.html. Lives outside #portalSignedIn so a tab
+         switch never wipes it, and it's the only iframe in the parent app;
+         everything else here is native markup. -->
+    <div id="pbPayModal" class="pb-pay-modal hidden" role="dialog" aria-modal="true" aria-label="Pay online">
+        <div class="pb-pay-modal-inner">
+            <button type="button" id="pbPayModalClose" class="pb-pay-modal-close" aria-label="Cancel payment">&times;</button>
+            <p id="pbPayModalStatus" class="pb-pay-modal-status">Loading secure payment form…</p>
+            <iframe id="pbPayFrame" name="pbPayFrame" class="pb-pay-frame" title="Secure payment"></iframe>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
       if ('serviceWorker' in navigator) {

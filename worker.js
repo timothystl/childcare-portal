@@ -988,7 +988,10 @@ export default {
       // console error to say why — the same silent-failure shape as R25 above.
       // Both hosts are needed: the /maps?output=embed URL is served by
       // maps.google.com and redirects to www.google.com/maps/embed.
-      "frame-src https://maps.google.com https://www.google.com; " +
+      // test.authorize.net (sandbox) / accept.authorize.net (production) are
+      // the online-payment iframe in the parent portal — see
+      // portal-billing.js and create-payment-session.
+      "frame-src https://maps.google.com https://www.google.com https://test.authorize.net https://accept.authorize.net; " +
       "font-src 'self' data: https://fonts.gstatic.com"
     );
     // SX4: the rest of the baseline security headers. Kept byte-identical to

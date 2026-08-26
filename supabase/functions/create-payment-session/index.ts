@@ -21,6 +21,12 @@
 //      authorizenet-webhook function does that, after Authorize.net itself
 //      confirms the charge. A parent closing the tab mid-payment leaves the
 //      invoice exactly as it was.
+//   6. hostedPaymentIFrameCommunicatorUrl points at /iframe-communicator.html
+//      on our own domain, which is what lets portal-billing.js embed the
+//      hosted form in an iframe instead of redirecting the whole page —
+//      paying never leaves the portal. Card data still never touches our
+//      server; the iframe just relays Authorize.net's own result back to us.
+//      See portal-billing.js's CommunicationHandler for the receiving end.
 //
 // Deploy:  supabase functions deploy create-payment-session
 // Secrets: AUTHORIZENET_API_LOGIN_ID, AUTHORIZENET_TRANSACTION_KEY,
@@ -141,6 +147,11 @@ serve(async (req) => {
                 },
                 hostedPaymentSettings: {
                     setting: [
+                        // Embeds the hosted form in our own iframe instead of a
+                        // full-page redirect — see behavior #6 above.
+                        { settingName: "hostedPaymentIFrameCommunicatorUrl", settingValue: JSON.stringify({
+                            url: `${ALLOWED_ORIGIN}/iframe-communicator.html`,
+                        }) },
                         { settingName: "hostedPaymentReturnOptions", settingValue: JSON.stringify({
                             showReceipt: false,
                             // A real query string, not a hash fragment — portal-auth.js
