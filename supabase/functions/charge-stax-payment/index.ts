@@ -30,13 +30,22 @@
 //      authorizenet-webhook, just triggered by the charge call's own
 //      response instead of by a redirect return.
 //
-// ⚠️ UNTESTED — Stax sandbox merchant not yet activated (2026-08-26), see
-//   create-stax-charge's header for the full status. In particular:
-//   re-confirm the exact /charge request/response shape (field names for
-//   amount, customer_id, payment_method_id, and where the transaction id
-//   and success flag live in the response body) against
-//   https://docs.staxpayments.com/reference once a real sandbox call can
-//   be made — this was written from the API reference, not a working call.
+// ✅ /charge request/response shape verified live 2026-08-26, after the
+//   Stax activations team turned on the sandbox gateway (see
+//   create-stax-charge's header). Confirmed end to end against the real
+//   sandbox: created a customer, vaulted a test Visa
+//   (4111 1111 1111 1111) against it, then POSTed exactly the body this
+//   file sends — {payment_method_id, customer_id, total, pre_auth, meta}
+//   — to /charge and got back {"success": true, "id": "...", "status":
+//   "SUCCESS", ...}. The `success`/`id` fields this code reads are
+//   exactly right; no changes needed to the charge call itself.
+//
+// ⚠️ STILL UNVERIFIED — this function assumes the browser already has a
+//   Stax payment_method id from Stax.js/Bolt, which does not exist yet
+//   (see create-stax-charge's header — the client-side tokenization piece
+//   is the remaining gap, not this function's own logic). Do not deploy
+//   until that's built and the whole flow has been exercised from the
+//   browser, not just curl.
 //
 // Deploy:  supabase functions deploy charge-stax-payment
 // Secrets: STAX_API_KEY
