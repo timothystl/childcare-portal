@@ -143,9 +143,12 @@ serve(async (req) => {
                     setting: [
                         { settingName: "hostedPaymentReturnOptions", settingValue: JSON.stringify({
                             showReceipt: false,
-                            url: `${returnBase}#billing?paid=${invoice.id}`,
+                            // A real query string, not a hash fragment — portal-auth.js
+                            // reads location.search (see its return-URL handling), and a
+                            // hash-only param would never be seen there.
+                            url: `${returnBase}?paid=${invoice.id}`,
                             urlText: "Return to portal",
-                            cancelUrl: `${returnBase}#billing?cancelled=${invoice.id}`,
+                            cancelUrl: `${returnBase}?cancelled=${invoice.id}`,
                             cancelUrlText: "Cancel",
                         }) },
                         { settingName: "hostedPaymentOrderOptions", settingValue: JSON.stringify({
