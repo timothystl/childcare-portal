@@ -1787,6 +1787,39 @@ should be structurally correct against Stax's documented API, but is unverified 
 browser. Treat the whole flow as an internal-only comparison tool (`?staxtest=1`) until
 someone with Stax dashboard access sets the Web Payments Token and clicks through it.
 
+### Deployed and live-tested (2026-08-26)
+
+`create-stax-charge` and `charge-stax-payment` were deployed to Supabase (they only
+existed as committed source before), `add_stax_payment_tracking.sql` was applied
+(`families.stax_customer_id` now exists live), and both secrets
+(`STAX_API_KEY`/`STAX_WEB_PAYMENTS_TOKEN`) were set. First real click-through against
+`portal.html?staxtest=1` (a throwaway test family, `$5.00` test invoice) got both
+payment buttons rendering correctly, but clicking "Pay with Stax (test)" failed
+immediately with **"Could not load the Stax payment library."**
+
+⚠️ **The cause was this repo's own CSP, not Stax.** `_headers`' `script-src` only
+allowed `cdn.jsdelivr.net` / `static.cloudflareinsights.com` — `staxjs.staxpayments.com`
+was never on the allowlist, so the browser silently blocked the `<script>` tag
+`pbLoadStaxJs()` injects. Same story as R25 (Google Fonts) and the home-page Maps
+embed: a `frame-src`/`script-src` miss looks identical to a real bug from the JS side,
+and only the CSP tells them apart. Fixed in **both** `_headers` and `worker.js`
+(verified byte-identical after editing, per this file's standing rule) by adding:
+- `script-src`: `https://staxjs.staxpayments.com` (loads the library itself)
+- `connect-src`: `https://apiprod.fattlabs.com`, `https://fattqueryprod.fattlabs.com`,
+  `https://transactions.fattlabs.com` — read directly out of `staxjs-captcha.js`'s own
+  bundled source (`grep`'d for `fattlabs.com`/`fattmerchant.com` references) rather than
+  guessed from docs, so this list is exactly what the library itself calls.
+- `frame-src`: `https://staxjs.staxpayments.com`, `https://omni.fattmerchant.com` — the
+  two candidate hosts for the mounted card-number/CVV iframes; `omni.fattmerchant.com`
+  is confirmed live (it's the `merchant_location_descriptor` in the `/charge` response
+  verified earlier this session), `staxjs.staxpayments.com` added defensively since the
+  library is loaded from there.
+
+**Not yet re-tested after the CSP fix** — the next click-through should get past this
+error. If it still fails, check the browser console for a *different* CSP violation
+(the exact iframe/XHR host actually used may differ from what was grepped) before
+assuming a code bug.
+
 ---
 
 ## Finance summary API (for the church ChMS finance integration)

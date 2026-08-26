@@ -6,7 +6,7 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=()
-  Content-Security-Policy: default-src 'self'; frame-ancestors 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com; img-src 'self' data:; frame-src https://maps.google.com https://www.google.com https://test.authorize.net https://accept.authorize.net; font-src 'self' data: https://fonts.gstatic.com
+  Content-Security-Policy: default-src 'self'; frame-ancestors 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://staxjs.staxpayments.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com https://apiprod.fattlabs.com https://fattqueryprod.fattlabs.com https://transactions.fattlabs.com; img-src 'self' data:; frame-src https://maps.google.com https://www.google.com https://test.authorize.net https://accept.authorize.net https://staxjs.staxpayments.com https://omni.fattmerchant.com; font-src 'self' data: https://fonts.gstatic.com
 
 # Bundles and stylesheets are versioned but NOT content-hashed, so they must
 # still revalidate on every request — `no-cache` allows an empty 304 response
