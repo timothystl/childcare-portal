@@ -1767,14 +1767,17 @@ input.prefilled {
 
 /* Branded splash/loading screen shown while a page's own JS boots.
    Markup + the show/hide script live inline near <body> on each page.
-   Real HTML/CSS rather than a single SVG image: an <img> loading an SVG
-   renders in an isolated context that cannot see this page's linked
-   Google Fonts, so the wordmark and body text would always fall back to
-   a generic sans no matter what the SVG declared. The wordmark itself is
-   still an image (images/logo/myMDO_*_wordmark_light.png) since "my" is
-   a script face cropped directly from the brand pack; everything else
-   here is live text in the fonts already linked on every page that shows
-   a splash (Nunito). */
+   This reproduces the "SPLASH / LOADING SCREENS" panel of the brand pack
+   exactly — same three pieces, same order, nothing added:
+     wordmark -> church/hill scene -> tagline -> gold dot spinner.
+   Two images, not one: an <img> loading an SVG renders in an isolated
+   context that cannot see this page's linked Google Fonts, so any text
+   baked into an image would fall back to a generic sans. The wordmark
+   (images/logo/myMDO_*_wordmark_light.png) and the scene
+   (images/logo/splash-scene-light.png) are pixel crops straight out of
+   the brand pack's own mockup — not redrawn — and the tagline is live
+   text in the font already linked on every page that shows a splash
+   (Nunito), reproducing the brand pack's copy verbatim. */
 .mdo-splash {
     position: fixed;
     inset: 0;
@@ -1782,60 +1785,71 @@ input.prefilled {
     background: #FDFAF0;
     display: flex;
     flex-direction: column;
+    align-items: center;
     transition: opacity .35s ease;
     overflow: hidden;
 }
 .mdo-splash.mdo-splash-hidden { opacity: 0; pointer-events: none; }
 
 .mdo-splash-top {
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 14vh 24px 0;
+    padding: 16vh 24px 0;
 }
 .mdo-splash-wordmark { width: min(72vw, 320px); height: auto; }
-.mdo-splash-tagline {
-    margin-top: 18px;
-    font-family: 'Nunito', sans-serif;
-    font-weight: 700;
-    font-size: 15px;
-    color: var(--green);
-    text-align: center;
-}
-.mdo-splash-tagline .t-gold { color: #F5B731; padding: 0 4px; }
-.mdo-splash-tagline .t-blue { color: #3E7BD1; }
 
-.mdo-splash-silhouette {
-    flex: 1;
+.mdo-splash-scene {
+    flex: 1 1 auto;
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    padding-bottom: 4vh;
-    opacity: .5;
+    width: 100%;
+    min-height: 0;
+    padding-top: 6vh;
 }
-.mdo-splash-silhouette svg { width: 55%; max-width: 260px; height: auto; }
+.mdo-splash-scene img { width: min(88vw, 400px); height: auto; }
 
-.mdo-splash-footer {
-    background: #01294A;
-    border-radius: 50% 50% 0 0 / 40px 40px 0 0;
-    padding: 34px 24px 40px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 14px;
-}
-.mdo-splash-spinner {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    border: 4px solid #173A5E;
-    border-top-color: #F5B731;
-    border-right-color: #F5B731;
-}
-.mdo-splash-footer p {
+.mdo-splash-tagline {
+    margin: 5vh 0 0;
+    padding: 0 32px;
     font-family: 'Nunito', sans-serif;
-    font-size: 15px;
-    color: #fff;
-    margin: 0;
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #6E6D6C;
+    text-align: center;
+}
+
+.mdo-splash-spinner {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    margin: 5vh 0 6vh;
+    flex: 0 0 auto;
+}
+.mdo-splash-spinner i {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    border-radius: 50%;
+    background: #F5B731;
+    transform-origin: 3px 15px;
+    animation: mdoSpinnerFade 1s linear infinite;
+}
+.mdo-splash-spinner i:nth-child(1)  { transform: rotate(0deg);    animation-delay: -.875s; }
+.mdo-splash-spinner i:nth-child(2)  { transform: rotate(45deg);   animation-delay: -.75s; }
+.mdo-splash-spinner i:nth-child(3)  { transform: rotate(90deg);   animation-delay: -.625s; }
+.mdo-splash-spinner i:nth-child(4)  { transform: rotate(135deg);  animation-delay: -.5s; }
+.mdo-splash-spinner i:nth-child(5)  { transform: rotate(180deg);  animation-delay: -.375s; }
+.mdo-splash-spinner i:nth-child(6)  { transform: rotate(225deg);  animation-delay: -.25s; }
+.mdo-splash-spinner i:nth-child(7)  { transform: rotate(270deg);  animation-delay: -.125s; }
+.mdo-splash-spinner i:nth-child(8)  { transform: rotate(315deg);  animation-delay: 0s; }
+@keyframes mdoSpinnerFade {
+    0%   { opacity: 1; }
+    100% { opacity: .15; }
 }
