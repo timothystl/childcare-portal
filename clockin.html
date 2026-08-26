@@ -637,17 +637,36 @@
         <img src="/images/logo/splash-church-pale.png" alt="">
     </div>
     <div class="mdo-splash-footer">
-        <div class="mdo-splash-spinner"></div>
-        <p>Loading <strong>myMDO</strong> Clock In&hellip;</p>
+        <div class="mdo-splash-spinner" id="mdoSplashSpinner"></div>
+        <svg id="mdoSplashCheck" width="34" height="34" viewBox="0 0 34 34" hidden>
+            <circle cx="17" cy="17" r="17" fill="#F5B731"/>
+            <path d="M9.5 17.5l5 5 10-11" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <p id="mdoSplashText">Loading <strong>myMDO</strong> Clock In&hellip;</p>
     </div>
 </div>
 <script>
   (function () {
     var el = document.getElementById('mdoSplash');
     if (!el) return;
+    var textEl = document.getElementById('mdoSplashText');
+    var spinnerEl = document.getElementById('mdoSplashSpinner');
+    var checkEl = document.getElementById('mdoSplashCheck');
+    var almostTimer = setTimeout(function () {
+      textEl.innerHTML = 'Almost there&hellip;';
+    }, 1400);
+    var hidden = false;
     function hide() {
-      el.classList.add('mdo-splash-hidden');
-      setTimeout(function () { el.remove(); }, 400);
+      if (hidden) return;
+      hidden = true;
+      clearTimeout(almostTimer);
+      spinnerEl.hidden = true;
+      checkEl.hidden = false;
+      textEl.textContent = 'Welcome!';
+      setTimeout(function () {
+        el.classList.add('mdo-splash-hidden');
+        setTimeout(function () { el.remove(); }, 400);
+      }, 450);
     }
     if (document.readyState === 'complete') hide();
     else window.addEventListener('load', hide);
