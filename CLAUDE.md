@@ -1690,12 +1690,13 @@ Set as Cloudflare Pages environment variables and Supabase Edge Function secrets
   `scripts/generate-vapid-keys.js`; the public key is also pasted into
   `js/push-notifications.js` and `js/staff/staff-push.js`.
 - `FINANCE_API_KEY` — shared secret for the `finance-summary` edge function (see below); same value must be set as `DAYCARE_API_KEY` on the ChMS side
-- `STAX_API_KEY` / `STAX_ENVIRONMENT` — Stax (fattmerchant) Core API bearer key, scaffolding only, see below
+- `STAX_API_KEY` / `STAX_ENVIRONMENT` — Stax (fattmerchant) Core API bearer key, server-side only, never sent to the browser — see below
+- `STAX_WEB_PAYMENTS_TOKEN` — the SEPARATE client-safe token Stax.js/Bolt needs in the browser (Stax dashboard → Settings → Web Payments); NOT the same value as `STAX_API_KEY`, see below
 - `STAX_WEBHOOK_SECRET` — placeholder shared secret for `stax-webhook`; **not** Stax's real signature scheme, see below
 
 ---
 
-## Stax payment processor — merchant activated, server-side flow verified (2026-08-26)
+## Stax payment processor — embedded checkout built, awaiting a real browser test (2026-08-26)
 
 The center is evaluating Stax alongside the already-live Authorize.net integration
 (`create-payment-session` / `authorizenet-webhook` / `admin-refund-payment` /
@@ -1730,27 +1731,61 @@ Hosted). `billing_payments.processor`/`processor_transaction_id` are already
 processor-agnostic (added for Anet), so Stax payments just use `processor = 'stax'` —
 no new payment-table columns needed.
 
-⚠️ **What's still unverified — this is now the actual remaining work, not a guess
-about the merchant:**
-- **The client-side half doesn't exist yet.** No Stax.js/Bolt wiring in
-  `portal-billing.js` — nothing renders hosted card fields or produces a real
-  `payment_method` id from the browser. Everything verified this session was done
-  directly against the Core API (customer + payment-method + charge), which is fine
-  for confirming the server-side edge functions but is NOT how a parent will pay —
-  raw card data must never reach our server, so the browser needs Stax.js to tokenize.
-  Build this next.
-- Whether `STAX_API_KEY` doubles as Stax.js's public/tokenization key, or whether Stax
-  issues a separate publishable key for client-side use — not confirmed.
-- `stax-webhook`'s actual signature/auth scheme (it currently checks a placeholder
-  shared-secret header, `X-Stax-Webhook-Secret` / `STAX_WEBHOOK_SECRET` — **not**
-  Stax's real webhook signing method) and its refund/void event payload shape — this
-  session's verification only exercised a charge, not a refund/dispute event.
+### Embedded checkout — built this session, not yet run in a real browser
 
-**Do not deploy `stax-webhook` or register its URL with Stax** until its signature
-scheme is confirmed. `create-stax-charge` and `charge-stax-payment` are verified
-sound server-side, but still depend on the unbuilt Stax.js client piece before real
-parents can use them — treat the whole flow as not production-ready until that
-exists and has been tested from an actual browser.
+`portal-billing.js` now has a second payment flow (`pbStartStaxPayment` onward) that
+embeds Stax.js/Bolt directly, instead of a hosted-page redirect: the card-number and
+CVV fields are Stax's own tiny iframes, mounted into `#pbStaxCardNumber` /
+`#pbStaxCardCvv` — divs **this app owns**, inside a modal (`#pbStaxModal` in
+`portal.html`) styled with the portal's own design tokens. Everything except those two
+fields — the layout, the amount shown, the Pay button, the receipt email that follows —
+is this app's own, not Stax's. That is the actual point of comparing the two: not just
+"does Stax work" but "do we get more control over how it looks and what the receipt
+says" — Authorize.net's Accept Hosted page is Anet's own document inside an iframe we
+don't control the inside of; Stax.js is the opposite shape.
+
+- **Hidden from every real family by default.** `pbStaxTestEnabled()` only turns the
+  second "Pay … with Stax (test)" button on when `?staxtest=1` was on the URL this tab
+  loaded with (then sticks in `sessionStorage` for the tab). No admin role, no settings
+  row — a normal parent visiting `portal.html` never sees it. This is deliberate: the
+  auto-merge workflow (`.github/workflows/auto-merge-claude.yml`) puts every push to a
+  `claude/**` branch straight into production, so a payment-flow comparison built for
+  internal evaluation must not be reachable by a real family who has no reason to be
+  asked "which processor?" A person running the evaluation adds `?staxtest=1` once on
+  their own account/invoice.
+- **A real bug was caught and fixed while building this.** The `create-stax-charge`
+  scaffolding from earlier returned `staxPublicKey: apiKey` — literally the server-side
+  `STAX_API_KEY` bearer key — to the browser. Stax's own docs confirm the browser needs
+  a *separate* client-safe token ("Website Payments Token", from the Stax dashboard,
+  Settings → Web Payments) for Stax.js, distinct from the Core API bearer key. Fixed:
+  the function now reads a new secret, `STAX_WEB_PAYMENTS_TOKEN`, and returns that
+  instead. Never reintroduce the old shape.
+- **Receipts now match Anet's, on purpose.** `charge-stax-payment` sends the identical
+  branded HTML receipt `authorizenet-webhook` sends (same Resend secrets, same
+  template) — a family paying by Stax should see the same-looking receipt as one paying
+  by Authorize.net, not a Stax-branded one. Fires only on a genuinely new charge record
+  (never the idempotent-duplicate retry path), same rule as the Anet one.
+- **Card-field mount config, expiration handling, and the `.tokenize()` call are all
+  written from Stax's own documented code samples**
+  (`docs.staxpayments.com/docs/accepting-credit-card-payments-on-your-website`,
+  `/docs/tokenizing-a-credit-card`) — number/CVV are mounted iframes, expiration
+  month/year travel as plain (non-tokenized) fields in the `.tokenize()` call, per
+  Stax's own sample. **None of this has run in an actual browser.** This session has no
+  way to obtain a real `STAX_WEB_PAYMENTS_TOKEN` (dashboard-only) to test against —
+  only the server-side Core API calls (customer/payment-method/charge, done via curl)
+  were verified live. Before this is anything but an internal comparison tool: set
+  `STAX_WEB_PAYMENTS_TOKEN`, open `portal.html?staxtest=1` on a real test family
+  account, and click through an actual card entry.
+- `stax-webhook`'s signature/auth scheme is still an unconfirmed placeholder (shared
+  secret header, not Stax's real signing method) — **do not deploy it or register its
+  URL with Stax** until that's resolved. It only matters for refunds/disputes; the
+  charge path above doesn't depend on it.
+
+**Bottom line:** `create-stax-charge` and `charge-stax-payment` are verified sound
+server-side (real sandbox calls succeeded). The embedded checkout UI is now built and
+should be structurally correct against Stax's documented API, but is unverified in a
+browser. Treat the whole flow as an internal-only comparison tool (`?staxtest=1`) until
+someone with Stax dashboard access sets the Web Payments Token and clicks through it.
 
 ---
 

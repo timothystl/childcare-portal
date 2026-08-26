@@ -33,10 +33,20 @@
 // portal-auth.js's location.search handling (?paid=/?cancelled=) stays in
 // place as a fallback for the rare case Authorize.net falls back to
 // navigating the return URL instead of using the communicator.
+//
+// ⚠️ STAX COMPARISON (2026-08-26): a second, Stax-based payment flow lives
+// at the bottom of this file (pbStartStaxPayment onward), embedding
+// Stax.js/Bolt fields instead of a hosted redirect page. It is HIDDEN from
+// every real family by default — see pbStaxTestEnabled() — and exists only
+// so the Stax-vs-Authorize.net evaluation can be run side by side on a
+// real account. See CLAUDE.md's Stax section for what is and isn't
+// verified yet before this could ever go live for real parents.
 
 let pbData = null;
 let pbReturnState = null;   // 'paid' | 'cancelled' | null — set by portal-auth.js
 let pbPaying = null;        // invoice id currently starting a payment, or null
+let pbStaxPaying = null;    // invoice id currently in the Stax comparison modal, or null
+let pbStaxInstance = null;  // the live StaxJs() instance for the open modal, or null
 
 /** Called from portal-auth.js when Authorize.net's hosted page redirects back. */
 function pbSetReturnState(kind) { pbReturnState = kind; }
@@ -97,8 +107,11 @@ function pbRender() {
         ${invoices.map(pbInvoiceCard).join('')}
     `;
 
-    body.querySelectorAll('.pb-pay-btn[data-invoice-id]').forEach(btn => {
+    body.querySelectorAll('.pb-pay-btn[data-invoice-id]:not(.pb-stax-btn)').forEach(btn => {
         btn.addEventListener('click', () => pbStartPayment(Number(btn.dataset.invoiceId)));
+    });
+    body.querySelectorAll('.pb-stax-btn[data-invoice-id]').forEach(btn => {
+        btn.addEventListener('click', () => pbStartStaxPayment(Number(btn.dataset.invoiceId)));
     });
 
     // A parent freshly back from a payment attempt: reload once more shortly
@@ -151,9 +164,32 @@ function pbInvoiceCard(inv) {
             </div>
             ${!paid ? `<button type="button" class="pb-pay-btn" data-invoice-id="${inv.id}"
                 ${isPaying ? 'disabled' : ''}>${isPaying ? 'Starting payment…' : `Pay ${pbMoney(due)} online`}</button>
-                <p class="pb-pay-error" id="pbPayError-${inv.id}" hidden></p>` : ''}
+                <p class="pb-pay-error" id="pbPayError-${inv.id}" hidden></p>
+                ${pbStaxTestEnabled() ? `<button type="button" class="pb-pay-btn pb-stax-btn" data-invoice-id="${inv.id}"
+                    ${pbStaxPaying === inv.id ? 'disabled' : ''}>${pbStaxPaying === inv.id ? 'Starting payment…' : `Pay ${pbMoney(due)} with Stax (test)`}</button>
+                    <p class="pb-pay-error" id="pbStaxError-${inv.id}" hidden></p>` : ''}` : ''}
         </div>
     </section>`;
+}
+
+/**
+ * Side-by-side Stax comparison, hidden from every real family by default.
+ * Only visible when ?staxtest=1 was on the URL this tab loaded with — the
+ * flag is stuck in sessionStorage from that point on so it survives a tab
+ * switch, but a fresh tab or a normal bookmark never shows it. This is
+ * deliberately NOT an admin role or a settings row: it exists purely so
+ * whoever is running the Stax-vs-Authorize.net evaluation can compare both
+ * live, on their own real account/invoice, without any real parent ever
+ * seeing a second "which processor" choice they have no reason to make.
+ * See the Stax section of CLAUDE.md for the evaluation's current status.
+ */
+function pbStaxTestEnabled() {
+    try {
+        if (new URLSearchParams(location.search).get('staxtest') === '1') {
+            sessionStorage.setItem('pbStaxTest', '1');
+        }
+        return sessionStorage.getItem('pbStaxTest') === '1';
+    } catch (_) { return false; }
 }
 
 /**
@@ -294,7 +330,206 @@ function pbParseCommQueryString(str) {
 
 document.addEventListener('DOMContentLoaded', () => {
     pbEl('pbPayModalClose')?.addEventListener('click', () => pbClosePayModal(false));
+    pbEl('pbStaxModalClose')?.addEventListener('click', () => pbCloseStaxModal(false));
+    pbEl('pbStaxPayBtn')?.addEventListener('click', pbStaxTokenizeAndCharge);
 });
+
+// ============================================================
+// Stax comparison flow — embedded Stax.js (Bolt) fields, our own modal
+// ============================================================
+// Unlike the Authorize.net flow above (their hosted page, in an iframe we
+// don't control the inside of), Stax.js mounts just the card-number and
+// CVV fields as small individual iframes into divs WE own — everything
+// around them (layout, labels, the Pay button, the amount shown, the
+// receipt that follows) is this app's own markup and its own branded
+// email, not Stax's. That's the actual point of this comparison: it's not
+// just "does Stax work", it's "do we get more control over how it looks
+// and what the receipt looks like" — see the file header's ⚠️ and
+// CLAUDE.md's Stax section for what is and isn't verified yet.
+//
+// ⚠️ Written from Stax's own documented code samples
+// (docs.staxpayments.com/docs/accepting-credit-card-payments-on-your-website,
+// /docs/tokenizing-a-credit-card) — this session has no way to obtain a
+// real STAX_WEB_PAYMENTS_TOKEN (Stax dashboard-only) to run it in an
+// actual browser. Treat this as unverified until someone with dashboard
+// access sets that secret and clicks through it for real.
+
+const PB_STAXJS_URL = 'https://staxjs.staxpayments.com/staxjs-captcha.js';
+let pbStaxJsLoadPromise = null;
+
+function pbLoadStaxJs() {
+    if (window.StaxJs) return Promise.resolve();
+    if (pbStaxJsLoadPromise) return pbStaxJsLoadPromise;
+    pbStaxJsLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = PB_STAXJS_URL;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Could not load the Stax payment library.'));
+        document.head.appendChild(script);
+    });
+    return pbStaxJsLoadPromise;
+}
+
+async function pbStartStaxPayment(invoiceId) {
+    if (pbStaxPaying) return;
+    pbStaxPaying = invoiceId;
+    pbRender();
+    const errEl = pbEl(`pbStaxError-${invoiceId}`);
+    if (errEl) errEl.hidden = true;
+    try {
+        const session = await createStaxChargeSession(invoiceId);
+        await pbLoadStaxJs();
+        pbOpenStaxModal(session);
+    } catch (e) {
+        pbStaxPaying = null;
+        pbRender();
+        const err = pbEl(`pbStaxError-${invoiceId}`);
+        if (err) {
+            err.textContent = e.message || 'Could not start payment. Please try again.';
+            err.hidden = false;
+        }
+    }
+}
+
+function pbPopulateStaxExpYearOnce() {
+    const yearEl = pbEl('pbStaxExpYear');
+    if (!yearEl || yearEl.options.length) return;
+    const thisYear = new Date().getFullYear();
+    const blank = document.createElement('option');
+    blank.value = ''; blank.textContent = 'YYYY';
+    yearEl.appendChild(blank);
+    for (let y = thisYear; y <= thisYear + 15; y++) {
+        const opt = document.createElement('option');
+        opt.value = String(y); opt.textContent = String(y);
+        yearEl.appendChild(opt);
+    }
+}
+
+/**
+ * Mounts fresh card-number/CVV fields for this session. A new StaxJs()
+ * instance is created every time the modal opens rather than reused —
+ * Stax.js's cleanup/teardown API isn't documented anywhere this session
+ * could find, so replacing the mount divs' contents outright (via
+ * innerHTML reset before construction) is the safe way to avoid stacking
+ * stale iframes across repeated opens.
+ */
+function pbOpenStaxModal(session) {
+    pbPopulateStaxExpYearOnce();
+    const modal = pbEl('pbStaxModal');
+    const numberMount = pbEl('pbStaxCardNumber');
+    const cvvMount = pbEl('pbStaxCardCvv');
+    const nameEl = pbEl('pbStaxName');
+    const amountEl = pbEl('pbStaxAmount');
+    const payBtn = pbEl('pbStaxPayBtn');
+    const status = pbEl('pbStaxModalStatus');
+    if (numberMount) numberMount.innerHTML = '';
+    if (cvvMount) cvvMount.innerHTML = '';
+    if (nameEl) nameEl.textContent = `${session.firstname} ${session.lastname}`.trim();
+    if (amountEl) amountEl.textContent = pbMoney(session.amount);
+    if (payBtn) payBtn.disabled = true;
+    if (status) { status.hidden = false; status.textContent = 'Loading secure card fields…'; }
+
+    window.__pbStaxSession = session;
+
+    pbStaxInstance = new StaxJs(session.webPaymentsToken, {
+        number: {
+            id: 'pbStaxCardNumber',
+            placeholder: '0000 0000 0000 0000',
+            style: 'height: 44px; width: 100%; font-size: 16px; padding: 0 12px; border: none; outline: none;',
+            type: 'text',
+            format: 'prettyFormat',
+        },
+        cvv: {
+            id: 'pbStaxCardCvv',
+            placeholder: 'CVV',
+            style: 'height: 44px; width: 100%; font-size: 16px; padding: 0 12px; border: none; outline: none;',
+            type: 'text',
+        },
+    });
+
+    // .showCardForm() is documented on Stax's "accepting a credit card
+    // payment" sample; feature-detect it in case a given Stax.js build
+    // mounts on construction instead, since this hasn't been run live.
+    const mounted = typeof pbStaxInstance.showCardForm === 'function'
+        ? pbStaxInstance.showCardForm()
+        : Promise.resolve();
+
+    mounted
+        .then(() => { if (status) status.hidden = true; })
+        .catch(err => {
+            if (status) { status.textContent = 'Could not load the card form. Please try again.'; }
+            console.error('Stax.js showCardForm failed:', err);
+        });
+
+    if (typeof pbStaxInstance.on === 'function') {
+        pbStaxInstance.on('card_form_complete', () => { if (payBtn) payBtn.disabled = false; });
+        pbStaxInstance.on('card_form_uncomplete', () => { if (payBtn) payBtn.disabled = true; });
+    }
+
+    if (modal) modal.classList.remove('hidden');
+    document.body.classList.add('pb-modal-open');
+}
+
+async function pbStaxTokenizeAndCharge() {
+    const session = window.__pbStaxSession;
+    const payBtn = pbEl('pbStaxPayBtn');
+    const status = pbEl('pbStaxModalStatus');
+    const monthEl = pbEl('pbStaxExpMonth');
+    const yearEl = pbEl('pbStaxExpYear');
+    if (!session || !pbStaxInstance) return;
+
+    if (payBtn) payBtn.disabled = true;
+    if (status) { status.hidden = false; status.textContent = 'Processing payment…'; }
+
+    try {
+        // Per Stax's documented sample, expiration month/year travel as
+        // plain fields here — only the number and CVV are collected inside
+        // Stax's own iframes. See create-stax-charge's ✅ note for why.
+        const tokenizeResult = await pbStaxInstance.tokenize({
+            firstname: session.firstname,
+            lastname: session.lastname,
+            person_name: `${session.firstname} ${session.lastname}`.trim(),
+            phone: session.phone || '',
+            method: 'card',
+            month: monthEl ? monthEl.value : '',
+            year: yearEl ? yearEl.value : '',
+            customer_id: session.customerId,
+            match_customer: true,
+            validate: false,
+        });
+
+        const paymentMethodId = tokenizeResult && tokenizeResult.id;
+        if (!paymentMethodId) throw new Error('Could not read the card. Please check the details and try again.');
+
+        const chargeResult = await chargeStaxPayment(session.invoiceId, paymentMethodId);
+        if (!chargeResult || chargeResult.success !== true) {
+            throw new Error('Payment was not confirmed. Please try again.');
+        }
+
+        pbCloseStaxModal(true);
+    } catch (e) {
+        if (status) {
+            status.hidden = false;
+            status.textContent = e.message || 'Payment failed. Please check the card details and try again.';
+        }
+        if (payBtn) payBtn.disabled = false;
+    }
+}
+
+function pbCloseStaxModal(success) {
+    const modal = pbEl('pbStaxModal');
+    if (modal) modal.classList.add('hidden');
+    document.body.classList.remove('pb-modal-open');
+    const numberMount = pbEl('pbStaxCardNumber');
+    const cvvMount = pbEl('pbStaxCardCvv');
+    if (numberMount) numberMount.innerHTML = '';
+    if (cvvMount) cvvMount.innerHTML = '';
+    pbStaxInstance = null;
+    window.__pbStaxSession = null;
+    pbStaxPaying = null;
+    if (success) pbSetReturnState('paid');
+    pbRender();
+}
 
 async function pbLoad() {
     const body = pbEl('pbBody');
