@@ -92,6 +92,51 @@ function readNote(raw: unknown): string {
     return String(v ?? "");
 }
 
+/**
+ * Which child, which days — pulled straight from the actual registration
+ * dates for the month, not re-derived pricing math. Deliberately does NOT
+ * attempt a per-day dollar breakdown: compute_family_month_charges() /
+ * _reconcile_billing_invoice_internal.sql's pricing (weekly rates, sibling
+ * and staff discounts, change fees, the $10 second-child-same-day discount)
+ * is intricate enough that a second, independent re-implementation here
+ * would risk showing a family numbers that don't add up to the real total —
+ * the exact "two sources of truth" trap this app's billing code has been
+ * bitten by before. A plain list of who and which days is accurate on its
+ * own terms and answers "what am I being charged for" without that risk.
+ */
+async function fetchCareDayBreakdown(admin: any, fam: { parent_email?: string; parent2_email?: string }, month: string):
+    Promise<Array<{ childName: string; dates: Array<{ date: string; dayType: string }> }>> {
+    const emails = [fam.parent_email, fam.parent2_email]
+        .filter(Boolean).map((e: string) => e.toLowerCase().trim());
+    if (!emails.length) return [];
+
+    const { data: regs } = await admin
+        .from("registrations")
+        .select("child_name, parent_email, registration_dates(care_date, day_type, waitlisted)")
+        .eq("status", "confirmed")
+        .eq("month_key", month);
+
+    const byChild = new Map<string, Array<{ date: string; dayType: string }>>();
+    for (const r of regs || []) {
+        if (!emails.includes(String(r.parent_email || "").toLowerCase().trim())) continue;
+        const dates = (r.registration_dates || [])
+            .filter((d: any) => !d.waitlisted)
+            .map((d: any) => ({ date: d.care_date as string, dayType: d.day_type === "half" ? "half" : "full" }))
+            .sort((a: any, b: any) => a.date.localeCompare(b.date));
+        if (!dates.length) continue;
+        const existing = byChild.get(r.child_name) || [];
+        byChild.set(r.child_name, [...existing, ...dates].sort((a, b) => a.date.localeCompare(b.date)));
+    }
+    return [...byChild.entries()].map(([childName, dates]) => ({ childName, dates }));
+}
+
+function formatCareDate(iso: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!m) return iso;
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+        .toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function monthLabel(month: string): string {
     // billing_cycles.month is 'YYYY-MM'
     const m = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
@@ -104,6 +149,7 @@ function buildHtml(o: {
     parentName: string; month: string; base: number; discount: number;
     adjustment: number; adjustmentNote: string; total: number; note: string;
     isTest?: boolean;
+    careDays?: Array<{ childName: string; dates: Array<{ date: string; dayType: string }> }>;
 }): string {
     const line = (label: string, value: string, strong = false) => `
         <tr>
@@ -113,6 +159,21 @@ function buildHtml(o: {
 
     const noteBlock = o.note
         ? `<div style="background:#FFF8E1;border:1px solid #F5B731;border-radius:8px;padding:14px 18px;margin:22px 0;color:#2E2A22;font-size:14px;line-height:1.6;">${escHtml(o.note)}</div>`
+        : "";
+
+    // Who and which days — see fetchCareDayBreakdown's comment for why this
+    // is a plain list rather than a re-derived per-day dollar amount.
+    const careDaysBlock = (o.careDays && o.careDays.length)
+        ? `<div style="margin:0 0 18px;">
+            ${o.careDays.map(c => {
+                const dateList = c.dates.map(d =>
+                    escHtml(formatCareDate(d.date)) + (d.dayType === "half" ? " (half day)" : "")
+                ).join(", ");
+                return `<p style="margin:0 0 8px;color:#2E2A22;font-size:14px;line-height:1.6;">
+                    <strong style="color:#01294A;">${escHtml(c.childName)}</strong> — ${dateList}
+                </p>`;
+            }).join("")}
+          </div>`
         : "";
 
     return `<!DOCTYPE html>
@@ -145,6 +206,8 @@ function buildHtml(o: {
               Hello ${escHtml(o.parentName)},<br>
               Here is your statement for ${escHtml(monthLabel(o.month))}, based on the days booked for your child${'('}ren${')'}.
             </p>
+
+            ${careDaysBlock}
 
             <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 6px;">
               ${line('Care days', money(o.base))}
@@ -266,18 +329,25 @@ serve(async (req) => {
             // nothing is drafted yet.
             const { data: sampleRows } = ids.length
                 ? await admin.from("billing_invoices")
-                    .select("base_amount, discount_amount, adjustment_amount, adjustment_note, final_amount, billing_cycles(month)")
+                    .select("family_id, base_amount, discount_amount, adjustment_amount, adjustment_note, final_amount, billing_cycles(month)")
                     .in("id", ids).limit(1)
                 : await admin.from("billing_invoices")
-                    .select("base_amount, discount_amount, adjustment_amount, adjustment_note, final_amount, billing_cycles(month)")
+                    .select("family_id, base_amount, discount_amount, adjustment_amount, adjustment_note, final_amount, billing_cycles(month)")
                     .order("id", { ascending: false }).limit(1);
             const sample = sampleRows?.[0];
 
             const now = new Date();
+            const sampleMonth = (sample as any)?.billing_cycles?.month
+                || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+            let sampleCareDays: Awaited<ReturnType<typeof fetchCareDayBreakdown>> = [];
+            if (sample?.family_id) {
+                const { data: sampleFam } = await admin.from("families")
+                    .select("parent_email, parent2_email").eq("id", sample.family_id).maybeSingle();
+                if (sampleFam) sampleCareDays = await fetchCareDayBreakdown(admin, sampleFam, sampleMonth).catch(() => []);
+            }
             const html = buildHtml({
                 parentName:     "there",
-                month:          (sample as any)?.billing_cycles?.month
-                                  || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+                month:          sampleMonth,
                 base:           Number(sample?.base_amount)       || 320,
                 discount:       Number(sample?.discount_amount)   || 0,
                 adjustment:     Number(sample?.adjustment_amount) || 0,
@@ -285,6 +355,7 @@ serve(async (req) => {
                 total:          Number(sample?.final_amount)      || 320,
                 note,
                 isTest:         true,
+                careDays:       sampleCareDays,
             });
 
             const res = await fetch("https://api.resend.com/emails", {
@@ -323,7 +394,7 @@ serve(async (req) => {
 
         const famIds = [...new Set((invoices || []).map(i => i.family_id).filter(Boolean))];
         const { data: families } = famIds.length
-            ? await admin.from("families").select("id, parent_name, parent_email").in("id", famIds)
+            ? await admin.from("families").select("id, parent_name, parent_email, parent2_email").in("id", famIds)
             : { data: [] as any[] };
         const famById = new Map((families || []).map((f: any) => [String(f.id), f]));
 
@@ -350,6 +421,7 @@ serve(async (req) => {
             }
 
             const month = (inv as any).billing_cycles?.month || "";
+            const careDays = await fetchCareDayBreakdown(admin, fam, month).catch(() => []);
             const html = buildHtml({
                 parentName:     fam.parent_name || "there",
                 month,
@@ -359,6 +431,7 @@ serve(async (req) => {
                 adjustmentNote: inv.adjustment_note || "",
                 total:          Number(inv.final_amount) || 0,
                 note,
+                careDays,
             });
 
             const res = await fetch("https://api.resend.com/emails", {
