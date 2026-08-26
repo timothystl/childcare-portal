@@ -26,11 +26,14 @@
 //      (processor='stax') is acted on — a refund for a transaction we
 //      have no record of is logged and ignored rather than guessed at.
 //
-// ⚠️ UNCONFIRMED — Stax sandbox merchant not yet activated (2026-08-26),
-//   see create-stax-charge's header. Two things in this file are written
-//   from general Stax API-reference reading, not a working webhook
-//   delivery, and MUST be confirmed before this is registered with Stax
-//   or deployed to production:
+// ⚠️ UNCONFIRMED — the sandbox merchant was activated 2026-08-26 (see
+//   create-stax-charge's header) and a real charge now works end to end,
+//   but nothing in THIS file has been exercised — it only fires on
+//   after-the-fact events (refund/void/dispute), which the verification
+//   session didn't trigger. Two things here are still written from
+//   general Stax API-reference reading, not a working webhook delivery,
+//   and MUST be confirmed before this is registered with Stax or deployed
+//   to production:
 //     - The signature/auth scheme Stax actually uses for webhook delivery
 //       (header name, HMAC algorithm, what it's computed over). This file
 //       currently checks a shared secret in a custom header
