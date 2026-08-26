@@ -47,7 +47,12 @@ const AP_TABS = {
     },
     messages: {
         icon: '💬', label: 'Messages',
-        blurb: 'Everything a family has sent through the portal — the Contact Us form and waitlist questions — in one inbox.',
+        blurb: "Every conversation with families and prospects, in one place — who's waiting on you, and what still needs an email.",
+        // One working inbox (design handoff design_handoff_messages_settings/
+        // Messages.dc.html, 2026-08-26) replaced the tab's old two-tool split
+        // (Family Conversations / Contact Us Messages). Same reasoning as
+        // Finance's defaultTool: one real tool, no dashboard to land on first.
+        defaultTool: 'messages',
     },
     classrooms: {
         icon: '📋', label: 'Classrooms',
@@ -79,7 +84,12 @@ const AP_TABS = {
     },
     settings: {
         icon: '⚙️', label: 'Settings',
-        blurb: 'The rules the portal runs on. Change these rarely — most take effect immediately for parents.',
+        blurb: 'The rules the portal runs on. Every control shows who last changed it.',
+        // One continuous page (design handoff design_handoff_messages_settings/
+        // Settings.dc.html, 2026-08-26) replaced the flat 9-panel tab. Same
+        // reasoning as Finance's defaultTool: one real tool, no dashboard to
+        // land on first.
+        defaultTool: 'settingsHub',
     },
 };
 
@@ -117,8 +127,6 @@ const AP_TOOLS = [
     // inspector, and the count they record is a count of children.
     { key: 'drills',      pane: 'daily',         section: 'fireDrillsSection',       tab: 'classrooms', group: 'Records', tint: AP_TINT.tang, icon: '🔥', name: 'Fire Drills',
       blurb: 'Every drill run, who was in the building, and how long it took.' },
-    { key: 'announce',    pane: 'daily',         section: 'announcementsSection',    tab: 'classrooms', group: 'Records', tint: AP_TINT.tang, icon: '📣', name: 'Announcements',
-      blurb: 'Write once — closures, news, events — and see who gets it.' },
     // ── Finance · Money In (design handoff: Finance Hub, 2026-08-26) ──
     // Bill This Month, Invoices, Who Owes, and Family Billing Summary are
     // consolidated into one ledger screen — the director's own complaint was
@@ -252,18 +260,13 @@ const AP_TOOLS = [
       blurb: 'Whether the geofence is recording anything, and whether two staff share a phone.' },
 
     // ── Messages ──
-    // Its own top-level tab, not a group buried under Planning: parents reach
-    // the office two different ways (an ongoing thread from an enrolled
-    // family, or a one-off Contact Us submission from anyone), and both used
-    // to be named "Parent Messages" in two different tabs — a director
-    // reported a message "not showing up" that was sitting in the other one
-    // the whole time. Keeping both tools under one tab with distinct names
-    // is the fix; they stay separate tools (different tables, different
-    // lifecycles) rather than one merged inbox.
-    { key: 'threads',     pane: 'messages', section: 'threadsSection',  tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '💬', name: 'Family Conversations',
-      blurb: 'Two-way conversations with enrolled families — reply as the office.' },
-    { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '📮', name: 'Contact Us Messages',
-      blurb: 'One-off messages sent via the Contact Us button on the registration portal.' },
+    // One working inbox (design handoff design_handoff_messages_settings/
+    // Messages.dc.html, 2026-08-26) — merges Family Conversations, Contact Us
+    // Messages, and Announcements into a single feed. Retired the three-tool
+    // split (`threads`, `msgHistory`, `announce`) and `adminPush`: there is no
+    // dashboard/tool split on this tab anymore — this IS the landing page.
+    { key: 'messages',    pane: 'messages', section: 'messagesUnifiedSection', tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '💬', name: 'Messages',
+      blurb: "Every conversation with families and prospects, in one place — who's waiting on you, and what still needs an email." },
 
     // ── Market Analysis ──
     { key: 'mktPos',      pane: 'market', section: 'marketOverviewSection',  tab: 'market', group: 'Where We Stand', tint: AP_TINT.green, icon: '📈', name: 'Market Position',
@@ -276,24 +279,14 @@ const AP_TOOLS = [
       blurb: 'The full comparable set — edit a row or add a provider.' },
 
     // ── Settings ──
-    { key: 'adminPush',   pane: 'settings', section: 'adminPushSection',     tab: 'settings', group: 'Access & Oversight', tint: AP_TINT.tang, icon: '🔔', name: 'My Notifications',
-      blurb: 'Turn on push notifications for new parent messages.' },
-    { key: 'regWindow',   pane: 'settings', section: 'regWindowSection',     tab: 'settings', group: 'Registration', tint: AP_TINT.gold, icon: '🔓', name: 'Registration Window',
-      blurb: 'Force the registration window open or closed.' },
-    { key: 'closedDays',  pane: 'settings', section: 'closedDaysSection',    tab: 'settings', group: 'Registration', tint: AP_TINT.gold, icon: '🚫', name: 'Closed Days',
-      blurb: 'Block dates so they show as unavailable to parents.' },
-    { key: 'summerCamp',  pane: 'settings', section: 'summerCampSection',    tab: 'settings', group: 'Registration', tint: AP_TINT.gold, icon: '☀️', name: 'Summer Camp',
-      blurb: 'Show or hide Summer Camp in the parent portal.' },
-    { key: 'rates',       pane: 'settings', section: 'ratesSection',         tab: 'settings', group: 'Rooms & Rates', tint: AP_TINT.green, icon: '⚙️', name: 'Room Rates & Fees',
-      blurb: 'Daily and weekly rates, age ranges, and one-time fees.' },
-    { key: 'ratios',      pane: 'settings', section: 'ratiosSection',        tab: 'settings', group: 'Rooms & Rates', tint: AP_TINT.green, icon: '👷', name: 'Staff-to-Child Ratios',
-      blurb: 'Maximum children per staff member for each room.' },
-    { key: 'capacity',    pane: 'settings', section: 'capacitySection',      tab: 'settings', group: 'Rooms & Rates', tint: AP_TINT.green, icon: '🏫', name: 'Classroom Capacity',
-      blurb: 'Maximum enrolled children per room per day.' },
-    { key: 'adminRoles',  pane: 'settings', section: 'adminRolesSection',    tab: 'settings', group: 'Access & Oversight', tint: AP_TINT.tang, icon: '🔐', name: 'Admin Access',
-      blurb: 'Admin login accounts and their access levels.' },
-    { key: 'auditLog',    pane: 'settings', section: 'auditLogSection',      tab: 'settings', group: 'Access & Oversight', tint: AP_TINT.tang, icon: '🧾', name: 'Admin Audit Log',
-      blurb: 'Who changed what, recorded automatically and unerasable.' },
+    // One continuous page (design handoff design_handoff_messages_settings/
+    // Settings.dc.html, 2026-08-26) — no dashboard/tool split, no accordion.
+    // Retired the eight separate tools (regWindow, closedDays, summerCamp,
+    // rates, ratios, capacity, adminRoles, auditLog); rates+ratios+capacity
+    // collapsed into one Rooms & rates table. "My Notifications" (adminPush)
+    // moved to the Messages tab header.
+    { key: 'settingsHub', pane: 'settings', section: 'settingsUnifiedSection', tab: 'settings', group: 'Settings', tint: AP_TINT.gold, icon: '⚙️', name: 'Settings',
+      blurb: 'The rules the portal runs on. Every control shows who last changed it.' },
 ];
 
 // Director owns no tools. It is a dashboard: every link on it deep-links
@@ -434,10 +427,7 @@ const AP_FULL_ONLY_TABS = ['finance', 'market'];
 // staffInjury for the same reason as payroll but more so: the report names an
 // employee, the part of their body, and where they were treated. A `restricted`
 // admin who plans schedules has no business reading it.
-// adminPush: a 'restricted'/'staff' login never sees the office-wide Parent
-// Messages inbox (admin-threads.js is unscoped to full admins), so offering
-// them a toggle for it would alert someone with nowhere to act on it.
-const AP_FULL_ONLY_KEYS = ['payroll', 'staffInjury', 'clockIntegrity', 'adminPush'];
+const AP_FULL_ONLY_KEYS = ['payroll', 'staffInjury', 'clockIntegrity'];
 
 function apToolAvailable(tool) {
     const el = document.getElementById(tool.section);
@@ -518,7 +508,10 @@ function apRender() {
     // A tab can name its own landing tool (see AP_TABS.finance) instead of
     // falling through to the generic Dashboard/Detail split — covers a fresh
     // tab click (apGoTab sets view to null), a restored session, and initial
-    // load alike, since all three funnel through this one render.
+    // load alike, since all three funnel through this one render. Messages
+    // and Settings use this for the same reason finance does: each has
+    // exactly one tool, so there is no dashboard/tool split to fall into
+    // (design handoff design_handoff_messages_settings, 2026-08-26).
     if (!apState.view) {
         const defaultKey = AP_TABS[apState.tab]?.defaultTool;
         const defaultTool = defaultKey ? AP_TOOL_BY_KEY[defaultKey] : null;
@@ -689,12 +682,6 @@ function apOnToolOpened(tool) {
             case 'staffDir':
                 if (typeof allStaffData !== 'undefined' && !allStaffData.length) loadStaffList();
                 break;
-            case 'msgHistory':
-                if (typeof loadMessages === 'function') loadMessages();
-                break;
-            case 'auditLog':
-                if (typeof loadAuditLogTab === 'function') loadAuditLogTab();
-                break;
             case 'wlPlanner':
             case 'wlDemand':
                 if (typeof loadWaitlistApplications === 'function' &&
@@ -711,13 +698,13 @@ function apOnToolOpened(tool) {
             window._apArInit = true; setupBillingDashYear();
         }
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
-        if (tool.key === 'announce' && typeof renderAnnouncementsTool === 'function') renderAnnouncementsTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
         if (tool.key === 'staffInjury' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();
         if (tool.key === 'clockIntegrity' && typeof renderClockIntegrityTool === 'function') renderClockIntegrityTool();
-        if (tool.key === 'threads' && typeof renderThreadsTool === 'function') renderThreadsTool();
+        if (tool.key === 'messages' && typeof renderMessagesUnifiedTool === 'function') renderMessagesUnifiedTool();
+        if (tool.key === 'settingsHub' && typeof renderSettingsUnifiedTool === 'function') renderSettingsUnifiedTool();
         if (tool.key === 'schedule')  apRenderScheduleTimeOff();
         if (tool.key === 'staffreq')  apRenderStaffReq();
         if (tool.key === 'scenario')  apRenderScenario();
@@ -908,7 +895,6 @@ function apRenderDashboard(page) {
         finance:    apDashFinanceHome,
         planning:   apDashPlanning,
         market:     apDashMarket,
-        settings:   apDashSettings,
     }[apState.tab] || apDashSimple;
     const dash = builder(live);
 
@@ -1161,7 +1147,7 @@ function apDashDirector(live) {
         {
             label: 'Unread messages', tone: 'gold', value: live.unread,
             sub: live.unread ? 'from families through the portal' : 'nothing new',
-            ...(live.unread ? { link: 'msgHistory', linkLabel: 'Open messages', linkIcon: '💬' } : {}),
+            ...(live.unread ? { link: 'messages', linkLabel: 'Open messages', linkIcon: '💬' } : {}),
         },
         {
             label: 'Seats open this week', tone: 'ok', value: seatsOpen,
@@ -1253,7 +1239,7 @@ function apDashDirector(live) {
         title: `${live.unread} unread message${live.unread > 1 ? 's' : ''}`,
         pill: 'FROM FAMILIES',
         context: 'sent through the parent portal',
-        actions: [{ key: 'msgHistory', label: 'Open', primary: true }],
+        actions: [{ key: 'messages', label: 'Open', primary: true }],
     });
 
     const infantsWaiting = (byRoom.bear || 0) + (byRoom.bee || 0);
@@ -1282,17 +1268,17 @@ function apDashDirector(live) {
     if (live.pending.length) attention.push({ icon: '🚫', key: 'schedule', urgent: true,
         text: `${live.pending.length} time-off request${live.pending.length > 1 ? 's are' : ' is'} waiting on your approval.`, cta: 'Review requests' });
     const edgeRooms = edgeRoomsForQueue(sf, peakIx);
-    if (edgeRooms.length) attention.push({ icon: '⚖️', key: 'ratios',
+    if (edgeRooms.length) attention.push({ icon: '⚖️', key: 'settingsHub',
         text: `${edgeRooms.map(r => r.label).join(', ')} sit${edgeRooms.length > 1 ? '' : 's'} exactly at ratio on ${peakDay} — one more child adds a staff member.`, cta: 'Open Ratios' });
     if (inv.unsent) attention.push({ icon: '🧾', key: 'financeHub', urgent: true,
         text: `${inv.unsent} invoice${inv.unsent === 1 ? ' is' : 's are'} drafted for this month but not marked sent.`, cta: 'Review and send invoices' });
     else if (!inv.drafted && live.billed > 0) attention.push({ icon: '🧾', key: 'financeHub',
         text: `${apMoney(live.billed)} is billable this month but no invoices have been drafted.`, cta: 'Open invoices' });
-    if (live.unread) attention.push({ icon: '✉️', key: 'msgHistory',
-        text: `${live.unread} Contact Us message${live.unread > 1 ? 's have' : ' has'} not been read.`, cta: 'Open Contact Us Messages' });
-    if (live.nextClosure) attention.push({ icon: '🚫', key: 'closedDays',
+    if (live.unread) attention.push({ icon: '✉️', key: 'messages',
+        text: `${live.unread} Contact Us message${live.unread > 1 ? 's have' : ' has'} not been read.`, cta: 'Open Messages' });
+    if (live.nextClosure) attention.push({ icon: '🚫', key: 'settingsHub',
         text: `Next closure is ${friendlyShort(live.nextClosure)} — ${live.closuresAhead} on the calendar ahead.`, cta: 'Open Closed Days' });
-    else attention.push({ icon: '🚫', key: 'closedDays',
+    else attention.push({ icon: '🚫', key: 'settingsHub',
         text: 'No closures are on the calendar ahead — check the holidays are blocked.', cta: 'Open Closed Days' });
     const infants = (byRoom.bear || 0) + (byRoom.bee || 0);
     if (infants) attention.push({ icon: '🍼', key: 'wlPlanner',
@@ -1305,10 +1291,10 @@ function apDashDirector(live) {
         left: [
             apPanel({ title: 'Staff needed this week',
                 sub: 'Each room, each day — from registered children and your saved ratios. Clock-in room data is never used.',
-                body: apStaffGridHtml(sf), tools: ['staffreq', 'ratios'] }),
+                body: apStaffGridHtml(sf), tools: ['staffreq', 'settingsHub'] }),
             apPanel({ title: 'How full each room is',
                 sub: 'Average booked children per day against capacity.',
-                body: apBarsHtml(apFillBars(sf)), tools: ['capacity', 'fte', 'seatDay'] }),
+                body: apBarsHtml(apFillBars(sf)), tools: ['settingsHub', 'fte', 'seatDay'] }),
         ],
         right: queueRows.length ? [
             apPanel({ title: 'Next up on the waitlist', tone: 'gold',
@@ -1381,42 +1367,9 @@ function apDashPlanning(live) {
     };
 }
 
-function apDashSettings(live) {
-    const roles = window._adminRoles || {};
-    const roleCount = Object.keys(roles).length;
-    const restricted = Object.values(roles).filter(r => r !== 'full').length;
-    return {
-        stamp: 'Live configuration · changes apply immediately',
-        kpis: [
-            { label: 'Closed days ahead', tone: 'navy', value: live.closuresAhead || 0,
-              sub: live.nextClosure ? `next: ${friendlyShort(live.nextClosure)}` : 'none scheduled' },
-            { label: 'Admin accounts', tone: 'navy', value: roleCount || '—',
-              sub: roleCount ? `${restricted} not full access` : 'open Admin Access to load' },
-            { label: 'Rooms configured', tone: 'ok', value: getSortedRooms().filter(r => !r.hidden).length, sub: 'with rates and ratios' },
-        ],
-        left: [
-            apPanel({ title: 'Room configuration',
-                sub: 'Capacity against the ratios everything else is calculated from.',
-                body: apRowsHtml(getSortedRooms().filter(r => !r.hidden).map(r => ({
-                    label: r.label,
-                    note:  `cap ${r.capacity || '—'} · ratio 1:${r.staffRatio || '—'}`,
-                    value: apMoney(r.fullDayRate || 0) + '/day',
-                }))),
-                tools: ['capacity', 'ratios', 'rates'] }),
-        ],
-        // regWindow and summerCamp had no path in from a phone at all; adminPush
-        // (a full admin's own push toggle) was unreachable even for a full admin.
-        right: [
-            apPanel({ title: 'Registration & notifications', sub: '',
-                body: '', tools: ['regWindow', 'summerCamp', 'adminPush'] }),
-        ],
-        attention: [
-            { icon: '🔐', key: 'adminRoles', text: 'Review who holds full access to the portal.', cta: 'Open Admin Access' },
-            { icon: '🧾', key: 'auditLog',   text: 'The audit log records every significant admin action.', cta: 'Open Audit Log' },
-            { icon: '🚫', key: 'closedDays', text: 'Blocked dates show as unavailable on the parent calendar.', cta: 'Open Closed Days' },
-        ],
-    };
-}
+// Settings has no dashboard of its own — the tab has exactly one tool
+// (`settingsHub`), so apRender()'s single-tool auto-open lands directly on
+// the unified page. See design_handoff_messages_settings/Settings.dc.html.
 
 // ── Classrooms ───────────────────────────────────────────────
 function apDashClassrooms(live) {

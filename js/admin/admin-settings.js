@@ -23,6 +23,7 @@ async function setupSummerCamp() {
         try {
             const hidden = toggle.checked;
             await saveSummerCampSetting(hidden);
+            await logAdminAction('update', 'summer_camp_setting', null, { hidden });
             if (summerRoom) summerRoom.hidden = hidden;
             if (statusEl) {
                 statusEl.textContent = '✓ Saved!';
@@ -229,6 +230,7 @@ function setupClosures() {
         if (!date) { alert('Please select a date to block.'); return; }
         try {
             await addClosure(date, reason);
+            await logAdminAction('create', 'closure', null, { date, reason: reason || null });
             document.getElementById('closureDate').value   = '';
             document.getElementById('closureReason').value = '';
             await loadClosureList();
@@ -292,6 +294,7 @@ async function loadClosureList() {
                 if (!confirm(`Remove closure for ${friendlyShort(d)}?`)) return;
                 try {
                     await deleteClosure(d);
+                    await logAdminAction('delete', 'closure', null, { date: d });
                     await loadClosureList();
                 } catch (err) {
                     alert('Error: ' + err.message);
@@ -438,228 +441,6 @@ function setupCollapsibles() {
         // Restore saved state (default: open)
         if (localStorage.getItem('adminCollapse_' + id) === '1') setCollapsed(true);
     });
-}
-
-// ============================================================
-// RATES & SETTINGS
-// ============================================================
-function setupRates() {
-    renderRatesTable();
-    document.getElementById('saveRatesBtn')?.addEventListener('click', onSaveRates);
-}
-
-function renderRatesTable() {
-    const wrap = document.getElementById('ratesTableWrap');
-    if (!wrap) return;
-    wrap.innerHTML = `
-        <table class="rates-table">
-            <thead>
-                <tr>
-                    <th>Room</th>
-                    <th>Age Range (months)<br><small>Min – age they move out at (blank = no limit)</small></th>
-                    <th>Full Day Rate ($)</th>
-                    <th>Half Day Rate ($)</th>
-                    <th>Weekly Full ($)<br><small>All 5 weekdays full</small></th>
-                    <th>Weekly Half ($)<br><small>All 5 weekdays half</small></th>
-                </tr>
-            </thead>
-            <tbody>
-                ${getSortedRooms().map(room => `
-                    <tr data-room-id="${room.id}">
-                        <td class="rates-room-label">
-                            <strong>${escHtml(room.label)}</strong>
-                            ${room.status === 'coming_soon' ? '<span class="rates-badge-soon">Coming Soon</span>' : ''}
-                            ${room.status === 'seasonal' ? '<span class="rates-badge-soon" style="background:#e0f2fe;color:#0369a1">Seasonal</span>' : ''}
-                            <span class="rates-ages">${escHtml(room.ages)}</span>
-                        </td>
-                        <td>
-                            <div style="display:flex;gap:4px;align-items:center;">
-                                <input type="number" class="rate-input" data-field="ageMinMonths"
-                                    value="${room.ageMinMonths ?? ''}" min="0" step="1" placeholder="min"
-                                    style="width:58px;" title="Minimum age in months">
-                                <span>–</span>
-                                <input type="number" class="rate-input" data-field="ageMaxMonths"
-                                    value="${room.ageMaxMonths ?? ''}" min="0" step="1" placeholder="∞"
-                                    style="width:58px;" title="Age in months a child moves OUT of this room at (exclusive) — blank = no upper limit">
-                            </div>
-                        </td>
-                        <td>
-                            <input type="number" class="rate-input" data-field="fullDayRate"
-                                value="${room.fullDayRate ?? ''}" min="0" step="0.01" placeholder="0.00">
-                        </td>
-                        <td>
-                            ${room.fullDayOnly
-                                ? '<span class="rates-na">Full day only</span>'
-                                : `<input type="number" class="rate-input" data-field="halfDayRate"
-                                    value="${room.halfDayRate ?? ''}" min="0" step="0.01" placeholder="0.00">`
-                            }
-                        </td>
-                        <td>
-                            <input type="number" class="rate-input" data-field="weeklyFullRate"
-                                value="${room.weeklyFullRate ?? ''}" min="0" step="0.01" placeholder="— disabled">
-                        </td>
-                        <td>
-                            ${room.fullDayOnly
-                                ? '<span class="rates-na">—</span>'
-                                : `<input type="number" class="rate-input" data-field="weeklyHalfRate"
-                                    value="${room.weeklyHalfRate ?? ''}" min="0" step="0.01" placeholder="— disabled">`
-                            }
-                        </td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-        <p class="rates-hint">💡 Age Range: changing these values updates which room children are auto-assigned to based on their date of birth. Weekly rates apply when a child books all 5 Mon–Fri days in a single week with the same day type.</p>`;
-}
-
-async function onSaveRates() {
-    const btn      = document.getElementById('saveRatesBtn');
-    const statusEl = document.getElementById('ratesStatus');
-    if (!btn) return;
-    btn.disabled    = true;
-    btn.textContent = 'Saving…';
-    if (statusEl) { statusEl.textContent = ''; }
-
-    try {
-        const rates = {};
-        document.querySelectorAll('#ratesTableWrap tbody tr[data-room-id]').forEach(row => {
-            const id = row.dataset.roomId;
-            rates[id] = {};
-            row.querySelectorAll('.rate-input[data-field]').forEach(input => {
-                const val   = input.value.trim();
-                const field = input.dataset.field;
-                // Age fields are integers; rate fields are floats
-                if (field === 'ageMinMonths' || field === 'ageMaxMonths') {
-                    rates[id][field] = val === '' ? null : parseInt(val, 10);
-                } else {
-                    rates[id][field] = val === '' ? null : parseFloat(val);
-                }
-            });
-            // Regenerate the human-readable ages label from the saved range.
-            // Max age (months) is the exact age a child ages OUT of the room at
-            // (exclusive) — matches getRoomIdFromDob()'s `months < ageMaxMonths`
-            // check, so the label always shows exactly what was typed, no +1.
-            const r = rates[id];
-            {
-                const min = r.ageMinMonths ?? 0;
-                const max = r.ageMaxMonths ?? null;
-                rates[id].ages = max == null
-                    ? (min > 0 ? `${min}+ months` : '')
-                    : `${min} – ${max} months`;
-            }
-        });
-
-        await saveRateSettings(rates);
-        await logAdminAction('update', 'rate_settings', null, { rooms: Object.keys(rates) });
-        // Merge saved values directly into ROOMS (avoids a DB round-trip that can
-        // silently fail and revert the display back to hardcoded defaults).
-        ROOMS.forEach(room => {
-            const r = rates[room.id];
-            if (!r) return;
-            if (r.fullDayRate    != null) room.fullDayRate    = r.fullDayRate;
-            if (r.halfDayRate    != null) room.halfDayRate    = r.halfDayRate;
-            if (r.weeklyFullRate != null) room.weeklyFullRate = r.weeklyFullRate;
-            if (r.weeklyHalfRate != null) room.weeklyHalfRate = r.weeklyHalfRate;
-            if ('ageMinMonths'   in r)    room.ageMinMonths   = r.ageMinMonths; // allow null
-            if ('ageMaxMonths'   in r)    room.ageMaxMonths   = r.ageMaxMonths; // allow null
-            if (r.ages           != null) room.ages           = r.ages;
-        });
-        renderRatesTable();
-
-        if (statusEl) {
-            statusEl.textContent   = '✓ Saved!';
-            statusEl.style.color   = '#2e7d32';
-            setTimeout(() => { statusEl.textContent = ''; }, 3000);
-        }
-    } catch (err) {
-        if (statusEl) {
-            statusEl.textContent = '⚠️ ' + err.message;
-            statusEl.style.color = '#c62828';
-        }
-        console.error('onSaveRates:', err);
-    } finally {
-        btn.disabled    = false;
-        btn.textContent = '💾 Save Rates';
-    }
-}
-
-// ============================================================
-// CLASSROOM CAPACITY
-// ============================================================
-function setupCapacity() {
-    renderCapacityTable();
-    document.getElementById('saveCapacityBtn')?.addEventListener('click', onSaveCapacity);
-}
-
-function renderCapacityTable() {
-    const wrap = document.getElementById('capacityTableWrap');
-    if (!wrap) return;
-    wrap.innerHTML = `
-        <table class="rates-table">
-            <thead>
-                <tr>
-                    <th>Room</th>
-                    <th>Age Group</th>
-                    <th>Max Children per Day</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${getSortedRooms().map(room => `
-                    <tr data-room-id="${room.id}">
-                        <td class="rates-room-label">
-                            <strong>${escHtml(room.label)}</strong>
-                        </td>
-                        <td class="rates-ages">${escHtml(room.ages)}</td>
-                        <td>
-                            <input type="number" class="capacity-input rate-input"
-                                value="${room.capacity ?? ''}" min="0" step="1" placeholder="e.g. 12"
-                                style="width:80px;">
-                        </td>
-                    </tr>`).join('')}
-            </tbody>
-        </table>
-        <p class="rates-hint">💡 Enter the maximum number of children enrolled in each room per day. Changes take effect immediately for new registrations, waitlist matching, and capacity displays.</p>`;
-}
-
-async function onSaveCapacity() {
-    const btn      = document.getElementById('saveCapacityBtn');
-    const statusEl = document.getElementById('capacityStatus');
-    if (!btn) return;
-    btn.disabled    = true;
-    btn.textContent = 'Saving…';
-    if (statusEl) statusEl.textContent = '';
-
-    try {
-        const capacities = {};
-        document.querySelectorAll('#capacityTableWrap tbody tr[data-room-id]').forEach(row => {
-            const id  = row.dataset.roomId;
-            const val = row.querySelector('.capacity-input')?.value.trim();
-            capacities[id] = val === '' ? null : parseInt(val, 10);
-        });
-
-        await saveCapacitySettings(capacities);
-        await logAdminAction('update', 'capacity_settings', null, { rooms: Object.keys(capacities) });
-        // Merge directly into ROOMS to avoid a silent DB round-trip failure.
-        ROOMS.forEach(room => {
-            if (capacities[room.id] != null) room.capacity = capacities[room.id];
-        });
-        renderCapacityTable();
-
-        if (statusEl) {
-            statusEl.textContent = '✓ Saved!';
-            statusEl.style.color = '#2e7d32';
-            setTimeout(() => { statusEl.textContent = ''; }, 3000);
-        }
-    } catch (err) {
-        if (statusEl) {
-            statusEl.textContent = '⚠️ ' + err.message;
-            statusEl.style.color = '#c62828';
-        }
-        console.error('onSaveCapacity:', err);
-    } finally {
-        btn.disabled    = false;
-        btn.textContent = '💾 Save Capacity';
-    }
 }
 
 // ============================================================
@@ -1039,12 +820,11 @@ function applyRoleRestrictions() {
     document.querySelectorAll('[data-tab="finance"]').forEach(el => { el.style.display = 'none'; });
     document.querySelectorAll('[data-tab="cacfp"]').forEach(el => { el.style.display = 'none'; });
     document.querySelectorAll('[data-tab="market"]').forEach(el => { el.style.display = 'none'; });
-    // Audit Log lives inside Settings (#auditLogSection) — it records every
-    // admin's actions across every tab (rate changes, PIN resets, lock/
-    // unlock), which is account-oversight material, not something a
-    // restricted or classroom-staff account should browse. Same treatment as
-    // adminRolesSection just below.
-    _hide('auditLogSection');
+    // Access & oversight (admin users + audit log) is account-oversight
+    // material — who can do what, and every admin's actions across every
+    // tab (rate changes, PIN resets, lock/unlock) — not something a
+    // restricted or classroom-staff account should browse.
+    _hide('setAccessCard');
 
     if (currentAdminRole === 'restricted') {
         // Staffing tab: hide everything except the schedule planner
@@ -1053,8 +833,7 @@ function applyRoleRestrictions() {
         _hide('staffRosterToggleWrap');
         _hide('staffRosterSection');
         // Settings tab: show only Registration Window Override
-        ['closedDaysSection', 'ratesSection', 'ratiosSection', 'capacitySection',
-         'offerLinksSection', 'adminRolesSection', 'summerCampSection']
+        ['setClosedDaysBlock', 'setSummerCampBlock', 'setRoomsCard', 'offerLinksSection']
             .forEach(id => _hide(id));
     }
 
@@ -1096,6 +875,7 @@ function setupAdminRoles() {
             window._adminRoles = window._adminRoles || {};
             window._adminRoles[email] = level;
             await saveAdminRoles(window._adminRoles);
+            await logAdminAction('create', 'admin_role', null, { email, role: level });
             emailInput.value = ''; passwordInput.value = '';
             _showAdminRolesStatus('✓ User created!', '#2e7d32');
             _loadAdminUsersTable();
@@ -1169,6 +949,7 @@ function _renderAdminUsersTable(authUsers) {
             window._adminRoles[sel.dataset.email] = sel.value;
             try {
                 await saveAdminRoles(window._adminRoles);
+                await logAdminAction('update', 'admin_role', null, { email: sel.dataset.email, role: sel.value });
                 _showAdminRolesStatus('✓ Saved!', '#2e7d32');
             } catch (err) {
                 _showAdminRolesStatus('⚠️ ' + err.message, '#c62828');
@@ -1203,6 +984,7 @@ function _renderAdminUsersTable(authUsers) {
                 await callAdminUsers('delete', { userId: userid });
                 if (window._adminRoles) delete window._adminRoles[email];
                 await saveAdminRoles(window._adminRoles || {});
+                await logAdminAction('delete', 'admin_role', null, { email });
                 _showAdminRolesStatus(`✓ Deleted ${email}`, '#2e7d32');
                 _loadAdminUsersTable();
             } catch (err) {

@@ -1319,6 +1319,7 @@ async function setupWindowOverride() {
         btn.textContent = 'Saving…';
         try {
             await upsertSetting('reg_window_override', val);
+            await logAdminAction('update', 'registration_window', null, { value: val });
             showOverrideStatus(val, true);
         } catch (err) {
             alert('Error saving override: ' + err.message);
