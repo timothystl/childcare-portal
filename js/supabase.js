@@ -4241,14 +4241,24 @@ async function insertBillingCycle(month) {
     return data;
 }
 
-async function getOrCreateBillingCycle(month) {
+/** Read-only lookup — never creates a row. For a month that was never
+ *  billed (e.g. Finance Hub reading a trailing month's history just to show
+ *  a balance), a missing cycle means "nothing happened," not something to
+ *  write into existence. Returns null if no cycle exists yet. */
+async function fetchBillingCycle(month) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data: existing, error: findErr } = await sbClient
+    const { data, error } = await sbClient
         .from('billing_cycles')
         .select('*')
         .eq('month', month)
         .maybeSingle();
-    if (findErr) throw findErr;
+    if (error) throw error;
+    return data || null;
+}
+
+async function getOrCreateBillingCycle(month) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const existing = await fetchBillingCycle(month);
     if (existing) return existing;
     const { data, error } = await sbClient
         .from('billing_cycles')

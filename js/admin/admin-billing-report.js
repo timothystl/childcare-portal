@@ -124,15 +124,19 @@ async function _brBuild(month) {
     // what last month settled at, so the report is never read in isolation.
     let invoiceCount = 0, heldCount = 0, prevBilled = 0, prevCollected = 0;
     try {
-        const cycle = await getOrCreateBillingCycle(month);
-        const invoices = await fetchInvoicesForCycle(cycle.id);
+        // Read-only report — a month with nothing billed yet has no cycle
+        // row, and that's a fact to display (0 invoices), not something to
+        // create by the act of looking at the report. fetchBillingCycle()
+        // never inserts, unlike getOrCreateBillingCycle().
+        const cycle = await fetchBillingCycle(month);
+        const invoices = cycle ? await fetchInvoicesForCycle(cycle.id) : [];
         invoiceCount = invoices.length;
         heldCount    = invoices.filter(i => !i.sent_at).length;
 
         const prevMonth = _bmPrevMonth(month);
-        const prevCycle = await getOrCreateBillingCycle(prevMonth);
+        const prevCycle = await fetchBillingCycle(prevMonth);
         const [prevInv, prevPay] = await Promise.all([
-            fetchInvoicesForCycle(prevCycle.id),
+            prevCycle ? fetchInvoicesForCycle(prevCycle.id) : Promise.resolve([]),
             fetchPaymentsForMonth(prevMonth).catch(() => []),
         ]);
         prevBilled    = prevInv.reduce((s, i) => s + parseFloat(i.final_amount || 0), 0);

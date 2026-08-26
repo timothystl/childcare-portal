@@ -136,6 +136,28 @@ function _fhSwitchTab(tab) {
     }
 }
 
+/** getOrCreateBillingCycle(), tolerant of one specific transient failure:
+ *  if the read half of that read-then-insert momentarily can't see an
+ *  already-existing row (a session/token hiccup right as the RLS-gated
+ *  SELECT runs), it wrongly concludes the cycle doesn't exist and tries to
+ *  INSERT one — which then fails loudly on the same RLS check, as
+ *  "new row violates row-level security policy for table billing_cycles"
+ *  even though the row was there the whole time. A plain re-read a moment
+ *  later almost always finds it, since the hiccup was momentary, not a real
+ *  permission problem (admin_role() is otherwise unchanged for this admin). */
+async function _fhGetOrCreateCycleResilient(month) {
+    try {
+        return await getOrCreateBillingCycle(month);
+    } catch (err) {
+        const msg = String(err?.message || '');
+        if (!/row-level security/i.test(msg)) throw err;
+        await new Promise(r => setTimeout(r, 400));
+        const retried = await fetchBillingCycle(month);
+        if (retried) return retried;
+        throw err;
+    }
+}
+
 // ── Load ─────────────────────────────────────────────────────
 async function _fhLoad() {
     const label = _fhEl('fhMonthLabel');
@@ -154,7 +176,7 @@ async function _fhLoad() {
         const isCurrent = _fhIsCurrentMonth(_fhMonth);
 
         const be     = await computeBillMonthExceptions(_fhMonth);
-        const cycle  = await getOrCreateBillingCycle(_fhMonth);
+        const cycle  = await _fhGetOrCreateCycleResilient(_fhMonth);
         const invAll = cycle ? await fetchInvoicesForCycle(cycle.id) : [];
         const invoices = invAll.filter(i => (i.invoice_type || 'original') === 'original');
         const payments = await fetchPaymentsForMonth(_fhMonth);
@@ -204,7 +226,11 @@ async function _fhLoadOwedAcrossMonths(month, priorCount) {
     const byFamily = new Map();
     for (const mk of months) {
         try {
-            const cycle = await getOrCreateBillingCycle(mk);
+            // Read-only — a month that was never billed has no cycle row,
+            // and that means "nothing happened," not something to create.
+            // getOrCreateBillingCycle() is for the one month _fhLoad() is
+            // actually editing; this trailing-months pass only ever reads.
+            const cycle = await fetchBillingCycle(mk);
             const invAll = cycle ? await fetchInvoicesForCycle(cycle.id) : [];
             const invoices = invAll.filter(i => (i.invoice_type || 'original') === 'original' && i.status !== 'void');
             const payments = await fetchPaymentsForMonth(mk);
