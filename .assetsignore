@@ -1,0 +1,17 @@
+# Excludes files from the Cloudflare Workers static-assets upload
+# (wrangler.jsonc -> assets.directory "."). Wrangler serves this repo's
+# files directly with no build step, so everything NOT listed here is
+# public on the live site — dist/*.min.js and the rest of the app is
+# meant to be public, these are not.
+#
+# Added after a deploy started failing with "Asset too large": .git's own
+# pack file crossed Cloudflare's 25 MiB per-asset limit as the repo grew,
+# which blocks every future deploy (not just the one that first hit it)
+# until .git is excluded here. node_modules/.wrangler/.github/.claude were
+# never meant to be public either — same fix, while this file is being
+# added anyway.
+.git/
+node_modules/
+.wrangler/
+.github/
+.claude/
