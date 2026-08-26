@@ -1906,19 +1906,20 @@
                  every .admin-section inside the open tab-pane, and a nested
                  one would fight the Ledger/Report tab switch for visibility. -->
             <section class="admin-section" id="financeHubSection">
-                <div class="fh-head">
-                    <div>
-                        <h2>Finance</h2>
-                        <p class="section-desc">One place for billing, invoices, and who owes.</p>
+                <!-- h2 is a direct child so apShowSection()'s ap-dup-head logic
+                     (admin-portal.js) hides it — the shell already renders
+                     "💵 Finance" above the card. The month switcher and search
+                     live in their own toolbar row instead of inside that
+                     heading, so they are not swept up in the same hide. -->
+                <h2>Finance</h2>
+                <p class="section-desc">One place for billing, invoices, and who owes.</p>
+                <div class="fh-toolbar">
+                    <div class="fh-month-switch">
+                        <button type="button" id="fhMonthPrev" class="fh-month-arrow" aria-label="Previous month">&#9664;</button>
+                        <span id="fhMonthLabel" class="fh-month-label">&mdash;</span>
+                        <button type="button" id="fhMonthNext" class="fh-month-arrow" aria-label="Next month">&#9654;</button>
                     </div>
-                    <div class="fh-head-controls">
-                        <div class="fh-month-switch">
-                            <button type="button" id="fhMonthPrev" class="fh-month-arrow" aria-label="Previous month">&#9664;</button>
-                            <span id="fhMonthLabel" class="fh-month-label">&mdash;</span>
-                            <button type="button" id="fhMonthNext" class="fh-month-arrow" aria-label="Next month">&#9654;</button>
-                        </div>
-                        <input type="text" id="fhSearch" class="fh-search" placeholder="Find a family&hellip;">
-                    </div>
+                    <input type="text" id="fhSearch" class="fh-search" placeholder="Find a family&hellip;">
                 </div>
 
                 <div class="fh-tabs" id="fhTabs" role="tablist">

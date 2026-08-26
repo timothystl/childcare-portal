@@ -312,7 +312,8 @@ function _fhRenderLedger() {
                 <div class="fh-stat-num">${sent.length}</div>
                 <div class="fh-stat-label">Issued</div>
             </div>
-            <button type="button" class="btn-primary" id="fhReleaseBtn" ${drafted.length ? '' : 'disabled'}>Release ${drafted.length} draft${drafted.length === 1 ? '' : 's'}</button>
+            <div class="fh-strip-spacer"></div>
+            <button type="button" class="btn-primary" id="fhReleaseBtn" title="Recomputes and emails every drafted invoice above, then marks each Issued." ${drafted.length ? '' : 'disabled'}>Release ${drafted.length} draft${drafted.length === 1 ? '' : 's'}</button>
         </div>
 
         <div class="fh-owed-banner">
@@ -337,12 +338,13 @@ function _fhRenderLedger() {
         <div class="table-wrapper">
             <table class="report-table fh-table">
                 <thead><tr>
-                    <th>Family</th><th>${_fhMonthLabel(_fhMonth).split(' ')[0]} charge</th>
+                    <th>Family</th><th class="fh-money-col">${_fhMonthLabel(_fhMonth).split(' ')[0]} charge</th>
+                    <th class="fh-money-col">Paid this month</th>
                     <th>Status</th><th>Note</th>
-                    <th style="text-align:right">Balance, all months</th><th></th>
+                    <th class="fh-money-col">Balance, all months</th><th></th>
                 </tr></thead>
                 <tbody>
-                    ${rows.length ? rows.map(_fhRowHtml).join('') : `<tr><td colspan="6"><p class="empty-hint">No families match.</p></td></tr>`}
+                    ${rows.length ? rows.map(_fhRowHtml).join('') : `<tr><td colspan="7"><p class="empty-hint">No families match.</p></td></tr>`}
                 </tbody>
             </table>
         </div>`;
@@ -387,18 +389,21 @@ function _fhRowHtml(row) {
 
     let actions = '';
     if (row.status === 'drafted') {
-        actions += `<button type="button" class="btn-xs btn-primary" data-fh-send="${row.familyId}">Send invoice</button>`;
+        actions += `<button type="button" class="fh-send-btn" data-fh-send="${row.familyId}">Send invoice</button>`;
     }
     if (row.owed > 0) {
         actions += `<button type="button" class="btn-xs" data-fh-remind="${row.familyId}">${dispStatus === 'card_declined' ? 'Retry charge' : 'Remind'}</button>`;
     }
 
+    const paidThisMonth = row.ar?.collected || 0;
+
     return `<tr data-fh-row="${row.familyId}">
         <td class="fh-row-open" data-fh-open="${row.familyId}"><strong>${escHtml(row.name)}</strong></td>
-        <td>${_fhMoney(row.total)}</td>
+        <td class="fh-money-col">${_fhMoney(row.total)}</td>
+        <td class="fh-money-col ${paidThisMonth > 0 ? 'fh-bal-clear' : ''}">${paidThisMonth > 0 ? _fhMoney(paidThisMonth) : '—'}</td>
         <td><span class="fh-pill ${meta.cls}">${escHtml(pillLabel)}</span></td>
         <td class="fh-note">${_fhNoteFor(row)}</td>
-        <td style="text-align:right" class="${balCls}">${_fhMoney(row.owed)}</td>
+        <td class="fh-money-col ${balCls}">${_fhMoney(row.owed)}</td>
         <td class="fh-row-actions" onclick="event.stopPropagation()">${actions}</td>
     </tr>`;
 }
