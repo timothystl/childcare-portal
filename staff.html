@@ -29,23 +29,42 @@
     <div id="mdoSplash" class="mdo-splash" aria-hidden="true">
         <div class="mdo-splash-top">
             <img class="mdo-splash-wordmark" src="/images/logo/myMDO_staff_wordmark_light.png" alt="">
-            <p class="mdo-splash-tagline">Welcome.<span class="t-gold">|</span><span class="t-blue">Receive.</span><span class="t-gold">|</span>Grow.<span class="t-gold">|</span><span class="t-gold">Go.</span></p>
+            <p class="mdo-splash-tagline">Welcome.<span class="t-div">|</span><span class="t-blue">Receive.</span><span class="t-div">|</span>Grow.<span class="t-div">|</span><span class="t-gold">Go.</span></p>
         </div>
         <div class="mdo-splash-silhouette" aria-hidden="true">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><g fill="#01294A"><rect x="175" y="255" width="145" height="410"/><polygon points="175,255 247,205 320,255"/><rect x="320" y="390" width="530" height="275"/><polygon points="320,390 545,300 850,390"/><rect x="238" y="120" width="18" height="115"/><rect x="195" y="155" width="105" height="18"/></g></svg>
+            <img src="/images/logo/splash-church-pale.png" alt="">
         </div>
         <div class="mdo-splash-footer">
-            <div class="mdo-splash-spinner"></div>
-            <p>Loading <strong>myMDO</strong> Staff&hellip;</p>
+            <div class="mdo-splash-spinner" id="mdoSplashSpinner"></div>
+            <svg id="mdoSplashCheck" width="34" height="34" viewBox="0 0 34 34" hidden>
+                <circle cx="17" cy="17" r="17" fill="#F5B731"/>
+                <path d="M9.5 17.5l5 5 10-11" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+            <p id="mdoSplashText">Loading <strong>myMDO</strong> Staff&hellip;</p>
         </div>
     </div>
     <script>
       (function () {
         var el = document.getElementById('mdoSplash');
         if (!el) return;
+        var textEl = document.getElementById('mdoSplashText');
+        var spinnerEl = document.getElementById('mdoSplashSpinner');
+        var checkEl = document.getElementById('mdoSplashCheck');
+        var almostTimer = setTimeout(function () {
+          textEl.innerHTML = 'Almost there&hellip;';
+        }, 1400);
+        var hidden = false;
         function hide() {
-          el.classList.add('mdo-splash-hidden');
-          setTimeout(function () { el.remove(); }, 400);
+          if (hidden) return;
+          hidden = true;
+          clearTimeout(almostTimer);
+          spinnerEl.hidden = true;
+          checkEl.hidden = false;
+          textEl.textContent = 'Welcome!';
+          setTimeout(function () {
+            el.classList.add('mdo-splash-hidden');
+            setTimeout(function () { el.remove(); }, 400);
+          }, 450);
         }
         if (document.readyState === 'complete') hide();
         else window.addEventListener('load', hide);
@@ -53,12 +72,99 @@
       })();
     </script>
 
+    <!-- Onboarding carousel: shown once per browser, before the PIN card. -->
+    <div id="mdoOnboard" class="mdo-onboard mdo-onboard-hidden" aria-hidden="true">
+        <div class="mdo-onboard-slides">
+            <div class="mdo-onboard-slide is-active">
+                <img class="mdo-onboard-scene" src="/images/logo/onboarding-scene.png" alt="">
+                <h2>All in one place</h2>
+                <p>Tools for our team. Updates for you. A better day for your child.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--clockin"><img src="/images/logo/icon-clockin-icon.png" alt=""></div>
+                <h2>Clock In with Ease</h2>
+                <p>Quick and simple time tracking for staff on the go.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--staff"><img src="/images/logo/icon-staff-icon.png" alt=""></div>
+                <h2>Support Your Team</h2>
+                <p>Everything staff need to manage their day and care for kids.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--admin"><img src="/images/logo/icon-admin-icon.png" alt=""></div>
+                <h2>Secure &amp; Reliable</h2>
+                <p>Secure access for administrators to manage and oversee.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--parent"><img src="/images/logo/icon-parent-icon.png" alt=""></div>
+                <h2>Stay Connected</h2>
+                <p>Stay connected with your child's day, updates, and important info.</p>
+            </div>
+        </div>
+        <div class="mdo-onboard-bottom">
+            <div class="mdo-onboard-dots" id="mdoOnboardDots"></div>
+            <div class="mdo-onboard-actions">
+                <button type="button" class="mdo-onboard-skip" id="mdoOnboardSkip">Skip</button>
+                <button type="button" class="mdo-onboard-next" id="mdoOnboardNext">Next</button>
+            </div>
+        </div>
+    </div>
+    <script>
+      (function () {
+        var KEY = 'mdoOnboardSeen_staff';
+        var el = document.getElementById('mdoOnboard');
+        if (!el) return;
+        var seen = false;
+        try { seen = !!localStorage.getItem(KEY); } catch (e) {}
+        if (seen) { el.remove(); return; }
+        var slides = Array.prototype.slice.call(el.querySelectorAll('.mdo-onboard-slide'));
+        var dotsWrap = document.getElementById('mdoOnboardDots');
+        var nextBtn = document.getElementById('mdoOnboardNext');
+        var skipBtn = document.getElementById('mdoOnboardSkip');
+        var idx = 0;
+        slides.forEach(function (_, i) {
+          var d = document.createElement('span');
+          if (i === 0) d.className = 'is-active';
+          dotsWrap.appendChild(d);
+        });
+        var dots = Array.prototype.slice.call(dotsWrap.children);
+        function render() {
+          slides.forEach(function (s, i) { s.classList.toggle('is-active', i === idx); });
+          dots.forEach(function (d, i) { d.classList.toggle('is-active', i === idx); });
+          nextBtn.textContent = idx === slides.length - 1 ? "Let's get started" : 'Next';
+        }
+        function finish() {
+          try { localStorage.setItem(KEY, '1'); } catch (e) {}
+          el.classList.add('mdo-onboard-hidden');
+          setTimeout(function () { el.remove(); }, 350);
+        }
+        nextBtn.addEventListener('click', function () {
+          if (idx === slides.length - 1) { finish(); return; }
+          idx++; render();
+        });
+        skipBtn.addEventListener('click', finish);
+        render();
+        function reveal() { el.classList.remove('mdo-onboard-hidden'); }
+        var splash = document.getElementById('mdoSplash');
+        if (splash) {
+          var t = setTimeout(reveal, 900);
+          splash.addEventListener('transitionend', function () { clearTimeout(t); reveal(); }, { once: true });
+        } else {
+          reveal();
+        }
+      })();
+    </script>
+
     <!-- PIN -->
     <div id="slPinScreen" class="sl-screen sl-center">
         <div class="sl-card">
             <div class="sl-logo"><img src="/images/logo/myMDO_staff_wordmark_light.png" alt="myMDO"></div>
-            <h1>Staff Log</h1>
-            <p class="sl-sub">Choose your name, then enter your PIN.</p>
+            <h1 class="sr-only">Staff Log</h1>
+            <div class="mdo-signin-badge mdo-signin-badge--staff">
+                <img src="/images/logo/icon-staff-icon.png" alt="">
+                <p class="mdo-signin-app">Staff</p>
+                <p class="mdo-signin-sub">Choose your name, then enter your PIN.</p>
+            </div>
             <!-- Identity first. A PIN with no name was tested against every
                  staff hash, so one guess had ~33 chances to land and there was
                  no account to lock. -->
@@ -67,8 +173,9 @@
             </select>
             <input type="password" id="slPinInput" class="sl-pin-input" placeholder="••••"
                    inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off">
-            <button id="slPinBtn" class="btn-primary sl-btn">Sign In</button>
+            <button id="slPinBtn" class="btn-primary sl-btn mdo-signin-btn--staff">Sign In</button>
             <p class="sl-hint">Your PIN is not stored on this phone. You'll re-enter it if the page reloads.</p>
+            <p class="mdo-signin-footer">Timothy Lutheran Church</p>
         </div>
     </div>
 

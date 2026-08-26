@@ -47,7 +47,12 @@ const AP_TABS = {
     },
     messages: {
         icon: '💬', label: 'Messages',
-        blurb: 'Everything a family has sent through the portal — the Contact Us form and waitlist questions — in one inbox.',
+        blurb: "Every conversation with families and prospects, in one place — who's waiting on you, and what still needs an email.",
+        // One working inbox (design handoff design_handoff_messages_settings/
+        // Messages.dc.html, 2026-08-26) replaced the tab's old two-tool split
+        // (Family Conversations / Contact Us Messages). Same reasoning as
+        // Finance's defaultTool: one real tool, no dashboard to land on first.
+        defaultTool: 'messages',
     },
     classrooms: {
         icon: '📋', label: 'Classrooms',
@@ -59,7 +64,15 @@ const AP_TABS = {
     },
     finance: {
         icon: '💰', label: 'Finance',
-        blurb: "Everything financial, grouped by what you're trying to do. Pick a tool to open it — you'll land on just that tool, not the whole page.",
+        blurb: 'Billing, invoices, and who owes — one ledger, one number for each.',
+        // Finance Hub (design handoff, 2026-08-26) replaced the four screens
+        // this tab used to fan out to (Bill This Month / Who Owes / Invoices /
+        // Family Billing Summary) with one ledger. A landing dashboard that
+        // still linked out to those tools would put the director right back
+        // where the redesign started — pick a screen before you can do
+        // anything. Finance opens straight into its one real tool instead of
+        // the generic Dashboard/Detail split every other tab uses.
+        defaultTool: 'financeHub',
     },
     planning: {
         icon: '🗓️', label: 'Planning',
@@ -71,7 +84,12 @@ const AP_TABS = {
     },
     settings: {
         icon: '⚙️', label: 'Settings',
-        blurb: 'The rules the portal runs on. Change these rarely — most take effect immediately for parents.',
+        blurb: 'The rules the portal runs on. Every control shows who last changed it.',
+        // One continuous page (design handoff design_handoff_messages_settings/
+        // Settings.dc.html, 2026-08-26) replaced the flat 9-panel tab. Same
+        // reasoning as Finance's defaultTool: one real tool, no dashboard to
+        // land on first.
+        defaultTool: 'settingsHub',
     },
 };
 
@@ -484,18 +502,21 @@ function apRender() {
         }
         apState.tab = next;
     }
-    // A tab with exactly one tool has no dashboard/tool split — landing on
-    // the tab IS landing on the tool (Messages, Settings: design handoff
-    // design_handoff_messages_settings, 2026-08-26). Recomputed on every
-    // render rather than persisted, so it stays correct as role restrictions
-    // change which tools are available.
-    if (!apState.view) {
-        const soleTools = apGroupsForTab(apState.tab).flatMap(g => g.tools);
-        if (soleTools.length === 1) apState.view = soleTools[0].key;
-    }
+    let tool = apState.view ? AP_TOOL_BY_KEY[apState.view] : null;
+    if (apState.view && (!tool || !apToolAvailable(tool))) { apState.view = null; tool = null; }
 
-    const tool = apState.view ? AP_TOOL_BY_KEY[apState.view] : null;
-    if (apState.view && (!tool || !apToolAvailable(tool))) apState.view = null;
+    // A tab can name its own landing tool (see AP_TABS.finance) instead of
+    // falling through to the generic Dashboard/Detail split — covers a fresh
+    // tab click (apGoTab sets view to null), a restored session, and initial
+    // load alike, since all three funnel through this one render. Messages
+    // and Settings use this for the same reason finance does: each has
+    // exactly one tool, so there is no dashboard/tool split to fall into
+    // (design handoff design_handoff_messages_settings, 2026-08-26).
+    if (!apState.view) {
+        const defaultKey = AP_TABS[apState.tab]?.defaultTool;
+        const defaultTool = defaultKey ? AP_TOOL_BY_KEY[defaultKey] : null;
+        if (defaultTool && apToolAvailable(defaultTool)) { apState.view = defaultKey; tool = defaultTool; }
+    }
 
     const meta      = AP_TABS[apState.tab];
     const chipIcon  = document.getElementById('currentTabIcon');

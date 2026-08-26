@@ -1767,14 +1767,20 @@ input.prefilled {
 
 /* Branded splash/loading screen shown while a page's own JS boots.
    Markup + the show/hide script live inline near <body> on each page.
-   Real HTML/CSS rather than a single SVG image: an <img> loading an SVG
-   renders in an isolated context that cannot see this page's linked
-   Google Fonts, so the wordmark and body text would always fall back to
-   a generic sans no matter what the SVG declared. The wordmark itself is
-   still an image (images/logo/myMDO_*_wordmark_light.png) since "my" is
-   a script face cropped directly from the brand pack; everything else
-   here is live text in the fonts already linked on every page that shows
-   a splash (Nunito). */
+   This reproduces the brand pack's "SPLASH SCREEN" / "LOADING SCREEN"
+   mockups — the same composition appears three separate times across the
+   brand pack's exports (each with a full phone frame + a 3-state loading
+   sequence), which is what makes it the canonical design rather than the
+   one-off alternate panel this app used briefly instead: wordmark ->
+   tagline -> pale church silhouette -> navy footer with a spinner and
+   "Loading myMDO…". An <img> loading an SVG renders in an isolated
+   context that cannot see this page's linked Google Fonts, so any text
+   baked into an image would fall back to a generic sans. The wordmark
+   (images/logo/myMDO_*_wordmark_light.png) and the silhouette
+   (images/logo/splash-church-pale.png) are pixel crops straight out of
+   the brand pack's own mockup — not redrawn — and the tagline/footer
+   text are live text in the font already linked on every page that shows
+   a splash (Nunito), reproducing the brand pack's copy verbatim. */
 .mdo-splash {
     position: fixed;
     inset: 0;
@@ -1796,15 +1802,16 @@ input.prefilled {
 }
 .mdo-splash-wordmark { width: min(72vw, 320px); height: auto; }
 .mdo-splash-tagline {
-    margin-top: 18px;
+    margin-top: 16px;
     font-family: 'Nunito', sans-serif;
-    font-weight: 700;
-    font-size: 15px;
-    color: var(--green);
+    font-weight: 600;
+    font-size: 14px;
+    color: #5BAD8B;
     text-align: center;
 }
-.mdo-splash-tagline .t-gold { color: #F5B731; padding: 0 4px; }
-.mdo-splash-tagline .t-blue { color: #3E7BD1; }
+.mdo-splash-tagline .t-div { color: #C9C4B8; padding: 0 6px; }
+.mdo-splash-tagline .t-blue { color: #3E7BD1; font-weight: 800; }
+.mdo-splash-tagline .t-gold { color: #F5B731; }
 
 .mdo-splash-silhouette {
     flex: 1;
@@ -1812,9 +1819,8 @@ input.prefilled {
     align-items: flex-end;
     justify-content: center;
     padding-bottom: 4vh;
-    opacity: .5;
 }
-.mdo-splash-silhouette svg { width: 55%; max-width: 260px; height: auto; }
+.mdo-splash-silhouette img { width: 62%; max-width: 280px; height: auto; }
 
 .mdo-splash-footer {
     background: #01294A;
@@ -1826,16 +1832,222 @@ input.prefilled {
     gap: 14px;
 }
 .mdo-splash-spinner {
-    width: 42px;
-    height: 42px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
-    border: 4px solid #173A5E;
+    border: 3px solid #173A5E;
     border-top-color: #F5B731;
     border-right-color: #F5B731;
+    animation: mdoSpinnerSpin .9s linear infinite;
+}
+@keyframes mdoSpinnerSpin {
+    to { transform: rotate(360deg); }
 }
 .mdo-splash-footer p {
     font-family: 'Nunito', sans-serif;
     font-size: 15px;
     color: #fff;
     margin: 0;
+}
+
+/* Sign-in badge: the icon + app name + "Sign in to your account" block from
+   the brand pack's "SIGN IN SCREENS" mockup, plus the "Timothy Lutheran
+   Church" footer line. Colors come from the per-app modifier class, not
+   from inline styles, so a page only has to name its app once. Icons are
+   pixel crops of the brand pack's own line-icon set
+   (images/logo/icon-*-icon.png), not redrawn. */
+.sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.mdo-signin-badge { text-align: center; margin: 0 0 22px; }
+.mdo-signin-badge img { width: 52px; height: auto; display: block; margin: 0 auto 10px; }
+.mdo-signin-badge .mdo-signin-app {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 800;
+    font-size: 1.25em;
+    margin: 0 0 4px;
+}
+.mdo-signin-badge .mdo-signin-sub { color: #5a6673; font-size: .92em; margin: 0; }
+
+.mdo-signin-badge--clockin .mdo-signin-app { color: #5BAD8B; }
+.mdo-signin-badge--staff   .mdo-signin-app { color: #3E7BD1; }
+.mdo-signin-badge--admin   .mdo-signin-app { color: #7E5BAA; }
+.mdo-signin-badge--parent  .mdo-signin-app { color: #5BAD8B; }
+
+.mdo-signin-btn--clockin, .mdo-signin-btn--parent { background: #5BAD8B !important; }
+.mdo-signin-btn--staff  { background: #3E7BD1 !important; }
+.mdo-signin-btn--admin  { background: #7E5BAA !important; }
+.mdo-signin-btn--clockin:hover, .mdo-signin-btn--parent:hover { background: #4c9a79 !important; }
+.mdo-signin-btn--staff:hover  { background: #326bc0 !important; }
+.mdo-signin-btn--admin:hover  { background: #6d4c96 !important; }
+
+.mdo-signin-footer {
+    text-align: center;
+    margin: 16px 0 0;
+    font-family: 'Nunito', sans-serif;
+    font-size: .82em;
+    color: #8a9099;
+}
+
+/* Onboarding carousel: brand pack's "ONBOARDING / INTRO SCREEN" +
+   "APP INTRO / FEATURE HIGHLIGHTS" panels, combined into one 5-slide
+   sequence (welcome + 4 feature cards). Shown once per browser per app
+   (localStorage flag set by the page's own inline script) before the
+   sign-in card. images/logo/onboarding-scene.png is the brand pack's own
+   illustration with its baked-in headline erased back to plain sky so the
+   headline can be live text in this page's linked fonts instead. */
+.mdo-onboard {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    background: #FDFAF0;
+    display: flex;
+    flex-direction: column;
+    transition: opacity .3s ease;
+}
+.mdo-onboard.mdo-onboard-hidden { opacity: 0; pointer-events: none; }
+.mdo-onboard-slides {
+    flex: 1;
+    display: flex;
+    overflow-x: hidden;
+    position: relative;
+}
+.mdo-onboard-slide {
+    flex: 0 0 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 8vh 28px 12vh;
+    opacity: 0;
+    transform: translateX(24px);
+    transition: opacity .35s ease, transform .35s ease;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+.mdo-onboard-slide.is-active {
+    opacity: 1;
+    transform: translateX(0);
+    position: relative;
+    pointer-events: auto;
+}
+.mdo-onboard-slide img.mdo-onboard-scene {
+    width: 100%;
+    max-width: 340px;
+    border-radius: 18px;
+    margin-bottom: 20px;
+}
+.mdo-onboard-slide .mdo-onboard-icon {
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 18px;
+    position: relative;
+}
+.mdo-onboard-slide .mdo-onboard-icon img { width: 40px; height: auto; }
+.mdo-onboard-slide .mdo-onboard-icon::before,
+.mdo-onboard-slide .mdo-onboard-icon::after {
+    content: '+';
+    position: absolute;
+    color: #F5B731;
+    font-weight: 800;
+    font-size: 18px;
+}
+.mdo-onboard-slide .mdo-onboard-icon::before { top: -6px; left: -10px; }
+.mdo-onboard-slide .mdo-onboard-icon::after { bottom: -2px; right: -12px; font-size: 14px; }
+.mdo-onboard-icon--clockin { background: #E8F4EE; }
+.mdo-onboard-icon--staff   { background: #E9F0FB; }
+.mdo-onboard-icon--admin   { background: #F2EDF7; }
+.mdo-onboard-icon--parent  { background: #E8F4EE; }
+.mdo-onboard-slide h2 {
+    font-family: 'Lora', Georgia, serif;
+    color: var(--navy);
+    font-size: 1.5em;
+    margin: 0 0 10px;
+}
+.mdo-onboard-slide p {
+    font-family: 'Nunito', sans-serif;
+    color: #5a6673;
+    font-size: .96em;
+    line-height: 1.5;
+    margin: 0;
+    max-width: 300px;
+}
+.mdo-onboard-bottom {
+    flex: 0 0 auto;
+    padding: 18px 28px calc(28px + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+.mdo-onboard-dots { display: flex; gap: 7px; }
+.mdo-onboard-dots span {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #DCD8CC;
+    transition: background .2s ease, width .2s ease;
+}
+.mdo-onboard-dots span.is-active { background: var(--navy); width: 18px; border-radius: 4px; }
+.mdo-onboard-actions { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mdo-onboard-skip {
+    background: none;
+    border: none;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    color: #8a9099;
+    font-size: .92em;
+    cursor: pointer;
+    padding: 10px 4px;
+}
+.mdo-onboard-next {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    background: var(--navy);
+    color: #fff;
+    border: none;
+    border-radius: 30px;
+    padding: 13px 30px;
+    font-size: .98em;
+    cursor: pointer;
+}
+.mdo-onboard-next:hover { background: var(--navy-lt); }
+
+/* Empty state: brand pack's "EMPTY STATE EXAMPLE" — a backpack instead of
+   a generic icon. images/logo/empty-backpack.png is a pixel crop of the
+   brand pack's own illustration. */
+.mdo-empty {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px;
+    background: #fff;
+    border: 1px solid #eee2d0;
+    border-radius: 14px;
+}
+.mdo-empty img { width: 56px; height: auto; flex: 0 0 auto; }
+.mdo-empty-text strong {
+    display: block;
+    font-family: 'Nunito', sans-serif;
+    color: var(--navy);
+    font-size: 1em;
+    margin-bottom: 3px;
+}
+.mdo-empty-text span {
+    font-family: 'Nunito', sans-serif;
+    color: #8a9099;
+    font-size: .88em;
 }
