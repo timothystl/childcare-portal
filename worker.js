@@ -967,7 +967,20 @@ export default {
       // what THIS page may embed (the Maps iframe), frame-ancestors is who may
       // embed this page.
       "frame-ancestors 'self'; " +
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; " +
+      // staxjs.staxpayments.com: Stax.js (Bolt), the embedded-checkout
+      // comparison in portal-billing.js — see its pbLoadStaxJs().
+      // core.spreedly.com: Stax.js itself loads Spreedly's iframe tokenization
+      // library (core.spreedly.com/iframe/iframe-v1.min.js) to actually
+      // collect the card number/CVV — found by grepping staxjs-captcha.js's
+      // own bundled source, not documented anywhere Stax publishes. Without
+      // this the number/CVV fields render as a refused-iframe placeholder
+      // (a blank gray box with a broken-page icon) even though the outer
+      // Stax.js library itself loads fine — a second, separate CSP miss from
+      // the first one (staxjs.staxpayments.com), caught only by actually
+      // clicking through the flow.
+      // www.google.com (recaptcha/api.js): Stax.js's own fraud-prevention
+      // captcha, loaded unconditionally by the library itself.
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://staxjs.staxpayments.com https://core.spreedly.com https://www.google.com; " +
       // R25: style-src/font-src previously omitted the Google Fonts hosts that
       // every page links (Lora, Nunito, Dancing Script), and the brand
       // typography fell back to Georgia / system-ui in production.
@@ -980,7 +993,18 @@ export default {
       // effective policy for everything else — so the two MUST stay in sync,
       // and a change made only here will silently do nothing.
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com; " +
+      // apiprod/fattqueryprod/transactions.fattlabs.com: the three hosts
+      // Stax.js itself calls, read directly out of its own bundled source
+      // (grepped staxjs-captcha.js for fattlabs.com/fattmerchant.com/
+      // staxpayments.com references) rather than guessed from docs.
+      // test.blockchyp.com / api.blockchyp.com: the real vault vendor for
+      // THIS merchant's Stax gateway, per its own console log ("Vendor
+      // lookup complete: using BlockChyp") — Stax bundles several possible
+      // vault backends (Spreedly above is one; BlockChyp is the one this
+      // merchant's test gateway actually routes through), so which one
+      // matters can only be learned from the actual browser session, not
+      // from reading the library's source.
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com https://apiprod.fattlabs.com https://fattqueryprod.fattlabs.com https://transactions.fattlabs.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com; " +
       "img-src 'self' data:; " +
       // frame-src for the Google Maps embed on the home page contact section.
       // There is no frame-src default: without this it falls back to
@@ -991,7 +1015,19 @@ export default {
       // test.authorize.net (sandbox) / accept.authorize.net (production) are
       // the online-payment iframe in the parent portal — see
       // portal-billing.js and create-payment-session.
-      "frame-src https://maps.google.com https://www.google.com https://test.authorize.net https://accept.authorize.net; " +
+      // staxjs.staxpayments.com / omni.fattmerchant.com: Stax.js mounts the
+      // card-number/CVV fields as small iframes from one of these — the
+      // charge response's own merchant_location_descriptor names
+      // omni.fattmerchant.com, so both are allowed rather than guessed at.
+      // core.spreedly.com is the actual card-number/CVV iframe host — see
+      // the script-src comment above for how this was found.
+      // test.blockchyp.com / api.blockchyp.com: the actual card-number/CVV
+      // iframe origin for this merchant's gateway, confirmed live from a
+      // browser console postMessage error naming
+      // https://test.blockchyp.com as the target origin the iframe never
+      // reached (blocked here, so it stayed at origin 'null' — the
+      // "flash of real fields, then reverts to blocked" symptom).
+      "frame-src https://maps.google.com https://www.google.com https://test.authorize.net https://accept.authorize.net https://staxjs.staxpayments.com https://omni.fattmerchant.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com; " +
       "font-src 'self' data: https://fonts.gstatic.com"
     );
     // SX4: the rest of the baseline security headers. Kept byte-identical to
