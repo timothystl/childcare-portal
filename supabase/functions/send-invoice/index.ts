@@ -331,6 +331,15 @@ serve(async (req) => {
         const skipped: Array<{ id: number; reason: string }> = [];
 
         for (const inv of invoices || []) {
+            // A void invoice is dead by definition — nothing should ever be
+            // charged or claimed against it. Caught live 2026-08-26: a stale
+            // void row's old amount got emailed because nothing here checked
+            // status, only sent_at (which a never-sent void row also has as
+            // null). See fix_reconcile_ignores_void_invoice.sql for the other
+            // half of this — that fix means a family with real current
+            // charges gets a fresh draft instead of a stuck void row, so this
+            // guard should now rarely fire; it stays as a hard backstop.
+            if (inv.status === "void") { skipped.push({ id: inv.id, reason: "invoice is void" }); continue; }
             if (inv.sent_at && !resend) { skipped.push({ id: inv.id, reason: "already sent" }); continue; }
 
             const fam = famById.get(String(inv.family_id));
