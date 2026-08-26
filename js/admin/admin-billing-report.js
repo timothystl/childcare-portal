@@ -187,7 +187,12 @@ function _brRoomTable() {
 }
 
 function _brChildRow(r) {
-    return `<tr class="br-row${r.isException ? ' br-exc' : ''}${r.withdrawn ? ' br-withdrawn' : ''}">
+    // data-br-email is a pure hook — Finance Hub delegates a click here to
+    // switch to the Ledger tab and open that family's drawer (implementation
+    // spec §5: "Billing Report row clicks must switch to the Ledger tab AND
+    // open that family's drawer in the same action"). No calculation here
+    // changes; admin-finance-hub.js owns what the click does.
+    return `<tr class="br-row${r.isException ? ' br-exc' : ''}${r.withdrawn ? ' br-withdrawn' : ''}" data-br-email="${escHtml(r.payer || '')}">
         <td>${escHtml(r.childName)}</td>
         <td>${escHtml(r.familyName)}<br><small style="color:var(--text-muted)">${escHtml(r.payer)}</small></td>
         <td style="text-align:center">${r.days || '—'}</td>
@@ -200,7 +205,7 @@ function _brChildRow(r) {
 function _brNameTable() {
     const rows = _brFamilyRows.map(f => {
         const kids = f.children.map((name, i) => `${escHtml(name)} <small>(${escHtml(_brRows.find(r => r.childName === name)?.roomLabel || '')})</small>`).join(', ');
-        return `<tr class="br-row${f.isException ? ' br-exc' : ''}${f.withdrawn ? ' br-withdrawn' : ''}">
+        return `<tr class="br-row${f.isException ? ' br-exc' : ''}${f.withdrawn ? ' br-withdrawn' : ''}" data-br-email="${escHtml(f.email || '')}">
             <td>${escHtml(f.name)}<br><small style="color:var(--text-muted)">${escHtml(f.email)}</small></td>
             <td>${kids || '—'}</td>
             <td style="text-align:center">${f.children.length}</td>
