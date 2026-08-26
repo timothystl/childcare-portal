@@ -233,7 +233,18 @@ serve(async (req) => {
     }
 
     // ── Refund or void: find the original charge this reverses ─────────
-    const refTransId: string = tx?.refTransId || tx?.refTransID || "";
+    // ⚠️ Verified live against the sandbox, and the two are NOT symmetric:
+    //   - A refund gets its own new transaction id; getTransactionDetailsRequest
+    //     on it returns refTransId/refTransID pointing at the original.
+    //   - A void does NOT create a new transaction — Authorize.net returns the
+    //     SAME transId as the charge it voids (confirmed: voiding transaction
+    //     80058619513 returned transId 80058619513, not a new one), and
+    //     getTransactionDetailsRequest on it carries NO refTransId/refTransID
+    //     field at all (present only in the direct createTransactionRequest
+    //     response, not in the details lookup). So for a void, the event's
+    //     own transId already IS the original's id — there is no separate
+    //     reference field to read.
+    const refTransId: string = isVoid ? String(transId) : (tx?.refTransId || tx?.refTransID || "");
     if (!refTransId) return json({ received: true, ignored: "no original transaction reference" }, 200);
 
     const { data: original, error: origErr } = await admin
@@ -252,10 +263,18 @@ serve(async (req) => {
     const reverseAmount = Number(tx.authAmount ?? tx.settleAmount ?? original.amount) || Number(original.amount) || 0;
     if (!(reverseAmount > 0)) return json({ received: true, ignored: "zero or invalid reversal amount" }, 200);
 
+    // A refund's transId is genuinely new and unique on its own. A void's
+    // transId is the ORIGINAL charge's id (see the note above) — storing it
+    // as-is would collide with the original payment's own row on the
+    // (processor, processor_transaction_id) unique index and be silently
+    // treated as an already-recorded duplicate, so the void would never
+    // actually get recorded. The ":void" suffix keeps it unique.
+    const reversalTransactionId = isVoid ? `${transId}:void` : String(transId);
+
     const result = await recordAndReconcile(admin, {
         family_id: original.family_id, invoice_id: original.invoice_id, amount: -reverseAmount,
         note: isRefund ? "Refund via Authorize.net" : "Void via Authorize.net",
-        processor_transaction_id: String(transId),
+        processor_transaction_id: reversalTransactionId,
         refund_of_payment_id: original.id,
     }).catch((e: Error) => ({ error: e.message } as any));
     if (result?.error) return json({ error: result.error }, 500);
@@ -264,7 +283,7 @@ serve(async (req) => {
         admin_email: "authorizenet-webhook",
         action:      isRefund ? "online_refund" : "online_void",
         entity:      "billing_invoice",
-        details:     { invoice_id: original.invoice_id, payment_id: original.id, amount: -reverseAmount, processor_transaction_id: String(transId) },
+        details:     { invoice_id: original.invoice_id, payment_id: original.id, amount: -reverseAmount, processor_transaction_id: reversalTransactionId },
     }).then(() => {}, (e: unknown) => console.error("authorizenet-webhook: audit write failed", e));
 
     return json({ received: true, ...result, invoiceId: original.invoice_id, amount: -reverseAmount }, 200);
