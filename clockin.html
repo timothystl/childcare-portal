@@ -564,69 +564,63 @@
             background: #FDFAF0;
             display: flex;
             flex-direction: column;
-            align-items: center;
             transition: opacity .35s ease;
             overflow: hidden;
         }
         .mdo-splash.mdo-splash-hidden { opacity: 0; pointer-events: none; }
         .mdo-splash-top {
-            flex: 0 0 auto;
+            flex: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 16vh 24px 0;
+            padding: 14vh 24px 0;
         }
         .mdo-splash-wordmark { width: min(72vw, 320px); height: auto; }
-        .mdo-splash-scene {
-            flex: 1 1 auto;
-            display: flex;
-            align-items: flex-end;
-            justify-content: center;
-            width: 100%;
-            min-height: 0;
-            padding-top: 6vh;
-        }
-        .mdo-splash-scene img { width: min(88vw, 400px); height: auto; }
         .mdo-splash-tagline {
-            margin: 5vh 0 0;
-            padding: 0 32px;
+            margin-top: 16px;
             font-family: 'Nunito', sans-serif;
             font-weight: 600;
             font-size: 14px;
-            line-height: 1.4;
-            color: #6E6D6C;
+            color: #5BAD8B;
             text-align: center;
         }
+        .mdo-splash-tagline .t-div { color: #C9C4B8; padding: 0 6px; }
+        .mdo-splash-tagline .t-blue { color: #3E7BD1; font-weight: 800; }
+        .mdo-splash-tagline .t-gold { color: #F5B731; }
+        .mdo-splash-silhouette {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 4vh;
+        }
+        .mdo-splash-silhouette img { width: 62%; max-width: 280px; height: auto; }
+        .mdo-splash-footer {
+            background: #01294A;
+            border-radius: 50% 50% 0 0 / 40px 40px 0 0;
+            padding: 34px 24px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+        }
         .mdo-splash-spinner {
-            position: relative;
-            width: 30px;
-            height: 30px;
-            margin: 5vh 0 6vh;
-            flex: 0 0 auto;
-        }
-        .mdo-splash-spinner i {
-            position: absolute;
-            top: 0;
-            left: 50%;
-            width: 6px;
-            height: 6px;
-            margin-left: -3px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
-            background: #F5B731;
-            transform-origin: 3px 15px;
-            animation: mdoSpinnerFade 1s linear infinite;
+            border: 3px solid #173A5E;
+            border-top-color: #F5B731;
+            border-right-color: #F5B731;
+            animation: mdoSpinnerSpin .9s linear infinite;
         }
-        .mdo-splash-spinner i:nth-child(1) { transform: rotate(0deg); animation-delay: -.875s; }
-        .mdo-splash-spinner i:nth-child(2) { transform: rotate(45deg); animation-delay: -.75s; }
-        .mdo-splash-spinner i:nth-child(3) { transform: rotate(90deg); animation-delay: -.625s; }
-        .mdo-splash-spinner i:nth-child(4) { transform: rotate(135deg); animation-delay: -.5s; }
-        .mdo-splash-spinner i:nth-child(5) { transform: rotate(180deg); animation-delay: -.375s; }
-        .mdo-splash-spinner i:nth-child(6) { transform: rotate(225deg); animation-delay: -.25s; }
-        .mdo-splash-spinner i:nth-child(7) { transform: rotate(270deg); animation-delay: -.125s; }
-        .mdo-splash-spinner i:nth-child(8) { transform: rotate(315deg); animation-delay: 0s; }
-        @keyframes mdoSpinnerFade {
-            0%   { opacity: 1; }
-            100% { opacity: .15; }
+        @keyframes mdoSpinnerSpin {
+            to { transform: rotate(360deg); }
+        }
+        .mdo-splash-footer p {
+            font-family: 'Nunito', sans-serif;
+            font-size: 15px;
+            color: #fff;
+            margin: 0;
         }
     </style>
 </head>
@@ -637,12 +631,15 @@
 <div id="mdoSplash" class="mdo-splash" aria-hidden="true">
     <div class="mdo-splash-top">
         <img class="mdo-splash-wordmark" src="/images/logo/myMDO_clockin_wordmark_light.png" alt="">
+        <p class="mdo-splash-tagline">Welcome.<span class="t-div">|</span><span class="t-blue">Receive.</span><span class="t-div">|</span>Grow.<span class="t-div">|</span><span class="t-gold">Go.</span></p>
     </div>
-    <div class="mdo-splash-scene" aria-hidden="true">
-        <img src="/images/logo/splash-scene-light.png" alt="">
+    <div class="mdo-splash-silhouette" aria-hidden="true">
+        <img src="/images/logo/splash-church-pale.png" alt="">
     </div>
-    <p class="mdo-splash-tagline">Helping our ministry run smoothly so we can focus on what matters.</p>
-    <div class="mdo-splash-spinner" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="mdo-splash-footer">
+        <div class="mdo-splash-spinner"></div>
+        <p>Loading <strong>myMDO</strong> Clock In&hellip;</p>
+    </div>
 </div>
 <script>
   (function () {
