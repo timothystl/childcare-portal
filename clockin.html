@@ -563,12 +563,61 @@
             z-index: 9999;
             background: #FDFAF0;
             display: flex;
-            align-items: center;
-            justify-content: center;
+            flex-direction: column;
             transition: opacity .35s ease;
+            overflow: hidden;
         }
-        .mdo-splash img { width: 100%; height: 100%; object-fit: cover; }
         .mdo-splash.mdo-splash-hidden { opacity: 0; pointer-events: none; }
+        .mdo-splash-top {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 14vh 24px 0;
+        }
+        .mdo-splash-wordmark { width: min(72vw, 320px); height: auto; }
+        .mdo-splash-tagline {
+            margin-top: 18px;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 700;
+            font-size: 15px;
+            color: #5BAD8B;
+            text-align: center;
+        }
+        .mdo-splash-tagline .t-gold { color: #F5B731; padding: 0 4px; }
+        .mdo-splash-tagline .t-blue { color: #3E7BD1; }
+        .mdo-splash-silhouette {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 4vh;
+            opacity: .5;
+        }
+        .mdo-splash-silhouette svg { width: 55%; max-width: 260px; height: auto; }
+        .mdo-splash-footer {
+            background: #01294A;
+            border-radius: 50% 50% 0 0 / 40px 40px 0 0;
+            padding: 34px 24px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+        }
+        .mdo-splash-spinner {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            border: 4px solid #173A5E;
+            border-top-color: #F5B731;
+            border-right-color: #F5B731;
+        }
+        .mdo-splash-footer p {
+            font-family: 'Nunito', sans-serif;
+            font-size: 15px;
+            color: #fff;
+            margin: 0;
+        }
     </style>
 </head>
 <body>
@@ -576,7 +625,17 @@
      Hidden on window 'load' with a fallback timeout so it never sticks
      around if something else stalls. -->
 <div id="mdoSplash" class="mdo-splash" aria-hidden="true">
-    <img src="/images/logo/splash/splash-clockin.svg" alt="" width="1290" height="2796">
+    <div class="mdo-splash-top">
+        <img class="mdo-splash-wordmark" src="/images/logo/myMDO_clockin_wordmark_light.png" alt="">
+        <p class="mdo-splash-tagline">Welcome.<span class="t-gold">|</span><span class="t-blue">Receive.</span><span class="t-gold">|</span>Grow.<span class="t-gold">|</span><span class="t-gold">Go.</span></p>
+    </div>
+    <div class="mdo-splash-silhouette" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><g fill="#01294A"><rect x="175" y="255" width="145" height="410"/><polygon points="175,255 247,205 320,255"/><rect x="320" y="390" width="530" height="275"/><polygon points="320,390 545,300 850,390"/><rect x="238" y="120" width="18" height="115"/><rect x="195" y="155" width="105" height="18"/></g></svg>
+    </div>
+    <div class="mdo-splash-footer">
+        <div class="mdo-splash-spinner"></div>
+        <p>Loading <strong>myMDO</strong> Clock In&hellip;</p>
+    </div>
 </div>
 <script>
   (function () {
