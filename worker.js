@@ -1012,7 +1012,16 @@ export default {
       // merchant's test gateway actually routes through), so which one
       // matters can only be learned from the actual browser session, not
       // from reading the library's source.
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com https://apiprod.fattlabs.com https://fattqueryprod.fattlabs.com https://transactions.fattlabs.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com; " +
+      // www.google.com: recaptcha itself calls back to
+      // recaptcha/api2/clr for its own internal analytics/logging beacon,
+      // after everything else (script-src's gstatic.com fix, the BlockChyp
+      // card enroll, the recaptcha token) already succeeded — a FOURTH
+      // separate CSP miss on the same captcha, caught from a real payment
+      // attempt whose console showed the enroll succeed and the recaptcha
+      // token generate, immediately followed by this connect-src block on
+      // repeat with backoff. www.google.com was already allowed in
+      // script-src/frame-src for other reasons but never added here.
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com https://apiprod.fattlabs.com https://fattqueryprod.fattlabs.com https://transactions.fattlabs.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com https://www.google.com; " +
       "img-src 'self' data:; " +
       // frame-src for the Google Maps embed on the home page contact section.
       // There is no frame-src default: without this it falls back to
