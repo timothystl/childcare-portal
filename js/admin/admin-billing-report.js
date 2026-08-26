@@ -53,6 +53,19 @@ async function _brBuild(month) {
     // names the child ("Ellie: days changed 5→3"), so a child inherits any
     // cause that mentions their name, or the family-wide ones (fee, credit,
     // sibling) on every child in that family.
+    //
+    // Loads the same overrides computeBillMonthExceptions used, so a child
+    // with a manual billing override prices the same way here as it does in
+    // the family total it rolls up into — an empty map here previously made
+    // "Base tuition" (built from these rows) and "Total to bill" (built from
+    // computeBillMonthExceptions) disagree for every overridden child.
+    let overrideRows = [];
+    try { overrideRows = await fetchBillingOverrides(month); } catch (e) { console.warn('br overrides:', e); }
+    const overridesMap = new Map(overrideRows.map(r => [
+        `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+        parseFloat(r.override_amount),
+    ]));
+
     const rows = [];
     famRows.forEach(fam => {
         if (fam.withdrawn) {
@@ -66,7 +79,6 @@ async function _brBuild(month) {
         // Re-derive per-child figures from the same source computeBillMonthExceptions
         // used, so a room subtotal and the family total it rolls up into can
         // never disagree — no second pass over registrations here.
-        const overridesMap = new Map();
         const perChild = _buildFamilyBillingData(month, overridesMap)
             .find(f => (f.parentEmail || '').toLowerCase() === (fam.email || '').toLowerCase());
         (perChild?.children || []).forEach(c => {
@@ -85,7 +97,15 @@ async function _brBuild(month) {
     });
     _brRows = rows;
 
-    const baseTuition = rows.reduce((s, r) => s + (r.amount || 0), 0);
+    // fam.base is already NET of the individual/sibling discount (see
+    // _buildFamilyBillingData: `subtotal += effRate - sib`), so summing the
+    // per-child row amounts (which come from that same net figure) and then
+    // showing "Discounts" as a further subtraction double-counts it — the
+    // stat tiles could never add up to Total that way. Base tuition here is
+    // the gross, pre-discount figure (fam.base + fam.discount) so
+    // Base − Discounts + Fees − Credits actually equals Total. It also
+    // excludes change fees, matching fam.total below, which excludes them too.
+    const baseTuition = famRows.reduce((s, f) => s + (f.base || 0) + (f.discount || 0), 0);
     const discounts    = famRows.reduce((s, f) => s + (f.discount || 0), 0);
     const fees         = famRows.reduce((s, f) => s + (f.regFee || 0) + (f.familyNewFee || 0), 0);
     const credits      = famRows.reduce((s, f) => s + (f.creditTotal || 0), 0);
