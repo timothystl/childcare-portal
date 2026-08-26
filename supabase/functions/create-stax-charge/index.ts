@@ -29,16 +29,23 @@
 //   real sandbox: POST /customer with {firstname, lastname, email,
 //   reference} returns 200 with an `id` exactly as this code expects.
 //
-// ⚠️ STILL UNVERIFIED — only the Stax.js/Bolt side, not the server side:
-//   whether the same STAX_API_KEY doubles as Stax.js's public/tokenization
-//   key, or whether Stax issues a separate one for client-side use. No
-//   client-side Stax.js/Bolt wiring exists yet in portal-billing.js — that
-//   is the next thing to confirm and build now that the merchant is live.
-//   Do not deploy this to production until that's resolved.
+// ✅ Confirmed via Stax's own docs (2026-08-26): the browser needs a
+//   SEPARATE "Website Payments Token" for Stax.js/Bolt — NOT the
+//   STAX_API_KEY bearer key used server-side above. An earlier version of
+//   this function returned the bearer key itself as `staxPublicKey`, which
+//   would have handed our server-side secret to every browser that opened
+//   the pay modal. Fixed: this now reads STAX_WEB_PAYMENTS_TOKEN, a
+//   separate, client-safe secret (get it from the Stax dashboard —
+//   Settings → Web Payments, per docs.staxpayments.com/docs/overview-of-staxjs).
+//
+// ✅ Embedded checkout built 2026-08-26 — see portal-billing.js
+//   (pbStartStaxPayment onward) and portal.html's #pbStaxModal. Hidden
+//   from every real family by default (?staxtest=1 only); see CLAUDE.md's
+//   Stax section for what is and isn't verified in a real browser yet.
 //
 // Deploy:  supabase functions deploy create-stax-charge
-// Secrets: STAX_API_KEY, STAX_ENVIRONMENT ('sandbox' | 'production',
-//          default sandbox)
+// Secrets: STAX_API_KEY, STAX_WEB_PAYMENTS_TOKEN, STAX_ENVIRONMENT
+//          ('sandbox' | 'production', default sandbox)
 // ============================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -140,18 +147,19 @@ serve(async (req) => {
 
         const { data: family, error: famErr } = await admin
             .from("families")
-            .select("id, parent_name, parent_email, stax_customer_id")
+            .select("id, parent_name, parent_email, parent_phone, stax_customer_id")
             .eq("id", invoice.family_id)
             .maybeSingle();
         if (famErr) return json({ error: famErr.message }, 500, ch);
         if (!family) return json({ error: "Family record not found." }, 404, ch);
 
+        const nameParts = String(family.parent_name || "Family").trim().split(/\s+/);
+        const firstname = nameParts[0] || "Family";
+        const lastname = nameParts.slice(1).join(" ") || "MDO";
+
         let staxCustomerId: string | null = family.stax_customer_id || null;
 
         if (!staxCustomerId) {
-            const nameParts = String(family.parent_name || "Family").trim().split(/\s+/);
-            const firstname = nameParts[0] || "Family";
-            const lastname = nameParts.slice(1).join(" ") || "MDO";
             const created = await staxRequest(apiKey, "/customer", {
                 method: "POST",
                 body: JSON.stringify({
@@ -173,17 +181,24 @@ serve(async (req) => {
 
         // ── 4. Hand the browser what it needs to tokenize a card ───
         // Stax.js (Bolt) collects the card client-side and returns a
-        // payment_method id; this server never sees the PAN. The public
-        // key it needs is the SAME api key used here in most Stax
-        // integrations — ⚠️ re-confirm this against Stax.js's own setup
-        // docs once the sandbox is live; some Stax accounts issue a
-        // separate publishable/tokenization key.
+        // payment_method id; this server never sees the PAN. webPaymentsToken
+        // is the client-safe token (NOT the server bearer key — see the ✅
+        // note above); firstname/lastname/phone let the browser prefill
+        // Stax.js's extraDetails without re-asking the parent for their own
+        // name. A missing STAX_WEB_PAYMENTS_TOKEN is reported the same way a
+        // missing STAX_API_KEY is — nothing partially works.
+        const webPaymentsToken = Deno.env.get("STAX_WEB_PAYMENTS_TOKEN");
+        if (!webPaymentsToken) return json({ error: "Payment processing is not configured yet." }, 500, ch);
+
         return json({
             customerId: staxCustomerId,
-            staxPublicKey: apiKey,
+            webPaymentsToken,
             environment: (Deno.env.get("STAX_ENVIRONMENT") || "sandbox").toLowerCase(),
             amount: due,
             invoiceId: invoice.id,
+            firstname,
+            lastname,
+            phone: family.parent_phone || "",
         }, 200, ch);
 
     } catch (err) {

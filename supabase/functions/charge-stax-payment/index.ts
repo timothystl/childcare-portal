@@ -40,15 +40,25 @@
 //   "SUCCESS", ...}. The `success`/`id` fields this code reads are
 //   exactly right; no changes needed to the charge call itself.
 //
-// ⚠️ STILL UNVERIFIED — this function assumes the browser already has a
-//   Stax payment_method id from Stax.js/Bolt, which does not exist yet
-//   (see create-stax-charge's header — the client-side tokenization piece
-//   is the remaining gap, not this function's own logic). Do not deploy
-//   until that's built and the whole flow has been exercised from the
-//   browser, not just curl.
+//   5. A payment receipt email fires only on a genuinely NEW charge record
+//      (the insert's own success, not the idempotent-duplicate path) — a
+//      retried request that lands on the duplicate branch sends nothing a
+//      second time. Same instinct and near-identical template as
+//      authorizenet-webhook's sendReceiptEmail — same relationship, same
+//      church, just the other processor. Kept as its own copy here rather
+//      than a shared import: edge functions in this repo each deploy from
+//      their own folder with no shared module path between them.
+//
+// ✅ /charge request/response shape verified live 2026-08-26 against the
+//   real sandbox (see create-stax-charge's header). Embedded checkout
+//   built the same session — see portal-billing.js (pbStartStaxPayment
+//   onward). Still unverified in an actual browser (no
+//   STAX_WEB_PAYMENTS_TOKEN available here — dashboard-only); see
+//   CLAUDE.md's Stax section.
 //
 // Deploy:  supabase functions deploy charge-stax-payment
-// Secrets: STAX_API_KEY
+// Secrets: STAX_API_KEY, RESEND_API_KEY, RESEND_FROM_EMAIL, RESEND_REPLY_TO
+//          (shared with authorizenet-webhook / send-invoice)
 // ============================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -74,6 +84,129 @@ function json(body: unknown, status: number, ch: Record<string, string>) {
 /** Stax wants a decimal dollar amount, same shape as Authorize.net's. */
 function amountStr(n: number): string {
     return (Math.round(n * 100) / 100).toFixed(2);
+}
+
+function money(n: number): string { return "$" + (Number(n) || 0).toFixed(2); }
+
+function escHtml(s: string): string {
+    return String(s ?? "").replace(/[&<>"']/g, c => (
+        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" } as Record<string, string>
+    )[c]);
+}
+
+function monthLabel(month: string): string {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(month || ""));
+    if (!m) return String(month || "");
+    return new Date(Number(m[1]), Number(m[2]) - 1, 1)
+        .toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+/**
+ * A payment receipt, sent only for a genuinely new charge (never a retry —
+ * the caller only reaches here when the billing_payments insert itself
+ * succeeded, not the idempotent-duplicate branch). Deliberately the same
+ * branding as authorizenet-webhook's sendReceiptEmail — a family paying by
+ * Stax should get the identical-looking receipt as one paying by
+ * Authorize.net, not a Stax-branded one, since from the family's side this
+ * is the same church, the same bill, just a different processor under the
+ * hood they never need to know about.
+ */
+async function sendReceiptEmail(admin: any, o: {
+    familyId: string; invoiceId: number; amountPaid: number; transId: string;
+}): Promise<void> {
+    const apiKey = Deno.env.get("RESEND_API_KEY");
+    const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
+    const replyTo = Deno.env.get("RESEND_REPLY_TO") || fromEmail;
+    if (!apiKey) { console.warn("charge-stax-payment: RESEND_API_KEY not set, skipping receipt"); return; }
+
+    const { data: fam } = await admin.from("families")
+        .select("parent_name, parent_email").eq("id", o.familyId).maybeSingle();
+    if (!fam?.parent_email) return;
+
+    const { data: invoice } = await admin.from("billing_invoices")
+        .select("final_amount, billing_cycles(month)")
+        .eq("id", o.invoiceId).maybeSingle();
+    const { data: paymentRows } = await admin.from("billing_payments")
+        .select("amount").eq("invoice_id", o.invoiceId);
+    const totalPaid = (paymentRows || []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0);
+    const finalAmount = Number(invoice?.final_amount) || 0;
+    const balanceRemaining = Math.max(0, finalAmount - totalPaid);
+    const month = (invoice as any)?.billing_cycles?.month || "";
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#F5F0E4;font-family:'Nunito',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F0E4;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(1,41,74,.08);">
+        <tr>
+          <td style="background:#C9E6DC;padding:26px 32px;border-bottom:3px solid #F5B731;text-align:center;">
+            <p style="margin:0;color:#01294A;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;">Timothy Lutheran Church</p>
+            <h1 style="margin:6px 0 0;color:#01294A;font-size:22px;font-weight:800;">Mother's Day Out</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:30px 32px 8px;">
+            <p style="margin:0 0 6px;color:#7A6E5A;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;">Payment Receipt</p>
+            <h2 style="margin:0 0 18px;color:#01294A;font-size:20px;font-weight:700;">${escHtml(monthLabel(month))}</h2>
+            <p style="margin:0 0 18px;color:#2E2A22;font-size:15px;line-height:1.6;">
+              Hello ${escHtml(fam.parent_name || "there")},<br>
+              We've received your online payment. Thank you!
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 6px;">
+              <tr>
+                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#2E2A22;font-size:15px;">Amount paid</td>
+                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#01294A;font-size:15px;text-align:right;font-weight:700;">${escHtml(money(o.amountPaid))}</td>
+              </tr>
+              <tr>
+                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#2E2A22;font-size:15px;">Confirmation #</td>
+                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#01294A;font-size:15px;text-align:right;">${escHtml(o.transId)}</td>
+              </tr>
+              <tr>
+                <td style="padding:9px 0;color:#2E2A22;font-size:15px;">${balanceRemaining > 0 ? "Balance remaining" : "Status"}</td>
+                <td style="padding:9px 0;color:#01294A;font-size:15px;text-align:right;font-weight:700;">${balanceRemaining > 0 ? escHtml(money(balanceRemaining)) : "Paid in full"}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 32px 28px;">
+            <p style="margin:0;color:#7A6E5A;font-size:14px;line-height:1.6;">
+              If anything here looks wrong, just reply to this email and we'll take a look — it's no trouble at all.
+            </p>
+            <p style="margin:20px 0 0;color:#2E2A22;font-size:15px;">Thank you,<br>
+              <strong style="color:#01294A;">Timothy Lutheran MDO</strong></p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#FDFAF0;padding:16px 32px;text-align:center;border-top:1px solid #E8E0CC;">
+            <p style="margin:0;color:#7A6E5A;font-size:12px;">You're receiving this because your child is enrolled at Timothy Lutheran Church MDO.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    try {
+        await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+                from: fromEmail,
+                to: [String(fam.parent_email).trim()],
+                reply_to: replyTo,
+                subject: `Payment received — Timothy Lutheran MDO`,
+                html,
+            }),
+        });
+    } catch (e) {
+        // A failed receipt email must never undo or fail the payment record
+        // itself — the charge already happened and is already stored.
+        console.error("charge-stax-payment: receipt email failed", e);
+    }
 }
 
 serve(async (req) => {
@@ -168,8 +301,7 @@ serve(async (req) => {
         });
         const chargeData = await chargeRes.json().catch(() => ({}));
 
-        // ⚠️ success/id field names are unverified — see header. Adjust once
-        // a real sandbox response can be inspected.
+        // ✅ success/id field names verified live 2026-08-26 — see header.
         const success = chargeRes.ok && chargeData?.success !== false && !!chargeData?.id;
         if (!success) {
             const msg = chargeData?.errors ? JSON.stringify(chargeData.errors) : "Payment was declined.";
@@ -194,7 +326,8 @@ serve(async (req) => {
             processor: "stax",
             processor_transaction_id: transactionId,
         });
-        if (insErr && String(insErr.code) !== "23505" && !/duplicate key/i.test(insErr.message || "")) {
+        const isDuplicate = insErr && (String(insErr.code) === "23505" || /duplicate key/i.test(insErr.message || ""));
+        if (insErr && !isDuplicate) {
             // The charge succeeded at Stax but we failed to record it —
             // surface this loudly rather than silently losing the payment.
             return json({ error: "Payment succeeded but could not be recorded. Contact the office." }, 500, ch);
@@ -208,6 +341,19 @@ serve(async (req) => {
         const newStatus = totalPaid >= (Number(invoice.final_amount) || 0) && Number(invoice.final_amount) > 0
             ? "paid" : (totalPaid > 0 ? "partial" : "sent");
         await admin.from("billing_invoices").update({ status: newStatus }).eq("id", invoice.id);
+
+        // Receipt only on the genuinely-new insert — a retry that lands on
+        // the duplicate branch must never send a second copy.
+        if (!isDuplicate) {
+            try {
+                await sendReceiptEmail(admin, {
+                    familyId: String(invoice.family_id), invoiceId: invoice.id,
+                    amountPaid: due, transId: transactionId,
+                });
+            } catch (e) {
+                console.error("charge-stax-payment: receipt email failed", e);
+            }
+        }
 
         return json({ success: true, transactionId, amount: due }, 200, ch);
 

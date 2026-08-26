@@ -4396,6 +4396,60 @@ async function createPaymentSession(invoiceId) {
 }
 
 /**
+ * Start a Stax evaluation payment — same shape as createPaymentSession,
+ * but for the Stax comparison flow (see portal-billing.js's staxtest
+ * gate). Only an invoice id travels; create-stax-charge computes the
+ * amount and confirms ownership server-side.
+ *
+ * @param {number} invoiceId
+ * @returns {Promise<{customerId: string, webPaymentsToken: string,
+ *   environment: string, amount: number, invoiceId: number,
+ *   firstname: string, lastname: string, phone: string}>}
+ */
+async function createStaxChargeSession(invoiceId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated.');
+    const { data, error } = await sbClient.functions.invoke('create-stax-charge', {
+        body: { invoiceId },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) {
+        let detail = '';
+        try { detail = (await error.context?.json())?.error || ''; } catch (_) { /* ignore */ }
+        throw new Error(detail || error.message || 'Could not start payment.');
+    }
+    return data;
+}
+
+/**
+ * Charge a Stax payment_method id (produced client-side by Stax.js/Bolt —
+ * this app never sees the card) against an invoice. Recomputes the amount
+ * server-side, same as createStaxChargeSession.
+ *
+ * @param {number} invoiceId
+ * @param {string} paymentMethodId
+ * @returns {Promise<{success: boolean, transactionId: string, amount: number}>}
+ */
+async function chargeStaxPayment(invoiceId, paymentMethodId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated.');
+    const { data, error } = await sbClient.functions.invoke('charge-stax-payment', {
+        body: { invoiceId, paymentMethodId },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) {
+        let detail = '';
+        try { detail = (await error.context?.json())?.error || ''; } catch (_) { /* ignore */ }
+        throw new Error(detail || error.message || 'Payment failed.');
+    }
+    return data;
+}
+
+/**
  * Ask Authorize.net to void or refund one online card payment (admin only,
  * full role). Only a billing_payments row id travels — the amount and
  * whether it's a void or refund are both decided server-side from the
