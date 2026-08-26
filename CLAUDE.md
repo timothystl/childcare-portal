@@ -1815,10 +1815,28 @@ and only the CSP tells them apart. Fixed in **both** `_headers` and `worker.js`
   verified earlier this session), `staxjs.staxpayments.com` added defensively since the
   library is loaded from there.
 
-**Not yet re-tested after the CSP fix** — the next click-through should get past this
-error. If it still fails, check the browser console for a *different* CSP violation
-(the exact iframe/XHR host actually used may differ from what was grepped) before
-assuming a code bug.
+**Re-tested — the script-load fix worked, and surfaced a second, separate CSP miss.**
+The modal now renders with the app's own styling (badge, title, amount, layout) instead
+of erroring immediately, confirming `staxjs.staxpayments.com` was the only problem with
+the *outer* library. But the card-number/CVV fields themselves rendered as a
+refused-iframe placeholder — a blank gray box with a broken-page icon, Chrome's tell for
+"this iframe embed was blocked," not a missing-image icon.
+
+⚠️ **The actual vaulting host is `core.spreedly.com`, not a Stax-branded domain at
+all.** Stax.js loads Spreedly's own hosted-fields library
+(`core.spreedly.com/iframe/iframe-v1.min.js`) to collect the card number and CVV —
+found by grepping `staxjs-captcha.js`'s bundled source for `spreedly`, since nothing in
+Stax's own docs names this. Added to `script-src`, `connect-src`, and `frame-src` in
+both `_headers` and `worker.js` (re-verified byte-identical after editing). This is the
+lesson to keep: a third-party embedded-payments library can itself depend on a further
+third party for the actual sensitive-field vaulting, and that dependency has to be
+found by reading the library's own bundle, not by trusting its documentation.
+
+**Still not re-tested after this second fix** — the next click-through should get past
+the placeholder and actually show usable card-number/CVV fields. If it still fails,
+check the browser console for a CSP violation naming a host neither fix covers, rather
+than assuming a code bug — this integration has now missed CSP twice in a row before
+finding the complete host list.
 
 ---
 
