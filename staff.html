@@ -27,7 +27,17 @@
          on window 'load' with a fallback timeout so it never sticks around if
          something else stalls. -->
     <div id="mdoSplash" class="mdo-splash" aria-hidden="true">
-        <img src="/images/logo/splash/splash-staff.svg" alt="" width="1290" height="2796">
+        <div class="mdo-splash-top">
+            <img class="mdo-splash-wordmark" src="/images/logo/myMDO_staff_wordmark_light.png" alt="">
+            <p class="mdo-splash-tagline">Welcome.<span class="t-gold">|</span><span class="t-blue">Receive.</span><span class="t-gold">|</span>Grow.<span class="t-gold">|</span><span class="t-gold">Go.</span></p>
+        </div>
+        <div class="mdo-splash-silhouette" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><g fill="#01294A"><rect x="175" y="255" width="145" height="410"/><polygon points="175,255 247,205 320,255"/><rect x="320" y="390" width="530" height="275"/><polygon points="320,390 545,300 850,390"/><rect x="238" y="120" width="18" height="115"/><rect x="195" y="155" width="105" height="18"/></g></svg>
+        </div>
+        <div class="mdo-splash-footer">
+            <div class="mdo-splash-spinner"></div>
+            <p>Loading <strong>myMDO</strong> Staff&hellip;</p>
+        </div>
     </div>
     <script>
       (function () {

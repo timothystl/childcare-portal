@@ -1766,17 +1766,76 @@ input.prefilled {
 }
 
 /* Branded splash/loading screen shown while a page's own JS boots.
-   Markup + the show/hide script live inline near <body> on each page;
-   this is just the shared visual. */
+   Markup + the show/hide script live inline near <body> on each page.
+   Real HTML/CSS rather than a single SVG image: an <img> loading an SVG
+   renders in an isolated context that cannot see this page's linked
+   Google Fonts, so the wordmark and body text would always fall back to
+   a generic sans no matter what the SVG declared. The wordmark itself is
+   still an image (images/logo/myMDO_*_wordmark_light.png) since "my" is
+   a script face cropped directly from the brand pack; everything else
+   here is live text in the fonts already linked on every page that shows
+   a splash (Nunito). */
 .mdo-splash {
     position: fixed;
     inset: 0;
     z-index: 9999;
     background: #FDFAF0;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
     transition: opacity .35s ease;
+    overflow: hidden;
 }
-.mdo-splash img { width: 100%; height: 100%; object-fit: cover; }
 .mdo-splash.mdo-splash-hidden { opacity: 0; pointer-events: none; }
+
+.mdo-splash-top {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14vh 24px 0;
+}
+.mdo-splash-wordmark { width: min(72vw, 320px); height: auto; }
+.mdo-splash-tagline {
+    margin-top: 18px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--green);
+    text-align: center;
+}
+.mdo-splash-tagline .t-gold { color: #F5B731; padding: 0 4px; }
+.mdo-splash-tagline .t-blue { color: #3E7BD1; }
+
+.mdo-splash-silhouette {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 4vh;
+    opacity: .5;
+}
+.mdo-splash-silhouette svg { width: 55%; max-width: 260px; height: auto; }
+
+.mdo-splash-footer {
+    background: #01294A;
+    border-radius: 50% 50% 0 0 / 40px 40px 0 0;
+    padding: 34px 24px 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+.mdo-splash-spinner {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 4px solid #173A5E;
+    border-top-color: #F5B731;
+    border-right-color: #F5B731;
+}
+.mdo-splash-footer p {
+    font-family: 'Nunito', sans-serif;
+    font-size: 15px;
+    color: #fff;
+    margin: 0;
+}
