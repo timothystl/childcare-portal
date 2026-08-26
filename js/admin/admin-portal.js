@@ -59,7 +59,15 @@ const AP_TABS = {
     },
     finance: {
         icon: '💰', label: 'Finance',
-        blurb: "Everything financial, grouped by what you're trying to do. Pick a tool to open it — you'll land on just that tool, not the whole page.",
+        blurb: 'Billing, invoices, and who owes — one ledger, one number for each.',
+        // Finance Hub (design handoff, 2026-08-26) replaced the four screens
+        // this tab used to fan out to (Bill This Month / Who Owes / Invoices /
+        // Family Billing Summary) with one ledger. A landing dashboard that
+        // still linked out to those tools would put the director right back
+        // where the redesign started — pick a screen before you can do
+        // anything. Finance opens straight into its one real tool instead of
+        // the generic Dashboard/Detail split every other tab uses.
+        defaultTool: 'financeHub',
     },
     planning: {
         icon: '🗓️', label: 'Planning',
@@ -504,8 +512,18 @@ function apRender() {
         }
         apState.tab = next;
     }
-    const tool = apState.view ? AP_TOOL_BY_KEY[apState.view] : null;
-    if (apState.view && (!tool || !apToolAvailable(tool))) apState.view = null;
+    let tool = apState.view ? AP_TOOL_BY_KEY[apState.view] : null;
+    if (apState.view && (!tool || !apToolAvailable(tool))) { apState.view = null; tool = null; }
+
+    // A tab can name its own landing tool (see AP_TABS.finance) instead of
+    // falling through to the generic Dashboard/Detail split — covers a fresh
+    // tab click (apGoTab sets view to null), a restored session, and initial
+    // load alike, since all three funnel through this one render.
+    if (!apState.view) {
+        const defaultKey = AP_TABS[apState.tab]?.defaultTool;
+        const defaultTool = defaultKey ? AP_TOOL_BY_KEY[defaultKey] : null;
+        if (defaultTool && apToolAvailable(defaultTool)) { apState.view = defaultKey; tool = defaultTool; }
+    }
 
     const meta      = AP_TABS[apState.tab];
     const chipIcon  = document.getElementById('currentTabIcon');
