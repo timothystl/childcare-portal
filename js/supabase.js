@@ -4349,6 +4349,33 @@ async function emailInvoices(invoiceIds, { resend = false, test = false } = {}) 
     return data;
 }
 
+/**
+ * Start an online payment for one of the signed-in parent's own invoices.
+ * Only an invoice id travels — create-payment-session reads the amount and
+ * confirms ownership server-side, and never trusts anything else from here.
+ *
+ * @param {number} invoiceId
+ * @returns {Promise<{token: string, formUrl: string, amount: number}>}
+ *   `token` + `formUrl` are handed straight to Authorize.net's Accept
+ *   Hosted page (see portal-billing.js) — this app never sees card data.
+ */
+async function createPaymentSession(invoiceId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated.');
+    const { data, error } = await sbClient.functions.invoke('create-payment-session', {
+        body: { invoiceId },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) {
+        let detail = '';
+        try { detail = (await error.context?.json())?.error || ''; } catch (_) { /* ignore */ }
+        throw new Error(detail || error.message || 'Could not start payment.');
+    }
+    return data;
+}
+
 /** Undo a send stamp — for a bill marked issued by mistake. */
 async function unmarkInvoiceSent(id) {
     if (!sbClient) throw new Error('Supabase not configured.');

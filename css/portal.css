@@ -894,7 +894,7 @@
 
 /* ============================================================
    BILLING TAB (portal-billing.js) — reuses .pd-card for its own cards;
-   these rules are just the row layout and the placeholder Pay button.
+   these rules are just the row layout and the Pay button/return states.
    ============================================================ */
 .pb-summary .pd-card-body { padding-top: 10px; }
 .pb-total { font-family: var(--font-head); font-size: 1.7em; color: var(--navy); margin: 0; }
@@ -915,7 +915,19 @@
 
 .pb-pay-btn {
     width: 100%; margin-top: 12px; min-height: 44px;
-    background: var(--linen); border: 1px dashed var(--border); border-radius: 10px;
-    color: var(--text-muted); font-family: inherit; font-size: .88em; font-weight: 700;
-    cursor: not-allowed;
+    background: var(--navy); border: none; border-radius: 10px;
+    color: #fff; font-family: inherit; font-size: .88em; font-weight: 700;
+    cursor: pointer;
 }
+.pb-pay-btn:hover:not(:disabled) { background: var(--navy-lt); }
+.pb-pay-btn:disabled {
+    background: var(--linen); border: 1px dashed var(--border);
+    color: var(--text-muted); cursor: not-allowed;
+}
+.pb-pay-error {
+    margin: 8px 0 0; font-size: .82em; line-height: 1.5; color: #B3261E;
+}
+
+.pb-return-banner .pd-card-body { padding: 14px 18px; font-size: .9em; line-height: 1.55; }
+.pb-return-paid      .pd-card-body { background: var(--green-pale); color: var(--green-dark, var(--green-text)); border-radius: 10px; }
+.pb-return-cancelled .pd-card-body { background: var(--linen); color: var(--text-muted); border-radius: 10px; }
