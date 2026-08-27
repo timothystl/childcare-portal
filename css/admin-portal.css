@@ -478,6 +478,9 @@
     .ap-sched-split { grid-template-columns: 1fr; }
     .ap-sched-side  { position: static; }
 }
+/* Ratio Step's second mount (consolidation pass, 2026-08-27) — a plain
+   divider above it is enough; the widget itself carries its own card. */
+.ap-sched-ratiostep { border-top: 1px solid var(--border); padding-top: 4px; }
 
 /* ── "Needs your OK" — time-off approval queue ───────────── */
 .ap-ok-panel {
