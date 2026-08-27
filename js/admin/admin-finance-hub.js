@@ -66,6 +66,14 @@ function _fhMonthLabel(month) {
 function _fhIsCurrentMonth(month) { return month === _fhDefaultMonth(); }
 
 // ── Entry point ──────────────────────────────────────────────
+// #fhBody (header + tabs + panes, all of it — see admin.html) stays behind
+// #fhSkeleton until this first _fhLoad() resolves, so the header — grouped
+// with the month label and search in one row now — never renders a beat
+// ahead of the data-dependent content underneath it. Only the FIRST open
+// gates on this; _fhGoToMonth()/_fhSwitchTab() call _fhLoad() again later
+// without touching the skeleton, so the header/tabs/search stay visible and
+// interactive during ordinary navigation (only #fhRoot's own "Loading…"
+// swaps in place there, same as it always has).
 async function renderFinanceHubTool() {
     if (!_fhMonth) _fhMonth = _fhDefaultMonth();
     _fhTab = 'ledger';
@@ -77,7 +85,14 @@ async function renderFinanceHubTool() {
     // state: pane visibility survives navigating away, so leaving on Billing
     // Report and coming back showed the report under a highlighted Ledger tab.
     _fhSwitchTab('ledger');
-    await _fhLoad();
+    _fhEl('fhBody')?.style.setProperty('display', 'none');
+    _fhEl('fhSkeleton')?.style.removeProperty('display');
+    try {
+        await _fhLoad();
+    } finally {
+        _fhEl('fhSkeleton')?.style.setProperty('display', 'none');
+        _fhEl('fhBody')?.style.removeProperty('display');
+    }
 }
 
 function _fhBindHeaderOnce() {
