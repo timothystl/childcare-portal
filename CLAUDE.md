@@ -1969,6 +1969,11 @@ webhook authenticity, or launch readiness. The 2026-08-27 hardening migration an
 function rewrites supersede the earlier "verified sound" wording. Treat the flow as
 internal-only until those changes are deployed in order and tested.
 
+**Production gate (2026-08-27):** both parent Stax endpoints require
+`STAX_PAYMENTS_ENABLED=true` **and** `STAX_ENVIRONMENT=production`. This is
+intentional: the previously documented credentials belong to a sandbox/test
+merchant, and a sandbox approval must never be recorded as a real tuition payment.
+
 ### Deployed and live-tested (2026-08-26)
 
 `create-stax-charge` and `charge-stax-payment` were deployed to Supabase (they only
