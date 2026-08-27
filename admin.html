@@ -1863,6 +1863,11 @@
                 <div class="fh-tabs" id="fhTabs" role="tablist">
                     <button type="button" class="fh-tab is-on" data-fh-tab="ledger" role="tab" aria-selected="true">Ledger</button>
                     <button type="button" class="fh-tab" data-fh-tab="report" role="tab" aria-selected="false">Billing Report</button>
+                    <!-- Bookkeeper (design handoff Finance Hub §6) — the third
+                         tab that retired seven separate Finance sidebar tools.
+                         Same director, no separate role; see
+                         js/admin/admin-finance-bookkeeper.js. -->
+                    <button type="button" class="fh-tab" data-fh-tab="bookkeeper" role="tab" aria-selected="false">Bookkeeper</button>
                 </div>
 
                 <div id="fhLedgerPane">
@@ -1887,6 +1892,10 @@
                         </div>
                     </div>
                     <div id="brBody"><p class="empty-hint">Loading…</p></div>
+                </div>
+
+                <div class="fh-bk-pane" id="fhBookkeeperPane" style="display:none">
+                    <div id="bkRoot"><p class="empty-hint">Loading&hellip;</p></div>
                 </div>
 
                 <div class="fh-note-editor">

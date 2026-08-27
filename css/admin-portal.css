@@ -1650,3 +1650,159 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .au-last-value { color: #888; font-size: .85em; }
 .au-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 @media (max-width: 900px) { .set-access-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ============================================================
+   Finance Hub — Bookkeeper tab (design handoff Finance Hub §6)
+   ============================================================
+   Sub-nav pills use the navy-fill/white toggle, deliberately NOT the
+   tone-colored fills the Ledger's filter chips use: those chips carry a
+   status meaning (tang = caution, green = resolved) and reusing that
+   vocabulary for plain navigation would say something the pills don't mean.
+   ------------------------------------------------------------ */
+.fh-bk-pane { padding-top: 20px; }
+
+.bk-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.bk-pill {
+    border: 1px solid var(--border); background: #fff; border-radius: 999px;
+    padding: 6px 12px; font-family: var(--font-body); font-weight: 700; font-size: 12.5px;
+    color: var(--text-muted); cursor: pointer; white-space: nowrap;
+    transition: background .15s, color .15s, border-color .15s;
+}
+.bk-pill:hover:not(.is-on) { background: var(--linen); }
+.bk-pill.is-on { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+.bk-h { font-family: var(--font-head); font-size: 15px; font-weight: 700; color: var(--navy); margin: 0 0 8px; }
+.bk-lede { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; max-width: 78ch; }
+.bk-progress { font-size: 13.5px; font-weight: 700; color: var(--navy); margin: 0 0 12px; }
+.bk-scope-note { margin: 12px 0 20px; }
+
+/* Stat cards */
+.bk-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.bk-stat { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.bk-stat-sun { background: var(--sun-pale); border-color: var(--sun-lt); }
+.bk-stat-label { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); }
+.bk-stat-num { font-family: var(--font-head); font-size: 24px; font-weight: 800; color: var(--navy); line-height: 1.15; margin-top: 4px; }
+.bk-stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.is-pos { color: var(--green-text); }
+.is-neg { color: var(--tang-dark); }
+
+/* Revenue vs. labor bars — CSS bars, never a wide table: the horizontal
+   scroll on the old dashboard is the specific complaint this replaces. */
+.bk-legend { font-size: 11.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+.bk-key { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.bk-key-rev { background: var(--navy); }
+.bk-key-lab { background: var(--tang); margin-left: 12px; }
+.bk-bars { display: flex; flex-direction: column; gap: 6px; }
+.bk-bar-row { display: flex; align-items: center; gap: 10px; }
+.bk-bar-label { flex: 0 0 34px; font-size: 11.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+.bk-bar-track { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bk-bar { height: 8px; border-radius: 4px; min-width: 2px; }
+.bk-bar-rev { background: var(--navy); }
+.bk-bar-lab { background: var(--tang); }
+.bk-bar-vals { flex: 0 0 150px; text-align: right; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.bk-bar-rev-val { color: var(--navy); font-weight: 700; }
+.bk-bar-lab-val { color: var(--tang-dark); }
+
+/* Cards, forms, buttons */
+.bk-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; }
+.bk-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.bk-card-head .bk-h { margin-bottom: 0; }
+.bk-link { background: none; border: none; padding: 0; cursor: pointer; color: var(--green-text); font-family: var(--font-body); font-weight: 700; font-size: 12.5px; text-decoration: underline; }
+.bk-budget-grid, .bk-room-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin-top: 10px; }
+.bk-kv-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.bk-kv-val { display: block; font-size: 14px; font-weight: 800; color: var(--navy); font-variant-numeric: tabular-nums; }
+
+/* Inline forms — expansions, never a modal (implementation spec §6). */
+.bk-form { border-radius: 12px; padding: 12px 14px; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.bk-form-sun   { background: var(--sun-pale);   border: 1.5px solid var(--sun-lt); }
+.bk-form-green { background: var(--green-pale); border: 1.5px solid var(--green-lt); }
+.bk-field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.bk-field input {
+    border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px;
+    font-family: var(--font-body); font-size: 13px; font-weight: 400; color: var(--text); background: #fff;
+}
+.bk-field input:focus { outline: none; border-color: var(--navy-lt); box-shadow: 0 0 0 3px rgba(1,41,74,.08); }
+.bk-form-btns { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.bk-btn-solid {
+    background: var(--navy); color: #fff; border: none; border-radius: 8px; padding: 8px 14px;
+    font-family: var(--font-body); font-weight: 800; font-size: 12.5px; cursor: pointer; transition: background .15s;
+}
+.bk-btn-solid:hover:not(:disabled) { background: var(--navy-lt); }
+.bk-btn-solid:disabled { opacity: .45; cursor: default; }
+.bk-btn-text { background: none; border: none; color: var(--text-muted); font-family: var(--font-body); font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.bk-btn-mini {
+    background: #fff; border: 1px solid var(--border); color: var(--navy); border-radius: 8px;
+    padding: 6px 10px; font-family: var(--font-body); font-weight: 700; font-size: 11.5px; cursor: pointer;
+    transition: background .15s; white-space: nowrap;
+}
+.bk-btn-mini:hover:not(:disabled) { background: var(--linen); }
+.bk-btn-mini:disabled { opacity: .45; cursor: default; }
+.bk-why { color: var(--text-muted); font-size: .9em; }
+
+/* Room P&L — a card grid, never a table. */
+.bk-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.bk-select {
+    border: 1px solid var(--border); border-radius: 999px; background: #fff;
+    padding: 7px 12px; font-family: var(--font-body); font-size: 13px; color: var(--navy); font-weight: 700;
+}
+.bk-room-grid-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.bk-room-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.bk-room-name { font-family: var(--font-head); font-size: 15px; font-weight: 700; color: var(--navy); }
+
+/* Month-end close checklist */
+.bk-check-card { padding: 4px 6px; }
+.bk-check-row {
+    display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
+    background: none; border: none; border-bottom: 1px solid var(--warm-gray);
+    padding: 12px 10px; cursor: pointer; font-family: var(--font-body); transition: background .12s;
+}
+.bk-check-row:last-child { border-bottom: none; }
+.bk-check-row:hover { background: var(--linen); }
+.bk-check-box {
+    flex: 0 0 20px; height: 20px; border: 1.5px solid var(--border); border-radius: 6px; background: #fff;
+    display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 12px;
+}
+.bk-check-row.is-done .bk-check-box { background: var(--green-text); border-color: var(--green-text); }
+.bk-check-label { display: block; font-size: 13.5px; font-weight: 700; color: var(--navy); }
+.bk-check-row.is-done .bk-check-label { text-decoration: line-through; color: var(--text-muted); }
+.bk-check-detail { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+/* Reconciliation */
+.bk-dep { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+.bk-dep.is-open { border-color: var(--navy); box-shadow: 0 0 0 3px rgba(1,41,74,.06); }
+.bk-dep-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bk-dep-amt { font-family: var(--font-head); font-size: 17px; font-weight: 800; color: var(--navy); }
+.bk-dep-meta { font-size: 12px; color: var(--text-muted); }
+.bk-dep-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bk-match { border-top: 1px solid var(--warm-gray); margin-top: 10px; padding-top: 8px; }
+.bk-match-row {
+    display: grid; grid-template-columns: 20px minmax(0, 1.4fr) minmax(0, 1.6fr) auto;
+    align-items: center; gap: 8px; padding: 6px 2px; font-size: 13px; cursor: pointer;
+}
+.bk-match-row:hover { background: var(--linen); }
+.bk-match-name { font-weight: 700; color: var(--navy); }
+.bk-match-meta { color: var(--text-muted); font-size: 12px; }
+.bk-match-amt { text-align: right; font-weight: 700; color: var(--green-text); font-variant-numeric: tabular-nums; }
+.bk-match-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--warm-gray); }
+.bk-match-total { font-size: 13px; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.bk-match-total.is-exact { color: var(--green-text); }
+.bk-pay-row {
+    display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.4fr) minmax(0, 1fr) auto;
+    align-items: center; gap: 8px; padding: 8px 2px; font-size: 13px; border-bottom: 1px solid var(--warm-gray);
+}
+.bk-pay-row:last-child { border-bottom: none; }
+.bk-pay-name { font-weight: 700; color: var(--navy); }
+.bk-pay-meta, .bk-pay-dep { color: var(--text-muted); font-size: 12px; }
+.bk-pay-amt { text-align: right; font-weight: 700; color: var(--green-text); font-variant-numeric: tabular-nums; }
+.bk-tag { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--mustard-dark); background: var(--sun-pale); border-radius: 999px; padding: 1px 6px; }
+
+/* GL export */
+.bk-gl-table { max-width: 460px; }
+.bk-gl-net td { font-weight: 800; color: var(--navy); border-top: 2px solid var(--border) !important; }
+
+@media (max-width: 900px) {
+    .bk-room-grid-wrap { grid-template-columns: minmax(0, 1fr); }
+    .bk-bar-vals { flex-basis: 108px; }
+    .bk-match-row, .bk-pay-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .bk-match-meta, .bk-pay-meta { grid-column: 1 / -1; }
+}

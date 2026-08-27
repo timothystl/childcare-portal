@@ -171,6 +171,98 @@ an `AP_TOOLS` entry, or it is unreachable.**
 
 ---
 
+## Finance tab overhaul — the Bookkeeper tab (2026-08-27)
+
+Built from `Billing_UI_inconsistency_issues.zip` → `design_handoff_finance_hub/`
+(README §6 + `IMPLEMENTATION_SPEC.md` §8–§9). The Ledger and Billing Report
+halves of that handoff already shipped (`js/admin/admin-finance-hub.js`); this
+session built the **third tab**, `Bookkeeper`, in `js/admin/admin-finance-bookkeeper.js`.
+
+Six sub-views behind one pill nav: **Overview · Accounts Receivable · Room P&L
+· Month-End Close · Reconciliation · GL Export**.
+
+### ⚠️ Seven sidebar tools were retired, and that is the point
+
+Finance's sidebar lost `ar`, `procare`, `revdash`, `dash`, `pnl`, `arrev` and
+`budget` from `AP_TOOLS`. The director's original complaint was a shelf of
+screens whose numbers were computed several ways and did not visibly agree;
+adding a Bookkeeper tab while leaving all seven reachable next to it would have
+kept every one of those disagreements and made the shelf longer.
+
+- **Their `<section>`s stay in `admin.html`.** Unreferenced by `AP_TOOLS` means
+  unreachable (the shell's own rule), so nothing that reads their DOM breaks.
+  Delete the markup only once nothing does.
+- **Attendance & Revenue is gone as a screen, not just as a nav entry.**
+  Child-days is now a stat on each Room P&L card, read from the same dataset
+  that card's revenue comes from — the two can no longer disagree, which is
+  exactly what a separate Attendance screen could not promise.
+- `yoy`, `expense` and `api` stay in the sidebar's Bookkeeper group; `discount`
+  stays under Money In.
+- **`scenario` and `model` moved to Planning → What-If**, per the handoff's own
+  scope sentence ("Scenario planning and enrollment modeling have moved out of
+  Finance"). ⚠️ Both were added to `AP_FULL_ONLY_KEYS`: Finance is in
+  `AP_FULL_ONLY_TABS`, Planning is not, so the move would otherwise have
+  quietly widened who can see wage and rate modeling.
+
+### One dataset, still
+
+Nothing in this tab derives a dollar figure of its own.
+
+| Number | Source |
+|---|---|
+| Revenue, child-days, tuition/fees split | `_buildFamilyBillingData()` — what the Ledger and Billing Report bill from |
+| Labor, per room and center-wide | `_buildRoomPnlData()` — what the retired dashboards read |
+| AR rows, days late, aging bands | `_fhRows` itself, filtered to `owed > 0`. The banner promises "same figures as the Ledger"; reading the Ledger's own array is what makes that true rather than aspirational |
+| Budget | `fetchAnnualBudget` / `saveAnnualBudget` — the same `annual_budget_{year}` setting the ChMS finance API reads |
+
+⚠️ **The budget form merges, never replaces.** It shows four fields; the record
+also carries the `actual*` fields `finance-summary` reads. A plain overwrite
+would silently zero the church's actuals.
+
+⚠️ **`_fhLoad()` calls `bookkeeperInvalidate()`.** Every Ledger write ends
+there, and the bookkeeper figures are the same figures — without it a send or a
+payment left the close screen showing pre-write numbers behind a tab switch.
+
+### Reconciliation never touches a balance
+
+It links existing `billing_payments` rows to a deposit record and nothing more.
+Deposits, the payment→deposit assignment, and hand-entered items live in the
+`finance_reconciliation` **settings** key — deliberately not a new table, and
+deliberately not written into `billing_payments`: a payment the feed missed
+must not become a row the Ledger then bills against. "+ Add item" rows are
+tagged *added by hand* in the list for the same reason.
+
+- **Confirm match is disabled unless the running total equals the deposit
+  exactly.** No partial, no over-match — "close enough" hides a missing
+  payment, a double entry, or an unaccounted processor fee.
+- Only one deposit is in matching mode at a time, so a payment can never be
+  provisionally checked against two.
+
+### Two places the spec did not match the live schema
+
+- **`billing_write_offs` has no `reviewed_at`** (and no DELETE grant). "Write-offs
+  pending for this close" therefore means *recorded during the month being
+  closed*, not *not yet ticked*.
+- **A write-off is netted out of AR, not used to hide the family.** Scoped to
+  the same trailing months the Ledger's `owed` figure spans — a write-off
+  against a long-settled invoice must not quietly reduce today's balance.
+- `billing_payments`' column is **`payment_method`**, not `method`.
+
+### Still UI-only, and say so rather than implying otherwise
+
+"Lock the month" records that the director considers the month closed; it does
+**not** block Ledger edits to that month. A real lock is separate work. The
+screen says this in a note rather than letting the checkbox imply enforcement.
+
+### Fixed in passing
+
+`renderFinanceHubTool()` reset `_fhTab` to `'ledger'` in state but never
+re-synced pane visibility, so leaving on Billing Report and navigating back
+showed the report under a highlighted Ledger tab. It now calls
+`_fhSwitchTab('ledger')`.
+
+---
+
 ## Design handoff build — staff, parent, director (2026-08-16)
 
 Built from `Parent_communication_expansion.zip` (staff app, parent app, director

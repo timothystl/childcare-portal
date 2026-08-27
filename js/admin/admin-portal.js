@@ -136,38 +136,33 @@ const AP_TOOLS = [
     // Report), not a separate nav entry — see admin-finance-hub.js and the
     // nested #billingReportSection markup in admin.html.
     { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance',
-      blurb: 'Billing, invoices, and who owes — one ledger, one number for each.' },
-    { key: 'ar',          pane: 'finance', section: 'billingArSection',      tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📋', name: 'Accounts Receivable',
-      blurb: 'Payment status per family for a month — overdue, partial, paid.' },
+      blurb: 'Billing, invoices, who owes, and the month-end close — one screen, one number for each.' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
 
     // ── Finance · Bookkeeper ──
-    // "The director does not do the monthly close-out and does not need room
-    // profitability" (client constraint, Finance.dc.html README). These tools
-    // are not deleted — reconciliation, room P&L and YoY are real and stay
-    // reachable — they are simply no longer on HER shelf. Nothing on the
-    // Finance dashboard (1a) links here; she opens this group on purpose.
-    { key: 'procare',     pane: 'finance', section: 'billingPaymentsSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📂', name: 'Reconcile Payments',
-      blurb: 'Import a bank/ProCare export and match it against what was billed.' },
-    { key: 'scenario',    pane: 'finance', section: 'rateScenarioSection',   tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🧮', name: 'Rate Increase Scenarios',
-      blurb: 'What-if a rate, registration, or supply fee change — annual net, before you commit.' },
-    { key: 'revdash',     pane: 'finance', section: 'billingDashSection',    tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📊', name: 'Revenue Dashboard',
-      blurb: 'Collection rate, YTD trends, and scholarship summary.' },
-    { key: 'dash',        pane: 'finance', section: 'financeDashSection',    tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '💰', name: 'Financial Dashboard',
-      blurb: 'Year-to-date revenue, labor, and margin with monthly charts.' },
+    // ⚠️ Seven tools used to live here and no longer do: Accounts Receivable,
+    // Reconcile Payments, Revenue Dashboard, Financial Dashboard, Room
+    // Profitability, Attendance & Revenue, and Annual Budget & Actuals. They
+    // are now the six sub-views of the Finance Hub's **Bookkeeper tab**
+    // (js/admin/admin-finance-bookkeeper.js) — Overview · Accounts Receivable
+    // · Room P&L · Month-End Close · Reconciliation · GL Export.
+    //
+    // This is the whole point of the overhaul: the numbers on those seven
+    // screens were computed seven ways and did not visibly agree. Leaving the
+    // originals reachable next to their replacement would have kept every one
+    // of those disagreements on the shelf and made the shelf longer. Their
+    // sections stay in admin.html (unreferenced by AP_TOOLS = unreachable, per
+    // the shell's own rule) so nothing that reads their DOM breaks; delete the
+    // markup only once nothing does.
+    //
+    // Attendance & Revenue is gone as a screen, not just as a nav entry:
+    // child-days is a stat on each Room P&L card now, from the same dataset
+    // that card's revenue comes from, so the two can no longer disagree.
     { key: 'yoy',         pane: 'finance', section: 'financeYoySection',     tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📈', name: 'Year-over-Year',
       blurb: 'Revenue and labor month-by-month against the prior year.' },
-    { key: 'pnl',         pane: 'finance', section: 'roomPnlSection',        tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🏫', name: 'Room Profitability (P&L)',
-      blurb: 'Monthly revenue vs. labor cost per classroom — confirmed headcount and revenue only, no expense allocation.' },
-    { key: 'arrev',       pane: 'finance', section: 'attendanceRevenueSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📊', name: 'Attendance & Revenue',
-      blurb: 'Monthly attendance and net revenue across all rooms.' },
-    { key: 'budget',      pane: 'finance', section: 'financeBudgetSection',  tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🎯', name: 'Annual Budget & Actuals',
-      blurb: "Set yearly targets and record what you've actually spent." },
     { key: 'expense',     pane: 'finance', section: 'financeExpenseSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📋', name: 'Expense Lines',
-      blurb: 'Fixed monthly costs and annual one-time expenses.' },
-    { key: 'model',       pane: 'finance', section: 'financeModelSection',   tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🔧', name: 'Rate & Wage Modeling',
-      blurb: 'Project the impact of tuition and wage changes before you make them.' },
+      blurb: 'Fixed monthly costs and annual one-time expenses — what GL Export reads for Rent and Supplies.' },
     { key: 'api',         pane: 'finance', section: 'financeApiTesterSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.sand, icon: '🔌', name: 'ChMS Finance API',
       blurb: 'Test the connection the church accounting system uses.' },
 
@@ -228,6 +223,21 @@ const AP_TOOLS = [
       blurb: 'Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as before.' },
     { key: 'ratioStep',   pane: 'waitlist', section: 'ratioStepSection',       tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '⚖️', name: 'Ratio Step & Next Child',
       blurb: 'Where the next child tips a room into another staff member.' },
+
+    // ── Planning · What-If ──
+    // Moved out of Finance by the Finance Hub handoff, which draws the line
+    // explicitly: "Scenario planning and enrollment modeling have moved out of
+    // Finance — they'll live in a separate Planning area. [Finance] stays
+    // close-focused: what happened, what reconciles, what exports." A model of
+    // a rate you have not set is not a thing that happened, so it does not
+    // belong on a close screen. Their sections still live in the `finance`
+    // pane (the shell un-hides the pane, so a cross-pane tool is fine) and
+    // both are in AP_FULL_ONLY_KEYS below — they show wages and rates, and the
+    // Planning tab, unlike Finance, is open to `restricted`.
+    { key: 'scenario',    pane: 'finance', section: 'rateScenarioSection',   tab: 'planning', group: 'What-If', tint: AP_TINT.tang, icon: '🧮', name: 'Rate Increase Scenarios',
+      blurb: 'What-if a rate, registration, or supply fee change — annual net, before you commit.' },
+    { key: 'model',       pane: 'finance', section: 'financeModelSection',   tab: 'planning', group: 'What-If', tint: AP_TINT.tang, icon: '🔧', name: 'Rate & Wage Modeling',
+      blurb: 'Project the impact of tuition and wage changes before you make them.' },
 
     // ── Staff · Scheduling ──
     { key: 'schedule',    pane: 'staffing', section: 'staffScheduleSection',  tab: 'staff', group: 'Scheduling', tint: AP_TINT.sand, icon: '🗓️', name: 'Build Staff Schedule',
@@ -429,7 +439,10 @@ const AP_FULL_ONLY_TABS = ['finance', 'market'];
 // staffInjury for the same reason as payroll but more so: the report names an
 // employee, the part of their body, and where they were treated. A `restricted`
 // admin who plans schedules has no business reading it.
-const AP_FULL_ONLY_KEYS = ['payroll', 'staffInjury', 'clockIntegrity'];
+// `scenario` and `model` moved to the Planning tab (see above). Planning is
+// open to `restricted`; Finance was not, so without these two keys the move
+// would have quietly widened who can see wage and rate modeling.
+const AP_FULL_ONLY_KEYS = ['payroll', 'staffInjury', 'clockIntegrity', 'scenario', 'model'];
 
 function apToolAvailable(tool) {
     const el = document.getElementById(tool.section);
@@ -699,9 +712,6 @@ function apOnToolOpened(tool) {
         }
         if (tool.pane === 'market' && typeof initMarketTab === 'function' && !window._apMarketInit) {
             window._apMarketInit = true; initMarketTab();
-        }
-        if (tool.key === 'ar' && typeof setupBillingDashYear === 'function' && !window._apArInit) {
-            window._apArInit = true; setupBillingDashYear();
         }
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();

@@ -1,0 +1,854 @@
+// ============================================================
+// admin-finance-bookkeeper — Finance Hub, third tab (design handoff:
+// Finance Hub §6 / IMPLEMENTATION_SPEC §8–§9, 2026-08-26)
+// ============================================================
+// Six sub-views behind one pill nav: Overview · Accounts Receivable ·
+// Room P&L · Month-End Close · Reconciliation · GL Export.
+//
+// This tab consolidates what used to be seven separate Finance sidebar
+// tools (Revenue Dashboard, Financial Dashboard, Room Profitability,
+// Attendance & Revenue, Annual Budget, Accounts Receivable, Reconcile
+// Payments). Those AP_TOOLS entries are retired in admin-portal.js —
+// the director's complaint was a shelf of screens whose numbers did not
+// visibly agree, and adding a Bookkeeper tab while leaving the originals
+// reachable would have made the shelf longer, not shorter.
+//
+// ⚠️ ONE COMPUTED DATASET, same rule as the Ledger. Revenue and child-days
+// come from _buildFamilyBillingData() (admin-reports.js) — the function the
+// Billing Report and the Ledger already read. Labor comes from
+// _buildRoomPnlData() (admin-reports.js) — the function the retired
+// dashboards already read. Nothing here re-derives a dollar figure of its
+// own, and nothing here writes to billing_invoices.
+//
+// ⚠️ Reconciliation NEVER changes an invoice or a balance. It links
+// existing billing_payments rows to a bank-deposit record and nothing
+// more. A payment with no matching invoice is a data problem to surface in
+// the Ledger, not something this screen resolves by itself.
+//
+// ⚠️ Scenario planning and enrollment modeling are deliberately absent —
+// they are planning tools, not close tools, and they now live under
+// Planning. Do not carry setupModelingTool() in here.
+
+let _bkView       = 'overview';
+let _bkMonth      = '';
+let _bkYear       = 0;
+let _bkData       = null;   // { months, byMonth, rooms, pnl, budget, expenses }
+let _bkPnlScope   = 'month'; // 'month' | 'ytd'
+let _bkPnlMonth   = '';
+let _bkAr         = { rows: [], writeOffs: [] };
+let _bkClose      = null;   // { [month]: { [itemKey]: true } }
+let _bkRecon      = null;   // { deposits: [], assign: { [paymentId]: depositId } }
+let _bkMatching   = null;   // deposit id currently in matching mode
+let _bkMatchPicks = new Set();
+let _bkBusy       = false;
+let _bkLoaded     = false;
+
+const BK_CLOSE_SETTING = 'finance_close_checklist';
+const BK_RECON_SETTING = 'finance_reconciliation';
+
+const BK_VIEWS = [
+    ['overview', 'Overview'],
+    ['ar',       'Accounts Receivable'],
+    ['pnl',      'Room P&L'],
+    ['close',    'Month-End Close'],
+    ['recon',    'Reconciliation'],
+    ['gl',       'GL Export'],
+];
+
+// Exact labels/details from IMPLEMENTATION_SPEC §8. `detail` may be a
+// function of the render context when the copy is dynamic.
+const BK_CLOSE_ITEMS = [
+    { key: 'bank',    label: 'Reconcile bank feed',        detail: () => 'Match every deposit to a payment before locking the month' },
+    { key: 'issued',  label: 'Confirm all invoices issued', detail: ctx => `No drafts left in the ledger for ${ctx.monthName}` },
+    { key: 'writeoff',label: 'Review write-offs',           detail: ctx => ctx.writeOffDetail },
+    { key: 'gl',      label: 'Export GL categories',        detail: () => 'Hand category totals to the bookkeeper' },
+    { key: 'lock',    label: 'Lock the month',              detail: ctx => `Prevents further edits to ${ctx.monthName} once closed` },
+];
+
+function _bkEl(id) { return document.getElementById(id); }
+
+function _bkMoney(n) {
+    const v = Math.abs(Number(n) || 0);
+    return (Number(n) < 0 ? '−$' : '$') + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function _bkMoney0(n) {
+    const v = Math.abs(Math.round(Number(n) || 0));
+    return (Number(n) < 0 ? '−$' : '$') + v.toLocaleString();
+}
+
+function _bkPct(n) { return `${(Number(n) || 0).toFixed(1)}%`; }
+
+function _bkMonthLabel(month) {
+    const [y, m] = (month || '').split('-').map(Number);
+    return m ? `${MONTH_NAMES[m - 1]} ${y}` : month;
+}
+
+function _bkMonthName(month) {
+    const [, m] = (month || '').split('-').map(Number);
+    return m ? MONTH_NAMES[m - 1] : month;
+}
+
+function _bkToday() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// ── Entry point ──────────────────────────────────────────────
+// Called by _fhSwitchTab('bookkeeper') in admin-finance-hub.js. `month` is
+// whatever month the Ledger is showing, so the two tabs never disagree
+// about which month "this month" means.
+async function renderFinanceBookkeeper(month) {
+    _bkMonth = month || _bkMonth;
+    if (!_bkPnlMonth || !_bkData) _bkPnlMonth = _bkMonth;
+    const root = _bkEl('bkRoot');
+    if (!root) return;
+    if (!_bkLoaded || _bkYear !== Number((_bkMonth || '').split('-')[0])) {
+        root.innerHTML = '<p class="empty-hint">Loading…</p>';
+        try {
+            await _bkLoad();
+            _bkLoaded = true;
+        } catch (err) {
+            console.error('Bookkeeper load:', err);
+            root.innerHTML = `<p class="empty-hint">Could not load the bookkeeper view — ${escHtml(err.message || 'unknown error')}</p>`;
+            return;
+        }
+    }
+    _bkRender();
+}
+
+/** Invalidate the cache so the next open re-reads. Called when the Ledger
+ *  writes anything (invoice sent, payment recorded, fee added) — the
+ *  bookkeeper numbers are the same numbers and must not go stale behind a
+ *  tab switch. */
+function bookkeeperInvalidate() { _bkLoaded = false; }
+
+// ── Load ─────────────────────────────────────────────────────
+async function _bkLoad() {
+    const year = Number((_bkMonth || '').split('-')[0]) || new Date().getFullYear();
+    _bkYear = year;
+
+    const today      = new Date();
+    const isThisYear = year === today.getFullYear();
+    // Never stop short of the month the Ledger is on: the month switcher can
+    // step into a future month, and a Bookkeeper tab that silently had no row
+    // for it would read as "$0 revenue," not as "not yet."
+    const openMonth  = Number((_bkMonth || '').split('-')[1]) || 1;
+    const lastMonth  = Math.max(isThisYear ? today.getMonth() + 1 : 12, openMonth);
+    const months     = Array.from({ length: lastMonth }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+
+    // Labor is capped at today rather than year-end: _buildRoomPnlData reads
+    // planned staff_schedules rows, and shifts scheduled for later this month
+    // have not been worked. Same reasoning as generateFinanceDashboard().
+    const endDate = isThisYear ? _bkToday() : `${year}-12-31`;
+
+    if (typeof allFamiliesData === 'undefined' || !allFamiliesData || !allFamiliesData.length) {
+        allFamiliesData = await fetchAllFamilies({ includeArchived: true });
+    }
+    if (typeof allRegistrations === 'undefined' || !allRegistrations || !allRegistrations.length) {
+        allRegistrations = await fetchAllRegistrations();
+    }
+
+    const [pnl, budget, expenses, writeOffs, closeState, reconState] = await Promise.all([
+        _buildRoomPnlData(`${year}-01-01`, endDate).catch(e => { console.warn('bk pnl:', e); return { months: [], rooms: [], data: {}, centerLaborByMonth: {} }; }),
+        fetchAnnualBudget(year).catch(() => null),
+        fetchExpenseConfig().catch(() => ({ items: [] })),
+        fetchWriteOffs().catch(() => []),
+        fetchSetting(BK_CLOSE_SETTING).catch(() => null),
+        fetchSetting(BK_RECON_SETTING).catch(() => null),
+    ]);
+
+    _bkClose = _bkParseState(closeState, {});
+    const recon = _bkParseState(reconState, {});
+    _bkRecon = { deposits: Array.isArray(recon.deposits) ? recon.deposits : [], assign: recon.assign && typeof recon.assign === 'object' ? recon.assign : {} };
+
+    // Per-month revenue and child-days, from the one billing calculation.
+    // ⚠️ fetchBillingOverrides is awaited as one wave, not serially inside the
+    // month loop — SX12 flags the serial version elsewhere; don't repeat it.
+    const overrideRows = await Promise.all(months.map(mo => fetchBillingOverrides(mo).catch(() => [])));
+    const byMonth = {};
+    months.forEach((mo, i) => {
+        const overrides = new Map((overrideRows[i] || []).map(r => [
+            `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+            parseFloat(r.override_amount),
+        ]));
+        const families = _buildFamilyBillingData(mo, overrides);
+        const rooms = {};
+        let tuition = 0, fees = 0;
+        families.forEach(fam => fam.children.forEach(c => {
+            const billed = (c.hasOverride ? c.overrideAmount : c.subtotal) || 0;
+            const fee    = c.changeFees || 0;
+            tuition += billed;
+            fees    += fee;
+            if (!c.roomId) return;
+            if (!rooms[c.roomId]) rooms[c.roomId] = { revenue: 0, childDays: 0 };
+            rooms[c.roomId].revenue   += billed + fee;
+            rooms[c.roomId].childDays += (c.halfDays || 0) + (c.fullDays || 0);
+        }));
+        byMonth[mo] = { tuition, fees, revenue: tuition + fees, rooms };
+    });
+
+    _bkData = { year, months, byMonth, pnl, budget: budget || null, expenses: expenses || { items: [] } };
+
+    // AR rows are the Ledger's own owed figures — never a second query.
+    _bkAr = { rows: _bkArRowsFromLedger(), writeOffs: writeOffs || [] };
+}
+
+function _bkParseState(raw, fallback) {
+    if (!raw) return fallback;
+    if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return fallback; } }
+    return (raw && typeof raw === 'object') ? raw : fallback;
+}
+
+/** AR list = exactly the Ledger's owing rows. The banner copy promises
+ *  "same figures as the Ledger" and this is what makes that true rather
+ *  than aspirational. */
+function _bkArRowsFromLedger() {
+    const rows = (typeof _fhRows !== 'undefined' && Array.isArray(_fhRows)) ? _fhRows : [];
+    const now = Date.now();
+    return rows
+        .filter(r => r.status !== 'withdrawn' && r.owed > 0)
+        .map(r => {
+            const sentAt = r.ar?.sentAt || null;
+            const days   = sentAt ? Math.floor((now - new Date(sentAt).getTime()) / 86400000) : null;
+            return {
+                familyId: r.familyId, name: r.name, owed: r.owed,
+                invoiceId: r.ar?.invoiceId || null, sentAt, days,
+                why: _bkArWhy(r, days),
+            };
+        })
+        .sort((a, b) => (b.days ?? -1) - (a.days ?? -1));
+}
+
+/** Write-offs, summed per family, limited to the months the Ledger's `owed`
+ *  figure actually spans. */
+function _bkForgivenByFamily() {
+    const months = (typeof _fhOwed !== 'undefined' && Array.isArray(_fhOwed?.months) && _fhOwed.months.length)
+        ? new Set(_fhOwed.months) : null;
+    const map = new Map();
+    (_bkAr.writeOffs || []).forEach(w => {
+        const mo = (w.created_at || '').slice(0, 7);
+        if (months && mo && !months.has(mo)) return;
+        const key = String(w.family_id);
+        map.set(key, (map.get(key) || 0) + (parseFloat(w.amount) || 0));
+    });
+    return map;
+}
+
+/** Write-offs recorded during the month being closed — those are the ones
+ *  this close has to account for. `billing_write_offs` has no reviewed flag
+ *  (and deliberately no DELETE grant), so "pending" means "recorded in this
+ *  month," not "not yet ticked." */
+function _bkWriteOffsThisMonth() {
+    return (_bkAr.writeOffs || []).filter(w => (w.created_at || '').startsWith(_bkMonth));
+}
+
+function _bkArWhy(row, days) {
+    if (!row.ar || !row.ar.sentAt) return 'Invoice not sent yet';
+    if (row.ar.collected > 0)      return 'Partial payment received';
+    if (days != null && days >= 30) return 'No payment, 30+ days since send';
+    return 'Invoice sent, awaiting payment';
+}
+
+// ── Labor helpers ────────────────────────────────────────────
+/** Total labor for one month across every room, plus whatever labor could
+ *  not be attributed to a room (float staff, hours with no schedule). Both
+ *  halves matter: dropping the unallocated half would understate payroll on
+ *  the Overview while the Room P&L cards still looked right. */
+function _bkLaborForMonth(mo) {
+    const pnl = _bkData?.pnl || {};
+    const roomRows = pnl.data?.[mo] || {};
+    let roomLabor = 0;
+    Object.values(roomRows).forEach(v => { roomLabor += v.labor || 0; });
+    const center = pnl.centerLaborByMonth?.[mo] || 0;
+    // centerLaborByMonth is the fallback total when no room schedules exist;
+    // when room rows carry labor it is the unallocated remainder.
+    return roomLabor > 0 ? roomLabor + center : center;
+}
+
+function _bkRoomLabor(mo, roomId) {
+    return _bkData?.pnl?.data?.[mo]?.[roomId]?.labor || 0;
+}
+
+function _bkRooms() {
+    const rooms = _bkData?.pnl?.rooms;
+    if (rooms && rooms.length) return rooms;
+    return (typeof getSortedRooms === 'function' ? getSortedRooms() : (typeof ROOMS !== 'undefined' ? ROOMS : []));
+}
+
+// ── Shell ────────────────────────────────────────────────────
+function _bkRender() {
+    const root = _bkEl('bkRoot');
+    if (!root) return;
+    const nav = BK_VIEWS.map(([key, label]) =>
+        `<button type="button" class="bk-pill${_bkView === key ? ' is-on' : ''}" data-bk-view="${key}">${escHtml(label)}</button>`).join('');
+
+    let body = '';
+    switch (_bkView) {
+        case 'overview': body = _bkOverviewHtml(); break;
+        case 'ar':       body = _bkArHtml();       break;
+        case 'pnl':      body = _bkPnlHtml();      break;
+        case 'close':    body = _bkCloseHtml();    break;
+        case 'recon':    body = _bkReconHtml();    break;
+        case 'gl':       body = _bkGlHtml();       break;
+    }
+
+    root.innerHTML = `<div class="bk-nav">${nav}</div><div class="bk-body">${body}</div>`;
+    _bkBind(root);
+}
+
+function _bkBind(root) {
+    root.querySelectorAll('[data-bk-view]').forEach(btn => {
+        btn.addEventListener('click', () => { _bkView = btn.dataset.bkView; _bkRender(); });
+    });
+    const handlers = {
+        overview: _bkBindOverview, ar: _bkBindAr, pnl: _bkBindPnl,
+        close: _bkBindClose, recon: _bkBindRecon, gl: _bkBindGl,
+    };
+    handlers[_bkView]?.(root);
+}
+
+// ── 1. Overview ──────────────────────────────────────────────
+function _bkOverviewHtml() {
+    const mo    = _bkMonth;
+    const m     = _bkData.byMonth[mo] || { revenue: 0, tuition: 0, fees: 0 };
+    const labor = _bkLaborForMonth(mo);
+    const net   = m.revenue - labor;
+    const b     = _bkData.budget;
+
+    const laborPct  = m.revenue > 0 ? (labor / m.revenue * 100) : 0;
+    const targetPct = b?.income > 0 ? (b.wages / b.income * 100) : 0;
+    const marginPct = m.revenue > 0 ? (net / m.revenue * 100) : 0;
+
+    const budgetNet = b
+        ? (b.income || 0) - (b.wages || 0) - (b.taxes || 0) - (b.workersComp || 0) - (b.payrollExp || 0) - (b.otherExp || 0)
+        : null;
+
+    const rows = _bkData.months.map(k => ({
+        key: k, label: MONTH_NAMES[Number(k.split('-')[1]) - 1].slice(0, 3),
+        rev: _bkData.byMonth[k]?.revenue || 0, lab: _bkLaborForMonth(k),
+    }));
+    const peak = Math.max(1, ...rows.map(r => Math.max(r.rev, r.lab)));
+
+    const bars = rows.map(r => `
+        <div class="bk-bar-row">
+            <div class="bk-bar-label">${escHtml(r.label)}</div>
+            <div class="bk-bar-track">
+                <div class="bk-bar bk-bar-rev" style="width:${(r.rev / peak * 100).toFixed(1)}%"></div>
+                <div class="bk-bar bk-bar-lab" style="width:${(r.lab / peak * 100).toFixed(1)}%"></div>
+            </div>
+            <div class="bk-bar-vals"><span class="bk-bar-rev-val">${_bkMoney0(r.rev)}</span> <span class="bk-bar-lab-val">${_bkMoney0(r.lab)}</span></div>
+        </div>`).join('');
+
+    return `
+        <div class="bk-stats">
+            <div class="bk-stat"><div class="bk-stat-label">Revenue, MTD</div><div class="bk-stat-num">${_bkMoney0(m.revenue)}</div><div class="bk-stat-sub">${_bkMonthLabel(mo)}</div></div>
+            <div class="bk-stat"><div class="bk-stat-label">Labor, MTD</div><div class="bk-stat-num">${_bkMoney0(labor)}</div><div class="bk-stat-sub">${_bkPct(laborPct)} of revenue${targetPct ? ` · target ${_bkPct(targetPct)}` : ''}</div></div>
+            <div class="bk-stat"><div class="bk-stat-label">Net margin, MTD</div><div class="bk-stat-num ${net < 0 ? 'is-neg' : 'is-pos'}">${_bkMoney0(net)}</div><div class="bk-stat-sub">${_bkPct(marginPct)} margin</div></div>
+            <div class="bk-stat bk-stat-sun"><div class="bk-stat-label">Annual budget net</div><div class="bk-stat-num">${budgetNet == null ? '—' : _bkMoney0(budgetNet)}</div><div class="bk-stat-sub">${budgetNet == null ? 'No budget set for ' + _bkData.year : 'Budget ' + _bkData.year}</div></div>
+        </div>
+
+        <h4 class="bk-h">Revenue vs. labor by month</h4>
+        <div class="bk-legend"><span class="bk-key bk-key-rev"></span> Revenue <span class="bk-key bk-key-lab"></span> Labor</div>
+        <div class="bk-bars">${bars || '<p class="empty-hint">No months to chart yet.</p>'}</div>
+        <p class="ap-note bk-scope-note">Scenario planning and enrollment modeling have moved out of Finance — they'll live in a separate Planning area. This screen stays close-focused: what happened, what reconciles, what exports.</p>
+
+        <div class="bk-card bk-budget-card">
+            <div class="bk-card-head">
+                <h4 class="bk-h">Annual budget, ${_bkData.year}</h4>
+                <button type="button" class="bk-link" id="bkEditBudget">Edit budget</button>
+            </div>
+            <div class="bk-budget-grid">
+                <div><span class="bk-kv-label">Revenue target</span><span class="bk-kv-val">${b?.income ? _bkMoney0(b.income) : '—'}</span></div>
+                <div><span class="bk-kv-label">Wages budget</span><span class="bk-kv-val">${b?.wages ? _bkMoney0(b.wages) : '—'}</span></div>
+                <div><span class="bk-kv-label">Payroll taxes</span><span class="bk-kv-val">${b?.taxes ? _bkMoney0(b.taxes) : '—'}</span></div>
+                <div><span class="bk-kv-label">Other expenses</span><span class="bk-kv-val">${b?.otherExp ? _bkMoney0(b.otherExp) : '—'}</span></div>
+            </div>
+            <div class="bk-form bk-form-sun" id="bkBudgetForm" style="display:none">
+                <label class="bk-field"><span>Revenue target ($/yr)</span><input type="number" step="0.01" id="bkBudgetIncome" value="${b?.income || ''}"></label>
+                <label class="bk-field"><span>Wages budget ($/yr)</span><input type="number" step="0.01" id="bkBudgetWages" value="${b?.wages || ''}"></label>
+                <label class="bk-field"><span>Payroll taxes ($/yr)</span><input type="number" step="0.01" id="bkBudgetTaxes" value="${b?.taxes || ''}"></label>
+                <label class="bk-field"><span>Other expenses ($/yr)</span><input type="number" step="0.01" id="bkBudgetOther" value="${b?.otherExp || ''}"></label>
+                <div class="bk-form-btns">
+                    <button type="button" class="bk-btn-solid" id="bkBudgetSave">Save budget</button>
+                    <button type="button" class="bk-btn-text" id="bkBudgetCancel">Cancel</button>
+                </div>
+            </div>
+        </div>`;
+}
+
+function _bkBindOverview(root) {
+    root.querySelector('#bkEditBudget')?.addEventListener('click', () => {
+        const f = root.querySelector('#bkBudgetForm');
+        if (f) f.style.display = f.style.display === 'none' ? '' : 'none';
+    });
+    root.querySelector('#bkBudgetCancel')?.addEventListener('click', () => {
+        const f = root.querySelector('#bkBudgetForm');
+        if (f) f.style.display = 'none';
+    });
+    root.querySelector('#bkBudgetSave')?.addEventListener('click', async () => {
+        if (_bkBusy) return;
+        const num = id => parseFloat(root.querySelector('#' + id)?.value) || 0;
+        // Merge, never replace: the budget record also carries the actual*
+        // fields the ChMS finance API reads, and this form does not show them.
+        const next = Object.assign({}, _bkData.budget || {}, {
+            income:   num('bkBudgetIncome'),
+            wages:    num('bkBudgetWages'),
+            taxes:    num('bkBudgetTaxes'),
+            otherExp: num('bkBudgetOther'),
+        });
+        _bkBusy = true;
+        try {
+            await saveAnnualBudget(_bkData.year, next);
+            _bkData.budget = next;
+            showToast(`Budget saved for ${_bkData.year}.`);
+            _bkRender();
+        } catch (e) {
+            showToast('Could not save the budget: ' + (e.message || e), 'error');
+        } finally { _bkBusy = false; }
+    });
+}
+
+// ── 2. Accounts Receivable ───────────────────────────────────
+function _bkArHtml() {
+    // A write-off forgives a balance without touching the invoice, so AR has
+    // to net it out here rather than the Ledger netting it out upstream.
+    // ⚠️ Scoped to the same trailing months the Ledger's `owed` figure covers
+    // — a write-off against a long-settled invoice must not quietly reduce
+    // today's balance.
+    const forgiven = _bkForgivenByFamily();
+    const rows = _bkAr.rows
+        .map(r => Object.assign({}, r, { owed: r.owed - (forgiven.get(String(r.familyId)) || 0) }))
+        .filter(r => r.owed > 0.005);
+    const total = rows.reduce((s, r) => s + r.owed, 0);
+
+    const mo      = _bkMonth;
+    const billed  = _bkData.byMonth[mo]?.revenue || 0;
+    const collectedPct = billed > 0 ? Math.max(0, Math.min(100, (1 - total / billed) * 100)) : 0;
+
+    const band = d => (d == null ? 'b0' : d >= 30 ? 'b30' : d >= 15 ? 'b15' : 'b0');
+    const bands = { b0: [], b15: [], b30: [] };
+    rows.forEach(r => bands[band(r.days)].push(r));
+    const sum = a => a.reduce((s, r) => s + r.owed, 0);
+
+    const body = rows.length ? rows.map(r => `
+        <tr>
+            <td><strong>${escHtml(r.name)}</strong></td>
+            <td>${r.days == null ? '—' : r.days}</td>
+            <td class="bk-why">${escHtml(r.why)}</td>
+            <td class="fh-money-col fh-bal-owed">${_bkMoney(r.owed)}</td>
+            <td class="fh-money-col"><button type="button" class="bk-btn-mini" data-bk-writeoff="${r.familyId}" data-bk-amt="${r.owed}" data-bk-inv="${r.invoiceId || ''}" data-bk-name="${escHtml(r.name)}">Write off</button></td>
+        </tr>`).join('') : `<tr><td colspan="5"><p class="empty-hint">Nothing outstanding.</p></td></tr>`;
+
+    return `
+        <div class="fh-owed-banner">
+            <div class="fh-owed-main">
+                <strong>${_bkMoney(total)} outstanding</strong> · <span class="fh-owed-famcount">${rows.length} famil${rows.length === 1 ? 'y' : 'ies'}</span>
+                <div class="fh-owed-sub">${_bkPct(collectedPct)} collected this month · aged from invoice send date, same figures as the Ledger</div>
+            </div>
+        </div>
+        <div class="fh-aging">
+            <div class="fh-aging-col"><div class="fh-aging-label">0–14 days</div><div class="fh-aging-amt">${_bkMoney(sum(bands.b0))}</div><div class="fh-aging-count">${bands.b0.length} famil${bands.b0.length === 1 ? 'y' : 'ies'}</div></div>
+            <div class="fh-aging-col fh-aging-watch"><div class="fh-aging-label">15–29 days</div><div class="fh-aging-amt">${_bkMoney(sum(bands.b15))}</div><div class="fh-aging-count">${bands.b15.length} famil${bands.b15.length === 1 ? 'y' : 'ies'}</div></div>
+            <div class="fh-aging-col fh-aging-severe"><div class="fh-aging-label">30+ days</div><div class="fh-aging-amt">${_bkMoney(sum(bands.b30))}</div><div class="fh-aging-count">${bands.b30.length} famil${bands.b30.length === 1 ? 'y' : 'ies'}</div></div>
+        </div>
+        <div class="table-wrapper">
+            <table class="report-table fh-table">
+                <thead><tr><th>Family</th><th>Days late</th><th>Why</th><th class="fh-money-col">Owed</th><th></th></tr></thead>
+                <tbody>${body}</tbody>
+            </table>
+        </div>
+        <p class="ap-note">A write-off forgives the balance for the close. The invoice itself is untouched — it stays the record of what was actually charged.</p>`;
+}
+
+function _bkBindAr(root) {
+    root.querySelectorAll('[data-bk-writeoff]').forEach(btn => {
+        btn.addEventListener('click', () => _bkWriteOff(btn));
+    });
+}
+
+async function _bkWriteOff(btn) {
+    if (_bkBusy) return;
+    const familyId = btn.dataset.bkWriteoff;
+    const amount   = parseFloat(btn.dataset.bkAmt) || 0;
+    const name     = btn.dataset.bkName || 'this family';
+    const invoiceId = btn.dataset.bkInv || null;
+    if (!confirm(`Write off ${_bkMoney(amount)} owed by ${name}? This forgives the balance for the close.`)) return;
+    const note = (prompt('Why? (goes on the record)') || '').trim();
+    if (!note) { alert('A write-off needs a reason.'); return; }
+    _bkBusy = true;
+    btn.disabled = true;
+    try {
+        const { data: { session } } = await sbClient.auth.getSession();
+        await insertWriteOff({
+            family_id: familyId, invoice_id: invoiceId || null, amount, note,
+            approved_by: session?.user?.email || 'admin',
+        });
+        _bkAr.writeOffs = await fetchWriteOffs().catch(() => _bkAr.writeOffs);
+        showToast(`Written off for ${name}.`);
+        _bkRender();
+    } catch (e) {
+        btn.disabled = false;
+        showToast('Could not record that write-off: ' + (e.message || e), 'error');
+    } finally { _bkBusy = false; }
+}
+
+// ── 3. Room P&L ──────────────────────────────────────────────
+function _bkPnlHtml() {
+    const months = _bkData.months;
+    if (!_bkPnlMonth || !months.includes(_bkPnlMonth)) _bkPnlMonth = months[months.length - 1] || _bkMonth;
+    const rooms  = _bkRooms();
+    const ytd    = _bkPnlScope === 'ytd';
+    const scope  = ytd ? months : [_bkPnlMonth];
+
+    const cards = rooms.map(room => {
+        let revenue = 0, labor = 0, childDays = 0;
+        scope.forEach(mo => {
+            const r = _bkData.byMonth[mo]?.rooms?.[room.id];
+            revenue   += r?.revenue   || 0;
+            childDays += r?.childDays || 0;
+            labor     += _bkRoomLabor(mo, room.id);
+        });
+        const net = revenue - labor;
+        const margin = revenue > 0 ? (net / revenue * 100) : 0;
+        return `
+            <div class="bk-room-card">
+                <div class="bk-room-name">${escHtml(room.label || room.id)}</div>
+                <div class="bk-room-grid">
+                    <div><span class="bk-kv-label">Revenue</span><span class="bk-kv-val">${_bkMoney0(revenue)}</span></div>
+                    <div><span class="bk-kv-label">Labor</span><span class="bk-kv-val">${_bkMoney0(labor)}</span></div>
+                    <div><span class="bk-kv-label">Net</span><span class="bk-kv-val ${net < 0 ? 'is-neg' : 'is-pos'}">${_bkMoney0(net)}</span></div>
+                    <div><span class="bk-kv-label">Margin</span><span class="bk-kv-val ${margin < 0 ? 'is-neg' : 'is-pos'}">${revenue > 0 ? _bkPct(margin) : '—'}</span></div>
+                    <div><span class="bk-kv-label">Child-days</span><span class="bk-kv-val">${childDays.toLocaleString()}</span></div>
+                </div>
+            </div>`;
+    }).join('');
+
+    return `
+        <div class="bk-toolbar">
+            <select id="bkPnlMonth" class="bk-select"${ytd ? ' disabled' : ''}>
+                ${months.map(mo => `<option value="${mo}"${mo === _bkPnlMonth ? ' selected' : ''}>${escHtml(_bkMonthLabel(mo))}</option>`).join('')}
+            </select>
+            <div class="ap-seg" role="group" aria-label="Scope">
+                <button type="button" class="ap-seg-btn${ytd ? '' : ' is-on'}" data-bk-scope="month">This month</button>
+                <button type="button" class="ap-seg-btn${ytd ? ' is-on' : ''}" data-bk-scope="ytd">YTD</button>
+            </div>
+        </div>
+        <div class="bk-room-grid-wrap">${cards || '<p class="empty-hint">No rooms configured.</p>'}</div>
+        <p class="ap-note">Revenue and child-days are the same per-room figures the Ledger and Billing Report bill from. Labor is real — staff schedules and clock events per room — not a flat percentage of revenue. Labor that could not be tied to one room (float staff, hours with no schedule) is excluded here and shown in the Overview's total.</p>`;
+}
+
+function _bkBindPnl(root) {
+    root.querySelector('#bkPnlMonth')?.addEventListener('change', e => {
+        _bkPnlMonth = e.target.value;
+        _bkRender();
+    });
+    root.querySelectorAll('[data-bk-scope]').forEach(btn => {
+        btn.addEventListener('click', () => { _bkPnlScope = btn.dataset.bkScope; _bkRender(); });
+    });
+}
+
+// ── 4. Month-End Close ───────────────────────────────────────
+function _bkCloseHtml() {
+    const mo    = _bkMonth;
+    const state = _bkClose[mo] || {};
+    const pending = _bkWriteOffsThisMonth();
+    const ctx = {
+        monthName: _bkMonthName(mo),
+        writeOffDetail: pending.length
+            ? `${pending.length} write-off${pending.length === 1 ? '' : 's'} totaling ${_bkMoney(pending.reduce((s, w) => s + (parseFloat(w.amount) || 0), 0))} to confirm`
+            : 'No write-offs pending for this close',
+    };
+    const done = BK_CLOSE_ITEMS.filter(i => state[i.key]).length;
+
+    const items = BK_CLOSE_ITEMS.map(item => `
+        <button type="button" class="bk-check-row${state[item.key] ? ' is-done' : ''}" data-bk-check="${item.key}">
+            <span class="bk-check-box">${state[item.key] ? '✓' : ''}</span>
+            <span class="bk-check-text">
+                <span class="bk-check-label">${escHtml(item.label)}</span>
+                <span class="bk-check-detail">${escHtml(item.detail(ctx))}</span>
+            </span>
+        </button>`).join('');
+
+    return `
+        <p class="bk-progress">${done} of ${BK_CLOSE_ITEMS.length} done · close ${escHtml(_bkMonthName(mo))} when every item is checked.</p>
+        <div class="bk-card bk-check-card">${items}</div>
+        <p class="ap-note">⚠️ Checking "Lock the month" records that you consider ${escHtml(_bkMonthName(mo))} closed. It does not yet block edits to that month in the Ledger — a real lock is separate work, not implied by this checklist.</p>`;
+}
+
+function _bkBindClose(root) {
+    root.querySelectorAll('[data-bk-check]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const key = btn.dataset.bkCheck;
+            const mo  = _bkMonth;
+            if (!_bkClose[mo]) _bkClose[mo] = {};
+            if (_bkClose[mo][key]) delete _bkClose[mo][key];
+            else _bkClose[mo][key] = true;
+            _bkRender();
+            try { await upsertSetting(BK_CLOSE_SETTING, _bkClose); }
+            catch (e) { showToast('Could not save that checklist change: ' + (e.message || e), 'error'); }
+        });
+    });
+}
+
+// ── 5. Reconciliation ────────────────────────────────────────
+async function _bkLoadPayments() {
+    if (_bkRecon.payments && _bkRecon.paymentsMonth === _bkMonth) return;
+    const rows = await fetchPaymentsForMonth(_bkMonth).catch(e => { console.warn('bk payments:', e); return []; });
+    const nameById = new Map((allFamiliesData || []).map(f => [String(f.id), f.parent_name || f.parent_email || 'Family']));
+    _bkRecon.payments = rows.map(p => ({
+        id: String(p.id),
+        date: p.payment_date,
+        name: nameById.get(String(p.family_id)) || 'Family',
+        amount: parseFloat(p.amount) || 0,
+        method: p.payment_method || 'Payment',
+    }));
+    // Manually-added items (a payment the processor feed missed) live in the
+    // saved state, not in billing_payments — adding one here must never
+    // fabricate a payment record the Ledger would then bill against.
+    (_bkRecon.manual || []).forEach(m => _bkRecon.payments.push(Object.assign({ manual: true }, m)));
+    _bkRecon.paymentsMonth = _bkMonth;
+}
+
+function _bkDepositMatched(depositId) {
+    return (_bkRecon.payments || [])
+        .filter(p => _bkRecon.assign[p.id] === depositId)
+        .reduce((s, p) => s + p.amount, 0);
+}
+
+function _bkReconHtml() {
+    if (!_bkRecon.payments || _bkRecon.paymentsMonth !== _bkMonth) {
+        _bkLoadPayments().then(() => { if (_bkView === 'recon') _bkRender(); });
+        return '<p class="empty-hint">Loading payments…</p>';
+    }
+
+    const deposits = (_bkRecon.deposits || []).filter(d => (d.date || '').startsWith(_bkMonth));
+    const payments = _bkRecon.payments;
+
+    const depositHtml = deposits.length ? deposits.map(d => {
+        const matched   = _bkDepositMatched(d.id);
+        const remaining = (d.amount || 0) - matched;
+        const isMatched = matched >= (d.amount || 0) - 0.005;
+        const open      = _bkMatching === d.id;
+        const picked    = open ? payments.filter(p => _bkMatchPicks.has(p.id)).reduce((s, p) => s + p.amount, 0) : 0;
+        const exact     = Math.abs(picked - (d.amount || 0)) < 0.005;
+
+        const candidates = open ? payments.filter(p => !_bkRecon.assign[p.id] || _bkRecon.assign[p.id] === d.id) : [];
+
+        return `
+            <div class="bk-dep${open ? ' is-open' : ''}">
+                <div class="bk-dep-head">
+                    <div>
+                        <div class="bk-dep-amt">${_bkMoney(d.amount)}</div>
+                        <div class="bk-dep-meta">${escHtml(d.date || '')}${d.memo ? ' · ' + escHtml(d.memo) : ''}</div>
+                    </div>
+                    <div class="bk-dep-right">
+                        <span class="fh-pill ${isMatched ? 'fh-pill-paid' : 'fh-pill-review'}">${isMatched ? 'Matched' : `${_bkMoney(remaining)} left to match`}</span>
+                        <button type="button" class="bk-btn-mini" data-bk-match="${escHtml(d.id)}">${open ? 'Close' : 'Match transactions'}</button>
+                    </div>
+                </div>
+                ${open ? `
+                <div class="bk-match">
+                    ${candidates.length ? candidates.map(p => `
+                        <label class="bk-match-row">
+                            <input type="checkbox" data-bk-pick="${escHtml(p.id)}"${_bkMatchPicks.has(p.id) ? ' checked' : ''}>
+                            <span class="bk-match-name">${escHtml(p.name)}</span>
+                            <span class="bk-match-meta">${escHtml(p.date || '')} · ${escHtml(p.method)}</span>
+                            <span class="bk-match-amt">${_bkMoney(p.amount)}</span>
+                        </label>`).join('') : '<p class="empty-hint">No unassigned payments this month.</p>'}
+                    <div class="bk-match-foot">
+                        <span class="bk-match-total${exact ? ' is-exact' : ''}">Selected: ${_bkMoney(picked)} of ${_bkMoney(d.amount)}</span>
+                        <button type="button" class="bk-btn-solid" id="bkConfirmMatch"${exact ? '' : ' disabled'}>Confirm match</button>
+                        <button type="button" class="bk-btn-text" id="bkCancelMatch">Cancel</button>
+                    </div>
+                </div>` : ''}
+            </div>`;
+    }).join('') : '<p class="empty-hint">No deposits entered for this month.</p>';
+
+    const depById = new Map(deposits.map(d => [d.id, d]));
+    const paymentHtml = payments.length ? payments.map(p => {
+        const dep = depById.get(_bkRecon.assign[p.id]);
+        return `
+            <div class="bk-pay-row">
+                <span class="bk-pay-name">${escHtml(p.name)}${p.manual ? ' <span class="bk-tag">added by hand</span>' : ''}</span>
+                <span class="bk-pay-meta">${escHtml(p.date || '')} · ${escHtml(p.method)}</span>
+                <span class="bk-pay-dep">${dep ? `→ deposit ${escHtml(dep.date || '')}` : 'unassigned'}</span>
+                <span class="bk-pay-amt">${_bkMoney(p.amount)}</span>
+            </div>`;
+    }).join('') : '<p class="empty-hint">No payments recorded this month.</p>';
+
+    return `
+        <p class="bk-lede">Match bank deposits to the parent payments that make them up. The processor pays out in batches — one deposit usually equals several parent payments summed. Procare is fully retired; nothing here reads from it.</p>
+
+        <div class="bk-card">
+            <div class="bk-card-head"><h4 class="bk-h">Bank deposits</h4><button type="button" class="bk-link" id="bkAddDeposit">+ Add deposit</button></div>
+            <div class="bk-form bk-form-sun" id="bkDepositForm" style="display:none">
+                <label class="bk-field"><span>Date</span><input type="date" id="bkDepDate" value="${escHtml(_bkToday())}"></label>
+                <label class="bk-field"><span>Amount</span><input type="number" step="0.01" id="bkDepAmount" placeholder="Amount"></label>
+                <label class="bk-field"><span>Memo</span><input type="text" id="bkDepMemo" placeholder="Memo"></label>
+                <div class="bk-form-btns">
+                    <button type="button" class="bk-btn-solid" id="bkDepSave">Add</button>
+                    <button type="button" class="bk-btn-text" id="bkDepCancel">Cancel</button>
+                </div>
+            </div>
+            ${depositHtml}
+        </div>
+
+        <div class="bk-card">
+            <div class="bk-card-head"><h4 class="bk-h">Parent payments</h4><button type="button" class="bk-link" id="bkAddItem">+ Add item</button></div>
+            <div class="bk-form bk-form-green" id="bkItemForm" style="display:none">
+                <label class="bk-field"><span>Date</span><input type="date" id="bkItemDate" value="${escHtml(_bkToday())}"></label>
+                <label class="bk-field"><span>Family name</span><input type="text" id="bkItemName" placeholder="Family name"></label>
+                <label class="bk-field"><span>Amount</span><input type="number" step="0.01" id="bkItemAmount" placeholder="Amount"></label>
+                <div class="bk-form-btns">
+                    <button type="button" class="bk-btn-solid" id="bkItemSave">Add</button>
+                    <button type="button" class="bk-btn-text" id="bkItemCancel">Cancel</button>
+                </div>
+            </div>
+            ${paymentHtml}
+        </div>
+        <p class="ap-note">Reconciliation never changes an invoice or a balance — it only links payments that already exist to a deposit. A payment with no invoice behind it is a Ledger problem, not something to resolve here.</p>`;
+}
+
+async function _bkSaveRecon() {
+    const payload = {
+        deposits: _bkRecon.deposits || [],
+        assign:   _bkRecon.assign   || {},
+        manual:   _bkRecon.manual   || [],
+    };
+    try { await upsertSetting(BK_RECON_SETTING, payload); }
+    catch (e) { showToast('Could not save reconciliation: ' + (e.message || e), 'error'); }
+}
+
+function _bkBindRecon(root) {
+    const toggle = (btnId, formId) => root.querySelector('#' + btnId)?.addEventListener('click', () => {
+        const f = root.querySelector('#' + formId);
+        if (f) f.style.display = f.style.display === 'none' ? '' : 'none';
+    });
+    toggle('bkAddDeposit', 'bkDepositForm');
+    toggle('bkAddItem', 'bkItemForm');
+    root.querySelector('#bkDepCancel')?.addEventListener('click', () => { const f = root.querySelector('#bkDepositForm'); if (f) f.style.display = 'none'; });
+    root.querySelector('#bkItemCancel')?.addEventListener('click', () => { const f = root.querySelector('#bkItemForm'); if (f) f.style.display = 'none'; });
+
+    root.querySelector('#bkDepSave')?.addEventListener('click', async () => {
+        const date   = root.querySelector('#bkDepDate')?.value;
+        const amount = parseFloat(root.querySelector('#bkDepAmount')?.value);
+        const memo   = (root.querySelector('#bkDepMemo')?.value || '').trim();
+        if (!date || !(amount > 0)) { alert('A deposit needs a date and an amount.'); return; }
+        _bkRecon.deposits.push({ id: `dep-${Date.now()}`, date, amount, memo });
+        await _bkSaveRecon();
+        _bkRender();
+    });
+
+    root.querySelector('#bkItemSave')?.addEventListener('click', async () => {
+        const date   = root.querySelector('#bkItemDate')?.value;
+        const name   = (root.querySelector('#bkItemName')?.value || '').trim();
+        const amount = parseFloat(root.querySelector('#bkItemAmount')?.value);
+        if (!date || !name || !(amount > 0)) { alert('An item needs a date, a family name, and an amount.'); return; }
+        if (!_bkRecon.manual) _bkRecon.manual = [];
+        const row = { id: `man-${Date.now()}`, date, name, amount, method: 'Entered by hand' };
+        _bkRecon.manual.push(row);
+        _bkRecon.payments.push(Object.assign({ manual: true }, row));
+        await _bkSaveRecon();
+        _bkRender();
+    });
+
+    root.querySelectorAll('[data-bk-match]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.bkMatch;
+            // Only one deposit matches at a time — opening a second closes the
+            // first, so a payment can never be provisionally checked against two.
+            if (_bkMatching === id) { _bkMatching = null; _bkMatchPicks = new Set(); }
+            else {
+                _bkMatching = id;
+                _bkMatchPicks = new Set((_bkRecon.payments || []).filter(p => _bkRecon.assign[p.id] === id).map(p => p.id));
+            }
+            _bkRender();
+        });
+    });
+
+    root.querySelectorAll('[data-bk-pick]').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const id = cb.dataset.bkPick;
+            if (cb.checked) _bkMatchPicks.add(id); else _bkMatchPicks.delete(id);
+            _bkRender();
+        });
+    });
+
+    root.querySelector('#bkCancelMatch')?.addEventListener('click', () => {
+        _bkMatching = null; _bkMatchPicks = new Set(); _bkRender();
+    });
+
+    root.querySelector('#bkConfirmMatch')?.addEventListener('click', async () => {
+        const id = _bkMatching;
+        if (!id) return;
+        (_bkRecon.payments || []).forEach(p => {
+            if (_bkMatchPicks.has(p.id)) _bkRecon.assign[p.id] = id;
+            else if (_bkRecon.assign[p.id] === id) delete _bkRecon.assign[p.id];
+        });
+        _bkMatching = null; _bkMatchPicks = new Set();
+        await _bkSaveRecon();
+        showToast('Deposit matched.');
+        _bkRender();
+    });
+}
+
+// ── 6. GL Export ─────────────────────────────────────────────
+/** Category totals for the open month. Tuition and fees split from the same
+ *  per-family billing calculation the Ledger uses; payroll from the same
+ *  labor data the Overview and Room P&L use; rent and supplies from the
+ *  Expense Lines config, matched on the line's own label. This is a
+ *  category-totals export, deliberately not a double-entry GL. */
+function _bkGlRows() {
+    const mo    = _bkMonth;
+    const m     = _bkData.byMonth[mo] || { tuition: 0, fees: 0 };
+    const labor = _bkLaborForMonth(mo);
+    const moNum = Number(mo.split('-')[1]);
+
+    const expenseFor = re => (_bkData.expenses.items || [])
+        .filter(it => re.test(it.label || ''))
+        .reduce((s, it) => {
+            const amt = parseFloat(it.amount) || 0;
+            if (it.type === 'annual') return s + (Number(it.month) === moNum ? amt : 0);
+            return s + amt;
+        }, 0);
+
+    const tuition  = m.tuition || 0;
+    const fees     = m.fees || 0;
+    const rent     = expenseFor(/rent|lease|mortgage/i);
+    const supplies = expenseFor(/suppl|material|classroom/i);
+    const net      = tuition + fees - rent - labor - supplies;
+
+    return [
+        { label: 'Tuition income', amount: tuition },
+        { label: 'Fees income',    amount: fees },
+        { label: 'Rent',           amount: rent },
+        { label: 'Payroll',        amount: labor },
+        { label: 'Supplies',       amount: supplies },
+        { label: 'Net',            amount: net, isNet: true },
+    ];
+}
+
+function _bkGlHtml() {
+    const rows = _bkGlRows();
+    return `
+        <p class="bk-lede">Category totals for ${escHtml(_bkMonthName(_bkMonth))} — hand this to the bookkeeper as-is, or export.</p>
+        <div class="table-wrapper">
+            <table class="report-table fh-table bk-gl-table">
+                <tbody>
+                    ${rows.map(r => `<tr class="${r.isNet ? 'bk-gl-net' : ''}"><td>${escHtml(r.label)}</td><td class="fh-money-col">${_bkMoney(r.amount)}</td></tr>`).join('')}
+                </tbody>
+            </table>
+        </div>
+        <div class="bk-form-btns"><button type="button" class="bk-btn-solid" id="bkGlCsv">&#8595; Export CSV</button></div>
+        <p class="ap-note">Rent and Supplies come from Expense Lines, matched on the line's label. Payroll is the same labor figure the Overview and Room P&amp;L read. A category with no matching expense line reads $0.00 rather than guessing.</p>`;
+}
+
+function _bkBindGl(root) {
+    root.querySelector('#bkGlCsv')?.addEventListener('click', () => {
+        // Raw numbers in the file even though the table shows currency —
+        // a spreadsheet cannot sum "$1,234.00".
+        const lines = _bkGlRows().map(r => `${csvCell(r.label)},${r.amount.toFixed(2)}`);
+        downloadFile(`gl-categories-${_bkMonth}.csv`, 'text/csv', ['Category,Amount', ...lines].join('\n'));
+    });
+}
