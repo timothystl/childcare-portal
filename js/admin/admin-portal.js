@@ -135,8 +135,14 @@ const AP_TOOLS = [
     // Report survives as this tool's own second tab (Ledger / Billing
     // Report), not a separate nav entry — see admin-finance-hub.js and the
     // nested #billingReportSection markup in admin.html.
-    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance',
-      blurb: 'Billing, invoices, who owes, and the month-end close — one screen, one number for each.' },
+    // noHeaderIcon: Finance is the tab's one real tool (AP_TABS.finance's
+    // own defaultTool), so its detail header IS effectively the tab header —
+    // repeating the money emoji there on top of the tab chip's own icon read
+    // as clutter against the design handoff's plain "Finance" title. The
+    // icon still shows in the sidebar nav item; only apRenderDetail()'s <h2>
+    // omits it (see admin-portal.js:apRenderDetail).
+    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance', noHeaderIcon: true,
+      blurb: 'One place for billing, invoices, and who owes' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
 
@@ -661,7 +667,7 @@ function apRenderDetail(tool) {
         head.innerHTML = `
             <div class="ap-head">
                 <div>
-                    <h2>${tool.icon} ${escHtml(tool.name)}</h2>
+                    <h2>${tool.noHeaderIcon ? '' : tool.icon + ' '}${escHtml(tool.name)}</h2>
                     <p>${escHtml(tool.blurb)}</p>
                 </div>
             </div>`;
