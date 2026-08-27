@@ -5368,3 +5368,104 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     color: var(--text-muted);
     font-style: italic;
 }
+
+/* ============================================================
+   Classroom Tab Redesign (2026-08-27) — Attendance Board actions,
+   Enrollment & Capacity view switcher, and the Incident/Fire Drill
+   "write it yourself" compose panels.
+   ============================================================ */
+
+/* Attendance Board — In / Out / Absent / Move, per child row. Same shape as
+   the retired Roster's .att-btn toggle pair, extended to three toggles plus
+   a move dropdown. */
+.ab-kid { flex-wrap: wrap; row-gap: 6px; }
+.ab-actions {
+    display: inline-flex; align-items: center; gap: 4px;
+    flex: none; margin-left: auto;
+}
+.ab-act-btn {
+    min-width: 40px; padding: 5px 9px; font-size: .78em; font-weight: 700;
+    line-height: 1; color: var(--text-muted); background: #fff;
+    border: 1.5px solid var(--border); border-radius: 999px; cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+}
+.ab-act-btn:hover:not(:disabled) { border-color: var(--navy); color: var(--navy); }
+.ab-act-btn:disabled { opacity: .5; cursor: progress; }
+.ab-act-btn.is-on { background: var(--green-lt); border-color: var(--green); color: var(--green-dark); }
+.ab-act-absent.is-on { background: var(--tang-pale); border-color: var(--tang); color: var(--tang-dark); }
+.ab-move-select {
+    font-size: .78em; font-weight: 700; color: var(--text-muted);
+    border: 1.5px solid var(--border); border-radius: 999px;
+    padding: 5px 8px; background: #fff; cursor: pointer;
+}
+@media (max-width: 700px) {
+    .ab-kid { flex-wrap: wrap; }
+    .ab-actions { flex: 1 1 100%; margin-left: 0; justify-content: flex-end; }
+}
+
+/* Enrollment & Capacity — Day / Week / Month / FTE view switcher. Same pill
+   shape as Bookkeeper's .bk-pill (css/admin-portal.css), kept as its own
+   class rather than shared since the two live in different modules. */
+.ec-view-switch { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+.ec-pill {
+    border: 1px solid var(--border); background: #fff; border-radius: 999px;
+    padding: 7px 15px; font-family: inherit; font-weight: 700; font-size: .85em;
+    color: var(--text-muted); cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.ec-pill:hover:not(.is-active) { background: var(--linen); }
+.ec-pill.is-active { background: var(--navy); color: #fff; border-color: var(--navy); }
+.ec-day-nav { align-items: center; }
+.ec-day-nav input[type="date"] { padding: 8px 12px; border: 2px solid var(--border); border-radius: 7px; }
+
+.ec-day-rows { display: grid; gap: 10px; }
+.ec-day-row {
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 16px;
+}
+.ec-day-row.is-near { border-left: 4px solid var(--sun); }
+.ec-day-row.is-full { border-left: 4px solid var(--tang); }
+.ec-day-room-name { font-weight: 800; color: var(--navy); flex: 1 1 160px; min-width: 140px; }
+.ec-day-stat { display: flex; flex-direction: column; align-items: center; min-width: 70px; }
+.ec-day-stat strong { font-family: var(--font-head); font-size: 1.1em; color: var(--navy); }
+.ec-day-stat span { font-size: .7em; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+.ec-day-flag { flex: none; }
+.ec-move-btn { flex: none; font-size: .82em; padding: 7px 12px; }
+
+/* Incident Reports — "+ Write a report" */
+.inc-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.inc-tabs-row .inc-tabs { margin-bottom: 0; }
+.inc-compose {
+    background: #fff; border: 1.5px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 16px;
+}
+.inc-compose-title { font-family: var(--font-head); font-size: 1.05em; color: var(--navy); margin: 0 0 12px; }
+.inc-compose-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.inc-compose-field label { font-size: .85em; font-weight: 600; color: var(--text-muted); }
+.inc-compose-field input,
+.inc-compose-field select,
+.inc-compose-field textarea {
+    padding: 9px 12px; border: 2px solid var(--border); border-radius: 7px;
+    font-size: .95em; font-family: inherit;
+}
+.inc-compose-btns { display: flex; gap: 10px; }
+
+/* Fire Drills — "+ Log a Drill" */
+.fd-banner-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.fd-banner-row .fd-nag { flex: 1 1 320px; margin-bottom: 0; }
+.fd-compose-open { flex: none; }
+.fd-compose {
+    background: #fff; border: 1.5px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; margin: 14px 0;
+}
+.fd-compose-title { font-family: var(--font-head); font-size: 1.05em; color: var(--navy); margin: 0 0 12px; }
+.fd-compose-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.fd-compose-field { display: flex; flex-direction: column; gap: 5px; }
+.fd-compose-field label { font-size: .82em; font-weight: 600; color: var(--text-muted); }
+.fd-compose-field input,
+.fd-compose-field select,
+.fd-compose-field textarea {
+    padding: 9px 12px; border: 2px solid var(--border); border-radius: 7px;
+    font-size: .95em; font-family: inherit;
+}
+.fd-compose-btns { display: flex; gap: 10px; margin-top: 4px; }

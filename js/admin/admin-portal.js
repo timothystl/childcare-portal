@@ -98,18 +98,40 @@ const AP_TABS = {
 // `pane` is the legacy tab-pane that section lives inside (the shell has
 // to un-hide the pane before it can show the section).
 const AP_TOOLS = [
-    // ── Classrooms · Today ──
-    // First in the group on purpose: it is the office mirror of the teachers'
-    // head count, and it is where a missing-child alert lights up for the
-    // director at the same instant it hits every staff phone.
-    { key: 'attBoard',    pane: 'daily',         section: 'attendanceBoardSection',  tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '🚸', name: 'Attendance Board',
-      blurb: 'Live — every room, who is in, who is expected, staff present, ratio.' },
-    { key: 'roster',      pane: 'daily',         section: 'dailyRosterSection',      tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📋', name: 'Classroom Roster',
-      blurb: 'Who is in each room today, this week, or this month.' },
-    { key: 'capOverview', pane: 'daily',         section: 'capacityOverviewSection', tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📆', name: 'Capacity Overview',
-      blurb: 'Every room, every day of a month, against capacity.' },
-    { key: 'roomSched',   pane: 'daily',         section: 'roomSchedSection',        tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📅', name: 'Room Schedule Planner',
-      blurb: 'Move children between rooms day by day.' },
+    // ── Classrooms · Daily (design handoff: Classroom Tab Redesign, 2026-08-27) ──
+    // 13 Classroom-tab screens → 7. Attendance Board absorbed Classroom
+    // Roster's day-view In/Out marking (the one thing Roster had that the
+    // board didn't) plus a Move-a-child shortcut; `roster` is retired below.
+    // Incident Reports and Fire Drills each gained a director-authored path
+    // ("+ Write a report" / "+ Log a Drill") alongside reviewing what staff
+    // filed — see admin-attendance.js/admin-incidents.js/admin-safety.js.
+    //
+    // ⚠️ `pane` must be 'families', not 'daily': all three sections
+    // (attendanceBoardSection/incidentsSection/fireDrillsSection) live inside
+    // admin.html's #tab-families, not #tab-daily. They previously carried
+    // pane:'daily', which made apShowSection() hide #tab-families (and the
+    // section along with it) the moment any of these three was opened —
+    // confirmed by reading apShowSection(), not assumed. The 'staff'-role
+    // visibility check in apToolAvailable() no longer keys off `pane` for
+    // exactly this reason (see that function's comment).
+    { key: 'attBoard',    pane: 'families', section: 'attendanceBoardSection',  tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '🚸', name: 'Attendance Board',
+      blurb: 'Live — every room, who is in, who is expected, staff present, ratio. Mark In/Out/Absent and move a child, all from here.' },
+    { key: 'incidents',   pane: 'families', section: 'incidentsSection',        tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '🩹', name: 'Incident Reports',
+      blurb: 'Review what staff filed, then release it to the family — or write one yourself.' },
+    { key: 'drills',      pane: 'families', section: 'fireDrillsSection',       tab: 'classrooms', group: 'Daily', tint: AP_TINT.tang, icon: '🔥', name: 'Fire Drills',
+      blurb: 'Every drill run, who was in the building, and how long it took — or log one yourself.' },
+
+    // ── Classrooms · Planning ──
+    // Replaces three screens that read the same registrations at different
+    // grains (Capacity Overview's month grid, Room Schedule Planner's weekly
+    // AM/PM view, and Planning's own FTE/seat-day Room Capacity Overview) with
+    // one Day/Week/Month/FTE view switcher — see admin-enrollment-capacity.js.
+    // `capOverview`, `roomSched` and Planning's `capacityOverview` are retired
+    // below; their old section wrappers are removed from admin.html since
+    // this tool relocated their actual content rather than leaving it behind
+    // unreferenced (contrast with `roster`/CACFP, which are true retirements).
+    { key: 'enrollCap',   pane: 'daily',    section: 'enrollmentCapacitySection', tab: 'classrooms', group: 'Planning', tint: AP_TINT.green, icon: '📆', name: 'Enrollment & Capacity',
+      blurb: 'Day, week, month, or FTE view of how full each room is — one screen, replacing three.' },
 
     // ── Classrooms · Records ──
     { key: 'careCal',     pane: 'registrations', section: 'allRegistrationsSection', tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '🗒️', name: 'Care Calendar',
@@ -118,15 +140,10 @@ const AP_TOOLS = [
       blurb: 'Active children with no registration for a month.' },
     { key: 'families',    pane: 'families',      section: 'familiesSection',         tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '👨‍👩‍👧', name: 'Family Directory',
       blurb: 'Family and child records, PINs, discounts, imports.' },
-    // Incidents sit under Classrooms because that is where they happen and who
-    // reports them. Approval is what notifies the family, so a report waiting
-    // here is a parent who has not been told yet.
-    { key: 'incidents',   pane: 'daily',         section: 'incidentsSection',        tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '🩹', name: 'Incident Reports',
-      blurb: 'Review what staff filed, then release it to the family.' },
-    // Drills sit under Classrooms with the incidents: same shelf, same
-    // inspector, and the count they record is a count of children.
-    { key: 'drills',      pane: 'daily',         section: 'fireDrillsSection',       tab: 'classrooms', group: 'Records', tint: AP_TINT.tang, icon: '🔥', name: 'Fire Drills',
-      blurb: 'Every drill run, who was in the building, and how long it took.' },
+    // `roster` (Classroom Roster) is retired: its day-view In/Out marking now
+    // lives on the Attendance Board above; its week/month browsing had no
+    // taker in the redesign. dailyRosterSection's markup stays in admin.html,
+    // unreferenced — same convention as the retired CACFP tools below.
     // ── Finance · Money In (design handoff: Finance Hub, 2026-08-26) ──
     // Bill This Month, Invoices, Who Owes, and Family Billing Summary are
     // consolidated into one ledger screen — the director's own complaint was
@@ -228,8 +245,12 @@ const AP_TOOLS = [
       blurb: 'Bulk-import waitlist applications from CSV or Excel.' },
 
     // ── Planning · Enrollment Outlook ──
-    { key: 'capacityOverview', pane: 'waitlist', section: 'roomCapacityOverviewSection', tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📆', name: 'Room Capacity Overview',
-      blurb: 'Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as before.' },
+    // `capacityOverview` (Room Capacity Overview / FTE / seat-day) is retired
+    // from here: its content is now the FTE/Seat-Day sub-view of Classrooms →
+    // Planning → Enrollment & Capacity (`enrollCap`, above), per the Classroom
+    // Tab Redesign handoff. roomCapacityOverviewSection's markup is removed
+    // from admin.html rather than left behind, since its content relocated
+    // rather than being wholesale retired — see enrollCap's comment.
     { key: 'ratioStep',   pane: 'waitlist', section: 'ratioStepSection',       tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '⚖️', name: 'Ratio Step & Next Child',
       blurb: 'Where the next child tips a room into another staff member.' },
 
@@ -461,7 +482,13 @@ function apToolAvailable(tool) {
     if (pane && pane.style.display === 'none') return false;
 
     const role = typeof currentAdminRole !== 'undefined' ? currentAdminRole : 'full';
-    if (role === 'staff') return tool.tab === 'classrooms' && tool.pane === 'daily';
+    // ⚠️ Was `tool.pane === 'daily'` — that happened to work only because
+    // attBoard/incidents/drills carried (wrong) pane:'daily' themselves. Fixing
+    // their pane to match where the sections actually live (#tab-families)
+    // would have silently dropped 'staff'-role access to all three. `group`
+    // is what the design handoff actually means by "Classrooms tab only,
+    // read-only roster view": the Daily group, not a DOM-location field.
+    if (role === 'staff') return tool.tab === 'classrooms' && tool.group === 'Daily';
     if (role !== 'full' && AP_FULL_ONLY_TABS.includes(tool.tab)) return false;
     if (role !== 'full' && AP_FULL_ONLY_KEYS.includes(tool.key)) return false;
     return true;
@@ -737,7 +764,7 @@ function apOnToolOpened(tool) {
         if (tool.key === 'schedule' && typeof apMountStaffRatioStep === 'function') apMountStaffRatioStep();
         if (tool.key === 'staffreq')  apRenderStaffReq();
         if (tool.key === 'scenario')  apRenderScenario();
-        if (tool.key === 'capacityOverview' && typeof renderCapacityOverviewTool === 'function') renderCapacityOverviewTool();
+        if (tool.key === 'enrollCap' && typeof renderEnrollCapTool === 'function') renderEnrollCapTool();
     } catch (err) {
         console.error('apOnToolOpened:', tool.key, err);
     }
@@ -1378,13 +1405,15 @@ function apDashPlanning(live) {
                 sub: 'Active applications against the seats actually open this week.',
                 body: apRowsHtml(pressure), tools: ['wlPlanner', 'wlImport'] }),
         ],
-        // Enrollment Outlook's own pill — otherwise capacityOverview/ratioStep
-        // had no path in from a phone at all. Demand-by-month, the demand
-        // forecast, and upcoming promotions are inline inside wlPlanner's own
-        // Grid render now, so their pill is wlPlanner itself, above.
+        // Enrollment Outlook's own pill — otherwise ratioStep had no path in
+        // from a phone at all. Demand-by-month, the demand forecast, and
+        // upcoming promotions are inline inside wlPlanner's own Grid render
+        // now, so their pill is wlPlanner itself, above. The FTE/seat-day
+        // table that used to live at `capacityOverview` is now a sub-view of
+        // Classrooms → Planning → Enrollment & Capacity (`enrollCap`).
         right: [
             apPanel({ title: 'Enrollment outlook', sub: 'Room capacity trends and the next ratio step.',
-                body: '', tools: ['capacityOverview', 'ratioStep'] }),
+                body: '', tools: ['enrollCap', 'ratioStep'] }),
         ],
         attention: [
             { icon: '👥', key: 'staffreq',   text: `The heaviest day this week needs ${peak} staff on the floor.`, cta: 'Open Daily Staffing' },
@@ -1456,7 +1485,7 @@ function apDashClassrooms(live) {
     const attention = [];
     if (missing) attention.push({ icon: '📋', key: 'missingCal', urgent: true,
         text: `${missing} child${missing === 1 ? ' has' : 'ren have'} no booked day this month.`, cta: 'Open missing calendars' });
-    if (atRatio.length) attention.push({ icon: '🏫', key: 'roomSched',
+    if (atRatio.length) attention.push({ icon: '🏫', key: 'enrollCap',
         text: `${atRatio.map(r => r.label).join(', ')} ${atRatio.length === 1 ? 'is' : 'are'} exactly at ratio — the next child adds a staff member.`, cta: 'Open room planner' });
     attention.push({ icon: '🗒️', key: 'careCal',
         text: 'Add a day, edit a calendar, or register a child from the care calendar.', cta: 'Open care calendar' });
@@ -1467,7 +1496,7 @@ function apDashClassrooms(live) {
         left: [
             apPanel({ title: isToday ? "Today's roster by room" : "Monday's roster by room",
                 sub: 'Headcount against capacity. A room at ratio needs another staff member before the next child.',
-                body: apBarsHtml(bars), tools: ['roster', 'roomSched', 'capOverview'] }),
+                body: apBarsHtml(bars), tools: ['attBoard', 'enrollCap'] }),
         ],
         // Below 900px this is the only path in to the whole Food Program
         // group — nothing else on this dashboard mentioned CACFP at all.

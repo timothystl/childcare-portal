@@ -5896,13 +5896,18 @@ function _capacityOverviewWeekdays(year, month1based) {
     return count;
 }
 
-async function _buildCapacityOverviewRows() {
+// `targetMonth` — a Date set to the 1st of the month to show, or omitted for
+// the current month. The Enrollment & Capacity tool's FTE/Seat-Day sub-view
+// has its own independent month picker (deliberately not shared with the
+// Month sub-view's), so this needs to compute against whatever month that
+// picker is on, not always "today".
+async function _buildCapacityOverviewRows(targetMonth) {
     const allRegs = await fetchAllRegistrations();
     const byMonth = _capacityOverviewByMonth(allRegs);
 
-    const today = new Date();
-    const curMo   = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-    const priorD  = new Date(today.getFullYear(), today.getMonth() - 6, 1);
+    const target  = targetMonth instanceof Date ? targetMonth : new Date();
+    const curMo   = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}`;
+    const priorD  = new Date(target.getFullYear(), target.getMonth() - 6, 1);
     const priorMo = `${priorD.getFullYear()}-${String(priorD.getMonth() + 1).padStart(2, '0')}`;
     const [curY, curM] = curMo.split('-').map(Number);
     const weekdays = _capacityOverviewWeekdays(curY, curM);
@@ -5923,12 +5928,12 @@ async function _buildCapacityOverviewRows() {
     });
 }
 
-async function renderCapacityOverviewTool() {
+async function renderCapacityOverviewTool(targetMonth) {
     const container = document.getElementById('capacityOverviewContent');
     if (!container) return;
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
-        _capacityOverviewRows = await _buildCapacityOverviewRows();
+        _capacityOverviewRows = await _buildCapacityOverviewRows(targetMonth);
         _capacityOverviewOpenRoom = null;
         container.innerHTML = _renderCapacityOverviewTable(_capacityOverviewRows);
         _wireCapacityOverviewRows();

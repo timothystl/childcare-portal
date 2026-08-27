@@ -354,6 +354,159 @@ it is not a new inaccuracy this tab introduced.
 
 ---
 
+## Classroom tab consolidation — Daily / Planning (2026-08-27)
+
+Built from `design_handoff_classroom_tab/` (README + prototype `Classroom Tab
+Redesign.dc.html`). Audited every screen in the Classroom tab and consolidated
+per the director's sign-off in that handoff. **Records** (Care Calendar,
+Family Directory, Missing Care Calendar) is explicitly out of scope — left
+alone, to be redesigned in a separate session.
+
+13 Classroom-tab screens → 7. **Daily**: Attendance Board, Incident Reports,
+Fire Drills. **Planning**: Enrollment & Capacity. **Records**: unchanged, 3
+screens. CACFP (already retired) stays retired.
+
+| Kept as | Was | Reason |
+|---|---|---|
+| **Attendance Board** | Attendance Board + Classroom Roster | Roster's day-view manual In/Out marking was the only thing Roster had that the live board didn't. In/Out/Absent/Move now live directly in each room card. |
+| **Incident Reports** | Incident Reports | Unchanged, plus **"+ Write a report"** — the director can file one herself. |
+| **Fire Drills** | Fire Drills | Unchanged, plus **"+ Log a Drill"** — the director can enter a drill directly. |
+| **Enrollment & Capacity** | Capacity Overview (month grid) + Room Schedule Planner (weekly AM/PM) + Planning's Room Capacity Overview (FTE/seat-day) | All three read the same registrations at different grains. Merged into one screen with a Day/Week/Month/FTE view switcher rather than picking a winner. |
+| Retired from nav | Classroom Roster | Its day-view marking moved to the Attendance Board; its week/month browsing had no taker in the redesign. `dailyRosterSection`'s markup stays in `admin.html`, unreferenced — same convention as CACFP. |
+
+### ⚠️ A real bug was found and fixed on the way in: the pane mismatch
+
+`attBoard`, `incidents` and `drills` all carried `pane: 'daily'` in `AP_TOOLS`,
+but their DOM sections (`attendanceBoardSection`/`incidentsSection`/
+`fireDrillsSection`) live inside `admin.html`'s `#tab-families`, not
+`#tab-daily`. `apShowSection()` hides every `.tab-pane` whose id isn't
+`'tab-' + tool.pane` — so opening any of these three tools hid `#tab-families`
+(and the section along with it) while showing the empty `#tab-daily`. Found by
+reading `apShowSection()` directly, not assumed from the symptom. Fixed by
+correcting `pane` to `'families'` on all three.
+
+**That fix had a second-order trap.** `apToolAvailable()`'s 'staff'-role gate
+was `tool.tab === 'classrooms' && tool.pane === 'daily'` — it had been using
+`pane` as a stand-in for "is this a Daily-group, staff-visible tool," which
+only worked because those three tools happened to carry the wrong `pane`
+already. Fixing `pane` to its correct DOM-location value would have silently
+dropped 'staff'-role admin logins from Attendance Board, Incident Reports and
+Fire Drills. Fixed by keying that check on `tool.group === 'Daily'` instead —
+a field that actually means what the check is testing for, decoupled from
+where the section physically sits in the DOM.
+
+### Attendance Board write path — resolved, not left open
+
+The design handoff's own open question: does the office's In/Out mark write
+to the same record the teacher app's check-in produces, or stay a separate
+office-only record? **Decided: the same table.** New RPC
+`admin_log_child_event` (migration `add_classroom_admin_authoring.sql`,
+**applied and verified in production 2026-08-27**) writes into
+`child_day_events` — the exact table `log_child_event` (the staff-app path)
+writes into — so the parent app's daily record and the office's manual mark
+can never disagree. It mirrors `log_child_event`'s own downstream effect: a
+check-in also upserts `attendance_records.status = 'present'`, which is what
+`center_headcount_rows()` already reads as the board's "marked" fact.
+
+**Absent stays exactly what it already was** — a write to `attendance_records`
+via the existing `saveAttendanceRecord`/`clearAttendanceRecord` (unchanged;
+`authenticated`/admin already holds direct grants there), which
+`center_headcount_rows()` was already reading as `marked = 'absent'`, distinct
+from `attendance_status`. No new plumbing needed for that half — the
+"Absent is its own explicit mark, distinct from not-yet-marked" requirement
+was already true of the live schema.
+
+**Move** reuses the existing single-day room move
+(`updateRegistrationDateRoom`) — the same write the Capacity Overview
+day-drill-down already made. The board doesn't get `registration_dates.id`
+from `center_headcount_rows()` (that RPC returns `student_id`/`child_name`/
+`room_id`, not a registration id), so it's resolved client-side from
+`allRegistrations` by child name + today's date — the same array every other
+admin day-view tool already lazy-loads.
+
+⚠️ **`center_headcount_rows()`'s SQL source was never committed to this
+repo** — `center_headcount_admin.sql`'s own comment says "Full body as
+applied... see git history for the text." That's why this work did **not**
+extend that shared function to carry `registration_date_id` directly, even
+though it would have been the more obvious fix: reconstructing a function
+whose true deployed source isn't in the tree risks silently dropping a field
+(`marked`, `allergies`) that the live board depends on. Resolving the id
+client-side avoided touching it at all.
+
+### Director-authored records — she is signature 1, not a fourth role
+
+For Incident Reports, the open question was how signature 1 works when there
+is no teacher filing the report. **Decided: she signs as signature 1 too** —
+same rule `submit_incident_report` already applies to a teacher ("filing IS
+signing"), just from the office. New RPC `admin_submit_incident_report`
+inserts the report and its `role = 'teacher'` signature from her own name in
+one call; the existing three-signature order-guard trigger
+(`incident_three_signatures.sql`) is **completely unchanged** and enforces
+everything after it exactly as it does for a staff-filed report — the parent
+still has to sign at pickup on a teacher's phone before the director can close
+it. No schema change, no new signature role.
+
+`admin_log_fire_drill` is the same shape for Fire Drills: an admin-gated twin
+of `log_fire_drill`, same explicit column allow-list, `drill_date` and the
+conductor still server-side.
+
+**All three new RPCs are gated on `admin_role() IN ('full', 'restricted')`,
+not `is_admin()` alone.** This file documents the 'staff' admin-portal role as
+"Classrooms tab only (read-only roster view)" — `is_admin()` alone would have
+let that role mark attendance, file incidents and log drills, which is a real
+write, not a read-only roster. Verified live in a rolled-back transaction: a
+probe `staff`-role email got `NULL` from `admin_log_child_event`; a probe
+`restricted`-role email succeeded on all three. Client-side, the Attendance
+Board's action buttons are hidden entirely for `currentAdminRole === 'staff'`,
+so the UI doesn't offer a control that would fail.
+
+### Enrollment & Capacity — relocated, not rebuilt
+
+Week and Month sub-views are the original tools' own container markup
+(`#roomSchedContent` / `#capacityGrid` and their controls) physically moved
+into the new `#enrollmentCapacitySection`, with `renderRoomSchedule()` /
+`renderCapacityOverview()` / `initCapacityMonthNav()` / `setupRoomCalendar()`
+**completely unchanged** — same element ids, new home. The old section
+wrappers (`capacityOverviewSection`, `roomSchedSection` in `#tab-daily`,
+`roomCapacityOverviewSection` in `#tab-waitlist`) are **removed from
+`admin.html`** rather than left behind — unlike Roster/CACFP, their content
+relocated rather than being wholesale retired, so an empty shell would have
+served no purpose.
+
+The FTE/Seat-Day sub-view is `renderCapacityOverviewTool()` (unchanged logic)
+given a new optional `targetMonth` parameter, because the design calls for its
+own month picker, independent of Month view's — `_buildCapacityOverviewRows()`
+now computes `curMo`/the 6-months-back trend comparison against whatever month
+is passed in, not always "today."
+
+Day is genuinely new (no prior screen existed at this grain): one row per
+active room for a single date — enrolled/cap, staff needed (`Math.ceil(enrolled
+/ ratio)`, booked registrations only — same "clock-in data is never read" rule
+as Daily Staffing Requirement), a capacity flag, and "Move a child →" which
+opens the exact same `showDayRosterDetail()` panel the Month view's day-cell
+click already does.
+
+`enrollCap` lives under Classrooms → Planning in `AP_TOOLS` (not the top-level
+Planning tab, where its FTE predecessor used to sit) — moving a tool between
+tabs has precedent (`scenario`/`model` moved Finance → Planning earlier).
+
+### Everything applied and verified live, 2026-08-27
+
+`add_classroom_admin_authoring.sql` — `admin_log_child_event`,
+`admin_submit_incident_report`, `admin_log_fire_drill`. Verified post-apply:
+`has_function_privilege` anon=false/authenticated=true on all three; a
+rolled-back functional probe with seeded `restricted`/`staff` admin_roles
+entries confirmed `staff` gets `NULL` and `restricted` succeeds on all three
+(new incident/fire-drill/child-event rows all rolled back, nothing persisted).
+
+`npm test` — 168/168. `npm run build` — `dist/` rebuilt and confirmed to
+contain the new symbols (`admin_log_child_event` etc. in
+`dist/supabase.min.js`; `renderEnrollCapTool`/`enrollmentCapacitySection` etc.
+in `dist/admin.min.js`) before committing — the exact check this file's own
+"it shipped half-live for a day" incident (Bookkeeper tab, above) says to run.
+
+---
+
 ## Design handoff build — staff, parent, director (2026-08-16)
 
 Built from `Parent_communication_expansion.zip` (staff app, parent app, director

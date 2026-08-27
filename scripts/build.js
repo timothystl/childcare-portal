@@ -180,6 +180,10 @@ const ENTRIES = [
                 'js/admin/admin-init.js',
                 'js/admin/admin-calendar.js',
                 'js/admin/admin-classrooms.js',
+                // After admin-calendar.js: reuses showDayRosterDetail(),
+                // renderCapacityOverview() and renderRoomSchedule() as the
+                // Enrollment & Capacity tool's Day/Month/Week sub-views.
+                'js/admin/admin-enrollment-capacity.js',
                 'js/admin/admin-families.js',
                 'js/admin/admin-reports.js',
                 'js/admin/admin-finance.js',

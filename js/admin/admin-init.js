@@ -40,6 +40,10 @@ async function initDashboard() {
     setupWindowOverride();
     setupFamilies();
     setupRoomCalendar();
+    // Enrollment & Capacity's view switcher, Day view, and FTE view's own
+    // month picker. Its Week/Month sub-views reuse the wiring just above
+    // (setupRoomCalendar/initCapacityMonthNav), unchanged.
+    if (typeof setupEnrollCapTool === 'function') setupEnrollCapTool();
     setupRegFee();
     setupPtoSettings();
     setupStaffDirectory();
