@@ -1808,6 +1808,16 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .bk-gl-table { max-width: 460px; }
 .bk-gl-net td { font-weight: 800; color: var(--navy); border-top: 2px solid var(--border) !important; }
 
+/* Month-lock indicators — never let a frozen month look indistinguishable
+   from a live one; see admin-finance-bookkeeper.js _bkLockMonth(). */
+.bk-lock-dot { font-size: 10px; cursor: help; }
+.bk-lock-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--sun-pale); border: 1px solid var(--sun-lt); color: var(--mustard-dark);
+    border-radius: 999px; padding: 3px 10px; font-size: 11.5px; font-weight: 800;
+    white-space: nowrap; cursor: help;
+}
+
 @media (max-width: 900px) {
     .bk-room-grid-wrap { grid-template-columns: minmax(0, 1fr); }
     .bk-bar-row { flex-wrap: wrap; row-gap: 4px; }

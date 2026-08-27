@@ -254,6 +254,48 @@ tagged *added by hand* in the list for the same reason.
 **not** block Ledger edits to that month. A real lock is separate work. The
 screen says this in a note rather than letting the checkbox imply enforcement.
 
+### ⚠️ "Lock the month" freezes a number into `billing_summary` (2026-08-27)
+
+Prompted by a real question: 2026 started partway through this app's life, so
+some early months are hand-imported and the director wants this year's final
+numbers frozen once complete, so 2027's Bookkeeper can compare against a
+number that cannot drift out from under it later.
+
+Checking "Lock the month" now writes the month's **currently live** total
+into `billing_summary` per room (`data_source: 'month_lock_snapshot'`, via the
+same `upsertBillingSummary()` the old Attendance & Revenue tool used) — the
+exact table the historical fallback above already reads. Unchecking removes
+the checklist flag but never deletes the snapshot row; re-locking overwrites
+it with whatever is live at that moment.
+
+⚠️ **A locked month must be read from exactly one place, never both.** The
+first version of this session's fix only added the historical fallback for
+months with *no* live data — it did nothing to change which source wins for a
+month that has *both* a snapshot and live registrations, which is the normal
+case right after closing a month. Caught by the user before it shipped:
+without a lock-aware read, freezing a snapshot would have been a no-op —
+`useLive = (tuition + fees) > 0` doesn't know or care whether the month is
+locked, so any live registration still sitting in `registration_dates` would
+keep outvoting the frozen number on every load, and the checkbox would
+silently do nothing.
+
+Fixed: `_bkLoad()` checks `_bkClose[mo]?.lock` **before** deciding a source —
+`useLive = !locked && (tuition + fees) > 0`. Locked ⇒ always the frozen
+snapshot, live data notwithstanding. Unlocked ⇒ the existing live-else-
+historical rule, unchanged. Every sub-view that reads `byMonth` (Overview,
+Room P&L, GL Export) shows a 🔒 badge on a locked month so a frozen number is
+never visually indistinguishable from a live one.
+
+Two things this is deliberately not:
+- **Not enforcement.** The Ledger stays fully editable for a locked month —
+  locking only changes what Bookkeeper *reads*, not what the database
+  *accepts*. Editing an invoice after locking makes the Ledger and the frozen
+  snapshot disagree until someone re-locks; the checklist detail line says so.
+- **Not a labor lock.** Only revenue and child-days go into the snapshot —
+  `billing_summary` never stored labor, and Room P&L's labor figure keeps
+  coming from `_buildRoomPnlData()` (staff schedules/clock events) whether or
+  not the month is locked.
+
 ### Fixed in passing
 
 `renderFinanceHubTool()` reset `_fhTab` to `'ledger'` in state but never

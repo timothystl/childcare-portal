@@ -62,7 +62,7 @@ const BK_CLOSE_ITEMS = [
     { key: 'issued',  label: 'Confirm all invoices issued', detail: ctx => `No drafts left in the ledger for ${ctx.monthName}` },
     { key: 'writeoff',label: 'Review write-offs',           detail: ctx => ctx.writeOffDetail },
     { key: 'gl',      label: 'Export GL categories',        detail: () => 'Hand category totals to the bookkeeper' },
-    { key: 'lock',    label: 'Lock the month',              detail: ctx => `Prevents further edits to ${ctx.monthName} once closed` },
+    { key: 'lock',    label: 'Lock the month',              detail: ctx => ctx.lockDetail },
 ];
 
 function _bkEl(id) { return document.getElementById(id); }
@@ -193,7 +193,16 @@ async function _bkLoad() {
         });
     } catch (e) { console.warn('bk historical billing_summary:', e); }
 
-    const byMonth = {};
+    // ⚠️ A locked month must be read from exactly one place, never blended.
+    // Without this, "Lock the month" would freeze a snapshot into
+    // billing_summary that a month with live registrations still sitting in
+    // registration_dates would simply outvote every load — the checkbox
+    // would do nothing, and the two numbers could quietly drift apart with
+    // no way to tell which one a report actually used. Locked ⇒ the frozen
+    // snapshot always wins, live data or not. Unlocked ⇒ the existing
+    // live-else-historical rule, unchanged.
+    const byMonth   = {};
+    const liveByMonth = {}; // mo → { tuition, fees, rooms } — what live computes RIGHT NOW, kept so _bkLockMonth() can snapshot it without a second pass over every month
     months.forEach((mo, i) => {
         const overrides = new Map((overrideRows[i] || []).map(r => [
             `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
@@ -212,14 +221,16 @@ async function _bkLoad() {
             liveRooms[c.roomId].revenue   += billed + fee;
             liveRooms[c.roomId].childDays += (c.halfDays || 0) + (c.fullDays || 0);
         }));
+        liveByMonth[mo] = { tuition, fees, rooms: liveRooms };
 
-        const useLive = (tuition + fees) > 0;
+        const locked  = !!_bkClose[mo]?.lock;
+        const useLive = !locked && (tuition + fees) > 0;
         byMonth[mo] = useLive
             ? { tuition, fees, revenue: tuition + fees, rooms: liveRooms }
             : { tuition: historicalRevByMo[mo] || 0, fees: 0, revenue: historicalRevByMo[mo] || 0, rooms: historicalRoomsByMo[mo] || {} };
     });
 
-    _bkData = { year, months, byMonth, pnl, budget: budget || null, expenses: expenses || { items: [] } };
+    _bkData = { year, months, byMonth, liveByMonth, pnl, budget: budget || null, expenses: expenses || { items: [] } };
 
     // AR rows are the Ledger's own owed figures — never a second query.
     _bkAr = { rows: _bkArRowsFromLedger(), writeOffs: writeOffs || [] };
@@ -361,6 +372,7 @@ function _bkOverviewHtml() {
     const rows = _bkData.months.map(k => ({
         key: k, label: MONTH_NAMES[Number(k.split('-')[1]) - 1].slice(0, 3),
         rev: _bkData.byMonth[k]?.revenue || 0, lab: _bkLaborForMonth(k),
+        locked: !!_bkClose[k]?.lock,
     }));
     // Each bar sizes against its own series' peak (revenue vs. labor), not a
     // shared one — otherwise labor (always the smaller number) would read as
@@ -370,7 +382,7 @@ function _bkOverviewHtml() {
 
     const bars = rows.map(r => `
         <div class="bk-bar-row">
-            <div class="bk-bar-label">${escHtml(r.label)}</div>
+            <div class="bk-bar-label">${escHtml(r.label)}${r.locked ? ' <span class="bk-lock-dot" title="Locked — reading the frozen historical total, not live registrations">&#128274;</span>' : ''}</div>
             <div class="bk-bar-pair">
                 <div class="bk-bar-track"><div class="bk-bar bk-bar-rev" style="width:${(r.rev / peakRev * 100).toFixed(1)}%"></div></div>
                 <div class="bk-bar-val bk-bar-rev-val">${_bkMoney(r.rev)}</div>
@@ -577,6 +589,8 @@ function _bkPnlHtml() {
             </div>`;
     }).join('');
 
+    const lockedThisMonth = !ytd && !!_bkClose[_bkPnlMonth]?.lock;
+
     return `
         <p class="bk-lede">One card per room &mdash; no wide table to scroll through.</p>
         <div class="bk-toolbar">
@@ -587,6 +601,7 @@ function _bkPnlHtml() {
                 <button type="button" class="ap-seg-btn${ytd ? '' : ' is-on'}" data-bk-scope="month">This month</button>
                 <button type="button" class="ap-seg-btn${ytd ? ' is-on' : ''}" data-bk-scope="ytd">YTD</button>
             </div>
+            ${lockedThisMonth ? '<span class="bk-lock-badge" title="Reading the frozen historical total for this month, not live registrations">&#128274; Locked</span>' : ''}
         </div>
         <div class="bk-room-grid-wrap">${cards || '<p class="empty-hint">No rooms configured.</p>'}</div>
         <p class="ap-note">Revenue and child-days are the same per-room figures the Ledger and Billing Report bill from. Labor is real — staff schedules and clock events per room — not a flat percentage of revenue. Labor that could not be tied to one room (float staff, hours with no schedule) is excluded here and shown in the Overview's total.</p>`;
@@ -607,11 +622,15 @@ function _bkCloseHtml() {
     const mo    = _bkMonth;
     const state = _bkClose[mo] || {};
     const pending = _bkWriteOffsThisMonth();
+    const locked  = !!state.lock;
     const ctx = {
         monthName: _bkMonthName(mo),
         writeOffDetail: pending.length
             ? `${pending.length} write-off${pending.length === 1 ? '' : 's'} totaling ${_bkMoney(pending.reduce((s, w) => s + (parseFloat(w.amount) || 0), 0))} to confirm`
             : 'No write-offs pending for this close',
+        lockDetail: locked
+            ? `Locked ${escHtml(state.lockedBy || 'by an admin')}${state.lockedAt ? ' on ' + escHtml(friendlyShort(state.lockedAt)) : ''} — Overview, Room P&L and GL Export now read the frozen total for ${escHtml(_bkMonthName(mo))}, not live registrations`
+            : `Freezes today's computed total into the permanent historical record for ${escHtml(_bkMonthName(mo))} — this is what next year compares against`,
     };
     const done = BK_CLOSE_ITEMS.filter(i => state[i.key]).length;
 
@@ -620,14 +639,14 @@ function _bkCloseHtml() {
             <span class="bk-check-box">${state[item.key] ? '✓' : ''}</span>
             <span class="bk-check-text">
                 <span class="bk-check-label">${escHtml(item.label)}</span>
-                <span class="bk-check-detail">${escHtml(item.detail(ctx))}</span>
+                <span class="bk-check-detail">${item.detail(ctx)}</span>
             </span>
         </button>`).join('');
 
     return `
         <p class="bk-progress">${done} of ${BK_CLOSE_ITEMS.length} done · close ${escHtml(_bkMonthName(mo))} when every item is checked.</p>
         <div class="bk-card bk-check-card">${items}</div>
-        <p class="ap-note">⚠️ Checking "Lock the month" records that you consider ${escHtml(_bkMonthName(mo))} closed. It does not yet block edits to that month in the Ledger — a real lock is separate work, not implied by this checklist.</p>`;
+        <p class="ap-note">⚠️ "Lock the month" freezes ${escHtml(_bkMonthName(mo))}'s current total into <code>billing_summary</code> and switches Overview/Room P&L/GL Export to read that frozen number instead of recomputing live — this is what keeps next year's comparison stable even if an invoice for this month is edited later. It does <strong>not</strong> stop that Ledger edit from happening; re-lock afterward to fold the correction into the frozen number. Unchecking un-freezes the display (back to live, if any exists) without deleting the saved snapshot.</p>`;
 }
 
 function _bkBindClose(root) {
@@ -636,6 +655,44 @@ function _bkBindClose(root) {
             const key = btn.dataset.bkCheck;
             const mo  = _bkMonth;
             if (!_bkClose[mo]) _bkClose[mo] = {};
+
+            if (key === 'lock') {
+                if (_bkBusy) return;
+                const turningOn = !_bkClose[mo].lock;
+                _bkBusy = true;
+                btn.disabled = true;
+                try {
+                    if (turningOn) {
+                        const ok = await _bkLockMonth(mo);
+                        if (!ok) return;
+                        _bkClose[mo].lock = true;
+                        _bkClose[mo].lockedAt = _bkToday();
+                        try {
+                            const { data: { session } } = await sbClient.auth.getSession();
+                            _bkClose[mo].lockedBy = session?.user?.email ? `by ${session.user.email}` : 'by an admin';
+                        } catch { _bkClose[mo].lockedBy = 'by an admin'; }
+                    } else {
+                        delete _bkClose[mo].lock;
+                        delete _bkClose[mo].lockedAt;
+                        delete _bkClose[mo].lockedBy;
+                    }
+                    await upsertSetting(BK_CLOSE_SETTING, _bkClose);
+                    // Locking changes which source byMonth reads for this month —
+                    // reload rather than patch in place, so Overview/Room P&L/GL
+                    // Export pick up the frozen (or unfrozen) number in the same
+                    // pass the checklist does, never a stale one behind a tab.
+                    bookkeeperInvalidate();
+                    await _bkLoad();
+                    showToast(turningOn ? `${_bkMonthName(mo)} locked.` : `${_bkMonthName(mo)} unlocked.`);
+                } catch (e) {
+                    showToast('Could not change the lock: ' + (e.message || e), 'error');
+                } finally {
+                    _bkBusy = false;
+                    _bkRender();
+                }
+                return;
+            }
+
             if (_bkClose[mo][key]) delete _bkClose[mo][key];
             else _bkClose[mo][key] = true;
             _bkRender();
@@ -643,6 +700,47 @@ function _bkBindClose(root) {
             catch (e) { showToast('Could not save that checklist change: ' + (e.message || e), 'error'); }
         });
     });
+}
+
+/** Snapshot the currently-open month's live totals into billing_summary, per
+ *  room, so it becomes the permanent historical record — the same table
+ *  every historical-month fallback already reads. Returns false if the
+ *  director cancels the confirm, true otherwise (including the no-op case
+ *  where there is nothing live to freeze). */
+async function _bkLockMonth(mo) {
+    const live  = _bkData.liveByMonth?.[mo] || { tuition: 0, fees: 0, rooms: {} };
+    const total = live.tuition + live.fees;
+    const monthName = _bkMonthName(mo);
+
+    if (total <= 0) {
+        // Already historical-only (imported data, or a month before this app
+        // tracked registrations) — the existing billing_summary row already
+        // IS the frozen number. Nothing to snapshot; locking just records
+        // that the month is considered closed.
+        return confirm(`Lock ${monthName}? There's no live-computed total for this month to freeze — it already reads from a saved historical record. This just marks it closed.`);
+    }
+
+    const isOpenCalendarMonth = mo === _bkToday().slice(0, 7);
+    const warn = isOpenCalendarMonth
+        ? `\n\n⚠️ ${monthName} is still the current month and may still change — freezing it now will miss anything added after today unless you lock again.`
+        : '';
+    if (!confirm(`Lock ${monthName}? This freezes today's computed total — ${_bkMoney0(total)} — as the permanent historical record for this month, per room.\n\nThe Ledger stays fully editable. If an invoice for ${monthName} changes afterward, this frozen number will not — re-lock to bring it up to date.${warn}`)) {
+        return false;
+    }
+
+    const rooms = _bkRooms();
+    for (const room of rooms) {
+        const r = live.rooms[room.id] || { revenue: 0, childDays: 0 };
+        await upsertBillingSummary({
+            month:       `${mo}-01`,
+            room_id:     room.id,
+            half_days:   null,
+            full_days:   r.childDays,
+            net_billed:  r.revenue,
+            data_source: 'month_lock_snapshot',
+        });
+    }
+    return true;
 }
 
 // ── 5. Reconciliation ────────────────────────────────────────
@@ -888,9 +986,10 @@ function _bkGlRows() {
 function _bkGlHtml() {
     const rows = _bkGlRows();
     const cellCls = r => r.isNet ? '' : (r.amount < 0 ? 'is-neg' : 'is-pos');
+    const locked = !!_bkClose[_bkMonth]?.lock;
     return `
         <div class="bk-card-head bk-gl-head">
-            <p class="bk-lede">Category totals for ${escHtml(_bkMonthName(_bkMonth))} — hand this to the bookkeeper as-is, or export.</p>
+            <p class="bk-lede">Category totals for ${escHtml(_bkMonthName(_bkMonth))} — hand this to the bookkeeper as-is, or export.${locked ? ' <span class="bk-lock-badge" title="Reading the frozen historical total for this month, not live registrations">&#128274; Locked</span>' : ''}</p>
             <button type="button" class="bk-btn-solid" id="bkGlCsv">&#8595; Export CSV</button>
         </div>
         <div class="table-wrapper">
