@@ -1416,6 +1416,13 @@ describe('Stax payment security guards', () => {
         expect(chargeFn.includes('idempotency_id: paymentAttemptId')).toBe(true);
     });
 
+    test('normal parent Pay online button uses Stax without a test query flag', () => {
+        const portal = read('js/portal/portal-billing.js');
+        expect(portal.includes('class="pb-pay-btn pb-stax-btn"')).toBe(true);
+        expect(portal.includes('pbStaxTestEnabled')).toBe(false);
+        expect(portal.includes('with Stax (test)')).toBe(false);
+    });
+
     test('saved-card response does not expose the opaque payment method id', () => {
         const createFn = read('supabase/functions/create-stax-charge/index.ts');
         const savedCardBlock = createFn.match(/savedCard:[\s\S]*?\} : null/);
