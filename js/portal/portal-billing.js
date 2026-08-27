@@ -204,9 +204,9 @@ async function pbStartPayment(invoiceId) {
     pbPaying = invoiceId;
     pbRender();
     try {
-        const { token, formUrl } = await createPaymentSession(invoiceId);
+        const { token, formUrl, priorBalance } = await createPaymentSession(invoiceId);
         pbEnsureCommunicationHandler();
-        pbOpenPayModal();
+        pbOpenPayModal(priorBalance);
 
         const form = document.createElement('form');
         form.method = 'POST';
@@ -234,11 +234,20 @@ async function pbStartPayment(invoiceId) {
     }
 }
 
-function pbOpenPayModal() {
+function pbOpenPayModal(priorBalance) {
     const modal = pbEl('pbPayModal');
     const status = pbEl('pbPayModalStatus');
     const frame = pbEl('pbPayFrame');
+    const priorNote = pbEl('pbPayPriorBalanceNote');
     if (status) { status.hidden = false; status.textContent = 'Loading secure payment form…'; }
+    if (priorNote) {
+        if (priorBalance > 0) {
+            priorNote.textContent = `This payment includes ${pbMoney(priorBalance)} carried over from a previous month.`;
+            priorNote.hidden = false;
+        } else {
+            priorNote.hidden = true;
+        }
+    }
     if (frame) {
         frame.style.height = '';
         frame.addEventListener('load', pbHidePayModalStatusOnce, { once: true });
@@ -332,6 +341,11 @@ document.addEventListener('DOMContentLoaded', () => {
     pbEl('pbPayModalClose')?.addEventListener('click', () => pbClosePayModal(false));
     pbEl('pbStaxModalClose')?.addEventListener('click', () => pbCloseStaxModal(false));
     pbEl('pbStaxPayBtn')?.addEventListener('click', pbStaxTokenizeAndCharge);
+    pbEl('pbStaxUseSavedCardBtn')?.addEventListener('click', pbStaxChargeSavedCard);
+    pbEl('pbStaxUseNewCardBtn')?.addEventListener('click', () => {
+        pbEl('pbStaxSavedCard')?.classList.add('hidden');
+        pbEl('pbStaxCardEntry')?.classList.remove('hidden');
+    });
 });
 
 // ============================================================
@@ -413,6 +427,45 @@ function pbPopulateStaxExpYearOnce() {
  * innerHTML reset before construction) is the safe way to avoid stacking
  * stale iframes across repeated opens.
  */
+/** Renders the itemized per-child breakdown + prior-balance line the server computed. */
+function pbRenderStaxLineItems(session) {
+    const el = pbEl('pbStaxLineItems');
+    if (!el) return;
+    const items = Array.isArray(session.lineItems) ? session.lineItems : [];
+    if (!items.length && !(session.priorBalance > 0)) { el.innerHTML = ''; return; }
+    const rows = items.map(li => {
+        const dayParts = [];
+        if (li.fullDays) dayParts.push(`${li.fullDays} full day${li.fullDays === 1 ? '' : 's'}`);
+        if (li.halfDays) dayParts.push(`${li.halfDays} half day${li.halfDays === 1 ? '' : 's'}`);
+        return `<div class="pb-stax-line-item">
+            <span><span class="pb-stax-line-item-child">${pbEsc(li.childName)}</span>
+                ${dayParts.length ? `<br><span class="pb-stax-line-item-detail">${pbEsc(dayParts.join(', '))}</span>` : ''}</span>
+            <span class="pb-stax-line-item-amount">${pbMoney(li.amount)}</span>
+        </div>`;
+    }).join('');
+    const priorRow = session.priorBalance > 0 ? `<div class="pb-stax-prior-balance">
+        <span>Includes balance from a previous month</span>
+        <span>${pbMoney(session.priorBalance)}</span>
+    </div>` : '';
+    el.innerHTML = rows + priorRow;
+}
+
+/** Shows the "use card on file" offer if the family has a saved Stax card, hides card entry until they choose. */
+function pbRenderStaxSavedCard(session) {
+    const wrap = pbEl('pbStaxSavedCard');
+    const entry = pbEl('pbStaxCardEntry');
+    const label = pbEl('pbStaxSavedCardLabel');
+    if (!wrap || !entry) return;
+    if (session.savedCard) {
+        if (label) label.textContent = `${pbEsc(session.savedCard.brand || 'Card')} ending in ${pbEsc(session.savedCard.last4 || '????')}`;
+        wrap.classList.remove('hidden');
+        entry.classList.add('hidden');
+    } else {
+        wrap.classList.add('hidden');
+        entry.classList.remove('hidden');
+    }
+}
+
 function pbOpenStaxModal(session) {
     pbPopulateStaxExpYearOnce();
     const modal = pbEl('pbStaxModal');
@@ -422,12 +475,17 @@ function pbOpenStaxModal(session) {
     const amountEl = pbEl('pbStaxAmount');
     const payBtn = pbEl('pbStaxPayBtn');
     const status = pbEl('pbStaxModalStatus');
+    const saveCardEl = pbEl('pbStaxSaveCard');
     if (numberMount) numberMount.innerHTML = '';
     if (cvvMount) cvvMount.innerHTML = '';
     if (nameEl) nameEl.textContent = `${session.firstname} ${session.lastname}`.trim();
     if (amountEl) amountEl.textContent = pbMoney(session.amount);
     if (payBtn) payBtn.disabled = true;
+    if (saveCardEl) saveCardEl.checked = false;
     if (status) { status.hidden = false; status.textContent = 'Loading secure card fields…'; }
+
+    pbRenderStaxLineItems(session);
+    pbRenderStaxSavedCard(session);
 
     window.__pbStaxSession = session;
 
@@ -501,7 +559,8 @@ async function pbStaxTokenizeAndCharge() {
         const paymentMethodId = tokenizeResult && tokenizeResult.id;
         if (!paymentMethodId) throw new Error('Could not read the card. Please check the details and try again.');
 
-        const chargeResult = await chargeStaxPayment(session.invoiceId, paymentMethodId);
+        const saveCard = !!pbEl('pbStaxSaveCard')?.checked;
+        const chargeResult = await chargeStaxPayment(session.invoiceId, paymentMethodId, { saveCard });
         if (!chargeResult || chargeResult.success !== true) {
             throw new Error('Payment was not confirmed. Please try again.');
         }
@@ -513,6 +572,29 @@ async function pbStaxTokenizeAndCharge() {
             status.textContent = e.message || 'Payment failed. Please check the card details and try again.';
         }
         if (payBtn) payBtn.disabled = false;
+    }
+}
+
+/** Charges the family's saved card on file directly — no tokenization needed, this app never handles the card. */
+async function pbStaxChargeSavedCard() {
+    const session = window.__pbStaxSession;
+    const btn = pbEl('pbStaxUseSavedCardBtn');
+    const status = pbEl('pbStaxModalStatus');
+    if (!session) return;
+    if (btn) btn.disabled = true;
+    if (status) { status.hidden = false; status.textContent = 'Processing payment…'; }
+    try {
+        const chargeResult = await chargeStaxPayment(session.invoiceId, null, { useSavedCard: true });
+        if (!chargeResult || chargeResult.success !== true) {
+            throw new Error('Payment was not confirmed. Please try again.');
+        }
+        pbCloseStaxModal(true);
+    } catch (e) {
+        if (status) {
+            status.hidden = false;
+            status.textContent = e.message || 'Payment failed. Please try again or use a different card.';
+        }
+        if (btn) btn.disabled = false;
     }
 }
 

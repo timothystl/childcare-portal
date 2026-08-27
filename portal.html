@@ -358,6 +358,7 @@
         <div class="pb-pay-modal-inner">
             <button type="button" id="pbPayModalClose" class="pb-pay-modal-close" aria-label="Cancel payment">&times;</button>
             <p id="pbPayModalStatus" class="pb-pay-modal-status">Loading secure payment form…</p>
+            <p id="pbPayPriorBalanceNote" class="pb-prior-balance-note" hidden></p>
             <iframe id="pbPayFrame" name="pbPayFrame" class="pb-pay-frame" title="Secure payment"></iframe>
         </div>
     </div>
@@ -376,34 +377,50 @@
                 <p class="pb-stax-name" id="pbStaxName"></p>
                 <p id="pbStaxModalStatus" class="pb-pay-modal-status" hidden></p>
 
-                <label class="pb-stax-label" for="pbStaxCardNumber">Card number</label>
-                <div id="pbStaxCardNumber" class="pb-stax-field pb-stax-field-number"></div>
+                <div id="pbStaxLineItems" class="pb-stax-line-items"></div>
 
-                <div class="pb-stax-row">
-                    <div>
-                        <label class="pb-stax-label" for="pbStaxExpMonth">Expiration</label>
-                        <div class="pb-stax-exp-row">
-                            <select id="pbStaxExpMonth" class="pb-stax-select" aria-label="Expiration month">
-                                <option value="">MM</option>
-                                <option value="01">01</option><option value="02">02</option>
-                                <option value="03">03</option><option value="04">04</option>
-                                <option value="05">05</option><option value="06">06</option>
-                                <option value="07">07</option><option value="08">08</option>
-                                <option value="09">09</option><option value="10">10</option>
-                                <option value="11">11</option><option value="12">12</option>
-                            </select>
-                            <select id="pbStaxExpYear" class="pb-stax-select" aria-label="Expiration year"></select>
-                        </div>
-                    </div>
-                    <div>
-                        <label class="pb-stax-label" for="pbStaxCardCvv">CVV</label>
-                        <div id="pbStaxCardCvv" class="pb-stax-field pb-stax-field-cvv"></div>
-                    </div>
+                <div id="pbStaxSavedCard" class="pb-stax-saved-card hidden">
+                    <p class="pb-stax-saved-card-label">
+                        <span id="pbStaxSavedCardLabel"></span>
+                    </p>
+                    <button type="button" id="pbStaxUseSavedCardBtn" class="pb-pay-btn">Pay with this card</button>
+                    <button type="button" id="pbStaxUseNewCardBtn" class="pb-stax-link-btn">Use a different card</button>
                 </div>
 
-                <button type="button" id="pbStaxPayBtn" class="pb-pay-btn" disabled>Pay</button>
-                <p class="pb-stax-fine">Card details are entered directly into Stax's own secure
-                   fields above — this app never sees or stores your card number.</p>
+                <div id="pbStaxCardEntry">
+                    <label class="pb-stax-label" for="pbStaxCardNumber">Card number</label>
+                    <div id="pbStaxCardNumber" class="pb-stax-field pb-stax-field-number"></div>
+
+                    <div class="pb-stax-row">
+                        <div>
+                            <label class="pb-stax-label" for="pbStaxExpMonth">Expiration</label>
+                            <div class="pb-stax-exp-row">
+                                <select id="pbStaxExpMonth" class="pb-stax-select" aria-label="Expiration month">
+                                    <option value="">MM</option>
+                                    <option value="01">01</option><option value="02">02</option>
+                                    <option value="03">03</option><option value="04">04</option>
+                                    <option value="05">05</option><option value="06">06</option>
+                                    <option value="07">07</option><option value="08">08</option>
+                                    <option value="09">09</option><option value="10">10</option>
+                                    <option value="11">11</option><option value="12">12</option>
+                                </select>
+                                <select id="pbStaxExpYear" class="pb-stax-select" aria-label="Expiration year"></select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="pb-stax-label" for="pbStaxCardCvv">CVV</label>
+                            <div id="pbStaxCardCvv" class="pb-stax-field pb-stax-field-cvv"></div>
+                        </div>
+                    </div>
+
+                    <label class="pb-stax-save-card-label">
+                        <input type="checkbox" id="pbStaxSaveCard"> Save this card for next time
+                    </label>
+
+                    <button type="button" id="pbStaxPayBtn" class="pb-pay-btn" disabled>Pay</button>
+                    <p class="pb-stax-fine">Card details are entered directly into Stax's own secure
+                       fields above — this app never sees or stores your card number.</p>
+                </div>
             </div>
         </div>
     </div>
