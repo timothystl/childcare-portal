@@ -89,6 +89,26 @@ function _fhBindHeaderOnce() {
         btn.addEventListener('click', () => _fhSwitchTab(btn.dataset.fhTab));
     });
     _fhEl('fhPrintCloseBtn')?.addEventListener('click', _fhClosePrintOverlay);
+    _fhEl('fhPrintNowBtn')?.addEventListener('click', () => window.print());
+
+    // Billing Report row clicks switch to the Ledger tab AND open that
+    // family's drawer in the same action (implementation spec §5) — a
+    // delegated listener so admin-billing-report.js's own render functions
+    // never need to know Finance Hub exists.
+    _fhEl('billingReportSection')?.addEventListener('click', async e => {
+        const tr = e.target.closest('[data-br-email]');
+        if (!tr) return;
+        const email = (tr.dataset.brEmail || '').toLowerCase();
+        if (!email) return;
+        const fam = (allFamiliesData || []).find(f =>
+            (f.parent_email  || '').toLowerCase() === email ||
+            (f.parent2_email || '').toLowerCase() === email);
+        if (!fam) return;
+        const brMonthVal = _fhEl('brMonth')?.value;
+        if (brMonthVal && brMonthVal !== _fhMonth) { _fhMonth = brMonthVal; await _fhLoad(); }
+        _fhSwitchTab('ledger');
+        _fhOpenDrawer(fam.id);
+    });
 }
 
 function _fhGoToMonth(month) {
@@ -116,6 +136,28 @@ function _fhSwitchTab(tab) {
     }
 }
 
+/** getOrCreateBillingCycle(), tolerant of one specific transient failure:
+ *  if the read half of that read-then-insert momentarily can't see an
+ *  already-existing row (a session/token hiccup right as the RLS-gated
+ *  SELECT runs), it wrongly concludes the cycle doesn't exist and tries to
+ *  INSERT one — which then fails loudly on the same RLS check, as
+ *  "new row violates row-level security policy for table billing_cycles"
+ *  even though the row was there the whole time. A plain re-read a moment
+ *  later almost always finds it, since the hiccup was momentary, not a real
+ *  permission problem (admin_role() is otherwise unchanged for this admin). */
+async function _fhGetOrCreateCycleResilient(month) {
+    try {
+        return await getOrCreateBillingCycle(month);
+    } catch (err) {
+        const msg = String(err?.message || '');
+        if (!/row-level security/i.test(msg)) throw err;
+        await new Promise(r => setTimeout(r, 400));
+        const retried = await fetchBillingCycle(month);
+        if (retried) return retried;
+        throw err;
+    }
+}
+
 // ── Load ─────────────────────────────────────────────────────
 async function _fhLoad() {
     const label = _fhEl('fhMonthLabel');
@@ -134,7 +176,7 @@ async function _fhLoad() {
         const isCurrent = _fhIsCurrentMonth(_fhMonth);
 
         const be     = await computeBillMonthExceptions(_fhMonth);
-        const cycle  = await getOrCreateBillingCycle(_fhMonth);
+        const cycle  = await _fhGetOrCreateCycleResilient(_fhMonth);
         const invAll = cycle ? await fetchInvoicesForCycle(cycle.id) : [];
         const invoices = invAll.filter(i => (i.invoice_type || 'original') === 'original');
         const payments = await fetchPaymentsForMonth(_fhMonth);
@@ -184,10 +226,22 @@ async function _fhLoadOwedAcrossMonths(month, priorCount) {
     const byFamily = new Map();
     for (const mk of months) {
         try {
-            const cycle = await getOrCreateBillingCycle(mk);
+            // Read-only — a month that was never billed has no cycle row,
+            // and that means "nothing happened," not something to create.
+            // getOrCreateBillingCycle() is for the one month _fhLoad() is
+            // actually editing; this trailing-months pass only ever reads.
+            const cycle = await fetchBillingCycle(mk);
             const invAll = cycle ? await fetchInvoicesForCycle(cycle.id) : [];
             const invoices = invAll.filter(i => (i.invoice_type || 'original') === 'original' && i.status !== 'void');
             const payments = await fetchPaymentsForMonth(mk);
+            const paymentsByFamily = new Map();
+            payments.forEach(p => {
+                const key = String(p.family_id);
+                const prev = paymentsByFamily.get(key) || [];
+                prev.push(p);
+                paymentsByFamily.set(key, prev);
+            });
+
             const rows = _buildArRows(mk, allFamiliesData, invoices, payments);
             rows.forEach(r => {
                 if (!r.familyId) return;
@@ -195,7 +249,14 @@ async function _fhLoadOwedAcrossMonths(month, priorCount) {
                 const prev = byFamily.get(key) || { outstanding: 0, months: [] };
                 prev.outstanding += r.outstanding;
                 if (r.billed > 0 || r.collected > 0) {
-                    prev.months.push({ month: mk, billed: r.billed, collected: r.collected, sentAt: r.sentAt, invoiceId: r.invoiceId });
+                    const famPayments = paymentsByFamily.get(key) || [];
+                    const lastPaymentDate = famPayments.length
+                        ? famPayments.map(p => p.payment_date).sort().slice(-1)[0]
+                        : null;
+                    prev.months.push({
+                        month: mk, billed: r.billed, collected: r.collected,
+                        sentAt: r.sentAt, invoiceId: r.invoiceId, lastPaymentDate,
+                    });
                 }
                 byFamily.set(key, prev);
             });
@@ -282,9 +343,6 @@ function _fhRenderLedger() {
 
     const owingRows = active.filter(r => r.owed > 0);
     const owedTotal = owingRows.reduce((s, r) => s + r.owed, 0);
-    const monthsSpan = _fhOwed.months.length > 1
-        ? `${_fhMonthLabel(_fhOwed.months[_fhOwed.months.length - 1])}–${_fhMonthLabel(_fhOwed.months[0])}`
-        : _fhMonthLabel(_fhMonth);
 
     const counts = _fhFilterCounts();
     const rows = _fhVisibleRows();
@@ -312,21 +370,22 @@ function _fhRenderLedger() {
                 <div class="fh-stat-label">Ready to send · ${_fhMoney(draftedTotal)}</div>
             </div>
             <span class="fh-arrow">→</span>
-            <div class="fh-stat is-clickable" data-fh-filter="sent">
+            <div class="fh-stat fh-stat-muted is-clickable" data-fh-filter="sent">
                 <div class="fh-stat-num">${sent.length}</div>
                 <div class="fh-stat-label">Issued</div>
             </div>
-            <button type="button" class="btn-primary" id="fhReleaseBtn" ${drafted.length ? '' : 'disabled'}>Release ${drafted.length} invoice${drafted.length === 1 ? '' : 's'}</button>
+            <div class="fh-strip-spacer"></div>
+            <button type="button" class="fh-release-btn" id="fhReleaseBtn" title="Recomputes and emails every invoice above, then marks each Issued." ${drafted.length ? '' : 'disabled'}>Release ${drafted.length} invoice${drafted.length === 1 ? '' : 's'}</button>
         </div>
 
         <div class="fh-owed-banner">
             <div class="fh-owed-main">
-                <strong>${_fhMoney(owedTotal)} owed</strong> · ${owingRows.length} famil${owingRows.length === 1 ? 'y' : 'ies'}
-                <div class="fh-owed-sub">Across ${monthsSpan}, not just ${_fhMonthLabel(_fhMonth)} · computed live from the rows below</div>
+                <strong>${_fhMoney(owedTotal)} owed</strong> · <span class="fh-owed-famcount">${owingRows.length} famil${owingRows.length === 1 ? 'y' : 'ies'}</span>
+                <div class="fh-owed-sub">across every open month, not just ${_fhMonthLabel(_fhMonth)} · computed live from the rows below</div>
             </div>
             <div class="fh-owed-actions">
-                <button type="button" class="btn-primary" id="fhNudgeAllBtn" ${owingRows.length ? '' : 'disabled'}>Nudge all ${owingRows.length}</button>
-                <button type="button" class="btn-secondary" id="fhAgingToggleBtn">${_fhShowAging ? 'Hide' : 'Open'} aging detail →</button>
+                <button type="button" class="fh-owed-btn-primary" id="fhNudgeAllBtn" ${owingRows.length ? '' : 'disabled'}>Nudge all ${owingRows.length}</button>
+                <button type="button" class="fh-owed-btn-outline" id="fhAgingToggleBtn">${_fhShowAging ? 'Hide aging detail' : 'Open aging detail →'}</button>
             </div>
         </div>
         ${_fhShowAging ? _fhAgingHtml(owingRows) : ''}
@@ -341,17 +400,27 @@ function _fhRenderLedger() {
         <div class="table-wrapper">
             <table class="report-table fh-table">
                 <thead><tr>
-                    <th>Family</th><th>${_fhMonthLabel(_fhMonth).split(' ')[0]} charge</th>
+                    <th>Family</th><th class="fh-money-col">${_fhMonthLabel(_fhMonth).split(' ')[0]}</th>
+                    <th class="fh-money-col">Paid this month</th>
                     <th>Status</th><th>Note</th>
-                    <th style="text-align:right">Balance, all months</th><th></th>
+                    <th class="fh-money-col">Balance, all months</th><th></th>
                 </tr></thead>
                 <tbody>
-                    ${rows.length ? rows.map(_fhRowHtml).join('') : `<tr><td colspan="6"><p class="empty-hint">No families match.</p></td></tr>`}
+                    ${rows.length ? rows.map(_fhRowHtml).join('') : `<tr><td colspan="7"><p class="empty-hint">No families match.</p></td></tr>`}
                 </tbody>
             </table>
-        </div>`;
+        </div>
+        <p class="ap-note fh-footer-note">${_fhBillingReportLinkNote()}</p>`;
 
     _fhBindLedgerListeners(root);
+}
+
+/** "Billing Report is the only other screen — read-only, for the binder or
+ *  export. This ledger is the only place balances change." — always visible
+ *  per the implementation spec, with "Billing Report" as a live link into
+ *  that tab (not just prose), on both the Ledger and the month-history view. */
+function _fhBillingReportLinkNote() {
+    return `<button type="button" class="fh-link-btn" data-fh-tab="report">Billing Report</button> is the only other screen — read-only, for the binder or export. This ledger is the only place balances change.`;
 }
 
 function _fhAgingHtml(owingRows) {
@@ -395,17 +464,20 @@ function _fhRowHtml(row) {
     // buttons a given row happens to have, which is what actually made the
     // column look misaligned rather than any one row being wrong.
     const sendSlot = row.status === 'drafted'
-        ? `<button type="button" class="btn-xs btn-primary" data-fh-send="${row.familyId}">Send invoice</button>` : '';
+        ? `<button type="button" class="fh-send-btn" data-fh-send="${row.familyId}">Send invoice</button>` : '';
     const remindSlot = row.owed > 0
         ? `<button type="button" class="btn-xs" data-fh-remind="${row.familyId}">${dispStatus === 'card_declined' ? 'Retry charge' : 'Remind'}</button>` : '';
     const actions = `<span class="fh-action-slot">${sendSlot}</span><span class="fh-action-slot">${remindSlot}</span>`;
 
+    const paidThisMonth = row.ar?.collected || 0;
+
     return `<tr data-fh-row="${row.familyId}">
         <td class="fh-row-open" data-fh-open="${row.familyId}"><strong>${escHtml(row.name)}</strong></td>
-        <td>${_fhMoney(row.total)}</td>
+        <td class="fh-money-col">${_fhMoney(row.total)}</td>
+        <td class="fh-money-col ${paidThisMonth > 0 ? 'fh-bal-clear' : ''}">${paidThisMonth > 0 ? _fhMoney(paidThisMonth) : '—'}</td>
         <td><span class="fh-pill ${meta.cls}">${escHtml(pillLabel)}</span></td>
         <td class="fh-note">${_fhNoteFor(row)}</td>
-        <td style="text-align:right" class="${balCls}">${_fhMoney(row.owed)}</td>
+        <td class="fh-money-col ${balCls}">${_fhMoney(row.owed)}</td>
         <td class="fh-row-actions" onclick="event.stopPropagation()">${actions}</td>
     </tr>`;
 }
@@ -426,6 +498,9 @@ function _fhBindLedgerListeners(root) {
     _fhEl('fhReleaseBtn')?.addEventListener('click', _fhReleaseDrafts);
     _fhEl('fhNudgeAllBtn')?.addEventListener('click', _fhNudgeAll);
     _fhEl('fhAgingToggleBtn')?.addEventListener('click', () => { _fhShowAging = !_fhShowAging; _fhRenderLedger(); });
+    root.querySelectorAll('[data-fh-tab]').forEach(el => {
+        el.addEventListener('click', () => _fhSwitchTab(el.dataset.fhTab));
+    });
 }
 
 // ── Month history (read-only) ───────────────────────────────
@@ -452,10 +527,13 @@ function _fhRenderMonthHistory() {
                 </tbody>
             </table>
         </div>
-        <p class="ap-note fh-history-foot">Billing Report is the only other screen — read-only, for the binder or export. This ledger is the only place balances change.</p>`;
+        <p class="ap-note fh-footer-note fh-history-foot">${_fhBillingReportLinkNote()}</p>`;
 
     root.querySelectorAll('[data-fh-open]').forEach(el => {
         el.addEventListener('click', () => _fhOpenDrawer(el.dataset.fhOpen));
+    });
+    root.querySelectorAll('[data-fh-tab]').forEach(el => {
+        el.addEventListener('click', () => _fhSwitchTab(el.dataset.fhTab));
     });
 }
 
@@ -607,10 +685,10 @@ async function _fhLoadDrawerBody(row) {
 
         <div class="fh-dr-actions">
             ${row.status !== 'sent' ? `
-                <button type="button" class="btn-outline" id="fhAddFeeBtn">+ Add a fee</button>
-                <button type="button" class="btn-outline fh-btn-green" id="fhAddCreditBtn">+ Add a credit</button>` : ''}
-            ${row.status === 'drafted' ? `<button type="button" class="btn-primary" id="fhDrSendBtn">Send invoice</button>` : ''}
-            <button type="button" class="btn-secondary" id="fhPrintStatementBtn">Print statement</button>
+                <button type="button" class="fh-dr-action-btn fh-dr-action-fee" id="fhAddFeeBtn">+ Add a fee</button>
+                <button type="button" class="fh-dr-action-btn fh-dr-action-credit" id="fhAddCreditBtn">+ Add a credit</button>` : ''}
+            ${row.status === 'drafted' ? `<button type="button" class="fh-dr-action-btn fh-dr-action-send" id="fhDrSendBtn">Send invoice</button>` : ''}
+            <button type="button" class="fh-dr-action-btn fh-dr-action-print" id="fhPrintStatementBtn">Print statement</button>
         </div>
         <div id="fhInlineForm"></div>
         <div class="fh-dr-row">
@@ -620,9 +698,9 @@ async function _fhLoadDrawerBody(row) {
 
         <div class="inc-dr-field">
             <div class="fh-dr-card-title">Balance by month</div>
-            ${(row.owedMonths.length ? row.owedMonths : [{ month: _fhMonth, billed: row.total, collected: 0, sentAt: null }]).map(m => `
+            ${(row.owedMonths.length ? row.owedMonths : [{ month: _fhMonth, billed: row.total, collected: 0, sentAt: null, lastPaymentDate: null }]).map(m => `
                 <div class="fh-dr-line">
-                    <span>${escHtml(_fhMonthLabel(m.month))} · charged ${_fhMoney(m.billed)}${m.sentAt ? ` (${escHtml(friendlyShort(String(m.sentAt).slice(0, 10)))})` : ''} · paid ${_fhMoney(m.collected)}</span>
+                    <span>${escHtml(_fhMonthLabel(m.month))} · charged ${_fhMoney(m.billed)}${m.sentAt ? ` (${escHtml(friendlyShort(String(m.sentAt).slice(0, 10)))})` : ''} · paid ${_fhMoney(m.collected)}${m.lastPaymentDate ? ` (${escHtml(friendlyShort(String(m.lastPaymentDate).slice(0, 10)))})` : ''}</span>
                     <strong class="${(m.billed - m.collected) > 0 ? 'fh-bal-owed' : 'fh-bal-clear'}">${_fhMoney(Math.max(0, m.billed - m.collected))}</strong>
                 </div>`).join('')}
         </div>
@@ -634,14 +712,14 @@ async function _fhLoadDrawerBody(row) {
             </div>
             ${familyPayments.length ? `<ul class="inc-sig-list">${familyPayments.map(p => `
                 <li class="inc-sig">
-                    <span>${escHtml(friendlyShort(String(p.payment_date || '').slice(0, 10)))} — ${_fhMoney(p.amount)}</span>
-                    <span class="fh-pay-method">${p.payment_method === 'autopay' || p.source === 'processor' ? 'Autopay' : `Manual${p.payment_method ? ' · ' + escHtml(p.payment_method) : ''}`}</span>
+                    <span>${escHtml(friendlyShort(String(p.payment_date || '').slice(0, 10)))} · ${p.payment_method === 'autopay' || p.source === 'processor' ? 'Autopay' : `Manual${p.payment_method ? ' · ' + escHtml(p.payment_method) : ''}`}</span>
+                    <span class="fh-pay-amt">${_fhMoney(p.amount)} → ${escHtml(_fhMonthLabel(_fhMonthForInvoice(row, p.invoice_id)))}</span>
                 </li>`).join('')}</ul>` : '<p class="empty-hint">No payments recorded yet.</p>'}
         </div>
 
         <div class="inc-dr-foot">
-            <button type="button" class="btn-secondary" id="fhDrawerCloseFoot">Save</button>
-            <button type="button" class="fh-remind-btn" id="fhDrawerRemindBtn">Send payment reminder</button>
+            <button type="button" class="fh-dr-save-btn" id="fhDrawerCloseFoot">Save</button>
+            <button type="button" class="fh-dr-remind-btn" id="fhDrawerRemindBtn">Send payment reminder</button>
         </div>`;
 
     _fhEl('fhAddFeeBtn')?.addEventListener('click', () => _fhShowLineItemForm(row, 'fee'));
@@ -653,6 +731,20 @@ async function _fhLoadDrawerBody(row) {
     _fhEl('fhRecordPaymentBtn')?.addEventListener('click', () => _fhShowPaymentForm(row));
     _fhEl('fhDrawerCloseFoot')?.addEventListener('click', _fhCloseDrawer);
     _fhEl('fhDrawerRemindBtn')?.addEventListener('click', () => _fhRemindOne(row.familyId, _fhEl('fhDrawerRemindBtn')));
+}
+
+/** Which open month a payment belongs to, from the invoice it was recorded
+ *  against — payments carry an invoice_id, not a month, so this resolves it
+ *  from the trailing-months lookup already built for the drawer. Falls back
+ *  to the current month for a payment outside that window (rare — mostly
+ *  matters for the display label, never for the underlying record). */
+function _fhMonthForInvoice(row, invoiceId) {
+    if (invoiceId != null) {
+        const hit = row.owedMonths.find(m => String(m.invoiceId) === String(invoiceId));
+        if (hit) return hit.month;
+        if (row.ar?.invoiceId != null && String(row.ar.invoiceId) === String(invoiceId)) return _fhMonth;
+    }
+    return _fhMonth;
 }
 
 /** Best-effort read of who/when for a manual fee, credit, or override on this
@@ -684,14 +776,14 @@ async function _fhFetchInvoiceAudit(invoiceId) {
 function _fhShowLineItemForm(row, kind) {
     const host = _fhEl('fhInlineForm');
     if (!host) return;
-    const verb = kind === 'fee' ? 'fee' : 'credit';
     host.innerHTML = `
-        <div class="fh-mini-form">
-            <label>Label <input type="text" id="fhLineLabel" placeholder="${kind === 'fee' ? 'e.g. Late pickup fee' : 'e.g. Closure credit'}"></label>
-            <label>Amount <input type="number" id="fhLineAmount" min="0.01" step="0.01" placeholder="0.00"></label>
+        <div class="fh-mini-form fh-mini-form-fee">
+            <div class="fh-mini-form-title">${kind === 'fee' ? 'New fee' : 'New credit'}</div>
+            <input type="text" id="fhLineLabel" placeholder="${kind === 'fee' ? 'e.g. Late pickup fee' : 'e.g. Sibling credit'}">
+            <input type="number" id="fhLineAmount" min="0.01" step="0.01" placeholder="Amount">
             <div class="fh-mini-form-btns">
-                <button type="button" class="btn-primary btn-sm" id="fhLineAdd">Add ${verb}</button>
-                <button type="button" class="btn-ghost btn-sm" id="fhLineCancel">Cancel</button>
+                <button type="button" class="fh-mini-confirm fh-mini-confirm-fee" id="fhLineAdd">Add</button>
+                <button type="button" class="fh-mini-cancel" id="fhLineCancel">Cancel</button>
             </div>
         </div>`;
     _fhEl('fhLineCancel').addEventListener('click', () => { host.innerHTML = ''; });
@@ -713,7 +805,7 @@ async function _fhSubmitLineItem(row, kind) {
         if (_fhDrawerRow) await _fhRenderDrawer(); else _fhCloseDrawer();
     } catch (err) {
         alert('Could not add that: ' + (err.message || err));
-        if (btn) { btn.disabled = false; btn.textContent = kind === 'fee' ? 'Add fee' : 'Add credit'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Add'; }
     }
 }
 
@@ -747,11 +839,12 @@ function _fhShowOverrideForm(row) {
     if (!host) return;
     host.innerHTML = `
         <div class="fh-mini-form fh-mini-form-caution">
-            <label>New total <input type="number" id="fhOvAmount" min="0" step="0.01" placeholder="0.00" value="${row.total.toFixed(2)}"></label>
-            <label>Reason <span class="fh-required">(required)</span> <input type="text" id="fhOvReason" placeholder="Why the total is different from what registrations compute"></label>
+            <div class="fh-mini-form-title">Override total for ${escHtml(_fhMonthLabel(_fhMonth))}</div>
+            <input type="number" id="fhOvAmount" min="0" step="0.01" placeholder="New total" value="${row.total.toFixed(2)}">
+            <input type="text" id="fhOvReason" placeholder="Reason (required — shows on the statement)">
             <div class="fh-mini-form-btns">
-                <button type="button" class="btn-primary btn-sm" id="fhOvSave">Save override</button>
-                <button type="button" class="btn-ghost btn-sm" id="fhOvCancel">Cancel</button>
+                <button type="button" class="fh-mini-confirm fh-mini-confirm-override" id="fhOvSave">Override</button>
+                <button type="button" class="fh-mini-cancel" id="fhOvCancel">Cancel</button>
             </div>
         </div>`;
     _fhEl('fhOvCancel').addEventListener('click', () => { host.innerHTML = ''; });
@@ -775,7 +868,7 @@ async function _fhSubmitOverride(row) {
         if (_fhDrawerRow) await _fhRenderDrawer(); else _fhCloseDrawer();
     } catch (err) {
         alert('Could not save that override: ' + (err.message || err));
-        if (btn) { btn.disabled = false; btn.textContent = 'Save override'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Override'; }
     }
 }
 
@@ -795,21 +888,25 @@ async function _fhApproveAsIs(row) {
 function _fhShowPaymentForm(row) {
     const host = _fhEl('fhInlineForm');
     if (!host) return;
-    const monthOptions = (row.owedMonths.length ? row.owedMonths.map(m => m.month) : [_fhMonth]);
-    if (!monthOptions.includes(_fhMonth)) monthOptions.unshift(_fhMonth);
+
+    // Sort every open month oldest-first and default to the earliest one
+    // that still has a balance — never default to "today's month" (spec §5:
+    // "a payment's month is chosen explicitly... defaulted to the family's
+    // first open month, not necessarily the current month").
+    const months = (row.owedMonths.length ? [...row.owedMonths] : [{ month: _fhMonth, billed: row.total, collected: 0 }]);
+    if (!months.some(m => m.month === _fhMonth)) months.push({ month: _fhMonth, billed: row.total, collected: 0 });
+    months.sort((a, b) => a.month.localeCompare(b.month));
+    const firstOpen = months.find(m => (m.billed - m.collected) > 0) || months[0];
+
     host.innerHTML = `
-        <div class="fh-mini-form">
-            <label>Amount <input type="number" id="fhPayAmount" min="0.01" step="0.01" placeholder="0.00"></label>
-            <label>Date <input type="date" id="fhPayDate" value="${new Date().toISOString().slice(0, 10)}"></label>
-            <label>Apply to
-                <select id="fhPayMonth">${monthOptions.map(m => `<option value="${m}">${_fhMonthLabel(m)}</option>`).join('')}</select>
-            </label>
-            <label>Method
-                <select id="fhPayMethod"><option value="check">Check</option><option value="cash">Cash</option><option value="other">Other</option></select>
-            </label>
+        <div class="fh-mini-form fh-mini-form-pay">
+            <input type="number" id="fhPayAmount" min="0.01" step="0.01" placeholder="Amount">
+            <input type="date" id="fhPayDate" value="${new Date().toISOString().slice(0, 10)}">
+            <select id="fhPayMonth">${months.map(m => `<option value="${m.month}"${m.month === firstOpen.month ? ' selected' : ''}>Apply to ${_fhMonthLabel(m.month)}</option>`).join('')}</select>
+            <select id="fhPayMethod"><option value="check">Check</option><option value="cash">Cash</option><option value="other">Other</option></select>
             <div class="fh-mini-form-btns">
-                <button type="button" class="btn-primary btn-sm" id="fhPaySave">Record payment</button>
-                <button type="button" class="btn-ghost btn-sm" id="fhPayCancel">Cancel</button>
+                <button type="button" class="fh-mini-confirm fh-mini-confirm-pay" id="fhPaySave">Record</button>
+                <button type="button" class="fh-mini-cancel" id="fhPayCancel">Cancel</button>
             </div>
         </div>`;
     _fhEl('fhPayCancel').addEventListener('click', () => { host.innerHTML = ''; });
@@ -842,7 +939,7 @@ async function _fhSubmitPayment(row) {
         if (_fhDrawerRow) await _fhRenderDrawer(); else _fhCloseDrawer();
     } catch (err) {
         alert('Could not save that payment: ' + (err.message || err));
-        if (btn) { btn.disabled = false; btn.textContent = 'Record payment'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Record'; }
     }
 }
 
@@ -851,23 +948,26 @@ function _fhPrintStatement(row, payments) {
     const scrim = _fhEl('fhPrintScrim');
     const sheet = _fhEl('fhPrintSheet');
     if (!scrim || !sheet) return;
-    const monthsHtml = (row.owedMonths.length ? row.owedMonths : [{ month: _fhMonth, billed: row.total, collected: 0 }])
-        .map(m => `<tr><td>${escHtml(_fhMonthLabel(m.month))}</td><td style="text-align:right">${_fhMoney(m.billed)}</td><td style="text-align:right">${_fhMoney(m.collected)}</td><td style="text-align:right">${_fhMoney(Math.max(0, m.billed - m.collected))}</td></tr>`)
+    const monthLabel = _fhMonthLabel(_fhMonth);
+    const monthWord  = monthLabel.split(' ')[0];
+    const thisMonth = row.owedMonths.find(m => m.month === _fhMonth) || { billed: row.total, collected: 0 };
+
+    const chargeRows = (row.owedMonths.length ? row.owedMonths : [{ month: _fhMonth, billed: row.total }])
+        .map(m => `<tr><td>${escHtml(_fhMonthLabel(m.month))} charge</td><td style="text-align:right">${_fhMoney(m.billed)}</td></tr>`)
         .join('');
     const paymentsHtml = (payments || []).map(p =>
-        `<tr><td>${escHtml(friendlyShort(String(p.payment_date || '').slice(0, 10)))}</td><td>${escHtml(p.payment_method || '')}</td><td style="text-align:right">${_fhMoney(p.amount)}</td></tr>`
-    ).join('') || '<tr><td colspan="3">No payments recorded.</td></tr>';
+        `<tr><td>${escHtml(friendlyShort(String(p.payment_date || '').slice(0, 10)))} — ${escHtml(p.payment_method || 'payment')}</td><td style="text-align:right">${_fhMoney(p.amount)}</td></tr>`
+    ).join('') || '<tr><td>No payments recorded.</td><td></td></tr>';
 
     sheet.innerHTML = `
-        <h1>${escHtml(row.name)}</h1>
-        <p>Statement generated ${escHtml(friendlyShort(new Date().toISOString().slice(0, 10)))}</p>
-        <h2>Balance by month</h2>
-        <table><thead><tr><th>Month</th><th>Charged</th><th>Paid</th><th>Balance</th></tr></thead><tbody>${monthsHtml}</tbody></table>
+        <h1>${escHtml(row.name)} — ${escHtml(monthLabel)} statement</h1>
+        <table><thead><tr><th>Charge</th><th>Amount</th></tr></thead><tbody>${chargeRows}
+            <tr><td><strong>Total, ${escHtml(monthWord)}</strong></td><td style="text-align:right"><strong>${_fhMoney(thisMonth.billed)}</strong></td></tr>
+        </tbody></table>
         <h2>Payments</h2>
-        <table><thead><tr><th>Date</th><th>Method</th><th>Amount</th></tr></thead><tbody>${paymentsHtml}</tbody></table>
-        <h2>Total balance due: ${_fhMoney(row.owed)}</h2>`;
+        <table><thead><tr><th>Payments</th><th></th></tr></thead><tbody>${paymentsHtml}</tbody></table>
+        <p class="fh-print-balance">Balance, all open months: ${_fhMoney(row.owed)}</p>`;
     scrim.style.display = 'flex';
-    setTimeout(() => window.print(), 300);
 }
 
 function _fhClosePrintOverlay() {

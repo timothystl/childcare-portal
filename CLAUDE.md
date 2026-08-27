@@ -1690,6 +1690,187 @@ Set as Cloudflare Pages environment variables and Supabase Edge Function secrets
   `scripts/generate-vapid-keys.js`; the public key is also pasted into
   `js/push-notifications.js` and `js/staff/staff-push.js`.
 - `FINANCE_API_KEY` — shared secret for the `finance-summary` edge function (see below); same value must be set as `DAYCARE_API_KEY` on the ChMS side
+- `STAX_API_KEY` / `STAX_ENVIRONMENT` — Stax (fattmerchant) Core API bearer key, server-side only, never sent to the browser — see below
+- `STAX_WEB_PAYMENTS_TOKEN` — the SEPARATE client-safe token Stax.js/Bolt needs in the browser (Stax dashboard → Settings → Web Payments); NOT the same value as `STAX_API_KEY`, see below
+- `STAX_WEBHOOK_SECRET` — placeholder shared secret for `stax-webhook`; **not** Stax's real signature scheme, see below
+
+---
+
+## Stax payment processor — embedded checkout built, awaiting a real browser test (2026-08-26)
+
+The center is evaluating Stax alongside the already-live Authorize.net integration
+(`create-payment-session` / `authorizenet-webhook` / `admin-refund-payment` /
+`reconcile-anet-payments`) — **both stay in place; this is not a replacement.**
+Nothing about the Anet flow changed in this session.
+
+**Was blocked on Stax's side, now cleared.** Earlier the same day, `GET /merchant/{id}`
+for the sandbox merchant (`15904290-f3c8-4c6d-8d4d-fd2a953ce869`) returned
+`gateways: []`, `gateway_type: null`, `vendor_keys: null`, `activated_at: null` and
+`POST /payment-method` failed every time with `{"errors":{"vaultLookup":["Failed to
+determine vault vendor for merchant account"]}}`. Support was emailed; their
+activations team attached a test gateway the same day. Re-checked live:
+`gateway_type` is now `"TEST"` and `gateways` is non-empty.
+
+**Full server-side flow verified against the real sandbox, end to end:**
+`POST /customer` → `POST /payment-method` (vaulted the documented test Visa
+`4111 1111 1111 1111` against that customer, no more `vaultLookup` error) →
+`POST /charge` (`{payment_method_id, customer_id, total, pre_auth, meta}`) → got back
+`{"success": true, "id": "...", "status": "SUCCESS", ...}`. That is exactly the request
+shape `charge-stax-payment` sends and the response fields it reads — **no code changes
+were needed**, the scaffolding written blind against the API reference turned out
+correct.
+
+**Scaffolding is in place** (`create-stax-charge`, `charge-stax-payment`,
+`stax-webhook` in `supabase/functions/`, plus `add_stax_payment_tracking.sql` adding
+`families.stax_customer_id`). It mirrors the Authorize.net posture exactly — request
+body carries only an invoice id, the amount charged is always recomputed server-side
+from `billing_invoices`/`billing_payments`, ownership is checked via
+`parent_family_ids()`, and raw card data is meant to never reach this server (Stax.js/
+Bolt tokenizes client-side into a `payment_method` id, same PCI-SAQ-A goal as Accept
+Hosted). `billing_payments.processor`/`processor_transaction_id` are already
+processor-agnostic (added for Anet), so Stax payments just use `processor = 'stax'` —
+no new payment-table columns needed.
+
+### Embedded checkout — built this session, not yet run in a real browser
+
+`portal-billing.js` now has a second payment flow (`pbStartStaxPayment` onward) that
+embeds Stax.js/Bolt directly, instead of a hosted-page redirect: the card-number and
+CVV fields are Stax's own tiny iframes, mounted into `#pbStaxCardNumber` /
+`#pbStaxCardCvv` — divs **this app owns**, inside a modal (`#pbStaxModal` in
+`portal.html`) styled with the portal's own design tokens. Everything except those two
+fields — the layout, the amount shown, the Pay button, the receipt email that follows —
+is this app's own, not Stax's. That is the actual point of comparing the two: not just
+"does Stax work" but "do we get more control over how it looks and what the receipt
+says" — Authorize.net's Accept Hosted page is Anet's own document inside an iframe we
+don't control the inside of; Stax.js is the opposite shape.
+
+- **Hidden from every real family by default.** `pbStaxTestEnabled()` only turns the
+  second "Pay … with Stax (test)" button on when `?staxtest=1` was on the URL this tab
+  loaded with (then sticks in `sessionStorage` for the tab). No admin role, no settings
+  row — a normal parent visiting `portal.html` never sees it. This is deliberate: the
+  auto-merge workflow (`.github/workflows/auto-merge-claude.yml`) puts every push to a
+  `claude/**` branch straight into production, so a payment-flow comparison built for
+  internal evaluation must not be reachable by a real family who has no reason to be
+  asked "which processor?" A person running the evaluation adds `?staxtest=1` once on
+  their own account/invoice.
+- **A real bug was caught and fixed while building this.** The `create-stax-charge`
+  scaffolding from earlier returned `staxPublicKey: apiKey` — literally the server-side
+  `STAX_API_KEY` bearer key — to the browser. Stax's own docs confirm the browser needs
+  a *separate* client-safe token ("Website Payments Token", from the Stax dashboard,
+  Settings → Web Payments) for Stax.js, distinct from the Core API bearer key. Fixed:
+  the function now reads a new secret, `STAX_WEB_PAYMENTS_TOKEN`, and returns that
+  instead. Never reintroduce the old shape.
+- **Receipts now match Anet's, on purpose.** `charge-stax-payment` sends the identical
+  branded HTML receipt `authorizenet-webhook` sends (same Resend secrets, same
+  template) — a family paying by Stax should see the same-looking receipt as one paying
+  by Authorize.net, not a Stax-branded one. Fires only on a genuinely new charge record
+  (never the idempotent-duplicate retry path), same rule as the Anet one.
+- **Card-field mount config, expiration handling, and the `.tokenize()` call are all
+  written from Stax's own documented code samples**
+  (`docs.staxpayments.com/docs/accepting-credit-card-payments-on-your-website`,
+  `/docs/tokenizing-a-credit-card`) — number/CVV are mounted iframes, expiration
+  month/year travel as plain (non-tokenized) fields in the `.tokenize()` call, per
+  Stax's own sample. **None of this has run in an actual browser.** This session has no
+  way to obtain a real `STAX_WEB_PAYMENTS_TOKEN` (dashboard-only) to test against —
+  only the server-side Core API calls (customer/payment-method/charge, done via curl)
+  were verified live. Before this is anything but an internal comparison tool: set
+  `STAX_WEB_PAYMENTS_TOKEN`, open `portal.html?staxtest=1` on a real test family
+  account, and click through an actual card entry.
+- `stax-webhook`'s signature/auth scheme is still an unconfirmed placeholder (shared
+  secret header, not Stax's real signing method) — **do not deploy it or register its
+  URL with Stax** until that's resolved. It only matters for refunds/disputes; the
+  charge path above doesn't depend on it.
+
+**Bottom line:** `create-stax-charge` and `charge-stax-payment` are verified sound
+server-side (real sandbox calls succeeded). The embedded checkout UI is now built and
+should be structurally correct against Stax's documented API, but is unverified in a
+browser. Treat the whole flow as an internal-only comparison tool (`?staxtest=1`) until
+someone with Stax dashboard access sets the Web Payments Token and clicks through it.
+
+### Deployed and live-tested (2026-08-26)
+
+`create-stax-charge` and `charge-stax-payment` were deployed to Supabase (they only
+existed as committed source before), `add_stax_payment_tracking.sql` was applied
+(`families.stax_customer_id` now exists live), and both secrets
+(`STAX_API_KEY`/`STAX_WEB_PAYMENTS_TOKEN`) were set. First real click-through against
+`portal.html?staxtest=1` (a throwaway test family, `$5.00` test invoice) got both
+payment buttons rendering correctly, but clicking "Pay with Stax (test)" failed
+immediately with **"Could not load the Stax payment library."**
+
+⚠️ **The cause was this repo's own CSP, not Stax.** `_headers`' `script-src` only
+allowed `cdn.jsdelivr.net` / `static.cloudflareinsights.com` — `staxjs.staxpayments.com`
+was never on the allowlist, so the browser silently blocked the `<script>` tag
+`pbLoadStaxJs()` injects. Same story as R25 (Google Fonts) and the home-page Maps
+embed: a `frame-src`/`script-src` miss looks identical to a real bug from the JS side,
+and only the CSP tells them apart. Fixed in **both** `_headers` and `worker.js`
+(verified byte-identical after editing, per this file's standing rule) by adding:
+- `script-src`: `https://staxjs.staxpayments.com` (loads the library itself)
+- `connect-src`: `https://apiprod.fattlabs.com`, `https://fattqueryprod.fattlabs.com`,
+  `https://transactions.fattlabs.com` — read directly out of `staxjs-captcha.js`'s own
+  bundled source (`grep`'d for `fattlabs.com`/`fattmerchant.com` references) rather than
+  guessed from docs, so this list is exactly what the library itself calls.
+- `frame-src`: `https://staxjs.staxpayments.com`, `https://omni.fattmerchant.com` — the
+  two candidate hosts for the mounted card-number/CVV iframes; `omni.fattmerchant.com`
+  is confirmed live (it's the `merchant_location_descriptor` in the `/charge` response
+  verified earlier this session), `staxjs.staxpayments.com` added defensively since the
+  library is loaded from there.
+
+**Re-tested — the script-load fix worked, and surfaced a second, separate CSP miss.**
+The modal now renders with the app's own styling (badge, title, amount, layout) instead
+of erroring immediately, confirming `staxjs.staxpayments.com` was the only problem with
+the *outer* library. But the card-number/CVV fields themselves rendered as a
+refused-iframe placeholder — a blank gray box with a broken-page icon, Chrome's tell for
+"this iframe embed was blocked," not a missing-image icon.
+
+⚠️ **The actual vaulting host is `core.spreedly.com`, not a Stax-branded domain at
+all.** Stax.js loads Spreedly's own hosted-fields library
+(`core.spreedly.com/iframe/iframe-v1.min.js`) to collect the card number and CVV —
+found by grepping `staxjs-captcha.js`'s bundled source for `spreedly`, since nothing in
+Stax's own docs names this. Added to `script-src`, `connect-src`, and `frame-src` in
+both `_headers` and `worker.js` (re-verified byte-identical after editing). This is the
+lesson to keep: a third-party embedded-payments library can itself depend on a further
+third party for the actual sensitive-field vaulting, and that dependency has to be
+found by reading the library's own bundle, not by trusting its documentation.
+
+**Re-tested — Spreedly wasn't even the real problem.** The card fields still failed the
+same way ("flash of what might be real fields, then reverts to a blocked placeholder"),
+but this time the browser console was captured directly, and it told the actual story
+`core.spreedly.com` never could:
+
+```
+Vendor lookup complete: using BlockChyp
+Failed to execute 'postMessage' on 'DOMWindow': The target origin provided
+('https://test.blockchyp.com') does not match the recipient window's origin ('null').
+```
+
+⚠️ **Stax.js bundles support for several possible vault backends (BlockChyp, Spreedly,
+NMI, Spreedly-adjacent others), and which one a given merchant's gateway actually uses
+is a runtime fact, not something readable from the library's source or from Stax's
+docs.** `core.spreedly.com` was a reasonable-looking find from grepping the bundle, and
+it was even real — it's genuinely one of the vendors Stax.js supports — it just is not
+the one *this* merchant's TEST gateway happens to route through. The iframe's real
+target was `https://test.blockchyp.com`; blocked by `frame-src`, it never navigated
+there and stayed at origin `'null'`, which is exactly why `postMessage` to it failed
+and why the field visually "flashed" (Chrome briefly shows the frame shell) before
+reverting to the blocked-content placeholder.
+
+A secondary finding from the same console capture: Stax.js also unconditionally loads
+Google's reCAPTCHA (`www.google.com/recaptcha/api.js`) for fraud prevention, also
+blocked by `script-src` (handled gracefully by the library so far, but still a real CSP
+violation worth fixing).
+
+Added `https://test.blockchyp.com` + `https://api.blockchyp.com` to `frame-src` and
+`connect-src`, and `https://www.google.com` to `script-src`, in both `_headers` and
+`worker.js` (re-verified byte-identical). Left the Spreedly entries in place — harmless
+if unused, and this vendor selection could plausibly differ for another environment
+this project runs in.
+
+**The real lesson: for a vendored library whose actual runtime behavior depends on
+server-side merchant configuration, static analysis of its bundle can only ever
+propose candidates — the definitive host list has to come from watching a live
+browser session actually attempt the flow.** Two fixes based on reading the bundle
+both missed; the one based on the browser console got it in one. Still not re-tested
+after this third fix.
 
 ---
 

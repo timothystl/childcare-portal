@@ -997,6 +997,13 @@ tr.br-withdrawn td { opacity: .62; }
 tr.br-grand-total td { background: var(--navy); color: #fff; font-weight: 800; }
 tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15em; }
 
+.br-note-input {
+    width: 100%; min-width: 140px; border: 1px solid transparent; background: transparent;
+    font: inherit; color: inherit; padding: 3px 6px; border-radius: var(--radius-sm);
+}
+.br-note-input:hover { border-color: var(--border); }
+.br-note-input:focus { border-color: var(--tang); background: #fff; outline: none; }
+
 .br-ties {
     margin-top: 16px; padding: 12px 16px; background: var(--linen); border: 1px solid var(--border);
     border-radius: var(--radius-md); font-size: .85em; color: var(--text-muted);
@@ -1097,76 +1104,119 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .afh-owes-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; }
 
 /* ============================================================
-   FINANCE HUB — Ledger (design handoff: Finance Hub, 2026-08-26)
+   FINANCE HUB — Ledger (design handoff: Finance Hub, 2026-08-26 +
+   IMPLEMENTATION_SPEC.md "Component Spec Sheet" — values below are taken
+   literally from that spec, not approximated, per its own instruction.)
    ============================================================
    Consolidates Bill This Month, Who Owes, Invoices, and Family Billing
    Summary. See js/admin/admin-finance-hub.js. The family drawer reuses
-   .inc-drawer/.inc-scrim (css/admin.css) rather than a second component. */
+   .inc-drawer/.inc-scrim (css/admin.css) rather than a second component,
+   overridden below to the spec's own drawer dimensions.
+   One deliberate deviation from the spec: the reconciliation strip's four
+   stats render as cards (shadow, radius) rather than bare numbers — a
+   director's explicit ask after seeing the first build — with the spec's
+   exact number/label colors kept inside each card. */
 
-.fh-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
-.fh-head-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fh-toolbar {
+    display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: -6px 0 4px;
+}
 .fh-month-switch {
     display: flex; align-items: center; gap: 8px;
     background: var(--linen); border: 1px solid var(--border); border-radius: 999px;
-    padding: 6px 12px; font-weight: 700; color: var(--navy);
+    padding: 3px 4px; font-weight: 700; color: var(--navy); font-family: var(--font-body);
 }
 .fh-month-arrow {
     background: none; border: none; cursor: pointer; color: var(--navy);
-    font-size: .9em; padding: 2px 4px; border-radius: 6px;
+    font-weight: 800; font-size: 14px; line-height: 1; padding: 4px 8px; border-radius: 6px;
     transition: background .15s;
 }
 .fh-month-arrow:hover:not(:disabled) { background: var(--warm-gray); }
-.fh-month-arrow:disabled { opacity: .35; cursor: default; }
-.fh-month-label { min-width: 8ch; text-align: center; }
+.fh-month-arrow:disabled { opacity: .3; cursor: default; }
+.fh-month-label { min-width: 9ch; text-align: center; padding: 0 2px; }
 .fh-search {
-    background: var(--linen); border: 1px solid var(--border); border-radius: 999px;
-    padding: 7px 14px; font-family: var(--font-body); font-size: .9em; width: 180px;
+    background: #fff; border: 1px solid var(--border); border-radius: 999px;
+    padding: 8px 14px; font-family: var(--font-body); font-size: 13px; width: 160px;
+    transition: border-color .15s, box-shadow .15s;
 }
+.fh-search:focus { outline: none; border-color: var(--navy-lt); box-shadow: 0 0 0 3px rgba(1,41,74,.08); }
 
-.fh-tabs { display: flex; gap: 2px; margin: 16px 0 0; border-bottom: 1px solid var(--border); }
+.fh-tabs { display: flex; gap: 4px; margin: 18px 0 0; border-bottom: 1.5px solid var(--border); }
 .fh-tab {
-    border: none; cursor: pointer; font-family: var(--font-body); font-weight: 700; font-size: .92em;
-    padding: 10px 18px; border-radius: 9px 9px 0 0;
+    border: none; cursor: pointer; font-family: var(--font-body); font-weight: 800; font-size: 13px;
+    padding: 9px 16px; border-radius: 9px 9px 0 0;
     background: var(--linen); color: var(--navy);
     transition: background .15s, color .15s;
+    position: relative; top: 1px;
 }
 .fh-tab:hover:not(.is-on) { background: var(--warm-gray); }
 .fh-tab.is-on { background: var(--navy); color: #fff; }
 
-#fhLedgerPane { padding-top: 18px; }
-.fh-report-pane { padding-top: 18px; }
+#fhLedgerPane { padding-top: 20px; }
+.fh-report-pane { padding-top: 20px; }
 .fh-report-pane > h3 { margin: 0 0 4px; font-family: var(--font-head); color: var(--navy); }
 
 /* Reconciliation strip */
 .fh-strip {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    padding: 14px 0 18px;
+    display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap;
+    padding: 4px 0 20px;
 }
-.fh-stat { min-width: 96px; }
+.fh-stat {
+    background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: 0 2px 10px rgba(1,41,74,.05);
+    padding: 14px 20px; min-width: 118px;
+    transition: box-shadow .15s, transform .15s;
+}
+.fh-stat-tang { background: var(--tang-pale); border-color: #f6d3c2; }
+.fh-stat-muted { background: var(--warm-gray); }
 .fh-stat-num { font-family: var(--font-head); font-size: 26px; font-weight: 800; color: var(--navy); line-height: 1; }
 .fh-stat-tang .fh-stat-num { color: var(--tang); }
-.fh-stat-label { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; }
-.fh-underline { text-decoration: underline; text-decoration-color: var(--tang); }
-.fh-arrow { color: var(--border); font-size: 20px; }
-.fh-stat.is-clickable { cursor: pointer; border-radius: 8px; padding: 4px 6px; margin: -4px -6px; transition: background .15s; }
-.fh-stat.is-clickable:hover { background: var(--linen); }
-#fhReleaseBtn { margin-left: auto; }
+.fh-stat-muted .fh-stat-num { color: var(--text-muted); }
+.fh-stat-label { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); margin-top: 6px; }
+.fh-stat-muted .fh-stat-label { color: var(--text-muted); }
+/* "Need a look" is clickable, so its label is darker than its own number
+   (spec: tang-dark, not the tang the number uses) and underlined. */
+.fh-stat-tang .fh-stat-label { color: var(--tang-dark); }
+.fh-underline { text-decoration: underline; text-decoration-color: currentColor; text-underline-offset: 2px; }
+.fh-arrow { color: #C9C2AA; font-size: 18px; align-self: center; padding: 0 4px; }
+.fh-stat.is-clickable { cursor: pointer; }
+.fh-stat.is-clickable:hover { box-shadow: 0 6px 18px rgba(1,41,74,.10); transform: translateY(-1px); }
+.fh-strip-spacer { flex: 1; min-width: 8px; }
+.fh-release-btn {
+    align-self: center; white-space: nowrap; background: var(--navy); color: #fff; border: none;
+    border-radius: 10px; padding: 11px 16px; font-family: var(--font-body); font-weight: 800;
+    font-size: 13.5px; cursor: pointer; transition: background .15s;
+}
+.fh-release-btn:hover:not(:disabled) { background: var(--navy-lt); }
+.fh-release-btn:disabled { opacity: .45; cursor: default; }
 
 /* Owed banner */
 .fh-owed-banner {
     display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
-    background: var(--sun-pale); border: 1px solid var(--sun-lt); border-radius: var(--radius-md);
-    padding: 14px 18px; margin-bottom: 14px;
+    background: var(--sun-pale); border: 1.5px solid var(--sun-lt); border-radius: var(--radius-md);
+    padding: 13px 18px; margin-bottom: 16px;
 }
-.fh-owed-main strong { font-size: 1.1em; color: var(--navy); }
-.fh-owed-sub { font-size: .82em; color: var(--text-muted); margin-top: 3px; }
+.fh-owed-main strong { font-family: var(--font-body); font-size: 14.5px; font-weight: 800; color: var(--navy); }
+.fh-owed-famcount { color: var(--mustard-dark); font-weight: 700; }
+.fh-owed-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 .fh-owed-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.fh-owed-btn-primary, .fh-owed-btn-outline {
+    border-radius: 9px; padding: 8px 13px; font-family: var(--font-body); font-weight: 800;
+    font-size: 12.5px; cursor: pointer; transition: background .15s, color .15s;
+}
+.fh-owed-btn-primary { background: var(--navy); color: #fff; border: none; }
+.fh-owed-btn-primary:hover:not(:disabled) { background: var(--navy-lt); }
+.fh-owed-btn-primary:disabled { opacity: .45; cursor: default; }
+.fh-owed-btn-outline { background: #fff; color: var(--navy); border: 1.5px solid var(--navy); }
+.fh-owed-btn-outline:hover { background: var(--linen); }
 
+/* Aging cards — only the label color escalates by severity; every card
+   keeps a plain white background and the dollar figure stays navy. */
 .fh-aging { display: flex; gap: 12px; margin-bottom: 14px; }
-.fh-aging-col { flex: 1; background: var(--linen); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; text-align: center; }
-.fh-aging-col.fh-aging-watch { background: var(--sun-pale); border-color: var(--sun-lt); }
-.fh-aging-col.fh-aging-severe { background: var(--tang-pale); border-color: var(--tang); }
+.fh-aging-col { flex: 1; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; text-align: center; }
 .fh-aging-label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.fh-aging-col.fh-aging-watch .fh-aging-label { color: var(--mustard-dark); }
+.fh-aging-col.fh-aging-severe .fh-aging-label { color: var(--tang-dark); }
 .fh-aging-amt { font-family: var(--font-head); font-size: 20px; font-weight: 800; color: var(--navy); margin-top: 2px; }
 .fh-aging-count { font-size: .8em; color: var(--text-muted); }
 
@@ -1174,39 +1224,66 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fh-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .fh-chip {
     border: 1px solid var(--border); background: #fff; border-radius: 999px;
-    padding: 6px 14px; font-family: var(--font-body); font-weight: 700; font-size: .84em;
-    color: var(--navy); cursor: pointer; transition: background .15s, color .15s;
+    padding: 6px 12px; font-family: var(--font-body); font-weight: 700; font-size: 12.5px;
+    color: var(--text-muted); cursor: pointer; transition: background .15s, color .15s, border-color .15s;
 }
 .fh-chip:hover { background: var(--linen); }
-.fh-chip-count { color: var(--text-muted); font-weight: 700; }
+.fh-chip-count { color: inherit; opacity: .75; font-weight: 700; }
 .fh-chip.is-on { background: var(--navy); color: #fff; border-color: var(--navy); }
-.fh-chip.is-on .fh-chip-count { color: rgba(255,255,255,.75); }
-.fh-chip-needs_review.is-on, .fh-chip-owing.is-on { background: var(--tang); border-color: var(--tang); }
-.fh-chip-paid.is-on { background: var(--green); border-color: var(--green); }
+/* Active tone follows the status the chip represents, not a uniform navy —
+   Needs review/Owing use the tang-pale "caution" tone, Paid in full uses
+   the green-pale "resolved" tone (spec: never a solid color fill here). */
+.fh-chip-needs_review.is-on, .fh-chip-owing.is-on {
+    background: var(--tang-pale); color: var(--tang-dark); border-color: var(--tang-soft, #f2b89a);
+}
+.fh-chip-paid.is-on { background: var(--green-pale); color: var(--green-text); border-color: var(--green-lt); }
 
 /* Table */
-.fh-table td { vertical-align: middle; }
+.fh-table { border-radius: var(--radius-md); overflow: hidden; }
+.fh-table thead th {
+    background: transparent !important; color: var(--text-muted) !important;
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
+    border-bottom: 2px solid var(--border) !important; padding: 8px 10px !important;
+    text-align: left !important;
+}
+.fh-table tbody td { font-size: 13.5px; padding: 10px !important; }
+.fh-table tbody tr { border-bottom: 1px solid var(--warm-gray); transition: background .1s; }
+.fh-table tbody tr:hover { background: var(--linen); }
 .fh-row-open { cursor: pointer; }
+.fh-row-open strong { color: var(--navy); font-weight: 700; }
 .fh-row-open:hover strong { text-decoration: underline; }
-.fh-note { color: var(--text-muted); font-size: .88em; max-width: 32ch; }
+.fh-note { color: var(--text-muted); font-size: .88em; max-width: 30ch; }
+.fh-money-col { text-align: right; font-variant-numeric: tabular-nums; }
 .fh-bal-owed { color: var(--tang-dark); font-weight: 700; }
 .fh-bal-clear { color: var(--green-text); font-weight: 700; }
 /* Fixed two-slot layout (Send invoice / Remind-or-Retry-charge), each
    right-aligned within its own slot — a row with only one of the two
    buttons no longer lands at a different x-position than a row with both.
-   See the fh-action-slot markup in _fhRowHtml(). */
+   See the fh-action-slot markup in _fhRowHtml(). The slot widths already
+   fix the column's total width, so there's no separate width on
+   .fh-row-actions the way an earlier version of this rule had. */
 .fh-row-actions { white-space: nowrap; display: flex; gap: 6px; justify-content: flex-end; }
 .fh-action-slot { display: flex; justify-content: flex-end; }
 .fh-action-slot:first-child { width: 100px; }
 .fh-action-slot:last-child  { width: 92px; }
-.fh-row-actions .btn-xs { margin-left: 0; }
+.fh-send-btn, .fh-row-actions .btn-xs {
+    display: inline-block; border-radius: 8px; padding: 6px 10px; font-size: 11.5px; font-weight: 700;
+    cursor: pointer; margin-left: 0; transition: background .15s;
+}
+/* .btn-xs alone (admin.css) sets a white background with no color of its
+   own — combined with .btn-primary's white text (styles.css) that reads as
+   an invisible box. .fh-send-btn is Finance Hub's own small primary action,
+   styled on purpose rather than reusing that collision-prone combo. */
+.fh-send-btn { border: none; background: var(--navy); color: #fff; }
+.fh-send-btn:hover { background: var(--navy-lt); }
+.fh-row-actions .btn-xs { background: #fff; border: 1px solid var(--border); color: var(--navy); }
 
 .fh-pill { display: inline-block; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 3px 9px; }
 .fh-pill-review    { background: #FDEEE8; color: #7a2a18; }
 .fh-pill-drafted   { background: var(--linen); color: var(--navy); border: 1px solid var(--border); }
 .fh-pill-sent      { background: #FFF8E1; color: #7a5a00; border: 1px solid #FDE598; }
 .fh-pill-paid      { background: #EAF5EF; color: #3A7B60; border: 1px solid #C9E6DC; }
-.fh-pill-declined  { background: #FDEEE8; color: #7a2a18; border: 1.5px solid var(--tang); }
+.fh-pill-declined  { background: #FDEEE8; color: #7a2a18; border: 1.5px solid var(--tang); font-weight: 800; }
 .fh-pill-withdrawn { background: #F5F0E4; color: var(--text-muted); }
 
 /* Month history (read-only) */
@@ -1217,6 +1294,17 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fh-history-banner strong { color: var(--navy); font-family: var(--font-head); font-size: 1.05em; }
 .fh-history-banner p { margin: 6px 0 0; font-size: .88em; color: var(--text-muted); }
 .fh-history-foot { text-align: center; margin-top: 16px; }
+
+/* Billing Report rows are a click target into the Ledger drawer (spec §5) —
+   this file owns the interaction, admin-billing-report.js only carries the
+   data-br-email hook. */
+.br-room-table tr[data-br-email], #brBody tr[data-br-email] { cursor: pointer; }
+.br-room-table tr[data-br-email]:hover, #brBody tr[data-br-email]:hover { background: var(--linen); }
+
+/* Footer note — always visible on both the Ledger and month-history views,
+   "Billing Report" is a live tab-switch link, not just prose. */
+.fh-footer-note { margin-top: 14px; text-align: center; }
+.fh-footer-note .fh-link-btn { font-family: var(--font-body); }
 
 /* Note editor footer */
 .fh-note-editor { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); max-width: 76ch; }
@@ -1229,50 +1317,104 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fh-note-row { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
 .fh-note-status { font-size: .85em; color: var(--green-text); font-weight: 700; }
 
-/* Family drawer content — hosted inside the shared .inc-drawer chrome */
+/* ── Family drawer ──────────────────────────────────────────
+   Overrides the shared .inc-drawer/.inc-scrim chrome (css/admin.css) to the
+   spec's own dimensions/colors, scoped so the incident drawer elsewhere in
+   the app is untouched. */
+#fhDrawer.inc-drawer {
+    width: 440px; max-width: 92vw; background: var(--cream);
+    box-shadow: -12px 0 40px rgba(1,41,74,.18); padding: 26px 24px 40px;
+}
+#fhDrawerScrim.inc-scrim { background: rgba(1,41,74,.35); }
+#fhDrawer .inc-dr-x { color: var(--text-muted); font-weight: 700; font-size: 14px; }
+#fhDrawer .inc-dr-head h3 { font-family: var(--font-head); font-size: 22px; }
+#fhDrawer .inc-dr-field {
+    background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+}
+
 .fh-dr-card-title { font-weight: 700; color: var(--navy); margin-bottom: 8px; }
 .fh-dr-card-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.fh-dr-line { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: .92em; }
-.fh-dr-line-sub { font-size: 11px; color: var(--text-muted); margin: -2px 0 6px; }
-.fh-dr-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; font-weight: 700; }
+.fh-dr-line { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13.5px; }
+/* The quietest text color used anywhere in the app — deliberately lighter
+   than --text-muted, so a line-item's "who/when" reads as background
+   detail, never competing with the number above it. */
+.fh-dr-line-sub { font-size: 11px; color: #B5AC94; margin: -2px 0 6px; }
+.fh-dr-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; font-weight: 800; font-size: 14px; }
 .fh-dr-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
 .fh-dr-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-.fh-btn-green { color: var(--green-text); border-color: var(--green-lt); }
-.fh-btn-green:hover { background: var(--green-pale); }
+
+.fh-dr-action-btn {
+    flex: 1; min-width: 90px; border-radius: 9px; padding: 9px 10px; font-family: var(--font-body);
+    font-weight: 800; font-size: 12.5px; cursor: pointer; transition: background .15s, color .15s;
+}
+.fh-dr-action-fee    { background: #fff; border: 1px solid var(--navy); color: var(--navy); }
+.fh-dr-action-fee:hover    { background: var(--navy); color: #fff; }
+.fh-dr-action-credit { background: #fff; border: 1px solid var(--green-text); color: var(--green-text); }
+.fh-dr-action-credit:hover { background: var(--green-text); color: #fff; }
+.fh-dr-action-send   { background: var(--navy); border: none; color: #fff; }
+.fh-dr-action-send:hover   { background: var(--navy-lt); }
+.fh-dr-action-print  { background: #fff; border: 1px solid var(--border); color: var(--navy); }
+.fh-dr-action-print:hover  { background: var(--linen); }
 
 .fh-override-btn {
-    background: #fff; border: 1px solid var(--border); color: var(--tang-dark);
-    border-radius: var(--radius-sm); padding: 8px 14px; font-family: var(--font-body);
-    font-weight: 700; font-size: .86em; cursor: pointer; transition: background .15s, border-color .15s;
+    background: #fff; border: 1px solid var(--tang-soft, #f2b89a); color: var(--tang-dark);
+    border-radius: 8px; padding: 7px 12px; font-family: var(--font-body);
+    font-weight: 700; font-size: 12px; cursor: pointer; transition: background .15s, border-color .15s;
 }
-.fh-override-btn:hover { background: var(--tang-pale); border-color: var(--tang); }
+.fh-override-btn:hover { background: var(--tang-pale); }
 .fh-required { color: var(--tang-dark); font-weight: 400; font-size: .85em; }
 
 .btn-approve {
-    background: var(--green); border: none; color: #fff; border-radius: var(--radius-sm);
-    padding: 8px 14px; font-family: var(--font-body); font-weight: 700; font-size: .86em;
+    background: var(--green-text); border: none; color: #fff; border-radius: 8px;
+    padding: 7px 12px; font-family: var(--font-body); font-weight: 800; font-size: 12px;
     cursor: pointer; transition: background .15s;
 }
 .btn-approve:hover { background: var(--green-dark); }
 
+/* Inline mini-forms — no modal, expand directly below the trigger. Each
+   kind gets its own tint: sun-pale for fee/credit, tang-pale (danger) for
+   override, green-pale (success) for a payment. */
 .fh-mini-form {
-    background: var(--linen); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    padding: 12px 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px;
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 7px;
 }
-.fh-mini-form-caution { background: var(--tang-pale); border-color: var(--tang-soft, var(--tang)); }
-.fh-mini-form label { font-size: .82em; font-weight: 700; color: var(--navy); display: flex; flex-direction: column; gap: 3px; }
+.fh-mini-form-title { font-weight: 700; font-size: 13px; color: var(--navy); margin-bottom: 2px; }
+.fh-mini-form-fee { background: var(--sun-pale); border: 1.5px solid var(--sun-lt); }
+.fh-mini-form-caution { background: var(--tang-pale); border: 1.5px solid var(--tang-soft, #f2b89a); }
+.fh-mini-form-caution .fh-mini-form-title { color: var(--tang-dark); }
+.fh-mini-form-pay { background: var(--green-pale); border: 1.5px solid var(--green-lt); border-radius: 10px; padding: 10px 12px; }
 .fh-mini-form input, .fh-mini-form select {
-    font-family: var(--font-body); font-size: .92em; padding: 6px 10px;
-    border: 1px solid var(--border); border-radius: 6px; font-weight: 400;
+    font-family: var(--font-body); font-size: 13px; padding: 7px 9px;
+    border: 1px solid var(--border); border-radius: 8px; font-weight: 400; background: #fff;
 }
+.fh-mini-form-fee input, .fh-mini-form-fee select { border-color: var(--sun-lt); }
+.fh-mini-form-caution input, .fh-mini-form-caution select { border-color: var(--tang-soft, #f2b89a); }
+.fh-mini-form-pay input, .fh-mini-form-pay select { border-color: var(--green-lt); }
 .fh-mini-form-btns { display: flex; gap: 8px; margin-top: 2px; }
+.fh-mini-confirm {
+    border: none; border-radius: 8px; padding: 7px 14px; font-family: var(--font-body);
+    font-weight: 700; font-size: 12.5px; color: #fff; cursor: pointer; transition: background .15s;
+}
+.fh-mini-confirm-fee { background: var(--navy); }
+.fh-mini-confirm-fee:hover { background: var(--navy-lt); }
+.fh-mini-confirm-override { background: var(--tang-dark); }
+.fh-mini-confirm-override:hover { background: #611f11; }
+.fh-mini-confirm-pay { background: var(--green-dark); }
+.fh-mini-confirm-pay:hover { background: #123f2a; }
+.fh-mini-cancel { background: none; border: none; color: var(--text-muted); font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.fh-mini-cancel:hover { text-decoration: underline; }
 
 .fh-link-btn { background: none; border: none; color: var(--navy-lt); font-weight: 700; font-size: .86em; cursor: pointer; text-decoration: underline; }
-.fh-pay-method { font-size: .8em; color: var(--text-muted); }
-.fh-remind-btn {
-    background: none; border: none; color: var(--tang); font-weight: 700; font-size: .88em; cursor: pointer;
+.fh-pay-amt { font-weight: 700; color: var(--green-text); }
+.inc-sig-list .fh-pay-amt { font-size: 13px; }
+
+.fh-dr-save-btn, .fh-dr-remind-btn {
+    flex: 1; border: none; border-radius: 10px; padding: 11px; font-family: var(--font-body);
+    font-weight: 800; font-size: 13.5px; color: #fff; cursor: pointer; transition: background .15s;
 }
-.fh-remind-btn:hover { text-decoration: underline; }
+.fh-dr-save-btn { background: var(--navy); }
+.fh-dr-save-btn:hover { background: var(--navy-lt); }
+.fh-dr-remind-btn { background: var(--tang); }
+.fh-dr-remind-btn:hover { background: #d1653f; }
 
 /* Print statement overlay — in-DOM, not window.open() (popups get blocked
    in sandboxed/embedded contexts). @media print hides everything else. */
@@ -1283,14 +1425,19 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fh-print-sheet {
     max-width: 680px; width: 100%; font-family: Arial, Helvetica, sans-serif; color: #222;
 }
-.fh-print-sheet h1 { font-size: 22px; margin: 0 0 4px; }
+.fh-print-sheet h1 { font-size: 20px; margin: 0 0 16px; }
 .fh-print-sheet h2 { font-size: 15px; margin: 22px 0 8px; }
 .fh-print-sheet table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .fh-print-sheet th, .fh-print-sheet td { border-bottom: 1px solid #ddd; padding: 6px 4px; text-align: left; }
-.fh-print-close {
-    margin-top: 24px; background: var(--navy); color: #fff; border: none; border-radius: var(--radius-sm);
+.fh-print-balance { font-size: 15px; font-weight: 700; margin-top: 20px; }
+.fh-print-btns { margin-top: 24px; display: flex; gap: 10px; }
+.fh-print-btn, .fh-print-close {
+    background: var(--navy); color: #fff; border: none; border-radius: var(--radius-sm);
     padding: 9px 18px; font-family: var(--font-body); font-weight: 700; cursor: pointer;
 }
+.fh-print-close { background: #fff; color: var(--navy); border: 1px solid var(--border); }
+.fh-print-close:hover { background: var(--linen); }
+.fh-print-btn:hover { background: var(--navy-lt); }
 @media print {
     body > *:not(.fh-print-scrim) { display: none !important; }
     .fh-print-scrim { position: static; padding: 0; }
@@ -1298,10 +1445,14 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 }
 
 @media (max-width: 720px) {
+    .fh-toolbar { justify-content: flex-start; }
     .fh-strip { gap: 8px; }
     .fh-arrow { display: none; }
-    #fhReleaseBtn { margin-left: 0; width: 100%; }
+    .fh-strip-spacer { display: none; }
+    .fh-release-btn { width: 100%; }
     .fh-search { width: 100%; }
+    .fh-row-actions { width: auto; }
+    #fhDrawer.inc-drawer { width: 100%; }
 }
 
 /* ============================================================
@@ -1310,6 +1461,7 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
    ============================================================ */
 
 /* ── Messages ─────────────────────────────────────────────── */
+.msg-toolbar-top { display: flex; justify-content: flex-end; margin: -6px 0 4px; }
 .msg-notify-toggle {
     display: inline-flex; align-items: center; gap: 8px;
     background: var(--white); border: 1px solid var(--border); border-radius: 999px;

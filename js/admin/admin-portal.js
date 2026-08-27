@@ -1344,9 +1344,6 @@ function apDashPlanning(live) {
             { label: 'Days off approved',   tone: 'ok',   value: live.timeOff.length, sub: 'in effect for scheduling' },
         ],
         left: [
-            apPanel({ title: 'Staff needed this week',
-                sub: 'From registered children and saved ratios — no clock-in data involved.',
-                body: apStaffGridHtml(sf), tools: ['staffreq', 'schedule'] }),
             apPanel({ title: 'Waitlist pressure by room',
                 sub: 'Active applications against the seats actually open this week.',
                 body: apRowsHtml(pressure), tools: ['wlPlanner', 'wlDemand', 'planner', 'promotions', 'wlImport'] }),
@@ -1522,6 +1519,9 @@ function apDashStaff(live) {
         stamp: `Week of ${friendlyShort(live.weekOf)} · ${roster.length || 'no'} staff on the roster`,
         kpis,
         left: [
+            apPanel({ title: 'Staff needed this week',
+                sub: 'From registered children and saved ratios — no clock-in data involved.',
+                body: apStaffGridHtml(sf), tools: ['staffreq', 'schedule'] }),
             apPanel({ title: 'Coverage against requirement',
                 sub: 'What the saved schedule puts on the floor, against what the ratios ask for that day.',
                 body: apBarsHtml(bars), tools: ['schedule', 'staffreq', 'staffRoster', 'pto'] }),

@@ -971,3 +971,48 @@
        has loaded; this is just a sane starting size before that arrives. */
 }
 body.pb-modal-open { overflow: hidden; }
+
+/* Stax comparison modal — the card-number/CVV fields are Stax.js iframes,
+   but everything around them is this app's own markup, styled the same as
+   the rest of the portal rather than left to a processor's hosted page.
+   See portal.html's pbStaxModal and portal-billing.js's pbOpenStaxModal. */
+.pb-stax-btn {
+    background: var(--tang); margin-top: 10px;
+}
+.pb-stax-btn:hover:not(:disabled) { background: var(--tang-dark, #7a2a18); }
+.pb-stax-modal-inner { max-width: 420px; }
+.pb-stax-modal-body { padding: 20px 24px 26px; }
+.pb-stax-badge {
+    display: inline-block; margin: 0 0 6px; padding: 3px 10px;
+    background: var(--tang-pale); color: var(--tang-dark, #7a2a18);
+    border-radius: 999px; font-size: .72em; font-weight: 800;
+    letter-spacing: .04em; text-transform: uppercase;
+}
+.pb-stax-title {
+    margin: 0 0 2px; color: var(--navy); font-family: var(--font-head);
+    font-size: 1.3em; font-weight: 800;
+}
+.pb-stax-name { margin: 0 0 16px; color: var(--text-muted); font-size: .85em; }
+.pb-stax-label {
+    display: block; margin: 14px 0 6px; color: var(--text);
+    font-size: .8em; font-weight: 700;
+}
+.pb-stax-field {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--white); overflow: hidden;
+}
+.pb-stax-field iframe { display: block; }
+.pb-stax-row { display: flex; gap: 16px; align-items: flex-start; }
+.pb-stax-row > div:first-child { flex: 1.3; }
+.pb-stax-row > div:last-child { flex: 1; }
+.pb-stax-exp-row { display: flex; gap: 8px; }
+.pb-stax-select {
+    flex: 1; height: 44px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--white);
+    font-family: inherit; font-size: .9em; color: var(--text);
+    padding: 0 8px;
+}
+.pb-stax-fine {
+    margin: 14px 0 0; font-size: .78em; line-height: 1.5;
+    color: var(--text-muted);
+}
