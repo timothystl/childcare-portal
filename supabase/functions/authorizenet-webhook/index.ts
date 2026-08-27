@@ -250,6 +250,140 @@ async function sendReceiptEmail(admin: any, o: {
     }
 }
 
+type DueRow = { id: number; due: number; month: string };
+
+/**
+ * Same due-set builder as create-payment-session's copy — every unpaid
+ * invoice for this family from the oldest through anchorMonth. Recomputed
+ * fresh at settlement time rather than trusting a stored list: a webhook
+ * retry (or one that lands minutes later) should reflect whatever is
+ * actually still owed right now, not a stale intent from when the session
+ * was created.
+ */
+async function computeFamilyDueSet(admin: any, familyId: string, anchorMonth: string): Promise<DueRow[]> {
+    const { data: invoices } = await admin
+        .from("billing_invoices")
+        .select("id, final_amount, status, sent_at, billing_cycles(month)")
+        .eq("family_id", familyId)
+        .not("sent_at", "is", null)
+        .in("status", ["sent", "partial"]);
+
+    const eligible = (invoices || []).filter((inv: any) => {
+        const m = inv?.billing_cycles?.month;
+        return typeof m === "string" && m.slice(0, 7) <= anchorMonth;
+    });
+    if (!eligible.length) return [];
+
+    const ids = eligible.map((inv: any) => inv.id);
+    const { data: pays } = await admin.from("billing_payments").select("invoice_id, amount").in("invoice_id", ids);
+    const paidByInvoice = new Map<number, number>();
+    for (const p of (pays || [])) {
+        paidByInvoice.set(p.invoice_id, (paidByInvoice.get(p.invoice_id) || 0) + (Number(p.amount) || 0));
+    }
+
+    const rows: DueRow[] = eligible.map((inv: any) => {
+        const paid = paidByInvoice.get(inv.id) || 0;
+        const due = Math.round(((Number(inv.final_amount) || 0) - paid) * 100) / 100;
+        return { id: inv.id as number, due, month: String(inv.billing_cycles.month).slice(0, 7) };
+    }).filter((r: DueRow) => r.due > 0.004);
+
+    rows.sort((a, b) => a.month.localeCompare(b.month));
+    return rows;
+}
+
+/**
+ * Allocates one settled amount across a due-set, oldest invoice first,
+ * recording one billing_payments row per invoice it actually covers.
+ * Idempotent per invoice: processor_transaction_id is the real transaction
+ * id suffixed with the invoice id, so a retry re-allocating the SAME
+ * due-set hits the same unique keys and is treated as already-recorded —
+ * see billing_payments_processor_txn_idx.
+ */
+async function allocateAcrossDueSet(admin: any, o: {
+    familyId: string; dueSet: DueRow[]; totalAmount: number; transId: string; note: string;
+}): Promise<{ recorded: boolean; anyNew: boolean; touchedInvoiceIds: number[] }> {
+    let remaining = Math.round(o.totalAmount * 100) / 100;
+    let anyNew = false;
+    const touched: number[] = [];
+
+    for (const row of o.dueSet) {
+        if (remaining <= 0.004) break;
+        const amt = Math.round(Math.min(remaining, row.due) * 100) / 100;
+        if (amt <= 0.004) continue;
+
+        const result = await recordAndReconcile(admin, {
+            family_id: o.familyId, invoice_id: row.id, amount: amt,
+            note: o.note,
+            processor_transaction_id: `${o.transId}-inv${row.id}`,
+        });
+        if (result.recorded) anyNew = true;
+        touched.push(row.id);
+        remaining = Math.round((remaining - amt) * 100) / 100;
+    }
+
+    return { recorded: touched.length > 0, anyNew, touchedInvoiceIds: touched };
+}
+
+type PaymentRow = { id: number; invoice_id: number; family_id: string; amount: number };
+
+/**
+ * ⚠️ Finds every billing_payments row a single Authorize.net charge could
+ * have been split across (2026-08-27). allocateAcrossDueSet suffixes each
+ * row's processor_transaction_id with "-inv<invoiceId>", so a real refund/
+ * void arrives referencing the BARE original transaction id — an exact-
+ * match lookup on that bare id (the old code here) matches zero rows for
+ * any charge the rollup spread across more than one invoice. Matches the
+ * bare id (pre-rollup rows, and any charge that only ever covered one
+ * invoice) OR any "<id>-inv*" suffix, sorted oldest-invoice-first so a
+ * partial reversal is applied in the same order the original charge was.
+ */
+async function findOriginalPaymentRows(admin: any, processor: string, baseTransactionId: string): Promise<PaymentRow[]> {
+    const { data } = await admin
+        .from("billing_payments")
+        .select("id, invoice_id, family_id, amount, billing_invoices(billing_cycles(month))")
+        .eq("processor", processor)
+        .or(`processor_transaction_id.eq.${baseTransactionId},processor_transaction_id.like.${baseTransactionId}-inv%`);
+    const rows = (data || []) as any[];
+    rows.sort((a, b) => {
+        const ma = a?.billing_invoices?.billing_cycles?.month || "";
+        const mb = b?.billing_invoices?.billing_cycles?.month || "";
+        return ma.localeCompare(mb);
+    });
+    return rows.map(r => ({ id: r.id, invoice_id: r.invoice_id, family_id: r.family_id, amount: Number(r.amount) || 0 }));
+}
+
+/**
+ * Allocates one refund/void total across every payment row a charge was
+ * split into, oldest-invoice-first, capping each reversal at that row's own
+ * amount (a partial refund never reverses more than was actually charged to
+ * a given invoice). Idempotent per row via a row-suffixed transaction id.
+ */
+async function reverseAcrossPaymentRows(admin: any, o: {
+    rows: PaymentRow[]; totalAmount: number; reversalTransactionId: string; note: string;
+}): Promise<{ anyNew: boolean; touchedInvoiceIds: number[] }> {
+    let remaining = Math.round(o.totalAmount * 100) / 100;
+    let anyNew = false;
+    const touched: number[] = [];
+
+    for (const row of o.rows) {
+        if (remaining <= 0.004) break;
+        const amt = Math.round(Math.min(remaining, row.amount) * 100) / 100;
+        if (amt <= 0.004) continue;
+
+        const result = await recordAndReconcile(admin, {
+            family_id: row.family_id, invoice_id: row.invoice_id, amount: -amt,
+            note: o.note,
+            processor_transaction_id: `${o.reversalTransactionId}-row${row.id}`,
+            refund_of_payment_id: row.id,
+        });
+        if (result.recorded) anyNew = true;
+        touched.push(row.invoice_id);
+        remaining = Math.round((remaining - amt) * 100) / 100;
+    }
+
+    return { anyNew, touchedInvoiceIds: touched };
+}
+
 /** Insert one billing_payments row (idempotent on processor+transaction id) and reconcile the invoice. */
 async function recordAndReconcile(admin: any, row: {
     family_id: string; invoice_id: number; amount: number; note: string;
@@ -362,32 +496,45 @@ serve(async (req) => {
         }
 
         const { data: invoice, error: invErr } = await admin
-            .from("billing_invoices").select("id, family_id").eq("id", invoiceId).maybeSingle();
+            .from("billing_invoices").select("id, family_id, billing_cycles(month)").eq("id", invoiceId).maybeSingle();
         if (invErr) return json({ error: invErr.message }, 500);
         if (!invoice) return json({ received: true, ignored: "invoice not found" }, 200);
 
-        const result = await recordAndReconcile(admin, {
-            family_id: invoice.family_id, invoice_id: invoice.id, amount,
-            note: "Paid online via Authorize.net",
-            processor_transaction_id: String(transId),
+        // ⚠️ Rolls up older unpaid months (2026-08-27) — mirrors
+        // create-payment-session's own computeFamilyDueSet exactly, so the
+        // amount Authorize.net actually settled gets spread across every
+        // invoice the family's payment session included, oldest first,
+        // instead of being dumped entirely onto the anchor invoice.
+        const anchorMonth = String((invoice as any)?.billing_cycles?.month || "").slice(0, 7);
+        const dueSet = await computeFamilyDueSet(admin, invoice.family_id, anchorMonth);
+        // A due-set that no longer includes the anchor (e.g. already paid by
+        // another means between session creation and settlement) still needs
+        // somewhere to record a real, approved charge — fall back to the
+        // anchor invoice alone rather than silently dropping the money.
+        const allocationSet: DueRow[] = dueSet.length ? dueSet : [{ id: invoice.id, due: amount, month: anchorMonth }];
+
+        const result = await allocateAcrossDueSet(admin, {
+            familyId: invoice.family_id, dueSet: allocationSet, totalAmount: amount,
+            transId: String(transId), note: "Paid online via Authorize.net",
         }).catch((e: Error) => ({ error: e.message } as any));
-        if (result?.error) return json({ error: result.error }, 500);
+        if ((result as any)?.error) return json({ error: (result as any).error }, 500);
+        const alloc = result as { recorded: boolean; anyNew: boolean; touchedInvoiceIds: number[] };
 
         await admin.from("admin_audit_log").insert({
             admin_email: "authorizenet-webhook", action: "online_payment", entity: "billing_invoice",
-            details: { invoice_id: invoice.id, amount, processor_transaction_id: String(transId) },
+            details: { invoice_ids: alloc.touchedInvoiceIds, amount, processor_transaction_id: String(transId) },
         }).then(() => {}, (e: unknown) => console.error("authorizenet-webhook: audit write failed", e));
 
         // Only on a genuinely new record — never on a webhook retry hitting
         // the duplicate branch, or the family gets the same receipt twice.
-        if (result.recorded) {
+        if (alloc.anyNew) {
             await sendReceiptEmail(admin, {
                 familyId: invoice.family_id, invoiceId: invoice.id,
                 amountPaid: amount, transId: String(transId),
             });
         }
 
-        return json({ received: true, ...result, invoiceId: invoice.id, amount }, 200);
+        return json({ received: true, ...alloc, invoiceId: invoice.id, amount }, 200);
     }
 
     // ── Refund or void: find the original charge this reverses ─────────
@@ -405,44 +552,42 @@ serve(async (req) => {
     const refTransId: string = isVoid ? String(transId) : (tx?.refTransId || tx?.refTransID || "");
     if (!refTransId) return json({ received: true, ignored: "no original transaction reference" }, 200);
 
-    const { data: original, error: origErr } = await admin
-        .from("billing_payments")
-        .select("id, family_id, invoice_id, amount")
-        .eq("processor", "authorizenet")
-        .eq("processor_transaction_id", refTransId)
-        .maybeSingle();
-    if (origErr) return json({ error: origErr.message }, 500);
-    if (!original) return json({ received: true, ignored: "original payment not found" }, 200);
+    // ⚠️ May be several rows (2026-08-27) — one real Authorize.net charge
+    // can be split across multiple invoices by the rollup, so a single
+    // refund/void of it has to reverse every row that charge was recorded
+    // into, not just one. See findOriginalPaymentRows.
+    const originalRows = await findOriginalPaymentRows(admin, "authorizenet", refTransId);
+    if (!originalRows.length) return json({ received: true, ignored: "original payment not found" }, 200);
+    const originalTotal = originalRows.reduce((s, r) => s + r.amount, 0);
 
     // A void carries the original auth amount in its own transaction detail;
-    // fall back to the original payment's recorded amount if that's absent
+    // fall back to the original payment's recorded total if that's absent
     // (a full reversal either way — this app only ever submits full
     // refunds/voids, see admin-refund-payment).
-    const reverseAmount = Number(tx.authAmount ?? tx.settleAmount ?? original.amount) || Number(original.amount) || 0;
+    const reverseAmount = Number(tx.authAmount ?? tx.settleAmount ?? originalTotal) || originalTotal || 0;
     if (!(reverseAmount > 0)) return json({ received: true, ignored: "zero or invalid reversal amount" }, 200);
 
     // A refund's transId is genuinely new and unique on its own. A void's
     // transId is the ORIGINAL charge's id (see the note above) — storing it
-    // as-is would collide with the original payment's own row on the
+    // as-is would collide with the original payment's own row(s) on the
     // (processor, processor_transaction_id) unique index and be silently
     // treated as an already-recorded duplicate, so the void would never
     // actually get recorded. The ":void" suffix keeps it unique.
     const reversalTransactionId = isVoid ? `${transId}:void` : String(transId);
 
-    const result = await recordAndReconcile(admin, {
-        family_id: original.family_id, invoice_id: original.invoice_id, amount: -reverseAmount,
+    const result = await reverseAcrossPaymentRows(admin, {
+        rows: originalRows, totalAmount: reverseAmount, reversalTransactionId,
         note: isRefund ? "Refund via Authorize.net" : "Void via Authorize.net",
-        processor_transaction_id: reversalTransactionId,
-        refund_of_payment_id: original.id,
     }).catch((e: Error) => ({ error: e.message } as any));
-    if (result?.error) return json({ error: result.error }, 500);
+    if ((result as any)?.error) return json({ error: (result as any).error }, 500);
+    const rev = result as { anyNew: boolean; touchedInvoiceIds: number[] };
 
     await admin.from("admin_audit_log").insert({
         admin_email: "authorizenet-webhook",
         action:      isRefund ? "online_refund" : "online_void",
         entity:      "billing_invoice",
-        details:     { invoice_id: original.invoice_id, payment_id: original.id, amount: -reverseAmount, processor_transaction_id: reversalTransactionId },
+        details:     { invoice_ids: rev.touchedInvoiceIds, amount: -reverseAmount, processor_transaction_id: reversalTransactionId },
     }).then(() => {}, (e: unknown) => console.error("authorizenet-webhook: audit write failed", e));
 
-    return json({ received: true, ...result, invoiceId: original.invoice_id, amount: -reverseAmount }, 200);
+    return json({ received: true, ...rev, invoiceIds: rev.touchedInvoiceIds, amount: -reverseAmount }, 200);
 });

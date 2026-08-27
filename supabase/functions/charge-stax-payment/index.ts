@@ -56,6 +56,16 @@
 //   STAX_WEB_PAYMENTS_TOKEN available here — dashboard-only); see
 //   CLAUDE.md's Stax section.
 //
+//   6. ⚠️ ROLLS UP OLDER UNPAID MONTHS (2026-08-27) and allocates the one
+//      Stax charge across every invoice it covers, oldest first — see
+//      computeFamilyDueSet(). Recomputed fresh here, not trusted from
+//      whatever create-stax-charge quoted a moment earlier.
+//   7. Saved card: pass useSavedCard:true instead of paymentMethodId to
+//      charge the family's card on file (add_stax_saved_card.sql), or
+//      saveCard:true after a fresh paymentMethodId to remember it for next
+//      time. Only Stax's own payment_method_id plus last4/brand are ever
+//      stored — never card data itself; see the migration's header.
+//
 // Deploy:  supabase functions deploy charge-stax-payment
 // Secrets: STAX_API_KEY, RESEND_API_KEY, RESEND_FROM_EMAIL, RESEND_REPLY_TO
 //          (shared with authorizenet-webhook / send-invoice)
@@ -87,6 +97,40 @@ function amountStr(n: number): string {
 }
 
 function money(n: number): string { return "$" + (Number(n) || 0).toFixed(2); }
+
+type DueRow = { id: number; due: number; month: string };
+
+/** Same due-set builder as create-stax-charge's / create-payment-session's copy. */
+async function computeFamilyDueSet(admin: any, familyId: string, anchorMonth: string): Promise<DueRow[]> {
+    const { data: invoices } = await admin
+        .from("billing_invoices")
+        .select("id, final_amount, status, sent_at, billing_cycles(month)")
+        .eq("family_id", familyId)
+        .not("sent_at", "is", null)
+        .in("status", ["sent", "partial"]);
+
+    const eligible = (invoices || []).filter((inv: any) => {
+        const m = inv?.billing_cycles?.month;
+        return typeof m === "string" && m.slice(0, 7) <= anchorMonth;
+    });
+    if (!eligible.length) return [];
+
+    const ids = eligible.map((inv: any) => inv.id);
+    const { data: pays } = await admin.from("billing_payments").select("invoice_id, amount").in("invoice_id", ids);
+    const paidByInvoice = new Map<number, number>();
+    for (const p of (pays || [])) {
+        paidByInvoice.set(p.invoice_id, (paidByInvoice.get(p.invoice_id) || 0) + (Number(p.amount) || 0));
+    }
+
+    const rows: DueRow[] = eligible.map((inv: any) => {
+        const paid = paidByInvoice.get(inv.id) || 0;
+        const due = Math.round(((Number(inv.final_amount) || 0) - paid) * 100) / 100;
+        return { id: inv.id as number, due, month: String(inv.billing_cycles.month).slice(0, 7) };
+    }).filter((r: DueRow) => r.due > 0.004);
+
+    rows.sort((a, b) => a.month.localeCompare(b.month));
+    return rows;
+}
 
 function escHtml(s: string): string {
     return String(s ?? "").replace(/[&<>"']/g, c => (
@@ -245,12 +289,17 @@ serve(async (req) => {
         const myFamilyIds = new Set((famIdRows || []).map((r: unknown) => String(r)));
         if (!myFamilyIds.size) return json({ error: "No family is linked to this account." }, 403, ch);
 
-        // ── 2. Input: an invoice id + the tokenized payment method ─
+        // ── 2. Input: an invoice id + either a fresh tokenized payment
+        // method or "use the card already on file" ─────────────────────
         const body = await req.json().catch(() => ({}));
         const invoiceId = Number(body?.invoiceId);
-        const paymentMethodId = String(body?.paymentMethodId || "");
+        const bodyPaymentMethodId = String(body?.paymentMethodId || "");
+        const useSavedCard = body?.useSavedCard === true;
+        const saveCard = body?.saveCard === true;
         if (!Number.isFinite(invoiceId)) return json({ error: "invoiceId is required." }, 400, ch);
-        if (!paymentMethodId) return json({ error: "paymentMethodId is required." }, 400, ch);
+        if (!bodyPaymentMethodId && !useSavedCard) {
+            return json({ error: "paymentMethodId is required." }, 400, ch);
+        }
 
         const admin = createClient(
             Deno.env.get("SUPABASE_URL")!,
@@ -273,7 +322,7 @@ serve(async (req) => {
 
         const { data: family, error: famErr } = await admin
             .from("families")
-            .select("id, stax_customer_id")
+            .select("id, stax_customer_id, stax_default_payment_method_id")
             .eq("id", invoice.family_id)
             .maybeSingle();
         if (famErr) return json({ error: famErr.message }, 500, ch);
@@ -281,14 +330,21 @@ serve(async (req) => {
             return json({ error: "Start a payment session before charging." }, 400, ch);
         }
 
-        const { data: paymentRows, error: payErr } = await admin
-            .from("billing_payments")
-            .select("amount")
-            .eq("invoice_id", invoiceId);
-        if (payErr) return json({ error: payErr.message }, 500, ch);
-        const paid = (paymentRows || []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0);
-        const due = Math.round(((Number(invoice.final_amount) || 0) - paid) * 100) / 100;
-        if (due <= 0) return json({ error: "This bill is already paid in full." }, 400, ch);
+        const paymentMethodId = useSavedCard ? (family.stax_default_payment_method_id || "") : bodyPaymentMethodId;
+        if (!paymentMethodId) {
+            return json({ error: useSavedCard ? "No saved card on file." : "paymentMethodId is required." }, 400, ch);
+        }
+
+        // ⚠️ Rolls up older unpaid months (2026-08-27) — same rule as
+        // create-payment-session/create-stax-charge: charge the anchor
+        // invoice's own balance plus any still-unpaid EARLIER month, never
+        // a later one. Recomputed fresh here rather than trusting whatever
+        // create-stax-charge quoted, since this is a separate request and
+        // something could have changed in between.
+        const anchorMonth = String((invoice as any)?.billing_cycles?.month || "").slice(0, 7);
+        const dueSet = await computeFamilyDueSet(admin, String(invoice.family_id), anchorMonth);
+        if (!dueSet.length) return json({ error: "This bill is already paid in full." }, 400, ch);
+        const due = Math.round(dueSet.reduce((s, r) => s + r.due, 0) * 100) / 100;
 
         // ── 3. Charge it ────────────────────────────────────────────
         const apiKey = Deno.env.get("STAX_API_KEY");
@@ -324,41 +380,66 @@ serve(async (req) => {
 
         const transactionId = String(chargeData.id);
 
-        // Idempotent insert — a retry with the same Stax transaction id
-        // hits billing_payments_processor_txn_idx and is treated as
-        // already-recorded rather than double-charging the invoice. Column
-        // shape matches recordAndReconcile() in authorizenet-webhook so
-        // both processors write the same table the same way.
-        const { error: insErr } = await admin.from("billing_payments").insert({
-            family_id: invoice.family_id,
-            invoice_id: invoice.id,
-            amount: due,
-            payment_date: new Date().toISOString().slice(0, 10),
-            payment_method: "card",
-            note: `Stax online payment — invoice ${invoice.id}`,
-            created_by: "charge-stax-payment",
-            processor: "stax",
-            processor_transaction_id: transactionId,
-        });
-        const isDuplicate = insErr && (String(insErr.code) === "23505" || /duplicate key/i.test(insErr.message || ""));
-        if (insErr && !isDuplicate) {
-            // The charge succeeded at Stax but we failed to record it —
-            // surface this loudly rather than silently losing the payment.
-            return json({ error: "Payment succeeded but could not be recorded. Contact the office." }, 500, ch);
+        // ── 4. Allocate the one charge across every invoice it covers,
+        // oldest first — idempotent per invoice via a suffixed transaction
+        // id, same shape as authorizenet-webhook's allocateAcrossDueSet.
+        let remaining = due;
+        let anyNew = false;
+        const touchedInvoiceIds: number[] = [];
+        for (const row of dueSet) {
+            if (remaining <= 0.004) break;
+            const amt = Math.round(Math.min(remaining, row.due) * 100) / 100;
+            if (amt <= 0.004) continue;
+
+            const { error: insErr } = await admin.from("billing_payments").insert({
+                family_id: invoice.family_id,
+                invoice_id: row.id,
+                amount: amt,
+                payment_date: new Date().toISOString().slice(0, 10),
+                payment_method: "card",
+                note: `Stax online payment — invoice ${row.id}`,
+                created_by: "charge-stax-payment",
+                processor: "stax",
+                processor_transaction_id: `${transactionId}-inv${row.id}`,
+            });
+            const isDuplicate = insErr && (String(insErr.code) === "23505" || /duplicate key/i.test(insErr.message || ""));
+            if (insErr && !isDuplicate) {
+                // The charge succeeded at Stax but we failed to record this
+                // invoice's share — surface it loudly rather than silently
+                // losing part of the payment. Invoices already recorded in
+                // this loop stay recorded; a retry with the same
+                // transactionId is idempotent per invoice either way.
+                return json({ error: "Payment succeeded but could not be fully recorded. Contact the office.", partiallyRecorded: touchedInvoiceIds }, 500, ch);
+            }
+            if (!isDuplicate) anyNew = true;
+            touchedInvoiceIds.push(row.id);
+            remaining = Math.round((remaining - amt) * 100) / 100;
+
+            const { data: payRows } = await admin.from("billing_payments").select("amount").eq("invoice_id", row.id);
+            const totalPaid = (payRows || []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0);
+            const { data: invRow } = await admin.from("billing_invoices").select("final_amount").eq("id", row.id).maybeSingle();
+            const finalAmt = Number(invRow?.final_amount) || 0;
+            const newStatus = totalPaid >= finalAmt && finalAmt > 0 ? "paid" : (totalPaid > 0 ? "partial" : "sent");
+            await admin.from("billing_invoices").update({ status: newStatus }).eq("id", row.id);
         }
 
-        // Recompute invoice status the same way recordAndReconcile() does —
-        // keep both processors' post-payment logic identical.
-        const { data: paymentRows2 } = await admin
-            .from("billing_payments").select("amount").eq("invoice_id", invoice.id);
-        const totalPaid = (paymentRows2 || []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0);
-        const newStatus = totalPaid >= (Number(invoice.final_amount) || 0) && Number(invoice.final_amount) > 0
-            ? "paid" : (totalPaid > 0 ? "partial" : "sent");
-        await admin.from("billing_invoices").update({ status: newStatus }).eq("id", invoice.id);
+        // ── 5. Save the card for next time, if asked — only Stax's own
+        // opaque payment_method_id plus the two PCI-permitted display
+        // fields, read from Stax's own charge response. Best-effort: a
+        // failed save never undoes or fails the payment, which already
+        // happened.
+        if (saveCard && !useSavedCard) {
+            const cardInfo = chargeData?.payment_method || chargeData?.response?.payment_method || {};
+            await admin.from("families").update({
+                stax_default_payment_method_id: paymentMethodId,
+                stax_default_card_last_four: cardInfo.card_last_four || cardInfo.last_four_digits || null,
+                stax_default_card_brand: cardInfo.card_type || null,
+            }).eq("id", invoice.family_id).then(() => {}, (e: unknown) => console.error("charge-stax-payment: save card failed", e));
+        }
 
-        // Receipt only on the genuinely-new insert — a retry that lands on
-        // the duplicate branch must never send a second copy.
-        if (!isDuplicate) {
+        // Receipt only on the genuinely-new insert(s) — a retry that lands
+        // entirely on the duplicate branch must never send a second copy.
+        if (anyNew) {
             try {
                 await sendReceiptEmail(admin, {
                     familyId: String(invoice.family_id), invoiceId: invoice.id,
@@ -369,7 +450,7 @@ serve(async (req) => {
             }
         }
 
-        return json({ success: true, transactionId, amount: due }, 200, ch);
+        return json({ success: true, transactionId, amount: due, touchedInvoiceIds }, 200, ch);
 
     } catch (err) {
         return json({ error: (err as Error).message }, 500, ch);

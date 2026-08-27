@@ -27,6 +27,18 @@
 //      paying never leaves the portal. Card data still never touches our
 //      server; the iframe just relays Authorize.net's own result back to us.
 //      See portal-billing.js's CommunicationHandler for the receiving end.
+//   7. ⚠️ ROLLS UP OLDER UNPAID MONTHS (2026-08-27). Paying invoice X now
+//      charges X's own balance PLUS any still-unpaid invoice for an EARLIER
+//      month for the same family — never a later one. A family with two
+//      unpaid months no longer has to click Pay twice, and can't quietly
+//      leave an old month unpaid while paying only the newest one. See
+//      computeFamilyDueSet(). authorizenet-webhook allocates the one
+//      settled amount back across every invoice this due-set covered,
+//      oldest first.
+//   8. Itemized via compute_family_month_charges_itemized() — the SAME
+//      per-child discount-aware computation compute_family_month_charges()
+//      already does internally, just returned per child instead of summed.
+//      Never a second, hand-rolled copy of the rate/discount math.
 //
 // Deploy:  supabase functions deploy create-payment-session
 // Secrets: AUTHORIZENET_API_LOGIN_ID, AUTHORIZENET_TRANSACTION_KEY,
@@ -60,6 +72,46 @@ function json(body: unknown, status: number, ch: Record<string, string>) {
 /** Authorize.net wants a plain decimal string, min 0.01. */
 function amountStr(n: number): string {
     return (Math.round(n * 100) / 100).toFixed(2);
+}
+
+type DueRow = { id: number; due: number; month: string };
+
+/**
+ * Every still-owed invoice for this family, from the oldest unpaid month
+ * through anchorMonth (inclusive) — never a month AFTER anchorMonth, so
+ * paying an old bill never reaches forward and charges a future one.
+ * Shared shape with charge-stax-payment's copy; kept duplicated per this
+ * repo's no-shared-module convention for edge functions.
+ */
+async function computeFamilyDueSet(admin: any, familyId: string, anchorMonth: string): Promise<DueRow[]> {
+    const { data: invoices } = await admin
+        .from("billing_invoices")
+        .select("id, final_amount, status, sent_at, billing_cycles(month)")
+        .eq("family_id", familyId)
+        .not("sent_at", "is", null)
+        .in("status", ["sent", "partial"]);
+
+    const eligible = (invoices || []).filter((inv: any) => {
+        const m = inv?.billing_cycles?.month;
+        return typeof m === "string" && m.slice(0, 7) <= anchorMonth;
+    });
+    if (!eligible.length) return [];
+
+    const ids = eligible.map((inv: any) => inv.id);
+    const { data: pays } = await admin.from("billing_payments").select("invoice_id, amount").in("invoice_id", ids);
+    const paidByInvoice = new Map<number, number>();
+    for (const p of (pays || [])) {
+        paidByInvoice.set(p.invoice_id, (paidByInvoice.get(p.invoice_id) || 0) + (Number(p.amount) || 0));
+    }
+
+    const rows: DueRow[] = eligible.map((inv: any) => {
+        const paid = paidByInvoice.get(inv.id) || 0;
+        const due = Math.round(((Number(inv.final_amount) || 0) - paid) * 100) / 100;
+        return { id: inv.id as number, due, month: String(inv.billing_cycles.month).slice(0, 7) };
+    }).filter((r: DueRow) => r.due > 0.004);
+
+    rows.sort((a, b) => a.month.localeCompare(b.month));
+    return rows;
 }
 
 serve(async (req) => {
@@ -111,16 +163,39 @@ serve(async (req) => {
             return json({ error: "This bill has not been issued yet." }, 400, ch);
         }
 
-        const { data: paymentRows, error: payErr } = await admin
-            .from("billing_payments")
-            .select("amount")
-            .eq("invoice_id", invoiceId);
-        if (payErr) return json({ error: payErr.message }, 500, ch);
-        const paid = (paymentRows || []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0);
-        const due = Math.round(((Number(invoice.final_amount) || 0) - paid) * 100) / 100;
-        if (due <= 0) return json({ error: "This bill is already paid in full." }, 400, ch);
+        const month = (invoice as unknown as { billing_cycles?: { month?: string } }).billing_cycles?.month || "";
+        const anchorMonth = String(month).slice(0, 7);
 
-        // ── 3. Ask Authorize.net for a Hosted Payment Page token ───
+        const dueSet = await computeFamilyDueSet(admin, String(invoice.family_id), anchorMonth);
+        if (!dueSet.length) return json({ error: "This bill is already paid in full." }, 400, ch);
+        const due = Math.round(dueSet.reduce((s, r) => s + r.due, 0) * 100) / 100;
+        const priorBalance = Math.round(
+            dueSet.filter(r => r.month < anchorMonth).reduce((s, r) => s + r.due, 0) * 100,
+        ) / 100;
+
+        // ── 3. Itemized lines — same per-child math the invoice total
+        // itself was computed from, never a second hand-rolled copy.
+        const { data: itemRows } = await admin.rpc("compute_family_month_charges_itemized", {
+            p_family_id: invoice.family_id, p_month: anchorMonth,
+        });
+        const lineItem = (itemRows || []).slice(0, priorBalance > 0 ? 29 : 30).map((r: any, i: number) => ({
+            itemId: `child${i + 1}`,
+            name: String(r.child_name || "Child").slice(0, 31),
+            description: `${r.full_days || 0} full day(s), ${r.half_days || 0} half day(s)`.slice(0, 250),
+            quantity: "1",
+            unitPrice: amountStr(Number(r.net) || 0),
+        }));
+        if (priorBalance > 0) {
+            lineItem.push({
+                itemId: "priorbal",
+                name: "Prior balance",
+                description: "Balance carried from an earlier month's bill",
+                quantity: "1",
+                unitPrice: amountStr(priorBalance),
+            });
+        }
+
+        // ── 4. Ask Authorize.net for a Hosted Payment Page token ───
         const env = (Deno.env.get("AUTHORIZENET_ENVIRONMENT") || "sandbox").toLowerCase();
         const apiUrl = ANET_API_URL[env as "sandbox" | "production"] || ANET_API_URL.sandbox;
         const loginId = Deno.env.get("AUTHORIZENET_API_LOGIN_ID");
@@ -130,7 +205,6 @@ serve(async (req) => {
         }
 
         const returnBase = Deno.env.get("PAYMENT_RETURN_URL") || `${ALLOWED_ORIGIN}/portal.html`;
-        const month = (invoice as unknown as { billing_cycles?: { month?: string } }).billing_cycles?.month || "";
 
         const anetReq = {
             getHostedPaymentPageRequest: {
@@ -138,11 +212,14 @@ serve(async (req) => {
                 transactionRequest: {
                     transactionType: "authCaptureTransaction",
                     amount: amountStr(due),
+                    lineItems: lineItem.length ? { lineItem } : undefined,
                     order: {
                         // Capped at 20 chars by Authorize.net; invoice ids here are
                         // small so this fits comfortably.
                         invoiceNumber: `mdoinv-${invoice.id}`,
-                        description: `Timothy Lutheran MDO — ${month}`,
+                        description: priorBalance > 0
+                            ? `Timothy Lutheran MDO — ${month} + prior balance`
+                            : `Timothy Lutheran MDO — ${month}`,
                     },
                 },
                 hostedPaymentSettings: {
@@ -197,6 +274,7 @@ serve(async (req) => {
                 ? "https://accept.authorize.net/payment/payment"
                 : "https://test.authorize.net/payment/payment",
             amount: due,
+            priorBalance,
         }, 200, ch);
 
     } catch (err) {
