@@ -42,6 +42,16 @@ async function loadRegistrations() {
         '<tr><td colspan="12" class="loading-cell">Loading…</td></tr>';
     try {
         allRegistrations = await fetchAllRegistrations();
+        // Discounts (the Discount column + bill estimate) read from
+        // allFamiliesData via getDiscountMap(), which is otherwise lazy-loaded
+        // only by the Families/Billing tools. Without this, opening
+        // Registrations first shows every discounted child at full price with
+        // no discount label — same guard admin-portal.js uses for the
+        // dashboard's "Billed this month" card.
+        if (!allFamiliesData || !allFamiliesData.length) {
+            allFamiliesData = await fetchAllFamilies({ includeArchived: false });
+            _discountMap = null;
+        }
         populateCareMonthFilter();
         applyFilters();
         renderCapacityOverview();
