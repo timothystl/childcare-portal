@@ -201,30 +201,33 @@ const AP_TOOLS = [
       blurb: 'Assemble and export the monthly reimbursement claim.' },
 
     // ── Planning · Waitlist ──
+    // Consolidation pass (design_handoff_planning_market, 2026-08-27): 15
+    // Planning + Market Analysis tools → 6. Retired entries below: `planner`
+    // (Enrollment Planner) was a duplicate of `wlPlanner`; `wlDemand`
+    // (Waitlist Demand by Month), `forecast` (Demand Forecast) and
+    // `promotions` (Upcoming Room Promotions) moved inline into wlPlanner's
+    // own Grid render (see wlpRenderDemandStrip/wlpRenderAgeOutStrip in
+    // admin-waitlist.js) rather than staying separate tools; `trends`, `fte`
+    // and `seatDay` are replaced by the single `capacityOverview` entry below,
+    // which zips their same underlying queries into one table instead of
+    // three. The underlying report functions (generateDemandForecast,
+    // generatePromotionsReport, generateEnrollmentTrends, etc.) are NOT
+    // deleted — only their standalone AP_TOOLS entries/sections are, per the
+    // handoff's explicit instruction. `ratioStep` is unchanged (no visual
+    // redesign) but its render function is now also mounted a second time
+    // inside Staff → Build Staff Schedule — see apOnToolOpened().
     { key: 'wlPlanner',   pane: 'waitlist', section: 'waitlistPlannerSection', tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '🗂️', name: 'Waitlist & Capacity Planner',
-      blurb: 'The queue, the grid, and the board — one shared allocation.' },
+      blurb: 'The queue, the grid, and the board — one shared allocation, now with demand-by-month and age-out rollups inline.' },
     { key: 'wlNotify',    pane: 'waitlist', section: 'wlNotifySection',       tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '📨', name: 'Waitlist Inquiries',
       blurb: 'Shareable inquiry link, notification email, and weekly reminders.' },
     { key: 'wlImport',    pane: 'waitlist', section: 'wlImportSection',       tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '📥', name: 'Import Waitlist from File',
       blurb: 'Bulk-import waitlist applications from CSV or Excel.' },
-    { key: 'wlDemand',    pane: 'waitlist', section: 'waitlistDemandSection', tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '📊', name: 'Waitlist Demand by Month',
-      blurb: 'Active applications by room and desired start month.' },
 
     // ── Planning · Enrollment Outlook ──
-    { key: 'trends',      pane: 'waitlist', section: 'enrollmentTrendsSection', tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📈', name: 'Enrollment Trends',
-      blurb: 'Month-by-month enrollment count per room.' },
-    { key: 'fte',         pane: 'waitlist', section: 'enrollmentFteSection',   tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📊', name: 'Total Enrollment & FTE',
-      blurb: 'Monthly headcount and full-time-equivalent enrollment per room.' },
-    { key: 'seatDay',     pane: 'waitlist', section: 'seatDayCapacitySection', tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '🪑', name: 'Seat-Day Capacity Model',
-      blurb: 'Plans around occupied seats per day, not enrolled headcount.' },
-    { key: 'forecast',    pane: 'waitlist', section: 'forecastSection',        tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📉', name: 'Demand Forecast',
-      blurb: 'Projected demand per room from history and the waitlist.' },
+    { key: 'capacityOverview', pane: 'waitlist', section: 'roomCapacityOverviewSection', tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📆', name: 'Room Capacity Overview',
+      blurb: 'Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as before.' },
     { key: 'ratioStep',   pane: 'waitlist', section: 'ratioStepSection',       tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '⚖️', name: 'Ratio Step & Next Child',
       blurb: 'Where the next child tips a room into another staff member.' },
-    { key: 'promotions',  pane: 'waitlist', section: 'promotionsSection',      tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '🎂', name: 'Upcoming Room Promotions',
-      blurb: 'Children aging out of their room in the next 2 years.' },
-    { key: 'planner',     pane: 'waitlist', section: 'enrollmentPlannerSection', tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📅', name: 'Enrollment Planner',
-      blurb: 'Cross-reference open capacity with waitlist demand.' },
 
     // ── Staff · Scheduling ──
     { key: 'schedule',    pane: 'staffing', section: 'staffScheduleSection',  tab: 'staff', group: 'Scheduling', tint: AP_TINT.sand, icon: '🗓️', name: 'Build Staff Schedule',
@@ -269,12 +272,11 @@ const AP_TOOLS = [
       blurb: "Every conversation with families and prospects, in one place — who's waiting on you, and what still needs an email." },
 
     // ── Market Analysis ──
-    { key: 'mktPos',      pane: 'market', section: 'marketOverviewSection',  tab: 'market', group: 'Where We Stand', tint: AP_TINT.green, icon: '📈', name: 'Market Position',
-      blurb: 'Flexibility vs. age range served, provider by provider.' },
-    { key: 'mktPricing',  pane: 'market', section: 'marketPricingSection',   tab: 'market', group: 'Where We Stand', tint: AP_TINT.green, icon: '💲', name: 'Pricing Landscape',
-      blurb: 'Weekly-equivalent rates and registration fees across providers.' },
-    { key: 'mktCost',     pane: 'market', section: 'marketCostSection',      tab: 'market', group: 'Where We Stand', tint: AP_TINT.green, icon: '💵', name: 'Cost & Wage Context',
-      blurb: 'Why infant care and staff pay are priced the way they are.' },
+    // mktPos/mktPricing/mktCost retired in favor of one directorReport entry
+    // (its three panes read the exact same fetchMarketProviders() call these
+    // three tools used — see renderDirectorReportTool() in admin-market.js).
+    { key: 'directorReport', pane: 'market', section: 'directorReportSection', tab: 'market', group: 'Where We Stand', tint: AP_TINT.green, icon: '📈', name: 'Director Report',
+      blurb: 'Market position, pricing, and cost & wage — auto-pulled from Comparable Providers.' },
     { key: 'mktProviders', pane: 'market', section: 'marketProvidersSection', tab: 'market', group: 'The Field', tint: AP_TINT.sand, icon: '🏫', name: 'Comparable Providers',
       blurb: 'The full comparable set — edit a row or add a provider.' },
 
@@ -564,9 +566,14 @@ function apNavHtml() {
         </button>`).join('');
 
     const groups = apGroupsForTab(apState.tab);
+    // A single group carries no differentiating information — only print the
+    // heading when a tab has more than one, or "SETTINGS"/"INBOX" sit above
+    // their tab's only tool group forever. apNavHtml() rebuilds this on every
+    // render, so a hand-edit to admin.html/CSS instead of here gets silently
+    // overwritten the next time it runs.
     const body = groups.length
         ? groups.map(g => `
-            <div class="ap-nav-group">${escHtml(g.label)}</div>
+            ${groups.length > 1 ? `<div class="ap-nav-group">${escHtml(g.label)}</div>` : ''}
             ${g.tools.map(t => `
             <button class="ap-nav-item${t.key === apState.view ? ' active is-active' : ''}" data-ap-go="${t.key}">
                 <span>${t.icon}</span><span>${escHtml(t.name)}</span>
@@ -683,7 +690,6 @@ function apOnToolOpened(tool) {
                 if (typeof allStaffData !== 'undefined' && !allStaffData.length) loadStaffList();
                 break;
             case 'wlPlanner':
-            case 'wlDemand':
                 if (typeof loadWaitlistApplications === 'function' &&
                     typeof _allWaitlistApps !== 'undefined' && !_allWaitlistApps.length) loadWaitlistApplications();
                 break;
@@ -706,8 +712,10 @@ function apOnToolOpened(tool) {
         if (tool.key === 'messages' && typeof renderMessagesUnifiedTool === 'function') renderMessagesUnifiedTool();
         if (tool.key === 'settingsHub' && typeof renderSettingsUnifiedTool === 'function') renderSettingsUnifiedTool();
         if (tool.key === 'schedule')  apRenderScheduleTimeOff();
+        if (tool.key === 'schedule' && typeof apMountStaffRatioStep === 'function') apMountStaffRatioStep();
         if (tool.key === 'staffreq')  apRenderStaffReq();
         if (tool.key === 'scenario')  apRenderScenario();
+        if (tool.key === 'capacityOverview' && typeof renderCapacityOverviewTool === 'function') renderCapacityOverviewTool();
     } catch (err) {
         console.error('apOnToolOpened:', tool.key, err);
     }
@@ -1294,7 +1302,7 @@ function apDashDirector(live) {
                 body: apStaffGridHtml(sf), tools: ['staffreq', 'settingsHub'] }),
             apPanel({ title: 'How full each room is',
                 sub: 'Average booked children per day against capacity.',
-                body: apBarsHtml(apFillBars(sf)), tools: ['settingsHub', 'fte', 'seatDay'] }),
+                body: apBarsHtml(apFillBars(sf)), tools: ['settingsHub', 'capacityOverview'] }),
         ],
         right: queueRows.length ? [
             apPanel({ title: 'Next up on the waitlist', tone: 'gold',
@@ -1346,20 +1354,19 @@ function apDashPlanning(live) {
         left: [
             apPanel({ title: 'Waitlist pressure by room',
                 sub: 'Active applications against the seats actually open this week.',
-                body: apRowsHtml(pressure), tools: ['wlPlanner', 'wlDemand', 'planner', 'promotions', 'wlImport'] }),
+                body: apRowsHtml(pressure), tools: ['wlPlanner', 'wlImport'] }),
         ],
-        // Enrollment Outlook's own pills — otherwise trends/forecast/ratioStep
-        // had no path in from a phone at all (fte and seatDay are reachable
-        // from the Staff dashboard's capacity panel, but these three weren't
-        // linked anywhere).
+        // Enrollment Outlook's own pill — otherwise capacityOverview/ratioStep
+        // had no path in from a phone at all. Demand-by-month, the demand
+        // forecast, and upcoming promotions are inline inside wlPlanner's own
+        // Grid render now, so their pill is wlPlanner itself, above.
         right: [
-            apPanel({ title: 'Enrollment outlook', sub: 'Trends, demand forecast, and the next ratio step.',
-                body: '', tools: ['trends', 'forecast', 'ratioStep'] }),
+            apPanel({ title: 'Enrollment outlook', sub: 'Room capacity trends and the next ratio step.',
+                body: '', tools: ['capacityOverview', 'ratioStep'] }),
         ],
         attention: [
             { icon: '👥', key: 'staffreq',   text: `The heaviest day this week needs ${peak} staff on the floor.`, cta: 'Open Daily Staffing' },
-            { icon: '🎂', key: 'promotions', text: 'Check who ages up out of their room next — those days reopen.', cta: 'See Room Promotions' },
-            { icon: '📊', key: 'wlDemand',   text: 'Waitlist demand by month shows where the real unmet demand sits.', cta: 'Open Waitlist Demand' },
+            { icon: '🎂', key: 'wlPlanner', text: 'The Capacity Planner grid shows who ages up out of their room next, and where unmet demand sits by month.', cta: 'Open the Capacity Planner' },
         ],
     };
 }
@@ -1544,7 +1551,7 @@ function apDashMarket(live) {
             kpis: [],
             left: [apPanel({ title: 'Nothing to compare against yet',
                 sub: 'Add the providers you compete with and this dashboard fills in — weekly rates, registration fees, and where we sit in the set.',
-                body: '', tools: ['mktProviders', 'mktPricing'] })],
+                body: '', tools: ['mktProviders', 'directorReport'] })],
             right: [],
             attention: [{ icon: '🏫', key: 'mktProviders',
                 text: 'The comparable provider set is empty.', cta: 'Add providers' }],
@@ -1599,14 +1606,14 @@ function apDashMarket(live) {
         left: [
             apPanel({ title: 'Pricing landscape',
                 sub: 'Weekly-equivalent full-time rate, us against the comparable set. Ranges are shown at their midpoint.',
-                body: apBarsHtml(bars), tools: ['mktPricing', 'mktPos', 'mktProviders'] }),
+                body: apBarsHtml(bars), tools: ['directorReport', 'mktProviders'] }),
         ],
         right: [],
         attention: [
             ...(us && gap < -3 ? [{ icon: '💲', key: 'scenario',
                 text: `We are ${Math.abs(gap)}% under the market median with no rate change modeled.`, cta: 'Open rate scenarios' }] : []),
             { icon: '🏫', key: 'mktProviders', text: 'Keep the comparable set current — rates move.', cta: 'Review providers' },
-            { icon: '💵', key: 'mktCost', text: 'Cost and wage context explains why infant care prices the way it does.', cta: 'Open cost context' },
+            { icon: '💵', key: 'directorReport', text: 'Cost and wage context explains why infant care prices the way it does.', cta: 'Open the Director Report' },
         ],
     };
 }
@@ -1707,6 +1714,38 @@ function apRenderStaffReq() {
         <p style="color:var(--text-muted);font-size:.86em;margin-top:14px;max-width:76ch;text-wrap:pretty">
             Ratios come from Settings → Staff-to-Child Ratios. An orange count means the room is exactly at ratio that day — one more child adds another staff member.
         </p>`;
+}
+
+// ── Ratio Step & Next Child, embedded in Build Staff Schedule ──────────
+// Second mount point for generateRatioStepReport() (admin-reports.js) —
+// design_handoff_planning_market, 2026-08-27: "Ratio Step must be a single
+// render function taking a mount element, called from two places, not
+// duplicated markup." The Planning tab's own Ratio Step tool is untouched
+// (default ids); this one reuses the schedule's own week-of picker instead
+// of a second date input, has no export button, and never alert()s on a
+// missing week — it renders nothing until one is chosen.
+let _apStaffRatioStepWired = false;
+
+function apMountStaffRatioStep() {
+    const mount = document.getElementById('staffRatioStepSection');
+    if (!mount || typeof generateRatioStepReport !== 'function') return;
+
+    if (!_apStaffRatioStepWired) {
+        _apStaffRatioStepWired = true;
+        document.getElementById('staffWeekOf')?.addEventListener('change', apRenderStaffRatioStep);
+    }
+    apRenderStaffRatioStep();
+}
+
+function apRenderStaffRatioStep() {
+    const mount = document.getElementById('staffRatioStepSection');
+    if (!mount) return;
+    const weekOf = document.getElementById('staffWeekOf')?.value || apWeekStart();
+    generateRatioStepReport({
+        containerId: 'staffRatioStepContent',
+        weekOf, roomSel: 'all',
+        showExport: false, silent: true,
+    });
 }
 
 // ============================================================

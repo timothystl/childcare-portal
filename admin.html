@@ -524,12 +524,13 @@
         <!-- ── Tab: Waitlist ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-waitlist">
 
-            <!-- Waitlist & Capacity Planner — one shared allocation drives all
-                 three views (Waitlist Queue / Capacity Planner → Grid / Board).
+            <!-- Waitlist & Capacity Planner — one shared allocation drives every
+                 view (Waitlist Queue / Capacity Planner → Grid or Board / Moving),
+                 plus the demand-by-month and age-out rollups inline in the Grid.
                  See renderWaitlistPlanner() in js/admin/admin-waitlist.js. -->
             <section class="admin-section" id="waitlistPlannerSection">
                 <h2>🗂️ Waitlist &amp; Capacity Planner</h2>
-                <p class="section-desc">One shared allocation drives all three views — Waitlist Queue, Capacity Planner grid, and Board. The queue is first-come, first-served by inquiry date.</p>
+                <p class="section-desc">One shared allocation drives every view — Waitlist Queue, the Capacity Planner grid or board, and Moving — with demand-by-month and age-out rollups inline below the grid. The queue is first-come, first-served by inquiry date.</p>
                 <div id="wlpRoot" style="margin-bottom:20px;"><p class="empty-hint">Loading…</p></div>
             </section>
 
@@ -626,82 +627,19 @@
                 <div id="wlImportPreview"></div>
             </section>
 
-            <!-- Demand Report (moved from Reports tab) -->
-            <section class="admin-section collapsible-section" id="waitlistDemandSection">
-                <h2>📊 Waitlist Demand by Month</h2>
-                <p class="section-desc">Active applications by room and desired start month — shows real unmet demand to guide capacity decisions.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateWaitlistBtn" class="btn-secondary">Generate Report</button>
-                </div>
-                <div id="waitlistContent">
-                    <p class="empty-hint">Click Generate Report to view waitlist demand.</p>
-                </div>
-            </section>
-
-            <!-- Enrollment Trends -->
-            <section class="admin-section collapsible-section" id="enrollmentTrendsSection">
-                <h2>📈 Enrollment Trends</h2>
-                <p class="section-desc">Month-by-month enrollment count per room — useful for spotting growth patterns and planning ahead.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateTrendsBtn" class="btn-secondary">Generate Trends</button>
-                    <button id="exportTrendsBtn" class="btn-primary">&#8595; Export Excel</button>
-                </div>
-                <div id="trendsContent">
-                    <p class="empty-hint">Click Generate Trends to view enrollment history.</p>
-                </div>
-            </section>
-
-            <!-- Total Enrollment & FTE -->
-            <section class="admin-section collapsible-section" id="enrollmentFteSection">
-                <h2>📊 Total Enrollment &amp; FTE</h2>
-                <p class="section-desc">Monthly headcount and full-time-equivalent enrollment per room. FTE = full-day children &times; 1.0 + half-day children &times; 0.5.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateFteBtn" class="btn-secondary">Generate Report</button>
-                </div>
-                <div id="enrollmentFteContent">
-                    <p class="empty-hint">Click Generate Report to view enrollment totals.</p>
-                </div>
-            </section>
-
-            <!-- Seat-Day Capacity Model -->
-            <section class="admin-section collapsible-section" id="seatDayCapacitySection">
-                <h2>🪑 Seat-Day Capacity Model</h2>
-                <p class="section-desc">Plans around occupied seats per day, not enrolled headcount — with flexible schedules, one seat can serve more than one child across a week. Active children ≈ average occupied seats/day &times; 5 &divide; average booked days/child.</p>
-                <div class="roster-btns" style="margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-                    <label style="font-weight:600">Room:
-                        <select id="seatDayRoomSel" style="margin-left:6px;padding:4px 8px">
-                            <option value="all">Full Center</option>
-                        </select>
-                    </label>
-                    <button id="generateSeatDayBtn" class="btn-secondary">Generate Report</button>
-                </div>
-                <div id="seatDayCapacityContent">
-                    <p class="empty-hint">Click Generate Report to view the seat-day capacity model.</p>
-                </div>
-            </section>
-
-            <!-- Demand Forecast -->
-            <section class="admin-section collapsible-section" id="forecastSection">
-                <h2>&#128200; Demand Forecast</h2>
-                <p class="section-desc">Projects children per room per day for the weeks ahead, from the same-weekday average and a four-week moving average. Shows what is already booked alongside it, so the booking still to come is visible. Converts bookings into expected attendance once attendance is being marked.</p>
-                <div class="roster-btns" style="margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-                    <label style="font-weight:600">Room:
-                        <select id="forecastRoomSel" style="margin-left:6px;padding:4px 8px">
-                            <option value="all">All rooms</option>
-                        </select>
-                    </label>
-                    <label style="font-weight:600" for="forecastWeeks">Horizon:
-                        <select id="forecastWeeks" style="margin-left:6px;padding:4px 8px">
-                            <option value="2">2 weeks</option>
-                            <option value="4" selected>4 weeks</option>
-                            <option value="8">8 weeks</option>
-                        </select>
-                    </label>
-                    <button id="generateForecastBtn" class="btn-secondary">Generate Forecast</button>
-                    <button id="exportForecastBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
-                </div>
-                <div id="forecastContent">
-                    <p class="empty-hint">Click Generate Forecast to project the weeks ahead.</p>
+            <!-- Room Capacity Overview (consolidation pass, design_handoff_planning_market,
+                 2026-08-27) — replaces Waitlist Demand by Month (folded inline into
+                 wlpRoot's Grid view above), Enrollment Trends, Total Enrollment & FTE,
+                 Seat-Day Capacity Model, Demand Forecast (its generateDemandForecast()
+                 source stays in admin-reports.js, unreached from the nav — see the
+                 handoff), and Upcoming Room Promotions (folded inline into wlpRoot's
+                 Grid view as the age-out timeline). See renderCapacityOverviewTool()
+                 in js/admin/admin-reports.js. -->
+            <section class="admin-section collapsible-section" id="roomCapacityOverviewSection">
+                <h2>📆 Room Capacity Overview</h2>
+                <p class="section-desc">Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as the three screens it replaces. Click a room to see the same month broken out by weekday.</p>
+                <div id="capacityOverviewContent">
+                    <p class="empty-hint">Loading…</p>
                 </div>
             </section>
 
@@ -723,38 +661,6 @@
                 </div>
                 <div id="ratioStepContent">
                     <p class="empty-hint">Pick a week and click Generate Report.</p>
-                </div>
-            </section>
-
-            <!-- Upcoming Room Promotions -->
-            <section class="admin-section collapsible-section" id="promotionsSection">
-                <h2>🎂 Upcoming Room Promotions</h2>
-                <p class="section-desc">Children aging out of their current room in the next 2 years, based on their birthday. Shows which days open up in the current room when they move up.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generatePromotionsBtn" class="btn-secondary">Generate Report</button>
-                    <button id="exportPromotionsBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
-                    <button id="printPromotionsBtn" class="btn-secondary" style="display:none;">&#128438; Print</button>
-                </div>
-                <div id="promotionsContent">
-                    <p class="empty-hint">Click Generate Report to view upcoming promotions.</p>
-                </div>
-            </section>
-
-            <!-- Enrollment Planner -->
-            <section class="admin-section collapsible-section" id="enrollmentPlannerSection">
-                <h2>📅 Enrollment Planner</h2>
-                <p class="section-desc">Cross-reference open capacity with waitlist demand. Prioritize full-day and full-week placements to maximize space and revenue.</p>
-                <div class="roster-btns" style="margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-                    <label style="font-weight:600">Room:
-                        <select id="plannerRoomSel" style="margin-left:6px;padding:4px 8px"></select>
-                    </label>
-                    <label style="font-weight:600">Month:
-                        <select id="plannerMonthSel" style="margin-left:6px;padding:4px 8px"></select>
-                    </label>
-                    <button id="generatePlannerBtn" class="btn-secondary" onclick="generateEnrollmentPlanner()">Generate Planner</button>
-                </div>
-                <div id="plannerContent">
-                    <p class="empty-hint">Select a room and month, then click Generate Planner.</p>
                 </div>
             </section>
 
@@ -970,53 +876,70 @@
         <!-- ── Tab: Market Analysis ───────────────────────────── -->
         <div class="tab-pane hidden" id="tab-market">
 
-            <section class="admin-section collapsible-section" id="marketOverviewSection">
-                <h2>📈 Market Position</h2>
-                <p class="section-desc">Where every provider actually sits — flexibility vs. age range served. Positioning scores are an illustrative index, not a provider-reported metric.</p>
-                <div class="families-dir-controls">
-                    <button id="marketEditContextBtn" class="btn-ghost">Edit Stats &amp; Figures</button>
-                    <button id="marketRefreshBtn" class="btn-secondary">&#8635; Refresh</button>
+            <!-- Director Report (consolidation pass, design_handoff_planning_market,
+                 2026-08-27) — replaces the Market Position / Pricing Landscape / Cost
+                 & Wage Context tools with one segmented view. Every chart below is the
+                 exact same canvas/render function those three tools used (same ids),
+                 just re-homed under one section and switched by the .ap-seg control
+                 instead of three separate nav entries — see _switchDirectorReportSeg()
+                 in js/admin/admin-market.js. -->
+            <section class="admin-section" id="directorReportSection">
+                <div class="dr-head">
+                    <div>
+                        <h2>📈 Director Report <span class="dr-live-pill">&#9679; LIVE</span></h2>
+                        <p class="section-desc">Market position, pricing, and cost &amp; wage — auto-pulled from Comparable Providers, no re-typing into static tables.</p>
+                    </div>
+                    <div class="dr-head-actions">
+                        <button id="marketEditContextBtn" class="btn-ghost">Edit Stats &amp; Figures</button>
+                        <button id="marketRefreshBtn" class="btn-secondary">&#8635; Refresh</button>
+                        <button id="drExportPacketBtn" class="btn-primary">&#128424;&#65039; Export Packet</button>
+                    </div>
                 </div>
-                <div id="marketHeroStats" class="market-hero-stats"></div>
-                <div id="marketTypeLegend" class="market-type-legend"></div>
-                <div class="chart-box" style="height:420px;position:relative;margin-top:16px">
-                    <canvas id="marketPositionChart"></canvas>
-                </div>
-                <p id="marketPositioningNote" class="chart-note"></p>
-            </section>
 
-            <section class="admin-section collapsible-section" id="marketPricingSection">
-                <h2>💲 Pricing Landscape</h2>
-                <p class="section-desc">Weekly-equivalent rates and registration fees across comparable providers — drawn live from the table below.</p>
-                <div class="two-col">
-                    <div>
-                        <div class="chart-box" style="height:420px;position:relative">
-                            <canvas id="marketRateChart"></canvas>
-                        </div>
+                <div class="ap-seg" id="drSeg">
+                    <button type="button" class="ap-seg-btn is-on" data-dr-seg="position">Market Position</button>
+                    <button type="button" class="ap-seg-btn" data-dr-seg="pricing">Pricing Landscape</button>
+                    <button type="button" class="ap-seg-btn" data-dr-seg="cost">Cost Context</button>
+                </div>
+
+                <div id="drPanePosition" class="dr-pane">
+                    <div id="marketHeroStats" class="market-hero-stats"></div>
+                    <div id="marketTypeLegend" class="market-type-legend"></div>
+                    <div class="chart-box" style="height:420px;position:relative;margin-top:16px">
+                        <canvas id="marketPositionChart"></canvas>
                     </div>
-                    <div>
-                        <div class="chart-box" style="height:420px;position:relative">
-                            <canvas id="marketRegFeeChart"></canvas>
+                    <p id="marketPositioningNote" class="chart-note"></p>
+                </div>
+
+                <div id="drPanePricing" class="dr-pane" style="display:none">
+                    <div class="two-col">
+                        <div>
+                            <div class="chart-box" style="height:420px;position:relative">
+                                <canvas id="marketRateChart"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="chart-box" style="height:420px;position:relative">
+                                <canvas id="marketRegFeeChart"></canvas>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <section class="admin-section collapsible-section" id="marketCostSection">
-                <h2>💵 Cost &amp; Wage Context</h2>
-                <p class="section-desc">Why infant care and staff pay are priced the way they are.</p>
-                <div class="two-col">
-                    <div>
-                        <div class="chart-box" style="height:260px;position:relative">
-                            <canvas id="marketInfantCostChart"></canvas>
+                <div id="drPaneCost" class="dr-pane" style="display:none">
+                    <div class="two-col">
+                        <div>
+                            <div class="chart-box" style="height:260px;position:relative">
+                                <canvas id="marketInfantCostChart"></canvas>
+                            </div>
+                            <p id="marketInfantCostSource" class="chart-note"></p>
                         </div>
-                        <p id="marketInfantCostSource" class="chart-note"></p>
-                    </div>
-                    <div>
-                        <div class="chart-box" style="height:260px;position:relative">
-                            <canvas id="marketWageChart"></canvas>
+                        <div>
+                            <div class="chart-box" style="height:260px;position:relative">
+                                <canvas id="marketWageChart"></canvas>
+                            </div>
+                            <p id="marketWageSource" class="chart-note"></p>
                         </div>
-                        <p id="marketWageSource" class="chart-note"></p>
                     </div>
                 </div>
             </section>
@@ -1344,6 +1267,17 @@
                         <div id="staffContent">
                             <p class="empty-hint">Select a week above and click Generate Schedule.</p>
                         </div>
+                        <!-- Ratio Step & Next Child, mounted a second time here (consolidation
+                             pass, design_handoff_planning_market, 2026-08-27) — same render
+                             function as the Planning tab's own Ratio Step tool, just pointed
+                             at this week's date instead of a second date picker. See
+                             apMountStaffRatioStep() in js/admin/admin-portal.js. -->
+                        <section class="ap-sched-ratiostep" id="staffRatioStepSection">
+                            <div class="wlp-section-label" style="margin:18px 0 6px">&#9878;&#65039; Ratio Step &amp; Next Child</div>
+                            <div id="staffRatioStepContent">
+                                <p class="empty-hint">Select a week above to see the next staffing step.</p>
+                            </div>
+                        </section>
                     </div>
                     <aside class="ap-sched-side" id="apSchedTimeOff"></aside>
                 </div>

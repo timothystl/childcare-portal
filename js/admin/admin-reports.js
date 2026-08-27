@@ -4138,11 +4138,20 @@ function _buildRatioStepRows(weekDates, rooms, staff) {
     return rows;
 }
 
-async function generateRatioStepReport() {
-    const container = document.getElementById('ratioStepContent');
+// Mounted twice (design_handoff_planning_market, 2026-08-27): the Planning
+// tab's own Ratio Step & Next Child tool (no visual change — every id below
+// defaults to that tool's existing markup), and a second time embedded in
+// Staff → Build Staff Schedule (see apMountStaffRatioStep() in
+// admin-portal.js), which passes its own container/export ids and a `weekOf`
+// value taken directly from the schedule's own week picker rather than a
+// second date input. One render function, not duplicated markup, per the
+// handoff's explicit "mount into a <div> slot" instruction.
+async function generateRatioStepReport(opts) {
+    opts = opts || {};
+    const container = document.getElementById(opts.containerId || 'ratioStepContent');
     if (!container) return;
-    const weekOf = document.getElementById('ratioStepWeekOf')?.value;
-    if (!weekOf) { alert('Please select a week.'); return; }
+    const weekOf = opts.weekOf || document.getElementById(opts.weekOfId || 'ratioStepWeekOf')?.value;
+    if (!weekOf) { if (!opts.silent) alert('Please select a week.'); return; }
 
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
@@ -4155,7 +4164,7 @@ async function generateRatioStepReport() {
         if (!allRegistrations.length) allRegistrations = await fetchAllRegistrations();
         const staff = await fetchAllStaff();
 
-        const roomSel = document.getElementById('ratioStepRoomSel')?.value || 'all';
+        const roomSel = opts.roomSel || document.getElementById(opts.roomSelId || 'ratioStepRoomSel')?.value || 'all';
         let rooms = getSortedRooms();
         if (roomSel === 'all') {
             // Drop rooms with no bookings anywhere this week — an out-of-season
@@ -4319,8 +4328,10 @@ async function generateRatioStepReport() {
                 Booked children are not the same as attended children — the portal has no child check-in, so these are bookings.
             </p>`;
 
-        const exportBtn = document.getElementById('exportRatioStepBtn');
-        if (exportBtn) exportBtn.style.display = '';
+        if (opts.showExport !== false) {
+            const exportBtn = document.getElementById(opts.exportBtnId || 'exportRatioStepBtn');
+            if (exportBtn) exportBtn.style.display = '';
+        }
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
     }
@@ -4723,9 +4734,13 @@ function setupExtraReports() {
     document.getElementById('exportForecastBtn')?.addEventListener('click', exportDemandForecast);
     document.getElementById('forecastRoomSel')?.addEventListener('change', generateDemandForecast);
     document.getElementById('forecastWeeks')?.addEventListener('change', generateDemandForecast);
-    document.getElementById('generateRatioStepBtn')?.addEventListener('click', generateRatioStepReport);
+    // Wrapped in arrow functions rather than passed directly: generateRatioStepReport
+    // now takes an optional opts object (it's also mounted a second time inside
+    // Build Staff Schedule — see apMountStaffRatioStep() in admin-portal.js), and an
+    // event listener would otherwise pass the click/change Event as that argument.
+    document.getElementById('generateRatioStepBtn')?.addEventListener('click', () => generateRatioStepReport());
     document.getElementById('exportRatioStepBtn')?.addEventListener('click', exportRatioStepReport);
-    document.getElementById('ratioStepRoomSel')?.addEventListener('change', generateRatioStepReport);
+    document.getElementById('ratioStepRoomSel')?.addEventListener('change', () => generateRatioStepReport());
     document.getElementById('generateDiscountPricingBtn')?.addEventListener('click', generateDiscountPricingReport);
     document.getElementById('exportDiscountPricingBtn')?.addEventListener('click', exportDiscountPricingReport);
     document.getElementById('printDiscountPricingBtn')?.addEventListener('click', printDiscountPricingReport);
@@ -5830,6 +5845,196 @@ async function exportEnrollmentTrends() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Enrollment Trends');
     XLSX.writeFile(wb, 'enrollment-trends.xlsx');
+}
+
+// ============================================================
+// ROOM CAPACITY OVERVIEW  (consolidation pass, design_handoff_planning_market,
+// 2026-08-27) — replaces the three separate Enrollment Trends / Total
+// Enrollment & FTE / Seat-Day Capacity Model screens with one table: Room ·
+// Enrolled · FTE · Seat-days occupied/available · %-full bar · 6-month trend.
+//
+// Per the handoff: "do not re-derive, call the existing helper each used and
+// zip the results by room+month." `_buildTrendMap()`/`_trendMonthOwnPattern()`
+// (Enrollment Trends' own helpers, above) are reused as-is for the per-weekday
+// drawer. Enrolled/FTE/seat-days reuse the exact same registration
+// classification the FTE and Seat-Day reports used (majority day-type per
+// registration, bucketed to the earliest care-date month) — but computed from
+// ONE fetchAllRegistrations() call instead of three independent ones.
+// generateEnrollmentFteReport()/generateSeatDayCapacityReport() themselves are
+// left in place (dead code, no AP_TOOLS entry reaches them) rather than
+// deleted, per the handoff's instruction to remove only the registry entries.
+// ============================================================
+
+let _capacityOverviewRows = [];
+let _capacityOverviewOpenRoom = null;
+
+function _capacityOverviewByMonth(registrations) {
+    const byMonth = {}; // 'YYYY-MM' → [{ room_id, type: 'full'|'half', childDays }]
+    registrations.filter(r => r.status === 'confirmed').forEach(reg => {
+        const dates = (reg.registration_dates || []).filter(d => !d.waitlisted);
+        if (!dates.length) return;
+        const moKey  = dates.map(d => d.care_date.slice(0, 7)).sort()[0];
+        const fullCt = dates.filter(d => d.day_type === 'full').length;
+        const halfCt = dates.filter(d => d.day_type === 'half').length;
+        const type   = fullCt >= halfCt ? 'full' : 'half';
+        (byMonth[moKey] = byMonth[moKey] || []).push({ room_id: reg.room_id, type, childDays: dates.length });
+    });
+    return byMonth;
+}
+
+// Non-weekend calendar days in a month — same convention as the Seat-Day
+// report's own _weekdaysInMonth(), mirrored rather than shared since that
+// function is coupled to no other state worth importing for it alone.
+function _capacityOverviewWeekdays(year, month1based) {
+    let count = 0;
+    const d = new Date(year, month1based - 1, 1);
+    while (d.getMonth() === month1based - 1) {
+        const dow = d.getDay();
+        if (dow !== 0 && dow !== 6) count++;
+        d.setDate(d.getDate() + 1);
+    }
+    return count;
+}
+
+async function _buildCapacityOverviewRows() {
+    const allRegs = await fetchAllRegistrations();
+    const byMonth = _capacityOverviewByMonth(allRegs);
+
+    const today = new Date();
+    const curMo   = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const priorD  = new Date(today.getFullYear(), today.getMonth() - 6, 1);
+    const priorMo = `${priorD.getFullYear()}-${String(priorD.getMonth() + 1).padStart(2, '0')}`;
+    const [curY, curM] = curMo.split('-').map(Number);
+    const weekdays = _capacityOverviewWeekdays(curY, curM);
+
+    const activeRooms = getSortedRooms().filter(r => r.status !== 'coming_soon');
+    return activeRooms.map(room => {
+        const curEntries   = (byMonth[curMo]   || []).filter(e => e.room_id === room.id);
+        const priorEntries = (byMonth[priorMo] || []).filter(e => e.room_id === room.id);
+        const enrolled = curEntries.length;
+        const full = curEntries.filter(e => e.type === 'full').length;
+        const half = curEntries.filter(e => e.type === 'half').length;
+        const fte  = full + half * 0.5;
+        const seatDaysOcc   = curEntries.reduce((s, e) => s + e.childDays, 0);
+        const seatDaysAvail = weekdays * (room.capacity || 0);
+        const pct   = room.capacity ? Math.round((enrolled / room.capacity) * 100) : 0;
+        const delta = enrolled - priorEntries.length;
+        return { room, curMo, priorMo, enrolled, fte, seatDaysOcc, seatDaysAvail, pct, delta };
+    });
+}
+
+async function renderCapacityOverviewTool() {
+    const container = document.getElementById('capacityOverviewContent');
+    if (!container) return;
+    container.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        _capacityOverviewRows = await _buildCapacityOverviewRows();
+        _capacityOverviewOpenRoom = null;
+        container.innerHTML = _renderCapacityOverviewTable(_capacityOverviewRows);
+        _wireCapacityOverviewRows();
+    } catch (err) {
+        container.innerHTML = `<p class="import-error">Error loading capacity overview: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function _renderCapacityOverviewTable(rows) {
+    if (!rows.length) return '<p class="empty-hint">No active rooms found.</p>';
+    return `
+    <div style="overflow-x:auto">
+    <table class="report-table">
+        <thead><tr>
+            <th>Room</th>
+            <th class="report-num">Enrolled</th>
+            <th class="report-num">FTE</th>
+            <th class="report-num">Seat-days occ. / avail.</th>
+            <th style="width:200px">% full</th>
+            <th class="report-num">6-mo trend</th>
+        </tr></thead>
+        <tbody>
+        ${rows.map(r => {
+            const pctColor   = r.pct >= 95 ? 'var(--tang)' : 'var(--navy)';
+            const trendLabel = r.delta > 0 ? `▲ +${r.delta}` : r.delta < 0 ? `▼ ${r.delta}` : '— flat';
+            const trendColor = r.delta > 0 ? 'var(--green-text)' : r.delta < 0 ? '#7a2a18' : 'var(--text-muted)';
+            return `
+            <tr class="capov-row" data-capov-room="${r.room.id}" style="cursor:pointer">
+                <td><strong>${escHtml(r.room.label)}</strong></td>
+                <td class="report-num">${r.enrolled}</td>
+                <td class="report-num">${r.fte % 1 === 0 ? r.fte : r.fte.toFixed(1)}</td>
+                <td class="report-num" style="font-size:.9em">${r.seatDaysOcc} / ${r.seatDaysAvail}</td>
+                <td>
+                    <div style="height:12px;border-radius:99px;background:var(--border);overflow:hidden">
+                        <div style="height:100%;width:${Math.min(100, r.pct)}%;border-radius:99px;background:${pctColor}"></div>
+                    </div>
+                    <div style="font-size:.72em;color:var(--text-muted);margin-top:3px">${r.pct}% full</div>
+                </td>
+                <td class="report-num" style="font-weight:800;color:${trendColor}">${trendLabel}</td>
+            </tr>
+            <tr class="capov-drawer-row" id="capovDrawer_${r.room.id}" style="display:none"><td colspan="6"></td></tr>`;
+        }).join('')}
+        </tbody>
+    </table>
+    </div>
+    <p style="font-size:.8em;color:#6b7280;margin:.75rem 0 0">
+        One table replacing three screens that computed the same room-fullness from the same data —
+        Enrollment Trends, Total Enrollment &amp; FTE, and the Seat-Day Capacity Model.
+        Seat-days occupied/available and % full are for the current month; the trend column compares
+        against enrollment 6 months ago. Click a room to see the same month broken out by weekday —
+        enrollment isn't even across the week.
+    </p>`;
+}
+
+function _wireCapacityOverviewRows() {
+    document.querySelectorAll('[data-capov-room]').forEach(row => {
+        row.addEventListener('click', () => _toggleCapacityOverviewDrawer(row.dataset.capovRoom));
+    });
+}
+
+async function _toggleCapacityOverviewDrawer(roomId) {
+    const drawerRow = document.getElementById(`capovDrawer_${roomId}`);
+    if (!drawerRow) return;
+    if (_capacityOverviewOpenRoom === roomId) {
+        drawerRow.style.display = 'none';
+        _capacityOverviewOpenRoom = null;
+        return;
+    }
+    if (_capacityOverviewOpenRoom) {
+        const prev = document.getElementById(`capovDrawer_${_capacityOverviewOpenRoom}`);
+        if (prev) prev.style.display = 'none';
+    }
+    _capacityOverviewOpenRoom = roomId;
+    const td = drawerRow.querySelector('td');
+    td.innerHTML = '<p class="empty-hint">Loading…</p>';
+    drawerRow.style.display = '';
+    try {
+        const trendMap = await _buildTrendMap();
+        const row = _capacityOverviewRows.find(r => r.room.id === roomId);
+        const pattern = _trendMonthOwnPattern(trendMap, roomId, row.curMo);
+        td.innerHTML = _renderCapacityOverviewDrawer(row, pattern);
+    } catch (err) {
+        td.innerHTML = `<p class="import-error">Error: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function _renderCapacityOverviewDrawer(row, pattern) {
+    const cap = row.room.capacity || 0;
+    return `
+    <div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:6px 0;background:var(--linen)">
+        <div style="font-weight:800;color:var(--navy);margin-bottom:2px">${escHtml(row.room.label)} — by weekday</div>
+        <p style="color:var(--text-muted);font-size:.8em;margin:2px 0 12px">Same room, same month — enrollment isn't even across the week.</p>
+        <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px">
+            ${TREND_DAYS.map(day => {
+                const p = pattern[day] || { half: 0, full: 0, count: 0 };
+                const total = p.half + p.full;
+                const pct = cap ? Math.min(100, Math.round((total / cap) * 100)) : 0;
+                const tight = pct >= 95;
+                return `<div style="background:${tight ? 'var(--tang-pale)' : '#fff'};border:1px solid ${tight ? 'var(--tang)' : 'var(--border)'};border-radius:9px;padding:8px 4px 9px;text-align:center">
+                    <div style="font-size:.68em;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted)">${escHtml(day)}</div>
+                    <div style="font-family:var(--font-head);font-size:1.15em;font-weight:700;color:var(--navy);margin-top:3px">${pct}%</div>
+                    <div style="font-size:.68em;color:var(--text-muted)">${fmtAvg(total)} of ${cap}</div>
+                </div>`;
+            }).join('')}
+        </div>
+    </div>`;
 }
 
 // ── Waitlist Demand ────────────────────────────────────────

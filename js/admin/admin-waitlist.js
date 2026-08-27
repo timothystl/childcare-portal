@@ -128,6 +128,8 @@ let _wlp = {
     queueSortMode: 'priority',   // Queue: 'priority'|'days_desc'|'days_asc'|'waiting'|'room' — display order only, never priority badges
     movingSelectedMonthIdx: 0,   // Moving: 0-11
     toastText: null,
+    rollupDrawer: null,       // Grid: { type: 'demand'|'ageout', monthIdx } — the demand-by-month / age-out strips below the grid table
+    movedKeys: new Set(),     // Moving: "monthLabel|name" keys of confirmed moves this session — see wlpConfirmMove()
 };
 let _wlpAlloc = null; // last computed allocation — see wlpRunAllocation()
 
@@ -496,6 +498,7 @@ function wlpMovementEvents(roomId, alloc) {
                 monthLabel: mo.label, name: ev.name, days: ev.days,
                 iconCls: 'wlp-event-icon-grad', icon: '↑',
                 actionLabel: nextId ? `moves up to ${nextLabel}` : 'graduates the program',
+                fromRoomId: roomId, toRoomId: nextId || null,
             });
         });
         (alloc.incoming[roomId][mo.idx] || []).forEach(k => {
@@ -1348,7 +1351,10 @@ function wlpRenderGrid(alloc) {
                 ${sel ? wlpGridRosterBlockHtml(sel, alloc) : ''}
             </div>
             ${sel ? wlpRenderGridSidebar(sel, alloc) : ''}
-        </div>`;
+        </div>
+        ${wlpRenderDemandStrip(alloc)}
+        ${wlpRenderAgeOutStrip(alloc)}
+        ${_wlp.toastText ? `<div class="wlp-toast" style="margin-top:14px;border-radius:7px;">${escHtml(_wlp.toastText)}</div>` : ''}`;
 }
 
 function wlpAttachGridListeners() {
@@ -1368,6 +1374,159 @@ function wlpAttachGridListeners() {
             wlpEnrollFromWaitlist(Number(el.dataset.wlpMatchOffer), _wlp.selCellA?.monthIdx);
         });
     });
+    document.querySelectorAll('[data-wlp-demand-month]').forEach(el => {
+        el.addEventListener('click', () => {
+            const idx = Number(el.dataset.wlpDemandMonth);
+            _wlp.rollupDrawer = (_wlp.rollupDrawer?.type === 'demand' && _wlp.rollupDrawer.monthIdx === idx)
+                ? null : { type: 'demand', monthIdx: idx };
+            renderWaitlistPlanner();
+        });
+    });
+    document.querySelectorAll('[data-wlp-ageout-month]').forEach(el => {
+        el.addEventListener('click', () => {
+            const idx = Number(el.dataset.wlpAgeoutMonth);
+            _wlp.rollupDrawer = (_wlp.rollupDrawer?.type === 'ageout' && _wlp.rollupDrawer.monthIdx === idx)
+                ? null : { type: 'ageout', monthIdx: idx };
+            renderWaitlistPlanner();
+        });
+    });
+    if (_wlp.rollupDrawer?.type === 'ageout' && _wlpAlloc) {
+        wlpAttachMoveConfirmListeners(_wlpAlloc, _wlp.rollupDrawer.monthIdx);
+    }
+}
+
+// ── Grid — inline demand-by-month / age-out rollups (consolidation pass,
+// design_handoff_planning_market, 2026-08-27) ───────────────────────────
+// Retires the standalone Waitlist Demand by Month and Upcoming Room
+// Promotions AP_TOOLS entries by surfacing the same two questions right
+// under the Grid they already inform. Neither runs a new query: demand
+// reads `_allWaitlistApps` (already loaded for this whole tool) and age-out
+// reads `alloc.gradOut`/`alloc.gradIn` (already computed by
+// wlpRunAllocation() for the Grid/Board/Moving views) — the age-out detail
+// drawer reuses wlpMovingMonthEvents()/wlpMovingDrawerCardHtml() verbatim,
+// the exact card Moving's own drawer renders, filtered to graduation events.
+
+function wlpDemandByMonth(alloc) {
+    const active = (_allWaitlistApps || []).filter(a => ['pending', 'offered', 'accepted'].includes(a.status));
+    return alloc.months.slice(0, 6).map(mo => ({
+        label: mo.label.split(' ')[0], monthIdx: mo.idx,
+        count: active.filter(a => (a.desired_start_date || '').slice(0, 7) === mo.key).length,
+    }));
+}
+
+function wlpAgeOutEventsForMonth(monthIdx, alloc) {
+    return wlpMovingMonthEvents(monthIdx, alloc).filter(ev => ev.iconCls === 'wlp-event-icon-grad');
+}
+
+function wlpAgeOutByMonth(alloc) {
+    const chain = wlpPromotionChain();
+    return alloc.months.slice(0, 6).map(mo => {
+        const pairs = {};
+        let count = 0;
+        alloc.rooms.forEach(room => {
+            const n = (alloc.gradOut[room.id][mo.idx] || []).length;
+            if (!n) return;
+            count += n;
+            const nextId = chain[room.id]?.nextRoom;
+            const toLabel = nextId ? (alloc.roomMeta[nextId]?.room.label.replace(/^\S+\s/, '') || '') : 'out of the program';
+            pairs[`${room.label.replace(/^\S+\s/, '')} → ${toLabel}`] = true;
+        });
+        const keys = Object.keys(pairs);
+        const subLabel = keys.length ? keys.slice(0, 2).join(', ') + (keys.length > 2 ? '…' : '') : 'no promotions';
+        return { label: mo.label.split(' ')[0], monthIdx: mo.idx, count, subLabel };
+    });
+}
+
+function wlpRenderDemandStrip(alloc) {
+    const months = wlpDemandByMonth(alloc);
+    const sel = _wlp.rollupDrawer;
+    return `
+        <div class="wlp-section-label" style="margin:22px 0 4px">Waitlist demand by month <span style="font-weight:600;text-transform:none;letter-spacing:0;color:var(--text-muted)">— rolled up from the queue, inline here instead of its own screen</span></div>
+        <div class="wlp-rollup-strip">
+            ${months.map(m => `
+                <button type="button" class="wlp-moving-tile${sel?.type === 'demand' && sel.monthIdx === m.monthIdx ? ' selected' : ''}" data-wlp-demand-month="${m.monthIdx}">
+                    <div class="wlp-moving-tile-label">${escHtml(m.label)}</div>
+                    <div class="wlp-moving-tile-count">${m.count}</div>
+                    <div class="wlp-rollup-tile-sub">waiting</div>
+                </button>`).join('')}
+        </div>
+        ${sel?.type === 'demand' ? wlpRenderDemandDrawer(sel.monthIdx, alloc) : ''}`;
+}
+
+function wlpRenderAgeOutStrip(alloc) {
+    const months = wlpAgeOutByMonth(alloc);
+    const sel = _wlp.rollupDrawer;
+    return `
+        <div class="wlp-section-label" style="margin:22px 0 4px">Age-out timeline <span style="font-weight:600;text-transform:none;letter-spacing:0;color:var(--text-muted)">— who ages into an open seat, and when</span></div>
+        <div class="wlp-rollup-strip">
+            ${months.map(m => `
+                <button type="button" class="wlp-moving-tile${sel?.type === 'ageout' && sel.monthIdx === m.monthIdx ? ' selected' : ''}" data-wlp-ageout-month="${m.monthIdx}">
+                    <div class="wlp-moving-tile-label">${escHtml(m.label)}</div>
+                    <div class="wlp-moving-tile-count">${m.count}</div>
+                    <div class="wlp-rollup-tile-sub">${escHtml(m.subLabel)}</div>
+                </button>`).join('')}
+        </div>
+        ${sel?.type === 'ageout' ? wlpRenderAgeOutDrawer(sel.monthIdx, alloc) : ''}`;
+}
+
+function wlpRenderAgeOutDrawer(monthIdx, alloc) {
+    const events = wlpAgeOutEventsForMonth(monthIdx, alloc);
+    const label = alloc.months[monthIdx].label;
+    return `
+        <div class="wlp-moving-drawer">
+            <div class="wlp-moving-drawer-head">${escHtml(label)} — ${events.length} age${events.length === 1 ? 's' : ''} out</div>
+            ${events.length
+                ? `<div class="wlp-moving-drawer-grid">${events.map(wlpMovingDrawerCardHtml).join('')}</div>`
+                : '<div class="wlp-moving-drawer-empty">No promotions scheduled this month.</div>'}
+        </div>`;
+}
+
+function wlpRenderDemandDrawer(monthIdx, alloc) {
+    const mo = alloc.months[monthIdx];
+    const active = (_allWaitlistApps || []).filter(a => ['pending', 'offered', 'accepted'].includes(a.status));
+    const inMonth = active.filter(a => (a.desired_start_date || '').slice(0, 7) === mo.key);
+    // "Matched" = the same allocation the Grid/Board already computed says
+    // this kid has a real seat by this month — not a second, divergent check.
+    const matchedIds = new Set(inMonth
+        .map(a => alloc.kids.find(k => k.id === a.id))
+        .filter(k => k && alloc.fitMonthByKid[k.id] != null && alloc.fitMonthByKid[k.id] <= monthIdx)
+        .map(k => k.id));
+    const unmatched = inMonth.length - matchedIds.size;
+    const roomsAffected = new Set(inMonth.map(a => wlDeriveRoom(a)).filter(Boolean)).size;
+
+    const statBox = (label, val) => `
+        <div style="background:var(--linen);border:1px solid var(--border);border-radius:9px;padding:8px 10px">
+            <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)">${label}</div>
+            <div style="font-family:var(--font-head);font-size:1.25em;font-weight:700;color:var(--navy)">${val}</div>
+        </div>`;
+
+    const cards = inMonth.map(a => {
+        const kid = alloc.kids.find(k => k.id === a.id);
+        if (!kid) return '';
+        const isMatched = matchedIds.has(kid.id);
+        const chips = kid.days.length
+            ? kid.days.map(d => `<span class="wlp-chip wlp-chip-open">${escHtml(d)}</span>`).join('')
+            : `<span class="wlp-chip wlp-chip-off" style="width:auto;padding:2px 8px">flexible</span>`;
+        const roomLabel = alloc.roomMeta[kid.room]?.room.label || 'room TBD';
+        return `
+            <div class="wlp-moving-drawer-card">
+                <div><b>${escHtml(kid.name)}</b> · ${escHtml(roomLabel)}</div>
+                <div class="wlp-chip-row" style="margin:5px 0 0">${chips}</div>
+                <div style="margin-top:4px;font-size:11px;font-weight:700;color:${isMatched ? 'var(--green-text)' : 'var(--text-muted)'}">${isMatched ? '✅ has a seat by this month' : 'still waiting'}</div>
+            </div>`;
+    }).join('');
+
+    return `
+        <div class="wlp-moving-drawer">
+            <div class="wlp-moving-drawer-head">Waitlist demand · ${escHtml(mo.label)}</div>
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px">
+                ${statBox('Total waiting', inMonth.length)}
+                ${statBox('Matched', matchedIds.size)}
+                ${statBox('Unmatched', unmatched)}
+                ${statBox('Rooms affected', roomsAffected)}
+            </div>
+            ${cards ? `<div class="wlp-moving-drawer-grid">${cards}</div>` : '<div class="wlp-moving-drawer-empty">No one on the waitlist requests this exact month yet.</div>'}
+        </div>`;
 }
 
 // ── Capacity Planner — Board view ───────────────────────────
@@ -1726,17 +1885,90 @@ function wlpMovingMonthCounts(alloc) {
     return counts;
 }
 
+// A graduation event ("ages out of this room") is the only kind that IS a
+// room move an admin can confirm — a waitlist start or an accepted offer
+// gets seated through the ordinary Enroll flow instead, not this button.
+function wlpMoveKey(ev) {
+    return `${ev.monthLabel}|${ev.name}`;
+}
+
 function wlpMovingDrawerCardHtml(ev) {
     const fg = ev.iconCls === 'wlp-event-icon-grad' ? 'var(--wlp-grad-fg)'
         : ev.iconCls === 'wlp-event-icon-promised' ? 'var(--wlp-promised-fg)' : 'var(--wlp-start-fg)';
     const chips = TREND_DAYS.map(d => ev.days.includes(d)
         ? `<span class="wlp-chip ${wlpEventChipClass(ev.iconCls)}">${d}</span>`
         : `<span class="wlp-chip wlp-chip-off">${d}</span>`).join('');
+    const done = ev.iconCls === 'wlp-event-icon-grad' && _wlp.movedKeys.has(wlpMoveKey(ev));
+    const confirmBtn = ev.iconCls === 'wlp-event-icon-grad'
+        ? `<button type="button" class="btn-secondary wlp-confirm-move-btn" data-wlp-confirm-move="${wlpMoveKey(ev)}" ${done ? 'disabled' : ''} style="margin-top:7px;padding:5px 12px;font-size:11.5px;${done ? 'opacity:.6;' : ''}">${done ? '✓ Moved' : 'Confirm move'}</button>`
+        : '';
     return `
-        <div class="wlp-moving-drawer-card">
+        <div class="wlp-moving-drawer-card" data-wlp-move-event="${wlpMoveKey(ev)}">
             <div><span style="color:${fg};font-weight:800;">${ev.icon}</span> <b>${escHtml(ev.name)}</b> ${escHtml(ev.actionLabel)}</div>
             <div class="wlp-chip-row" style="margin:5px 0 0">${chips}</div>
+            ${confirmBtn}
         </div>`;
+}
+
+// Confirm a graduation move: writes the child's room assignment forward via
+// the same updateStudentRoomOverride() path the Family Directory's own room
+// dropdown already uses (admin-families.js) — this is not a new write
+// mechanism, just a second caller of the existing one. "Moved" is tracked
+// locally for the session (there's no dedicated moves table, same as the
+// design mock's own movedKeys) since the write itself — the room_override —
+// is the durable record; re-deriving "already moved" from that on a future
+// page load would need the graduation index to stop projecting a child once
+// their override matches the destination room, which the age-out computation
+// doesn't currently check (it walks registrations/dob, not room_override).
+async function wlpConfirmMove(moveKey, ev) {
+    if (!ev.toRoomId) {
+        wlpFlashToast(`${ev.name} graduates the program — no destination room to set here.`);
+        return;
+    }
+    try {
+        if (typeof allFamiliesData === 'undefined' || !allFamiliesData || !allFamiliesData.length) {
+            allFamiliesData = await fetchAllFamilies({ includeArchived: false });
+        }
+    } catch (err) {
+        alert('Could not load family records: ' + err.message);
+        return;
+    }
+    const student = wlpFindStudentByChildName(ev.name);
+    if (!student) {
+        wlpFlashToast(`Couldn't match ${ev.name} to a child record — update their room from Family Directory instead.`);
+        return;
+    }
+    try {
+        await updateStudentRoomOverride(student.id, ev.toRoomId);
+        _wlp.movedKeys.add(moveKey);
+        const toLabel = (ROOMS.find(r => r.id === ev.toRoomId) || {}).label || 'the new room';
+        wlpFlashToast(`${ev.name} moved to ${toLabel}.`);
+    } catch (err) {
+        alert('Could not update the room: ' + err.message);
+    }
+}
+
+function wlpFindStudentByChildName(name) {
+    const key = (name || '').trim().toLowerCase();
+    if (!key || !Array.isArray(allFamiliesData)) return null;
+    for (const fam of allFamiliesData) {
+        const match = (fam.students || []).find(st => (st.child_name || '').trim().toLowerCase() === key);
+        if (match) return match;
+    }
+    return null;
+}
+
+function wlpAttachMoveConfirmListeners(alloc, monthIdx) {
+    document.querySelectorAll('[data-wlp-confirm-move]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const key = btn.dataset.wlpConfirmMove;
+            const events = wlpMovingMonthEvents(monthIdx, alloc);
+            const ev = events.find(e => wlpMoveKey(e) === key);
+            if (!ev) return;
+            btn.disabled = true;
+            wlpConfirmMove(key, ev).finally(() => renderWaitlistPlanner());
+        });
+    });
 }
 
 function wlpRenderMoving(alloc) {
@@ -1776,7 +2008,8 @@ function wlpRenderMoving(alloc) {
             <div class="wlp-collapse-count" style="display:block;margin-bottom:6px;">${movementCount} move${movementCount === 1 ? '' : 's'}</div>
             <div class="wlp-section-hint">↑ graduating up to the next room · 🎯 promised a spot (offer accepted, reserved regardless of capacity) · + projected to start from the waitlist (simulated, not guaranteed)</div>
             <div class="wlp-movement-grid" style="grid-template-columns: repeat(${Math.max(movementCols.length, 1)}, minmax(0, 1fr));">${movementHtml || '<div class="wlp-empty-note">No graduations or waitlist starts in the next 12 months.</div>'}</div>
-        </div>`;
+        </div>
+        ${_wlp.toastText ? `<div class="wlp-toast" style="margin:14px 24px 0;border-radius:7px;">${escHtml(_wlp.toastText)}</div>` : ''}`;
 }
 
 function wlpAttachMovingListeners() {
@@ -1786,6 +2019,9 @@ function wlpAttachMovingListeners() {
             renderWaitlistPlanner();
         });
     });
+    if (_wlpAlloc) {
+        wlpAttachMoveConfirmListeners(_wlpAlloc, Math.max(0, Math.min(11, _wlp.movingSelectedMonthIdx)));
+    }
 }
 
 // ── Offer / Tour modal bridges (reuses the existing #wlOfferModal /

@@ -3787,6 +3787,15 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-moving-drawer-empty { color: var(--text-muted); font-size: 12.5px; font-style: italic; }
 .wlp-moving-allpanel { padding: 16px 24px 20px; border-top: 1px solid var(--border); }
 
+/* ── Grid — inline demand-by-month / age-out rollup strips (consolidation
+   pass, design_handoff_planning_market, 2026-08-27). Same tile chrome as
+   the Moving timeline (.wlp-moving-tile/-label/-count), just a 6-column
+   parent instead of 12 — and a .wlp-moving-drawer opens below whichever
+   strip's box was clicked. */
+.wlp-rollup-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin: 10px 0 4px; }
+.wlp-rollup-tile-sub { font-size: 10px; color: var(--text-muted); line-height: 1.3; margin-top: 2px; }
+@media (max-width: 720px) { .wlp-rollup-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
 /* ============================================================
    ROOM SCHEDULE PLANNER
    ============================================================ */
@@ -4715,6 +4724,22 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 
 .market-type-legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 0; font-size: .82em; color: var(--text-muted); }
 .market-type-legend .swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; margin-right: 6px; vertical-align: middle; }
+
+/* ── Director Report (consolidation pass, design_handoff_planning_market,
+   2026-08-27) — header row + LIVE pill + segmented-control panes. The
+   .dr-pane children hold the exact same market-* / chart-box content the
+   three retired tools used; only this wrapper and the .ap-seg switch are new. */
+.dr-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.dr-head h2 { display: flex; align-items: center; gap: 10px; }
+.dr-head-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.dr-live-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--green-pale); color: var(--green-dark);
+    font-size: .55em; font-weight: 800; letter-spacing: .05em;
+    border-radius: 999px; padding: 4px 11px; vertical-align: middle;
+}
+#drSeg { margin-bottom: 18px; }
+.dr-pane { padding-top: 2px; }
 
 .tag { display: inline-block; font-size: .78em; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
 .tag.church { background: var(--green-pale); color: var(--green-dark); border: 1px solid var(--green-lt); }
