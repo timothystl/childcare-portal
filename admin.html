@@ -22,7 +22,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=16">
+    <link rel="stylesheet" href="css/admin.css?v=17">
     <link rel="stylesheet" href="css/admin-portal.css?v=2">
 </head>
 <body class="admin-body">
@@ -276,35 +276,80 @@
                 </div>
             </section>
 
-            <!-- Capacity Overview — its own tool in the portal shell, so it
-                 needs an id for AP_TOOLS to point at. -->
-            <section class="capacity-section" id="capacityOverviewSection">
-                <div class="capacity-header">
-                    <h2>Capacity Overview</h2>
-                    <div class="capacity-month-nav">
-                        <button id="capPrevMonth" class="btn-ghost" title="Previous month">&#8592;</button>
-                        <select id="capMonthSelect" class="cap-month-select"></select>
-                        <button id="capNextMonth" class="btn-ghost" title="Next month">&#8594;</button>
-                    </div>
-                </div>
-                <div id="capacityGrid"></div>
-            </section>
+            <!-- Enrollment & Capacity (Classroom Tab Redesign, 2026-08-27) —
+                 replaces Capacity Overview's month grid, Room Schedule
+                 Planner's weekly AM/PM view, and Planning's FTE/seat-day Room
+                 Capacity Overview with one Day/Week/Month/FTE view switcher.
+                 Same underlying registrations, one screen instead of three
+                 that could disagree. Week/Month/FTE sub-views are the
+                 original tools' own markup relocated here unchanged — their
+                 render functions (renderRoomSchedule/renderCapacityOverview/
+                 renderCapacityOverviewTool) still target the same element
+                 ids, just from a new home. See js/admin/admin-enrollment-capacity.js. -->
+            <section class="admin-section collapsible-section" id="enrollmentCapacitySection">
+                <h2>📆 Enrollment &amp; Capacity</h2>
+                <p class="section-desc">How full each room is — by day, week, month, or FTE/seat-day occupancy. Click any day to move a child.</p>
 
-            <!-- Room Schedule Planner -->
-            <section class="admin-section collapsible-section" id="roomSchedSection">
-                <h2>📅 Room Schedule Planner</h2>
-                <p class="section-desc">Weekly enrollment by classroom — shows how full each room is for each day. AM = all enrolled children, PM = full-day only.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="roomSchedWeekOf">Week of (Monday)</label>
-                        <input type="date" id="roomSchedWeekOf">
+                <div class="ec-view-switch" role="tablist" aria-label="View">
+                    <button type="button" class="ec-pill is-active" data-ec-view="day" role="tab" aria-selected="true">Day</button>
+                    <button type="button" class="ec-pill" data-ec-view="week" role="tab" aria-selected="false">Week</button>
+                    <button type="button" class="ec-pill" data-ec-view="month" role="tab" aria-selected="false">Month</button>
+                    <button type="button" class="ec-pill" data-ec-view="fte" role="tab" aria-selected="false">FTE / Seat-Day</button>
+                </div>
+
+                <!-- Day -->
+                <div class="ec-subview" id="ecDayView">
+                    <div class="roster-controls">
+                        <div class="roster-btns ec-day-nav">
+                            <button type="button" id="ecDayPrev" class="btn-ghost" title="Previous day">&#8592;</button>
+                            <input type="date" id="ecDayDate">
+                            <button type="button" id="ecDayNext" class="btn-ghost" title="Next day">&#8594;</button>
+                        </div>
                     </div>
-                    <div class="roster-btns">
-                        <button id="viewRoomSchedBtn" class="btn-secondary">View Week</button>
+                    <div id="ecDayContent"><p class="empty-hint">Loading…</p></div>
+                </div>
+
+                <!-- Week -->
+                <div class="ec-subview hidden" id="ecWeekView">
+                    <div class="roster-controls">
+                        <div class="roster-field">
+                            <label for="roomSchedWeekOf">Week of (Monday)</label>
+                            <input type="date" id="roomSchedWeekOf">
+                        </div>
+                        <div class="roster-btns">
+                            <button id="viewRoomSchedBtn" class="btn-secondary">View Week</button>
+                        </div>
+                    </div>
+                    <div id="roomSchedContent">
+                        <p class="empty-hint">Select a week above and click View Week.</p>
                     </div>
                 </div>
-                <div id="roomSchedContent">
-                    <p class="empty-hint">Select a week above and click View Week.</p>
+
+                <!-- Month -->
+                <div class="ec-subview hidden" id="ecMonthView">
+                    <div class="capacity-header">
+                        <div class="capacity-month-nav">
+                            <button id="capPrevMonth" class="btn-ghost" title="Previous month">&#8592;</button>
+                            <select id="capMonthSelect" class="cap-month-select"></select>
+                            <button id="capNextMonth" class="btn-ghost" title="Next month">&#8594;</button>
+                        </div>
+                    </div>
+                    <div id="capacityGrid"></div>
+                </div>
+
+                <!-- FTE / Seat-Day -->
+                <div class="ec-subview hidden" id="ecFteView">
+                    <p class="section-desc">Enrollment, FTE, and seat-day occupancy — the same underlying data as the Month view, aggregated for the month. Click a room to see the same month broken out by weekday. This view's month picker is independent of Month view's.</p>
+                    <div class="capacity-header">
+                        <div class="capacity-month-nav">
+                            <button id="ecFtePrevMonth" class="btn-ghost" title="Previous month">&#8592;</button>
+                            <select id="ecFteMonthSelect" class="cap-month-select"></select>
+                            <button id="ecFteNextMonth" class="btn-ghost" title="Next month">&#8594;</button>
+                        </div>
+                    </div>
+                    <div id="capacityOverviewContent">
+                        <p class="empty-hint">Loading…</p>
+                    </div>
                 </div>
             </section>
 
@@ -627,21 +672,13 @@
                 <div id="wlImportPreview"></div>
             </section>
 
-            <!-- Room Capacity Overview (consolidation pass, design_handoff_planning_market,
-                 2026-08-27) — replaces Waitlist Demand by Month (folded inline into
-                 wlpRoot's Grid view above), Enrollment Trends, Total Enrollment & FTE,
-                 Seat-Day Capacity Model, Demand Forecast (its generateDemandForecast()
-                 source stays in admin-reports.js, unreached from the nav — see the
-                 handoff), and Upcoming Room Promotions (folded inline into wlpRoot's
-                 Grid view as the age-out timeline). See renderCapacityOverviewTool()
-                 in js/admin/admin-reports.js. -->
-            <section class="admin-section collapsible-section" id="roomCapacityOverviewSection">
-                <h2>📆 Room Capacity Overview</h2>
-                <p class="section-desc">Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as the three screens it replaces. Click a room to see the same month broken out by weekday.</p>
-                <div id="capacityOverviewContent">
-                    <p class="empty-hint">Loading…</p>
-                </div>
-            </section>
+            <!-- Room Capacity Overview relocated (Classroom Tab Redesign,
+                 2026-08-27): its content — id="capacityOverviewContent" and
+                 renderCapacityOverviewTool() — now lives as the FTE/Seat-Day
+                 sub-view of Classrooms → Planning → Enrollment & Capacity
+                 (#tab-daily, enrollmentCapacitySection). Removed from here
+                 rather than left as an empty shell, since AP_TOOLS no longer
+                 points at a `roomCapacityOverviewSection` id. -->
 
             <!-- Ratio-Step / Next-Child Calculator -->
             <section class="admin-section collapsible-section" id="ratioStepSection">

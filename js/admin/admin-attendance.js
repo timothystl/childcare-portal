@@ -27,6 +27,7 @@
 let _abData    = null;
 let _abAlerts  = [];
 let _abTimer   = null;
+let _abActionsBound = false;
 
 function _abEl(id) { return document.getElementById(id); }
 
@@ -66,6 +67,13 @@ async function renderAttendanceBoard() {
         ]);
         _abData   = board;
         _abAlerts = alerts || [];
+        // In/Out/Absent/Move need each child's registration for today (id for
+        // the room move, registration_id for the attendance_records mark) —
+        // the head-count RPC doesn't carry either. Same lazy-load guard used
+        // throughout the admin app; a no-op after the first load.
+        if (typeof allRegistrations !== 'undefined' && !allRegistrations.length) {
+            allRegistrations = await fetchAllRegistrations().catch(() => []);
+        }
     } catch (e) {
         wrap.innerHTML = `<p class="muted">Could not load the board: ${escHtml(e.message || e)}</p>`;
         return;
@@ -75,7 +83,121 @@ async function renderAttendanceBoard() {
         return;
     }
     _abRender();
+    _abBindActions();
     _abStartRefresh();
+}
+
+// 'staff'-role admin logins get a read-only board — CLAUDE.md documents that
+// role as "Classrooms tab only (read-only roster view)", and the server-side
+// gate on admin_log_child_event/saveAttendanceRecord's underlying RPCs
+// already refuses that role; hiding the controls keeps the UI honest about it
+// instead of showing buttons that fail.
+function _abCanAct() {
+    return !(typeof currentAdminRole !== 'undefined' && currentAdminRole === 'staff');
+}
+
+// Resolve the registration behind one child's TODAY, for the Absent mark
+// (needs registration_id) and the Move dropdown (needs registration_dates.id).
+// The head-count RPC returns student_id/child_name/room_id, not either of
+// those, so this reads them from the same allRegistrations array every other
+// admin day-view tool already uses.
+function _abResolveReg(childName) {
+    if (typeof allRegistrations === 'undefined' || !_abData?.care_date) return null;
+    const dateStr = _abData.care_date;
+    const lower   = String(childName || '').toLowerCase();
+    for (const reg of allRegistrations) {
+        if (String(reg.child_name || '').toLowerCase() !== lower) continue;
+        const d = (reg.registration_dates || []).find(x => x.care_date === dateStr && !x.waitlisted);
+        if (d) return { registrationId: reg.id, dateId: d.id, roomId: d.room_id || reg.room_id };
+    }
+    return null;
+}
+
+function _abBindActions() {
+    if (_abActionsBound) return;
+    _abActionsBound = true;
+    const wrap = _abEl('attendanceBoardBody');
+    if (!wrap) return;
+
+    wrap.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.ab-act-btn');
+        if (!btn) return;
+        const actions   = btn.closest('.ab-actions');
+        const studentId = actions?.dataset.student;
+        const childName = actions?.dataset.name;
+        const act       = btn.dataset.act;
+        if (!studentId || !act) return;
+
+        btn.disabled = true;
+        try {
+            if (act === 'in' || act === 'out') {
+                const id = await adminLogChildEvent(studentId, act === 'in' ? 'check_in' : 'check_out');
+                if (id == null) throw new Error("couldn't record — check your admin role or today's booking");
+            } else if (act === 'absent') {
+                const wasAbsent = btn.classList.contains('is-on');
+                const reg = _abResolveReg(childName);
+                if (wasAbsent) {
+                    if (reg) await clearAttendanceRecord(reg.registrationId, _abData.care_date);
+                } else {
+                    if (!reg) throw new Error('no booking found for today');
+                    await saveAttendanceRecord({
+                        registrationId: reg.registrationId, careDate: _abData.care_date,
+                        roomId: reg.roomId, childName, status: 'absent',
+                    });
+                }
+            }
+            await renderAttendanceBoard();
+        } catch (err) {
+            alert(`Couldn't update attendance: ${err.message}`);
+            btn.disabled = false;
+        }
+    });
+
+    wrap.addEventListener('change', async (e) => {
+        const sel = e.target.closest('.ab-move-select');
+        if (!sel || !sel.value) return;
+        const actions   = sel.closest('.ab-actions');
+        const childName = actions?.dataset.name;
+        const fromRoomId = actions?.dataset.room;
+        const toRoomId   = sel.value;
+        const reg = _abResolveReg(childName);
+        if (!reg) { alert('No booking found for today.'); sel.value = ''; return; }
+
+        const fromLabel = _abRoomLabel(fromRoomId);
+        const toLabel   = _abRoomLabel(toRoomId);
+        if (!confirm(`Move ${childName} from ${fromLabel} to ${toLabel} for today only?`)) {
+            sel.value = '';
+            return;
+        }
+        sel.disabled = true;
+        try {
+            await updateRegistrationDateRoom(reg.dateId, toRoomId);
+            await renderAttendanceBoard();
+        } catch (err) {
+            alert('Move failed: ' + err.message);
+            sel.disabled = false;
+            sel.value = '';
+        }
+    });
+}
+
+function _abActionsHtml(c, roomId) {
+    const otherRooms = (typeof ROOMS !== 'undefined' ? ROOMS : [])
+        .filter(r => r.id !== roomId && r.status !== 'coming_soon');
+    const moveOptions = otherRooms.map(r => `<option value="${r.id}">${escHtml(r.label)}</option>`).join('');
+    return `<span class="ab-actions" data-student="${escHtml(c.student_id)}"
+                  data-name="${escHtml(c.child_name)}" data-room="${escHtml(roomId)}">
+        <button type="button" class="ab-act-btn${c.attendance_status === 'present' ? ' is-on' : ''}"
+                data-act="in" title="Mark ${escHtml(c.child_name)} checked in">In</button>
+        <button type="button" class="ab-act-btn${c.attendance_status === 'left' ? ' is-on' : ''}"
+                data-act="out" title="Mark ${escHtml(c.child_name)} checked out">Out</button>
+        <button type="button" class="ab-act-btn ab-act-absent${c.marked === 'absent' ? ' is-on' : ''}"
+                data-act="absent" title="Mark ${escHtml(c.child_name)} absent">Absent</button>
+        <select class="ab-move-select" title="Move ${escHtml(c.child_name)} to another room today">
+            <option value="">Move &rarr;</option>
+            ${moveOptions}
+        </select>
+    </span>`;
 }
 
 // A board titled "Live" that is five minutes stale is worse than one that says
@@ -206,6 +328,7 @@ function _abRoom(roomId, kids, staff, hasCheckins) {
         unknown: r.ratio ? `<span class="ab-pill">1:${r.ratio} required</span>` : '',
     }[r.state];
 
+    const canAct = _abCanAct();
     const rows = roomKids.map(c => {
         const allergy = (c.allergies || '').trim();
         let mark, cls;
@@ -219,6 +342,7 @@ function _abRoom(roomId, kids, staff, hasCheckins) {
             <span class="ab-kid-name">${escHtml(c.child_name)}${
                 c.dropin ? '<span class="ab-dropin">drop-in</span>' : ''}</span>
             <span class="ab-kid-mark">${allergy ? `<span title="${escHtml(allergy)}">⚠️</span> ` : ''}${escHtml(mark)}</span>
+            ${canAct ? _abActionsHtml(c, roomId) : ''}
         </div>`;
     }).join('');
 

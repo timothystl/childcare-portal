@@ -2302,6 +2302,26 @@ async function logChildEvent(staffId, pin, entry) {
 }
 
 /**
+ * The merged Attendance Board's office In/Out mark. Admin session, no PIN —
+ * writes into the SAME child_day_events table log_child_event does, so the
+ * parent app's daily record and the office's manual mark can never disagree.
+ * Restricted to check_in/check_out; the database refuses anything else.
+ * @returns {Promise<number|null>} New event id, or null if the caller's admin
+ *   role isn't 'full'/'restricted' or event_type was rejected.
+ */
+async function adminLogChildEvent(studentId, eventType, occurredAt = null, careDate = null) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_log_child_event', {
+        p_student_id:  studentId,
+        p_event_type:  eventType,
+        p_occurred_at: occurredAt,
+        p_care_date:   careDate,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/**
  * A child's logged day, newest last — the parent Today feed and the full-day
  * report both read this. RLS restricts it to the signed-in parent's children,
  * so there is no family filter here on purpose: the database owns that rule.
@@ -2528,6 +2548,31 @@ async function submitIncidentReport(staffId, pin, r) {
         p_after_notes:   r.afterNotes?.length ? r.afterNotes : null,
         p_ratio_note:    r.ratioNote || null,
         p_incident_kind: r.incidentKind || null,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/**
+ * Incident Reports' "+ Write a report" — the director files it herself, from
+ * an admin session (no PIN). Filing IS signing, same as the staff path: this
+ * writes the teacher-role signature (signature 1) from her own name, and the
+ * existing three-signature order-guard trigger enforces everything after it
+ * unchanged — a parent signature at pickup is still required before this
+ * report can be closed. Restricted to admin_role() 'full'/'restricted'.
+ */
+async function adminSubmitIncidentReport(r) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_submit_incident_report', {
+        p_student_id:    r.studentId,
+        p_incident_type: r.incidentType,
+        p_description:   r.description,
+        p_action_taken:  r.actionTaken,
+        p_incident_kind: r.incidentKind || null,
+        p_location:      r.location || null,
+        p_body_area:     r.bodyArea || null,
+        p_occurred_at:   r.occurredAt || null,
+        p_signed_name:   r.signedName || null,
     });
     if (error) throw friendlyError(error);
     return data ?? null;
@@ -2808,6 +2853,21 @@ async function logFireDrill(staffId, pin, payload = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('log_fire_drill', {
         p_staff_id: staffId, p_pin: parseInt(pin, 10), p_payload: payload,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/**
+ * Fire Drills' "+ Log a Drill" — the director enters a drill she ran or a
+ * paper record, from an admin session (no PIN). Same explicit column
+ * allow-list as log_fire_drill; drill_date and the conductor stay
+ * server-side. Restricted to admin_role() 'full'/'restricted'.
+ */
+async function adminLogFireDrill(payload = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_log_fire_drill', {
+        p_payload: payload,
     });
     if (error) throw friendlyError(error);
     return data ?? null;

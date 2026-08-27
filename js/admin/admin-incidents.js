@@ -27,11 +27,21 @@ let _incData    = [];
 let _incSigs    = {};     // incident_id -> { teacher, parent, director }
 let _incFilter  = 'submitted';
 let _incOpenId  = null;
+let _incComposeOpen = false;   // "+ Write a report" panel
 
 function _incEl(id) { return document.getElementById(id); }
 
 const INC_TYPE_LABEL = {
     injury: 'Injury', illness: 'Illness', behavior: 'Behavior', other: 'Other',
+};
+
+// The teacher-facing chip label (incident_kind) vs. the four-value stored
+// category (incident_type) — same split incident_kind_and_after_notes.sql
+// documents: four chips map to 'injury', one each to 'illness' and 'other'.
+const INC_KIND_OPTIONS = ['Fall', 'Bump or bruise', 'Bite', 'Scratch', 'Illness', 'Other'];
+const INC_KIND_TO_TYPE = {
+    Fall: 'injury', 'Bump or bruise': 'injury', Bite: 'injury', Scratch: 'injury',
+    Illness: 'illness', Other: 'other',
 };
 
 const INC_TABS = [
@@ -100,6 +110,7 @@ function _incRender() {
         `<button class="inc-tab ${_incFilter === t.key ? 'active' : ''}" data-filter="${t.key}">
             ${t.label}${_incFilter === t.key ? ` · ${_incData.length}` : ''}
          </button>`).join('');
+    const composeBtn = `<button type="button" class="btn-primary inc-compose-open" id="incComposeOpenBtn">&#43; Write a report</button>`;
 
     const rows = _incData.length ? _incData.map(r => {
         const child = r.students?.child_name || 'Unknown child';
@@ -135,7 +146,11 @@ function _incRender() {
             : 'Nothing here.'}</p>`;
 
     wrap.innerHTML = `
-        <div class="inc-tabs">${tabs}</div>
+        <div class="inc-tabs-row">
+            <div class="inc-tabs">${tabs}</div>
+            ${composeBtn}
+        </div>
+        ${_incComposeOpen ? _incComposeHtml(_incComposeStudentList()) : ''}
         <div class="inc-list">${rows}</div>
         <div class="inc-scrim${_incOpenId ? '' : ' hidden'}" id="incScrim"></div>
         <aside class="inc-drawer${_incOpenId ? ' is-open' : ''}" id="incDrawer"
@@ -153,6 +168,100 @@ function _incBind() {
         b.onclick = () => { _incOpenId = Number(b.dataset.open); _incRender(); };
     });
     _incEl('incScrim')?.addEventListener('click', _incCloseDrawer);
+    _incEl('incComposeOpenBtn')?.addEventListener('click', _incOpenCompose);
+    _incEl('incComposeCancel')?.addEventListener('click', _incCloseCompose);
+    _incEl('incComposeSave')?.addEventListener('click', _incComposeSave);
+}
+
+// ── "+ Write a report" — the director files it herself ──────
+// Filing IS signing (she's signature 1, same rule as a teacher's own report —
+// see admin_submit_incident_report). The parent still has to sign at pickup
+// on the teacher's phone before this can be closed; it lands in "Waiting on
+// parent" like any other freshly-filed report.
+
+function _incComposeStudentList() {
+    if (typeof allFamiliesData === 'undefined') return [];
+    return allFamiliesData
+        .flatMap(f => (f.students || []).map(s => ({ id: s.id, name: s.child_name })))
+        .filter(s => s.id && s.name)
+        .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function _incOpenCompose() {
+    _incComposeOpen = true;
+    if (typeof allFamiliesData !== 'undefined' && !allFamiliesData.length && typeof loadFamilies === 'function') {
+        try { await loadFamilies(); } catch (e) { console.warn('incident compose: loadFamilies failed', e); }
+    }
+    _incRender();
+}
+
+function _incCloseCompose() {
+    _incComposeOpen = false;
+    _incRender();
+}
+
+function _incComposeHtml(students) {
+    const options = students.map(s => `<option value="${escHtml(s.id)}">${escHtml(s.name)}</option>`).join('');
+    return `<div class="inc-compose">
+        <h3 class="inc-compose-title">Write a report</h3>
+        <div class="inc-compose-field">
+            <label for="incComposeChild">Child</label>
+            <select id="incComposeChild">
+                <option value="">${students.length ? 'Select a child…' : 'Loading…'}</option>
+                ${options}
+            </select>
+        </div>
+        <div class="inc-compose-field">
+            <label for="incComposeKind">Type</label>
+            <select id="incComposeKind">${INC_KIND_OPTIONS.map(k =>
+                `<option value="${escHtml(k)}">${escHtml(k)}</option>`).join('')}</select>
+        </div>
+        <div class="inc-compose-field">
+            <label for="incComposeDesc">What happened</label>
+            <textarea id="incComposeDesc" rows="3" placeholder="Describe what happened…"></textarea>
+        </div>
+        <div class="inc-compose-field">
+            <label for="incComposeAction">What we did</label>
+            <textarea id="incComposeAction" rows="2" placeholder="First aid, comfort given, etc."></textarea>
+        </div>
+        <div class="inc-compose-btns">
+            <button type="button" class="btn-primary" id="incComposeSave">Save</button>
+            <button type="button" class="btn-ghost" id="incComposeCancel">Cancel</button>
+        </div>
+    </div>`;
+}
+
+async function _incComposeSave() {
+    const studentId    = _incEl('incComposeChild')?.value;
+    const kind         = _incEl('incComposeKind')?.value;
+    const description  = _incEl('incComposeDesc')?.value?.trim();
+    const actionTaken  = _incEl('incComposeAction')?.value?.trim();
+    if (!studentId) { alert('Choose a child.'); return; }
+    if (!description || !actionTaken) { alert('Describe what happened and what you did about it.'); return; }
+
+    const btn = _incEl('incComposeSave');
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = 'Saving…';
+    try {
+        const id = await adminSubmitIncidentReport({
+            studentId, incidentType: INC_KIND_TO_TYPE[kind] || 'other',
+            incidentKind: kind, description, actionTaken,
+        });
+        if (id == null) {
+            showToast("Couldn't save — check your admin role.", 'error');
+            return;
+        }
+        showToast('Report filed. It needs the parent’s signature at pickup before you can sign off.');
+        _incComposeOpen = false;
+        _incFilter = 'submitted';
+        await renderIncidentsTool();
+    } catch (e) {
+        showToast('Error: ' + (e.message || e), 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+    }
 }
 
 function _incCloseDrawer() {

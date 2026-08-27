@@ -252,6 +252,8 @@ function staffInjuryPrint(id) {
 // not a table: a drill log you have to remember to look at does not remind
 // anyone to hold a drill.
 
+let _fdComposeOpen = false;   // "+ Log a Drill" panel
+
 async function renderFireDrillsTool() {
     const wrap = _sfEl('fireDrillsBody');
     if (!wrap) return;
@@ -291,9 +293,13 @@ function _fdRender() {
         </div>`;
     }
 
-    if (!_fdData.length) { wrap.innerHTML = banner; return; }
+    const bannerRow = `<div class="fd-banner-row">${banner}
+        <button type="button" class="btn-primary fd-compose-open" id="fdComposeOpenBtn">&#43; Log a Drill</button>
+    </div>${_fdComposeOpen ? _fdComposeHtml() : ''}`;
 
-    wrap.innerHTML = banner + `<div class="fd-list">` + _fdData.map(d => {
+    if (!_fdData.length) { wrap.innerHTML = bannerRow; _fdBind(); return; }
+
+    wrap.innerHTML = bannerRow + `<div class="fd-list">` + _fdData.map(d => {
         const kidsShort  = d.children_present - d.children_accounted;
         const staffShort = d.staff_present - d.staff_accounted;
         const short = kidsShort + staffShort;
@@ -339,6 +345,95 @@ function _fdRender() {
             </details>
         </div>`;
     }).join('') + '</div>';
+    _fdBind();
+}
+
+function _fdBind() {
+    _sfEl('fdComposeOpenBtn')?.addEventListener('click', () => { _fdComposeOpen = true; _fdRender(); });
+    _sfEl('fdComposeCancel')?.addEventListener('click', () => { _fdComposeOpen = false; _fdRender(); });
+    _sfEl('fdComposeSave')?.addEventListener('click', _fdComposeSave);
+}
+
+function _fdComposeHtml() {
+    return `<div class="fd-compose">
+        <h3 class="fd-compose-title">Log a drill</h3>
+        <div class="fd-compose-grid">
+            <div class="fd-compose-field">
+                <label for="fdComposeType">Type</label>
+                <select id="fdComposeType">
+                    <option value="fire">Fire</option>
+                    <option value="tornado">Tornado</option>
+                    <option value="lockdown">Lockdown</option>
+                    <option value="earthquake">Earthquake</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div class="fd-compose-field">
+                <label for="fdComposeSecs">Time to clear (seconds)</label>
+                <input type="number" id="fdComposeSecs" min="0" step="1" placeholder="e.g. 90">
+            </div>
+            <div class="fd-compose-field">
+                <label for="fdComposeKidsPresent">Children present</label>
+                <input type="number" id="fdComposeKidsPresent" min="0" step="1" value="0">
+            </div>
+            <div class="fd-compose-field">
+                <label for="fdComposeKidsAccounted">Children accounted for</label>
+                <input type="number" id="fdComposeKidsAccounted" min="0" step="1" value="0">
+            </div>
+            <div class="fd-compose-field">
+                <label for="fdComposeStaffPresent">Staff present</label>
+                <input type="number" id="fdComposeStaffPresent" min="0" step="1" value="0">
+            </div>
+            <div class="fd-compose-field">
+                <label for="fdComposeStaffAccounted">Staff accounted for</label>
+                <input type="number" id="fdComposeStaffAccounted" min="0" step="1" value="0">
+            </div>
+        </div>
+        <div class="fd-compose-field">
+            <label for="fdComposeNotes">Notes (optional)</label>
+            <textarea id="fdComposeNotes" rows="2"></textarea>
+        </div>
+        <div class="fd-compose-btns">
+            <button type="button" class="btn-primary" id="fdComposeSave">Save</button>
+            <button type="button" class="btn-ghost" id="fdComposeCancel">Cancel</button>
+        </div>
+    </div>`;
+}
+
+async function _fdComposeSave() {
+    const type   = _sfEl('fdComposeType')?.value || 'fire';
+    const secs   = _sfEl('fdComposeSecs')?.value;
+    const kidsPresent    = Number(_sfEl('fdComposeKidsPresent')?.value || 0);
+    const kidsAccounted  = Number(_sfEl('fdComposeKidsAccounted')?.value || 0);
+    const staffPresent   = Number(_sfEl('fdComposeStaffPresent')?.value || 0);
+    const staffAccounted = Number(_sfEl('fdComposeStaffAccounted')?.value || 0);
+    const notes  = _sfEl('fdComposeNotes')?.value?.trim() || '';
+
+    const btn = _sfEl('fdComposeSave');
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = 'Saving…';
+    try {
+        const id = await adminLogFireDrill({
+            drill_type: type,
+            evacuation_seconds: secs === '' || secs == null ? null : Number(secs),
+            children_present: kidsPresent, children_accounted: kidsAccounted,
+            staff_present: staffPresent, staff_accounted: staffAccounted,
+            notes,
+        });
+        if (id == null) {
+            showToast("Couldn't save — check your admin role.", 'error');
+            return;
+        }
+        showToast('Drill logged.');
+        _fdComposeOpen = false;
+        await renderFireDrillsTool();
+    } catch (e) {
+        showToast('Error: ' + (e.message || e), 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+    }
 }
 
 function _fdRosterList(title, list) {
