@@ -1431,6 +1431,12 @@ describe('Stax payment security guards', () => {
         expect(chargeFn.includes('!== "production"')).toBe(true);
     });
 
+    test('portal falls back to the existing hosted checkout while Stax is gated', () => {
+        const portal = read('js/portal/portal-billing.js');
+        expect(portal.includes("e?.message === 'Online payments are not configured for production yet.'")).toBe(true);
+        expect(portal.includes('return pbStartPayment(invoiceId)')).toBe(true);
+    });
+
     test('saved-card response does not expose the opaque payment method id', () => {
         const createFn = read('supabase/functions/create-stax-charge/index.ts');
         const savedCardBlock = createFn.match(/savedCard:[\s\S]*?\} : null/);
