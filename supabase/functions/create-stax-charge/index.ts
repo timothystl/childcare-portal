@@ -43,6 +43,21 @@
 //   from every real family by default (?staxtest=1 only); see CLAUDE.md's
 //   Stax section for what is and isn't verified in a real browser yet.
 //
+//   5. ⚠️ ROLLS UP OLDER UNPAID MONTHS (2026-08-27) — identical rule and
+//      helper shape to create-payment-session's: paying invoice X charges
+//      X's own balance plus any STILL-unpaid invoice for an earlier month,
+//      never a later one. See computeFamilyDueSet().
+//   6. Itemized via compute_family_month_charges_itemized() — same
+//      per-child math compute_family_month_charges() already computes
+//      internally; never a second copy of the rate/discount logic.
+//   7. Saved-card lookup: if this family already has a saved Stax payment
+//      method (add_stax_saved_card.sql), this returns its last4/brand so
+//      the browser can offer "pay with the card on file" and skip card
+//      entry entirely — charge-stax-payment does the actual charge either
+//      way. Nothing here ever sees the card itself, saved or new; only
+//      Stax's own opaque payment_method_id and the two PCI-permitted
+//      display fields (last4, brand) are stored.
+//
 // Deploy:  supabase functions deploy create-stax-charge
 // Secrets: STAX_API_KEY, STAX_WEB_PAYMENTS_TOKEN, STAX_ENVIRONMENT
 //          ('sandbox' | 'production', default sandbox)
@@ -86,6 +101,40 @@ async function staxRequest(apiKey: string, path: string, init: RequestInit = {})
     return { ok: res.ok, status: res.status, data };
 }
 
+type DueRow = { id: number; due: number; month: string };
+
+/** Same due-set builder as create-payment-session's copy — see its header. */
+async function computeFamilyDueSet(admin: any, familyId: string, anchorMonth: string): Promise<DueRow[]> {
+    const { data: invoices } = await admin
+        .from("billing_invoices")
+        .select("id, final_amount, status, sent_at, billing_cycles(month)")
+        .eq("family_id", familyId)
+        .not("sent_at", "is", null)
+        .in("status", ["sent", "partial"]);
+
+    const eligible = (invoices || []).filter((inv: any) => {
+        const m = inv?.billing_cycles?.month;
+        return typeof m === "string" && m.slice(0, 7) <= anchorMonth;
+    });
+    if (!eligible.length) return [];
+
+    const ids = eligible.map((inv: any) => inv.id);
+    const { data: pays } = await admin.from("billing_payments").select("invoice_id, amount").in("invoice_id", ids);
+    const paidByInvoice = new Map<number, number>();
+    for (const p of (pays || [])) {
+        paidByInvoice.set(p.invoice_id, (paidByInvoice.get(p.invoice_id) || 0) + (Number(p.amount) || 0));
+    }
+
+    const rows: DueRow[] = eligible.map((inv: any) => {
+        const paid = paidByInvoice.get(inv.id) || 0;
+        const due = Math.round(((Number(inv.final_amount) || 0) - paid) * 100) / 100;
+        return { id: inv.id as number, due, month: String(inv.billing_cycles.month).slice(0, 7) };
+    }).filter((r: DueRow) => r.due > 0.004);
+
+    rows.sort((a, b) => a.month.localeCompare(b.month));
+    return rows;
+}
+
 serve(async (req) => {
     const ch = corsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: ch });
@@ -120,7 +169,7 @@ serve(async (req) => {
 
         const { data: invoice, error: invErr } = await admin
             .from("billing_invoices")
-            .select("id, family_id, final_amount, status, sent_at")
+            .select("id, family_id, final_amount, status, sent_at, billing_cycles(month)")
             .eq("id", invoiceId)
             .maybeSingle();
         if (invErr) return json({ error: invErr.message }, 500, ch);
@@ -132,14 +181,24 @@ serve(async (req) => {
             return json({ error: "This bill has not been issued yet." }, 400, ch);
         }
 
-        const { data: paymentRows, error: payErr } = await admin
-            .from("billing_payments")
-            .select("amount")
-            .eq("invoice_id", invoiceId);
-        if (payErr) return json({ error: payErr.message }, 500, ch);
-        const paid = (paymentRows || []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0);
-        const due = Math.round(((Number(invoice.final_amount) || 0) - paid) * 100) / 100;
-        if (due <= 0) return json({ error: "This bill is already paid in full." }, 400, ch);
+        const anchorMonth = String((invoice as any)?.billing_cycles?.month || "").slice(0, 7);
+
+        const dueSet = await computeFamilyDueSet(admin, String(invoice.family_id), anchorMonth);
+        if (!dueSet.length) return json({ error: "This bill is already paid in full." }, 400, ch);
+        const due = Math.round(dueSet.reduce((s, r) => s + r.due, 0) * 100) / 100;
+        const priorBalance = Math.round(
+            dueSet.filter(r => r.month < anchorMonth).reduce((s, r) => s + r.due, 0) * 100,
+        ) / 100;
+
+        const { data: itemRows } = await admin.rpc("compute_family_month_charges_itemized", {
+            p_family_id: invoice.family_id, p_month: anchorMonth,
+        });
+        const lineItems = (itemRows || []).map((r: any) => ({
+            childName: String(r.child_name || "Child"),
+            fullDays: Number(r.full_days) || 0,
+            halfDays: Number(r.half_days) || 0,
+            amount: Number(r.net) || 0,
+        }));
 
         // ── 3. Resolve (or create) a Stax customer for this family ─
         const apiKey = Deno.env.get("STAX_API_KEY");
@@ -147,7 +206,7 @@ serve(async (req) => {
 
         const { data: family, error: famErr } = await admin
             .from("families")
-            .select("id, parent_name, parent_email, parent_phone, stax_customer_id")
+            .select("id, parent_name, parent_email, parent_phone, stax_customer_id, stax_default_payment_method_id, stax_default_card_last_four, stax_default_card_brand")
             .eq("id", invoice.family_id)
             .maybeSingle();
         if (famErr) return json({ error: famErr.message }, 500, ch);
@@ -195,10 +254,17 @@ serve(async (req) => {
             webPaymentsToken,
             environment: (Deno.env.get("STAX_ENVIRONMENT") || "sandbox").toLowerCase(),
             amount: due,
+            priorBalance,
+            lineItems,
             invoiceId: invoice.id,
             firstname,
             lastname,
             phone: family.parent_phone || "",
+            savedCard: family.stax_default_payment_method_id ? {
+                paymentMethodId: family.stax_default_payment_method_id,
+                last4: family.stax_default_card_last_four || "",
+                brand: family.stax_default_card_brand || "",
+            } : null,
         }, 200, ch);
 
     } catch (err) {
