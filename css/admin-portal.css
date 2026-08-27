@@ -1566,12 +1566,35 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .set-top-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-bottom: 20px; align-items: start; }
 @media (max-width: 900px) { .set-top-row { grid-template-columns: minmax(0, 1fr); } }
 .set-card-body { padding: 16px 22px 20px; display: flex; flex-direction: column; gap: 18px; }
-/* The combined rates+ratios+capacity table is wider than the half-width
-   card on anything but a very wide screen — scroll it inside its own
-   container rather than let .ap-panel's overflow:hidden clip columns off
-   the edge. */
-#roomsTableWrap { overflow-x: auto; }
-#roomsTableWrap .rates-table { min-width: 640px; }
+/* The combined rates+ratios+capacity fields are wider than the half-width
+   card on anything but a very wide screen. Rather than scroll them inside
+   their own box (which hid the ratio/capacity fields off the right edge
+   unless you noticed and scrolled), each room is a flex-wrap row of
+   labeled fields that wraps onto a second line as the card narrows — see
+   _renderRoomsTable() in admin-settings-unified.js. */
+.rf-rows { border-top: 1px solid var(--warm-gray); }
+.rf-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px 16px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--warm-gray);
+}
+.rf-row:hover { background: var(--cream); }
+.rf-cell { min-width: 0; }
+.rf-room { flex: 1 1 130px; align-self: center; }
+.rf-room strong { display: block; color: var(--text); }
+.rf-label {
+    display: block;
+    font-size: .72em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+.rf-cell input { max-width: 100%; }
 /* Registration window: the longest option ("Force Closed — block
    registration right now") is wider than a native <select> can render
    inside the half-width Registration card without the browser's own
@@ -1587,11 +1610,23 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .set-fee-fields input { width: 90px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; }
 @media (max-width: 560px) { .set-fee-fields { grid-template-columns: 1fr; } }
 .set-access-grid { padding: 16px 22px 20px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
-/* The admin-users table (email/role/last-login/actions, width:100% with
-   table-layout:auto) still renders wider than its column's content when
-   the natural column widths don't fit — width:100% caps the *target*
-   width, not the table's minimum content width, so it visually overflows
-   into the audit-log column next to it rather than affecting the grid's
-   own track sizing. Scroll it inside its own box instead. */
-#adminRolesTableWrap { overflow-x: auto; }
+/* The admin-users list (email/role/last-login/actions) is wider than its
+   column's content when the natural widths don't fit. Rather than scroll
+   it inside its own box (which hid "Reset Password"/"Delete" off the right
+   edge unless you noticed and scrolled), each row is a flex-wrap row that
+   wraps its fields onto a second line as the column narrows — see
+   _renderAdminUsersTable() in admin-settings.js. */
+.au-rows { border-top: 1px solid var(--warm-gray); }
+.au-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px 16px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--warm-gray);
+}
+.au-row:hover { background: var(--cream); }
+.au-cell { min-width: 0; }
+.au-email { flex: 2 1 160px; align-self: center; word-break: break-word; }
+.au-actions { display: flex; gap: 6px; flex-wrap: wrap; align-self: center; }
 @media (max-width: 900px) { .set-access-grid { grid-template-columns: minmax(0, 1fr); } }
