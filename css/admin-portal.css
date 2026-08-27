@@ -1500,9 +1500,25 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     border-radius: 12px; padding: 4px 4px 4px 0; box-shadow: var(--shadow-card);
 }
 .msg-row-head {
-    display: flex; gap: 12px; align-items: flex-start; width: 100%; text-align: left;
-    background: none; border: none; cursor: pointer; padding: 10px 12px; font-family: var(--font-body);
+    display: flex; gap: 8px; align-items: flex-start; width: 100%; padding: 10px 12px;
+    font-family: var(--font-body);
 }
+/* The expand/collapse control — everything except the Read/Archive
+   checkboxes, which need to sit outside it. A <button> can't legally
+   contain interactive children (checkboxes), and even set aside from
+   validity, a click on a checkbox nested in a clickable row would also
+   fire the row's own expand toggle. */
+.msg-row-clickable {
+    display: flex; gap: 12px; align-items: flex-start; flex: 1; min-width: 0; text-align: left;
+    background: none; border: none; cursor: pointer; padding: 0; font-family: inherit;
+}
+.msg-row-actions { flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px; align-self: center; }
+.msg-row-check {
+    display: flex; align-items: center; gap: 5px; font-size: .76em; font-weight: 700;
+    color: var(--text-muted); white-space: nowrap; cursor: pointer;
+}
+.msg-row-check input { width: 14px; height: 14px; cursor: pointer; }
+.msg-row-check:has(input:checked) { color: var(--green-text); }
 .msg-row-icon {
     flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px;
     display: flex; align-items: center; justify-content: center; font-size: 1.05em; font-weight: 800; color: var(--navy);

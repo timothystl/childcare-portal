@@ -242,23 +242,40 @@ function _msgRenderFeed() {
 
     wrap.innerHTML = feed.map(item => `
         <div class="msg-row" style="border-left-color:${item.accent}">
-            <button type="button" class="msg-row-head" data-msg-toggle="${item.key}">
-                <span class="msg-row-icon" style="background:${item.iconBg}">${item.icon}</span>
-                <span class="msg-row-main">
-                    <span class="msg-row-top">
-                        <span class="msg-row-name">${escHtml(item.name)}</span>
-                        <span class="msg-row-when">${escHtml(_msgWhen(item.sortTs))}</span>
+            <div class="msg-row-head">
+                <button type="button" class="msg-row-clickable" data-msg-toggle="${item.key}">
+                    <span class="msg-row-icon" style="background:${item.iconBg}">${item.icon}</span>
+                    <span class="msg-row-main">
+                        <span class="msg-row-top">
+                            <span class="msg-row-name">${escHtml(item.name)}</span>
+                            <span class="msg-row-when">${escHtml(_msgWhen(item.sortTs))}</span>
+                        </span>
+                        <span class="msg-row-meta">${escHtml(item.metaLine)}</span>
+                        <span class="msg-row-preview">${escHtml(item.preview || '')}</span>
                     </span>
-                    <span class="msg-row-meta">${escHtml(item.metaLine)}</span>
-                    <span class="msg-row-preview">${escHtml(item.preview || '')}</span>
-                </span>
-                <span class="msg-status-pill tone-${item.statusTone}">${escHtml(item.statusText)}</span>
-            </button>
+                </button>
+                ${item.kind === 'inquiry' ? `
+                <span class="msg-row-actions">
+                    <label class="msg-row-check" title="Mark read or unread">
+                        <input type="checkbox" data-msg-read="${item.raw.id}" ${item.raw.is_read ? 'checked' : ''}> Read
+                    </label>
+                    <label class="msg-row-check" title="Archive — removes it from this list">
+                        <input type="checkbox" data-msg-archive-check="${item.raw.id}"> Archive
+                    </label>
+                </span>`
+                : `<span class="msg-status-pill tone-${item.statusTone}">${escHtml(item.statusText)}</span>`}
+            </div>
             <div class="msg-row-body${_msgExpanded === item.key ? '' : ' hidden'}" data-msg-body="${item.key}"></div>
         </div>`).join('');
 
     wrap.querySelectorAll('[data-msg-toggle]').forEach(b => {
         b.addEventListener('click', () => _msgToggle(b.dataset.msgToggle, feed));
+    });
+    wrap.querySelectorAll('[data-msg-read]').forEach(box => {
+        box.addEventListener('change', e => _msgSetInquiryRead(Number(box.dataset.msgRead), e.target.checked, feed));
+    });
+    wrap.querySelectorAll('[data-msg-archive-check]').forEach(box => {
+        box.addEventListener('change', e => _msgSetInquiryArchived(Number(box.dataset.msgArchiveCheck), e.target.checked));
     });
 
     if (_msgExpanded) {
@@ -272,15 +289,52 @@ function _msgToggle(key, feed) {
     _msgExpanded = wasOpen ? null : key;
     const item = feed.find(i => i.key === key);
     if (!wasOpen && item?.kind === 'thread') _msgMarkThreadRead(item);
-    if (!wasOpen && item?.kind === 'inquiry' && !item.raw.is_read) _msgMarkInquiryRead(item);
+    if (!wasOpen && item?.kind === 'inquiry' && !item.raw.is_read) _msgSetInquiryRead(item.raw.id, true, feed);
     _msgRenderFeed();
 }
 
 async function _msgMarkThreadRead(item) {
     try { await markThreadRead(item.raw.id); } catch (e) { console.warn('mark thread read:', e); }
 }
-async function _msgMarkInquiryRead(item) {
-    try { await markMessageRead(item.raw.id); item.raw.is_read = true; } catch (e) { console.warn('mark message read:', e); }
+
+// The Read checkbox on a Contact form row — works both ways (mark read,
+// or mark back unread), independent of expanding the row.
+async function _msgSetInquiryRead(id, isRead, feed) {
+    const item = (feed || []).find(i => i.kind === 'inquiry' && i.raw.id === id);
+    try {
+        await markMessageRead(id, isRead);
+        if (item) item.raw.is_read = isRead;
+        const raw = _msgMessages.find(m => m.id === id);
+        if (raw) raw.is_read = isRead;
+        _msgRenderKpis();
+        // Only the pill/preview need updating, not a full feed rebuild —
+        // re-render the one row's collapsed status without losing scroll
+        // position or another row's expanded state.
+        if (item && _msgExpanded !== item.key) _msgRenderFeed();
+        else if (item) _msgRenderExpanded(item);
+    } catch (err) {
+        showToast('Could not update: ' + (err.message || err), 'error');
+        _msgRenderFeed();
+    }
+}
+
+// The Archive checkbox — checking it archives the message and drops the
+// row from the feed immediately (fetchMessages(false) never returns
+// archived rows, so there is no "unarchive" checkbox to show here; that
+// stays in the expanded detail panel via the existing Archive/Restore
+// pattern elsewhere in the app).
+async function _msgSetInquiryArchived(id, archived) {
+    if (!archived) return;
+    try {
+        await archiveMessage(id, true);
+        _msgMessages = _msgMessages.filter(m => m.id !== id);
+        if (_msgExpanded === 'inquiry-' + id) _msgExpanded = null;
+        showToast('Archived.');
+        _msgRender();
+    } catch (err) {
+        showToast('Could not archive: ' + (err.message || err), 'error');
+        _msgRenderFeed();
+    }
 }
 
 function _msgRenderExpanded(item) {
