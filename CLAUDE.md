@@ -261,6 +261,35 @@ re-synced pane visibility, so leaving on Billing Report and navigating back
 showed the report under a highlighted Ledger tab. It now calls
 `_fhSwitchTab('ledger')`.
 
+### ⚠️ It shipped half-live for a day, and `dist/` is why
+
+The merge landed correctly — source, `admin.html`, `scripts/build.js` and
+`css/admin-portal.css` all had the tab. But `dist/admin.min.js` on `main` did
+**not** contain a single byte of it, so on the live site the Bookkeeper tab
+button existed with no code behind it. The old bundled `_fhSwitchTab()` has no
+`bookkeeper` case, so clicking it hid the Ledger pane, hid the Report pane, and
+showed nothing — the whole card went blank, which reads exactly like "this was
+never built."
+
+Cause: a concurrent `claude/**` branch (payment-security-fixes) branched before
+this merge, ran its own `npm run bump` + rebuild, and the auto-merge's
+`--theirs` resolution for `dist/*.min.js` (T9) took **its** bundle. That
+resolution is right for a genuine build-artifact conflict and wrong here: the
+newer bundle was built from the older tree.
+
+⚠️ **`git log -- dist/admin.min.js` is not the check. Grep the bundle for a
+string only your change introduces.** The dist-freshness CI job compares
+`dist/` to the branch it runs on, so a bundle that is stale only relative to
+*another* branch's merge passes it. After any `claude/**` merge that touches
+`js/`, confirm on `main`:
+
+```
+git show origin/main:dist/admin.min.js | grep -c '<a symbol only your change adds>'
+```
+
+A `0` there means the feature is merged and not deployed, and nothing will say
+so — the page just does nothing.
+
 ---
 
 ## Design handoff build — staff, parent, director (2026-08-16)
