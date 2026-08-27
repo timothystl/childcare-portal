@@ -1191,8 +1191,15 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fh-note { color: var(--text-muted); font-size: .88em; max-width: 32ch; }
 .fh-bal-owed { color: var(--tang-dark); font-weight: 700; }
 .fh-bal-clear { color: var(--green-text); font-weight: 700; }
-.fh-row-actions { white-space: nowrap; text-align: right; }
-.fh-row-actions .btn-xs { margin-left: 6px; }
+/* Fixed two-slot layout (Send invoice / Remind-or-Retry-charge), each
+   right-aligned within its own slot — a row with only one of the two
+   buttons no longer lands at a different x-position than a row with both.
+   See the fh-action-slot markup in _fhRowHtml(). */
+.fh-row-actions { white-space: nowrap; display: flex; gap: 6px; justify-content: flex-end; }
+.fh-action-slot { display: flex; justify-content: flex-end; }
+.fh-action-slot:first-child { width: 100px; }
+.fh-action-slot:last-child  { width: 92px; }
+.fh-row-actions .btn-xs { margin-left: 0; }
 
 .fh-pill { display: inline-block; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 3px 9px; }
 .fh-pill-review    { background: #FDEEE8; color: #7a2a18; }

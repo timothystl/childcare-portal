@@ -219,7 +219,11 @@ function _fhRenderShell() {
 // ── Ledger (current month, editable) ────────────────────────
 const FH_STATUS_META = {
     needs_review: { label: 'Needs review',       cls: 'fh-pill-review' },
-    drafted:      { label: 'Drafted',            cls: 'fh-pill-drafted' },
+    // "Drafted" read as "someone is in the middle of drafting this" — it's
+    // the opposite: the database already computed it from booked days, and
+    // nothing more happens to it until you click Send. "Ready to send" says
+    // what it actually is and what the button next to it does.
+    drafted:      { label: 'Ready to send',      cls: 'fh-pill-drafted' },
     sent:         { label: 'Invoice sent',       cls: 'fh-pill-sent' },
     paid:         { label: 'Paid in full',       cls: 'fh-pill-paid' },
     card_declined:{ label: 'Card declined',      cls: 'fh-pill-declined' },
@@ -286,7 +290,7 @@ function _fhRenderLedger() {
     const rows = _fhVisibleRows();
 
     const chips = [
-        ['all', 'All'], ['needs_review', 'Needs review'], ['drafted', 'Drafted'],
+        ['all', 'All'], ['needs_review', 'Needs review'], ['drafted', 'Ready to send'],
         ['sent', 'Issued'], ['card_declined', 'Card declined'], ['owing', 'Owing'],
         ['paid', 'Paid in full'], ['withdrawn', 'Withdrawn'],
     ];
@@ -305,14 +309,14 @@ function _fhRenderLedger() {
             <span class="fh-arrow">→</span>
             <div class="fh-stat is-clickable" data-fh-filter="drafted">
                 <div class="fh-stat-num">${drafted.length}</div>
-                <div class="fh-stat-label">Drafted, ready · ${_fhMoney(draftedTotal)}</div>
+                <div class="fh-stat-label">Ready to send · ${_fhMoney(draftedTotal)}</div>
             </div>
             <span class="fh-arrow">→</span>
             <div class="fh-stat is-clickable" data-fh-filter="sent">
                 <div class="fh-stat-num">${sent.length}</div>
                 <div class="fh-stat-label">Issued</div>
             </div>
-            <button type="button" class="btn-primary" id="fhReleaseBtn" ${drafted.length ? '' : 'disabled'}>Release ${drafted.length} draft${drafted.length === 1 ? '' : 's'}</button>
+            <button type="button" class="btn-primary" id="fhReleaseBtn" ${drafted.length ? '' : 'disabled'}>Release ${drafted.length} invoice${drafted.length === 1 ? '' : 's'}</button>
         </div>
 
         <div class="fh-owed-banner">
@@ -385,13 +389,16 @@ function _fhRowHtml(row) {
     const pillLabel = dispStatus === 'sent' && sentDate ? `Invoice sent ${sentDate}` : meta.label;
     const balCls = row.owed > 0 ? 'fh-bal-owed' : 'fh-bal-clear';
 
-    let actions = '';
-    if (row.status === 'drafted') {
-        actions += `<button type="button" class="btn-xs btn-primary" data-fh-send="${row.familyId}">Send invoice</button>`;
-    }
-    if (row.owed > 0) {
-        actions += `<button type="button" class="btn-xs" data-fh-remind="${row.familyId}">${dispStatus === 'card_declined' ? 'Retry charge' : 'Remind'}</button>`;
-    }
+    // Two fixed slots, always both present (empty when the action doesn't
+    // apply to this row) — Send invoice and Remind/Retry charge otherwise
+    // land at a different x-position on every row depending on which
+    // buttons a given row happens to have, which is what actually made the
+    // column look misaligned rather than any one row being wrong.
+    const sendSlot = row.status === 'drafted'
+        ? `<button type="button" class="btn-xs btn-primary" data-fh-send="${row.familyId}">Send invoice</button>` : '';
+    const remindSlot = row.owed > 0
+        ? `<button type="button" class="btn-xs" data-fh-remind="${row.familyId}">${dispStatus === 'card_declined' ? 'Retry charge' : 'Remind'}</button>` : '';
+    const actions = `<span class="fh-action-slot">${sendSlot}</span><span class="fh-action-slot">${remindSlot}</span>`;
 
     return `<tr data-fh-row="${row.familyId}">
         <td class="fh-row-open" data-fh-open="${row.familyId}"><strong>${escHtml(row.name)}</strong></td>
@@ -456,7 +463,7 @@ function _fhRenderMonthHistory() {
 async function _fhReleaseDrafts() {
     const drafted = _fhRows.filter(r => r.status === 'drafted' && r.familyId);
     if (!drafted.length) return;
-    if (!confirm(`Release ${drafted.length} draft${drafted.length === 1 ? '' : 's'} totaling ${_fhMoney(drafted.reduce((s, r) => s + r.total, 0))}?\n\nThey email to families now.`)) return;
+    if (!confirm(`Release ${drafted.length} invoice${drafted.length === 1 ? '' : 's'} totaling ${_fhMoney(drafted.reduce((s, r) => s + r.total, 0))}?\n\nThey email to families now.`)) return;
     if (_fhBusy) return;
     _fhBusy = true;
     const btn = _fhEl('fhReleaseBtn');
@@ -466,7 +473,7 @@ async function _fhReleaseDrafts() {
         showToast(`${drafted.length} invoice${drafted.length === 1 ? '' : 's'} released.`);
         await _fhLoad();
     } catch (err) {
-        alert('Could not release those drafts: ' + (err.message || err));
+        alert('Could not release those invoices: ' + (err.message || err));
     } finally {
         _fhBusy = false;
     }
