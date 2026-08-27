@@ -166,6 +166,33 @@ async function _bkLoad() {
     // ⚠️ fetchBillingOverrides is awaited as one wave, not serially inside the
     // month loop — SX12 flags the serial version elsewhere; don't repeat it.
     const overrideRows = await Promise.all(months.map(mo => fetchBillingOverrides(mo).catch(() => [])));
+
+    // ⚠️ Live registrations are not the only source of truth for a past month —
+    // a month billed before this app tracked registrations (or entered by hand
+    // for any other reason) has rows in billing_summary and nothing in
+    // registration_dates, so _buildFamilyBillingData alone reads it as $0.
+    // generateFinanceDashboard() and the YoY report both fall back to
+    // billing_summary for exactly this reason; mirrored here so Bookkeeper
+    // never shows $0 for a month the director can see real numbers for
+    // elsewhere in Finance. Historical rows have no tuition/fees split (only
+    // a net_billed total), so a historical month reports its whole total as
+    // tuition and $0 fees — the same simplification the dashboard makes.
+    const historicalRevByMo     = {}; // mo → total net_billed
+    const historicalRoomsByMo   = {}; // mo → roomId → { revenue, childDays }
+    try {
+        (await fetchBillingSummary()).forEach(r => {
+            const mo = (r.month || '').substring(0, 7);
+            if (!months.includes(mo)) return;
+            const net = parseFloat(r.net_billed) || 0;
+            historicalRevByMo[mo] = (historicalRevByMo[mo] || 0) + net;
+            if (!r.room_id) return;
+            if (!historicalRoomsByMo[mo]) historicalRoomsByMo[mo] = {};
+            if (!historicalRoomsByMo[mo][r.room_id]) historicalRoomsByMo[mo][r.room_id] = { revenue: 0, childDays: 0 };
+            historicalRoomsByMo[mo][r.room_id].revenue   += net;
+            historicalRoomsByMo[mo][r.room_id].childDays += (r.half_days || 0) + (r.full_days || 0);
+        });
+    } catch (e) { console.warn('bk historical billing_summary:', e); }
+
     const byMonth = {};
     months.forEach((mo, i) => {
         const overrides = new Map((overrideRows[i] || []).map(r => [
@@ -173,7 +200,7 @@ async function _bkLoad() {
             parseFloat(r.override_amount),
         ]));
         const families = _buildFamilyBillingData(mo, overrides);
-        const rooms = {};
+        const liveRooms = {};
         let tuition = 0, fees = 0;
         families.forEach(fam => fam.children.forEach(c => {
             const billed = (c.hasOverride ? c.overrideAmount : c.subtotal) || 0;
@@ -181,11 +208,15 @@ async function _bkLoad() {
             tuition += billed;
             fees    += fee;
             if (!c.roomId) return;
-            if (!rooms[c.roomId]) rooms[c.roomId] = { revenue: 0, childDays: 0 };
-            rooms[c.roomId].revenue   += billed + fee;
-            rooms[c.roomId].childDays += (c.halfDays || 0) + (c.fullDays || 0);
+            if (!liveRooms[c.roomId]) liveRooms[c.roomId] = { revenue: 0, childDays: 0 };
+            liveRooms[c.roomId].revenue   += billed + fee;
+            liveRooms[c.roomId].childDays += (c.halfDays || 0) + (c.fullDays || 0);
         }));
-        byMonth[mo] = { tuition, fees, revenue: tuition + fees, rooms };
+
+        const useLive = (tuition + fees) > 0;
+        byMonth[mo] = useLive
+            ? { tuition, fees, revenue: tuition + fees, rooms: liveRooms }
+            : { tuition: historicalRevByMo[mo] || 0, fees: 0, revenue: historicalRevByMo[mo] || 0, rooms: historicalRoomsByMo[mo] || {} };
     });
 
     _bkData = { year, months, byMonth, pnl, budget: budget || null, expenses: expenses || { items: [] } };
