@@ -73,6 +73,10 @@ async function renderFinanceHubTool() {
     _fhSearch = '';
     _fhReportLoaded = false;
     _fhBindHeaderOnce();
+    // Re-entering the tool must land on the Ledger *visually*, not just in
+    // state: pane visibility survives navigating away, so leaving on Billing
+    // Report and coming back showed the report under a highlighted Ledger tab.
+    _fhSwitchTab('ledger');
     await _fhLoad();
 }
 
@@ -126,13 +130,26 @@ function _fhSwitchTab(tab) {
     });
     const ledgerPane = _fhEl('fhLedgerPane');
     const reportPane = _fhEl('billingReportSection');
+    const bkPane     = _fhEl('fhBookkeeperPane');
     if (ledgerPane) ledgerPane.style.display = tab === 'ledger' ? '' : 'none';
     if (reportPane) reportPane.style.display = tab === 'report' ? '' : 'none';
+    if (bkPane)     bkPane.style.display     = tab === 'bookkeeper' ? '' : 'none';
+    // The note editor and the month/search toolbar belong to the Ledger and
+    // the Billing Report. Bookkeeper carries its own month controls per
+    // sub-view, and "note on every invoice email" is a Ledger setting — both
+    // read as broken controls on a close screen.
+    const noteEditor = document.querySelector('#financeHubSection .fh-note-editor');
+    if (noteEditor) noteEditor.style.display = tab === 'bookkeeper' ? 'none' : '';
+    const searchBox = _fhEl('fhSearch');
+    if (searchBox) searchBox.style.display = tab === 'bookkeeper' ? 'none' : '';
     if (tab === 'report' && !_fhReportLoaded) {
         _fhReportLoaded = true;
         const brMonth = _fhEl('brMonth');
         if (brMonth && !brMonth.value) brMonth.value = _fhMonth;
         if (typeof renderBillingReportTool === 'function') renderBillingReportTool();
+    }
+    if (tab === 'bookkeeper' && typeof renderFinanceBookkeeper === 'function') {
+        renderFinanceBookkeeper(_fhMonth);
     }
 }
 
@@ -160,6 +177,9 @@ async function _fhGetOrCreateCycleResilient(month) {
 
 // ── Load ─────────────────────────────────────────────────────
 async function _fhLoad() {
+    // Bookkeeper reads the same figures; a ledger write must not leave the
+    // close screen showing the pre-write numbers behind a tab switch.
+    if (typeof bookkeeperInvalidate === 'function') bookkeeperInvalidate();
     const label = _fhEl('fhMonthLabel');
     if (label) label.textContent = _fhMonthLabel(_fhMonth);
     const root = _fhEl('fhRoot');
