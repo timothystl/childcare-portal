@@ -1692,7 +1692,7 @@ Set as Cloudflare Pages environment variables and Supabase Edge Function secrets
 - `FINANCE_API_KEY` — shared secret for the `finance-summary` edge function (see below); same value must be set as `DAYCARE_API_KEY` on the ChMS side
 - `STAX_API_KEY` / `STAX_ENVIRONMENT` — Stax (fattmerchant) Core API bearer key, server-side only, never sent to the browser — see below
 - `STAX_WEB_PAYMENTS_TOKEN` — the SEPARATE client-safe token Stax.js/Bolt needs in the browser (Stax dashboard → Settings → Web Payments); NOT the same value as `STAX_API_KEY`, see below
-- `STAX_WEBHOOK_SECRET` — placeholder shared secret for `stax-webhook`; **not** Stax's real signature scheme, see below
+- `STAX_WEBHOOK_SECRET` — a value **we choose**, embedded as a `?secret=` query param on the webhook URL registered with Stax. Stax has no signing scheme of its own; see below.
 
 ---
 
@@ -1776,10 +1776,9 @@ don't control the inside of; Stax.js is the opposite shape.
   were verified live. Before this is anything but an internal comparison tool: set
   `STAX_WEB_PAYMENTS_TOKEN`, open `portal.html?staxtest=1` on a real test family
   account, and click through an actual card entry.
-- `stax-webhook`'s signature/auth scheme is still an unconfirmed placeholder (shared
-  secret header, not Stax's real signing method) — **do not deploy it or register its
-  URL with Stax** until that's resolved. It only matters for refunds/disputes; the
-  charge path above doesn't depend on it.
+- ~~`stax-webhook`'s signature/auth scheme is still an unconfirmed placeholder~~ —
+  **resolved and verified live 2026-08-27, see the section below.** It only matters
+  for refunds/disputes; the charge path above doesn't depend on it.
 
 **Bottom line:** `create-stax-charge` and `charge-stax-payment` are verified sound
 server-side (real sandbox calls succeeded). The embedded checkout UI is now built and
@@ -1871,6 +1870,82 @@ propose candidates — the definitive host list has to come from watching a live
 browser session actually attempt the flow.** Two fixes based on reading the bundle
 both missed; the one based on the browser console got it in one. Still not re-tested
 after this third fix.
+
+### Billing rollup, itemization, saved cards, and a verified refund webhook (2026-08-27)
+
+- **Prior-balance rollup.** `create-payment-session` (Authorize.net) and
+  `create-stax-charge`/`charge-stax-payment` (Stax) now charge the anchor invoice's own
+  balance **plus** any still-unpaid earlier month, not just the one invoice a parent
+  opened. `computeFamilyDueSet()` builds the oldest-first list of unpaid, *issued*
+  (`sent_at` set) invoices through the anchor month; `allocateAcrossDueSet()` /
+  `allocateAcrossPaymentRows` (webhook side) spreads one settled payment across all of
+  them, capping each at that invoice's own remaining balance. Each function duplicates
+  this pair rather than sharing a module — this repo's edge functions have no shared
+  import path between them.
+- **Itemized invoices, both processors.** `compute_family_month_charges_itemized()`
+  (new SQL function, `add_family_month_charges_itemized.sql`) is the *exact same* CTE
+  chain as `compute_family_month_charges()`, stopped one step earlier to return one row
+  per child instead of a single total — so itemization can never drift from the real
+  bill. Verified against real production families: the itemized sum matches the
+  aggregate total exactly, including a family with an active discount. Authorize.net
+  gets real `lineItem` entries on the Hosted Payment Page; Stax gets a `lineItems`
+  array for the app's own modal to render (not yet wired into the visible portal UI).
+- **PCI-compliant saved cards (Stax only so far).** `add_stax_saved_card.sql` adds
+  `families.stax_default_payment_method_id` / `_card_last_four` / `_card_brand` — only
+  Stax's own opaque vault reference plus the two PCI-permitted display fields, never
+  card data. `charge-stax-payment` accepts `useSavedCard` (charge the card on file) and
+  `saveCard` (remember a fresh one).
+
+⚠️ **The rollup introduced a real bug, found and fixed the same session.** Splitting
+one charge across several invoices suffixes each `billing_payments` row's
+`processor_transaction_id` with `-inv<id>`, so a refund/void webhook naming the *bare*
+original transaction id matched zero rows — a refund of a rolled-up charge would
+silently fail to record. Both webhooks now use `findOriginalPaymentRows()` (matches the
+bare id OR any `<id>-inv*` suffix) and reverse every row a charge was split into,
+oldest-invoice-first.
+
+### ✅ `stax-webhook` is real now — verified against a live registered webhook, not docs
+
+Three iterations, each corrected by an actual delivery rather than more reading:
+
+1. First draft (this file, pre-2026-08-27): a placeholder `X-Stax-Webhook-Secret`
+   header and a guess at a `refund`/`void` event name with a nested
+   `child_transactions[]` shape. **Never deployed against a real webhook.**
+2. Read Stax's actual API reference (`docs.staxpayments.com/reference/*`): the webhook
+   resource has no `secret` field at all — `{id, user_id, merchant_id, reference_id,
+   url, event, created_at, updated_at, deleted_at}` — and creation takes only
+   `target_url` + `event`. Stax's own doc: "you can generate a secret key in your URL
+   ... to add additional security" — **the secret is a query param WE embed in the
+   registered URL, not anything Stax computes or signs.** Rewrote to check
+   `?secret=` on the incoming request instead of a header. Registered for
+   `update_transaction` per the refund/void endpoint docs describing a "child
+   transaction added to the parent." **This event never fired, for a charge, a
+   refund, or a second refund — tested live, zero deliveries.**
+3. Registered for `create_transaction` instead: fired within ~1 second for a real
+   charge, and fired again for a refund of that same charge. **A refund/void delivers
+   as its own `create_transaction` event** — Stax treats a reversal as a new
+   transaction being created, not the parent being updated — and the POSTed body is
+   that reversal transaction directly (top-level `type: "refund"`/`"void"`,
+   `reference_id` = the original charge's id, `total` = the amount), not nested under
+   a parent's `child_transactions[]` the way the refund *endpoint response* shape
+   (used only by the earlier drafts) had suggested.
+
+**Full round trip verified live**, not just delivery: charged a real test invoice via
+the Core API, inserted the matching `billing_payments` row, issued a real sandbox
+refund, and confirmed `stax-webhook` recorded the correct negative row
+(`refund_of_payment_id` set, amount matching) and left the invoice status correct.
+Test rows removed afterward — the live production catalog carries no trace of this
+test. `stax-webhook` is now genuinely safe to rely on for refunds/voids; it is
+registered with Stax for `create_transaction` only (an ordinary charge's
+`create_transaction` event is deliberately ignored here, since `charge-stax-payment`
+already recorded it synchronously).
+
+⚠️ **A temporary function, `stax-webhook-admin-tmp`, was deployed this session** to
+register the webhook and drive these tests via Stax's Core API (gated by a hardcoded
+token, not a project secret, precisely because it was meant to be short-lived). **It
+should be deleted from the Supabase dashboard** — no delete-function tool is available
+here, same limitation already noted for the `dynamic-function` orphan earlier in this
+file.
 
 ---
 
