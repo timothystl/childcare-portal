@@ -346,6 +346,8 @@ document.addEventListener('DOMContentLoaded', () => {
         pbEl('pbStaxSavedCard')?.classList.add('hidden');
         pbEl('pbStaxCardEntry')?.classList.remove('hidden');
     });
+    pbEl('pbStaxPartialToggle')?.addEventListener('click', pbToggleStaxPartialAmount);
+    pbEl('pbStaxPaymentAmount')?.addEventListener('input', pbUpdateStaxDisplayedAmount);
 });
 
 // ============================================================
@@ -466,6 +468,65 @@ function pbRenderStaxSavedCard(session) {
     }
 }
 
+/**
+ * Returns the parent's selected amount in whole cents. The full live balance
+ * is prefilled and remains the default; this only becomes an installment when
+ * the parent deliberately enters a smaller amount. The edge function repeats
+ * all validation against a freshly-computed balance before moving money.
+ */
+function pbSelectedStaxAmount() {
+    const session = window.__pbStaxSession;
+    const input = pbEl('pbStaxPaymentAmount');
+    const amount = Number(input?.value);
+    const amountCents = Math.round(amount * 100);
+    const balanceCents = Math.round((Number(session?.amount) || 0) * 100);
+    if (!Number.isFinite(amount) || amountCents < 1) {
+        throw new Error('Enter a payment amount of at least $0.01.');
+    }
+    if (Math.abs(amount * 100 - amountCents) > 0.000001) {
+        throw new Error('Enter no more than two decimal places.');
+    }
+    if (amountCents > balanceCents) {
+        throw new Error(`The payment cannot exceed the ${pbMoney(balanceCents / 100)} balance.`);
+    }
+    return amountCents / 100;
+}
+
+function pbUpdateStaxDisplayedAmount() {
+    const amountEl = pbEl('pbStaxAmount');
+    const payBtn = pbEl('pbStaxPayBtn');
+    const savedBtn = pbEl('pbStaxUseSavedCardBtn');
+    try {
+        const amount = pbSelectedStaxAmount();
+        if (amountEl) amountEl.textContent = pbMoney(amount);
+        if (payBtn) payBtn.textContent = `Pay ${pbMoney(amount)}`;
+        if (savedBtn) savedBtn.textContent = `Pay ${pbMoney(amount)} with this card`;
+    } catch (_) {
+        if (amountEl) amountEl.textContent = '—';
+        if (payBtn) payBtn.textContent = 'Pay';
+        if (savedBtn) savedBtn.textContent = 'Pay with this card';
+    }
+}
+
+function pbToggleStaxPartialAmount() {
+    const toggle = pbEl('pbStaxPartialToggle');
+    const fields = pbEl('pbStaxPartialFields');
+    const input = pbEl('pbStaxPaymentAmount');
+    if (!toggle || !fields) return;
+    const opening = fields.hidden;
+    fields.hidden = !opening;
+    toggle.setAttribute('aria-expanded', String(opening));
+    toggle.textContent = opening ? 'Pay the full balance instead' : 'Pay a different amount';
+    if (opening) {
+        input?.focus();
+        input?.select();
+    } else {
+        const session = window.__pbStaxSession;
+        if (input && session) input.value = Number(session.amount).toFixed(2);
+        pbUpdateStaxDisplayedAmount();
+    }
+}
+
 function pbOpenStaxModal(session) {
     pbPopulateStaxExpYearOnce();
     const modal = pbEl('pbStaxModal');
@@ -473,6 +534,11 @@ function pbOpenStaxModal(session) {
     const cvvMount = pbEl('pbStaxCardCvv');
     const nameEl = pbEl('pbStaxName');
     const amountEl = pbEl('pbStaxAmount');
+    const balanceEl = pbEl('pbStaxBalanceDue');
+    const amountWrap = pbEl('pbStaxPaymentAmountWrap');
+    const amountInput = pbEl('pbStaxPaymentAmount');
+    const partialFields = pbEl('pbStaxPartialFields');
+    const partialToggle = pbEl('pbStaxPartialToggle');
     const payBtn = pbEl('pbStaxPayBtn');
     const status = pbEl('pbStaxModalStatus');
     const saveCardEl = pbEl('pbStaxSaveCard');
@@ -480,6 +546,20 @@ function pbOpenStaxModal(session) {
     if (cvvMount) cvvMount.innerHTML = '';
     if (nameEl) nameEl.textContent = `${session.firstname} ${session.lastname}`.trim();
     if (amountEl) amountEl.textContent = pbMoney(session.amount);
+    if (balanceEl) balanceEl.textContent = pbMoney(session.amount);
+    // An older deployed charge function ignores unknown request fields and
+    // would charge the full balance. Keep installments unavailable unless
+    // the server explicitly advertises the matching validation behavior.
+    if (amountWrap) amountWrap.hidden = session.supportsPartialPayments !== true;
+    if (amountInput) {
+        amountInput.value = Number(session.amount).toFixed(2);
+        amountInput.max = Number(session.amount).toFixed(2);
+    }
+    if (partialFields) partialFields.hidden = true;
+    if (partialToggle) {
+        partialToggle.textContent = 'Pay a different amount';
+        partialToggle.setAttribute('aria-expanded', 'false');
+    }
     if (payBtn) payBtn.disabled = true;
     if (saveCardEl) saveCardEl.checked = false;
     if (status) { status.hidden = false; status.textContent = 'Loading secure card fields…'; }
@@ -488,6 +568,7 @@ function pbOpenStaxModal(session) {
     pbRenderStaxSavedCard(session);
 
     window.__pbStaxSession = session;
+    pbUpdateStaxDisplayedAmount();
 
     pbStaxInstance = new StaxJs(session.webPaymentsToken, {
         number: {
@@ -516,7 +597,7 @@ function pbOpenStaxModal(session) {
         .then(() => { if (status) status.hidden = true; })
         .catch(err => {
             if (status) { status.textContent = 'Could not load the card form. Please try again.'; }
-            console.error('Stax.js showCardForm failed:', err);
+            console.error('Stax.js showCardForm failed');
         });
 
     if (typeof pbStaxInstance.on === 'function') {
@@ -540,6 +621,7 @@ async function pbStaxTokenizeAndCharge() {
     if (status) { status.hidden = false; status.textContent = 'Processing payment…'; }
 
     try {
+        const amount = pbSelectedStaxAmount();
         // Per Stax's documented sample, expiration month/year travel as
         // plain fields here — only the number and CVV are collected inside
         // Stax's own iframes. See create-stax-charge's ✅ note for why.
@@ -553,20 +635,23 @@ async function pbStaxTokenizeAndCharge() {
             year: yearEl ? yearEl.value : '',
             customer_id: session.customerId,
             match_customer: true,
-            validate: false,
+            validate: true,
         });
 
         const paymentMethodId = tokenizeResult && tokenizeResult.id;
         if (!paymentMethodId) throw new Error('Could not read the card. Please check the details and try again.');
 
         const saveCard = !!pbEl('pbStaxSaveCard')?.checked;
-        const chargeResult = await chargeStaxPayment(session.invoiceId, paymentMethodId, { saveCard });
+        const chargeResult = await chargeStaxPayment(session.invoiceId, paymentMethodId, {
+            saveCard, amount, paymentAttemptId: session.paymentAttemptId,
+        });
         if (!chargeResult || chargeResult.success !== true) {
             throw new Error('Payment was not confirmed. Please try again.');
         }
 
         pbCloseStaxModal(true);
     } catch (e) {
+        if (e.nextPaymentAttemptId) session.paymentAttemptId = e.nextPaymentAttemptId;
         if (status) {
             status.hidden = false;
             status.textContent = e.message || 'Payment failed. Please check the card details and try again.';
@@ -584,12 +669,16 @@ async function pbStaxChargeSavedCard() {
     if (btn) btn.disabled = true;
     if (status) { status.hidden = false; status.textContent = 'Processing payment…'; }
     try {
-        const chargeResult = await chargeStaxPayment(session.invoiceId, null, { useSavedCard: true });
+        const amount = pbSelectedStaxAmount();
+        const chargeResult = await chargeStaxPayment(session.invoiceId, null, {
+            useSavedCard: true, amount, paymentAttemptId: session.paymentAttemptId,
+        });
         if (!chargeResult || chargeResult.success !== true) {
             throw new Error('Payment was not confirmed. Please try again.');
         }
         pbCloseStaxModal(true);
     } catch (e) {
+        if (e.nextPaymentAttemptId) session.paymentAttemptId = e.nextPaymentAttemptId;
         if (status) {
             status.hidden = false;
             status.textContent = e.message || 'Payment failed. Please try again or use a different card.';

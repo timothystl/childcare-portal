@@ -1963,11 +1963,11 @@ don't control the inside of; Stax.js is the opposite shape.
   **resolved and verified live 2026-08-27, see the section below.** It only matters
   for refunds/disputes; the charge path above doesn't depend on it.
 
-**Bottom line:** `create-stax-charge` and `charge-stax-payment` are verified sound
-server-side (real sandbox calls succeeded). The embedded checkout UI is now built and
-should be structurally correct against Stax's documented API, but is unverified in a
-browser. Treat the whole flow as an internal-only comparison tool (`?staxtest=1`) until
-someone with Stax dashboard access sets the Web Payments Token and clicks through it.
+**Historical test result, not a security approval:** real sandbox calls established
+the request/response shape, but did not prove concurrency safety, atomic recording,
+webhook authenticity, or launch readiness. The 2026-08-27 hardening migration and
+function rewrites supersede the earlier "verified sound" wording. Treat the flow as
+internal-only until those changes are deployed in order and tested.
 
 ### Deployed and live-tested (2026-08-26)
 
@@ -2113,22 +2113,22 @@ Three iterations, each corrected by an actual delivery rather than more reading:
    a parent's `child_transactions[]` the way the refund *endpoint response* shape
    (used only by the earlier drafts) had suggested.
 
-**Full round trip verified live**, not just delivery: charged a real test invoice via
+**The delivery shape was verified live**, not just inferred: charged a real test invoice via
 the Core API, inserted the matching `billing_payments` row, issued a real sandbox
 refund, and confirmed `stax-webhook` recorded the correct negative row
 (`refund_of_payment_id` set, amount matching) and left the invoice status correct.
 Test rows removed afterward — the live production catalog carries no trace of this
-test. `stax-webhook` is now genuinely safe to rely on for refunds/voids; it is
-registered with Stax for `create_transaction` only (an ordinary charge's
-`create_transaction` event is deliberately ignored here, since `charge-stax-payment`
-already recorded it synchronously).
+test. That test did not prove authenticity or atomic multi-row recording: the old
+implementation trusted the webhook payload after only a URL-secret check and wrote
+split reversals sequentially. The hardened webhook now re-fetches the transaction
+from Stax's authenticated API and calls one transactional database function.
 
-⚠️ **A temporary function, `stax-webhook-admin-tmp`, was deployed this session** to
+🚨 **Launch blocker: `stax-webhook-admin-tmp` remains deployed** to
 register the webhook and drive these tests via Stax's Core API (gated by a hardcoded
 token, not a project secret, precisely because it was meant to be short-lived). **It
-should be deleted from the Supabase dashboard** — no delete-function tool is available
-here, same limitation already noted for the `dynamic-function` orphan earlier in this
-file.
+must be deleted from the Supabase dashboard.** The repository includes an inert 410
+replacement as an emergency containment step, but the live function must be disabled
+or deleted and its hardcoded token treated as compromised before launch.
 
 ---
 

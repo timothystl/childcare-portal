@@ -1,14 +1,11 @@
 // ============================================================
 // create-stax-charge — starts a Stax (fattmerchant) payment
 // ============================================================
-// Scaffolding, not yet live-tested — see the ⚠️ block below. Mirrors
-// create-payment-session's (Authorize.net) security posture exactly,
-// because it is the same class of problem: a function that must never be
-// aimable at an arbitrary amount or account.
+// Starts an authenticated, server-priced Stax checkout session. The actual
+// charge and all payment allocation happen in charge-stax-payment.
 //
-//   1. The request body carries ONLY an invoice id. The amount charged is
-//      always (final_amount - sum of recorded payments), computed here
-//      from the database — never trusted from the caller.
+//   1. The request body carries ONLY an invoice id. A restricted database
+//      function computes the issued balance and fails closed on query errors.
 //   2. The caller must hold a valid parent session AND that invoice must
 //      belong to their own family (parent_family_ids(), same definer RPC
 //      every other parent-facing read already trusts).
@@ -22,31 +19,9 @@
 //      charge-stax-payment, called AFTER the browser has a
 //      payment_method id, never with raw card fields.
 //
-// ✅ Merchant activated 2026-08-26 (gateway_type: "TEST", gateways
-//   non-empty) — Stax's activations team turned on the sandbox gateway
-//   after support was emailed. The earlier `vaultLookup` block is gone.
-//   The /customer create call in this file was verified live against the
-//   real sandbox: POST /customer with {firstname, lastname, email,
-//   reference} returns 200 with an `id` exactly as this code expects.
-//
-// ✅ Confirmed via Stax's own docs (2026-08-26): the browser needs a
-//   SEPARATE "Website Payments Token" for Stax.js/Bolt — NOT the
-//   STAX_API_KEY bearer key used server-side above. An earlier version of
-//   this function returned the bearer key itself as `staxPublicKey`, which
-//   would have handed our server-side secret to every browser that opened
-//   the pay modal. Fixed: this now reads STAX_WEB_PAYMENTS_TOKEN, a
-//   separate, client-safe secret (get it from the Stax dashboard —
-//   Settings → Web Payments, per docs.staxpayments.com/docs/overview-of-staxjs).
-//
-// ✅ Embedded checkout built 2026-08-26 — see portal-billing.js
-//   (pbStartStaxPayment onward) and portal.html's #pbStaxModal. Hidden
-//   from every real family by default (?staxtest=1 only); see CLAUDE.md's
-//   Stax section for what is and isn't verified in a real browser yet.
-//
-//   5. ⚠️ ROLLS UP OLDER UNPAID MONTHS (2026-08-27) — identical rule and
-//      helper shape to create-payment-session's: paying invoice X charges
+//   5. Rolls up older unpaid months: paying invoice X quotes
 //      X's own balance plus any STILL-unpaid invoice for an earlier month,
-//      never a later one. See computeFamilyDueSet().
+//      never a later one. See stax_quote_balance() in the hardening migration.
 //   6. Itemized via compute_family_month_charges_itemized() — same
 //      per-child math compute_family_month_charges() already computes
 //      internally; never a second copy of the rate/discount logic.
@@ -56,10 +31,12 @@
 //      entry entirely — charge-stax-payment does the actual charge either
 //      way. Nothing here ever sees the card itself, saved or new; only
 //      Stax's own opaque payment_method_id and the two PCI-permitted
-//      display fields (last4, brand) are stored.
+//      display fields (last4, brand) are stored. The opaque payment-method
+//      id itself is never returned to the browser.
 //
 // Deploy:  supabase functions deploy create-stax-charge
-// Secrets: STAX_API_KEY, STAX_WEB_PAYMENTS_TOKEN, STAX_ENVIRONMENT
+// Secrets: STAX_API_KEY, STAX_WEB_PAYMENTS_TOKEN, STAX_ENVIRONMENT,
+//          STAX_PAYMENTS_ENABLED
 //          ('sandbox' | 'production', default sandbox)
 // ============================================================
 
@@ -84,7 +61,7 @@ function corsHeaders(req: Request): Record<string, string> {
 
 function json(body: unknown, status: number, ch: Record<string, string>) {
     return new Response(JSON.stringify(body), {
-        status, headers: { ...ch, "Content-Type": "application/json" },
+        status, headers: { ...ch, "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
 }
 
@@ -101,45 +78,15 @@ async function staxRequest(apiKey: string, path: string, init: RequestInit = {})
     return { ok: res.ok, status: res.status, data };
 }
 
-type DueRow = { id: number; due: number; month: string };
-
-/** Same due-set builder as create-payment-session's copy — see its header. */
-async function computeFamilyDueSet(admin: any, familyId: string, anchorMonth: string): Promise<DueRow[]> {
-    const { data: invoices } = await admin
-        .from("billing_invoices")
-        .select("id, final_amount, status, sent_at, billing_cycles(month)")
-        .eq("family_id", familyId)
-        .not("sent_at", "is", null)
-        .in("status", ["sent", "partial"]);
-
-    const eligible = (invoices || []).filter((inv: any) => {
-        const m = inv?.billing_cycles?.month;
-        return typeof m === "string" && m.slice(0, 7) <= anchorMonth;
-    });
-    if (!eligible.length) return [];
-
-    const ids = eligible.map((inv: any) => inv.id);
-    const { data: pays } = await admin.from("billing_payments").select("invoice_id, amount").in("invoice_id", ids);
-    const paidByInvoice = new Map<number, number>();
-    for (const p of (pays || [])) {
-        paidByInvoice.set(p.invoice_id, (paidByInvoice.get(p.invoice_id) || 0) + (Number(p.amount) || 0));
-    }
-
-    const rows: DueRow[] = eligible.map((inv: any) => {
-        const paid = paidByInvoice.get(inv.id) || 0;
-        const due = Math.round(((Number(inv.final_amount) || 0) - paid) * 100) / 100;
-        return { id: inv.id as number, due, month: String(inv.billing_cycles.month).slice(0, 7) };
-    }).filter((r: DueRow) => r.due > 0.004);
-
-    rows.sort((a, b) => a.month.localeCompare(b.month));
-    return rows;
-}
-
 serve(async (req) => {
     const ch = corsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: ch });
+    if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, ch);
 
     try {
+        if (Deno.env.get("STAX_PAYMENTS_ENABLED") !== "true") {
+            return json({ error: "Stax payments are not currently available." }, 503, ch);
+        }
         // ── 1. Caller must hold a parent session ──────────────────
         const authHeader = req.headers.get("Authorization");
         if (!authHeader) return json({ error: "Unauthorized" }, 401, ch);
@@ -182,17 +129,21 @@ serve(async (req) => {
         }
 
         const anchorMonth = String((invoice as any)?.billing_cycles?.month || "").slice(0, 7);
+        const { data: quote, error: quoteErr } = await admin.rpc("stax_quote_balance", {
+            p_invoice_id: invoice.id,
+            p_family_id: invoice.family_id,
+        });
+        if (quoteErr) return json({ error: quoteErr.message }, 400, ch);
+        const due = Number(quote?.amount);
+        const priorBalance = Number(quote?.priorBalance) || 0;
+        if (!Number.isFinite(due) || due <= 0) {
+            return json({ error: "Could not calculate the current balance." }, 500, ch);
+        }
 
-        const dueSet = await computeFamilyDueSet(admin, String(invoice.family_id), anchorMonth);
-        if (!dueSet.length) return json({ error: "This bill is already paid in full." }, 400, ch);
-        const due = Math.round(dueSet.reduce((s, r) => s + r.due, 0) * 100) / 100;
-        const priorBalance = Math.round(
-            dueSet.filter(r => r.month < anchorMonth).reduce((s, r) => s + r.due, 0) * 100,
-        ) / 100;
-
-        const { data: itemRows } = await admin.rpc("compute_family_month_charges_itemized", {
+        const { data: itemRows, error: itemErr } = await admin.rpc("compute_family_month_charges_itemized", {
             p_family_id: invoice.family_id, p_month: anchorMonth,
         });
+        if (itemErr) return json({ error: "Could not calculate invoice details." }, 500, ch);
         const lineItems = (itemRows || []).map((r: any) => ({
             childName: String(r.child_name || "Child"),
             fullDays: Number(r.full_days) || 0,
@@ -228,14 +179,26 @@ serve(async (req) => {
                 }),
             });
             if (!created.ok || !created.data?.id) {
-                return json({ error: created.data?.errors ? JSON.stringify(created.data.errors) : "Could not start payment with Stax." }, 502, ch);
+                console.error("create-stax-charge: customer creation failed", created.status);
+                return json({ error: "Could not start payment with Stax." }, 502, ch);
             }
             staxCustomerId = created.data.id;
 
-            // Best-effort — a failed save here just means we create a new
-            // Stax customer next time rather than reusing this one. Never
-            // block the payment attempt on it.
-            await admin.from("families").update({ stax_customer_id: staxCustomerId }).eq("id", family.id);
+            // Two tabs may both observe a missing customer. Only the first
+            // conditional update wins; re-read and use the persisted winner
+            // so the browser never tokenizes against an orphaned customer.
+            const { error: saveCustomerErr } = await admin.from("families")
+                .update({ stax_customer_id: staxCustomerId })
+                .eq("id", family.id)
+                .is("stax_customer_id", null);
+            if (saveCustomerErr) return json({ error: "Could not save the payment customer." }, 500, ch);
+
+            const { data: persistedFamily, error: persistedFamilyErr } = await admin.from("families")
+                .select("stax_customer_id").eq("id", family.id).maybeSingle();
+            if (persistedFamilyErr || !persistedFamily?.stax_customer_id) {
+                return json({ error: "Could not confirm the payment customer." }, 500, ch);
+            }
+            staxCustomerId = persistedFamily.stax_customer_id;
         }
 
         // ── 4. Hand the browser what it needs to tokenize a card ───
@@ -254,6 +217,12 @@ serve(async (req) => {
             webPaymentsToken,
             environment: (Deno.env.get("STAX_ENVIRONMENT") || "sandbox").toLowerCase(),
             amount: due,
+            // The browser hides its installment control unless this exact
+            // capability is present. That prevents a newer frontend from
+            // sending a partial amount to an older charge function that
+            // does not yet understand or enforce it.
+            supportsPartialPayments: true,
+            paymentAttemptId: crypto.randomUUID(),
             priorBalance,
             lineItems,
             invoiceId: invoice.id,
@@ -261,13 +230,13 @@ serve(async (req) => {
             lastname,
             phone: family.parent_phone || "",
             savedCard: family.stax_default_payment_method_id ? {
-                paymentMethodId: family.stax_default_payment_method_id,
                 last4: family.stax_default_card_last_four || "",
                 brand: family.stax_default_card_brand || "",
             } : null,
         }, 200, ch);
 
-    } catch (err) {
-        return json({ error: (err as Error).message }, 500, ch);
+    } catch (_err) {
+        console.error("create-stax-charge: unhandled failure");
+        return json({ error: "Could not start the payment session." }, 500, ch);
     }
 });

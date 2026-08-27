@@ -21,3 +21,22 @@ verify_jwt = false
 # a server-to-server caller to hold.
 [functions.finance-summary]
 verify_jwt = false
+
+# Parent payment endpoints require a valid Supabase access token at the
+# gateway and repeat ownership/authentication checks inside the function.
+[functions.create-stax-charge]
+verify_jwt = true
+
+[functions.charge-stax-payment]
+verify_jwt = true
+
+# Stax cannot present a Supabase JWT. The webhook verifies a URL secret and,
+# critically, re-fetches the transaction from Stax with the server API key
+# before any database mutation.
+[functions.stax-webhook]
+verify_jwt = false
+
+# This temporary function must be deleted. If deletion is not immediately
+# possible, deploying the checked-in implementation leaves only a 410 stub.
+[functions.stax-webhook-admin-tmp]
+verify_jwt = true

@@ -1355,6 +1355,102 @@ describe('billing invoice integrity guards', () => {
     });
 });
 
+describe('Stax payment security guards', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const migration = read('supabase/migrations/20260827193636_harden_stax_payments.sql');
+    const chargeFn = read('supabase/functions/charge-stax-payment/index.ts');
+    const webhookFn = read('supabase/functions/stax-webhook/index.ts');
+
+    test('active payment attempts are unique per family, not merely invoice', () => {
+        expect(/payment_charge_locks_active_family_idx[\s\S]*?\(family_id\)[\s\S]*?processor_succeeded/.test(migration)).toBe(true);
+    });
+
+    test('charge allocation and reversal recording use atomic database functions', () => {
+        expect(chargeFn.includes('admin.rpc("stax_finalize_charge"')).toBe(true);
+        expect(webhookFn.includes('admin.rpc("stax_record_reversal"')).toBe(true);
+        expect(migration.includes('CREATE OR REPLACE FUNCTION public.stax_finalize_charge')).toBe(true);
+        expect(migration.includes('CREATE OR REPLACE FUNCTION public.stax_record_reversal')).toBe(true);
+    });
+
+    test('privileged Stax database functions are not browser-executable', () => {
+        for (const signature of [
+            'stax_quote_balance(bigint, uuid)',
+            'stax_prepare_charge(bigint, uuid, numeric, text)',
+            'stax_set_charge_state(bigint, text, text, text)',
+            'stax_finalize_charge(bigint)',
+            'stax_record_reversal(text, text, text, numeric)',
+        ]) {
+            expect(migration.includes(`REVOKE ALL ON FUNCTION public.${signature} FROM PUBLIC, anon, authenticated`)).toBe(true);
+        }
+    });
+
+    test('webhook re-fetches the transaction from Stax before mutation', () => {
+        const verifyAt = webhookFn.indexOf('/transaction/${encodeURIComponent(eventTransactionId)}');
+        const mutateAt = webhookFn.indexOf('admin.rpc("stax_record_reversal"');
+        expect(verifyAt).toBeGreaterThan(-1);
+        expect(mutateAt).toBeGreaterThan(verifyAt);
+    });
+
+    test('charge verifies the payment method belongs to the family customer', () => {
+        const lookupAt = chargeFn.indexOf('/payment-method/${encodeURIComponent(paymentMethodId)}');
+        const reserveAt = chargeFn.indexOf('admin.rpc("stax_prepare_charge"');
+        expect(lookupAt).toBeGreaterThan(-1);
+        expect(chargeFn.includes('verifiedMethod?.customer_id')).toBe(true);
+        expect(reserveAt).toBeGreaterThan(lookupAt);
+    });
+
+    test('webhook records only processor-verified successful transactions', () => {
+        const successAt = webhookFn.indexOf('const verifiedSuccess = transaction?.success === true');
+        const reversalAt = webhookFn.indexOf('admin.rpc("stax_record_reversal"');
+        expect(successAt).toBeGreaterThan(-1);
+        expect(webhookFn.indexOf('if (!verifiedSuccess)', successAt)).toBeGreaterThan(successAt);
+        expect(reversalAt).toBeGreaterThan(successAt);
+    });
+
+    test('client request carries the stable server-created payment attempt id', () => {
+        const createFn = read('supabase/functions/create-stax-charge/index.ts');
+        const client = read('js/supabase.js');
+        expect(createFn.includes('paymentAttemptId: crypto.randomUUID()')).toBe(true);
+        expect(client.includes('paymentAttemptId: opts?.paymentAttemptId')).toBe(true);
+        expect(chargeFn.includes('idempotency_id: paymentAttemptId')).toBe(true);
+    });
+
+    test('saved-card response does not expose the opaque payment method id', () => {
+        const createFn = read('supabase/functions/create-stax-charge/index.ts');
+        const savedCardBlock = createFn.match(/savedCard:[\s\S]*?\} : null/);
+        if (!savedCardBlock) throw new Error('savedCard response block not found');
+        expect(savedCardBlock[0].includes('paymentMethodId')).toBe(false);
+    });
+
+    test('temporary webhook-admin function is inert and JWT protected in source config', () => {
+        const tempFn = read('supabase/functions/stax-webhook-admin-tmp/index.ts');
+        const config = read('supabase/config.toml');
+        expect(tempFn.includes('status: 410')).toBe(true);
+        expect(tempFn.includes('Deno.env')).toBe(false);
+        expect(/\[functions\.stax-webhook-admin-tmp\][\s\S]*?verify_jwt\s*=\s*true/.test(config)).toBe(true);
+    });
+
+    test('_headers and worker.js ship identical CSP values', () => {
+        const headersMatch = read('_headers').match(/^\s*Content-Security-Policy:\s*(.+)$/m);
+        if (!headersMatch) throw new Error('CSP missing from _headers');
+        const workerMatch = read('worker.js').match(/newHeaders\.set\(\s*'Content-Security-Policy',([\s\S]*?)\n\s*\);/);
+        if (!workerMatch) throw new Error('CSP setter missing from worker.js');
+        // The captured expression is a concatenation of repository-owned
+        // string literals and comments; evaluating it yields the actual header.
+        // eslint-disable-next-line no-eval
+        const workerCsp = eval(workerMatch[1]);
+        expect(workerCsp).toBe(headersMatch[1].trim());
+    });
+
+    test('public bundles contain no server-side Stax or Supabase secret names', () => {
+        const bundles = read('dist/portal.min.js') + read('dist/supabase.min.js');
+        for (const secretName of ['STAX_API_KEY', 'STAX_WEBHOOK_SECRET', 'SUPABASE_SERVICE_ROLE_KEY']) {
+            expect(bundles.includes(secretName)).toBe(false);
+        }
+    });
+});
+
 // ---- Summary ----
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;

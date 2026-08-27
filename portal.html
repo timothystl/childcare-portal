@@ -379,6 +379,23 @@
 
                 <div id="pbStaxLineItems" class="pb-stax-line-items"></div>
 
+                <div id="pbStaxPaymentAmountWrap" class="pb-stax-payment-amount" hidden>
+                    <p class="pb-stax-balance">Balance due: <strong id="pbStaxBalanceDue">$0.00</strong></p>
+                    <button type="button" id="pbStaxPartialToggle" class="pb-stax-link-btn"
+                            aria-expanded="false" aria-controls="pbStaxPartialFields">Pay a different amount</button>
+                    <div id="pbStaxPartialFields" hidden>
+                        <label class="pb-stax-label" for="pbStaxPaymentAmount">Payment amount</label>
+                        <div class="pb-stax-money-input">
+                            <span aria-hidden="true">$</span>
+                            <input type="number" id="pbStaxPaymentAmount" min="0.01" step="0.01"
+                                   inputmode="decimal" aria-describedby="pbStaxPartialHelp">
+                        </div>
+                        <p id="pbStaxPartialHelp" class="pb-stax-fine">
+                            Payments are applied to the oldest outstanding balance first. Any remainder stays due.
+                        </p>
+                    </div>
+                </div>
+
                 <div id="pbStaxSavedCard" class="pb-stax-saved-card hidden">
                     <p class="pb-stax-saved-card-label">
                         <span id="pbStaxSavedCardLabel"></span>

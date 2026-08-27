@@ -9,20 +9,17 @@
 // raw card data — and actually charges it.
 //
 //   1. The request body carries an invoice id and a Stax payment_method
-//      id. The amount charged is always (final_amount - sum of recorded
-//      payments), recomputed here from the database — never trusted from
-//      the caller, same as create-stax-charge and create-payment-session.
+//      id. The caller may request an installment amount, but the live
+//      outstanding balance is recomputed here and the request is rejected
+//      unless it is positive, cent-precise, and no greater than that balance.
+//      Omitting an amount charges the full balance for older clients.
 //   2. Same ownership/status checks as create-stax-charge: caller must
 //      hold a parent session, the invoice must belong to their own
 //      family, and it must be issued (sent_at set, status sent/partial).
-//   3. Unlike Authorize.net's Hosted Payment Page (redirect + async
-//      webhook), Stax's /charge call is synchronous — its response tells
-//      us immediately whether the charge succeeded. So this function DOES
-//      record the billing_payments row itself, on a confirmed-successful
-//      response only. billing_payments_processor_txn_idx (processor,
-//      processor_transaction_id) — already in place for Authorize.net —
-//      makes a retried request idempotent here too: the same Stax
-//      transaction id can only ever be recorded once.
+//   3. A stable paymentAttemptId from create-stax-charge is used both for
+//      the family-wide database reservation and Stax's idempotency_id.
+//      Retrying the same request therefore returns/finalizes the original
+//      attempt instead of creating another processor charge.
 //   4. A Stax webhook (stax-webhook, scaffolded alongside this) still
 //      exists for anything that happens AFTER this synchronous response —
 //      a later refund or chargeback — the same "processor's own
@@ -56,21 +53,16 @@
 //   STAX_WEB_PAYMENTS_TOKEN available here — dashboard-only); see
 //   CLAUDE.md's Stax section.
 //
-//   6. ⚠️ ROLLS UP OLDER UNPAID MONTHS (2026-08-27) and allocates the one
-//      Stax charge across every invoice it covers, oldest first — see
-//      computeFamilyDueSet(). Recomputed fresh here, not trusted from
-//      whatever create-stax-charge quoted a moment earlier.
+//   6. Rolls up older unpaid months and allocates a successful charge in
+//      one restricted Postgres transaction. If the due set changes while
+//      Stax is processing, any excess becomes an explicit unapplied credit.
 //   7. Saved card: pass useSavedCard:true instead of paymentMethodId to
 //      charge the family's card on file (add_stax_saved_card.sql), or
 //      saveCard:true after a fresh paymentMethodId to remember it for next
 //      time. Only Stax's own payment_method_id plus last4/brand are ever
 //      stored — never card data itself; see the migration's header.
-//   8. ⚠️ CHARGE-LOCKED against double-charging (2026-08-27, independent
-//      review finding C3 — proven live before this fix: invoice 3847 was
-//      charged twice, nine minutes apart). A payment_charge_locks row
-//      (add_payment_charge_locks.sql) is inserted BEFORE calling Stax, with
-//      a partial unique index allowing only one 'pending' lock per invoice
-//      — a concurrent/retried attempt gets a 409 instead of reaching Stax.
+//   8. CHARGE-LOCKED against double-charging. The active lock is unique per
+//      FAMILY, since different anchor invoices can cover overlapping debt.
 //      A network error or a Stax PENDING status is treated as ambiguous and
 //      leaves the lock 'pending' on purpose (never releases it for a
 //      retry); only a clean decline releases it. The idempotency_id sent to
@@ -79,7 +71,8 @@
 //      than creating a new one.
 //
 // Deploy:  supabase functions deploy charge-stax-payment
-// Secrets: STAX_API_KEY, RESEND_API_KEY, RESEND_FROM_EMAIL, RESEND_REPLY_TO
+// Secrets: STAX_API_KEY, STAX_PAYMENTS_ENABLED, RESEND_API_KEY,
+//          RESEND_FROM_EMAIL, RESEND_REPLY_TO
 //          (shared with authorizenet-webhook / send-invoice)
 // ============================================================
 
@@ -99,7 +92,7 @@ function corsHeaders(req: Request): Record<string, string> {
 
 function json(body: unknown, status: number, ch: Record<string, string>) {
     return new Response(JSON.stringify(body), {
-        status, headers: { ...ch, "Content-Type": "application/json" },
+        status, headers: { ...ch, "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
 }
 
@@ -109,40 +102,6 @@ function amountStr(n: number): string {
 }
 
 function money(n: number): string { return "$" + (Number(n) || 0).toFixed(2); }
-
-type DueRow = { id: number; due: number; month: string };
-
-/** Same due-set builder as create-stax-charge's / create-payment-session's copy. */
-async function computeFamilyDueSet(admin: any, familyId: string, anchorMonth: string): Promise<DueRow[]> {
-    const { data: invoices } = await admin
-        .from("billing_invoices")
-        .select("id, final_amount, status, sent_at, billing_cycles(month)")
-        .eq("family_id", familyId)
-        .not("sent_at", "is", null)
-        .in("status", ["sent", "partial"]);
-
-    const eligible = (invoices || []).filter((inv: any) => {
-        const m = inv?.billing_cycles?.month;
-        return typeof m === "string" && m.slice(0, 7) <= anchorMonth;
-    });
-    if (!eligible.length) return [];
-
-    const ids = eligible.map((inv: any) => inv.id);
-    const { data: pays } = await admin.from("billing_payments").select("invoice_id, amount").in("invoice_id", ids);
-    const paidByInvoice = new Map<number, number>();
-    for (const p of (pays || [])) {
-        paidByInvoice.set(p.invoice_id, (paidByInvoice.get(p.invoice_id) || 0) + (Number(p.amount) || 0));
-    }
-
-    const rows: DueRow[] = eligible.map((inv: any) => {
-        const paid = paidByInvoice.get(inv.id) || 0;
-        const due = Math.round(((Number(inv.final_amount) || 0) - paid) * 100) / 100;
-        return { id: inv.id as number, due, month: String(inv.billing_cycles.month).slice(0, 7) };
-    }).filter((r: DueRow) => r.due > 0.004);
-
-    rows.sort((a, b) => a.month.localeCompare(b.month));
-    return rows;
-}
 
 function escHtml(s: string): string {
     return String(s ?? "").replace(/[&<>"']/g, c => (
@@ -168,7 +127,8 @@ function monthLabel(month: string): string {
  * hood they never need to know about.
  */
 async function sendReceiptEmail(admin: any, o: {
-    familyId: string; invoiceId: number; amountPaid: number; transId: string;
+    familyId: string; invoiceId: number; amountPaid: number;
+    balanceRemaining: number; transId: string;
 }): Promise<void> {
     const apiKey = Deno.env.get("RESEND_API_KEY");
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
@@ -180,13 +140,9 @@ async function sendReceiptEmail(admin: any, o: {
     if (!fam?.parent_email) return;
 
     const { data: invoice } = await admin.from("billing_invoices")
-        .select("final_amount, billing_cycles(month)")
+        .select("billing_cycles(month)")
         .eq("id", o.invoiceId).maybeSingle();
-    const { data: paymentRows } = await admin.from("billing_payments")
-        .select("amount").eq("invoice_id", o.invoiceId);
-    const totalPaid = (paymentRows || []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0);
-    const finalAmount = Number(invoice?.final_amount) || 0;
-    const balanceRemaining = Math.max(0, finalAmount - totalPaid);
+    const balanceRemaining = Math.max(0, o.balanceRemaining);
     const month = (invoice as any)?.billing_cycles?.month || "";
 
     // How many care days this invoice's month actually covers — same
@@ -234,7 +190,7 @@ async function sendReceiptEmail(admin: any, o: {
                 <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#01294A;font-size:15px;text-align:right;">${escHtml(o.transId)}</td>
               </tr>
               <tr>
-                <td style="padding:9px 0;color:#2E2A22;font-size:15px;">${balanceRemaining > 0 ? "Balance remaining" : "Status"}</td>
+                <td style="padding:9px 0;color:#2E2A22;font-size:15px;">${balanceRemaining > 0 ? "Account balance remaining" : "Status"}</td>
                 <td style="padding:9px 0;color:#01294A;font-size:15px;text-align:right;font-weight:700;">${balanceRemaining > 0 ? escHtml(money(balanceRemaining)) : "Paid in full"}</td>
               </tr>
             </table>
@@ -282,12 +238,18 @@ async function sendReceiptEmail(admin: any, o: {
 serve(async (req) => {
     const ch = corsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: ch });
+    if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, ch);
 
     try {
-        // ── 1. Caller must hold a parent session ──────────────────
+        if (Deno.env.get("STAX_PAYMENTS_ENABLED") !== "true") {
+            return json({ error: "Stax payments are not currently available." }, 503, ch);
+        }
+        const apiKey = Deno.env.get("STAX_API_KEY");
+        if (!apiKey) return json({ error: "Payment processing is not configured yet." }, 500, ch);
+
+        // ── 1. Authenticate the parent and resolve their families ──────
         const authHeader = req.headers.get("Authorization");
         if (!authHeader) return json({ error: "Unauthorized" }, 401, ch);
-
         const callerClient = createClient(
             Deno.env.get("SUPABASE_URL")!,
             Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -295,20 +257,26 @@ serve(async (req) => {
         );
         const { data: { user }, error: authError } = await callerClient.auth.getUser();
         if (authError || !user) return json({ error: "Unauthorized" }, 401, ch);
-
         const { data: famIdRows, error: famIdErr } = await callerClient.rpc("parent_family_ids");
         if (famIdErr) return json({ error: "Could not resolve your family." }, 403, ch);
         const myFamilyIds = new Set((famIdRows || []).map((r: unknown) => String(r)));
         if (!myFamilyIds.size) return json({ error: "No family is linked to this account." }, 403, ch);
 
-        // ── 2. Input: an invoice id + either a fresh tokenized payment
-        // method or "use the card already on file" ─────────────────────
+        // ── 2. Validate non-card input. Raw PAN/CVV never reaches here. ─
         const body = await req.json().catch(() => ({}));
         const invoiceId = Number(body?.invoiceId);
+        const paymentAttemptId = String(body?.paymentAttemptId || "").toLowerCase();
         const bodyPaymentMethodId = String(body?.paymentMethodId || "");
         const useSavedCard = body?.useSavedCard === true;
         const saveCard = body?.saveCard === true;
-        if (!Number.isFinite(invoiceId)) return json({ error: "invoiceId is required." }, 400, ch);
+        const requestedAmount = body?.amount;
+        if (!Number.isSafeInteger(invoiceId) || invoiceId <= 0) {
+            return json({ error: "A valid invoiceId is required." }, 400, ch);
+        }
+        if (!paymentAttemptId) return json({ error: "paymentAttemptId is required." }, 400, ch);
+        if (requestedAmount != null && (typeof requestedAmount !== "number" || !Number.isFinite(requestedAmount))) {
+            return json({ error: "Payment amount must be a number." }, 400, ch);
+        }
         if (!bodyPaymentMethodId && !useSavedCard) {
             return json({ error: "paymentMethodId is required." }, 400, ch);
         }
@@ -317,19 +285,18 @@ serve(async (req) => {
             Deno.env.get("SUPABASE_URL")!,
             Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
         );
-
         const { data: invoice, error: invErr } = await admin
             .from("billing_invoices")
-            .select("id, family_id, final_amount, status, sent_at, billing_cycles(month)")
+            .select("id, family_id, status, sent_at, billing_cycles(month)")
             .eq("id", invoiceId)
             .maybeSingle();
-        if (invErr) return json({ error: invErr.message }, 500, ch);
+        if (invErr) return json({ error: "Could not load the invoice." }, 500, ch);
         if (!invoice) return json({ error: "Invoice not found." }, 404, ch);
         if (!myFamilyIds.has(String(invoice.family_id))) {
             return json({ error: "That invoice does not belong to your family." }, 403, ch);
         }
         if (!invoice.sent_at || !["sent", "partial"].includes(invoice.status)) {
-            return json({ error: "This bill has not been issued yet." }, 400, ch);
+            return json({ error: "This bill has not been issued or is no longer payable." }, 400, ch);
         }
 
         const { data: family, error: famErr } = await admin
@@ -337,203 +304,182 @@ serve(async (req) => {
             .select("id, stax_customer_id, stax_default_payment_method_id")
             .eq("id", invoice.family_id)
             .maybeSingle();
-        if (famErr) return json({ error: famErr.message }, 500, ch);
+        if (famErr) return json({ error: "Could not load the payment customer." }, 500, ch);
         if (!family?.stax_customer_id) {
             return json({ error: "Start a payment session before charging." }, 400, ch);
         }
-
         const paymentMethodId = useSavedCard ? (family.stax_default_payment_method_id || "") : bodyPaymentMethodId;
         if (!paymentMethodId) {
             return json({ error: useSavedCard ? "No saved card on file." : "paymentMethodId is required." }, 400, ch);
         }
+        if (paymentMethodId.length > 200) return json({ error: "Invalid payment method." }, 400, ch);
 
-        // ⚠️ Rolls up older unpaid months (2026-08-27) — same rule as
-        // create-payment-session/create-stax-charge: charge the anchor
-        // invoice's own balance plus any still-unpaid EARLIER month, never
-        // a later one. Recomputed fresh here rather than trusting whatever
-        // create-stax-charge quoted, since this is a separate request and
-        // something could have changed in between.
-        const anchorMonth = String((invoice as any)?.billing_cycles?.month || "").slice(0, 7);
-        const dueSet = await computeFamilyDueSet(admin, String(invoice.family_id), anchorMonth);
-        if (!dueSet.length) return json({ error: "This bill is already paid in full." }, 400, ch);
-        const due = Math.round(dueSet.reduce((s, r) => s + r.due, 0) * 100) / 100;
+        // Never trust an opaque token merely because the browser supplied it.
+        // Verify through Stax that it is actually attached to this family's
+        // customer before reserving or charging anything.
+        let methodRes: Response;
+        let methodBody: any = {};
+        try {
+            methodRes = await fetch(`${STAX_API_URL}/payment-method/${encodeURIComponent(paymentMethodId)}`, {
+                headers: { "Authorization": `Bearer ${apiKey}`, "Accept": "application/json" },
+            });
+            methodBody = await methodRes.json().catch(() => ({}));
+        } catch (_err) {
+            return json({ error: "Could not verify the payment method. Please try again." }, 502, ch);
+        }
+        const verifiedMethod = methodBody?.data && typeof methodBody.data === "object" ? methodBody.data : methodBody;
+        if (!methodRes.ok || String(verifiedMethod?.id || "") !== paymentMethodId
+            || String(verifiedMethod?.customer_id || "") !== family.stax_customer_id) {
+            return json({ error: "That payment method is not available for this family." }, 400, ch);
+        }
 
-        // ── 3. Acquire a charge lock BEFORE calling the processor ───────
-        // ⚠️ 2026-08-27, independent review finding C3: nothing previously
-        // stopped a second real charge against an invoice already paid at
-        // the processor but not yet recorded here — proven live (invoice
-        // 3847, two Authorize.net charges nine minutes apart). The unique
-        // index on (processor, processor_transaction_id) makes RECORDING
-        // idempotent; it does nothing about CHARGING twice, since two
-        // charges are two distinct transaction ids and both insert cleanly.
-        // A concurrent or repeated attempt (double-click, two open tabs, a
-        // retry after this exact function returned an ambiguous error) now
-        // loses the race here, at the database, before reaching Stax at all.
-        const idempotencyKey = crypto.randomUUID();
-        const { data: lockRow, error: lockErr } = await admin
-            .from("payment_charge_locks")
-            .insert({ invoice_id: invoice.id, family_id: invoice.family_id, processor: "stax", idempotency_key: idempotencyKey })
-            .select("id").single();
-        if (lockErr) {
-            const isConflict = String(lockErr.code) === "23505" || /duplicate key/i.test(lockErr.message || "");
-            if (isConflict) {
-                return json({ error: "A payment for this invoice is already being processed. Please wait a moment and check your email before trying again." }, 409, ch);
+        // ── 3. Atomically price and reserve the whole family balance. ───
+        const { data: prepared, error: prepareErr } = await admin.rpc("stax_prepare_charge", {
+            p_invoice_id: invoice.id,
+            p_family_id: invoice.family_id,
+            p_requested_amount: requestedAmount ?? null,
+            p_idempotency_key: paymentAttemptId,
+        });
+        if (prepareErr) {
+            const busy = String(prepareErr.code) === "55P03" || /already being processed/i.test(prepareErr.message || "");
+            return json({ error: busy
+                ? "A payment for this family is already being processed. Please wait and check your balance before trying again."
+                : prepareErr.message }, busy ? 409 : 400, ch);
+        }
+
+        const lockId = Number(prepared?.lockId);
+        const chargeAmount = Number(prepared?.amount);
+        if (!Number.isSafeInteger(lockId) || !Number.isFinite(chargeAmount) || chargeAmount <= 0) {
+            return json({ error: "Could not reserve this payment." }, 500, ch);
+        }
+
+        // A response may have been lost after the processor or database
+        // succeeded. Reusing the same attempt id completes/returns that same
+        // attempt; it never calls Stax again.
+        if (prepared?.existing === true) {
+            if (prepared.status === "succeeded") {
+                return json({ success: true, alreadyProcessed: true,
+                    transactionId: prepared.transactionId, amount: chargeAmount }, 200, ch);
             }
-            return json({ error: lockErr.message }, 500, ch);
-        }
-        const lockId = lockRow.id;
-        async function resolveLock(status: "succeeded" | "failed", processorTransactionId?: string) {
-            await admin.from("payment_charge_locks").update({
-                status, processor_transaction_id: processorTransactionId ?? null,
-                resolved_at: new Date().toISOString(),
-            }).eq("id", lockId).then(() => {}, (e: unknown) => console.error("charge-stax-payment: lock resolve failed", e));
+            if (prepared.status === "processor_succeeded") {
+                const { data: recovered, error: recoverErr } = await admin.rpc("stax_finalize_charge", { p_lock_id: lockId });
+                if (recoverErr) return json({ error: "Payment succeeded but still needs office reconciliation." }, 500, ch);
+                return json(recovered, 200, ch);
+            }
+            return json({ error: "This payment attempt is already processing. Please wait and check your balance before trying again.", ambiguous: prepared.status === "ambiguous" }, 409, ch);
         }
 
-        // ── 4. Charge it ────────────────────────────────────────────
-        const apiKey = Deno.env.get("STAX_API_KEY");
-        if (!apiKey) return json({ error: "Payment processing is not configured yet." }, 500, ch);
+        const setState = async (status: "ambiguous" | "processor_succeeded" | "failed", transactionId?: string, note?: string) => {
+            const { error } = await admin.rpc("stax_set_charge_state", {
+                p_lock_id: lockId,
+                p_status: status,
+                p_transaction_id: transactionId || null,
+                p_note: note || null,
+            });
+            if (error) console.error("charge-stax-payment: could not persist processor state", error.code);
+            return !error;
+        };
 
-        const month = (invoice as unknown as { billing_cycles?: { month?: string } }).billing_cycles?.month || "";
-
-        // idempotency_id is Stax's own duplicate-charge protection (confirmed
-        // against Stax's docs: a repeated request with the same
-        // idempotency_id returns the ORIGINAL transaction rather than
-        // creating a new one) — a second, independent layer behind the lock
-        // above, in case this exact request is retried by the network layer
-        // itself rather than by a second click.
+        // ── 4. Move money using the same stable idempotency key. ────────
+        const month = String((invoice as any)?.billing_cycles?.month || "");
         let chargeRes: Response;
         let chargeData: any = {};
         try {
             chargeRes = await fetch(`${STAX_API_URL}/charge`, {
                 method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${apiKey}`,
-                    "Content-Type": "application/json",
-                },
+                headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
                 body: JSON.stringify({
                     payment_method_id: paymentMethodId,
                     customer_id: family.stax_customer_id,
-                    total: amountStr(due),
+                    total: amountStr(chargeAmount),
                     pre_auth: false,
-                    idempotency_id: idempotencyKey,
+                    idempotency_id: paymentAttemptId,
                     meta: {
                         memo: `Timothy Lutheran MDO — ${month} — invoice ${invoice.id}`,
                         reference: `mdoinv-${invoice.id}`,
+                        payment_attempt_id: paymentAttemptId,
                     },
                 }),
             });
             chargeData = await chargeRes.json().catch(() => ({}));
-        } catch (e) {
-            // ⚠️ A network failure talking to Stax is exactly the ambiguous
-            // case that produced the live double-charge — we genuinely do
-            // not know whether the card was charged. The lock stays
-            // 'pending' on purpose: it must block a retry, not invite one.
-            console.error("charge-stax-payment: network error calling Stax", e);
-            return json({ error: "We couldn't confirm whether your payment went through. Please wait a few minutes and check your email or contact the office before trying again.", ambiguous: true }, 502, ch);
+        } catch (_err) {
+            await setState("ambiguous", undefined, "Network failure while awaiting Stax response");
+            return json({ error: "We couldn't confirm whether your payment went through. Please wait and contact the office before trying again.", ambiguous: true }, 502, ch);
         }
 
-        // Stax can also report a transaction as PENDING when it "cannot
-        // receive a response from the gateway" — per Stax's own docs this
-        // can take up to 3 hours to resolve to SUCCESS or FAILED. That is
-        // just as ambiguous as a network error: don't record a payment for
-        // it, and don't release the lock for a retry.
         const staxStatus = String(chargeData?.status || "").toUpperCase();
+        const transactionId = String(chargeData?.id || "");
         if (staxStatus === "PENDING") {
-            return json({ error: "Your payment is still processing at the card network. Please check back in a few minutes before trying again.", ambiguous: true }, 202, ch);
+            await setState("ambiguous", transactionId || undefined, "Stax returned PENDING");
+            return json({ error: "Your payment is still processing at the card network. Please wait before trying again.", ambiguous: true }, 202, ch);
         }
 
-        // ✅ success/id field names verified live 2026-08-26 — see header.
-        const success = chargeRes.ok && chargeData?.success !== false && !!chargeData?.id;
-        if (!success) {
-            // A clean, definitive decline — Stax told us this charge did not
-            // happen, so it's safe to release the lock for a fresh attempt
-            // (a different card, say).
-            await resolveLock("failed");
-            const msg = chargeData?.errors ? JSON.stringify(chargeData.errors) : "Payment was declined.";
-            return json({ error: msg }, 502, ch);
-        }
-
-        const transactionId = String(chargeData.id);
-        // Money has genuinely moved at the processor now. Resolve the lock
-        // to succeeded regardless of what happens in the recording step
-        // below — a recording failure past this point is this app's own
-        // bookkeeping problem (see the existing "partiallyRecorded" branch),
-        // never grounds to let a second real charge through.
-        await resolveLock("succeeded", transactionId);
-
-        // ── 5. Allocate the one charge across every invoice it covers,
-        // oldest first — idempotent per invoice via a suffixed transaction
-        // id, same shape as authorizenet-webhook's allocateAcrossDueSet.
-        let remaining = due;
-        let anyNew = false;
-        const touchedInvoiceIds: number[] = [];
-        for (const row of dueSet) {
-            if (remaining <= 0.004) break;
-            const amt = Math.round(Math.min(remaining, row.due) * 100) / 100;
-            if (amt <= 0.004) continue;
-
-            const { error: insErr } = await admin.from("billing_payments").insert({
-                family_id: invoice.family_id,
-                invoice_id: row.id,
-                amount: amt,
-                payment_date: new Date().toISOString().slice(0, 10),
-                payment_method: "card",
-                note: `Stax online payment — invoice ${row.id}`,
-                created_by: "charge-stax-payment",
-                processor: "stax",
-                processor_transaction_id: `${transactionId}-inv${row.id}`,
-            });
-            const isDuplicate = insErr && (String(insErr.code) === "23505" || /duplicate key/i.test(insErr.message || ""));
-            if (insErr && !isDuplicate) {
-                // The charge succeeded at Stax but we failed to record this
-                // invoice's share — surface it loudly rather than silently
-                // losing part of the payment. Invoices already recorded in
-                // this loop stay recorded; a retry with the same
-                // transactionId is idempotent per invoice either way.
-                return json({ error: "Payment succeeded but could not be fully recorded. Contact the office.", partiallyRecorded: touchedInvoiceIds }, 500, ch);
+        const strictSuccess = chargeRes.ok
+            && chargeData?.success === true
+            && staxStatus === "SUCCESS"
+            && !!transactionId;
+        if (!strictSuccess) {
+            const definitiveFailure = chargeData?.success === false || ["FAILED", "DECLINED"].includes(staxStatus);
+            if (definitiveFailure) {
+                await setState("failed", transactionId || undefined, "Stax declined the charge");
+                return json({ error: "Payment was declined.", nextPaymentAttemptId: crypto.randomUUID() }, 402, ch);
             }
-            if (!isDuplicate) anyNew = true;
-            touchedInvoiceIds.push(row.id);
-            remaining = Math.round((remaining - amt) * 100) / 100;
-
-            const { data: payRows } = await admin.from("billing_payments").select("amount").eq("invoice_id", row.id);
-            const totalPaid = (payRows || []).reduce((s: number, p: { amount: number }) => s + (Number(p.amount) || 0), 0);
-            const { data: invRow } = await admin.from("billing_invoices").select("final_amount").eq("id", row.id).maybeSingle();
-            const finalAmt = Number(invRow?.final_amount) || 0;
-            const newStatus = totalPaid >= finalAmt && finalAmt > 0 ? "paid" : (totalPaid > 0 ? "partial" : "sent");
-            await admin.from("billing_invoices").update({ status: newStatus }).eq("id", row.id);
+            await setState("ambiguous", transactionId || undefined, "Unrecognized Stax response state");
+            return json({ error: "We couldn't safely determine the payment result. Please contact the office before retrying.", ambiguous: true }, 502, ch);
         }
 
-        // ── 6. Save the card for next time, if asked — only Stax's own
-        // opaque payment_method_id plus the two PCI-permitted display
-        // fields, read from Stax's own charge response. Best-effort: a
-        // failed save never undoes or fails the payment, which already
-        // happened.
+        const returnedTotal = Number(chargeData?.total);
+        const returnedCustomer = String(chargeData?.customer_id || "");
+        if (!Number.isFinite(returnedTotal)
+            || Math.round(returnedTotal * 100) !== Math.round(chargeAmount * 100)
+            || returnedCustomer !== family.stax_customer_id) {
+            await setState("ambiguous", transactionId, "Stax success response did not match reserved amount/customer");
+            return json({ error: "The processor response did not match this payment. The office must reconcile it before another attempt.", ambiguous: true }, 502, ch);
+        }
+
+        const stateSaved = await setState("processor_succeeded", transactionId);
+        if (!stateSaved) {
+            return json({ error: "Payment succeeded but could not be recorded. Contact the office; do not retry.", ambiguous: true }, 500, ch);
+        }
+
+        // ── 5. One transaction records every allocation and status. ────
+        const { data: finalized, error: finalizeErr } = await admin.rpc("stax_finalize_charge", { p_lock_id: lockId });
+        if (finalizeErr) {
+            console.error("charge-stax-payment: atomic finalization failed", finalizeErr.code);
+            return json({ error: "Payment succeeded but could not be recorded. Contact the office; do not retry.", ambiguous: true }, 500, ch);
+        }
+
+        // Save only an opaque token and display metadata, and only after the
+        // successful family-bound charge has been durably recorded.
         if (saveCard && !useSavedCard) {
             const cardInfo = chargeData?.payment_method || chargeData?.response?.payment_method || {};
-            await admin.from("families").update({
+            const rawLast4 = String(cardInfo?.card_last_four || cardInfo?.last_four_digits || "");
+            const last4 = /^[0-9]{4}$/.test(rawLast4) ? rawLast4 : null;
+            const brand = cardInfo?.card_type ? String(cardInfo.card_type).slice(0, 40) : null;
+            const { error: saveErr } = await admin.from("families").update({
                 stax_default_payment_method_id: paymentMethodId,
-                stax_default_card_last_four: cardInfo.card_last_four || cardInfo.last_four_digits || null,
-                stax_default_card_brand: cardInfo.card_type || null,
-            }).eq("id", invoice.family_id).then(() => {}, (e: unknown) => console.error("charge-stax-payment: save card failed", e));
+                stax_default_card_last_four: last4,
+                stax_default_card_brand: brand,
+            }).eq("id", invoice.family_id).eq("stax_customer_id", family.stax_customer_id);
+            if (saveErr) console.error("charge-stax-payment: saved-card metadata update failed", saveErr.code);
         }
 
-        // Receipt only on the genuinely-new insert(s) — a retry that lands
-        // entirely on the duplicate branch must never send a second copy.
-        if (anyNew) {
+        if (finalized?.anyNew === true) {
             try {
                 await sendReceiptEmail(admin, {
                     familyId: String(invoice.family_id), invoiceId: invoice.id,
-                    amountPaid: due, transId: transactionId,
+                    amountPaid: Number(finalized.amount) || chargeAmount,
+                    balanceRemaining: Number(finalized.balanceRemaining) || 0,
+                    transId: transactionId,
                 });
-            } catch (e) {
-                console.error("charge-stax-payment: receipt email failed", e);
+            } catch (_err) {
+                console.error("charge-stax-payment: receipt email failed");
             }
         }
 
-        return json({ success: true, transactionId, amount: due, touchedInvoiceIds }, 200, ch);
-
-    } catch (err) {
-        return json({ error: (err as Error).message }, 500, ch);
+        return json(finalized, 200, ch);
+    } catch (_err) {
+        console.error("charge-stax-payment: unhandled failure");
+        return json({ error: "Payment processing failed safely. Please try again or contact the office." }, 500, ch);
     }
 });
