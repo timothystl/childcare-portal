@@ -59,55 +59,66 @@ function _setRenderCaption(elId, entities) {
 function _renderRoomsTable() {
     const wrap = _setEl('roomsTableWrap');
     if (!wrap) return;
+    // Flex-wrap rows instead of a fixed-column <table> — the card is only
+    // ever half-width above 900px, narrower than 8 numeric columns need, so
+    // a literal table forced a horizontal scrollbar that hid the right-hand
+    // fields (ratio, capacity) entirely unless you noticed and scrolled.
+    // Each field carries its own inline label, so it stays legible however
+    // many of them wrap onto a second (or third) line.
     wrap.innerHTML = `
-        <table class="rates-table">
-            <thead>
-                <tr>
-                    <th>Room</th>
-                    <th>Ages (months)</th>
-                    <th>Daily ($)</th>
-                    <th>Half-day ($)</th>
-                    <th>Weekly full ($)</th>
-                    <th>Weekly half ($)</th>
-                    <th>Ratio (1:)</th>
-                    <th>Capacity</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${getSortedRooms().map(room => `
-                    <tr data-room-id="${room.id}">
-                        <td class="rates-room-label">
-                            <strong>${escHtml(room.label)}</strong>
-                            ${room.status === 'coming_soon' ? '<span class="rates-badge-soon">Coming Soon</span>' : ''}
-                            ${room.status === 'seasonal' ? '<span class="rates-badge-soon" style="background:#e0f2fe;color:#0369a1">Seasonal</span>' : ''}
-                        </td>
-                        <td>
-                            <div style="display:flex;gap:4px;align-items:center;">
-                                <input type="number" class="rate-input" data-field="ageMinMonths"
-                                    value="${room.ageMinMonths ?? ''}" min="0" step="1" placeholder="min" style="width:52px;">
-                                <span>–</span>
-                                <input type="number" class="rate-input" data-field="ageMaxMonths"
-                                    value="${room.ageMaxMonths ?? ''}" min="0" step="1" placeholder="∞" style="width:52px;">
-                            </div>
-                        </td>
-                        <td><input type="number" class="rate-input" data-field="fullDayRate"
-                                value="${room.fullDayRate ?? ''}" min="0" step="0.01" placeholder="0.00" style="width:70px;"></td>
-                        <td>${room.fullDayOnly ? '<span class="rates-na">—</span>' :
+        <div class="rf-rows">
+            ${getSortedRooms().map(room => `
+                <div class="rf-row" data-room-id="${room.id}">
+                    <div class="rf-cell rf-room">
+                        <strong>${escHtml(room.label)}</strong>
+                        ${room.status === 'coming_soon' ? '<span class="rates-badge-soon">Coming Soon</span>' : ''}
+                        ${room.status === 'seasonal' ? '<span class="rates-badge-soon" style="background:#e0f2fe;color:#0369a1">Seasonal</span>' : ''}
+                    </div>
+                    <div class="rf-cell">
+                        <span class="rf-label">Ages (months)</span>
+                        <div style="display:flex;gap:4px;align-items:center;">
+                            <input type="number" class="rate-input" data-field="ageMinMonths"
+                                value="${room.ageMinMonths ?? ''}" min="0" step="1" placeholder="min" style="width:52px;">
+                            <span>–</span>
+                            <input type="number" class="rate-input" data-field="ageMaxMonths"
+                                value="${room.ageMaxMonths ?? ''}" min="0" step="1" placeholder="∞" style="width:52px;">
+                        </div>
+                    </div>
+                    <div class="rf-cell">
+                        <span class="rf-label">Daily ($)</span>
+                        <input type="number" class="rate-input" data-field="fullDayRate"
+                                value="${room.fullDayRate ?? ''}" min="0" step="0.01" placeholder="0.00" style="width:70px;">
+                    </div>
+                    <div class="rf-cell">
+                        <span class="rf-label">Half-day ($)</span>
+                        ${room.fullDayOnly ? '<span class="rates-na">—</span>' :
                             `<input type="number" class="rate-input" data-field="halfDayRate"
-                                value="${room.halfDayRate ?? ''}" min="0" step="0.01" placeholder="0.00" style="width:70px;">`}</td>
-                        <td><input type="number" class="rate-input" data-field="weeklyFullRate"
-                                value="${room.weeklyFullRate ?? ''}" min="0" step="0.01" placeholder="—" style="width:70px;"></td>
-                        <td>${room.fullDayOnly ? '<span class="rates-na">—</span>' :
+                                value="${room.halfDayRate ?? ''}" min="0" step="0.01" placeholder="0.00" style="width:70px;">`}
+                    </div>
+                    <div class="rf-cell">
+                        <span class="rf-label">Weekly full ($)</span>
+                        <input type="number" class="rate-input" data-field="weeklyFullRate"
+                                value="${room.weeklyFullRate ?? ''}" min="0" step="0.01" placeholder="—" style="width:70px;">
+                    </div>
+                    <div class="rf-cell">
+                        <span class="rf-label">Weekly half ($)</span>
+                        ${room.fullDayOnly ? '<span class="rates-na">—</span>' :
                             `<input type="number" class="rate-input" data-field="weeklyHalfRate"
-                                value="${room.weeklyHalfRate ?? ''}" min="0" step="0.01" placeholder="—" style="width:70px;">`}</td>
-                        <td><input type="number" class="ratio-input rate-input" data-field="staffRatio"
-                                value="${room.staffRatio ?? ''}" min="1" step="1" placeholder="e.g. 4" style="width:56px;"></td>
-                        <td><input type="number" class="capacity-input rate-input" data-field="capacity"
-                                value="${room.capacity ?? ''}" min="0" step="1" placeholder="e.g. 12" style="width:56px;"></td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
+                                value="${room.weeklyHalfRate ?? ''}" min="0" step="0.01" placeholder="—" style="width:70px;">`}
+                    </div>
+                    <div class="rf-cell">
+                        <span class="rf-label">Ratio (1:)</span>
+                        <input type="number" class="ratio-input rate-input" data-field="staffRatio"
+                                value="${room.staffRatio ?? ''}" min="1" step="1" placeholder="e.g. 4" style="width:56px;">
+                    </div>
+                    <div class="rf-cell">
+                        <span class="rf-label">Capacity</span>
+                        <input type="number" class="capacity-input rate-input" data-field="capacity"
+                                value="${room.capacity ?? ''}" min="0" step="1" placeholder="e.g. 12" style="width:56px;">
+                    </div>
+                </div>
+            `).join('')}
+        </div>
         <p class="rates-hint">💡 Age range controls which room a child is auto-assigned to. Weekly rates apply when a child books all 5 Mon–Fri days in a week with the same day type. Ratio is the maximum children per staff member; capacity is the maximum enrolled children per day.</p>`;
 }
 
@@ -128,7 +139,7 @@ async function _onSaveRoomsTable() {
 
     try {
         const rates = {}, ratios = {}, capacities = {};
-        document.querySelectorAll('#roomsTableWrap tbody tr[data-room-id]').forEach(row => {
+        document.querySelectorAll('#roomsTableWrap .rf-row[data-room-id]').forEach(row => {
             const id = row.dataset.roomId;
             rates[id] = {};
             row.querySelectorAll('.rate-input[data-field]').forEach(input => {

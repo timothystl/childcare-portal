@@ -915,6 +915,12 @@ function _renderAdminUsersTable(authUsers) {
         return;
     }
 
+    // Flex-wrap rows instead of a fixed-column <table> — email, the role
+    // select and the two action buttons together are wider than this card's
+    // half-width column, so a literal table forced a horizontal scrollbar
+    // that hid "Reset Password"/"Delete" off the right edge unless you
+    // noticed and scrolled. Each field wraps onto its own line as needed
+    // instead, with its own label so nothing loses context when it wraps.
     const rows = authUsers.map(u => {
         const email   = u.email || '';
         const role    = rolesMap[email] || 'full';
@@ -925,22 +931,24 @@ function _renderAdminUsersTable(authUsers) {
             ? new Date(u.last_sign_in_at).toLocaleDateString()
             : 'Never';
         return `
-            <tr>
-                <td>${escHtml(email)}</td>
-                <td><select class="admin-role-select family-search-input btn-sm" data-email="${escHtml(email)}">${options}</select></td>
-                <td style="color:#888;font-size:.85em;white-space:nowrap">${lastSeen}</td>
-                <td style="white-space:nowrap">
+            <div class="au-row">
+                <div class="au-cell au-email">${escHtml(email)}</div>
+                <div class="au-cell">
+                    <span class="rf-label">Access Level</span>
+                    <select class="admin-role-select family-search-input btn-sm" data-email="${escHtml(email)}">${options}</select>
+                </div>
+                <div class="au-cell">
+                    <span class="rf-label">Last Login</span>
+                    <span style="color:#888;font-size:.85em">${lastSeen}</span>
+                </div>
+                <div class="au-cell au-actions">
                     <button class="btn-ghost btn-sm reset-pw-btn" data-email="${escHtml(email)}">Reset Password</button>
                     <button class="btn-ghost btn-sm delete-user-btn" style="color:#c62828" data-userid="${u.id}" data-email="${escHtml(email)}">Delete</button>
-                </td>
-            </tr>`;
+                </div>
+            </div>`;
     }).join('');
 
-    wrap.innerHTML = `
-        <table class="rates-table" style="width:100%">
-            <thead><tr><th>Email</th><th>Access Level</th><th>Last Login</th><th></th></tr></thead>
-            <tbody>${rows}</tbody>
-        </table>`;
+    wrap.innerHTML = `<div class="au-rows">${rows}</div>`;
 
     // Inline role change — save immediately on select change
     wrap.querySelectorAll('.admin-role-select').forEach(sel => {
