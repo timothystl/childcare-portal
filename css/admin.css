@@ -3529,14 +3529,6 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-toolbar .wlp-pill-btn { color: #fff; padding: 6px 14px; font-size: 14px; }
 .wlp-toolbar .wlp-pill-btn.active { background: var(--white); color: var(--navy); }
 
-.wlp-month-nav { display: flex; align-items: center; gap: 10px; color: var(--white); }
-.wlp-month-nav-btn {
-    background: rgba(255,255,255,.16); border: none; color: var(--white);
-    width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 16px;
-}
-.wlp-month-nav-btn:disabled { opacity: .4; cursor: default; }
-.wlp-month-nav-label { font-weight: 800; min-width: 96px; text-align: center; font-size: 15px; }
-
 /* ── Filter bar (search + room) ───────────────────────────── */
 .wlp-filter-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 12px 24px 0; }
 .wlp-filter-bar .rates-status { margin-left: auto; }
@@ -3706,22 +3698,50 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-grid-wrap { display: flex; }
 .wlp-grid-main { flex: 1; min-width: 0; }
 
-/* ── Capacity Planner — Board view ────────────────────────── */
-.wlp-board-wrap { display: flex; }
-.wlp-board-rooms { flex: 1; padding: 18px 24px; }
-.wlp-board-room { margin-bottom: 16px; }
-.wlp-board-room-title { font-weight: 700; font-size: 16px; color: var(--navy); margin-bottom: 6px; }
-.wlp-board-room-cap { font-weight: 400; color: var(--text-muted); font-size: 14px; }
-.wlp-board-slots { display: flex; gap: 8px; }
+/* ── Capacity Planner — Board view (candidate-first match & assign,
+   design_handoff_planning_market, 2026-08-27) ────────────────────────── */
+.wlp-board-month-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+.wlp-board-month-pill {
+    border: none; border-radius: 999px; padding: 8px 15px; font-family: var(--font-body);
+    font-weight: 800; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+    background: var(--linen); color: var(--navy);
+}
+.wlp-board-month-pill.active { background: var(--navy); color: #fff; }
+.wlp-board-columns { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
+@media (max-width: 780px) { .wlp-board-columns { grid-template-columns: 1fr; } }
+.wlp-board-candidate-list { display: flex; flex-direction: column; gap: 8px; max-height: 560px; overflow-y: auto; }
+.wlp-board-candidate {
+    text-align: left; border: 1px solid var(--border); background: #fff; border-radius: 9px;
+    padding: 10px 12px; cursor: pointer; font-family: inherit; width: 100%;
+}
+.wlp-board-candidate.selected { border-color: var(--sun); background: #FFFBEF; }
+.wlp-board-candidate-name { font-weight: 800; color: var(--navy); font-size: 13.5px; }
+.wlp-board-candidate-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.wlp-board-assign-panel { border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.wlp-board-assign-title { font-weight: 800; color: var(--navy); font-size: 15px; margin-bottom: 2px; }
+.wlp-board-assign-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+.wlp-board-assign-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.wlp-board-assign-empty {
+    border: 1px dashed var(--border); border-radius: 12px; padding: 36px;
+    text-align: center; color: var(--text-muted);
+}
 .wlp-slot {
-    flex: 1; text-align: center; padding: 10px 4px; border-radius: 8px; cursor: pointer;
-    border: 2px solid transparent;
+    flex: 1; width: 100%; text-align: center; padding: 10px 4px; border-radius: 8px; cursor: pointer;
+    border: 2px solid transparent; font-family: inherit; background: none;
 }
 .wlp-slot.wlp-avail-green,
 .wlp-slot.wlp-avail-amber,
 .wlp-slot.wlp-avail-red { border-color: transparent; }
+/* .wlp-slot's own background:none is (0,1,0) and would otherwise lose the
+   cascade to whichever of these three same-specificity rules is declared
+   later in the file — pin each as a combined .wlp-slot.wlp-avail-* selector
+   (0,2,0) so the slot's background always wins regardless of source order. */
+.wlp-slot.wlp-avail-green { background: var(--wlp-green-bg); color: var(--wlp-green-fg); }
+.wlp-slot.wlp-avail-amber { background: var(--wlp-amber-bg); color: var(--wlp-amber-fg); }
+.wlp-slot.wlp-avail-red   { background: var(--wlp-red-bg);   color: var(--wlp-red-fg); }
 .wlp-slot.selected { background: var(--navy) !important; color: var(--sun) !important; border-color: var(--navy); }
 .wlp-slot.highlight { box-shadow: inset 0 0 0 2px var(--sun); }
+.wlp-slot:disabled { background: var(--linen); color: #B0A88F; cursor: not-allowed; }
 .wlp-slot-day { font-size: 13px; font-weight: 700; }
 .wlp-slot-open { font-size: 18.5px; font-weight: 800; margin-top: 2px; }
 /* "+N waiting" demand badge — amber pill, legible on any slot background
@@ -4415,7 +4435,6 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     /* Larger tap targets — 28px/13.5px controls are under the ~44px
        recommended touch target size. */
     .wlp-edit-btn { padding: 8px 12px; font-size: 14px; }
-    .wlp-month-nav-btn { width: 36px; height: 36px; }
 
     /* Header/toolbar/filter bar carried 24px of padding per side, meant for
        a desktop-width card — that's real width lost on a ~375px viewport. */
