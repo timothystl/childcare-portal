@@ -59,62 +59,78 @@ function _setRenderCaption(elId, entities) {
 function _renderRoomsTable() {
     const wrap = _setEl('roomsTableWrap');
     if (!wrap) return;
-    // Flex-wrap rows instead of a fixed-column <table> — the card is only
-    // ever half-width above 900px, narrower than 8 numeric columns need, so
-    // a literal table forced a horizontal scrollbar that hid the right-hand
-    // fields (ratio, capacity) entirely unless you noticed and scrolled.
-    // Each field carries its own inline label, so it stays legible however
-    // many of them wrap onto a second (or third) line.
+    // A CSS grid of labeled fields per room, not a fixed-column <table> —
+    // the card is only ever half-width above 900px, narrower than 8 numeric
+    // columns need, so a literal table forced a horizontal scrollbar that
+    // hid the right-hand fields (ratio, capacity) off the edge.
+    // ⚠️ The first cut of this used plain flex-wrap on one long row per
+    // room (room name + all 7 fields as flex siblings). It looked broken,
+    // not just cramped: flex-wrap breaks a line wherever the next item
+    // stops fitting, with no notion of a grid, so which fields landed on
+    // which line was arbitrary and shifted per room depending on how much
+    // of the room-name cell's width was used — "Half-day"/"Weekly full"/
+    // "Weekly half" stranded on their own row while "Ratio"/"Capacity"
+    // jumped back to a third, with nothing lining up between rooms. The
+    // room name also sat inline as just another flex item, vertically
+    // centered against the *first* field row only, so it looked attached
+    // to "Ages/Daily" and orphaned from everything that wrapped below it.
+    // Fixed by separating concerns: the room name is its own full-width
+    // row (`.rf-room-head`), and the seven fields sit in a real
+    // `.rf-fields` CSS grid, which — unlike flex-wrap — lays out in actual
+    // columns that stay aligned from row to row and reflow as whole grid
+    // rows, not one item at a time.
     wrap.innerHTML = `
         <div class="rf-rows">
             ${getSortedRooms().map(room => `
                 <div class="rf-row" data-room-id="${room.id}">
-                    <div class="rf-cell rf-room">
+                    <div class="rf-room-head">
                         <strong>${escHtml(room.label)}</strong>
                         ${room.status === 'coming_soon' ? '<span class="rates-badge-soon">Coming Soon</span>' : ''}
                         ${room.status === 'seasonal' ? '<span class="rates-badge-soon" style="background:#e0f2fe;color:#0369a1">Seasonal</span>' : ''}
                     </div>
-                    <div class="rf-cell">
-                        <span class="rf-label">Ages (months)</span>
-                        <div style="display:flex;gap:4px;align-items:center;">
-                            <input type="number" class="rate-input" data-field="ageMinMonths"
-                                value="${room.ageMinMonths ?? ''}" min="0" step="1" placeholder="min" style="width:52px;">
-                            <span>–</span>
-                            <input type="number" class="rate-input" data-field="ageMaxMonths"
-                                value="${room.ageMaxMonths ?? ''}" min="0" step="1" placeholder="∞" style="width:52px;">
+                    <div class="rf-fields">
+                        <div class="rf-field rf-field-ages">
+                            <span class="rf-label">Ages (months)</span>
+                            <div class="rf-age-inputs">
+                                <input type="number" class="rate-input" data-field="ageMinMonths"
+                                    value="${room.ageMinMonths ?? ''}" min="0" step="1" placeholder="min">
+                                <span>–</span>
+                                <input type="number" class="rate-input" data-field="ageMaxMonths"
+                                    value="${room.ageMaxMonths ?? ''}" min="0" step="1" placeholder="∞">
+                            </div>
                         </div>
-                    </div>
-                    <div class="rf-cell">
-                        <span class="rf-label">Daily ($)</span>
-                        <input type="number" class="rate-input" data-field="fullDayRate"
-                                value="${room.fullDayRate ?? ''}" min="0" step="0.01" placeholder="0.00" style="width:70px;">
-                    </div>
-                    <div class="rf-cell">
-                        <span class="rf-label">Half-day ($)</span>
-                        ${room.fullDayOnly ? '<span class="rates-na">—</span>' :
-                            `<input type="number" class="rate-input" data-field="halfDayRate"
-                                value="${room.halfDayRate ?? ''}" min="0" step="0.01" placeholder="0.00" style="width:70px;">`}
-                    </div>
-                    <div class="rf-cell">
-                        <span class="rf-label">Weekly full ($)</span>
-                        <input type="number" class="rate-input" data-field="weeklyFullRate"
-                                value="${room.weeklyFullRate ?? ''}" min="0" step="0.01" placeholder="—" style="width:70px;">
-                    </div>
-                    <div class="rf-cell">
-                        <span class="rf-label">Weekly half ($)</span>
-                        ${room.fullDayOnly ? '<span class="rates-na">—</span>' :
-                            `<input type="number" class="rate-input" data-field="weeklyHalfRate"
-                                value="${room.weeklyHalfRate ?? ''}" min="0" step="0.01" placeholder="—" style="width:70px;">`}
-                    </div>
-                    <div class="rf-cell">
-                        <span class="rf-label">Ratio (1:)</span>
-                        <input type="number" class="ratio-input rate-input" data-field="staffRatio"
-                                value="${room.staffRatio ?? ''}" min="1" step="1" placeholder="e.g. 4" style="width:56px;">
-                    </div>
-                    <div class="rf-cell">
-                        <span class="rf-label">Capacity</span>
-                        <input type="number" class="capacity-input rate-input" data-field="capacity"
-                                value="${room.capacity ?? ''}" min="0" step="1" placeholder="e.g. 12" style="width:56px;">
+                        <div class="rf-field">
+                            <span class="rf-label">Daily ($)</span>
+                            <input type="number" class="rate-input" data-field="fullDayRate"
+                                    value="${room.fullDayRate ?? ''}" min="0" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="rf-field">
+                            <span class="rf-label">Half-day ($)</span>
+                            ${room.fullDayOnly ? '<span class="rates-na">—</span>' :
+                                `<input type="number" class="rate-input" data-field="halfDayRate"
+                                    value="${room.halfDayRate ?? ''}" min="0" step="0.01" placeholder="0.00">`}
+                        </div>
+                        <div class="rf-field">
+                            <span class="rf-label">Weekly full ($)</span>
+                            <input type="number" class="rate-input" data-field="weeklyFullRate"
+                                    value="${room.weeklyFullRate ?? ''}" min="0" step="0.01" placeholder="—">
+                        </div>
+                        <div class="rf-field">
+                            <span class="rf-label">Weekly half ($)</span>
+                            ${room.fullDayOnly ? '<span class="rates-na">—</span>' :
+                                `<input type="number" class="rate-input" data-field="weeklyHalfRate"
+                                    value="${room.weeklyHalfRate ?? ''}" min="0" step="0.01" placeholder="—">`}
+                        </div>
+                        <div class="rf-field">
+                            <span class="rf-label">Ratio (1:)</span>
+                            <input type="number" class="ratio-input rate-input" data-field="staffRatio"
+                                    value="${room.staffRatio ?? ''}" min="1" step="1" placeholder="e.g. 4">
+                        </div>
+                        <div class="rf-field">
+                            <span class="rf-label">Capacity</span>
+                            <input type="number" class="capacity-input rate-input" data-field="capacity"
+                                    value="${room.capacity ?? ''}" min="0" step="1" placeholder="e.g. 12">
+                        </div>
                     </div>
                 </div>
             `).join('')}

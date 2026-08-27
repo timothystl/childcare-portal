@@ -915,12 +915,22 @@ function _renderAdminUsersTable(authUsers) {
         return;
     }
 
-    // Flex-wrap rows instead of a fixed-column <table> — email, the role
+    // Stacked rows instead of a fixed-column <table> — email, the role
     // select and the two action buttons together are wider than this card's
     // half-width column, so a literal table forced a horizontal scrollbar
     // that hid "Reset Password"/"Delete" off the right edge unless you
-    // noticed and scrolled. Each field wraps onto its own line as needed
-    // instead, with its own label so nothing loses context when it wraps.
+    // noticed and scrolled.
+    // ⚠️ The first cut put email, Access Level, Last Login and the two
+    // buttons as flex-wrap siblings on one row. It looked broken: flex-wrap
+    // breaks wherever the next item stops fitting, so at this card's actual
+    // width the buttons ended up wrapping onto the Access Level select's
+    // line while Last Login got stranded alone below the email — nothing
+    // to do with any of them belonging together, just where the wrap
+    // happened to fall. Fixed with a deterministic stack instead: email is
+    // its own full-width row, Access Level + Last Login sit in a
+    // `.au-fields` grid below it, and the two buttons are their own row —
+    // the same three groups every time, at every width, rather than
+    // whichever grouping flex-wrap produced.
     const rows = authUsers.map(u => {
         const email   = u.email || '';
         const role    = rolesMap[email] || 'full';
@@ -932,16 +942,18 @@ function _renderAdminUsersTable(authUsers) {
             : 'Never';
         return `
             <div class="au-row">
-                <div class="au-cell au-email">${escHtml(email)}</div>
-                <div class="au-cell">
-                    <span class="rf-label">Access Level</span>
-                    <select class="admin-role-select family-search-input btn-sm" data-email="${escHtml(email)}">${options}</select>
+                <div class="au-email">${escHtml(email)}</div>
+                <div class="au-fields">
+                    <div class="au-field">
+                        <span class="rf-label">Access Level</span>
+                        <select class="admin-role-select family-search-input btn-sm" data-email="${escHtml(email)}">${options}</select>
+                    </div>
+                    <div class="au-field">
+                        <span class="rf-label">Last Login</span>
+                        <span class="au-last-value">${lastSeen}</span>
+                    </div>
                 </div>
-                <div class="au-cell">
-                    <span class="rf-label">Last Login</span>
-                    <span style="color:#888;font-size:.85em">${lastSeen}</span>
-                </div>
-                <div class="au-cell au-actions">
+                <div class="au-actions">
                     <button class="btn-ghost btn-sm reset-pw-btn" data-email="${escHtml(email)}">Reset Password</button>
                     <button class="btn-ghost btn-sm delete-user-btn" style="color:#c62828" data-userid="${u.id}" data-email="${escHtml(email)}">Delete</button>
                 </div>
