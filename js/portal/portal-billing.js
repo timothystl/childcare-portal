@@ -358,6 +358,14 @@ async function pbStartStaxPayment(invoiceId) {
     } catch (e) {
         pbStaxPaying = null;
         pbRender();
+        // Keep online payments available during a controlled processor
+        // rollout. Stax itself fails closed unless production credentials are
+        // explicitly configured; in that state, use the already-live
+        // Authorize.net hosted checkout rather than leaving families blocked.
+        if (e?.message === 'Online payments are not configured for production yet.'
+            || e?.message === 'Stax payments are not currently available.') {
+            return pbStartPayment(invoiceId);
+        }
         const err = pbEl(`pbStaxError-${invoiceId}`);
         if (err) {
             err.textContent = e.message || 'Could not start payment. Please try again.';
