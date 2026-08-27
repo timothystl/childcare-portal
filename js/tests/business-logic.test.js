@@ -1423,6 +1423,14 @@ describe('Stax payment security guards', () => {
         expect(portal.includes('with Stax (test)')).toBe(false);
     });
 
+    test('parent Stax endpoints fail closed unless explicitly configured for production', () => {
+        const createFn = read('supabase/functions/create-stax-charge/index.ts');
+        expect(createFn.includes('STAX_ENVIRONMENT')).toBe(true);
+        expect(createFn.includes('!== "production"')).toBe(true);
+        expect(chargeFn.includes('STAX_ENVIRONMENT')).toBe(true);
+        expect(chargeFn.includes('!== "production"')).toBe(true);
+    });
+
     test('saved-card response does not expose the opaque payment method id', () => {
         const createFn = read('supabase/functions/create-stax-charge/index.ts');
         const savedCardBlock = createFn.match(/savedCard:[\s\S]*?\} : null/);

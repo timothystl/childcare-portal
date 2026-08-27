@@ -244,6 +244,10 @@ serve(async (req) => {
         if (Deno.env.get("STAX_PAYMENTS_ENABLED") !== "true") {
             return json({ error: "Stax payments are not currently available." }, 503, ch);
         }
+        if ((Deno.env.get("STAX_ENVIRONMENT") || "").toLowerCase() !== "production") {
+            console.error("charge-stax-payment: refusing parent payment outside production environment");
+            return json({ error: "Online payments are not configured for production yet." }, 503, ch);
+        }
         const apiKey = Deno.env.get("STAX_API_KEY");
         if (!apiKey) return json({ error: "Payment processing is not configured yet." }, 500, ch);
 

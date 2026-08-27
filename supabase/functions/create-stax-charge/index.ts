@@ -87,6 +87,10 @@ serve(async (req) => {
         if (Deno.env.get("STAX_PAYMENTS_ENABLED") !== "true") {
             return json({ error: "Stax payments are not currently available." }, 503, ch);
         }
+        if ((Deno.env.get("STAX_ENVIRONMENT") || "").toLowerCase() !== "production") {
+            console.error("create-stax-charge: refusing parent payment outside production environment");
+            return json({ error: "Online payments are not configured for production yet." }, 503, ch);
+        }
         // ── 1. Caller must hold a parent session ──────────────────
         const authHeader = req.headers.get("Authorization");
         if (!authHeader) return json({ error: "Unauthorized" }, 401, ch);
@@ -215,7 +219,7 @@ serve(async (req) => {
         return json({
             customerId: staxCustomerId,
             webPaymentsToken,
-            environment: (Deno.env.get("STAX_ENVIRONMENT") || "sandbox").toLowerCase(),
+            environment: "production",
             amount: due,
             // The browser hides its installment control unless this exact
             // capability is present. That prevents a newer frontend from
