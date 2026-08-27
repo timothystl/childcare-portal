@@ -43,6 +43,13 @@ let _bkMatchPicks = new Set();
 let _bkBusy       = false;
 let _bkLoaded     = false;
 let _bkYoyLoaded  = false; // Year-over-year is expensive; render it at most once per Bookkeeper session — see _bkBindOverview()
+// mo → { tuition, fees, rooms } — the expensive part of _bkLoad()'s per-month
+// loop (_buildFamilyBillingData(), one real synchronous pass per month),
+// cached across _bkLoad() calls and across Bookkeeper sessions in this tab
+// (survives navigating away and back; only a hard page reload clears it).
+// Evicted per month by bookkeeperInvalidate(month), never wholesale — see
+// that function's own comment for why a full clear is never actually needed.
+let _bkMonthCache = new Map();
 
 const BK_CLOSE_SETTING = 'finance_close_checklist';
 const BK_RECON_SETTING = 'finance_reconciliation';
@@ -122,7 +129,23 @@ async function renderFinanceBookkeeper(month) {
  *  writes anything (invoice sent, payment recorded, fee added) — the
  *  bookkeeper numbers are the same numbers and must not go stale behind a
  *  tab switch. */
-function bookkeeperInvalidate() { _bkLoaded = false; _bkYoyLoaded = false; }
+/** Called whenever the Ledger writes anything for a given month (invoice
+ *  sent, payment recorded, fee added). `month`, when given, evicts only that
+ *  one entry from _bkMonthCache — a Ledger write only ever changes the month
+ *  it was made against, so every other month's cached figure is still
+ *  correct and recomputing it would be pure waste. Omit `month` for a
+ *  lighter refresh that leaves the whole cache alone (used by the
+ *  lock/unlock toggle, which changes which cached figure is *displayed*,
+ *  never the figure itself — see _bkLoad()'s own comment). There is
+ *  deliberately no "clear everything" path: nothing in this file has ever
+ *  needed one, and a family-level change (a discount edited in Family
+ *  Directory, say) already isn't tracked by this signal either — that gap
+ *  predates this cache and isn't one this function claims to close. */
+function bookkeeperInvalidate(month) {
+    _bkLoaded = false;
+    _bkYoyLoaded = false;
+    if (month) _bkMonthCache.delete(month);
+}
 
 // ── Load ─────────────────────────────────────────────────────
 async function _bkLoad() {
@@ -164,9 +187,44 @@ async function _bkLoad() {
     _bkRecon = { deposits: Array.isArray(recon.deposits) ? recon.deposits : [], assign: recon.assign && typeof recon.assign === 'object' ? recon.assign : {} };
 
     // Per-month revenue and child-days, from the one billing calculation.
+    // ⚠️ Cached across _bkLoad() calls, per month (_bkMonthCache) — this is
+    // the fix for "Bookkeeper is very slow." _buildFamilyBillingData() does
+    // real synchronous work per family (weekly-rate grouping, sibling-
+    // discount ranking) and was being re-run for all 8-12 months of the year
+    // on EVERY load, including every time _fhLoad() called
+    // bookkeeperInvalidate() after a single Ledger write. A Ledger write
+    // only ever changes the ONE month it was made against — _fhLoad() now
+    // passes that month to bookkeeperInvalidate(month), which evicts just
+    // that one cache entry. Every other month's figure is already correct
+    // and is reused as-is, its billing-overrides fetch included, instead of
+    // being recomputed (and re-fetched) for no reason. The lock/historical
+    // decision below is NOT cached — it re-reads current _bkClose state
+    // every load, so locking or unlocking a month never needs a cache
+    // eviction to take effect.
+    const missingMonths = months.filter(mo => !_bkMonthCache.has(mo));
     // ⚠️ fetchBillingOverrides is awaited as one wave, not serially inside the
     // month loop — SX12 flags the serial version elsewhere; don't repeat it.
-    const overrideRows = await Promise.all(months.map(mo => fetchBillingOverrides(mo).catch(() => [])));
+    const overrideRows = await Promise.all(missingMonths.map(mo => fetchBillingOverrides(mo).catch(() => [])));
+    missingMonths.forEach((mo, i) => {
+        const overrides = new Map((overrideRows[i] || []).map(r => [
+            `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
+            parseFloat(r.override_amount),
+        ]));
+        const families = _buildFamilyBillingData(mo, overrides);
+        const liveRooms = {};
+        let tuition = 0, fees = 0;
+        families.forEach(fam => fam.children.forEach(c => {
+            const billed = (c.hasOverride ? c.overrideAmount : c.subtotal) || 0;
+            const fee    = c.changeFees || 0;
+            tuition += billed;
+            fees    += fee;
+            if (!c.roomId) return;
+            if (!liveRooms[c.roomId]) liveRooms[c.roomId] = { revenue: 0, childDays: 0 };
+            liveRooms[c.roomId].revenue   += billed + fee;
+            liveRooms[c.roomId].childDays += (c.halfDays || 0) + (c.fullDays || 0);
+        }));
+        _bkMonthCache.set(mo, { tuition, fees, rooms: liveRooms });
+    });
 
     // ⚠️ Live registrations are not the only source of truth for a past month —
     // a month billed before this app tracked registrations (or entered by hand
@@ -202,32 +260,16 @@ async function _bkLoad() {
     // no way to tell which one a report actually used. Locked ⇒ the frozen
     // snapshot always wins, live data or not. Unlocked ⇒ the existing
     // live-else-historical rule, unchanged.
-    const byMonth   = {};
+    const byMonth     = {};
     const liveByMonth = {}; // mo → { tuition, fees, rooms } — what live computes RIGHT NOW, kept so _bkLockMonth() can snapshot it without a second pass over every month
-    months.forEach((mo, i) => {
-        const overrides = new Map((overrideRows[i] || []).map(r => [
-            `${(r.parent_email || '').toLowerCase()}:${(r.child_name || '').toLowerCase()}`,
-            parseFloat(r.override_amount),
-        ]));
-        const families = _buildFamilyBillingData(mo, overrides);
-        const liveRooms = {};
-        let tuition = 0, fees = 0;
-        families.forEach(fam => fam.children.forEach(c => {
-            const billed = (c.hasOverride ? c.overrideAmount : c.subtotal) || 0;
-            const fee    = c.changeFees || 0;
-            tuition += billed;
-            fees    += fee;
-            if (!c.roomId) return;
-            if (!liveRooms[c.roomId]) liveRooms[c.roomId] = { revenue: 0, childDays: 0 };
-            liveRooms[c.roomId].revenue   += billed + fee;
-            liveRooms[c.roomId].childDays += (c.halfDays || 0) + (c.fullDays || 0);
-        }));
-        liveByMonth[mo] = { tuition, fees, rooms: liveRooms };
+    months.forEach(mo => {
+        const live = _bkMonthCache.get(mo); // always populated — either just computed above, or a hit from a prior _bkLoad()
+        liveByMonth[mo] = live;
 
         const locked  = !!_bkClose[mo]?.lock;
-        const useLive = !locked && (tuition + fees) > 0;
+        const useLive = !locked && (live.tuition + live.fees) > 0;
         byMonth[mo] = useLive
-            ? { tuition, fees, revenue: tuition + fees, rooms: liveRooms }
+            ? { tuition: live.tuition, fees: live.fees, revenue: live.tuition + live.fees, rooms: live.rooms }
             : { tuition: historicalRevByMo[mo] || 0, fees: 0, revenue: historicalRevByMo[mo] || 0, rooms: historicalRoomsByMo[mo] || {} };
     });
 
