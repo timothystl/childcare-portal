@@ -66,11 +66,10 @@ async function computeBillMonthExceptions(month) {
         parseFloat(r.override_amount),
     ]));
 
-    const [thisMonth, lastMonth, students, closures, credits] = await Promise.all([
+    const [thisMonth, lastMonth, students, credits] = await Promise.all([
         Promise.resolve(_buildFamilyBillingData(month, overridesMap)),
         Promise.resolve(_buildFamilyBillingData(prevMonth)),
         fetchStudents().catch(() => []),
-        fetchClosures().catch(() => []),
         fetchBillingCredits({ unappliedOnly: true }).catch(() => []),
     ]);
 
@@ -99,12 +98,12 @@ async function computeBillMonthExceptions(month) {
         creditsByFamily.set(c.family_id, arr);
     });
 
-    // A closure date inside THIS month is what lets "days changed" carry the
-    // more specific "closure credit" cause instead of a bare day-count diff —
-    // it does not attempt to prove which day moved, only that one plausibly did.
-    const monthHasClosure = closures.some(c => String(c.close_date || '').startsWith(month));
-
-    // Prior month, by child name, for the day-count diff.
+    // Prior month, by child name — used only to tell "new this month" apart
+    // from an existing child. A plain day-count difference from last month is
+    // NOT surfaced as a cause: every family's schedule varies month to month
+    // by design (that's the whole point of flexible day booking), so flagging
+    // it read as "this kid has 4 days this month, 5 last month" on every
+    // single row — noise dressed up as a review flag, not a real exception.
     const prevChildDays = new Map();   // childName(lower) -> {full, half, total}
     lastMonth.forEach(fam => fam.children.forEach(c => {
         prevChildDays.set((c.childName || '').toLowerCase().trim(), {
@@ -152,15 +151,7 @@ async function computeBillMonthExceptions(month) {
 
             const key  = (c.childName || '').toLowerCase().trim();
             const prev = prevChildDays.get(key);
-            const days = c.fullDays + c.halfDays;
-            if (prev && prev.total !== days) {
-                causes.push({
-                    kind: 'days', child: c.childName,
-                    text: monthHasClosure && days < prev.total
-                        ? `${c.childName}: ${prev.total}→${days} days (a closure this month may explain some of it)`
-                        : `${c.childName}: days changed ${prev.total}→${days}`,
-                });
-            } else if (!prev) {
+            if (!prev) {
                 causes.push({ kind: 'new', child: c.childName, text: `${c.childName}: new this month` });
             }
 

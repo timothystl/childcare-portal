@@ -1256,18 +1256,24 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fh-money-col { text-align: right; font-variant-numeric: tabular-nums; }
 .fh-bal-owed { color: var(--tang-dark); font-weight: 700; }
 .fh-bal-clear { color: var(--green-text); font-weight: 700; }
-/* Fixed width so a row with zero actions (a $0 balance, an already-issued
-   invoice) leaves matching empty space instead of the column collapsing and
-   throwing every row's right edge out of alignment. */
-.fh-row-actions { white-space: nowrap; text-align: right; width: 190px; }
-.fh-row-actions .btn-xs { margin-left: 6px; }
+/* Fixed two-slot layout (Send invoice / Remind-or-Retry-charge), each
+   right-aligned within its own slot — a row with only one of the two
+   buttons no longer lands at a different x-position than a row with both.
+   See the fh-action-slot markup in _fhRowHtml(). The slot widths already
+   fix the column's total width, so there's no separate width on
+   .fh-row-actions the way an earlier version of this rule had. */
+.fh-row-actions { white-space: nowrap; display: flex; gap: 6px; justify-content: flex-end; }
+.fh-action-slot { display: flex; justify-content: flex-end; }
+.fh-action-slot:first-child { width: 100px; }
+.fh-action-slot:last-child  { width: 92px; }
 .fh-send-btn, .fh-row-actions .btn-xs {
     display: inline-block; border-radius: 8px; padding: 6px 10px; font-size: 11.5px; font-weight: 700;
-    cursor: pointer; margin-left: 6px; transition: background .15s;
+    cursor: pointer; margin-left: 0; transition: background .15s;
 }
 /* .btn-xs alone (admin.css) sets a white background with no color of its
    own — combined with .btn-primary's white text (styles.css) that reads as
-   an invisible box. This is Finance Hub's own small primary action. */
+   an invisible box. .fh-send-btn is Finance Hub's own small primary action,
+   styled on purpose rather than reusing that collision-prone combo. */
 .fh-send-btn { border: none; background: var(--navy); color: #fff; }
 .fh-send-btn:hover { background: var(--navy-lt); }
 .fh-row-actions .btn-xs { background: #fff; border: 1px solid var(--border); color: var(--navy); }
