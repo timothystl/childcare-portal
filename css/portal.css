@@ -970,6 +970,10 @@
        iframe-communicator.html) sets a precise inline height once the form
        has loaded; this is just a sane starting size before that arrives. */
 }
+.pb-prior-balance-note {
+    margin: 0; padding: 0 20px 12px; text-align: center;
+    font-size: .82em; color: var(--tang-dark, #7a2a18);
+}
 body.pb-modal-open { overflow: hidden; }
 
 /* Stax comparison modal — the card-number/CVV fields are Stax.js iframes,
@@ -1016,3 +1020,33 @@ body.pb-modal-open { overflow: hidden; }
     margin: 14px 0 0; font-size: .78em; line-height: 1.5;
     color: var(--text-muted);
 }
+.pb-stax-line-items {
+    margin: 0 0 16px; padding: 10px 12px; background: var(--linen);
+    border-radius: var(--radius-sm); font-size: .85em;
+}
+.pb-stax-line-item {
+    display: flex; justify-content: space-between; gap: 10px; padding: 3px 0;
+}
+.pb-stax-line-item-child { color: var(--text); }
+.pb-stax-line-item-detail { color: var(--text-muted); font-size: .9em; }
+.pb-stax-line-item-amount { color: var(--navy); font-weight: 700; white-space: nowrap; }
+.pb-stax-prior-balance {
+    display: flex; justify-content: space-between; gap: 10px; padding: 6px 0 0;
+    margin-top: 4px; border-top: 1px solid var(--border); color: var(--tang-dark, #7a2a18);
+    font-weight: 700;
+}
+.pb-stax-saved-card {
+    margin: 0 0 18px; padding: 12px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--linen);
+}
+.pb-stax-saved-card-label { margin: 0 0 8px; font-size: .88em; color: var(--text); }
+.pb-stax-link-btn {
+    display: block; margin: 8px auto 0; background: none; border: none;
+    color: var(--navy); font-size: .82em; text-decoration: underline;
+    cursor: pointer; padding: 4px;
+}
+.pb-stax-save-card-label {
+    display: flex; align-items: center; gap: 8px; margin: 14px 0 0;
+    font-size: .82em; color: var(--text); cursor: pointer;
+}
+.pb-stax-save-card-label input { margin: 0; }

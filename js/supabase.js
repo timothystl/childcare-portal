@@ -4446,8 +4446,10 @@ async function createPaymentSession(invoiceId) {
  *
  * @param {number} invoiceId
  * @returns {Promise<{customerId: string, webPaymentsToken: string,
- *   environment: string, amount: number, invoiceId: number,
- *   firstname: string, lastname: string, phone: string}>}
+ *   environment: string, amount: number, priorBalance: number,
+ *   lineItems: Array<{childName: string, fullDays: number, halfDays: number, amount: number}>,
+ *   invoiceId: number, firstname: string, lastname: string, phone: string,
+ *   savedCard: {paymentMethodId: string, last4: string, brand: string}|null}>}
  */
 async function createStaxChargeSession(invoiceId) {
     if (!sbClient) throw new Error('Supabase not configured.');
@@ -4472,16 +4474,24 @@ async function createStaxChargeSession(invoiceId) {
  * server-side, same as createStaxChargeSession.
  *
  * @param {number} invoiceId
- * @param {string} paymentMethodId
- * @returns {Promise<{success: boolean, transactionId: string, amount: number}>}
+ * @param {string|null} paymentMethodId - omit/null when useSavedCard is true
+ * @param {{useSavedCard?: boolean, saveCard?: boolean}} [opts]
+ *   useSavedCard charges the family's card on file instead of paymentMethodId;
+ *   saveCard remembers a freshly-tokenized card for next time (PCI-compliant —
+ *   only Stax's own payment_method_id + last4/brand are ever stored).
+ * @returns {Promise<{success: boolean, transactionId: string, amount: number, touchedInvoiceIds: number[]}>}
  */
-async function chargeStaxPayment(invoiceId, paymentMethodId) {
+async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: { session } } = await sbClient.auth.getSession();
     const token = session?.access_token;
     if (!token) throw new Error('Not authenticated.');
     const { data, error } = await sbClient.functions.invoke('charge-stax-payment', {
-        body: { invoiceId, paymentMethodId },
+        body: {
+            invoiceId, paymentMethodId,
+            useSavedCard: !!opts?.useSavedCard,
+            saveCard: !!opts?.saveCard,
+        },
         headers: { Authorization: `Bearer ${token}` },
     });
     if (error) {
