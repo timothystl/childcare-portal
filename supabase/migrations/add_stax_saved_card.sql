@@ -1,14 +1,11 @@
 -- ============================================================
--- SAVED CARD (Stax) — PCI-compliant "pay again without re-entering a card"
+-- SAVED CARD (Stax) — tokenized "pay again without re-entering a card"
 -- ============================================================
--- Storing NOTHING here that touches PCI cardholder-data scope: a
--- payment_method_id is Stax's own opaque vault reference (the actual PAN
--- lives in Stax/BlockChyp's vault, never ours), and card_last_four /
--- card_brand are the two fields PCI DSS explicitly permits a merchant to
--- store outside a validated cardholder-data environment because they
--- cannot be used to reconstruct a card number. This is the same SAQ-A
--- posture the rest of the Stax/Anet integration already holds — a saved
--- card does not widen that.
+-- payment_method_id is Stax's opaque vault reference (the actual PAN lives
+-- with the payment vendors, never in this database); card_last_four and
+-- card_brand are display metadata. This design reduces PCI scope, but source
+-- code cannot certify an SAQ category or PCI compliance. Confirm that
+-- classification with the acquiring bank/QSA and the deployed integration.
 --
 -- One saved card per family (not per parent slot) since the invoice is a
 -- family-level bill regardless of which parent pays it.

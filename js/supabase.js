@@ -4446,10 +4446,11 @@ async function createPaymentSession(invoiceId) {
  *
  * @param {number} invoiceId
  * @returns {Promise<{customerId: string, webPaymentsToken: string,
- *   environment: string, amount: number, priorBalance: number,
+ *   environment: string, amount: number, supportsPartialPayments: boolean,
+ *   paymentAttemptId: string, priorBalance: number,
  *   lineItems: Array<{childName: string, fullDays: number, halfDays: number, amount: number}>,
  *   invoiceId: number, firstname: string, lastname: string, phone: string,
- *   savedCard: {paymentMethodId: string, last4: string, brand: string}|null}>}
+ *   savedCard: {last4: string, brand: string}|null}>}
  */
 async function createStaxChargeSession(invoiceId) {
     if (!sbClient) throw new Error('Supabase not configured.');
@@ -4471,14 +4472,16 @@ async function createStaxChargeSession(invoiceId) {
 /**
  * Charge a Stax payment_method id (produced client-side by Stax.js/Bolt —
  * this app never sees the card) against an invoice. Recomputes the amount
- * server-side, same as createStaxChargeSession.
+ * server-side. The optional amount is a parent-requested installment; the
+ * server recomputes the live balance and rejects zero, negative, malformed,
+ * or over-balance amounts before calling Stax.
  *
  * @param {number} invoiceId
  * @param {string|null} paymentMethodId - omit/null when useSavedCard is true
- * @param {{useSavedCard?: boolean, saveCard?: boolean}} [opts]
+ * @param {{useSavedCard?: boolean, saveCard?: boolean, amount?: number, paymentAttemptId: string}} [opts]
  *   useSavedCard charges the family's card on file instead of paymentMethodId;
- *   saveCard remembers a freshly-tokenized card for next time (PCI-compliant —
- *   only Stax's own payment_method_id + last4/brand are ever stored).
+ *   saveCard remembers a freshly-tokenized card for next time; only Stax's
+ *   opaque payment_method_id + last4/brand are stored, never PAN or CVV.
  * @returns {Promise<{success: boolean, transactionId: string, amount: number, touchedInvoiceIds: number[]}>}
  */
 async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
@@ -4491,13 +4494,17 @@ async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
             invoiceId, paymentMethodId,
             useSavedCard: !!opts?.useSavedCard,
             saveCard: !!opts?.saveCard,
+            amount: opts?.amount,
+            paymentAttemptId: opts?.paymentAttemptId,
         },
         headers: { Authorization: `Bearer ${token}` },
     });
     if (error) {
-        let detail = '';
-        try { detail = (await error.context?.json())?.error || ''; } catch (_) { /* ignore */ }
-        throw new Error(detail || error.message || 'Payment failed.');
+        let payload = {};
+        try { payload = (await error.context?.json()) || {}; } catch (_) { /* ignore */ }
+        const paymentError = new Error(payload.error || error.message || 'Payment failed.');
+        if (payload.nextPaymentAttemptId) paymentError.nextPaymentAttemptId = payload.nextPaymentAttemptId;
+        throw paymentError;
     }
     return data;
 }
