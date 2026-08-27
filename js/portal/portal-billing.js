@@ -34,13 +34,10 @@
 // place as a fallback for the rare case Authorize.net falls back to
 // navigating the return URL instead of using the communicator.
 //
-// ⚠️ STAX COMPARISON (2026-08-26): a second, Stax-based payment flow lives
-// at the bottom of this file (pbStartStaxPayment onward), embedding
-// Stax.js/Bolt fields instead of a hosted redirect page. It is HIDDEN from
-// every real family by default — see pbStaxTestEnabled() — and exists only
-// so the Stax-vs-Authorize.net evaluation can be run side by side on a
-// real account. See CLAUDE.md's Stax section for what is and isn't
-// verified yet before this could ever go live for real parents.
+// STAX PAYMENT FLOW (live 2026-08-27): the normal Pay online button uses
+// Stax.js/Bolt fields. The full outstanding balance is the default; parents
+// can deliberately choose a smaller installment, which the server validates
+// against a fresh balance before charging.
 
 let pbData = null;
 let pbReturnState = null;   // 'paid' | 'cancelled' | null — set by portal-auth.js
@@ -107,9 +104,6 @@ function pbRender() {
         ${invoices.map(pbInvoiceCard).join('')}
     `;
 
-    body.querySelectorAll('.pb-pay-btn[data-invoice-id]:not(.pb-stax-btn)').forEach(btn => {
-        btn.addEventListener('click', () => pbStartPayment(Number(btn.dataset.invoiceId)));
-    });
     body.querySelectorAll('.pb-stax-btn[data-invoice-id]').forEach(btn => {
         btn.addEventListener('click', () => pbStartStaxPayment(Number(btn.dataset.invoiceId)));
     });
@@ -145,8 +139,6 @@ function pbInvoiceCard(inv) {
     const pill = paid
         ? '<span class="ps-status ps-paid">PAID</span>'
         : `<span class="ps-status ps-due">${inv.status === 'partial' ? 'PARTIAL' : 'DUE'}</span>`;
-    const isPaying = pbPaying === inv.id;
-
     return `<section class="pd-card">
         <div class="pd-card-head"><span aria-hidden="true">🧾</span>${pbEsc(pbMonthLabel(inv.month))}</div>
         <div class="pd-card-body">
@@ -162,34 +154,11 @@ function pbInvoiceCard(inv) {
                 <span class="pb-row-label">${paid ? 'Balance' : 'Balance due'}</span>
                 <span class="pb-row-value">${pbMoney(due)} ${pill}</span>
             </div>
-            ${!paid ? `<button type="button" class="pb-pay-btn" data-invoice-id="${inv.id}"
-                ${isPaying ? 'disabled' : ''}>${isPaying ? 'Starting payment…' : `Pay ${pbMoney(due)} online`}</button>
-                <p class="pb-pay-error" id="pbPayError-${inv.id}" hidden></p>
-                ${pbStaxTestEnabled() ? `<button type="button" class="pb-pay-btn pb-stax-btn" data-invoice-id="${inv.id}"
-                    ${pbStaxPaying === inv.id ? 'disabled' : ''}>${pbStaxPaying === inv.id ? 'Starting payment…' : `Pay ${pbMoney(due)} with Stax (test)`}</button>
-                    <p class="pb-pay-error" id="pbStaxError-${inv.id}" hidden></p>` : ''}` : ''}
+            ${!paid ? `<button type="button" class="pb-pay-btn pb-stax-btn" data-invoice-id="${inv.id}"
+                ${pbStaxPaying === inv.id ? 'disabled' : ''}>${pbStaxPaying === inv.id ? 'Starting payment…' : `Pay ${pbMoney(due)} online`}</button>
+                <p class="pb-pay-error" id="pbStaxError-${inv.id}" hidden></p>` : ''}
         </div>
     </section>`;
-}
-
-/**
- * Side-by-side Stax comparison, hidden from every real family by default.
- * Only visible when ?staxtest=1 was on the URL this tab loaded with — the
- * flag is stuck in sessionStorage from that point on so it survives a tab
- * switch, but a fresh tab or a normal bookmark never shows it. This is
- * deliberately NOT an admin role or a settings row: it exists purely so
- * whoever is running the Stax-vs-Authorize.net evaluation can compare both
- * live, on their own real account/invoice, without any real parent ever
- * seeing a second "which processor" choice they have no reason to make.
- * See the Stax section of CLAUDE.md for the evaluation's current status.
- */
-function pbStaxTestEnabled() {
-    try {
-        if (new URLSearchParams(location.search).get('staxtest') === '1') {
-            sessionStorage.setItem('pbStaxTest', '1');
-        }
-        return sessionStorage.getItem('pbStaxTest') === '1';
-    } catch (_) { return false; }
 }
 
 /**
@@ -351,24 +320,14 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================================
-// Stax comparison flow — embedded Stax.js (Bolt) fields, our own modal
+// Stax payment flow — embedded Stax.js (Bolt) fields, our own modal
 // ============================================================
 // Unlike the Authorize.net flow above (their hosted page, in an iframe we
 // don't control the inside of), Stax.js mounts just the card-number and
 // CVV fields as small individual iframes into divs WE own — everything
 // around them (layout, labels, the Pay button, the amount shown, the
 // receipt that follows) is this app's own markup and its own branded
-// email, not Stax's. That's the actual point of this comparison: it's not
-// just "does Stax work", it's "do we get more control over how it looks
-// and what the receipt looks like" — see the file header's ⚠️ and
-// CLAUDE.md's Stax section for what is and isn't verified yet.
-//
-// ⚠️ Written from Stax's own documented code samples
-// (docs.staxpayments.com/docs/accepting-credit-card-payments-on-your-website,
-// /docs/tokenizing-a-credit-card) — this session has no way to obtain a
-// real STAX_WEB_PAYMENTS_TOKEN (Stax dashboard-only) to run it in an
-// actual browser. Treat this as unverified until someone with dashboard
-// access sets that secret and clicks through it for real.
+// email, not Stax's. Card number and CVV stay inside Stax-owned iframes.
 
 const PB_STAXJS_URL = 'https://staxjs.staxpayments.com/staxjs-captcha.js';
 let pbStaxJsLoadPromise = null;

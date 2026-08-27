@@ -363,16 +363,14 @@
         </div>
     </div>
 
-    <!-- Stax comparison modal — only ever opened when ?staxtest=1 has been
-         seen this tab (see pbStaxTestEnabled() in portal-billing.js). Unlike
-         the Authorize.net modal above, the card-number/CVV fields here are
-         Stax.js iframes mounted into OUR OWN divs, inside markup this app
-         fully controls — that's the point of the comparison. -->
-    <div id="pbStaxModal" class="pb-pay-modal hidden" role="dialog" aria-modal="true" aria-label="Pay with Stax (test)">
+    <!-- Stax payment modal. Card-number/CVV fields are Stax.js iframes;
+         the surrounding amount, installment, saved-card and receipt UI is
+         controlled by this portal. -->
+    <div id="pbStaxModal" class="pb-pay-modal hidden" role="dialog" aria-modal="true" aria-label="Pay online">
         <div class="pb-pay-modal-inner pb-stax-modal-inner">
             <button type="button" id="pbStaxModalClose" class="pb-pay-modal-close" aria-label="Cancel payment">&times;</button>
             <div class="pb-stax-modal-body">
-                <p class="pb-stax-badge">Stax — test comparison</p>
+                <p class="pb-stax-badge">Secure online payment</p>
                 <h3 class="pb-stax-title">Pay <span id="pbStaxAmount">$0.00</span></h3>
                 <p class="pb-stax-name" id="pbStaxName"></p>
                 <p id="pbStaxModalStatus" class="pb-pay-modal-status" hidden></p>
