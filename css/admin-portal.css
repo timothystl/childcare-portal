@@ -1703,7 +1703,7 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
    sized against its own series' peak — not one shared track with two
    stacked segments, which reads as one split bar instead of two figures. */
 .bk-bar-pair { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
-.bk-bar-track { flex: 1; min-width: 0; background: var(--warm-gray); border-radius: 4px; height: 8px; }
+.bk-bar-track { flex: 1; min-width: 0; background: #fff; border: 1px solid var(--border); border-radius: 4px; height: 8px; }
 .bk-bar { height: 8px; border-radius: 4px; min-width: 2px; }
 .bk-bar-rev { background: var(--green-text); }
 .bk-bar-lab { background: var(--tang); }

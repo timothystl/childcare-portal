@@ -290,6 +290,26 @@ git show origin/main:dist/admin.min.js | grep -c '<a symbol only your change add
 A `0` there means the feature is merged and not deployed, and nothing will say
 so — the page just does nothing.
 
+### ⚠️ Overview/Room P&L read $0 for a month billed before this table existed
+
+Found live: January–March showed real revenue in the YoY report and the old
+Financial Dashboard, but $0 in the new Bookkeeper Overview bar chart. Cause:
+`_bkLoad()` computed every month's revenue from `_buildFamilyBillingData()`
+alone, which reads `registration_dates` — for a month billed before
+registrations were tracked in this app (or entered by hand for any other
+reason), that table has nothing, so the live calculation is genuinely $0. The
+real number lives in `billing_summary`, and `generateFinanceDashboard()` /
+the YoY report already knew this: **prefer live revenue when it's nonzero for
+the month, otherwise fall back to `billing_summary`'s `net_billed`.**
+Bookkeeper had no fallback at all — a straight port of `_buildFamilyBillingData`
+without the surrounding dashboard's historical branch.
+
+Fixed by mirroring that exact fallback in `_bkLoad()`, per month and per room.
+⚠️ **`billing_summary` has no tuition/fees split** — only a `net_billed`
+total — so a historical month reports its whole total as tuition and $0 fees.
+That's the same simplification `generateFinanceDashboard()` already makes;
+it is not a new inaccuracy this tab introduced.
+
 ---
 
 ## Design handoff build — staff, parent, director (2026-08-16)
