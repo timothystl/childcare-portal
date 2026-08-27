@@ -1536,9 +1536,12 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .msg-row-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
 .msg-row-name { font-weight: 800; color: var(--navy); font-size: .98em; }
 .msg-row-when { font-size: .78em; color: var(--text-muted); white-space: nowrap; }
-.msg-row-meta { font-size: .78em; color: var(--text-muted); margin-top: 1px; }
+.msg-row-meta {
+    display: block; font-size: .78em; color: var(--text-muted); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .msg-row-preview {
-    font-size: .9em; color: var(--text); margin-top: 5px;
+    display: block; font-size: .9em; color: var(--text); margin-top: 5px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .msg-status-pill {
