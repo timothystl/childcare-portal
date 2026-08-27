@@ -1660,6 +1660,10 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
    vocabulary for plain navigation would say something the pills don't mean.
    ------------------------------------------------------------ */
 .fh-bk-pane { padding-top: 20px; }
+.bk-title { font-family: var(--font-head); font-size: 20px; font-weight: 700; color: var(--navy); margin: 0 0 4px; }
+.bk-subtitle { margin: 0 0 18px; }
+.bk-gl-head { align-items: flex-start; margin-bottom: 14px; }
+.bk-gl-head .bk-lede { margin: 0; flex: 1; }
 
 .bk-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
 .bk-pill {
@@ -1690,18 +1694,22 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
    scroll on the old dashboard is the specific complaint this replaces. */
 .bk-legend { font-size: 11.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
 .bk-key { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
-.bk-key-rev { background: var(--navy); }
+.bk-key-rev { background: var(--green-text); }
 .bk-key-lab { background: var(--tang); margin-left: 12px; }
-.bk-bars { display: flex; flex-direction: column; gap: 6px; }
-.bk-bar-row { display: flex; align-items: center; gap: 10px; }
+.bk-bars { display: flex; flex-direction: column; gap: 10px; }
+.bk-bar-row { display: flex; align-items: center; gap: 16px; }
 .bk-bar-label { flex: 0 0 34px; font-size: 11.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
-.bk-bar-track { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* Revenue and labor are two independent bar+value pairs side by side, each
+   sized against its own series' peak — not one shared track with two
+   stacked segments, which reads as one split bar instead of two figures. */
+.bk-bar-pair { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.bk-bar-track { flex: 1; min-width: 0; background: var(--warm-gray); border-radius: 4px; height: 8px; }
 .bk-bar { height: 8px; border-radius: 4px; min-width: 2px; }
-.bk-bar-rev { background: var(--navy); }
+.bk-bar-rev { background: var(--green-text); }
 .bk-bar-lab { background: var(--tang); }
-.bk-bar-vals { flex: 0 0 150px; text-align: right; font-size: 11.5px; font-variant-numeric: tabular-nums; }
-.bk-bar-rev-val { color: var(--navy); font-weight: 700; }
-.bk-bar-lab-val { color: var(--tang-dark); }
+.bk-bar-val { flex: 0 0 78px; text-align: right; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.bk-bar-rev-val { color: var(--green-text); font-weight: 700; }
+.bk-bar-lab-val { color: var(--tang-dark); font-weight: 700; }
 
 /* Cards, forms, buttons */
 .bk-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; }
@@ -1802,7 +1810,8 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 
 @media (max-width: 900px) {
     .bk-room-grid-wrap { grid-template-columns: minmax(0, 1fr); }
-    .bk-bar-vals { flex-basis: 108px; }
+    .bk-bar-row { flex-wrap: wrap; row-gap: 4px; }
+    .bk-bar-pair { flex-basis: 100%; }
     .bk-match-row, .bk-pay-row { grid-template-columns: minmax(0, 1fr) auto; }
     .bk-match-meta, .bk-pay-meta { grid-column: 1 / -1; }
 }

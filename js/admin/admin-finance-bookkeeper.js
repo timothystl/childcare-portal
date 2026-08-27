@@ -77,7 +77,7 @@ function _bkMoney0(n) {
     return (Number(n) < 0 ? '−$' : '$') + v.toLocaleString();
 }
 
-function _bkPct(n) { return `${(Number(n) || 0).toFixed(1)}%`; }
+function _bkPct(n) { return `${Math.round(Number(n) || 0)}%`; }
 
 function _bkMonthLabel(month) {
     const [y, m] = (month || '').split('-').map(Number);
@@ -293,7 +293,10 @@ function _bkRender() {
         case 'gl':       body = _bkGlHtml();       break;
     }
 
-    root.innerHTML = `<div class="bk-nav">${nav}</div><div class="bk-body">${body}</div>`;
+    root.innerHTML = `
+        <h3 class="bk-title">Bookkeeper</h3>
+        <p class="section-desc bk-subtitle">Month-end close, reconciliation, and the exports the books need &mdash; this ledger's numbers, nothing recomputed.</p>
+        <div class="bk-nav">${nav}</div><div class="bk-body">${body}</div>`;
     _bkBind(root);
 }
 
@@ -328,24 +331,43 @@ function _bkOverviewHtml() {
         key: k, label: MONTH_NAMES[Number(k.split('-')[1]) - 1].slice(0, 3),
         rev: _bkData.byMonth[k]?.revenue || 0, lab: _bkLaborForMonth(k),
     }));
-    const peak = Math.max(1, ...rows.map(r => Math.max(r.rev, r.lab)));
+    // Each bar sizes against its own series' peak (revenue vs. labor), not a
+    // shared one — otherwise labor (always the smaller number) would read as
+    // flat across every month regardless of how it actually moved.
+    const peakRev = Math.max(1, ...rows.map(r => r.rev));
+    const peakLab = Math.max(1, ...rows.map(r => r.lab));
 
     const bars = rows.map(r => `
         <div class="bk-bar-row">
             <div class="bk-bar-label">${escHtml(r.label)}</div>
-            <div class="bk-bar-track">
-                <div class="bk-bar bk-bar-rev" style="width:${(r.rev / peak * 100).toFixed(1)}%"></div>
-                <div class="bk-bar bk-bar-lab" style="width:${(r.lab / peak * 100).toFixed(1)}%"></div>
+            <div class="bk-bar-pair">
+                <div class="bk-bar-track"><div class="bk-bar bk-bar-rev" style="width:${(r.rev / peakRev * 100).toFixed(1)}%"></div></div>
+                <div class="bk-bar-val bk-bar-rev-val">${_bkMoney(r.rev)}</div>
             </div>
-            <div class="bk-bar-vals"><span class="bk-bar-rev-val">${_bkMoney0(r.rev)}</span> <span class="bk-bar-lab-val">${_bkMoney0(r.lab)}</span></div>
+            <div class="bk-bar-pair">
+                <div class="bk-bar-track"><div class="bk-bar bk-bar-lab" style="width:${(r.lab / peakLab * 100).toFixed(1)}%"></div></div>
+                <div class="bk-bar-val bk-bar-lab-val">${_bkMoney(r.lab)}</div>
+            </div>
         </div>`).join('');
+
+    // "Projected full year" extrapolates the elapsed months' actual margin
+    // (revenue minus labor — no monthly opex actuals exist to add in) plus
+    // the full budgeted net rate for whatever months are left. It is an
+    // estimate, not a recomputation of the budget figure above it.
+    let projectedFullYear = null;
+    if (budgetNet != null) {
+        const elapsed = rows.length;
+        const remaining = Math.max(0, 12 - elapsed);
+        const ytdActualMargin = rows.reduce((s, r) => s + (r.rev - r.lab), 0);
+        projectedFullYear = ytdActualMargin + remaining * (budgetNet / 12);
+    }
 
     return `
         <div class="bk-stats">
-            <div class="bk-stat"><div class="bk-stat-label">Revenue, MTD</div><div class="bk-stat-num">${_bkMoney0(m.revenue)}</div><div class="bk-stat-sub">${_bkMonthLabel(mo)}</div></div>
-            <div class="bk-stat"><div class="bk-stat-label">Labor, MTD</div><div class="bk-stat-num">${_bkMoney0(labor)}</div><div class="bk-stat-sub">${_bkPct(laborPct)} of revenue${targetPct ? ` · target ${_bkPct(targetPct)}` : ''}</div></div>
-            <div class="bk-stat"><div class="bk-stat-label">Net margin, MTD</div><div class="bk-stat-num ${net < 0 ? 'is-neg' : 'is-pos'}">${_bkMoney0(net)}</div><div class="bk-stat-sub">${_bkPct(marginPct)} margin</div></div>
-            <div class="bk-stat bk-stat-sun"><div class="bk-stat-label">Annual budget net</div><div class="bk-stat-num">${budgetNet == null ? '—' : _bkMoney0(budgetNet)}</div><div class="bk-stat-sub">${budgetNet == null ? 'No budget set for ' + _bkData.year : 'Budget ' + _bkData.year}</div></div>
+            <div class="bk-stat"><div class="bk-stat-label">Revenue, MTD</div><div class="bk-stat-num">${_bkMoney(m.revenue)}</div><div class="bk-stat-sub">${_bkMonthLabel(mo)}</div></div>
+            <div class="bk-stat"><div class="bk-stat-label">Labor, MTD</div><div class="bk-stat-num">${_bkMoney(labor)}</div><div class="bk-stat-sub">${_bkPct(laborPct)} of revenue${targetPct ? ` · budget ≤${_bkPct(targetPct)}` : ''}</div></div>
+            <div class="bk-stat"><div class="bk-stat-label">Net margin, MTD</div><div class="bk-stat-num ${net < 0 ? 'is-neg' : 'is-pos'}">${_bkMoney(net)}</div><div class="bk-stat-sub">${_bkPct(marginPct)} of revenue</div></div>
+            <div class="bk-stat bk-stat-sun"><div class="bk-stat-label">Annual budget net</div><div class="bk-stat-num">${budgetNet == null ? '—' : _bkMoney(budgetNet)}</div><div class="bk-stat-sub">${projectedFullYear == null ? 'No budget set for ' + _bkData.year : 'projected full year ' + _bkMoney(projectedFullYear)}</div></div>
         </div>
 
         <h4 class="bk-h">Revenue vs. labor by month</h4>
@@ -359,10 +381,10 @@ function _bkOverviewHtml() {
                 <button type="button" class="bk-link" id="bkEditBudget">Edit budget</button>
             </div>
             <div class="bk-budget-grid">
-                <div><span class="bk-kv-label">Revenue target</span><span class="bk-kv-val">${b?.income ? _bkMoney0(b.income) : '—'}</span></div>
-                <div><span class="bk-kv-label">Wages budget</span><span class="bk-kv-val">${b?.wages ? _bkMoney0(b.wages) : '—'}</span></div>
-                <div><span class="bk-kv-label">Payroll taxes</span><span class="bk-kv-val">${b?.taxes ? _bkMoney0(b.taxes) : '—'}</span></div>
-                <div><span class="bk-kv-label">Other expenses</span><span class="bk-kv-val">${b?.otherExp ? _bkMoney0(b.otherExp) : '—'}</span></div>
+                <div><span class="bk-kv-label">Revenue target</span><span class="bk-kv-val">${b?.income ? _bkMoney(b.income) : '—'}</span></div>
+                <div><span class="bk-kv-label">Wages budget</span><span class="bk-kv-val">${b?.wages ? _bkMoney(b.wages) : '—'}</span></div>
+                <div><span class="bk-kv-label">Payroll taxes</span><span class="bk-kv-val">${b?.taxes ? _bkMoney(b.taxes) : '—'}</span></div>
+                <div><span class="bk-kv-label">Other expenses</span><span class="bk-kv-val">${b?.otherExp ? _bkMoney(b.otherExp) : '—'}</span></div>
             </div>
             <div class="bk-form bk-form-sun" id="bkBudgetForm" style="display:none">
                 <label class="bk-field"><span>Revenue target ($/yr)</span><input type="number" step="0.01" id="bkBudgetIncome" value="${b?.income || ''}"></label>
@@ -515,9 +537,9 @@ function _bkPnlHtml() {
             <div class="bk-room-card">
                 <div class="bk-room-name">${escHtml(room.label || room.id)}</div>
                 <div class="bk-room-grid">
-                    <div><span class="bk-kv-label">Revenue</span><span class="bk-kv-val">${_bkMoney0(revenue)}</span></div>
-                    <div><span class="bk-kv-label">Labor</span><span class="bk-kv-val">${_bkMoney0(labor)}</span></div>
-                    <div><span class="bk-kv-label">Net</span><span class="bk-kv-val ${net < 0 ? 'is-neg' : 'is-pos'}">${_bkMoney0(net)}</span></div>
+                    <div><span class="bk-kv-label">Revenue</span><span class="bk-kv-val">${_bkMoney(revenue)}</span></div>
+                    <div><span class="bk-kv-label">Labor</span><span class="bk-kv-val">${_bkMoney(labor)}</span></div>
+                    <div><span class="bk-kv-label">Net</span><span class="bk-kv-val ${net < 0 ? 'is-neg' : 'is-pos'}">${_bkMoney(net)}</span></div>
                     <div><span class="bk-kv-label">Margin</span><span class="bk-kv-val ${margin < 0 ? 'is-neg' : 'is-pos'}">${revenue > 0 ? _bkPct(margin) : '—'}</span></div>
                     <div><span class="bk-kv-label">Child-days</span><span class="bk-kv-val">${childDays.toLocaleString()}</span></div>
                 </div>
@@ -525,6 +547,7 @@ function _bkPnlHtml() {
     }).join('');
 
     return `
+        <p class="bk-lede">One card per room &mdash; no wide table to scroll through.</p>
         <div class="bk-toolbar">
             <select id="bkPnlMonth" class="bk-select"${ytd ? ' disabled' : ''}>
                 ${months.map(mo => `<option value="${mo}"${mo === _bkPnlMonth ? ' selected' : ''}>${escHtml(_bkMonthLabel(mo))}</option>`).join('')}
@@ -644,7 +667,7 @@ function _bkReconHtml() {
                     </div>
                     <div class="bk-dep-right">
                         <span class="fh-pill ${isMatched ? 'fh-pill-paid' : 'fh-pill-review'}">${isMatched ? 'Matched' : `${_bkMoney(remaining)} left to match`}</span>
-                        <button type="button" class="bk-btn-mini" data-bk-match="${escHtml(d.id)}">${open ? 'Close' : 'Match transactions'}</button>
+                        <button type="button" class="bk-btn-solid" data-bk-match="${escHtml(d.id)}">${open ? 'Close' : (isMatched ? 'Review' : 'Match transactions')}</button>
                     </div>
                 </div>
                 ${open ? `
@@ -695,7 +718,7 @@ function _bkReconHtml() {
         </div>
 
         <div class="bk-card">
-            <div class="bk-card-head"><h4 class="bk-h">Parent payments</h4><button type="button" class="bk-link" id="bkAddItem">+ Add item</button></div>
+            <div class="bk-card-head"><h4 class="bk-h">Parent payments (from processor) &middot; ${payments.filter(p => !_bkRecon.assign[p.id]).length} unassigned</h4><button type="button" class="bk-link" id="bkAddItem">+ Add item</button></div>
             <div class="bk-form bk-form-green" id="bkItemForm" style="display:none">
                 <label class="bk-field"><span>Date</span><input type="date" id="bkItemDate" value="${escHtml(_bkToday())}"></label>
                 <label class="bk-field"><span>Family name</span><input type="text" id="bkItemName" placeholder="Family name"></label>
@@ -817,30 +840,36 @@ function _bkGlRows() {
     const fees     = m.fees || 0;
     const rent     = expenseFor(/rent|lease|mortgage/i);
     const supplies = expenseFor(/suppl|material|classroom/i);
-    const net      = tuition + fees - rent - labor - supplies;
-
-    return [
+    // Income rows are positive, expense rows negative — Net is a plain sum
+    // of the rows above it, never a separately-derived figure that could
+    // drift from what the table actually shows.
+    const lineItems = [
         { label: 'Tuition income', amount: tuition },
         { label: 'Fees income',    amount: fees },
-        { label: 'Rent',           amount: rent },
-        { label: 'Payroll',        amount: labor },
-        { label: 'Supplies',       amount: supplies },
-        { label: 'Net',            amount: net, isNet: true },
+        { label: 'Rent',           amount: -rent },
+        { label: 'Payroll',        amount: -labor },
+        { label: 'Supplies',       amount: -supplies },
     ];
+    const net = lineItems.reduce((s, r) => s + r.amount, 0);
+    return [...lineItems, { label: 'Net', amount: net, isNet: true }];
 }
 
 function _bkGlHtml() {
     const rows = _bkGlRows();
+    const cellCls = r => r.isNet ? '' : (r.amount < 0 ? 'is-neg' : 'is-pos');
     return `
-        <p class="bk-lede">Category totals for ${escHtml(_bkMonthName(_bkMonth))} — hand this to the bookkeeper as-is, or export.</p>
+        <div class="bk-card-head bk-gl-head">
+            <p class="bk-lede">Category totals for ${escHtml(_bkMonthName(_bkMonth))} — hand this to the bookkeeper as-is, or export.</p>
+            <button type="button" class="bk-btn-solid" id="bkGlCsv">&#8595; Export CSV</button>
+        </div>
         <div class="table-wrapper">
             <table class="report-table fh-table bk-gl-table">
+                <thead><tr><th>Category</th><th class="fh-money-col">Amount</th></tr></thead>
                 <tbody>
-                    ${rows.map(r => `<tr class="${r.isNet ? 'bk-gl-net' : ''}"><td>${escHtml(r.label)}</td><td class="fh-money-col">${_bkMoney(r.amount)}</td></tr>`).join('')}
+                    ${rows.map(r => `<tr class="${r.isNet ? 'bk-gl-net' : ''}"><td>${escHtml(r.label)}</td><td class="fh-money-col ${cellCls(r)}">${_bkMoney(r.amount)}</td></tr>`).join('')}
                 </tbody>
             </table>
         </div>
-        <div class="bk-form-btns"><button type="button" class="bk-btn-solid" id="bkGlCsv">&#8595; Export CSV</button></div>
         <p class="ap-note">Rent and Supplies come from Expense Lines, matched on the line's label. Payroll is the same labor figure the Overview and Room P&amp;L read. A category with no matching expense line reads $0.00 rather than guessing.</p>`;
 }
 
