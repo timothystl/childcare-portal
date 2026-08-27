@@ -193,8 +193,11 @@ async function _fhGetOrCreateCycleResilient(month) {
 // ── Load ─────────────────────────────────────────────────────
 async function _fhLoad() {
     // Bookkeeper reads the same figures; a ledger write must not leave the
-    // close screen showing the pre-write numbers behind a tab switch.
-    if (typeof bookkeeperInvalidate === 'function') bookkeeperInvalidate();
+    // close screen showing the pre-write numbers behind a tab switch. Pass
+    // the month explicitly — bookkeeperInvalidate() evicts only that one
+    // cached month rather than recomputing the whole year on every write,
+    // which was the actual cause of "the Bookkeeper tab is very slow."
+    if (typeof bookkeeperInvalidate === 'function') bookkeeperInvalidate(_fhMonth);
     const label = _fhEl('fhMonthLabel');
     if (label) label.textContent = _fhMonthLabel(_fhMonth);
     const root = _fhEl('fhRoot');
