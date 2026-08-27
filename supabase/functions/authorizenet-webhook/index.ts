@@ -159,6 +159,17 @@ async function sendReceiptEmail(admin: any, o: {
     const balanceRemaining = Math.max(0, finalAmount - totalPaid);
     const month = (invoice as any)?.billing_cycles?.month || "";
 
+    // How many care days this invoice's month actually covers — same
+    // family-matching logic as compute_family_month_charges, so it can
+    // never disagree with the amount charged. 0 for a manually-priced
+    // invoice with no real bookings — the line below is simply omitted in
+    // that case rather than showing a confusing "0 days of care". Kept
+    // identical to charge-stax-payment's copy, same relationship as every
+    // other duplicated piece of this template between the two processors.
+    const { data: daysOfCare } = await admin.rpc("count_family_month_care_days", {
+        p_family_id: o.familyId, p_month: month,
+    });
+
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -185,6 +196,10 @@ async function sendReceiptEmail(admin: any, o: {
                 <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#2E2A22;font-size:15px;">Amount paid</td>
                 <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#01294A;font-size:15px;text-align:right;font-weight:700;">${escHtml(money(o.amountPaid))}</td>
               </tr>
+              ${Number(daysOfCare) > 0 ? `<tr>
+                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#2E2A22;font-size:15px;">Days of care</td>
+                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#01294A;font-size:15px;text-align:right;">${Number(daysOfCare)}</td>
+              </tr>` : ""}
               <tr>
                 <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#2E2A22;font-size:15px;">Confirmation #</td>
                 <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#01294A;font-size:15px;text-align:right;">${escHtml(o.transId)}</td>
