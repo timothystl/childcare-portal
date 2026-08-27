@@ -1841,70 +1841,88 @@
                  every .admin-section inside the open tab-pane, and a nested
                  one would fight the Ledger/Report tab switch for visibility. -->
             <section class="admin-section" id="financeHubSection">
-                <!-- h2 is a direct child so apShowSection()'s ap-dup-head logic
-                     (admin-portal.js) hides it — the shell already renders
-                     "💵 Finance" + its blurb above the card. No section-desc
-                     paragraph here on purpose: one used to restate that same
-                     blurb in different words directly underneath it, which
-                     read as a stutter rather than added information — see
-                     the same fix on Messages/Settings. The month switcher and
-                     search live in their own toolbar row instead of inside
-                     the heading, so they are not swept up in the same hide. -->
-                <h2>Finance</h2>
-                <div class="fh-toolbar">
-                    <div class="fh-month-switch">
-                        <button type="button" id="fhMonthPrev" class="fh-month-arrow" aria-label="Previous month">&#9664;</button>
-                        <span id="fhMonthLabel" class="fh-month-label">&mdash;</span>
-                        <button type="button" id="fhMonthNext" class="fh-month-arrow" aria-label="Next month">&#9654;</button>
-                    </div>
-                    <input type="text" id="fhSearch" class="fh-search" placeholder="Find a family&hellip;">
-                </div>
+                <!-- Finance is its tab's one real tool (AP_TABS.finance's own
+                     defaultTool — see admin-portal.js), so this header IS the
+                     page header; the design handoff shows it on one row with
+                     the month switcher and search, not stacked as a separate
+                     shell heading above a second toolbar row underneath. The
+                     generic shell (apRenderDetail()) renders nothing for this
+                     tool (customHeader: true on its AP_TOOLS entry) so there
+                     is exactly one header, not two. h2 is NOT a direct child
+                     of the section (it's nested in .fh-head), so
+                     apShowSection()'s ap-dup-head logic — which only targets
+                     `:scope > h2` — leaves it alone.
 
-                <div class="fh-tabs" id="fhTabs" role="tablist">
-                    <button type="button" class="fh-tab is-on" data-fh-tab="ledger" role="tab" aria-selected="true">Ledger</button>
-                    <button type="button" class="fh-tab" data-fh-tab="report" role="tab" aria-selected="false">Billing Report</button>
-                    <!-- Bookkeeper (design handoff Finance Hub §6) — the third
-                         tab that retired seven separate Finance sidebar tools.
-                         Same director, no separate role; see
-                         js/admin/admin-finance-bookkeeper.js. -->
-                    <button type="button" class="fh-tab" data-fh-tab="bookkeeper" role="tab" aria-selected="false">Bookkeeper</button>
-                </div>
-
-                <div id="fhLedgerPane">
-                    <div id="fhRoot"><p class="empty-hint">Loading&hellip;</p></div>
-                </div>
-
-                <div class="fh-report-pane" id="billingReportSection" style="display:none">
-                    <h3>📊 Billing Report</h3>
-                    <p class="section-desc">Every registration for the month, its rate, what changed it, and a total that ties to the invoices. Prints two pages, grouped by room.</p>
-                    <div class="roster-controls">
-                        <div class="roster-field">
-                            <label for="brMonth">Month</label>
-                            <input type="month" id="brMonth">
+                     #fhBody stays hidden behind #fhSkeleton until the first
+                     _fhLoad() resolves (see renderFinanceHubTool()), so the
+                     header — now data-adjacent in the same row as the month
+                     label and search — never renders a beat ahead of the
+                     content it's grouped with. Once loaded, #fhSkeleton never
+                     reappears: subsequent month/tab switches update #fhRoot
+                     etc. in place, same as before. -->
+                <div id="fhSkeleton" class="empty-hint" style="padding:60px 0;text-align:center">Loading&hellip;</div>
+                <div id="fhBody" style="display:none">
+                    <div class="ap-head fh-head">
+                        <div>
+                            <h2>Finance</h2>
+                            <p>One place for billing, invoices, and who owes</p>
                         </div>
-                        <div class="ap-seg" id="brGroupToggle" role="group" aria-label="Group by">
-                            <button type="button" class="ap-seg-btn is-on" data-group="room">By room</button>
-                            <button type="button" class="ap-seg-btn" data-group="name">By name</button>
-                        </div>
-                        <div class="roster-btns">
-                            <button id="brPrintBtn" class="btn-secondary">🖨️ Print</button>
-                            <button id="brCsvBtn" class="btn-secondary">&#8595; Export CSV</button>
+                        <div class="fh-toolbar">
+                            <div class="fh-month-switch">
+                                <button type="button" id="fhMonthPrev" class="fh-month-arrow" aria-label="Previous month">&#9664;</button>
+                                <span id="fhMonthLabel" class="fh-month-label">&mdash;</span>
+                                <button type="button" id="fhMonthNext" class="fh-month-arrow" aria-label="Next month">&#9654;</button>
+                            </div>
+                            <input type="text" id="fhSearch" class="fh-search" placeholder="Find a family&hellip;">
                         </div>
                     </div>
-                    <div id="brBody"><p class="empty-hint">Loading…</p></div>
-                </div>
 
-                <div class="fh-bk-pane" id="fhBookkeeperPane" style="display:none">
-                    <div id="bkRoot"><p class="empty-hint">Loading&hellip;</p></div>
-                </div>
+                    <div class="fh-tabs" id="fhTabs" role="tablist">
+                        <button type="button" class="fh-tab is-on" data-fh-tab="ledger" role="tab" aria-selected="true">Ledger</button>
+                        <button type="button" class="fh-tab" data-fh-tab="report" role="tab" aria-selected="false">Billing Report</button>
+                        <!-- Bookkeeper (design handoff Finance Hub §6) — the third
+                             tab that retired seven separate Finance sidebar tools.
+                             Same director, no separate role; see
+                             js/admin/admin-finance-bookkeeper.js. -->
+                        <button type="button" class="fh-tab" data-fh-tab="bookkeeper" role="tab" aria-selected="false">Bookkeeper</button>
+                    </div>
 
-                <div class="fh-note-editor">
-                    <label for="invNoteText">Note on every invoice email <span class="fh-note-hint">(how to pay, when it's due — optional)</span></label>
-                    <textarea id="invNoteText" rows="2" placeholder="e.g. Payment is due by the 10th. Cheques to Timothy Lutheran MDO, or pay in the office."></textarea>
-                    <div class="fh-note-row">
-                        <button id="invNoteSaveBtn" class="btn-secondary">💾 Save note</button>
-                        <button id="invTestBtn" class="btn-secondary">✉️ Send me a test</button>
-                        <span id="invNoteStatus" class="fh-note-status"></span>
+                    <div id="fhLedgerPane">
+                        <div id="fhRoot"><p class="empty-hint">Loading&hellip;</p></div>
+                    </div>
+
+                    <div class="fh-report-pane" id="billingReportSection" style="display:none">
+                        <h3>📊 Billing Report</h3>
+                        <p class="section-desc">Every registration for the month, its rate, what changed it, and a total that ties to the invoices. Prints two pages, grouped by room.</p>
+                        <div class="roster-controls">
+                            <div class="roster-field">
+                                <label for="brMonth">Month</label>
+                                <input type="month" id="brMonth">
+                            </div>
+                            <div class="ap-seg" id="brGroupToggle" role="group" aria-label="Group by">
+                                <button type="button" class="ap-seg-btn is-on" data-group="room">By room</button>
+                                <button type="button" class="ap-seg-btn" data-group="name">By name</button>
+                            </div>
+                            <div class="roster-btns">
+                                <button id="brPrintBtn" class="btn-secondary">🖨️ Print</button>
+                                <button id="brCsvBtn" class="btn-secondary">&#8595; Export CSV</button>
+                            </div>
+                        </div>
+                        <div id="brBody"><p class="empty-hint">Loading…</p></div>
+                    </div>
+
+                    <div class="fh-bk-pane" id="fhBookkeeperPane" style="display:none">
+                        <div id="bkRoot"><p class="empty-hint">Loading&hellip;</p></div>
+                    </div>
+
+                    <div class="fh-note-editor">
+                        <label for="invNoteText">Note on every invoice email <span class="fh-note-hint">(how to pay, when it's due — optional)</span></label>
+                        <textarea id="invNoteText" rows="2" placeholder="e.g. Payment is due by the 10th. Cheques to Timothy Lutheran MDO, or pay in the office."></textarea>
+                        <div class="fh-note-row">
+                            <button id="invNoteSaveBtn" class="btn-secondary">💾 Save note</button>
+                            <button id="invTestBtn" class="btn-secondary">✉️ Send me a test</button>
+                            <span id="invNoteStatus" class="fh-note-status"></span>
+                        </div>
                     </div>
                 </div>
 

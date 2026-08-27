@@ -135,13 +135,16 @@ const AP_TOOLS = [
     // Report survives as this tool's own second tab (Ledger / Billing
     // Report), not a separate nav entry — see admin-finance-hub.js and the
     // nested #billingReportSection markup in admin.html.
-    // noHeaderIcon: Finance is the tab's one real tool (AP_TABS.finance's
-    // own defaultTool), so its detail header IS effectively the tab header —
-    // repeating the money emoji there on top of the tab chip's own icon read
-    // as clutter against the design handoff's plain "Finance" title. The
-    // icon still shows in the sidebar nav item; only apRenderDetail()'s <h2>
-    // omits it (see admin-portal.js:apRenderDetail).
-    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance', noHeaderIcon: true,
+    // customHeader: Finance is the tab's one real tool (AP_TABS.finance's own
+    // defaultTool), and the design handoff puts its title/subtitle on the
+    // SAME row as the month switcher and search — those live inside
+    // financeHubSection (admin.html's own .fh-head), not in the generic
+    // shell. apRenderDetail() renders nothing into #apDetailHead for this
+    // tool, so there is exactly one header, not a shell heading stacked
+    // above a second toolbar row. The icon still shows in the sidebar nav
+    // item; only the page header omits it, matching the handoff's plain
+    // "Finance" title.
+    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance', customHeader: true,
       blurb: 'One place for billing, invoices, and who owes' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
@@ -662,12 +665,15 @@ function apRenderDetail(tool) {
     // No back link: the sidebar keeps its place and highlights where you
     // are, which is the way back. A heading instead, so a tool page starts
     // at the same left edge as a dashboard heading and nothing shifts.
+    // customHeader tools (Finance) render their own header inline in their
+    // own section — see the AP_TOOLS comment on financeHub — so the shell
+    // renders nothing here rather than stacking a duplicate above it.
     const head = document.getElementById('apDetailHead');
     if (head) {
-        head.innerHTML = `
+        head.innerHTML = tool.customHeader ? '' : `
             <div class="ap-head">
                 <div>
-                    <h2>${tool.noHeaderIcon ? '' : tool.icon + ' '}${escHtml(tool.name)}</h2>
+                    <h2>${tool.icon} ${escHtml(tool.name)}</h2>
                     <p>${escHtml(tool.blurb)}</p>
                 </div>
             </div>`;
