@@ -1569,22 +1569,30 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 /* The combined rates+ratios+capacity fields are wider than the half-width
    card on anything but a very wide screen. Rather than scroll them inside
    their own box (which hid the ratio/capacity fields off the right edge
-   unless you noticed and scrolled), each room is a flex-wrap row of
-   labeled fields that wraps onto a second line as the card narrows — see
-   _renderRoomsTable() in admin-settings-unified.js. */
+   unless you noticed and scrolled), each room's fields sit in a real CSS
+   grid that reflows as whole rows and wraps onto a second line as the card
+   narrows — see _renderRoomsTable() in admin-settings-unified.js.
+   ⚠️ Not flex-wrap: a plain flex-wrap row of the room name + 7 fields as
+   siblings wrapped one item at a time with no shared columns, so which
+   fields landed on which line was arbitrary per room and the room name
+   (just another flex item) ended up vertically centered against whichever
+   field happened to be on its own line — it read as misaligned because it
+   effectively was. The room name is its own full-width row here, and the
+   fields are a `.rf-fields` grid so every room's columns line up. */
 .rf-rows { border-top: 1px solid var(--warm-gray); }
-.rf-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 10px 16px;
-    padding: 10px 4px;
-    border-bottom: 1px solid var(--warm-gray);
-}
+.rf-row { padding: 12px 4px; border-bottom: 1px solid var(--warm-gray); }
 .rf-row:hover { background: var(--cream); }
-.rf-cell { min-width: 0; }
-.rf-room { flex: 1 1 130px; align-self: center; }
-.rf-room strong { display: block; color: var(--text); }
+.rf-room-head { margin-bottom: 8px; }
+.rf-room-head strong { color: var(--text); font-size: 1.02em; }
+.rf-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 10px 14px;
+}
+.rf-field { min-width: 0; }
+.rf-field-ages { grid-column: span 2; min-width: 130px; }
+.rf-age-inputs { display: flex; gap: 4px; align-items: center; }
+.rf-age-inputs input { flex: 1 1 0; min-width: 0; }
 .rf-label {
     display: block;
     font-size: .72em;
@@ -1592,9 +1600,10 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     text-transform: uppercase;
     letter-spacing: .04em;
     color: var(--text-muted);
-    margin-bottom: 2px;
+    margin-bottom: 4px;
+    white-space: nowrap;
 }
-.rf-cell input { max-width: 100%; }
+.rf-field input { width: 100%; box-sizing: border-box; }
 /* Registration window: the longest option ("Force Closed — block
    registration right now") is wider than a native <select> can render
    inside the half-width Registration card without the browser's own
@@ -1613,20 +1622,28 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 /* The admin-users list (email/role/last-login/actions) is wider than its
    column's content when the natural widths don't fit. Rather than scroll
    it inside its own box (which hid "Reset Password"/"Delete" off the right
-   edge unless you noticed and scrolled), each row is a flex-wrap row that
-   wraps its fields onto a second line as the column narrows — see
-   _renderAdminUsersTable() in admin-settings.js. */
+   edge unless you noticed and scrolled), each row is a deterministic
+   stack — email, then an Access Level + Last Login grid, then the action
+   buttons — that reflows the same way at every width instead of wrapping
+   wherever flex happens to break the line. See _renderAdminUsersTable()
+   in admin-settings.js for why plain flex-wrap looked misaligned here. */
 .au-rows { border-top: 1px solid var(--warm-gray); }
 .au-row {
     display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 8px 16px;
-    padding: 10px 4px;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 4px;
     border-bottom: 1px solid var(--warm-gray);
 }
 .au-row:hover { background: var(--cream); }
-.au-cell { min-width: 0; }
-.au-email { flex: 2 1 160px; align-self: center; word-break: break-word; }
-.au-actions { display: flex; gap: 6px; flex-wrap: wrap; align-self: center; }
+.au-email { font-weight: 700; color: var(--text); word-break: break-word; }
+.au-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px 16px;
+}
+.au-field { min-width: 0; }
+.au-field select { width: 100%; box-sizing: border-box; }
+.au-last-value { color: #888; font-size: .85em; }
+.au-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 @media (max-width: 900px) { .set-access-grid { grid-template-columns: minmax(0, 1fr); } }
