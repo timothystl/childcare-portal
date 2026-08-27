@@ -298,10 +298,18 @@ async function computeFamilyDueSet(admin: any, familyId: string, anchorMonth: st
  * id suffixed with the invoice id, so a retry re-allocating the SAME
  * due-set hits the same unique keys and is treated as already-recorded —
  * see billing_payments_processor_txn_idx.
+ *
+ * ⚠️ Returns any leftover (2026-08-27, independent review finding C2). The
+ * due-set is recomputed fresh at settlement time (deliberately — see its own
+ * header), which means it can have SHRUNK since the payment session was
+ * created if another payment landed on one of its invoices in between. The
+ * amount actually settled at Authorize.net does not shrink to match. The
+ * caller is responsible for recording (never dropping) whatever this loop
+ * could not place on a real invoice.
  */
 async function allocateAcrossDueSet(admin: any, o: {
     familyId: string; dueSet: DueRow[]; totalAmount: number; transId: string; note: string;
-}): Promise<{ recorded: boolean; anyNew: boolean; touchedInvoiceIds: number[] }> {
+}): Promise<{ recorded: boolean; anyNew: boolean; touchedInvoiceIds: number[]; leftover: number }> {
     let remaining = Math.round(o.totalAmount * 100) / 100;
     let anyNew = false;
     const touched: number[] = [];
@@ -321,10 +329,55 @@ async function allocateAcrossDueSet(admin: any, o: {
         remaining = Math.round((remaining - amt) * 100) / 100;
     }
 
-    return { recorded: touched.length > 0, anyNew, touchedInvoiceIds: touched };
+    return { recorded: touched.length > 0, anyNew, touchedInvoiceIds: touched, leftover: Math.max(0, remaining) };
 }
 
-type PaymentRow = { id: number; invoice_id: number; family_id: string; amount: number };
+/**
+ * Records settled money that couldn't be placed on any invoice (C2 above) as
+ * an unapplied credit — invoice_id NULL is allowed by schema specifically for
+ * this — rather than dropping it. Never silent: audit-logged and mailed to
+ * the office so someone applies it to a future invoice or refunds it.
+ */
+async function recordUnappliedCredit(admin: any, o: {
+    familyId: string; amount: number; processor: string; transId: string; note: string;
+}): Promise<void> {
+    const amt = Math.round(o.amount * 100) / 100;
+    if (amt <= 0.004) return;
+    const { error } = await admin.from("billing_payments").insert({
+        family_id: o.familyId, invoice_id: null, amount: amt,
+        payment_date: new Date().toISOString().slice(0, 10),
+        payment_method: "card", note: o.note,
+        created_by: "authorizenet-webhook", processor: o.processor,
+        processor_transaction_id: `${o.transId}-credit`,
+    });
+    if (error && String(error.code) !== "23505" && !/duplicate key/i.test(error.message || "")) {
+        console.error("recordUnappliedCredit: insert failed", error);
+    }
+    await admin.from("admin_audit_log").insert({
+        admin_email: "authorizenet-webhook", action: "online_payment_overage", entity: "billing_invoice",
+        details: { family_id: o.familyId, amount: amt, processor_transaction_id: o.transId },
+    }).then(() => {}, (e: unknown) => console.error("recordUnappliedCredit: audit write failed", e));
+
+    const apiKey = Deno.env.get("RESEND_API_KEY");
+    const toEmail = Deno.env.get("RESEND_REPLY_TO") || "mdo@timothystl.org";
+    if (!apiKey) return;
+    try {
+        await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+                from: Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev",
+                to: [toEmail],
+                subject: "⚠️ Unapplied payment credit recorded",
+                html: `<p style="font-family:Georgia,serif;">A family's online payment settled for more than their currently-owed balance covered. $${amt.toFixed(2)} was recorded as an unapplied credit (no invoice attached) rather than being dropped. Check Invoices → Accounts Receivable and apply it to a future bill or refund it.</p><p style="font-family:Georgia,serif;color:#888;font-size:12px;">Family: ${escHtml(o.familyId)} · Transaction: ${escHtml(o.transId)}</p>`,
+            }),
+        });
+    } catch (e) {
+        console.error("recordUnappliedCredit: alert email failed", e);
+    }
+}
+
+type PaymentRow = { id: number; invoice_id: number; family_id: string; amount: number; alreadyReversed: number };
 
 /**
  * ⚠️ Finds every billing_payments row a single Authorize.net charge could
@@ -336,6 +389,13 @@ type PaymentRow = { id: number; invoice_id: number; family_id: string; amount: n
  * bare id (pre-rollup rows, and any charge that only ever covered one
  * invoice) OR any "<id>-inv*" suffix, sorted oldest-invoice-first so a
  * partial reversal is applied in the same order the original charge was.
+ *
+ * ⚠️ Also returns how much of EACH row has already been reversed
+ * (2026-08-27, independent review finding H2). A second, independent
+ * refund/void of the same original charge — e.g. two partial dashboard
+ * refunds issued separately — must cap against what's still un-reversed on
+ * a row, not against the row's full original amount, or the second
+ * reversal double-counts money already given back.
  */
 async function findOriginalPaymentRows(admin: any, processor: string, baseTransactionId: string): Promise<PaymentRow[]> {
     const { data } = await admin
@@ -349,25 +409,46 @@ async function findOriginalPaymentRows(admin: any, processor: string, baseTransa
         const mb = b?.billing_invoices?.billing_cycles?.month || "";
         return ma.localeCompare(mb);
     });
-    return rows.map(r => ({ id: r.id, invoice_id: r.invoice_id, family_id: r.family_id, amount: Number(r.amount) || 0 }));
+
+    const ids = rows.map(r => r.id);
+    const reversedByRow = new Map<number, number>();
+    if (ids.length) {
+        const { data: reversals } = await admin
+            .from("billing_payments").select("refund_of_payment_id, amount").in("refund_of_payment_id", ids);
+        for (const r of (reversals || [])) {
+            const key = r.refund_of_payment_id as number;
+            reversedByRow.set(key, (reversedByRow.get(key) || 0) + Math.abs(Number(r.amount) || 0));
+        }
+    }
+
+    return rows.map(r => ({
+        id: r.id, invoice_id: r.invoice_id, family_id: r.family_id, amount: Number(r.amount) || 0,
+        alreadyReversed: reversedByRow.get(r.id) || 0,
+    }));
 }
 
 /**
  * Allocates one refund/void total across every payment row a charge was
  * split into, oldest-invoice-first, capping each reversal at that row's own
- * amount (a partial refund never reverses more than was actually charged to
- * a given invoice). Idempotent per row via a row-suffixed transaction id.
+ * REMAINING un-reversed amount (amount minus whatever prior reversal already
+ * took), so a second independent reversal of the same charge can never
+ * exceed what was actually charged. Idempotent per row via a row-suffixed
+ * transaction id. Any amount this call can't place (the processor reports
+ * reversing more than this app has any un-reversed record of) is returned as
+ * `leftover` rather than silently absorbed into the wrong row.
  */
 async function reverseAcrossPaymentRows(admin: any, o: {
     rows: PaymentRow[]; totalAmount: number; reversalTransactionId: string; note: string;
-}): Promise<{ anyNew: boolean; touchedInvoiceIds: number[] }> {
+}): Promise<{ anyNew: boolean; touchedInvoiceIds: number[]; leftover: number }> {
     let remaining = Math.round(o.totalAmount * 100) / 100;
     let anyNew = false;
     const touched: number[] = [];
 
     for (const row of o.rows) {
         if (remaining <= 0.004) break;
-        const amt = Math.round(Math.min(remaining, row.amount) * 100) / 100;
+        const reversible = Math.round((row.amount - row.alreadyReversed) * 100) / 100;
+        if (reversible <= 0.004) continue;
+        const amt = Math.round(Math.min(remaining, reversible) * 100) / 100;
         if (amt <= 0.004) continue;
 
         const result = await recordAndReconcile(admin, {
@@ -381,7 +462,7 @@ async function reverseAcrossPaymentRows(admin: any, o: {
         remaining = Math.round((remaining - amt) * 100) / 100;
     }
 
-    return { anyNew, touchedInvoiceIds: touched };
+    return { anyNew, touchedInvoiceIds: touched, leftover: Math.max(0, remaining) };
 }
 
 /** Insert one billing_payments row (idempotent on processor+transaction id) and reconcile the invoice. */
@@ -500,6 +581,23 @@ serve(async (req) => {
         if (invErr) return json({ error: invErr.message }, 500);
         if (!invoice) return json({ received: true, ignored: "invoice not found" }, 200);
 
+        // ⚠️ Refuse to re-allocate a transaction this app has already
+        // recorded anywhere (2026-08-27, independent review findings H1/M1).
+        // A webhook retry, or reconcile-anet-payments replaying a charge it
+        // wrongly believed was missing, must never re-run the allocation —
+        // the due-set is recomputed fresh each time, so a second run can land
+        // on a DIFFERENT invoice than the first and credit money twice. This
+        // check has to match the same bare-id-OR-suffix shape the recording
+        // itself uses, or it's the exact bug it's meant to prevent.
+        const { data: alreadyRows } = await admin
+            .from("billing_payments").select("id")
+            .eq("processor", "authorizenet")
+            .or(`processor_transaction_id.eq.${transId},processor_transaction_id.like.${transId}-inv%`)
+            .limit(1);
+        if ((alreadyRows || []).length > 0) {
+            return json({ received: true, ignored: "already recorded" }, 200);
+        }
+
         // ⚠️ Rolls up older unpaid months (2026-08-27) — mirrors
         // create-payment-session's own computeFamilyDueSet exactly, so the
         // amount Authorize.net actually settled gets spread across every
@@ -518,11 +616,22 @@ serve(async (req) => {
             transId: String(transId), note: "Paid online via Authorize.net",
         }).catch((e: Error) => ({ error: e.message } as any));
         if ((result as any)?.error) return json({ error: (result as any).error }, 500);
-        const alloc = result as { recorded: boolean; anyNew: boolean; touchedInvoiceIds: number[] };
+        const alloc = result as { recorded: boolean; anyNew: boolean; touchedInvoiceIds: number[]; leftover: number };
+
+        // ⚠️ Never drop settled money (2026-08-27, C2). The due-set can have
+        // shrunk since the payment session was created; whatever this
+        // settlement couldn't place on a real invoice becomes an unapplied
+        // credit instead of vanishing.
+        if (alloc.leftover > 0.004) {
+            await recordUnappliedCredit(admin, {
+                familyId: invoice.family_id, amount: alloc.leftover, processor: "authorizenet",
+                transId: String(transId), note: "Unapplied credit — Authorize.net settlement exceeded amount owed",
+            });
+        }
 
         await admin.from("admin_audit_log").insert({
             admin_email: "authorizenet-webhook", action: "online_payment", entity: "billing_invoice",
-            details: { invoice_ids: alloc.touchedInvoiceIds, amount, processor_transaction_id: String(transId) },
+            details: { invoice_ids: alloc.touchedInvoiceIds, amount, leftover: alloc.leftover, processor_transaction_id: String(transId) },
         }).then(() => {}, (e: unknown) => console.error("authorizenet-webhook: audit write failed", e));
 
         // Only on a genuinely new record — never on a webhook retry hitting
@@ -580,13 +689,25 @@ serve(async (req) => {
         note: isRefund ? "Refund via Authorize.net" : "Void via Authorize.net",
     }).catch((e: Error) => ({ error: e.message } as any));
     if ((result as any)?.error) return json({ error: (result as any).error }, 500);
-    const rev = result as { anyNew: boolean; touchedInvoiceIds: number[] };
+    const rev = result as { anyNew: boolean; touchedInvoiceIds: number[]; leftover: number };
+
+    // ⚠️ Never silently absorb an over-reversal into the wrong row
+    // (2026-08-27, H2). If the processor reports reversing more than this
+    // app has any un-reversed record of — e.g. a refund replayed against a
+    // charge already fully refunded by other means — that excess is exactly
+    // the kind of discrepancy that needs a human, not a best-effort guess.
+    if (rev.leftover > 0.004) {
+        await admin.from("admin_audit_log").insert({
+            admin_email: "authorizenet-webhook", action: "online_reversal_overage", entity: "billing_invoice",
+            details: { processor_transaction_id: reversalTransactionId, unmatched_amount: rev.leftover, kind: isRefund ? "refund" : "void" },
+        }).then(() => {}, (e: unknown) => console.error("authorizenet-webhook: audit write failed", e));
+    }
 
     await admin.from("admin_audit_log").insert({
         admin_email: "authorizenet-webhook",
         action:      isRefund ? "online_refund" : "online_void",
         entity:      "billing_invoice",
-        details:     { invoice_ids: rev.touchedInvoiceIds, amount: -reverseAmount, processor_transaction_id: reversalTransactionId },
+        details:     { invoice_ids: rev.touchedInvoiceIds, amount: -reverseAmount, leftover: rev.leftover, processor_transaction_id: reversalTransactionId },
     }).then(() => {}, (e: unknown) => console.error("authorizenet-webhook: audit write failed", e));
 
     return json({ received: true, ...rev, invoiceIds: rev.touchedInvoiceIds, amount: -reverseAmount }, 200);

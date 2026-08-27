@@ -199,14 +199,28 @@ serve(async (_req) => {
         const reversalsSeenCount = candidates.filter(r => REVERSAL_STATUSES.has(r.transactionStatus)).length;
 
         // ── 2. Which charges are already recorded? ───────────────────
+        // ⚠️ Fixed 2026-08-27 (independent review, finding H1): a charge can
+        // be split across several invoices by the rollup, so its recorded
+        // processor_transaction_id is "<transId>-inv<invoiceId>", never the
+        // bare transId. The old exact-match .in() check never matched any
+        // rolled-up charge, so this job replayed every one of them nightly —
+        // and each replay recomputes the due-set fresh, so a replay landing
+        // on an invoice that entered the due-set AFTER the original payment
+        // (e.g. a newly-issued backlog month) would credit money nobody
+        // paid. Match bare id OR any "<id>-inv*" suffix, same as
+        // findOriginalPaymentRows in authorizenet-webhook/stax-webhook.
         const admin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
         const transIds = charges.map(c => String(c.transId));
-        const { data: existingRows } = transIds.length
+        const orParts = transIds.flatMap(id => [`processor_transaction_id.eq.${id}`, `processor_transaction_id.like.${id}-inv%`]);
+        const { data: existingRows } = orParts.length
             ? await admin.from("billing_payments").select("processor_transaction_id")
-                .eq("processor", "authorizenet").in("processor_transaction_id", transIds)
+                .eq("processor", "authorizenet").or(orParts.join(","))
             : { data: [] as any[] };
-        const already = new Set((existingRows || []).map((r: any) => r.processor_transaction_id));
-        const missing = charges.filter(c => !already.has(String(c.transId)));
+        const existingIds = (existingRows || []).map((r: any) => String(r.processor_transaction_id));
+        const missing = charges.filter(c => {
+            const id = String(c.transId);
+            return !existingIds.some(v => v === id || v.startsWith(`${id}-inv`));
+        });
 
         // ── 3. Replay each missing charge through the real webhook ───
         const repaired: Array<{ transId: string; invoiceNumber: string; amount: number }> = [];
