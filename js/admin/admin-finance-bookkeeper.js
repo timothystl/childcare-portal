@@ -42,6 +42,7 @@ let _bkMatching   = null;   // deposit id currently in matching mode
 let _bkMatchPicks = new Set();
 let _bkBusy       = false;
 let _bkLoaded     = false;
+let _bkYoyLoaded  = false; // Year-over-year is expensive; render it at most once per Bookkeeper session — see _bkBindOverview()
 
 const BK_CLOSE_SETTING = 'finance_close_checklist';
 const BK_RECON_SETTING = 'finance_reconciliation';
@@ -121,7 +122,7 @@ async function renderFinanceBookkeeper(month) {
  *  writes anything (invoice sent, payment recorded, fee added) — the
  *  bookkeeper numbers are the same numbers and must not go stale behind a
  *  tab switch. */
-function bookkeeperInvalidate() { _bkLoaded = false; }
+function bookkeeperInvalidate() { _bkLoaded = false; _bkYoyLoaded = false; }
 
 // ── Load ─────────────────────────────────────────────────────
 async function _bkLoad() {
@@ -413,9 +414,11 @@ function _bkOverviewHtml() {
             <div class="bk-stat bk-stat-sun"><div class="bk-stat-label">Annual budget net</div><div class="bk-stat-num">${budgetNet == null ? '—' : _bkMoney(budgetNet)}</div><div class="bk-stat-sub">${projectedFullYear == null ? 'No budget set for ' + _bkData.year : 'projected full year ' + _bkMoney(projectedFullYear)}</div></div>
         </div>
 
-        <h4 class="bk-h">Revenue vs. labor by month</h4>
-        <div class="bk-legend"><span class="bk-key bk-key-rev"></span> Revenue <span class="bk-key bk-key-lab"></span> Labor</div>
-        <div class="bk-bars">${bars || '<p class="empty-hint">No months to chart yet.</p>'}</div>
+        <div class="bk-card">
+            <h4 class="bk-h">Revenue vs. labor by month</h4>
+            <div class="bk-legend"><span class="bk-key bk-key-rev"></span> Revenue <span class="bk-key bk-key-lab"></span> Labor</div>
+            <div class="bk-bars">${bars || '<p class="empty-hint">No months to chart yet.</p>'}</div>
+        </div>
         <p class="ap-note bk-scope-note">Scenario planning and enrollment modeling have moved out of Finance — they'll live in a separate Planning area. This screen stays close-focused: what happened, what reconciles, what exports.</p>
 
         <div class="bk-card bk-budget-card">
@@ -439,7 +442,68 @@ function _bkOverviewHtml() {
                     <button type="button" class="bk-btn-text" id="bkBudgetCancel">Cancel</button>
                 </div>
             </div>
+
+            <!-- Budget lines — absorbs the retired standalone "Expense Lines"
+                 tool (2026-08-28). Same data (expense_config setting, same
+                 fetchExpenseConfig()/saveExpenseConfig()), same four line
+                 types the old tool supported — GL Export's Rent/Supplies
+                 match against these by label, so nothing downstream changed,
+                 only where you add/remove a line. -->
+            <div class="bk-exp-head">
+                <span class="bk-kv-label">Budget lines</span>
+                <button type="button" class="bk-link" id="bkAddExpLine">+ Add line</button>
+            </div>
+            <div class="bk-exp-list">${_bkExpenseLinesHtml()}</div>
+            <div class="bk-form bk-form-sun" id="bkExpForm" style="display:none">
+                <label class="bk-field"><span>Label</span><input type="text" id="bkExpLabel" placeholder="e.g. Rent, Workers Comp, Supplies"></label>
+                <label class="bk-field"><span>Type</span>
+                    <select id="bkExpType">
+                        <option value="monthly">Monthly (recurring)</option>
+                        <option value="annual">Annual (one-time)</option>
+                        <option value="payroll_pct">Payroll tax — % of wages</option>
+                        <option value="revenue_pct">Payment processing — % of revenue</option>
+                    </select>
+                </label>
+                <label class="bk-field" id="bkExpAmountWrap"><span>Amount ($)</span><input type="number" step="0.01" id="bkExpAmount" placeholder="0.00"></label>
+                <label class="bk-field" id="bkExpMonthWrap" style="display:none"><span>Month it occurs</span>
+                    <select id="bkExpMonth">${MONTH_NAMES.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('')}</select>
+                </label>
+                <div class="bk-form-btns">
+                    <button type="button" class="bk-btn-solid" id="bkExpSave">Add</button>
+                    <button type="button" class="bk-btn-text" id="bkExpCancel">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bk-card">
+            <h4 class="bk-h">Year-over-year</h4>
+            <p class="bk-lede">This year against last, month by month — the same revenue and labor figures as the chart above.</p>
+            <div id="financeYoyContent"><p class="empty-hint">Loading…</p></div>
         </div>`;
+}
+
+/** Exact four types the retired Expense Lines tool supported — label text
+ *  mirrors that tool's own copy so a director who used it before recognizes
+ *  the same categories in the same words. */
+function _bkExpenseLineLabel(item) {
+    const amt = parseFloat(item.amount) || 0;
+    switch (item.type) {
+        case 'annual':      return `${_bkMoney(amt)} in ${MONTH_NAMES[(Number(item.month) || 1) - 1]}`;
+        case 'payroll_pct': return `${amt}% of payroll`;
+        case 'revenue_pct': return `${amt}% of revenue`;
+        default:            return `${_bkMoney(amt)} / month`;
+    }
+}
+
+function _bkExpenseLinesHtml() {
+    const items = _bkData.expenses?.items || [];
+    if (!items.length) return '<p class="empty-hint">No budget lines yet.</p>';
+    return items.map(it => `
+        <div class="bk-exp-row">
+            <span class="bk-exp-name">${escHtml(it.label || '(untitled)')}</span>
+            <span class="bk-exp-val">${_bkExpenseLineLabel(it)}</span>
+            <button type="button" class="bk-exp-del" data-bk-exp-del="${escHtml(it.id)}" title="Remove this line" aria-label="Remove ${escHtml(it.label || 'line')}">&times;</button>
+        </div>`).join('');
 }
 
 function _bkBindOverview(root) {
@@ -472,6 +536,77 @@ function _bkBindOverview(root) {
             showToast('Could not save the budget: ' + (e.message || e), 'error');
         } finally { _bkBusy = false; }
     });
+
+    // ── Budget lines (Expense Lines, absorbed) ──
+    root.querySelector('#bkExpType')?.addEventListener('change', e => {
+        const isAnnual = e.target.value === 'annual';
+        const isPct    = e.target.value === 'payroll_pct' || e.target.value === 'revenue_pct';
+        const amountLabel = root.querySelector('#bkExpAmountWrap span');
+        if (amountLabel) amountLabel.textContent = isPct ? 'Percent (%)' : 'Amount ($)';
+        const monthWrap = root.querySelector('#bkExpMonthWrap');
+        if (monthWrap) monthWrap.style.display = isAnnual ? '' : 'none';
+    });
+    root.querySelector('#bkAddExpLine')?.addEventListener('click', () => {
+        const f = root.querySelector('#bkExpForm');
+        if (f) f.style.display = f.style.display === 'none' ? '' : 'none';
+    });
+    root.querySelector('#bkExpCancel')?.addEventListener('click', () => {
+        const f = root.querySelector('#bkExpForm');
+        if (f) f.style.display = 'none';
+    });
+    root.querySelector('#bkExpSave')?.addEventListener('click', async () => {
+        if (_bkBusy) return;
+        const label  = (root.querySelector('#bkExpLabel')?.value || '').trim();
+        const type   = root.querySelector('#bkExpType')?.value || 'monthly';
+        const amount = parseFloat(root.querySelector('#bkExpAmount')?.value);
+        const month  = parseInt(root.querySelector('#bkExpMonth')?.value, 10) || null;
+        if (!label || !(amount >= 0)) { alert('A budget line needs a label and an amount.'); return; }
+        _bkBusy = true;
+        try {
+            const items = (_bkData.expenses?.items || []).slice();
+            items.push({
+                id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `exp-${Date.now()}`,
+                label, type, amount, month: type === 'annual' ? month : null, notes: '',
+            });
+            const nextConfig = { items };
+            await saveExpenseConfig(nextConfig);
+            _bkData.expenses = nextConfig;
+            showToast(`Added "${label}".`);
+            _bkRender();
+        } catch (e) {
+            showToast('Could not add that line: ' + (e.message || e), 'error');
+        } finally { _bkBusy = false; }
+    });
+    root.querySelectorAll('[data-bk-exp-del]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (_bkBusy) return;
+            const id = btn.dataset.bkExpDel;
+            const items = (_bkData.expenses?.items || []).filter(it => it.id !== id);
+            _bkBusy = true;
+            try {
+                const nextConfig = { items };
+                await saveExpenseConfig(nextConfig);
+                _bkData.expenses = nextConfig;
+                _bkRender();
+            } catch (e) {
+                showToast('Could not remove that line: ' + (e.message || e), 'error');
+            } finally { _bkBusy = false; }
+        });
+    });
+
+    // ── Year-over-year, absorbed from its own sidebar entry (2026-08-28) ──
+    // Lazy + cached: generateYoyComparison() does two full _buildRoomPnlData()
+    // scans (real current year vs. prior — it reads its year from a
+    // long-retired dashboard's own selector, falls back to the true current
+    // year when that's absent, same as before this move) on top of
+    // everything _bkLoad() already computed. Re-running it on every Overview
+    // re-render (e.g. after saving a budget line, which calls _bkRender())
+    // would make the tab's own "very slow load" complaint worse, not better —
+    // so it runs once per Bookkeeper session, not once per render.
+    if (typeof generateYoyComparison === 'function' && !_bkYoyLoaded) {
+        _bkYoyLoaded = true;
+        generateYoyComparison();
+    }
 }
 
 // ── 2. Accounts Receivable ───────────────────────────────────

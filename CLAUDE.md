@@ -352,6 +352,77 @@ total — so a historical month reports its whole total as tuition and $0 fees.
 That's the same simplification `generateFinanceDashboard()` already makes;
 it is not a new inaccuracy this tab introduced.
 
+### Bookkeeper Overview absorbs Year-over-Year and Expense Lines (2026-08-28)
+
+Prompted directly by the director after the tab first shipped: the bar chart
+needed a white card behind it (it was sitting on the page's own cream
+background, same color family, and read as unstyled), Expense Lines needed
+its own screen removed with its editing folded into "Edit budget" instead of
+just deleted, Year-over-Year needed to live inside Bookkeeper → Overview
+under the budget card rather than its own sidebar entry, and ChMS Finance API
+needed to move to Settings.
+
+- **The bars now sit in a `.bk-card`.** Same white/border/radius as every
+  other card on the tab — it was the one chart-shaped element on the page not
+  wrapped in one.
+- **"Budget lines" replaces the standalone Expense Lines tool**, added
+  directly under the Annual Budget card's "Edit budget" form. Same data
+  (`expense_config` setting, same `fetchExpenseConfig()`/`saveExpenseConfig()`
+  the retired tool used, same four line types it supported — monthly $,
+  annual $ + month, % of payroll, % of revenue) — verified against the live
+  setting before building this, which held one of each of three of those four
+  types. **GL Export's Rent/Supplies regex-match is unaffected**: it reads the
+  same `expense_config` items either way, only where you add/remove a line
+  changed.
+- **Year-over-Year is now a card in Bookkeeper → Overview**, under the budget
+  card. It calls the same `generateYoyComparison()` (admin-finance.js,
+  untouched) into a `#financeYoyContent` container — deleted from its own
+  retired `#financeYoySection` rather than merely left unreferenced, because
+  `generateYoyComparison()` expects to be the only element with that id on the
+  page; leaving the old one in place would have shadowed the new one via
+  `getElementById()`'s first-match behavior. ⚠️ It still reads its year from
+  `_financeYear()`, which reads a `#financeYear` selector that lived in the
+  Financial Dashboard tool (`dash`, retired in an earlier session) — absent,
+  it falls back to the real current year, same as it always has. It does
+  **not** follow Bookkeeper's own `_bkData.year` if a director navigates the
+  Ledger's month switcher into a different year; matches its pre-existing
+  behavior exactly, not a regression from this move.
+- ⚠️ **Lazy and cached, on purpose.** `generateYoyComparison()` runs two full
+  `_buildRoomPnlData()` scans (current year, prior year) on top of everything
+  `_bkLoad()` already computes — expensive, and the director had *just*
+  flagged the tab's load as slow. It fires once per Bookkeeper session
+  (`_bkYoyLoaded`, cleared by `bookkeeperInvalidate()`), not on every Overview
+  re-render — saving a budget line calls `_bkRender()`, which would otherwise
+  re-trigger both scans for no reason.
+- **ChMS Finance API moved into Settings → Access & oversight**
+  (`#financeApiCard`), not a new AP_TOOLS sidebar entry — Settings is a single
+  continuous page by design (see the admin portal shell section above), and a
+  second sidebar item under it would have reintroduced the "pick a screen
+  first" pattern that redesign explicitly removed. `setupFinanceApiTester()`/
+  `testFinanceApiConnection()` are unchanged; only the section moved.
+  ⚠️ **Settings is not a full-only tab, but this tool needs to stay
+  full-only** — it printed the church's own revenue/payroll summary and was
+  gated by living under the `finance` tab (`AP_FULL_ONLY_TABS`). Moved
+  `_hide('financeApiCard')` into `applyRoleRestrictions()`'s existing
+  full-only block, right next to `setAccessCard`'s identical treatment.
+- **The Bookkeeper sidebar group under Finance is now empty.** Ten tools have
+  passed through it across two sessions (`ar`, `procare`, `revdash`, `dash`,
+  `pnl`, `arrev`, `budget`, `yoy`, `expense`, `api`) and none remain — every
+  one is now either a Bookkeeper tab sub-view or embedded in one. Their old
+  `<section>`s stay in `admin.html`, unreferenced by `AP_TOOLS` (unreachable,
+  per the shell's own rule) — **except** `#financeYoySection` and
+  `#financeApiTesterSection`, deleted outright because this move reused their
+  ids/markup at the new location, and a leftover duplicate would have
+  shadowed the new one.
+- **The tab's slow load is still open, and this session did not fix it** —
+  it made it marginally worse by adding a second, lazy-loaded heavy call
+  (YoY) alongside the load `_bkLoad()` already does across up to 12 months
+  of `_buildFamilyBillingData()` + `_buildRoomPnlData()`. That per-month
+  loop — not this session's additions — is almost certainly the real cost;
+  a proper fix (caching across months, or computing the whole year in one
+  pass instead of one call per month) is a bigger change than a same-session
+  follow-up and hasn't been attempted here.
+
 ---
 
 ## Classroom tab consolidation — Daily / Planning (2026-08-27)

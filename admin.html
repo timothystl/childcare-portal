@@ -1164,6 +1164,27 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- ChMS Finance API — moved from its own Finance/Bookkeeper
+                     sidebar entry, 2026-08-28. Full-only, same as Access &
+                     oversight above (_hide('financeApiCard') in
+                     applyRoleRestrictions(), admin-settings.js) — it isn't a
+                     secret leak by itself (the key is pasted fresh each test,
+                     never saved), but the response it prints is the church's
+                     own revenue/payroll summary, which restricted admins
+                     don't otherwise see. Markup/ids and setupFinanceApiTester()/
+                     testFinanceApiConnection() are unchanged from the retired
+                     #financeApiTesterSection — only the location and gate. -->
+                <div class="ap-panel" id="financeApiCard">
+                    <div class="ap-panel-head"><h3>🔌 ChMS Finance API</h3></div>
+                    <p class="section-desc">Test the <code>finance-summary</code> endpoint the church ChMS integration calls. Paste the same value you saved as the <code>FINANCE_API_KEY</code> secret in Supabase — this box only uses it for this one test, it isn't saved anywhere.</p>
+                    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
+                        <input id="financeApiTestKey" type="password" class="form-control" placeholder="FINANCE_API_KEY value" style="max-width:320px" autocomplete="off">
+                        <button id="financeApiTestBtn" class="btn-primary">Test Connection</button>
+                        <span id="financeApiTestStatus" style="font-size:.85em;color:#6b7280"></span>
+                    </div>
+                    <pre id="financeApiTestOutput" class="hidden" style="background:#0f172a;color:#e2e8f0;padding:.85rem 1rem;border-radius:8px;font-size:.8rem;overflow-x:auto;max-height:320px;white-space:pre-wrap;word-break:break-word"></pre>
+                </div>
             </section>
 
             <!-- New Family Enrollment Capacity — hidden 2026-07, may bring back later
@@ -1644,17 +1665,11 @@
                 </div>
             </section>
 
-            <!-- ChMS Finance API Tester -->
-            <section class="admin-section collapsible-section" id="financeApiTesterSection">
-                <h2>🔌 ChMS Finance API</h2>
-                <p class="section-desc">Test the <code>finance-summary</code> endpoint the church ChMS integration calls. Paste the same value you saved as the <code>FINANCE_API_KEY</code> secret in Supabase — this box only uses it for this one test, it isn't saved anywhere.</p>
-                <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
-                    <input id="financeApiTestKey" type="password" class="form-control" placeholder="FINANCE_API_KEY value" style="max-width:320px" autocomplete="off">
-                    <button id="financeApiTestBtn" class="btn-primary">Test Connection</button>
-                    <span id="financeApiTestStatus" style="font-size:.85em;color:#6b7280"></span>
-                </div>
-                <pre id="financeApiTestOutput" class="hidden" style="background:#0f172a;color:#e2e8f0;padding:.85rem 1rem;border-radius:8px;font-size:.8rem;overflow-x:auto;max-height:320px;white-space:pre-wrap;word-break:break-word"></pre>
-            </section>
+            <!-- ChMS Finance API tester moved to Settings → Access & oversight,
+                 2026-08-28 (was its own Finance/Bookkeeper sidebar entry) —
+                 see settingsUnifiedSection's #financeApiCard below, which
+                 reuses these exact ids/markup verbatim; only its location
+                 and role gate changed. -->
 
             <!-- Financial Dashboard -->
             <section class="admin-section collapsible-section" id="financeDashSection">
@@ -1687,18 +1702,15 @@
                 </div>
             </section>
 
-            <!-- Year-over-Year Comparison -->
-            <section class="admin-section collapsible-section" id="financeYoySection">
-                <h2>📈 Year-over-Year Comparison</h2>
-                <p class="section-desc">Compare revenue and labor month-by-month against the prior year.</p>
-                <div class="report-controls" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
-                    <span style="font-size:.9em;color:#6b7280">Uses the year selected above — compares it against the prior year.</span>
-                    <button id="generateYoyBtn" class="btn-secondary">Generate Comparison</button>
-                </div>
-                <div id="financeYoyContent">
-                    <p class="empty-hint">Click Generate Comparison.</p>
-                </div>
-            </section>
+            <!-- Year-over-Year Comparison moved into the Bookkeeper tab's
+                 Overview sub-view, 2026-08-28, under the Annual Budget card
+                 (was its own Finance/Bookkeeper sidebar entry). Deleted
+                 rather than merely unreferenced: generateYoyComparison()
+                 (admin-finance.js) writes into a #financeYoyContent it
+                 expects to be the ONLY one on the page — see
+                 admin-finance-bookkeeper.js's own #financeYoyContent, which
+                 would silently lose to this one on getElementById() if both
+                 existed at once. -->
 
             <!-- Expense Lines -->
             <section class="admin-section collapsible-section" id="financeExpenseSection">
