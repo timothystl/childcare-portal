@@ -65,6 +65,18 @@
 //      saveCard:true after a fresh paymentMethodId to remember it for next
 //      time. Only Stax's own payment_method_id plus last4/brand are ever
 //      stored — never card data itself; see the migration's header.
+//   8. ⚠️ CHARGE-LOCKED against double-charging (2026-08-27, independent
+//      review finding C3 — proven live before this fix: invoice 3847 was
+//      charged twice, nine minutes apart). A payment_charge_locks row
+//      (add_payment_charge_locks.sql) is inserted BEFORE calling Stax, with
+//      a partial unique index allowing only one 'pending' lock per invoice
+//      — a concurrent/retried attempt gets a 409 instead of reaching Stax.
+//      A network error or a Stax PENDING status is treated as ambiguous and
+//      leaves the lock 'pending' on purpose (never releases it for a
+//      retry); only a clean decline releases it. The idempotency_id sent to
+//      Stax is the second, independent layer: a genuine network-level retry
+//      of the identical request returns Stax's ORIGINAL transaction rather
+//      than creating a new one.
 //
 // Deploy:  supabase functions deploy charge-stax-payment
 // Secrets: STAX_API_KEY, RESEND_API_KEY, RESEND_FROM_EMAIL, RESEND_REPLY_TO
@@ -346,41 +358,110 @@ serve(async (req) => {
         if (!dueSet.length) return json({ error: "This bill is already paid in full." }, 400, ch);
         const due = Math.round(dueSet.reduce((s, r) => s + r.due, 0) * 100) / 100;
 
-        // ── 3. Charge it ────────────────────────────────────────────
+        // ── 3. Acquire a charge lock BEFORE calling the processor ───────
+        // ⚠️ 2026-08-27, independent review finding C3: nothing previously
+        // stopped a second real charge against an invoice already paid at
+        // the processor but not yet recorded here — proven live (invoice
+        // 3847, two Authorize.net charges nine minutes apart). The unique
+        // index on (processor, processor_transaction_id) makes RECORDING
+        // idempotent; it does nothing about CHARGING twice, since two
+        // charges are two distinct transaction ids and both insert cleanly.
+        // A concurrent or repeated attempt (double-click, two open tabs, a
+        // retry after this exact function returned an ambiguous error) now
+        // loses the race here, at the database, before reaching Stax at all.
+        const idempotencyKey = crypto.randomUUID();
+        const { data: lockRow, error: lockErr } = await admin
+            .from("payment_charge_locks")
+            .insert({ invoice_id: invoice.id, family_id: invoice.family_id, processor: "stax", idempotency_key: idempotencyKey })
+            .select("id").single();
+        if (lockErr) {
+            const isConflict = String(lockErr.code) === "23505" || /duplicate key/i.test(lockErr.message || "");
+            if (isConflict) {
+                return json({ error: "A payment for this invoice is already being processed. Please wait a moment and check your email before trying again." }, 409, ch);
+            }
+            return json({ error: lockErr.message }, 500, ch);
+        }
+        const lockId = lockRow.id;
+        async function resolveLock(status: "succeeded" | "failed", processorTransactionId?: string) {
+            await admin.from("payment_charge_locks").update({
+                status, processor_transaction_id: processorTransactionId ?? null,
+                resolved_at: new Date().toISOString(),
+            }).eq("id", lockId).then(() => {}, (e: unknown) => console.error("charge-stax-payment: lock resolve failed", e));
+        }
+
+        // ── 4. Charge it ────────────────────────────────────────────
         const apiKey = Deno.env.get("STAX_API_KEY");
         if (!apiKey) return json({ error: "Payment processing is not configured yet." }, 500, ch);
 
         const month = (invoice as unknown as { billing_cycles?: { month?: string } }).billing_cycles?.month || "";
 
-        const chargeRes = await fetch(`${STAX_API_URL}/charge`, {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                payment_method_id: paymentMethodId,
-                customer_id: family.stax_customer_id,
-                total: amountStr(due),
-                pre_auth: false,
-                meta: {
-                    memo: `Timothy Lutheran MDO — ${month} — invoice ${invoice.id}`,
-                    reference: `mdoinv-${invoice.id}`,
+        // idempotency_id is Stax's own duplicate-charge protection (confirmed
+        // against Stax's docs: a repeated request with the same
+        // idempotency_id returns the ORIGINAL transaction rather than
+        // creating a new one) — a second, independent layer behind the lock
+        // above, in case this exact request is retried by the network layer
+        // itself rather than by a second click.
+        let chargeRes: Response;
+        let chargeData: any = {};
+        try {
+            chargeRes = await fetch(`${STAX_API_URL}/charge`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": "application/json",
                 },
-            }),
-        });
-        const chargeData = await chargeRes.json().catch(() => ({}));
+                body: JSON.stringify({
+                    payment_method_id: paymentMethodId,
+                    customer_id: family.stax_customer_id,
+                    total: amountStr(due),
+                    pre_auth: false,
+                    idempotency_id: idempotencyKey,
+                    meta: {
+                        memo: `Timothy Lutheran MDO — ${month} — invoice ${invoice.id}`,
+                        reference: `mdoinv-${invoice.id}`,
+                    },
+                }),
+            });
+            chargeData = await chargeRes.json().catch(() => ({}));
+        } catch (e) {
+            // ⚠️ A network failure talking to Stax is exactly the ambiguous
+            // case that produced the live double-charge — we genuinely do
+            // not know whether the card was charged. The lock stays
+            // 'pending' on purpose: it must block a retry, not invite one.
+            console.error("charge-stax-payment: network error calling Stax", e);
+            return json({ error: "We couldn't confirm whether your payment went through. Please wait a few minutes and check your email or contact the office before trying again.", ambiguous: true }, 502, ch);
+        }
+
+        // Stax can also report a transaction as PENDING when it "cannot
+        // receive a response from the gateway" — per Stax's own docs this
+        // can take up to 3 hours to resolve to SUCCESS or FAILED. That is
+        // just as ambiguous as a network error: don't record a payment for
+        // it, and don't release the lock for a retry.
+        const staxStatus = String(chargeData?.status || "").toUpperCase();
+        if (staxStatus === "PENDING") {
+            return json({ error: "Your payment is still processing at the card network. Please check back in a few minutes before trying again.", ambiguous: true }, 202, ch);
+        }
 
         // ✅ success/id field names verified live 2026-08-26 — see header.
         const success = chargeRes.ok && chargeData?.success !== false && !!chargeData?.id;
         if (!success) {
+            // A clean, definitive decline — Stax told us this charge did not
+            // happen, so it's safe to release the lock for a fresh attempt
+            // (a different card, say).
+            await resolveLock("failed");
             const msg = chargeData?.errors ? JSON.stringify(chargeData.errors) : "Payment was declined.";
             return json({ error: msg }, 502, ch);
         }
 
         const transactionId = String(chargeData.id);
+        // Money has genuinely moved at the processor now. Resolve the lock
+        // to succeeded regardless of what happens in the recording step
+        // below — a recording failure past this point is this app's own
+        // bookkeeping problem (see the existing "partiallyRecorded" branch),
+        // never grounds to let a second real charge through.
+        await resolveLock("succeeded", transactionId);
 
-        // ── 4. Allocate the one charge across every invoice it covers,
+        // ── 5. Allocate the one charge across every invoice it covers,
         // oldest first — idempotent per invoice via a suffixed transaction
         // id, same shape as authorizenet-webhook's allocateAcrossDueSet.
         let remaining = due;
@@ -423,7 +504,7 @@ serve(async (req) => {
             await admin.from("billing_invoices").update({ status: newStatus }).eq("id", row.id);
         }
 
-        // ── 5. Save the card for next time, if asked — only Stax's own
+        // ── 6. Save the card for next time, if asked — only Stax's own
         // opaque payment_method_id plus the two PCI-permitted display
         // fields, read from Stax's own charge response. Best-effort: a
         // failed save never undoes or fails the payment, which already

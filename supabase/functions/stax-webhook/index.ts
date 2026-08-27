@@ -72,9 +72,15 @@ function json(body: unknown, status: number) {
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-type PaymentRow = { id: number; invoice_id: number; family_id: string; amount: number };
+type PaymentRow = { id: number; invoice_id: number; family_id: string; amount: number; alreadyReversed: number };
 
-/** Same shape as authorizenet-webhook's copy — see its header for why this has to match by prefix, not exact id. */
+/**
+ * Same shape as authorizenet-webhook's copy — see its header for why this
+ * has to match by prefix, not exact id. Also returns how much of each row
+ * has already been reversed (2026-08-27, independent review finding H2), so
+ * a second independent refund/void of the same charge caps against what's
+ * still un-reversed rather than the row's full original amount.
+ */
 async function findOriginalPaymentRows(admin: any, baseTransactionId: string): Promise<PaymentRow[]> {
     const { data } = await admin
         .from("billing_payments")
@@ -87,7 +93,22 @@ async function findOriginalPaymentRows(admin: any, baseTransactionId: string): P
         const mb = b?.billing_invoices?.billing_cycles?.month || "";
         return ma.localeCompare(mb);
     });
-    return rows.map(r => ({ id: r.id, invoice_id: r.invoice_id, family_id: r.family_id, amount: Number(r.amount) || 0 }));
+
+    const ids = rows.map(r => r.id);
+    const reversedByRow = new Map<number, number>();
+    if (ids.length) {
+        const { data: reversals } = await admin
+            .from("billing_payments").select("refund_of_payment_id, amount").in("refund_of_payment_id", ids);
+        for (const r of (reversals || [])) {
+            const key = r.refund_of_payment_id as number;
+            reversedByRow.set(key, (reversedByRow.get(key) || 0) + Math.abs(Number(r.amount) || 0));
+        }
+    }
+
+    return rows.map(r => ({
+        id: r.id, invoice_id: r.invoice_id, family_id: r.family_id, amount: Number(r.amount) || 0,
+        alreadyReversed: reversedByRow.get(r.id) || 0,
+    }));
 }
 
 serve(async (req) => {
@@ -141,7 +162,9 @@ serve(async (req) => {
 
     for (const row of originalRows) {
         if (remaining <= 0.004) break;
-        const amt = Math.round(Math.min(remaining, row.amount) * 100) / 100;
+        const reversible = Math.round((row.amount - row.alreadyReversed) * 100) / 100;
+        if (reversible <= 0.004) continue;
+        const amt = Math.round(Math.min(remaining, reversible) * 100) / 100;
         if (amt <= 0.004) continue;
 
         const { error: insErr } = await admin.from("billing_payments").insert({
@@ -172,10 +195,21 @@ serve(async (req) => {
         await admin.from("billing_invoices").update({ status: newStatus }).eq("id", row.invoice_id);
     }
 
+    // ⚠️ Never silently absorb an over-reversal into the wrong row
+    // (2026-08-27, H2). If Stax reports reversing more than this app has any
+    // un-reversed record of, that's a discrepancy for a human, not a
+    // best-effort guess at which row to dock it from.
+    if (remaining > 0.004) {
+        await admin.from("admin_audit_log").insert({
+            admin_email: "stax-webhook", action: "online_reversal_overage", entity: "billing_invoice",
+            details: { parent_transaction_id: parentId, unmatched_amount: remaining, kind },
+        }).then(() => {}, (e: unknown) => console.error("stax-webhook: audit write failed", e));
+    }
+
     await admin.from("admin_audit_log").insert({
         admin_email: "stax-webhook", action: "online_refund_or_void", entity: "billing_invoice",
-        details: { invoice_ids: touchedInvoiceIds, parent_transaction_id: parentId, kind },
+        details: { invoice_ids: touchedInvoiceIds, parent_transaction_id: parentId, kind, leftover: remaining },
     }).then(() => {}, (e: unknown) => console.error("stax-webhook: audit write failed", e));
 
-    return json({ received: true, anyNew, touchedInvoiceIds }, 200);
+    return json({ received: true, anyNew, touchedInvoiceIds, leftover: remaining }, 200);
 });
