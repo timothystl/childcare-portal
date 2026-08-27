@@ -825,6 +825,11 @@ function applyRoleRestrictions() {
     // tab (rate changes, PIN resets, lock/unlock) — not something a
     // restricted or classroom-staff account should browse.
     _hide('setAccessCard');
+    // ChMS Finance API test tool — moved into Settings from its own
+    // Finance/Bookkeeper sidebar entry (full-only there via
+    // AP_FULL_ONLY_TABS); same gate here now that it sits on a tab
+    // `restricted` can otherwise open.
+    _hide('financeApiCard');
 
     if (currentAdminRole === 'restricted') {
         // Staffing tab: hide everything except the schedule planner

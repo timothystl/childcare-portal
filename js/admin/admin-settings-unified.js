@@ -31,6 +31,15 @@ async function renderSettingsUnifiedTool() {
     _renderRoomsTable();
     await _setLoadAuditCaptions();
     _setBindRoomsSave();
+    // ChMS Finance API tester — moved here from its own Finance/Bookkeeper
+    // sidebar entry (2026-08-28); setupFinanceApiTester() itself is
+    // unchanged (admin-finance.js), only its section moved. Bind once —
+    // this tool re-renders on every Settings open, and a second listener
+    // would double-fire the test request.
+    if (typeof setupFinanceApiTester === 'function' && !window._setApiTesterBound) {
+        window._setApiTesterBound = true;
+        setupFinanceApiTester();
+    }
 }
 
 // ── "Last changed by" captions ─────────────────────────────────

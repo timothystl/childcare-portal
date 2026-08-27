@@ -149,31 +149,39 @@ const AP_TOOLS = [
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
 
-    // ── Finance · Bookkeeper ──
-    // ⚠️ Seven tools used to live here and no longer do: Accounts Receivable,
-    // Reconcile Payments, Revenue Dashboard, Financial Dashboard, Room
-    // Profitability, Attendance & Revenue, and Annual Budget & Actuals. They
-    // are now the six sub-views of the Finance Hub's **Bookkeeper tab**
-    // (js/admin/admin-finance-bookkeeper.js) — Overview · Accounts Receivable
-    // · Room P&L · Month-End Close · Reconciliation · GL Export.
+    // ── Finance · Bookkeeper group — now EMPTY, and that's the point ──
+    // Ten tools used to live in this sidebar group across two sessions and
+    // no longer do: Accounts Receivable, Reconcile Payments, Revenue
+    // Dashboard, Financial Dashboard, Room Profitability, Attendance &
+    // Revenue, Annual Budget & Actuals, Year-over-Year, Expense Lines, and
+    // ChMS Finance API. They are now:
+    //   - the six sub-views of the Finance Hub's **Bookkeeper tab**
+    //     (js/admin/admin-finance-bookkeeper.js) — Overview · Accounts
+    //     Receivable · Room P&L · Month-End Close · Reconciliation ·
+    //     GL Export;
+    //   - Year-over-Year and the Expense Lines editor, folded directly into
+    //     Bookkeeper → Overview, under its Annual Budget card
+    //     (2026-08-28 — see admin-finance-bookkeeper.js's
+    //     `_bkOverviewHtml()`, the "Budget lines" editor and the embedded
+    //     `#financeYoyContent`);
+    //   - ChMS Finance API, moved to Settings → Access & oversight
+    //     (`#financeApiCard`, admin.html) — it needed a tab, not a
+    //     Bookkeeper sub-view, and Settings already hosts the other
+    //     admin-account-oversight tools.
     //
-    // This is the whole point of the overhaul: the numbers on those seven
-    // screens were computed seven ways and did not visibly agree. Leaving the
-    // originals reachable next to their replacement would have kept every one
-    // of those disagreements on the shelf and made the shelf longer. Their
-    // sections stay in admin.html (unreferenced by AP_TOOLS = unreachable, per
-    // the shell's own rule) so nothing that reads their DOM breaks; delete the
-    // markup only once nothing does.
+    // This is the whole point of the overhaul: the numbers on those ten
+    // screens were computed several different ways and did not visibly
+    // agree. Leaving the originals reachable next to their replacement would
+    // have kept every one of those disagreements on the shelf and made the
+    // shelf longer. Their sections stay in admin.html (unreferenced by
+    // AP_TOOLS = unreachable, per the shell's own rule) so nothing that
+    // reads their DOM breaks — except #financeYoySection and
+    // #financeApiTesterSection, deleted outright because their ids/markup
+    // were reused at the new location (see admin.html's own comments there).
     //
     // Attendance & Revenue is gone as a screen, not just as a nav entry:
     // child-days is a stat on each Room P&L card now, from the same dataset
     // that card's revenue comes from, so the two can no longer disagree.
-    { key: 'yoy',         pane: 'finance', section: 'financeYoySection',     tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📈', name: 'Year-over-Year',
-      blurb: 'Revenue and labor month-by-month against the prior year.' },
-    { key: 'expense',     pane: 'finance', section: 'financeExpenseSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📋', name: 'Expense Lines',
-      blurb: 'Fixed monthly costs and annual one-time expenses — what GL Export reads for Rent and Supplies.' },
-    { key: 'api',         pane: 'finance', section: 'financeApiTesterSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.sand, icon: '🔌', name: 'ChMS Finance API',
-      blurb: 'Test the connection the church accounting system uses.' },
 
     // Historical Payroll Records is commented out in admin.html ("hidden
     // 2026-07, may bring back later") — same for New Family Enrollment,
