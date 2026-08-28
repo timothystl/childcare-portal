@@ -3595,23 +3595,30 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-header {
     background: var(--navy);
     color: var(--white);
-    padding: 16px 24px;
+    padding: 20px 24px 22px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
     gap: 12px;
 }
+.wlp-header-main { min-width: 0; }
 .wlp-header-title { font-family: var(--font-head); font-weight: 700; font-size: 21.5px; }
 .wlp-header-sub { font-size: 14px; color: rgba(255,255,255,.65); margin-top: 2px; }
 .wlp-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-.wlp-pill-group { display: flex; background: rgba(255,255,255,.12); border-radius: 8px; padding: 3px; }
+/* Separate pills with the header navy showing between them — NOT one shared
+   translucent track. The design mockup gives every pill its own fill and a
+   real gap; a segmented-control track reads as a different component. */
+.wlp-pill-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .wlp-pill-btn {
-    background: transparent; color: rgba(255,255,255,.75); border: none;
-    padding: 8px 16px; border-radius: 6px; font-weight: 800; font-size: 15px; cursor: pointer;
+    background: rgba(255,255,255,.12); color: var(--white); border: none;
+    padding: 9px 18px; border-radius: 8px; font-family: var(--font-body);
+    font-weight: 800; font-size: 15px; cursor: pointer;
 }
-.wlp-pill-btn.active { background: var(--sun); color: var(--navy); }
+.wlp-pill-btn:hover { background: rgba(255,255,255,.2); }
+.wlp-pill-btn.active,
+.wlp-pill-btn.active:hover { background: var(--sun); color: var(--navy); }
 
 .wlp-toolbar {
     background: var(--navy-table);
@@ -3622,9 +3629,10 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     flex-wrap: wrap;
     gap: 10px;
 }
-.wlp-toolbar .wlp-pill-group { background: rgba(255,255,255,.14); }
-.wlp-toolbar .wlp-pill-btn { color: #fff; padding: 6px 14px; font-size: 14px; }
-.wlp-toolbar .wlp-pill-btn.active { background: var(--white); color: var(--navy); }
+.wlp-toolbar .wlp-pill-group { margin-top: 0; }
+.wlp-toolbar .wlp-pill-btn { padding: 8px 16px; font-size: 14px; }
+.wlp-toolbar .wlp-pill-btn.active,
+.wlp-toolbar .wlp-pill-btn.active:hover { background: var(--white); color: var(--navy); }
 
 /* ── Filter bar (search + room) ───────────────────────────── */
 .wlp-filter-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 12px 24px 0; }
@@ -3774,23 +3782,34 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 
 /* ── Capacity Planner — Board view (candidate-first match & assign,
    design_handoff_planning_market, 2026-08-27) ────────────────────────── */
+.wlp-board-panel { padding: 18px 24px 22px; }
 .wlp-board-month-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+/* Fixed-width weekday tiles, left-aligned — the mockup's demand strip does not
+   stretch to the card's full width the way the Grid's own rollup strips do. */
+.wlp-board-day-strip {
+    display: grid; grid-template-columns: repeat(5, 106px); gap: 10px;
+    justify-content: start; margin-bottom: 22px;
+}
+@media (max-width: 700px) { .wlp-board-day-strip { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.wlp-board-day-tile { cursor: default; border-radius: 10px; padding: 11px 4px; }
+.wlp-board-day-tile .wlp-moving-tile-label { text-transform: uppercase; letter-spacing: .06em; }
+.wlp-board-day-tile .wlp-moving-tile-count { font-size: 22px; line-height: 1.25; }
 .wlp-board-month-pill {
     border: none; border-radius: 999px; padding: 8px 15px; font-family: var(--font-body);
     font-weight: 800; font-size: 12.5px; cursor: pointer; white-space: nowrap;
     background: var(--linen); color: var(--navy);
 }
 .wlp-board-month-pill.active { background: var(--navy); color: #fff; }
-.wlp-board-columns { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
+.wlp-board-columns { display: grid; grid-template-columns: minmax(240px, .85fr) 1fr; gap: 24px; align-items: start; }
 @media (max-width: 780px) { .wlp-board-columns { grid-template-columns: 1fr; } }
-.wlp-board-candidate-list { display: flex; flex-direction: column; gap: 8px; max-height: 560px; overflow-y: auto; }
+.wlp-board-candidate-list { display: flex; flex-direction: column; gap: 10px; max-height: 560px; overflow-y: auto; }
 .wlp-board-candidate {
     text-align: left; border: 1px solid var(--border); background: #fff; border-radius: 9px;
-    padding: 10px 12px; cursor: pointer; font-family: inherit; width: 100%;
+    padding: 12px 14px; cursor: pointer; font-family: inherit; width: 100%;
 }
 .wlp-board-candidate.selected { border-color: var(--sun); background: #FFFBEF; }
-.wlp-board-candidate-name { font-weight: 800; color: var(--navy); font-size: 13.5px; }
-.wlp-board-candidate-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.wlp-board-candidate-name { font-weight: 800; color: var(--navy); font-size: 14.5px; }
+.wlp-board-candidate-meta { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
 .wlp-board-assign-panel { border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
 .wlp-board-assign-title { font-weight: 800; color: var(--navy); font-size: 15px; margin-bottom: 2px; }
 .wlp-board-assign-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
@@ -3903,13 +3922,23 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
    saturated rust than this app's --tang-dark (#7a2a18), so used directly
    rather than force-fit an existing token that doesn't match it. */
 .wlp-ageout-card-reason { color: #B3452B; font-weight: 700; }
-.wlp-ageout-card .wlp-confirm-move-btn { flex-shrink: 0; }
+.wlp-confirm-move-btn {
+    flex-shrink: 0; background: var(--green-text); color: var(--white); border: none;
+    padding: 9px 18px; border-radius: 7px; cursor: pointer;
+    font-family: var(--font-body); font-size: .9em; font-weight: 700;
+}
+.wlp-confirm-move-btn:hover { background: var(--green-dark); }
+.wlp-confirm-move-btn:disabled { background: var(--border); color: var(--text-muted); cursor: default; }
 
 /* ── Grid — inline demand-by-month / age-out rollup strips (consolidation
    pass, design_handoff_planning_market, 2026-08-27). Same tile chrome as
    the Moving timeline (.wlp-moving-tile/-label/-count), just a 6-column
    parent instead of 12 — and a .wlp-moving-drawer opens below whichever
    strip's box was clicked. */
+/* The two inline rollup strips sit OUTSIDE .wlp-grid-wrap, so without this
+   they rendered flush against the card's own edge while the grid table above
+   them was inset 24px. */
+.wlp-rollup-panel { padding: 0 24px 20px; }
 .wlp-rollup-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin: 10px 0 4px; }
 .wlp-rollup-tile-sub { font-size: 10px; color: var(--text-muted); line-height: 1.3; margin-top: 2px; }
 @media (max-width: 720px) { .wlp-rollup-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
