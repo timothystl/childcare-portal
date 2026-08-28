@@ -729,6 +729,54 @@ FTE report table's trend/drawer was removed.
   attention" tone used everywhere else this session touched.
 - `css/admin.css?v=21`.
 
+### Three real bugs found in the live review of the Week/Month/FTE fix above (fixed 2026-08-28)
+
+Reported live with three more screenshots minutes after the fix above shipped.
+Not a color/layout mismatch this time — two of the three were functional bugs,
+one of them long-standing and unrelated to this session's redesign work.
+
+- ⚠️ **Clicking a day cell did nothing — `showDayRosterDetail()`'s panel was
+  rendering inside a `display:none` ancestor.** Its lazy-create path nested
+  the panel inside `#roomCalModal .rcal-dialog` when that element exists —
+  which it always does, since `#roomCalModal` is the pre-existing per-room
+  calendar modal and is only ever unhidden by `openRoomCalendar()`, which
+  neither Day view's "Move a child" button nor the new Month grid's day cells
+  call. `.rcal-overlay.hidden { display: none; }` on the parent hides the
+  whole subtree regardless of the panel's own `position:fixed`, which is a
+  hard CSS rule with no exception — the panel's fixed positioning never
+  mattered once its ancestor stopped being rendered at all. **This is not new
+  to Month view** — Day view's Move button has called the same function since
+  Enrollment & Capacity first shipped, so it was very likely broken the whole
+  time, just never clicked through in a real browser. Fixed by always
+  appending the panel to `document.body`: nothing about `.rcal-overlay`
+  (no `transform`/`filter`) traps `position:fixed` z-index into a sub-context,
+  so the panel still stacks above the per-room modal on the rare path where
+  that modal happens to be open too — the conditional nesting was never
+  buying anything, only risking exactly this.
+- ⚠️ **The FTE table's "% full" was comparing a whole-month number to a
+  single day's capacity.** `_buildCapacityOverviewRows()` computed
+  `pct = enrolled / room.capacity` — but `enrolled` is `curEntries.length`,
+  the count of **distinct children** registered in that room for the whole
+  month, not a same-day headcount. Eleven different children cycling through
+  a 9-seat room across a month (some Mon/Wed/Fri, others Tue/Thu) is normal,
+  not "122% full" — and the Day/Week/Month grids next to it already showed
+  every real day under capacity, which is what made the number read as
+  obviously wrong rather than just high. Fixed by deriving `pct` from the
+  seat-days figures already computed two lines above
+  (`seatDaysOcc / seatDaysAvail`) instead of the distinct-enrollment count —
+  the same daily-average math the day-grids use, so the two can't disagree
+  the way this bug let them. This bug predates this session — verified by
+  diff, this session only touched two color lines in that table before now.
+- **Month's cell colors needed a stronger border, not a different fill.**
+  The pale green/gold/tangerine fills matched the design source's literal
+  hex values, but read as too close to the page's own cream background to
+  register as a flag at a glance. `.ec-month-cell.is-near`/`.is-full` now
+  also set `border-color` to the saturated tone (`--sun`/`--ap-deep-tang`)
+  instead of the neutral tan border every cell started with — the fill
+  stays the same pale tint, the ring around a flagged day is what carries
+  the contrast now.
+- `css/admin.css?v=23`.
+
 ### Director-authored records — she is signature 1, not a fourth role
 
 For Incident Reports, the open question was how signature 1 works when there

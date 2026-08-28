@@ -5550,8 +5550,12 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     padding: 8px 4px; cursor: pointer; font-family: inherit;
     background: var(--green-pale); color: var(--navy);
 }
-.ec-month-cell.is-near { background: var(--sun-pale); }
-.ec-month-cell.is-full { background: var(--tang-pale); color: var(--ap-deep-tang); }
+/* The plain tan border reads fine for an unflagged day, but a pale fill
+   alone was too close to the page's own cream background to read as a
+   flag at a glance — a colored border carries the distinction even where
+   the fill doesn't stand out. */
+.ec-month-cell.is-near { background: var(--sun-pale); border-color: var(--sun); }
+.ec-month-cell.is-full { background: var(--tang-pale); color: var(--ap-deep-tang); border-color: var(--ap-deep-tang); }
 .ec-month-cell.is-closed { background: var(--warm-gray); color: var(--text-muted); cursor: default; }
 .ec-month-cell-empty { background: transparent; border: none; cursor: default; }
 .ec-month-date  { font-size: .68em; color: var(--text-muted); }
