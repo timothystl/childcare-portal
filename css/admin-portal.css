@@ -108,12 +108,13 @@
     background: var(--warm-gray);
 }
 
-/* The tool's own heading, so a tool page starts at the same left edge as
-   a dashboard heading and nothing shifts when you move between them. The
-   section's own <h2> then duplicates it — hidden by apShowSection(), but
-   only where the heading is inert text (see the comment there). */
-.ap-detail-head .ap-head { margin-bottom: 18px; }
-.ap-dup-head { display: none !important; }
+/* apRenderDetail() (admin-portal.js) no longer renders a shell tile into
+   #apDetailHead for any tool — it used to print the tool's own name+blurb
+   here, which duplicated the section's own heading directly below it (found
+   live 2026-08-28, e.g. Waitlist & Capacity Planner). Each section's own
+   <h2> is now the only heading a tool shows. .ap-detail-head itself is kept
+   as an empty mount point rather than removed from admin.html, in case a
+   future tool needs a header row the section can't own itself. */
 
 
 /* ── Page heading ────────────────────────────────────────── */
@@ -136,6 +137,18 @@
     color: var(--text-muted);
     font-size: .95em;
     margin: 6px 0 0;
+    max-width: 62ch;
+    text-wrap: pretty;
+}
+
+/* apRenderDashboard()'s per-tab landing page. Used to open with an <h2> of
+   the tab's own name — pure repeat of the sidebar's highlighted tab and the
+   header chip (#currentTabLabel) right above it. Only the live-data caption
+   (a week, a count, a source) carries real information, so it's what's left. */
+.ap-dash-stamp {
+    color: var(--text-muted);
+    font-size: .95em;
+    margin: 0 0 22px;
     max-width: 62ch;
     text-wrap: pretty;
 }
@@ -1175,6 +1188,13 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 }
 .fh-stat-tang { background: var(--tang-pale); border-color: #f6d3c2; }
 .fh-stat-muted { background: var(--warm-gray); }
+/* This month's own total (not the running owed banner) — a dollar figure
+   reads wider than a bare count at the same font size, so it gets a
+   slightly smaller number and a label that's allowed to wrap onto a
+   second line instead of forcing the card wider than the rest of the strip. */
+.fh-stat-month { max-width: 220px; }
+.fh-stat-month .fh-stat-num { font-size: 21px; }
+.fh-stat-month .fh-stat-label { white-space: normal; }
 .fh-stat-num { font-family: var(--font-head); font-size: 26px; font-weight: 800; color: var(--navy); line-height: 1; }
 .fh-stat-tang .fh-stat-num { color: var(--tang); }
 .fh-stat-muted .fh-stat-num { color: var(--text-muted); }
@@ -1693,6 +1713,14 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .bk-stat-label { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); }
 .bk-stat-num { font-family: var(--font-head); font-size: 24px; font-weight: 800; color: var(--navy); line-height: 1.15; margin-top: 4px; }
 .bk-stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+/* A live input inside a .bk-stat card (Build Staff Schedule's "Week of"),
+   rather than a computed number — sized/colored to read as part of the
+   same card row instead of a stray form field. */
+.bk-stat-date-input {
+    width: 100%; margin-top: 6px; padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 7px; font-family: inherit; font-size: 15px; font-weight: 700;
+    color: var(--navy); background: #fff;
+}
 .is-pos { color: var(--green-text); }
 .is-neg { color: var(--tang-dark); }
 

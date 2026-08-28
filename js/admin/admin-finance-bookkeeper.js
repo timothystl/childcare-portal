@@ -287,12 +287,14 @@ function _bkParseState(raw, fallback) {
 
 /** AR list = exactly the Ledger's owing rows. The banner copy promises
  *  "same figures as the Ledger" and this is what makes that true rather
- *  than aspirational. */
+ *  than aspirational. Reuses _fhOwingRowsDeduped() (admin-finance-hub.js) —
+ *  a second, differently-scoped filter here (this used to exclude
+ *  `status === 'withdrawn'`, which was the Ledger's *old* scoping) would
+ *  silently stop being "the same figures" the moment either file changed. */
 function _bkArRowsFromLedger() {
-    const rows = (typeof _fhRows !== 'undefined' && Array.isArray(_fhRows)) ? _fhRows : [];
+    const rows = (typeof _fhOwingRowsDeduped === 'function') ? _fhOwingRowsDeduped() : [];
     const now = Date.now();
     return rows
-        .filter(r => r.status !== 'withdrawn' && r.owed > 0)
         .map(r => {
             const sentAt = r.ar?.sentAt || null;
             const days   = sentAt ? Math.floor((now - new Date(sentAt).getTime()) / 86400000) : null;
@@ -1027,7 +1029,7 @@ function _bkReconHtml() {
             <div class="bk-card-head"><h4 class="bk-h">Parent payments (from processor) &middot; ${payments.filter(p => !_bkRecon.assign[p.id]).length} unassigned</h4><button type="button" class="bk-link" id="bkAddItem">+ Add item</button></div>
             <div class="bk-form bk-form-green" id="bkItemForm" style="display:none">
                 <label class="bk-field"><span>Date</span><input type="date" id="bkItemDate" value="${escHtml(_bkToday())}"></label>
-                <label class="bk-field"><span>Family name</span><input type="text" id="bkItemName" placeholder="Family name"></label>
+                <label class="bk-field"><span>Family name</span><input type="text" id="bkItemName" placeholder="Family name" autocomplete="off"></label>
                 <label class="bk-field"><span>Amount</span><input type="number" step="0.01" id="bkItemAmount" placeholder="Amount"></label>
                 <div class="bk-form-btns">
                     <button type="button" class="bk-btn-solid" id="bkItemSave">Add</button>

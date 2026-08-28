@@ -65,6 +65,12 @@ function _fhMonthLabel(month) {
 
 function _fhIsCurrentMonth(month) { return month === _fhDefaultMonth(); }
 
+// "Read-only history" means the month already happened — a future month has
+// no history yet and should get the same live, editable Ledger the current
+// month gets. String comparison is safe here: month keys are zero-padded
+// 'YYYY-MM', which sorts identically to chronological order.
+function _fhIsLedgerMonth(month) { return month >= _fhDefaultMonth(); }
+
 // ── Entry point ──────────────────────────────────────────────
 // #fhBody (header + tabs + panes, all of it — see admin.html) stays behind
 // #fhSkeleton until this first _fhLoad() resolves, so the header — grouped
@@ -134,6 +140,18 @@ function _fhGoToMonth(month) {
     _fhMonth = month;
     _fhFilter = 'all';
     _fhLoad();
+    // The header's month nav is shared across all three tabs, but Billing
+    // Report and Bookkeeper each keep their own month state (_brMonth /
+    // _bkMonth) — _fhLoad() only refreshes the Ledger pane, so without this
+    // the tab actually on screen kept showing the *old* month while the
+    // header above it already said the new one.
+    if (_fhTab === 'report') {
+        const brMonth = _fhEl('brMonth');
+        if (brMonth) brMonth.value = _fhMonth;
+        if (typeof renderBillingReportTool === 'function') renderBillingReportTool();
+    } else if (_fhTab === 'bookkeeper' && typeof renderFinanceBookkeeper === 'function') {
+        renderFinanceBookkeeper(_fhMonth);
+    }
 }
 
 function _fhSwitchTab(tab) {
@@ -241,6 +259,15 @@ async function _fhLoad() {
             return {
                 familyId, name: r.name, email: r.email,
                 total: r.total, causes: r.causes || [],
+                // Carried through from computeBillMonthExceptions() so the
+                // strip can show gross tuition / discounts / fees separately
+                // instead of just the one net number. base is already net of
+                // both the individual and sibling discount (see that
+                // function's own comment); discount is the sum of both, so
+                // base + discount is the pre-discount "sticker" tuition.
+                base: r.base || 0, discount: r.discount || 0,
+                changeFees: r.changeFees || 0, regFee: r.regFee || 0,
+                familyNewFee: r.familyNewFee || 0, creditTotal: r.creditTotal || 0,
                 withdrawn: !!r.withdrawn, status,
                 ar, owed: owedRow.outstanding, owedMonths: owedRow.months,
             };
@@ -308,7 +335,7 @@ function _fhRenderShell() {
     const prevBtn = _fhEl('fhMonthPrev');
     if (prevBtn) prevBtn.disabled = false;
 
-    if (_fhIsCurrentMonth(_fhMonth)) {
+    if (_fhIsLedgerMonth(_fhMonth)) {
         _fhRenderLedger();
     } else {
         _fhRenderMonthHistory();
@@ -337,6 +364,33 @@ function _fhRowDisplayStatus(row) {
     return row.status;
 }
 
+/** One row per family that owes money — deduplicated by familyId.
+ *  ⚠️ _fhRows can carry TWO rows for the same family in the same month.
+ *  computeBillMonthExceptions() flags "withdrawn" by comparing which
+ *  parent's email is on *this* month's registration-derived row against
+ *  *last* month's — so a family where either parent can register, and a
+ *  different parent happens to submit each month, reads as "present last
+ *  month, absent this month" even though they never actually left. That
+ *  produces a real active row AND a spurious withdrawn row, both resolved
+ *  to the same familyId in _fhLoad() (it matches on both parent_email and
+ *  parent2_email) and both carrying the identical _fhOwed balance. Verified
+ *  live: the Scheetz family registered under lindseymartie@gmail.com in
+ *  July and fscheetz31@yahoo.com in August — same family, same three kids,
+ *  never withdrew. Summing every row with owed > 0 double-counts every
+ *  family this happens to. Preferring the non-withdrawn row when both
+ *  exist keeps the real, current one. */
+function _fhOwingRowsDeduped() {
+    const byFamily = new Map();
+    _fhRows.forEach(r => {
+        if (r.owed <= 0 || !r.familyId) return;
+        const existing = byFamily.get(r.familyId);
+        if (!existing || (existing.status === 'withdrawn' && r.status !== 'withdrawn')) {
+            byFamily.set(r.familyId, r);
+        }
+    });
+    return [...byFamily.values()];
+}
+
 function _fhFilterCounts() {
     const active = _fhRows.filter(r => r.status !== 'withdrawn');
     return {
@@ -345,14 +399,25 @@ function _fhFilterCounts() {
         drafted:       active.filter(r => r.status === 'drafted').length,
         sent:          active.filter(r => r.status === 'sent').length,
         card_declined: 0, // no payment-processor decline signal exists yet — see BILLING_MODEL.md
-        owing:         active.filter(r => r.owed > 0).length,
-        paid:          active.filter(r => r.owed <= 0 && (r.ar?.billed > 0 || r.status === 'sent')).length,
+        // ⚠️ Deliberately NOT scoped to `active`. r.owed is the cross-month
+        // balance (_fhOwed), not this month's invoice — a family with no
+        // booking in the viewed month still owes whatever they owed before,
+        // and "withdrawn" here only ever means "no days booked this month."
+        // Deduplicated per _fhOwingRowsDeduped — see its own comment.
+        owing:         _fhOwingRowsDeduped().length,
+        // r.ar?.billed alone no longer implies "sent" — _buildArRows() keeps
+        // it as the raw drafted-or-sent amount now that `owed` is correctly
+        // gated on sent_at (see that function's own comment). Check sentAt
+        // directly so an unsent draft with owed<=0 (nothing sent, so nothing
+        // owed) doesn't misread as "paid."
+        paid:          active.filter(r => r.owed <= 0 && r.ar?.sentAt).length,
         withdrawn:     _fhRows.filter(r => r.status === 'withdrawn').length,
     };
 }
 
 function _fhVisibleRows() {
     const q = _fhSearch.trim().toLowerCase();
+    const owingRows = _fhFilter === 'owing' ? _fhOwingRowsDeduped() : null;
     return _fhRows.filter(r => {
         if (q && !r.name.toLowerCase().includes(q)) return false;
         switch (_fhFilter) {
@@ -361,8 +426,8 @@ function _fhVisibleRows() {
             case 'drafted':       return r.status === 'drafted';
             case 'sent':          return r.status === 'sent';
             case 'card_declined': return false;
-            case 'owing':         return r.status !== 'withdrawn' && r.owed > 0;
-            case 'paid':          return r.status !== 'withdrawn' && r.owed <= 0 && (r.ar?.billed > 0 || r.status === 'sent');
+            case 'owing':         return owingRows.includes(r); // deduplicated — see _fhOwingRowsDeduped
+            case 'paid':          return r.status !== 'withdrawn' && r.owed <= 0 && r.ar?.sentAt;
             case 'withdrawn':     return r.status === 'withdrawn';
             default:              return true;
         }
@@ -379,7 +444,44 @@ function _fhRenderLedger() {
     const sent       = active.filter(r => r.status === 'sent');
     const draftedTotal = drafted.reduce((s, r) => s + r.total, 0);
 
-    const owingRows = active.filter(r => r.owed > 0);
+    // What this one month's care actually costs, full stop — every active
+    // family's row.total (drafted, sent, or already paid, doesn't matter),
+    // summed. Same source as Billing Report's own "Total to bill" (no second
+    // calculation, per this file's header note), just surfaced right here so
+    // it doesn't take a tab switch to see. Deliberately NOT the owed banner's
+    // number: this is what this month alone bills for; the banner below is a
+    // running balance across every open month.
+    const monthTotal = active.reduce((s, r) => s + r.total, 0);
+
+    // The single "Total to bill" figure above reads as the final answer, but
+    // it's a net number — discounts are already subtracted into it and fees
+    // already added — so a director asking "why is it this much" had no way
+    // to see either piece. Broken out here from the same per-row fields
+    // computeBillMonthExceptions() already computes (nothing new calculated):
+    // grossTuition is the sticker-price tuition before any discount (r.base
+    // is already net of both the individual and sibling discount, so adding
+    // r.discount back gives the pre-discount figure); discountsTotal is what
+    // came off; feesTotal is what got added on top (registration fee,
+    // new-family fee, schedule-change fees, net of any account credit
+    // applied). grossTuition − discountsTotal + feesTotal === monthTotal.
+    const grossTuition   = active.reduce((s, r) => s + (r.base || 0) + (r.discount || 0), 0);
+    const discountsTotal = active.reduce((s, r) => s + (r.discount || 0), 0);
+    const feesTotal      = active.reduce((s, r) =>
+        s + (r.changeFees || 0) + (r.regFee || 0) + (r.familyNewFee || 0) - (r.creditTotal || 0), 0);
+
+    // ⚠️ NOT `active.filter(...)`. r.owed is the real cross-month balance
+    // (_fhOwed) — a family with no booking this month ("withdrawn" for this
+    // month's exceptions only) can still owe every dollar of an earlier
+    // month's unpaid invoice, and this banner promises "across every open
+    // month, not just [this month]." Scoping to `active` silently dropped
+    // any family not currently billed, which made the total (and the
+    // aging detail, and Nudge all's own displayed count below) collapse
+    // toward zero the moment registrations thinned out for a future month
+    // — read as "paid off" when nothing had actually been paid. Deduplicated
+    // by family — see _fhOwingRowsDeduped — so a family whose withdrawal
+    // flag is a false positive (a different parent registered this month)
+    // is counted once, not twice.
+    const owingRows = _fhOwingRowsDeduped();
     const owedTotal = owingRows.reduce((s, r) => s + r.owed, 0);
 
     const counts = _fhFilterCounts();
@@ -393,6 +495,25 @@ function _fhRenderLedger() {
 
     root.innerHTML = `
         <div class="fh-strip">
+            <div class="fh-stat">
+                <div class="fh-stat-num">${_fhMoney(grossTuition)}</div>
+                <div class="fh-stat-label">Tuition, ${_fhMonthLabel(_fhMonth)} — before discounts</div>
+            </div>
+            <span class="fh-arrow">→</span>
+            <div class="fh-stat fh-stat-muted">
+                <div class="fh-stat-num">${_fhMoney(-discountsTotal)}</div>
+                <div class="fh-stat-label">Discounts</div>
+            </div>
+            <span class="fh-arrow">→</span>
+            <div class="fh-stat">
+                <div class="fh-stat-num">${_fhMoney(feesTotal)}</div>
+                <div class="fh-stat-label">Fees</div>
+            </div>
+            <span class="fh-arrow">→</span>
+            <div class="fh-stat fh-stat-month">
+                <div class="fh-stat-num">${_fhMoney(monthTotal)}</div>
+                <div class="fh-stat-label">Amount to collect, ${_fhMonthLabel(_fhMonth)} — this month alone</div>
+            </div>
             <div class="fh-stat">
                 <div class="fh-stat-num">${active.length}</div>
                 <div class="fh-stat-label">Families, ${_fhMonthLabel(_fhMonth).split(' ')[0]}</div>
@@ -516,7 +637,7 @@ function _fhRowHtml(row) {
         <td><span class="fh-pill ${meta.cls}">${escHtml(pillLabel)}</span></td>
         <td class="fh-note">${_fhNoteFor(row)}</td>
         <td class="fh-money-col ${balCls}">${_fhMoney(row.owed)}</td>
-        <td class="fh-row-actions" onclick="event.stopPropagation()">${actions}</td>
+        <td class="fh-row-actions">${actions}</td>
     </tr>`;
 }
 
@@ -546,7 +667,22 @@ function _fhRenderMonthHistory() {
     const root = _fhEl('fhRoot');
     if (!root) return;
     const rows = _fhRows.filter(r => r.status !== 'withdrawn' && (r.ar?.billed > 0 || r.total > 0));
+    // Same figure the "Charged" column below sums to — r.ar?.billed is the
+    // real invoice amount where one exists, r.total (computeBillMonthExceptions)
+    // otherwise. No second calculation, so this card can't disagree with the
+    // table under it.
+    const monthTotal = rows.reduce((s, r) => s + (r.ar?.billed || r.total), 0);
     root.innerHTML = `
+        <div class="fh-strip">
+            <div class="fh-stat fh-stat-month">
+                <div class="fh-stat-num">${_fhMoney(monthTotal)}</div>
+                <div class="fh-stat-label">Total invoiced, ${_fhMonthLabel(_fhMonth)}</div>
+            </div>
+            <div class="fh-stat">
+                <div class="fh-stat-num">${rows.length}</div>
+                <div class="fh-stat-label">Families, ${_fhMonthLabel(_fhMonth).split(' ')[0]}</div>
+            </div>
+        </div>
         <div class="fh-history-banner">
             <strong>${_fhMonthLabel(_fhMonth)} — read-only history</strong>
             <p>To record a late payment against this month, open the family (click a row) and use Record payment — it applies to whichever month you pick, regardless of today's date.</p>
@@ -596,7 +732,9 @@ async function _fhReleaseDrafts() {
 }
 
 async function _fhNudgeAll() {
-    const owing = _fhRows.filter(r => r.owed > 0 && r.familyId);
+    // Deduplicated — see _fhOwingRowsDeduped. Without it, a family whose
+    // withdrawal flag is a false positive would get nudged twice in one click.
+    const owing = _fhOwingRowsDeduped();
     if (!owing.length) return;
     if (!confirm(`Nudge ${owing.length} famil${owing.length === 1 ? 'y' : 'ies'} with a balance?`)) return;
     const btn = _fhEl('fhNudgeAllBtn');
@@ -752,6 +890,9 @@ async function _fhLoadDrawerBody(row) {
                 <li class="inc-sig">
                     <span>${escHtml(friendlyShort(String(p.payment_date || '').slice(0, 10)))} · ${p.payment_method === 'autopay' || p.source === 'processor' ? 'Autopay' : `Manual${p.payment_method ? ' · ' + escHtml(p.payment_method) : ''}`}</span>
                     <span class="fh-pay-amt">${_fhMoney(p.amount)} → ${escHtml(_fhMonthLabel(_fhMonthForInvoice(row, p.invoice_id)))}</span>
+                    ${_fhCanRefund(p, familyPayments)
+                        ? `<button type="button" class="fh-link-btn fh-pay-refund-btn" data-payment-id="${p.id}" data-processor="${escHtml(p.processor)}">↩ Refund</button>`
+                        : ''}
                 </li>`).join('')}</ul>` : '<p class="empty-hint">No payments recorded yet.</p>'}
         </div>
 
@@ -769,6 +910,50 @@ async function _fhLoadDrawerBody(row) {
     _fhEl('fhRecordPaymentBtn')?.addEventListener('click', () => _fhShowPaymentForm(row));
     _fhEl('fhDrawerCloseFoot')?.addEventListener('click', _fhCloseDrawer);
     _fhEl('fhDrawerRemindBtn')?.addEventListener('click', () => _fhRemindOne(row.familyId, _fhEl('fhDrawerRemindBtn')));
+    body.querySelectorAll('.fh-pay-refund-btn').forEach(btn => {
+        btn.addEventListener('click', () => _fhRefundPayment(Number(btn.dataset.paymentId), btn.dataset.processor, row));
+    });
+}
+
+/** An online card charge (Authorize.net or Stax) can be reversed; a payment
+ *  already reversed (or itself a reversal) never gets a button, so it can't
+ *  be double-clicked into two refunds for the same charge. Mirrors the same
+ *  gate the old admin-billing.js AR table used, before that table's own
+ *  section (billingArSection) was retired from AP_TOOLS and became
+ *  unreachable — this drawer is the live place a family's payments are
+ *  actually seen today, so this is where the control has to live. */
+function _fhCanRefund(p, allPayments) {
+    const REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax']);
+    if (!REFUNDABLE_PROCESSORS.has(p.processor)) return false;
+    if (!(parseFloat(p.amount || 0) > 0)) return false;
+    if (p.refund_of_payment_id) return false;
+    return !allPayments.some(o => o.refund_of_payment_id === p.id);
+}
+
+/** Refund/void an online card payment from the Ledger drawer. Only asks the
+ *  processor that actually took the charge to reverse it —
+ *  admin-refund-payment / admin-refund-stax-payment never touch
+ *  billing_payments or the invoice itself, so this button's job ends at
+ *  "submitted," not "done." The processor's own webhook records the actual
+ *  reversal a few seconds later; _fhLoad() (which invalidates Bookkeeper's
+ *  cache, per this file's own convention) and a drawer re-render pick it up
+ *  the next time either is opened, not because the reversal is guaranteed
+ *  to be reflected immediately. */
+async function _fhRefundPayment(paymentId, processor, row) {
+    const processorName = processor === 'stax' ? 'Stax' : 'Authorize.net';
+    if (!confirm(`Refund or void this online payment? This asks ${processorName} to reverse the charge and cannot be undone from here.`)) {
+        return;
+    }
+    try {
+        const result = await adminRefundPayment(paymentId, processor);
+        alert(`${result.kind === 'void' ? 'Void' : 'Refund'} submitted. It will show here once ${processorName} confirms it (usually a few seconds).`);
+        await logAdminAction(`${result.kind}_submitted`, 'billing_payment', paymentId);
+        await _fhLoad();
+        _fhDrawerRow = _fhRows.find(r => String(r.familyId) === String(row.familyId)) || null;
+        if (_fhDrawerRow) await _fhRenderDrawer(); else _fhCloseDrawer();
+    } catch (err) {
+        alert('Refund failed: ' + err.message);
+    }
 }
 
 /** Which open month a payment belongs to, from the invoice it was recorded

@@ -782,6 +782,7 @@ async function openFamilyModal(family = null) {
         const photoPaths = familyModalChildren.map(c => c.profile_photo_path).filter(Boolean);
         _fmPhotoUrlCache = photoPaths.length ? await fetchChildProfilePhotoUrls(photoPaths).catch(() => new Map()) : new Map();
         _fmPhotosToDelete = [];
+        _fmLoadPickupContacts(family.id);
     } else {
         // Clear all fields
         ['fmParentName','fmParentEmail','fmParentPhone',
@@ -799,6 +800,8 @@ async function openFamilyModal(family = null) {
         familyModalChildren = [];
         _fmPhotoUrlCache = new Map();
         _fmPhotosToDelete = [];
+        const pickupList = document.getElementById('fmPickupList');
+        if (pickupList) pickupList.innerHTML = '<p class="empty-hint">Save this family first, then reopen Edit to see their pickup list.</p>';
     }
 
     renderModalChildRows();
@@ -849,7 +852,7 @@ function renderModalChildRows() {
                     </div>
                     <div class="fm-field fm-field-grow">
                         <label>Name *</label>
-                        <input type="text" class="fmc-name" value="${escHtml(child.child_name || '')}" placeholder="Child's full name">
+                        <input type="text" class="fmc-name" value="${escHtml(child.child_name || '')}" placeholder="Child's full name" autocomplete="off">
                     </div>
                     <div class="fm-field">
                         <label>Date of Birth</label>
@@ -1108,6 +1111,37 @@ function _fmBindDocumentsRow(row) {
             }
         }
     });
+}
+
+// ── Approved for pickup (Family Directory modal — read-only) ───────────
+// Family-level, not per-child (pickup_contacts keys on family_id), so this
+// renders once for the whole modal rather than once per child row. The
+// family adds/removes their own entries from the parent portal; this is
+// the office's view of that same list, not a second editor for it.
+function _fmRenderPickupList(list) {
+    const el = document.getElementById('fmPickupList');
+    if (!el) return;
+    if (!list.length) {
+        el.innerHTML = '<p class="empty-hint">No one approved for pickup yet.</p>';
+        return;
+    }
+    el.innerHTML = list.map(p => `
+        <div class="fm-pickup-row">
+            <strong>${escHtml(p.name)}</strong>
+            ${p.relationship ? ` — ${escHtml(p.relationship)}` : ''}
+            ${p.note ? `<div class="fm-pickup-note">${escHtml(p.note)}</div>` : ''}
+        </div>`).join('');
+}
+
+async function _fmLoadPickupContacts(familyId) {
+    const el = document.getElementById('fmPickupList');
+    if (!el) return;
+    el.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        _fmRenderPickupList(await fetchPickupContactsAdmin(familyId));
+    } catch (err) {
+        el.innerHTML = `<p class="import-error">Couldn't load the pickup list: ${escHtml(err.message)}</p>`;
+    }
 }
 
 // Uploads/removes a profile picture for the row's child. Repaints only the

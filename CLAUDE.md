@@ -550,6 +550,69 @@ half-live for a day" incidents (Bookkeeper tab, Classroom tab) say to run.
 as of this commit — apply it in the Supabase SQL Editor before the Write-ups
 or Policies tabs will do anything beyond render an empty list.
 
+### ⚠️ The first pass only fixed the nav — the schedule grid still didn't match the mockup
+
+Shipped, then flagged live: the director's screenshots of the actual mockup
+(`design_handoff_staff/Staff Tab Redesign.dc.html`) showed a genuinely
+different **Build Staff Schedule** grid than what went out — one compact
+table (Room | Shift | day columns, one row per room+shift) versus the app's
+pre-existing per-room block table (a tall stack of "AM Staff 1/2/3", "+
+optional" rows, repeated per room). The first fix only reclassed two buttons
+from `.btn-secondary` to `.btn-ghost`; the real gap was structural, and
+`renderScheduleTables()`/`renderScheduleByWorker()` were never actually
+compared against the mockup's own source before this session called the
+work done. Read the `.dc.html` template directly (its `roomShiftGrid`/
+`scheduleRows` data-shaping functions in `support.js`) rather than
+re-guessing from a screenshot a second time.
+
+Rebuilt both to match:
+
+- **By room & shift** — one `<table>`, not one block per room. Every
+  `<select class="sched-staff-select" data-date data-room data-shift
+  data-slot>` kept its exact classes/attributes; only how they're grouped
+  into rows/cells changed (a small stack of selects inside one day-cell
+  instead of one table row per slot). This is what made the rebuild safe:
+  `_syncGroup()`, `_readAssignmentsFromDOM()` (which `saveStaffSchedule()`,
+  the XLSX export, and `renderScheduleByWorker()` all read through), and the
+  day-print click wiring all key off those selectors, not DOM shape — none
+  of them needed to change, verified by re-reading each one before touching
+  `renderScheduleTables()`, not assumed. Kids-count/staff-needed figures
+  (real, valuable, and not in the mockup's plain data-only cells) were kept
+  as a small caption inside each cell rather than dropped — same "match the
+  visual language while keeping the data" call this app made for
+  Enrollment & Capacity's FTE table.
+- **By worker** — rebuilt from a day-by-day pivot table (this session's
+  first draft) into the mockup's actual shape: one row per person per
+  (room, shift) they hold this week, with a real per-person cost (their own
+  `hourly_rate` × assigned hours, not the header's wage-model estimate —
+  salaried staff show `—` since a per-shift dollar figure isn't meaningful
+  for them) and a coverage pill (`Full week` vs `N of 5 days`). Still
+  read-only, still built from `_readAssignmentsFromDOM()`.
+- **Week of / Children this week / Est. labor cost** — one row of three
+  cards, matching the mockup, instead of the date field sitting separately
+  above two stat cards. ⚠️ The date `<input>` itself had to stay a *static*
+  DOM element (`apSchedHeaderStats()`'s mount uses `display:contents` so its
+  two dynamic `.bk-stat` divs land as grid siblings of it) — folding the
+  input into the JS-rendered mount would have destroyed and recreated it on
+  every render, dropping its one-time `change` listener and any in-progress
+  typing.
+- **A real near-miss, caught before shipping**: the first attempt at this
+  also wrapped the section's `<h2>` in a flex container to put the Print
+  button top-right next to the title, matching the mockup exactly.
+  `apShowSection()` only recognizes a section's own heading via `:scope >
+  h2` — nesting it inside a wrapper div silently broke that selector and
+  would have reintroduced the exact double-heading bug this app already
+  spent a session fixing (see "Every redesigned Classroom-tab tool showed
+  its own heading twice" below). Reverted to keeping `h2`/`p` as direct
+  children of `.admin-section` and the button row as their sibling — Print
+  sits in the button row, not next to the title, which is a real (small,
+  deliberate) deviation from the mockup in favor of not reopening a closed
+  bug class.
+
+`npm test` — 183/183 (grew by one from another PR merged in between).
+`npm run build` — rebuilt and grepped for the new grid/worker CSS classes
+and `apSchedHeaderStats` before committing, same discipline as above.
+
 ---
 
 ## Classroom tab consolidation — Daily / Planning (2026-08-27)
@@ -3215,6 +3278,792 @@ token, not a project secret, precisely because it was meant to be short-lived). 
 must be deleted from the Supabase dashboard.** The repository includes an inert 410
 replacement as an emergency containment step, but the live function must be disabled
 or deleted and its hardcoded token treated as compromised before launch.
+⚠️ Still true as of the fixes below — confirmed still `ACTIVE` in `list_edge_functions`,
+still needs a human to delete it from the dashboard (no MCP delete-function tool exists).
+
+### External payments security review — fixes applied 2026-08-28
+
+A second AI agent's independent security review of the Stax work above was checked
+claim-by-claim against the live catalog rather than taken on faith (several of its
+"live evidence" claims were verified with direct queries before acting on them).
+Two of its findings were real and fixable without a production/Stax go-live decision;
+those were fixed this session. The two findings that require an actual production
+Stax merchant (pinning/verifying the merchant id behind `STAX_API_KEY`, and running a
+real `create_transaction` webhook test against production) were correctly identified
+by the review as pre-launch gates, not live incidents — `charge-stax-payment` already
+refuses to run unless `STAX_ENVIRONMENT === "production"`, which it is not yet, so
+there was nothing to fix today. Revisit those two before any real Stax launch.
+
+- **`add_day_to_invoice_by_email` was executable by every `authenticated` session,
+  including a parent.** `fs5_phase1_revoke_add_day_anon.sql` (2026-08-11) revoked
+  `anon`/`PUBLIC` and clamped the delta non-negative, but left `authenticated` with
+  EXECUTE. That was fine while every `authenticated` caller was an admin; it stopped
+  being fine the same day this repo shipped `parent_portal_option_b_accounts_APPLIED.sql`
+  — parents now hold real Supabase Auth JWTs too. The function still takes an arbitrary
+  `p_email` (not the caller's own family), has no admin-role check, and no status guard
+  (writes to a `finalized`/`paid` invoice same as a `draft`). A signed-in parent could
+  have called it directly against PostgREST to inflate any other family's issued
+  invoice. **Not Stax-specific and needed no launch decision** — fixed immediately by
+  `20260828030000_revoke_add_day_invoice_authenticated.sql`, which revokes
+  `authenticated` too (service_role only now). Safe because `js/`/`supabase/` have zero
+  remaining `.rpc('add_day_to_invoice_by_email')` call sites (superseded by the
+  recompute-only billing rewrite the same day as the original fix) and
+  `pg_stat_statements` still shows the same 30 historical `authenticated` calls
+  `fs5_phase1` recorded in 2026-08-11 — zero calls since. Verified post-apply:
+  `has_function_privilege` authenticated=false, anon=false, service_role=true.
+- **Leftover sandbox test data was live in production**, exactly as the review's "live
+  evidence" claimed and contrary to this file's own "no live trace" note (which
+  describes a *different*, later webhook test, not this one): a synthetic family
+  (`stax-eval-test@timothystl.org`, zero students), its `stax_customer_id`, a `$5.00`
+  `billing_invoices` row, and the matching `billing_payments` row from the 2026-08-26
+  first click-through — with no `payment_charge_locks` row, confirming it predated the
+  hardening. All four deleted; verified zero remaining rows referencing that family or
+  that Stax customer/payment.
+- **A Stax `PENDING` charge (HTTP 202) was silently shown to the parent as a plain
+  failure.** 202 is a 2xx status, so `supabase-js`'s `functions.invoke()` resolves it as
+  `data`, not `error` — `chargeStaxPayment()` in `js/supabase.js` just returned the body,
+  and `portal-billing.js`'s `chargeResult.success !== true` check discarded the server's
+  real `{error: "...still processing...", ambiguous: true}` message in favor of a
+  hardcoded `'Payment was not confirmed. Please try again.'`. The charge-lock already
+  prevented a double charge; the parent was just told the wrong thing and had no reason
+  not to retry immediately. Fixed by making `chargeStaxPayment()` recognize this shape
+  and throw the server's own message (both portal-billing.js call sites already surface
+  `e.message`, so no UI-layer change was needed). Guarded by a new test:
+  `'client never reads a Stax PENDING (HTTP 202) response as a confirmed charge'`.
+- **Migration history had drifted from what was actually applied** — the review found
+  the live catalog recorded `harden_stax_payments` as
+  `20260827225514_harden_stax_payments`, while the repo had it committed as
+  `20260827193636_harden_stax_payments.sql`. Content was diffed against the live
+  function bodies first and matched exactly (`stax_prepare_charge` etc.) — this was pure
+  filename/history drift, not a functional gap. Renamed to match the applied version,
+  per this file's own standing rule that a migration's filename should match what
+  actually ran.
+- **Not fixed, and don't try to fix from the code alone:** pinning/verifying the Stax
+  merchant id, and a production `create_transaction` webhook test. Both need a live
+  production Stax merchant, which does not exist yet — see the launch-blocker note
+  above and the "Production gate" note earlier in this section.
+
+`npm test` — 183/183 (added the one new guard above). `npm run build` — `dist/`
+rebuilt; `dist/supabase.min.js` grepped for `Your payment could not be confirmed` to
+confirm the fix actually shipped in the bundle portal.html loads, per this file's own
+"it shipped half-live for a day" lesson.
+
+### Second-round follow-up review — reconciliation job added, two items scoped out (2026-08-28)
+
+A follow-up pass from the same external reviewer re-checked the fixes above and raised
+four more items. One was newly built; two are documented, correctly-identified gaps
+this session did not attempt; one is a migration-history footnote.
+
+- **High — production webhook still unverified.** Same as the merchant-id pinning gap
+  above: needs an actual production Stax merchant, which does not exist yet. Nothing to
+  fix in code. Revisit together with that item before any real Stax launch.
+- **Medium — no scheduled Stax reconciliation job — FIXED.** New function
+  `reconcile-stax-payments` (deployed) + `schedule_stax_reconciliation.sql` (applied,
+  runs every 30 minutes via the same pg_cron + pg_net pattern as
+  `schedule_anet_reconciliation.sql`). It finds `payment_charge_locks` rows stuck
+  `pending`/`ambiguous` for more than 15 minutes with no webhook confirmation — the
+  exact gap the review named: `payment_charge_locks_active_family_idx` blocks that
+  family from paying online again until something resolves the lock.
+  - ⚠️ **Written defensively because it is itself unverified against a live merchant.**
+    Stax's documented `GET /transaction` list/filter endpoint is used ONLY to find
+    candidate transaction ids for a family's customer id in a time window — nothing
+    from that response is ever trusted for a decision. Every candidate is re-fetched
+    through `GET /transaction/{id}`, the exact same single-transaction call
+    `stax-webhook` already verifies real production data through, and only that
+    response's own `success`/`meta` fields decide anything. If the list endpoint's
+    filters don't behave as documented, the worst case is zero candidates found and
+    the existing gap simply persists one more cycle — nothing is corrupted, because
+    `stax_set_charge_state()` itself already refuses to downgrade a lock once recorded
+    `processor_succeeded`. Smoke-tested once against production (zero stale locks
+    existed, so it returned `{candidates:0,repaired:0,released:0}` and logged one
+    `admin_audit_log` row) — that confirms it deploys and runs cleanly, **not** that
+    the list endpoint's filters actually work; watch the first real recovery closely.
+  - A lock still unmatched after 2 hours (`RELEASE_HOURS`) is marked `failed` — not in
+    the blocking set — so a family whose charge attempt genuinely never reached Stax
+    (a network failure before Stax received it) is not locked out indefinitely by this
+    job's own caution.
+  - Reuses `stax_set_charge_state`/`stax_finalize_charge` — the exact same RPCs
+    `charge-stax-payment` and `stax-webhook` already call. No new billing logic.
+- **Medium — CSP still allows `unsafe-inline`/`unsafe-eval` — scoped out, not a
+  same-session fix.** Confirmed still true, and confirmed why it isn't a quick
+  tightening: this app has 431+ inline `style="..."` attributes across the HTML alone
+  (many more are generated by JS template-literal rendering, e.g. every admin table
+  row), 17 inline `<script>` blocks across `admin.html`/`index.html`/`portal.html`/
+  `staff.html`/`clockin.html` used for build-time config injection, and at least one
+  CDN library (`xlsx`, per R10) that may depend on `unsafe-eval`. Removing either
+  safely needs either converting all of that markup away from inline styles/scripts,
+  or a per-request nonce — which this static, no-build-step deploy
+  (`assets.directory "."`, see the Development workflow section) cannot generate,
+  since a nonce has to be unique per response and nothing here renders HTML per
+  request except the narrow `run_worker_first` SSR path for `/`. Tightening this is a
+  real, multi-page refactor that needs its own scoped session with a reviewer, the
+  same call this file already made for R13's `alert()`/`confirm()` cleanup — not
+  something to fold into a security-fix pass blind.
+  ⚠️ **Half of this turned out wrong on closer inventory — see "CSP tightening" below
+  (2026-08-28).** `script-src`'s `unsafe-inline`/`unsafe-eval` were removed the same
+  day: only 23 inline event-handler attributes existed repo-wide (not "every admin
+  table row" — that estimate was actually describing `style-src`'s inline `style="..."`
+  attributes, a different directive), and neither CDN library nor this app's own code
+  uses `eval`/`new Function`. `style-src`'s `unsafe-inline` genuinely does stay, for
+  the reason given here — the multi-page refactor call was right for that half.
+- **Low — `stax-webhook-admin-tmp` and `debug-list-webhooks` remain deployed as inert
+  stubs.** Re-confirmed both are still the safe 410 stubs (not the original dangerous
+  code) via `get_edge_function` — no live exposure — but both are still `ACTIVE` and
+  still need a human to delete them from the Supabase dashboard; there is no
+  delete-function tool available in this session, same limitation noted when SX3 was
+  closed by hand earlier in this file.
+- **Low — the new revoke migration drifted too.** Same class as `harden_stax_payments`:
+  `apply_migration` assigns its own timestamp at apply time regardless of what the
+  local filename says, so `20260828030000_revoke_add_day_invoice_authenticated.sql`
+  never matched the live `20260828135150`. Renamed to match. **Lesson for next time:**
+  re-check `list_migrations` immediately after every `apply_migration` call and name
+  the local file from that result, not from a timestamp picked while drafting it —
+  this is now the second time in one day this exact drift happened.
+
+`npm test` — 188/188 (5 new guards for the reconciliation job). `npm run build` —
+`dist/` rebuilt.
+
+### CSP tightening — script-src locked to a hash allowlist (2026-08-28)
+
+The second review round scoped this out as "a real, multi-page refactor, not a
+safe blind fix" — and that was the right call for `style-src` (see below), but
+`script-src`'s `unsafe-inline`/`unsafe-eval` turned out to be far more
+tractable once actually inventoried instead of estimated. Removed both.
+
+**Inline event-handler attributes: 23 total, not "every admin table row."**
+`onclick=`/`onchange=`/`oninput=`/`onblur=`/`onkeydown=` across the whole
+repo — `js/admin/admin-billing.js` (11, all in the Accounts Receivable table:
+lock/unlock, edit-billed, Details, Payment, and the payment-history Refund
+button), one each in `admin-reports.js` (a per-room collapse toggle),
+`admin-finance-hub.js` and `admin-billing-report.js` (both a bare
+`event.stopPropagation()` — dead code, verified no ancestor click listener
+existed for either to guard against, so removed outright rather than
+converted), plus 9 in `payroll.html` (a church-ChMS mockup — "nothing here
+calls it," per this file's Stax section — but still served statically at
+`/payroll.html` under the same global `_headers` CSP, so still had to be
+fixed) and one in `docs/manual.html` (a print button — found only by the new
+drift-guard test below; a root-only file scan had missed it, see that test's
+own comment). All converted to `data-*` attributes plus a **delegated**
+listener on the nearest container that survives every re-render — the
+existing pattern this codebase already used in a few spots (e.g.
+`admin-billing.js`'s own `.inv-adj-issue`/`.inv-adj-discard` buttons), just
+not yet applied to the AR table.
+
+⚠️ **A duplicate-handler bug was caught and fixed before shipping.** The
+first pass added a delegated `.pay-hist-refund-btn` listener on
+`#arTableWrap` in `setupBilling()` *and* left the direct
+`el.querySelectorAll('.pay-hist-refund-btn').forEach(...)` binding already
+sitting in `renderPaymentHistory()` — since that container always renders
+inside `#arTableWrap` (a detail row opened from the AR table), a refund
+click would have fired `refundOnlinePayment()` twice. Removed the direct
+binding; the delegated one covers it.
+
+⚠️ **`blur` doesn't bubble.** The "type a new billed amount" input's old
+`onblur="saveBilledAmount(...)"` needed a bubbling equivalent to delegate
+correctly — used `focusout` (fires in the same cases `blur` does, but
+bubbles), not a capture-phase `blur` listener.
+
+**Inline `<script>` blocks: 22 unique, locked to `'sha256-...'` hashes
+instead of `'unsafe-inline'`.** Verified none are build-time templated —
+`scripts/build.js`'s `patchHtml()` only replaces `<script src="js/...">` dev
+tags with `dist/*.min.js` references; it never touches inline `<script>`
+content, confirmed by reading the function, not assumed. So a hash computed
+from the committed source is exactly what a browser hashes at request time,
+stable across every future `npm run build`.
+
+⚠️ **The first hash-generation pass only scanned root-level `.html` files —
+missed 5 real pages.** `wrangler.jsonc` serves `assets.directory: "."`, and
+`.assetsignore`'s own header comment says it plainly: "everything NOT listed
+here is public on the live site." `docs/manual.html`, `marketing/email.html`,
+`marketing/poster.html`, `marketing/website/index.html`, and the two
+`docs/design_handoff/*.dc.html` mockups are all real, publicly-servable
+files under the same global CSP — a root-only `fs.readdirSync('.')` scan
+silently missed all of them, which is exactly how `docs/manual.html`'s own
+`onclick="printPartB()"` almost shipped unconverted (caught only because the
+new drift-guard test below walks the whole tree and failed on it). Both the
+hash generation and the test that verifies it now walk the full repo,
+respecting the same ignore list as `.assetsignore`.
+
+**`unsafe-eval`: removed, based on evidence, not assumption.** Grepped this
+app's own `js/` for `eval(`/`new Function(` — zero matches (the two
+sub-strings in `js/tests/business-logic.test.js` are the Node test runner's
+own `eval` calls, never shipped to a browser). Downloaded and grepped the
+actual CDN bundles: `xlsx@0.18.5` and `chart.js@4.4.4` — zero
+eval/`new Function` calls in either. `staxjs-captcha.js`, Spreedly's
+`iframe-v1.min.js`, and Google's `recaptcha__en.js` (all loaded by the
+gated, not-yet-production `?staxtest=1` flow) each contain a `new Function`
+or `eval` call, but every one checked is the same well-known
+`globalThis`-detection bundler-polyfill fallback (`n=n||new
+Function("return this")()`, guarded by a `typeof globalThis`/`typeof
+self`/try-catch chain ahead of it) or a legacy `JSON.parse`-unavailable
+shim — dead code in any modern browser, which is why reCAPTCHA is
+extensively deployed on sites with strict `script-src` and no
+`unsafe-eval`. ⚠️ Not proven by executing the code, only by reading it — if
+Stax's flow is ever exercised for real (the existing `?staxtest=1`
+browser-verification TODO elsewhere in this file), watch the console
+specifically for "Refused to evaluate a string as JavaScript" as the
+tell-tale sign this reasoning was wrong for this specific bundle version.
+
+**`style-src`'s `unsafe-inline` was measured, not just estimated, and stays
+for now.** 758 `style="..."` occurrences in `js/*.js` alone (49 confirmed
+dynamic — built with a template-literal `${...}` directly in the attribute
+value), on top of 431+ static ones in the `.html` files themselves
+(CLAUDE.md's earlier count). `'unsafe-hashes'` only allowlists an *exact*
+attribute string, so it cannot cover a value that's different on every
+render (a computed percentage, a data-driven color) — the only real fix for
+those is converting every such call site to `el.style.propertyName = value`
+(individual CSSOM property assignment, which CSP's `style-src` has never
+restricted, unlike `.style.cssText =` or `setAttribute('style', ...)` —
+confirmed only 2 of those exist in `js/`, both easy, but they don't unlock
+anything on their own while everything else still needs `'unsafe-inline'`).
+Converting hundreds of render functions across most of the admin surface is
+a genuinely different scale of change from the 23 event handlers above, and
+this session did not attempt it.
+
+**New drift guards** (`js/tests/business-logic.test.js`, describe block "CSP
+tightening"): script-src carries neither unsafe keyword; every inline
+`<script>` block across the whole repo tree has a matching hash (fails loud
+if someone edits a script's content without recomputing it — the "shipped
+half-live" failure shape this file warns about elsewhere, except here the
+browser's own refusal-to-execute would be the symptom instead of a stale
+bundle); and a repo-wide grep confirms zero inline event-handler attributes
+remain anywhere in `js/` or any `.html` file.
+
+**Verified two ways, not just by reading the diff.** A local Node server
+served the actual repo with the actual `_headers` CSP value enforced,
+Chromium (the browser already available in this environment) loaded all 12
+real app pages plus a hand-written sanity page with a deliberately unhashed
+inline script — the sanity page's script was correctly refused (proving the
+test harness itself can detect a real violation, not just report "clean"
+against a broken check), and all 12 real pages loaded with **zero** CSP
+violations. Two unrelated `pageerror`s did appear on `clockin.html`/
+`payroll.html` (`Cannot read properties of undefined (reading
+'createClient')`) — traced to `net::ERR_CONNECTION_RESET` fetching
+`cdn.jsdelivr.net` from the sandboxed test environment's browser process,
+not a CSP refusal (a real CSP block reads as "Refused to load the script
+... because it violates the following Content Security Policy directive,"
+which never appeared) — a sandbox networking limitation, not a regression.
+
+`npm test` — 191/191 (3 new CSP guards). `npm run build` — `dist/` rebuilt
+and grepped for the new class names (`ar-lock-btn`, `ar-payment-btn`,
+`trends-room-toggle`, etc.) to confirm the delegated-listener conversion
+actually shipped in the bundle, not just the source.
+
+### ⚠️ That PR broke the deploy — `_headers` has a 2,000-character-per-line limit (2026-08-28)
+
+Cloudflare's `Workers Builds` check failed on the CSP-tightening PR within
+minutes of opening it. Not a code bug — the CSP line in `_headers` had grown
+to **2,151 characters** (22 sha256 hashes plus the existing directives), and
+Cloudflare's own `_headers` docs are explicit: *"Each line in the `_headers`
+file has a 2,000 character limit. The entire line, including spacing, header
+name, and value, counts toward this limit."* This repo already has one prior
+incident from exactly this file (the blank-`Pragma:` deploy failure
+documented above) — worth remembering that `_headers` has hard, silent-ish
+limits a normal code review won't catch.
+
+Fixed two ways, one of them a real correctness fix rather than just a
+line-length trim:
+
+- **Extracted the 3 least-critical inline `<script>` blocks to external
+  `.js` files** (`docs/manual.js`, `marketing/poster.js`,
+  `marketing/website/site.js`) instead of hashing them. `script-src 'self'`
+  already covers same-origin external scripts with no hash needed, so this
+  drops 3 hashes (~150 characters) with zero behavior change, and as a
+  side benefit these three pages' JS no longer needs a CSP-hash update
+  every time someone edits their script content.
+- ⚠️ **A real bug in the hash generation, not just a size optimization**:
+  `<script type="text/x-dc" ...>` (the two `docs/design_handoff/*.dc.html`
+  mockups' data blocks) and `<script type="application/ld+json">`
+  (`index.html`'s SEO structured data) were being hashed and counted toward
+  the line **even though browsers never execute either as JavaScript**.
+  Verified empirically before relying on it: a `type="text/x-dc"` block
+  with content matching nothing in the CSP produced **zero** CSP violation
+  in a real browser — script-src simply doesn't gate a `<script>` tag the
+  parser was never going to execute as script in the first place. Excluding
+  non-JS `type` values dropped 3 more hashes and is the *correct* fix, not
+  a shortcut — those hashes were dead weight that would have made every
+  future JSON-LD or `.dc.html` edit falsely look like it needed a CSP
+  update too.
+- Final line: **1,827 characters** (was 2,151), with margin restored
+  specifically so the next inline script or CDN host addition doesn't
+  immediately reopen this exact failure.
+
+**New guards**, both structural (would have caught this before it ever
+reached Cloudflare):
+- A dedicated test asserts the raw `_headers` CSP line stays under 1,950
+  characters — checked against the actual line as written, including the
+  `Content-Security-Policy:` label and leading whitespace, not just the
+  directive value, since that's what Cloudflare actually counts.
+- The script-hash drift guard now excludes non-executable `type=` script
+  tags using the same allowlist a real browser does (absent/empty/
+  `text/javascript`/`application/javascript`/`text/ecmascript`/
+  `application/ecmascript`/`module`), so it stops falsely demanding hashes
+  for content that was never going to run.
+
+**Verified against the actual constraint, not just the test suite**:
+recomputed the real full line (`Content-Security-Policy: ` prefix +
+directives) at 1,827 characters, re-ran the same real-browser CSP check
+from the section above against all four touched pages
+(`payroll.html`/`docs/manual.html`/`marketing/poster.html`/
+`marketing/website/index.html`) — zero script-src violations on any of
+them, confirming the externalized scripts load correctly under `'self'`.
+
+`npm test` — 192/192. `npm run build` — `dist/` rebuilt.
+
+### Sandbox click-through testing reintroduced — `?staxtest=1` is back, differently (2026-08-28)
+
+Asked directly to test the real Stax.js embedded-checkout flow. Turned out
+the two-button `?staxtest=1` design this file describes earlier in the Stax
+section (a second "Pay … with Stax (test)" button, visible only behind the
+flag) had at some point been replaced with the current single-button design
+(`pbStartStaxPayment()` always tries Stax first, silently falling back to
+Authorize.net on `"Online payments are not configured for production yet."`)
+— and nothing in this file had caught that the `?staxtest=1` mechanism was
+gone entirely along with it. **A parent asking to test the flow got routed
+straight to Authorize.net with no way to reach Stax at all**, because
+`STAX_ENVIRONMENT` is still sandbox and the single button's fallback is
+unconditional once that gate refuses.
+
+⚠️ **Flipping `STAX_ENVIRONMENT` to `production` to unblock this would have
+been exactly the mistake the last security review's hard blocker warned
+against** — `STAX_API_KEY` is still a sandbox key, and telling the app it's
+in production would record sandbox test money as if it were real tuition.
+There is no real Stax merchant account yet, so that path was never on the
+table.
+
+Fixed by reintroducing a narrow, explicitly-opt-in bypass — a **two-signal
+gate**, not a reopened hole:
+
+- `pbStaxTestEnabled()` is back in `portal-billing.js`, same shape as the
+  original: reads `?staxtest=1` off the URL once, then sticks in
+  `sessionStorage` for the tab. The button itself is unchanged (same class,
+  same "Pay $X online" label, no visible "(test)" marker) — this only
+  changes what `sandboxTest` value rides along in the request body of
+  `createStaxChargeSession()` and `chargeStaxPayment()`.
+- `create-stax-charge` and `charge-stax-payment` both gate on
+  `isProduction || (STAX_SANDBOX_TEST_ENABLED === "true" && body.sandboxTest === true)`.
+  **Both signals are required.** The server secret alone does nothing to a
+  real parent's normal click, since that request never sets `sandboxTest`.
+  The URL flag alone does nothing unless the operator has also deliberately
+  turned on `STAX_SANDBOX_TEST_ENABLED` — meant to be flipped on only for
+  the duration of an active test session and back off immediately after,
+  the same "belt and suspenders" reasoning the rest of this app's security
+  fixes use (e.g. SX1's revoke-from-both-anon-and-PUBLIC).
+- A charge that goes through this path is **real test money against Stax's
+  real sandbox merchant** — not a faked success. It gets recorded in
+  `billing_payments` exactly like any other Stax charge, which is the whole
+  point: verifying the actual invoice/payment allocation, not just that a
+  button doesn't error.
+- `create-stax-charge`'s response `environment` field now honestly reflects
+  `"sandbox"` when this path is taken, instead of being hardcoded to
+  `"production"` regardless of which gate let the request through.
+
+⚠️ **Setting `STAX_SANDBOX_TEST_ENABLED` is a manual dashboard step** — no
+tool available in this session can set a Supabase Function secret. Turn it
+on only while testing, and turn it back off when done; there's no code-side
+reminder that it's still on.
+
+`npm test` — 192/192 (2 of the older Stax tests were rewritten in place —
+their assumption that `pbStaxTestEnabled` should never exist was itself the
+thing this session found to be stale).
+
+### A real sandbox click-through surfaced a real bug: a fake test phone number, rejected by Stax's own validator
+
+With `?staxtest=1` working, an actual embedded-checkout charge was run
+against a disposable test family in production (`stax-test-20260828@…`,
+invoice `3992`) — the first time this flow had been driven through a real
+browser rather than curl. The modal loaded and the card fields rendered
+correctly, but `pbStaxInstance.tokenize()` failed every time with a bare
+"Payment failed. Please check the card details and try again." — no detail,
+because the thrown error in `pbStaxTokenizeAndCharge()`'s catch block had no
+`.message`, meaning the failure never reached our own server at all.
+
+Traced via the browser's own Network tab, not guesswork: BlockChyp's iframe
+tokenized the test Visa fine, Stax.js then generated a reCAPTCHA token, and
+the actual `POST … /token` request to Stax's API — the one that creates the
+payment method — came back **422** with `{"phone":["The phone format is
+invalid."]}`. `create-stax-charge` passes `family.parent_phone` straight
+through as `extraDetails.phone` in the `tokenize()` call (no local
+formatting or validation of its own — Stax's own validator is authoritative
+here, correctly), and the disposable test family's `parent_phone` had been
+set to `"555-0100"` — 7 digits, no area code. Not a code bug: fixed by
+correcting the test fixture's phone to a properly formatted number
+(`314-555-0100`). Stax's customer record (already created with the bad
+phone on the first attempt) didn't need to be recreated — `tokenize()` sends
+`phone` fresh on every call, so the very next attempt with the corrected
+family row succeeded end to end (BlockChyp tokenize → Stax charge → this
+app's own `charge-stax-payment` recording the `billing_payments` row).
+**Worth remembering for the next sandbox test**: give the disposable test
+family a real-shaped phone number, not an obviously-fake placeholder — Stax
+validates it server-side and will reject a malformed one before ever
+reaching this app's own code.
+
+### Refunding a Stax payment had no admin path at all — built and deployed same session
+
+Testing continued into "can the office refund a Stax charge" — and the
+answer was no, not even partially. `renderPaymentHistory()`'s `canRefund`
+check (`js/admin/admin-billing.js`) was `p.processor === 'authorizenet'`
+only, so a Stax-processed row in the AR payment history got **no Refund
+button at all** — not a broken button, an invisible one. The only edge
+function that submits a reversal to a processor, `admin-refund-payment`,
+explicitly rejects anything but `processor === "authorizenet"`
+(`"Only an online card payment can be reversed this way."`). Confirmed by
+reading both files, not assumed from the symptom: there was no dead code
+to fix, the capability had simply never been built for the second
+processor this app now takes real money through.
+
+Fixed with a direct Stax counterpart, **`admin-refund-stax-payment`**
+(deployed), mirroring `admin-refund-payment`'s exact security posture:
+
+- Same gate — a valid Supabase Auth session **and** `admin_role() = 'full'`
+  (read from the `admin_roles` setting, the same code path
+  `admin-refund-payment` uses).
+- Request body carries **only a `billing_payments` row id** — never an
+  amount. The reversal amount is always that row's own `amount`.
+- **Void vs. refund is decided from Stax's own `is_voidable` flag**, read
+  fresh via `GET /transaction/{id}` before acting — never guessed locally
+  from a locally-stored settlement guess, mirroring how
+  `admin-refund-payment` reads Authorize.net's own `transactionStatus`
+  rather than assuming. Voidable → `POST /transaction/{id}/void`; otherwise
+  → `POST /transaction/{id}/refund` with `{total: <payment's own amount>}`.
+  Both endpoint shapes confirmed against Stax's own API reference
+  (`docs.staxpayments.com/reference/refund-transaction`,
+  `.../void-transaction`) before writing the call — **not** the
+  `/terminal/void-or-refund` endpoint, which is for card-present terminal
+  transactions and requires a `register` id this app has no such thing as.
+- ⚠️ **`billing_payments.processor_transaction_id` can carry this app's own
+  `-inv<id>` or `-credit` suffix** (see `stax_finalize_charge` in
+  `harden_stax_payments.sql` — a charge rolled up across several unpaid
+  invoices is recorded as one row per invoice, all sharing the same real
+  Stax transaction id with a different suffix). `baseTransactionId()` strips
+  that suffix before ever calling Stax's API — sending the suffixed id would
+  have 404'd on a real refund attempt for any rolled-up charge.
+- Already-reversed payments, and payments Stax itself already shows as
+  `is_refunded`/`is_voided`, are both rejected up front — belt and
+  suspenders against a double-click submitting two reversals.
+- **Does not touch `billing_payments` or invoice status** — same "request
+  here, record on confirmation" split as the Authorize.net path and as the
+  charge path itself. The actual reversal is recorded by the already-live
+  `stax-webhook` (`stax_record_reversal`, applied and verified in production
+  earlier this session) once Stax's own `create_transaction` event for the
+  refund/void arrives and is independently re-verified — this function
+  never writes billing state itself, only asks Stax to act.
+- `js/admin/admin-billing.js`'s `canRefund` now checks
+  `REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax'])`; the button
+  carries `data-processor` so the click handler
+  (`refundOnlinePayment(paymentId, processor)`) and `adminRefundPayment()`
+  (`js/supabase.js`) route to the right edge function — the Authorize.net
+  path is completely unchanged, just no longer the only one.
+- Not independently curl-tested end-to-end by this session (doing so would
+  need a real admin login, which this session doesn't have) — verified by
+  reading the deployed source and by the existing security-guard tests
+  below; the live click-through is the director's own test, same as the
+  charge flow above.
+
+`npm test` — 200/200 (8 new guards: full-admin gate, processor/status
+checks, the `is_voidable`-driven branch, the amount always coming from the
+stored row, the suffix-stripping, no direct `billing_payments`/
+`billing_invoices` write, and both the button and the JS routing).
+`npm run build` — `dist/` rebuilt and grepped for
+`admin-refund-stax-payment` (in `dist/supabase.min.js`) and
+`Set(["authorizenet","stax"])` (in `dist/admin.min.js`) to confirm the
+feature actually shipped in the bundles the live site loads, not just the
+source — the standing check this file has asked for since the Bookkeeper
+and Enrollment & Capacity tabs each shipped half-live.
+
+### ⚠️ …and the button above was wired into a genuinely dead section — found within the hour, by the person testing it
+
+Asked directly, minutes after the PR above merged: "where is refunds?" — on
+the live **Finance → Bookkeeper → Accounts Receivable** screen, which shows
+only an aging summary (banner + 0–14/15–29/30+ day bands), no per-payment
+list, no button of any kind. The Refund button this session had just built
+was real, tested, and shipped in the bundle — and **unreachable**, because
+it was added to `admin-billing.js`'s `renderPaymentHistory()`, which only
+ever renders inside `billingArSection`'s `#arTableWrap` — and
+`billingArSection` is one of the ten tools this file's own Finance-tab
+overhaul section already documents as retired from `AP_TOOLS` in the
+2026-08-27 Bookkeeper redesign ("Accounts Receivable, Reconcile Payments,
+Revenue Dashboard…"), unreferenced and therefore unreachable per the
+shell's own rule (`apShowSection()` never shows a section no `AP_TOOLS`
+entry points at). Confirmed by grepping `admin-portal.js` for
+`billingArSection` — zero matches.
+
+⚠️ **This means the pre-existing Authorize.net refund button — not just the
+Stax one this session added — has been unreachable since that same redesign
+merged**, a full day before this session started. Nobody had needed to
+refund an online payment in the meantime, so nothing surfaced it. This
+wasn't caused by this session's change; this session's change just happened
+to add a second, equally-invisible button right next to the first one,
+which is what made it worth checking where "the AR table" that
+`admin-billing.js`'s comments still describe actually renders today.
+
+**The fix wasn't re-registering `billingArSection`.** The whole point of
+retiring it was fewer screens computing the same numbers differently, and
+reopening it as a nav entry would have undone that. Instead, the Refund
+control was added to the place a family's payments are actually visible
+today: the **Ledger drawer** (`_fhLoadDrawerBody()` in
+`admin-finance-hub.js`, opened from Finance → Ledger by clicking any family
+row) — which already had its own "Payments" list and a "+ Record payment"
+button, but no way to reverse one. New `_fhCanRefund()` (same gate as the
+old `renderPaymentHistory()`: processor is `authorizenet` or `stax`,
+positive amount, not itself a reversal, not already reversed) and
+`_fhRefundPayment()` (confirm → `adminRefundPayment(paymentId, processor)`
+→ `_fhLoad()`, the same reload `_fhSubmitPayment()` already does after
+recording a payment, so Bookkeeper's cache invalidates and the drawer
+re-renders with current data). `admin-billing.js`'s original wiring was
+left in place rather than deleted — same "unreferenced, not deleted"
+convention this file uses for every other retired tool, in case
+`billingArSection` is ever revived — but it is dead weight, not a second
+live implementation to keep in sync.
+
+**New drift guard**, specifically to stop this exact class of mistake from
+recurring: a test asserts `billingArSection` stays absent from
+`admin-portal.js` (documenting that it actually is dead, not assuming it)
+*and* that `admin-finance-hub.js` carries the real, reachable refund wiring
+— so a future refund-related change made only to the old file would fail
+this test rather than ship silently unreachable again.
+
+**The lesson to take from this, generalized:** `npm run build` + grepping
+the bundle for a new symbol (this file's standing check since the
+Bookkeeper/Enrollment & Capacity "shipped half-live" incidents) proves a
+change is *in* the bundle. It does not prove the bundle's own code path
+that contains it is one `apShowSection()` will ever call. For any change to
+a section's markup or its rendering function, check `AP_TOOLS` for that
+section id too — a symbol present in the bundle and a feature reachable in
+the shell are two different claims, and this file's existing checklist
+only ever verified the first one.
+
+`npm test` — 203/203 (3 more guards: the dead-code confirmation, the live
+drawer wiring, and the double-refund guard). `npm run build` — `dist/`
+rebuilt and grepped for `_fhRefundPayment`/`_fhCanRefund` to confirm the
+*actually reachable* version shipped, not just the first one.
+
+### ⚠️ It shipped half-live a THIRD time in the same evening — and this time the root cause was in the auto-merge workflow itself, not in this feature
+
+The director tested the fix above from a fresh admin login (version badge
+correctly reading the new build) and the Refund link still wasn't there —
+twice. Both times, `git show origin/main:dist/admin.min.js | grep -c
+_fhRefundPayment` came back `0` while the *source* on `main` had it the
+whole time. Not a browser cache issue either time (ruled out directly: the
+version banner embedded inside `dist/admin.min.js` itself, not just the
+HTML, matched the deployed `package.json` version — so the exact bundle
+running in the browser really was the one just deployed, and it genuinely
+lacked the fix). Two more `claude/**` branches had each merged into `main`
+within the same half hour, each hitting the identical dist conflict this
+file already documents twice above (Bookkeeper, Enrollment & Capacity) —
+except by the third occurrence in one evening it was clear the fix each
+time ("rebuild and re-push") was treating a symptom, not the disease.
+
+**Root cause, found by finally reading `.github/workflows/auto-merge-claude.yml`
+line by line instead of re-patching around it a fourth time:** the
+conflict-resolution step's own comment said "take the branch's dist
+bundles (they were built on top of main's JS)" and unconditionally ran
+`git checkout --theirs` for every conflicting `dist/*.min.js` — with
+**no check on which side was actually newer**. That assumption holds for
+exactly one merge in isolation. It silently breaks the moment a *second*
+`claude/**` branch is queued behind a first: branch B was forked from (and
+last built its own `dist/` against) a `main` that predates branch A's
+merge. By the time B's own turn to merge arrives, "theirs" is B's
+own bundle — stale relative to the `main` this merge is about to produce —
+and the workflow took it anyway, every time, because nothing about the
+rule was version-aware. The `sort -V | tail -1` logic just above it in the
+same step only ever decided the **version number string** written into
+`package.json`/`build-version.js`; it never gated which side's `dist/*.min.js`
+bytes got used. Two completely different questions were being resolved by
+one comparison that only answered the first.
+
+**Fixed by not picking a side at all.** On any conflict that reaches this
+step, `dist/` is now unconditionally **rebuilt from the just-merged source**
+(`npm run build`, then a follow-up commit if it produced a diff) instead of
+`git checkout --theirs` on the bundle files. A bundle generated from the
+tree this exact merge just produced cannot be stale relative to that tree —
+there's no side to pick wrong. This also fixes a subtler case the old rule
+never touched at all: two branches whose `dist/*.min.js` happened to merge
+with **no textual conflict** (neither touched the same bytes) still ended
+up carrying the *old* `__BUILD_VERSION__` banner from whichever side's
+un-conflicting copy git kept, mismatched against the version number the
+`package.json` conflict resolution had just forced to something higher.
+Rebuilding fixes that silently-wrong case too, which a "pick the right
+side" rule could never have covered because there was no wrong side to
+avoid — both were stale relative to the version just written.
+
+⚠️ **This needed Node available earlier in the job.** `actions/setup-node`
++ `npm ci` were previously only run right before the deploy step, after the
+merge had already been pushed. Both moved up to before the merge step, so
+`npm run build` has a working toolchain available mid-conflict-resolution.
+
+**Not chased further:** the `verify` job (which runs per-branch, before
+this) still cannot catch this class of bug on its own — it rebuilds and
+diffs `dist/` against that one branch's own `js/`, which was correct
+*for that branch in isolation* at push time. The staleness only exists
+relative to whatever `main` looks like at the moment its merge is actually
+processed, which `verify` has no way to know in advance. The fix has to
+live in `merge-to-main`, where the real merged tree exists — which is
+exactly where it now does.
+
+---
+
+## Ledger's "Total to bill" was a net figure with nothing showing its parts — broken into a 4-box strip (2026-08-28)
+
+Asked directly: the Ledger tab's headline stat read as one opaque number, with
+no visibility into how much of it was tuition versus discounts versus fees.
+`_fhRenderLedger()` (`js/admin/admin-finance-hub.js`) now shows a chained
+sequence — **Tuition (before discounts) → Discounts → Fees → Amount to
+collect** — instead of the single `fh-stat-month` box. Nothing new is
+computed: `computeBillMonthExceptions()` (`js/admin/admin-bill-month.js`)
+already produces `base` (net of both the individual and sibling discount),
+`discount` (the sum of both), and the fee fields per family; `_fhLoad()` was
+only keeping `total` and `causes` off that object and discarding the rest.
+It now carries `base`/`discount`/`changeFees`/`regFee`/`familyNewFee`/
+`creditTotal` through into `_fhRows` too.
+
+- **`grossTuition = Σ(base + discount)`** — the pre-discount sticker price,
+  reconstructed by adding the discount back onto the already-net `base`.
+- **`discountsTotal = Σ(discount)`**, shown as `_fhMoney(-discountsTotal)` so
+  the existing negative-number formatting in `_fhMoney()` supplies the minus
+  sign rather than a hand-built one.
+- **`feesTotal = Σ(changeFees + regFee + familyNewFee − creditTotal)`** — the
+  same fee fields the per-family exception card in `admin-bill-month.js`
+  already itemizes, net of any account credit applied that month.
+- `grossTuition − discountsTotal + feesTotal === monthTotal` (the existing
+  "Amount to collect" figure), by construction — nothing about the final
+  number's *own* computation changed, only what got exposed alongside it.
+
+⚠️ **A real bug surfaced while wiring this up, not introduced by it.**
+`computeBillMonthExceptions()`'s `total` was `base + regFee + familyNewFee −
+creditTotal` — no `changeFees`. The sibling `prevFamilyTotal` calculation nine
+lines above it *does* include `c.changeFees`, so the current month's total and
+the prior month's total (used for the same-screen "vs. last time" comparison)
+were computed on different bases. Any family with a schedule-change fee this
+month was undercounted in the Ledger's month total, the "Bill the Month"
+screen's own total, and the per-family "Approve $X" button — though never in
+what actually got billed, since `reconcileBillingInvoice()` recomputes the
+real invoice amount server-side and never reads this client total. Fixed by
+adding `+ changeFees` to the formula; flagged with an inline comment at the
+fix site so it isn't lost the way this file warns about elsewhere.
+
+`npm test` — 200/200 (no new guards needed; existing Stax/CSP/billing-integrity
+suites all held). `npm run build` — `dist/` rebuilt and grepped for `Amount to
+collect` / `before discounts` in `dist/admin.min.js` to confirm the new strip
+actually shipped in the bundle, not just the source.
+
+### ⚠️ The Fees box was toggling between ~$300 and ~$15,300 — a real registration-fee-year race, not a rendering bug (2026-08-28)
+
+Reported directly: "sometimes the fees box will show 15,300 dollars and
+sometimes 0, i think it should be 0 i havent charged fees this month like
+that." Checked live against production (`dahdstopsumxnqvdclmy`) rather than
+guessed at — the center's real registration-fee settings are `$150`/child
+capped at `$200`/family, renewal date **09-01**. Today (08-28) is four days
+before that renewal, so the correct fiscal cycle year is **2025**, and under
+that year only **2 children** in August's roster still owe the fee (~$300).
+`reg_fee_paid_year` is `2025` for 135 students, `NULL` for 17 — confirms most
+of the roster already paid for the cycle that's still open.
+
+**Root cause: `currentFeeCycleYear(window._regFeeRenewalDate)` had no fallback
+fetch.** `computeBillMonthExceptions()` (`admin-bill-month.js`) and
+`generateFamilyBillingReport()` (`admin-reports.js`) both already guard the
+three dollar-amount fee settings with `window._X ?? (await
+fetchSetting(...))` — but the renewal-date line was reading
+`window._regFeeRenewalDate` directly, with no such guard. `setupRegFee()`
+(`admin-settings.js`, called from `admin-init.js`) is what actually populates
+that global, and it's async — if either screen was opened before it
+resolved, `currentFeeCycleYear()` silently fell back to its own internal
+default, `'01-01'`. Since `'01-01'` has already passed this calendar year,
+that default computes `currentYear = 2026` (this year) instead of the true
+`2025` (last year's cycle, still open until 09-01) — and because none of the
+135 already-paid students carry `reg_fee_paid_year = 2026` yet, **every one
+of them looks unpaid** under the wrong year. Verified the exact swing live:
+117 of August's booked children would be flagged "owed" under the buggy 2026
+read versus 2 under the correct 2025 read — $15,550 vs $300 in raw
+registration-fee terms, which lines up with the $15,300 the Fees box (which
+also nets in change fees / new-family fee / credits) actually showed.
+
+⚠️ **`generateFamilyBillingReport()`'s copy of this bug was the more serious
+one.** Unlike the Ledger/Bill-the-Month preview, that report *stamps*
+`reg_fee_paid_year` onto every student it charges the fee to the moment it's
+generated — so hitting this race there wouldn't just misdisplay a number, it
+would have charged and permanently marked roughly 117 children as paid for
+the wrong cycle. Checked live before writing this up: zero students currently
+carry `reg_fee_paid_year = 2026`, so this hadn't fired yet — the landmine was
+live, not sprung.
+
+Fixed in both places with the same `window._regFeeRenewalDate ?? (await
+fetchSetting('registration_fee_renewal_date'))` guard the other three fee
+settings already use, matching each file's own existing style
+(`??`-chained in `admin-bill-month.js`, try/catch in `admin-reports.js`,
+where the three settings just above it already use that idiom).
+
+Also fixed in passing: the Finance family drawer's own header (`.inc-drawer`
+/ `.inc-scrim`, shared with the incident drawer) was `z-index: 60/61` while
+`.admin-header` is `position: sticky; z-index: 100` — the sticky green top
+bar rendered on top of the drawer's own head, cutting off the family name at
+the top of the panel every time it opened. Raised to `150`/`151`, clearing
+every other `z-index` in the app under `500` (the mobile tab bar and
+above) while staying below the toast/modal tier (`1000`+). This is a shared
+component, so the fix isn't Finance-specific — it clears the same bug for
+the incident drawer too, wherever else `.inc-drawer` is used.
+
+`npm test` — 200/200. `npm run build` — `dist/` rebuilt and grepped for
+`registration_fee_renewal_date` in `dist/admin.min.js` to confirm both fixes
+shipped in the bundle.
+
+### ⚠️ The Ledger's "owed" banner counted every drafted-but-unsent invoice as a real receivable (2026-08-28)
+
+Follow-up question from the director, prompted by the Fees-box investigation
+above: why does the "owed" banner (83 families, $54,014.56) show fewer
+families than "Ready to send" (97), and shouldn't accounts from before
+August already be cleared since real invoicing/billing here is brand new?
+
+Checked live before assuming either half of that was right. **There is no
+pre-August backlog to clear** — `billing_cycles`/`billing_invoices` for
+2026-06 and 2026-07 have **zero rows**. Every dollar of the $54,014.56 is
+from **August itself**: 95 `billing_invoices` rows exist for August, and
+**94 of them had never been sent** (`sent_at IS NULL`) — only one real send
+had ever gone out (a $5.00 Stax sandbox test charge from earlier this
+session, `invoice 3992`, $4 already paid on it). Those 94 unsent drafts'
+combined `final_amount` was **$54,013.56** — matching the owed banner almost
+to the dollar.
+
+**Root cause:** `reconcileBillingInvoice()` drafts a `billing_invoices` row
+for every clean family the moment Bill the Month computes them — well
+before Release/Send is ever clicked (see "Billing writes are now
+recompute-only" above). `_buildArRows()` (`admin-billing.js`) read
+`billed = inv?.final_amount` with no check on `inv.sent_at`, so a drafted
+invoice nobody has emailed yet counted as a real receivable — inflating
+"owed," inviting "Nudge all 83" to nudge families for bills they had never
+actually been shown, and (before this fix) would have misread as
+`status: 'overdue'` rather than simply not-yet-billed.
+
+This is the exact same principle FS29 already established for **aging**
+("an invoice nobody has sent is not overdue") — applied one step earlier:
+**an invoice nobody has sent isn't owed yet either.**
+
+⚠️ **`billed` itself was deliberately left alone** — only `outstanding`/
+`status` are now gated on `sent_at` (`billedIfSent`, a separate local). The
+raw `billed` figure is still what the Finance drawer's "Base tuition" line
+and the Ledger's month-history fallback read (`r.ar?.billed || r.total`) —
+both want "what does the draft say," sent or not, and zeroing `billed`
+outright would have shown $0.00 tuition in the drawer for anyone whose
+invoice hadn't been sent. Two call sites in `admin-finance-hub.js`'s "Paid
+in full" chip count were checking `r.ar?.billed > 0` as a proxy for "this
+family has been sent something" — that stopped being true once `billed`
+could be nonzero while unsent, so both were switched to check `r.ar?.sentAt`
+directly, the thing they actually meant.
+
+Guarded with a real behavioral test (not just a source grep, given the
+dollar stakes): `_buildArRows` copied into
+`js/tests/business-logic.test.js` with its own drift guard, plus four
+cases — an unsent draft is billed-but-not-owed, the same amount becomes
+owed once sent, a fully-paid sent invoice reads `paid`, and a payment
+against an unsent draft can't push `outstanding` negative.
+
+`npm test` — 205/205 (4 new behavioral cases + 1 drift guard). `npm run
+build` — `dist/` rebuilt; `_buildArRows` confirmed present in
+`dist/admin.min.js` (the specific local-variable rename that carries the
+fix doesn't survive minification as a greppable symbol — this is one of the
+rare fixes where the standing "grep the bundle for a symbol only your
+change introduces" check doesn't apply, since nothing new was added at
+module scope).
 
 ---
 

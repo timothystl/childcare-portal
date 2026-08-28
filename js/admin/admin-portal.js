@@ -177,17 +177,17 @@ const AP_TOOLS = [
     // Report survives as this tool's own second tab (Ledger / Billing
     // Report), not a separate nav entry — see admin-finance-hub.js and the
     // nested #billingReportSection markup in admin.html.
-    // customHeader: Finance is the tab's one real tool (AP_TABS.finance's own
-    // defaultTool), and the design handoff puts its title/subtitle on the
-    // SAME row as the month switcher and search — those live inside
-    // financeHubSection (admin.html's own .fh-head), not in the generic
-    // shell. apRenderDetail() renders nothing into #apDetailHead for this
-    // tool, so there is exactly one header, not a shell heading stacked
-    // above a second toolbar row. The icon still shows in the sidebar nav
-    // item; only the page header omits it, matching the handoff's plain
-    // "Finance" title.
-    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance', customHeader: true,
-      blurb: 'One place for billing, invoices, and who owes' },
+    // Finance is the tab's one real tool (AP_TABS.finance's own defaultTool),
+    // and the design handoff puts its title/subtitle on the SAME row as the
+    // month switcher and search — those live inside financeHubSection
+    // (admin.html's own .fh-head). apRenderDetail() no longer renders a shell
+    // header for any tool (see that function), so this needs no special
+    // handling anymore — it just always worked out that way.
+    // No `blurb` — apRenderDetail() hasn't rendered a shell header for any
+    // tool since 2026-08-28 (see that function's own comment), and this
+    // entry's own on-screen title was removed from #fhBody the same day, so
+    // the field had nothing left reading it.
+    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
 
@@ -241,18 +241,14 @@ const AP_TOOLS = [
     // sidebar's dashed note (apNavHtml) points to Staff → Pay & Policy
     // instead of inventing two undesigned screens.
 
-    // ── Classrooms · Food Program ──
-    // Moved out of Finance entirely per the handoff: "a program to run, not
-    // money to manage." Its claim total still posts into Money In — nothing
-    // about what the claim computes changed, only which tab opens it.
-    { key: 'cacfpMeal',   pane: 'cacfp', section: 'cacfpMealSection',   tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '🍽️', name: 'Daily Meal Counts',
-      blurb: 'Record meals served for the CACFP claim.' },
-    { key: 'cacfpMenu',   pane: 'cacfp', section: 'cacfpMenuSection',   tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '📋', name: 'Menu Planner',
-      blurb: 'Plan compliant menus week by week.' },
-    { key: 'cacfpIncome', pane: 'cacfp', section: 'cacfpIncomeSection', tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '💵', name: 'Income Eligibility',
-      blurb: 'Household eligibility forms and tiering.' },
-    { key: 'cacfpClaims', pane: 'cacfp', section: 'cacfpClaimsSection', tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '🧾', name: 'Monthly Claim',
-      blurb: 'Assemble and export the monthly reimbursement claim.' },
+    // ── Classrooms · Food Program — retired 2026-08-28 ──
+    // The four CACFP tools (Daily Meal Counts, Menu Planner, Income
+    // Eligibility, Monthly Claim) are removed from the sidebar at the
+    // director's request. Same convention as every other retirement in this
+    // file: unreferenced by AP_TOOLS = unreachable, per the shell's own rule.
+    // `cacfpMealSection`/`cacfpMenuSection`/`cacfpIncomeSection`/
+    // `cacfpClaimsSection` stay in admin.html and `js/admin/admin-cacfp.js`
+    // stays in the tree, unreferenced, in case the program is ever revived.
 
     // ── Planning · Waitlist ──
     // Consolidation pass (design_handoff_planning_market, 2026-08-27): 15
@@ -755,66 +751,37 @@ function apShowSection(tool) {
         const open = !!tool && s.id === tool.section;
         s.classList.toggle('ap-hidden-tool', !open);
 
-        // The shell now renders the tool's name above the card, so the
-        // section's own <h2> is a duplicate — but only hide it when it is
-        // inert text. Several carry controls inside the heading (Care
-        // Calendar's "New Registration" button), and those must stay
-        // reachable.
+        // Never hide a section's own heading. This used to strip it whenever
+        // the shell printed the tool's name+blurb above it — but that shell
+        // tile (icon + name + blurb, from apRenderDetail below) was itself
+        // the unwanted repetition: the sidebar already names the open tool,
+        // and the section's own heading already carries a more specific
+        // description. The shell tile is gone now (see apRenderDetail), so
+        // there is nothing left for a section's own <h2> to duplicate.
         //
-        // ⚠️ EXCLUDE .collapse-toggle. setupCollapsibles() (admin-settings.js)
-        // injects a collapse/expand <button> into every .collapsible-section's
-        // <h2>, and that button used to be a legitimate reason to keep a
-        // heading visible — until css/admin-portal.css's
-        // ".ap-on .admin-section.is-collapsed .collapsible-body { display:
-        // block !important; }" made it a dead control inside this shell (every
-        // section renders open regardless of the toggle's state). Counting it
-        // as a "real control" left every .collapsible-section's own <h2>
-        // visibly duplicated under the shell's header, on every tool, on every
-        // page — found live 2026-08-28. Fixing the class check here, once,
-        // covers every section that has this pattern; removing
-        // `collapsible-section` from individual sections' markup (done for
-        // the Classroom tab's tools in the same session) is good hygiene but
-        // was never going to be a complete fix on its own.
-        const h2 = s.querySelector(':scope > h2');
-        const hideHeading = open && !!h2 && !h2.querySelector('button:not(.collapse-toggle), input, select, a');
-        if (h2) h2.classList.toggle('ap-dup-head', hideHeading);
-
-        // A <p class="section-desc"> directly under the h2 is the same
-        // duplicate-blurb pattern as the h2 itself — the shell already prints
-        // the tool's blurb above the card, so a section-desc restating it here
-        // reads as the tool's name+description printed twice. The check above
-        // only ever covered the h2; found live 2026-08-28 on the Waitlist &
-        // Capacity Planner (its own h2/p pair was deleted outright — its inner
-        // renderWaitlistPlanner() already renders a real header) and again on
-        // Import Waitlist from File, which has no inner header of its own, so
-        // hiding here — not deleting the markup — is the fix for it. Scoped to
-        // the paragraph immediately after the h2 specifically, so a section
-        // that uses .section-desc further down for real per-field help text
-        // is untouched.
-        const descP = h2 && h2.nextElementSibling;
-        if (descP && descP.tagName === 'P' && descP.classList.contains('section-desc')) {
-            descP.classList.toggle('ap-dup-head', hideHeading);
-        }
+        // waitlistPlannerSection is the one exception: it carries no static
+        // <h2>/<p> at all (deleted, not just hidden) because its inner
+        // renderWaitlistPlanner() already renders a real header of its own
+        // (icon, name, subtitle, tab pills) into #wlpRoot — keeping a static
+        // pair there would still have duplicated against THAT header even
+        // with the shell tile gone. Every other section keeps its own
+        // heading as its one and only header.
     });
 }
 
 function apRenderDetail(tool) {
     // No back link: the sidebar keeps its place and highlights where you
-    // are, which is the way back. A heading instead, so a tool page starts
-    // at the same left edge as a dashboard heading and nothing shifts.
-    // customHeader tools (Finance) render their own header inline in their
-    // own section — see the AP_TOOLS comment on financeHub — so the shell
-    // renders nothing here rather than stacking a duplicate above it.
+    // are, which is the way back. No shell heading either — every section
+    // already carries its own <h2> + description, and printing the tool's
+    // name and blurb again above it just retyped the same header a second
+    // time on every tab (found live 2026-08-28, screenshotted on Waitlist &
+    // Capacity Planner: the shell's "Waitlist & Capacity Planner" tile sat
+    // directly on top of the section's own near-identical subtitle). Finance
+    // (`customHeader: true`) already skipped this shell tile for the same
+    // reason; every tool now gets that same treatment instead of carrying a
+    // one-off flag.
     const head = document.getElementById('apDetailHead');
-    if (head) {
-        head.innerHTML = tool.customHeader ? '' : `
-            <div class="ap-head">
-                <div>
-                    <h2>${tool.icon} ${escHtml(tool.name)}</h2>
-                    <p>${escHtml(tool.blurb)}</p>
-                </div>
-            </div>`;
-    }
+    if (head) head.innerHTML = '';
 
     apShowSection(tool);
 
@@ -1057,11 +1024,12 @@ async function apLoadLive() {
 function apRenderDashboard(page) {
     const live = apState.live;
     if (!live) {
-        page.innerHTML = `
-            <div class="ap-head"><div>
-                <h2>${escHtml(AP_TABS[apState.tab].label)}</h2>
-                <p>Loading today's figures…</p>
-            </div></div>`;
+        // No tab-name heading here: the sidebar already highlights the open
+        // tab, and the header chip (#currentTabLabel) already names it — a
+        // third "Planning"/"Market Analysis" as a page <h2> was pure repeat,
+        // the same class of retyping fixed in apRenderDetail() above (found
+        // live 2026-08-28, on the dashboard rather than a tool this time).
+        page.innerHTML = `<p class="ap-dash-stamp">Loading today's figures…</p>`;
         apLoadLive().then(() => { if (!apState.view) apRender(); })
                     .catch(err => {
                         console.error('apLoadLive:', err);
@@ -1070,7 +1038,6 @@ function apRenderDashboard(page) {
         return;
     }
 
-    const meta = AP_TABS[apState.tab];
     const builder = {
         director:   apDashDirector,
         classrooms: apDashClassrooms,
@@ -1081,13 +1048,11 @@ function apRenderDashboard(page) {
     }[apState.tab] || apDashSimple;
     const dash = builder(live);
 
+    // No tab-name heading here either — see the loading-state comment above.
+    // dash.stamp is real per-load context (a week, a count, a data source),
+    // not a repeat of the tab's own name, so it stays as a plain caption.
     page.innerHTML = `
-        <div class="ap-head">
-            <div>
-                <h2>${escHtml(meta.label)}</h2>
-                <p>${escHtml(dash.stamp)}</p>
-            </div>
-        </div>
+        <p class="ap-dash-stamp">${escHtml(dash.stamp)}</p>
         ${dash.needsYou && dash.needsYou.length ? apNeedsYouHtml(dash.needsYou) : ''}
         ${dash.kpis.length ? `<div class="ap-metrics">${dash.kpis.map(apKpiHtml).join('')}</div>` : ''}
         <div class="ap-body">
@@ -1630,12 +1595,9 @@ function apDashClassrooms(live) {
                 sub: 'Headcount against capacity. A room at ratio needs another staff member before the next child.',
                 body: apBarsHtml(bars), tools: ['attBoard', 'enrollCap'] }),
         ],
-        // Below 900px this is the only path in to the whole Food Program
-        // group — nothing else on this dashboard mentioned CACFP at all.
-        right: [
-            apPanel({ title: 'Food Program', sub: 'CACFP meal counts, menus, income, and claims.',
-                body: '', tools: ['cacfpMeal', 'cacfpMenu', 'cacfpIncome', 'cacfpClaims'] }),
-        ],
+        // Food Program panel removed 2026-08-28 along with its AP_TOOLS
+        // entries — see the retirement comment above `enrollCap`'s block.
+        right: [],
         attention,
     };
 }

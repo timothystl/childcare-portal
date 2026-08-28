@@ -22,8 +22,8 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=26">
-    <link rel="stylesheet" href="css/admin-portal.css?v=3">
+    <link rel="stylesheet" href="css/admin.css?v=28">
+    <link rel="stylesheet" href="css/admin-portal.css?v=7">
 </head>
 <body class="admin-body">
 
@@ -425,7 +425,7 @@
                     </button>
                 </h2>
                 <div class="filters">
-                    <input type="text" id="searchInput" placeholder="Search by parent, child, or email…">
+                    <input type="text" id="searchInput" placeholder="Search by parent, child, or email…" autocomplete="off">
                     <select id="roomFilter">
                         <option value="">All rooms</option>
                     </select>
@@ -543,13 +543,11 @@
              tab's only tool; there is no dashboard/tool split here. -->
         <div class="tab-pane hidden" id="tab-messages">
             <section class="admin-section" id="messagesUnifiedSection">
-                <!-- The notify toggle used to live inside the h2, which meant
-                     apShowSection()'s ap-dup-head logic (admin-portal.js) —
-                     which only auto-hides an h2 with no interactive children —
-                     never hid it. That put "💬 Messages" plus the identical
-                     blurb sentence on screen twice: once from the shell, once
-                     here. Moved to its own row so the h2 is plain again and
-                     hides like every other tool's does. -->
+                <!-- The notify toggle used to live inside this h2. The shell
+                     no longer prints its own duplicate header for any tool
+                     (see apRenderDetail() in admin-portal.js), so this h2 is
+                     the only heading Messages shows — moved the toggle to its
+                     own row below rather than crowding it into the title. -->
                 <h2>💬 Messages</h2>
                 <div class="msg-toolbar-top">
                     <label id="apPushToggleWrap" class="msg-notify-toggle">
@@ -563,7 +561,7 @@
 
                 <div class="msg-toolbar">
                     <div class="ap-seg" id="msgFilterSeg"></div>
-                    <input type="text" id="msgSearch" placeholder="Search by name…" class="family-search-input" style="flex:1;min-width:160px">
+                    <input type="text" id="msgSearch" placeholder="Search by name…" class="family-search-input" style="flex:1;min-width:160px" autocomplete="off">
                     <button type="button" id="msgOpenComposeBtn" class="btn-secondary">✎ Message a family</button>
                     <button type="button" id="msgOpenAnnounceBtn" class="btn-primary">📣 New announcement</button>
                 </div>
@@ -601,17 +599,16 @@
                  plus the demand-by-month and age-out rollups inline in the Grid.
                  See renderWaitlistPlanner() in js/admin/admin-waitlist.js.
 
-                 No static h2/p here on purpose. apShowSection()'s ap-dup-head
-                 logic (admin-portal.js) is meant to auto-hide a section's own
-                 duplicate heading under the shell's, but only ever targeted the
-                 h2 itself — a sibling <p class="section-desc"> was never covered,
-                 so this tool's own name+blurb rendered twice (once from the
-                 shell, once here) regardless. Same root cause and same fix as
-                 the Messages tab (see #messagesUnifiedSection's comment): since
-                 renderWaitlistPlanner() already renders a real header (icon,
-                 name, subtitle, tab pills) into #wlpRoot below, a static h2/p
-                 here was pure duplication, not a fallback anything depended on
-                 — deleted rather than patched to hide correctly. -->
+                 No static h2/p here on purpose — a concurrent session (same
+                 day, same live bug, same screenshot) removed the shell's own
+                 name+blurb tile entirely (see apRenderDetail()'s comment in
+                 admin-portal.js), which means every OTHER section now relies
+                 on its own <h2>/<p> as the one real header. This section is
+                 the exception: renderWaitlistPlanner() already renders a real
+                 header of its own (icon, name, subtitle, tab pills) into
+                 #wlpRoot below, so a static h2/p here would still duplicate
+                 against THAT even with the shell tile gone — left out rather
+                 than added back. -->
             <section class="admin-section" id="waitlistPlannerSection">
                 <div id="wlpRoot" style="margin-bottom:20px;"><p class="empty-hint">Loading…</p></div>
             </section>
@@ -641,7 +638,7 @@
                         </div>
                         <div class="wl-notify-field">
                             <label>Notify This Email on New Inquiries</label>
-                            <input type="email" id="wlNotifyEmail" placeholder="director@timothystl.org">
+                            <input type="email" id="wlNotifyEmail" placeholder="director@timothystl.org" autocomplete="off">
                         </div>
                     </div>
                     <div class="wl-notify-field">
@@ -748,8 +745,15 @@
                  css/admin-portal.css's ".ap-on .admin-section.is-collapsed
                  .collapsible-body { display: block !important; }" forces the
                  body open inside this shell regardless. Dropping the class
-                 removes a dead control and lets the intended single-header
-                 behavior apply. -->
+                 removed a dead control, but the underlying duplication (the
+                 shell's own name+blurb tile sitting on top of every section's
+                 own heading) was still there for sections whose <h2> DID hide
+                 correctly — the section's .section-desc paragraph right below
+                 it was never covered by that hiding logic at all. Fixed for
+                 good 2026-08-28 by removing the shell's tile entirely
+                 (apRenderDetail() no longer renders anything into
+                 #apDetailHead) rather than continuing to patch which parts of
+                 a section's own heading get hidden underneath it. -->
             <section class="admin-section" id="roomCapacityOverviewSection">
                 <h2>📆 Room Capacity Overview</h2>
                 <p class="section-desc">Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as the three screens it replaces. Click a room to see the same month broken out by weekday.</p>
@@ -790,11 +794,11 @@
                         <div class="admin-wl-section-label">Parent / Guardian</div>
                         <div class="admin-wl-row">
                             <label>Name <span class="req">*</span></label>
-                            <input type="text" id="adminWlParentName" required placeholder="Full name">
+                            <input type="text" id="adminWlParentName" required placeholder="Full name" autocomplete="off">
                         </div>
                         <div class="admin-wl-row">
                             <label>Email <span class="req">*</span></label>
-                            <input type="email" id="adminWlParentEmail" required placeholder="email@example.com">
+                            <input type="email" id="adminWlParentEmail" required placeholder="email@example.com" autocomplete="off">
                         </div>
                         <div class="admin-wl-row">
                             <label>Phone <span class="req">*</span></label>
@@ -804,7 +808,7 @@
                         <div class="admin-wl-section-label" style="margin-top:14px">Child</div>
                         <div class="admin-wl-row">
                             <label>Child's Name <span class="req">*</span></label>
-                            <input type="text" id="adminWlChildName" required placeholder="Child's full name">
+                            <input type="text" id="adminWlChildName" required placeholder="Child's full name" autocomplete="off">
                         </div>
                         <div class="admin-wl-row">
                             <label></label>
@@ -872,7 +876,7 @@
                         <div id="adminWlSibRow" class="hidden">
                             <div class="admin-wl-row">
                                 <label>Sibling's Name</label>
-                                <input type="text" id="adminWlSibName" placeholder="Sibling's name">
+                                <input type="text" id="adminWlSibName" placeholder="Sibling's name" autocomplete="off">
                             </div>
                             <div class="admin-wl-row">
                                 <label>Sibling's Room</label>
@@ -1187,6 +1191,43 @@
 
                 </div>
 
+                <!-- Policies & enrollment forms — re-enabled 2026-08-28 (was
+                     "hidden 2026-07, may bring back later" as its own
+                     collapsible tab-level section; now a card inside the
+                     unified Settings page instead, matching how ChMS Finance
+                     API was folded in below). Feeds two places from the same
+                     `enrollment_forms` setting: the public /enroll page and
+                     the parent portal's Account → Documents → "Policies and
+                     forms" card (js/portal/portal-documents.js
+                     pdFormsSection()) — that card has said "The office
+                     hasn't posted any forms here yet" since forms were
+                     retired, because nothing let the office post one.
+                     setupEnrollmentForms()/loadEnrollmentForms()/
+                     saveEnrollmentForms()/uploadEnrollmentFormFile()
+                     (admin-settings.js / js/supabase.js) were never removed —
+                     only this markup was — so no JS changes were needed. -->
+                <div class="ap-panel" id="enrollmentFormsCard">
+                    <div class="ap-panel-head"><h3>📋 Policies &amp; enrollment forms</h3></div>
+                    <div class="set-card-body">
+                        <p class="section-desc" style="margin-top:0">Upload the forms and policies families need. They appear as download cards on the public <a href="/enroll" target="_blank">/enroll page</a> and in every family's portal under Account → Documents → "Policies and forms." PDF or Word (.doc/.docx), 10&nbsp;MB max per file.</p>
+                        <div id="enrollmentFormsList" style="margin-top:12px;">
+                            <p class="empty-hint">Loading…</p>
+                        </div>
+                        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                            <p style="font-weight:600;font-size:.9em;margin-bottom:10px;">Add a form</p>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                                <input type="text" id="newEnrollFormName" placeholder="Form name (e.g. Child Enrollment Form)" class="form-input">
+                                <input type="text" id="newEnrollFormDesc" placeholder="Short description (optional)" class="form-input">
+                            </div>
+                            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                                <input type="file" id="newEnrollFormFile" accept=".pdf,.doc,.docx" style="font-size:.9em;">
+                                <button id="uploadEnrollFormBtn" class="btn-primary" style="padding:6px 16px;">⬆️ Upload</button>
+                                <span id="uploadEnrollFormStatus" class="rates-status"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Access & oversight — full width, lesser-used -->
                 <div class="ap-panel" id="setAccessCard">
                     <div class="ap-panel-head"><h3>Access &amp; oversight</h3></div>
@@ -1199,7 +1240,7 @@
                             <p class="section-desc" style="margin-top:16px;font-weight:600;color:#444">Add Admin User</p>
                             <form id="addAdminRoleForm" autocomplete="off">
                             <div class="add-role-row">
-                                <input type="email" id="newRoleEmail" placeholder="email@example.com" class="family-search-input" style="flex:1;min-width:160px" autocomplete="off">
+                                <input type="email" id="newRoleEmail" placeholder="email@example.com" class="family-search-input" style="flex:1;min-width:160px" autocomplete="username">
                                 <input type="password" id="newRolePassword" placeholder="Password (min 6 chars)" class="family-search-input" style="width:190px" autocomplete="new-password">
                                 <select id="newRoleLevel" class="family-search-input">
                                     <option value="full">Full Access</option>
@@ -1281,26 +1322,6 @@
             </section>
             -->
 
-            <!-- Enrollment Forms — hidden 2026-07, may bring back later
-            <section class="admin-section collapsible-section" id="enrollmentFormsSection">
-                <h2>📋 Enrollment Forms</h2>
-                <p class="section-desc">Upload the forms new families need to complete. They appear as download cards on the public <a href="/enroll" target="_blank">/enroll page</a>. PDF, Word (.doc/.docx), 10 MB max per file.</p>
-                <div id="enrollmentFormsList" style="margin-top:12px;"></div>
-                <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
-                    <p style="font-weight:600;font-size:.9em;margin-bottom:10px;">Add a form</p>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-                        <input type="text" id="newEnrollFormName" placeholder="Form name (e.g. Child Enrollment Form)" class="form-input">
-                        <input type="text" id="newEnrollFormDesc" placeholder="Short description (optional)" class="form-input">
-                    </div>
-                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-                        <input type="file" id="newEnrollFormFile" accept=".pdf,.doc,.docx" style="font-size:.9em;">
-                        <button id="uploadEnrollFormBtn" class="btn-primary" style="padding:6px 16px;">⬆️ Upload</button>
-                        <span id="uploadEnrollFormStatus" class="rates-status"></span>
-                    </div>
-                </div>
-            </section>
-            -->
-
             <!-- Offer Email Links — hidden 2026-07, may bring back later
             <section class="admin-section collapsible-section" id="offerLinksSection">
                 <h2>🔗 Offer Email Links</h2>
@@ -1362,23 +1383,40 @@
             <section class="admin-section collapsible-section" id="staffScheduleSection">
                 <h2>🗓️ Build Staff Schedule</h2>
                 <p class="section-desc">Assign staff to rooms and shifts for the week, against what the ratios require. Closed days are excluded automatically.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="staffWeekOf">Week of (Monday)</label>
-                        <input type="date" id="staffWeekOf">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="saveScheduleBtn"   class="btn-primary">💾 Save Schedule</button>
-                        <button id="exportStaffBtn"    class="btn-secondary">&#8595; Export Excel</button>
-                        <button id="emailStaffScheduleBtn" class="btn-secondary">✉️ Email Schedules</button>
-                        <button id="printStaffScheduleBtn" class="btn-secondary">&#128424; Print schedule</button>
-                    </div>
+                <!-- ⚠️ h2/p must stay DIRECT children of .admin-section: apShowSection()
+                     (admin-portal.js) only recognizes a section's own heading via
+                     `:scope > h2`, and only hides it (avoiding a duplicate under the
+                     shell's own header) when it carries no real control. Nesting h2
+                     inside a flex wrapper — tried first, to put Print top-right next
+                     to the title like the mockup — silently broke that selector and
+                     brought back the exact double-heading bug this app already spent
+                     a session fixing (see "Every redesigned Classroom-tab tool showed
+                     its own heading twice" below). Kept the button row as its own
+                     sibling instead. -->
+                <div class="roster-btns" style="margin-bottom:16px">
+                    <button id="saveScheduleBtn"   class="btn-primary">💾 Save Schedule</button>
+                    <button id="exportStaffBtn"    class="btn-ghost">&#8595; Export Excel</button>
+                    <button id="emailStaffScheduleBtn" class="btn-ghost">✉️ Email Schedules</button>
+                    <button id="printStaffScheduleBtn" class="btn-ghost">&#128424; Print schedule</button>
                 </div>
-                <!-- Children this week / Est. labor cost — apSchedHeaderStats()
-                     in admin-portal.js, same figures apRenderStaffReq() computes
-                     for its own footer. Pinned above the tab strip since both
-                     tabs share them, per the handoff. -->
-                <div class="bk-stats" id="apSchedHeaderStats" style="margin-bottom:16px"></div>
+                <!-- Week of / Children this week / Est. labor cost, one row of
+                     three cards — apSchedHeaderStats() (admin-portal.js) only
+                     owns the last two (display:contents so its own two
+                     .bk-stat divs land as siblings of the static "Week of"
+                     card in the same grid, not nested inside a third cell).
+                     The date input itself stays static, wired once by
+                     setupStaffScheduling() — regenerating it on every render
+                     the way a dynamic mount would have dropped its listener
+                     and any in-progress typing. Both Requirement inputs read
+                     it directly, so the two tabs can't disagree about which
+                     week they're looking at. -->
+                <div class="bk-stats" style="margin-bottom:16px">
+                    <div class="bk-stat">
+                        <div class="bk-stat-label">Week of</div>
+                        <input type="date" id="staffWeekOf" class="bk-stat-date-input">
+                    </div>
+                    <div id="apSchedHeaderStats" style="display:contents"></div>
+                </div>
 
                 <div class="bk-nav" id="apSchedTabs">
                     <button class="bk-pill is-on" data-ap-sched-tab="week">This week's schedule</button>
@@ -1546,7 +1584,7 @@
                                     <small style="color:var(--text-muted,#888);font-size:.82em;">How long after shift start/end before a missed-clock alert fires.</small>
                                 </label>
                                 <label>Director Notify Email
-                                    <input type="email" id="geofenceNotifyEmail" placeholder="director@example.com">
+                                    <input type="email" id="geofenceNotifyEmail" placeholder="director@example.com" autocomplete="off">
                                     <small style="color:var(--text-muted,#888);font-size:.82em;">Receives geofence alerts and missed-clock summaries.</small>
                                 </label>
                             </div>
@@ -1666,7 +1704,7 @@
                         <div class="fm-field">
                             <label>Clock-In PIN (4 digits)</label>
                             <input type="text" id="sfPin" maxlength="4" placeholder="e.g. 1234"
-                                class="rate-input" style="width:90px" inputmode="numeric" pattern="\d{4}">
+                                class="rate-input" style="width:90px" inputmode="numeric" pattern="\d{4}" autocomplete="off">
                         </div>
                         <div class="fm-field">
                             <label>PTO Starting Balance (hrs)</label>
@@ -2084,12 +2122,9 @@
                      page header; the design handoff shows it on one row with
                      the month switcher and search, not stacked as a separate
                      shell heading above a second toolbar row underneath. The
-                     generic shell (apRenderDetail()) renders nothing for this
-                     tool (customHeader: true on its AP_TOOLS entry) so there
-                     is exactly one header, not two. h2 is NOT a direct child
-                     of the section (it's nested in .fh-head), so
-                     apShowSection()'s ap-dup-head logic — which only targets
-                     `:scope > h2` — leaves it alone.
+                     generic shell (apRenderDetail()) no longer renders a
+                     header for any tool, so there is exactly one header here,
+                     same as everywhere else.
 
                      #fhBody stays hidden behind #fhSkeleton until the first
                      _fhLoad() resolves (see renderFinanceHubTool()), so the
@@ -2101,10 +2136,14 @@
                 <div id="fhSkeleton" class="empty-hint" style="padding:60px 0;text-align:center">Loading&hellip;</div>
                 <div id="fhBody" style="display:none">
                     <div class="ap-head fh-head">
-                        <div>
-                            <h2>Finance</h2>
-                            <p>One place for billing, invoices, and who owes</p>
-                        </div>
+                        <!-- Title/blurb removed per director request (2026-08-28) — the
+                             sidebar already names the open tool and highlights it, and
+                             the tab strip right below (Ledger/Billing Report/Bookkeeper)
+                             makes it obvious what screen this is. Kept as an empty div,
+                             not deleted outright, so .fh-toolbar (month switcher +
+                             search) stays right-aligned via .ap-head's own
+                             justify-content: space-between. -->
+                        <div></div>
                         <div class="fh-toolbar">
                             <div class="fh-month-switch">
                                 <button type="button" id="fhMonthPrev" class="fh-month-arrow" aria-label="Previous month">&#9664;</button>
@@ -2155,7 +2194,7 @@
 
                     <div class="fh-note-editor">
                         <label for="invNoteText">Note on every invoice email <span class="fh-note-hint">(how to pay, when it's due — optional)</span></label>
-                        <textarea id="invNoteText" rows="2" placeholder="e.g. Payment is due by the 10th. Cheques to Timothy Lutheran MDO, or pay in the office."></textarea>
+                        <textarea id="invNoteText" rows="2"></textarea>
                         <div class="fh-note-row">
                             <button id="invNoteSaveBtn" class="btn-secondary">💾 Save note</button>
                             <button id="invTestBtn" class="btn-secondary">✉️ Send me a test</button>
@@ -2301,7 +2340,8 @@
                         <div class="fm-field fm-field-pin">
                             <label>PIN</label>
                             <div class="fm-pin-row">
-                                <input type="text" id="fmPin" class="fm-pin-input" maxlength="8" placeholder="4-8 digits">
+                                <input type="text" id="fmPin" class="fm-pin-input" maxlength="8" placeholder="4-8 digits"
+                                       inputmode="numeric" pattern="\d{4,8}" autocomplete="off">
                                 <button type="button" id="fmNewPinBtn" class="btn-ghost fm-pin-btn" title="Generate new PIN">&#8635;</button>
                             </div>
                         </div>
@@ -2329,7 +2369,8 @@
                         <div class="fm-field fm-field-pin">
                             <label>PIN</label>
                             <div class="fm-pin-row">
-                                <input type="text" id="fmParent2Pin" class="fm-pin-input" maxlength="8" placeholder="4-8 digits">
+                                <input type="text" id="fmParent2Pin" class="fm-pin-input" maxlength="8" placeholder="4-8 digits"
+                                       inputmode="numeric" pattern="\d{4,8}" autocomplete="off">
                                 <button type="button" id="fmNewPin2Btn" class="btn-ghost fm-pin-btn" title="Generate new PIN">&#8635;</button>
                             </div>
                         </div>
@@ -2344,6 +2385,22 @@
                             <input type="tel" id="fmParent2Phone" placeholder="555-123-4567" autocomplete="off">
                         </div>
                     </div>
+                </div>
+
+                <!-- Approved for pickup — the family's own list, read-only here.
+                     Added 2026-08-28: parents record this in their own portal
+                     (portal-account.js "Approved for pickup") via
+                     add_pickup_contact/remove_pickup_contact, writing into
+                     pickup_contacts (family_id, name, relationship, note).
+                     Nothing in the admin app read that table before this —
+                     the office had no way to see who a parent has approved
+                     to pick up their child without asking the parent
+                     directly. Read-only: the family still owns adding and
+                     removing entries from their own portal. -->
+                <div class="fm-section" id="fmPickupSection">
+                    <div class="fm-section-label">Approved for pickup</div>
+                    <p class="section-desc" style="margin-top:0">Added by the family in their own portal — read-only here.</p>
+                    <div id="fmPickupList"></div>
                 </div>
 
                 <!-- Group -->

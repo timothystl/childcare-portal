@@ -3361,15 +3361,39 @@ async function fetchClockEventsForDate(workDate) {
     return data || [];
 }
 
+// ⚠️ Paginated on purpose — PostgREST silently truncates a `.select()` at its
+// default row cap (1,000) with no error, and this table now holds 1,600+
+// rows for this year alone and grows by ~300/month. Confirmed live: a
+// Jan1–Aug28 call to the unpaginated version dropped every clock event from
+// mid-June onward, because the running row count crosses 1,000 right around
+// then — undercounting real labor cost for June/July/August in Room P&L and
+// Bookkeeper, and undercounting YTD hours/PTO in the Payroll Report, whose
+// `ytdStart`-to-today and PTO-cutoff-to-today calls hit the exact same wide,
+// growing range. Same bug class as this file's own documented R12
+// (fetchAllRegistrations) — a date-bounded query is not the same thing as a
+// row-bounded one once a table grows past the cap. The explicit `.order()`
+// makes page boundaries deterministic; without it, PostgREST's return order
+// is unspecified and consecutive `.range()` calls could skip or repeat rows.
 async function fetchClockEventsForRange(startDate, endDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
-        .from('staff_clock_events')
-        .select('id, staff_id, clock_in, clock_out, work_date, room_id')
-        .gte('work_date', startDate)
-        .lte('work_date', endDate);
-    if (error) throw error;
-    return data || [];
+    const pageSize = 1000;
+    let all = [];
+    let offset = 0;
+    for (;;) {
+        const { data, error } = await sbClient
+            .from('staff_clock_events')
+            .select('id, staff_id, clock_in, clock_out, work_date, room_id')
+            .gte('work_date', startDate)
+            .lte('work_date', endDate)
+            .order('work_date', { ascending: true })
+            .order('id', { ascending: true })
+            .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        all = all.concat(data || []);
+        if (!data || data.length < pageSize) break;
+        offset += pageSize;
+    }
+    return all;
 }
 
 async function insertManualClockEvent(staffId, workDate, clockInISO, clockOutISO) {
@@ -4671,6 +4695,11 @@ async function createPaymentSession(invoiceId) {
  * amount and confirms ownership server-side.
  *
  * @param {number} invoiceId
+ * @param {{sandboxTest?: boolean}} [opts] sandboxTest is only ever true when
+ *   the tab has ?staxtest=1 — see pbStaxTestEnabled() in portal-billing.js.
+ *   It lets a real click-through against Stax's sandbox merchant bypass the
+ *   production-only gate, but only when the server has ALSO explicitly
+ *   turned on STAX_SANDBOX_TEST_ENABLED — this flag alone does nothing.
  * @returns {Promise<{customerId: string, webPaymentsToken: string,
  *   environment: string, amount: number, supportsPartialPayments: boolean,
  *   paymentAttemptId: string, priorBalance: number,
@@ -4678,13 +4707,13 @@ async function createPaymentSession(invoiceId) {
  *   invoiceId: number, firstname: string, lastname: string, phone: string,
  *   savedCard: {last4: string, brand: string}|null}>}
  */
-async function createStaxChargeSession(invoiceId) {
+async function createStaxChargeSession(invoiceId, opts) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: { session } } = await sbClient.auth.getSession();
     const token = session?.access_token;
     if (!token) throw new Error('Not authenticated.');
     const { data, error } = await sbClient.functions.invoke('create-stax-charge', {
-        body: { invoiceId },
+        body: { invoiceId, sandboxTest: !!opts?.sandboxTest },
         headers: { Authorization: `Bearer ${token}` },
     });
     if (error) {
@@ -4704,10 +4733,12 @@ async function createStaxChargeSession(invoiceId) {
  *
  * @param {number} invoiceId
  * @param {string|null} paymentMethodId - omit/null when useSavedCard is true
- * @param {{useSavedCard?: boolean, saveCard?: boolean, amount?: number, paymentAttemptId: string}} [opts]
+ * @param {{useSavedCard?: boolean, saveCard?: boolean, amount?: number, paymentAttemptId: string, sandboxTest?: boolean}} [opts]
  *   useSavedCard charges the family's card on file instead of paymentMethodId;
  *   saveCard remembers a freshly-tokenized card for next time; only Stax's
  *   opaque payment_method_id + last4/brand are stored, never PAN or CVV.
+ *   sandboxTest mirrors createStaxChargeSession's — only true behind
+ *   ?staxtest=1, and only effective when the server has also opted in.
  * @returns {Promise<{success: boolean, transactionId: string, amount: number, touchedInvoiceIds: number[]}>}
  */
 async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
@@ -4722,6 +4753,7 @@ async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
             saveCard: !!opts?.saveCard,
             amount: opts?.amount,
             paymentAttemptId: opts?.paymentAttemptId,
+            sandboxTest: !!opts?.sandboxTest,
         },
         headers: { Authorization: `Bearer ${token}` },
     });
@@ -4732,25 +4764,39 @@ async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
         if (payload.nextPaymentAttemptId) paymentError.nextPaymentAttemptId = payload.nextPaymentAttemptId;
         throw paymentError;
     }
+    // A Stax PENDING result comes back as HTTP 202 — a 2xx status, so
+    // supabase-js resolves it here instead of treating it as `error`. The
+    // body still carries the same {error, ambiguous} shape a real failure
+    // would, and it must never be read as a confirmed charge.
+    if (data && data.success !== true && (data.ambiguous || data.error)) {
+        const paymentError = new Error(data.error || 'Your payment could not be confirmed.');
+        if (data.ambiguous) paymentError.ambiguous = true;
+        if (data.nextPaymentAttemptId) paymentError.nextPaymentAttemptId = data.nextPaymentAttemptId;
+        throw paymentError;
+    }
     return data;
 }
 
 /**
- * Ask Authorize.net to void or refund one online card payment (admin only,
- * full role). Only a billing_payments row id travels — the amount and
- * whether it's a void or refund are both decided server-side from the
- * transaction's own state. Does NOT itself mark anything reversed; the
- * authorizenet-webhook function does that once Authorize.net confirms it.
+ * Ask the payment processor to void or refund one online card payment
+ * (admin only, full role). Only a billing_payments row id travels — the
+ * amount and whether it's a void or refund are both decided server-side
+ * from the transaction's own state. Does NOT itself mark anything
+ * reversed; authorizenet-webhook / stax-webhook does that once the
+ * processor confirms it.
  *
  * @param {number} paymentId
+ * @param {'authorizenet'|'stax'} [processor] — which edge function to call;
+ *   defaults to 'authorizenet' for older call sites.
  * @returns {Promise<{submitted: boolean, kind: 'void'|'refund', processorTransactionId: string}>}
  */
-async function adminRefundPayment(paymentId) {
+async function adminRefundPayment(paymentId, processor) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: { session } } = await sbClient.auth.getSession();
     const token = session?.access_token;
     if (!token) throw new Error('Not authenticated.');
-    const { data, error } = await sbClient.functions.invoke('admin-refund-payment', {
+    const fnName = processor === 'stax' ? 'admin-refund-stax-payment' : 'admin-refund-payment';
+    const { data, error } = await sbClient.functions.invoke(fnName, {
         body: { paymentId },
         headers: { Authorization: `Bearer ${token}` },
     });

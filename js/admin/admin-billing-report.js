@@ -241,7 +241,7 @@ function _brNameTable() {
             <td style="text-align:center">${f.children.length}</td>
             <td style="text-align:right">$${f.base.toFixed(2)}</td>
             <td>${escHtml(f.causes.map(c => c.text).join(' · ') || '—')}</td>
-            <td onclick="event.stopPropagation()"><input type="text" class="br-note-input" data-email="${escHtml(f.email || '')}" value="${escHtml(f.note || '')}" placeholder="Add a note…"></td>
+            <td><input type="text" class="br-note-input" data-email="${escHtml(f.email || '')}" value="${escHtml(f.note || '')}" placeholder="Add a note…"></td>
             <td style="text-align:right"><strong>$${f.total.toFixed(2)}</strong></td>
         </tr>`;
     }).join('');

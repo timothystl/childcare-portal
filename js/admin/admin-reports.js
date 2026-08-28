@@ -397,7 +397,28 @@ async function generateFamilyBillingReport() {
     // passed) or because they're a brand-new student who's never been
     // charged. Whoever owes it gets charged and stamped for this cycle the
     // moment their billing report is generated — no manual paid/unpaid step.
-    const currentYear = currentFeeCycleYear(window._regFeeRenewalDate);
+    //
+    // ⚠️ window._regFeeRenewalDate needs the same window._X ?? fetch guard
+    // the three fee amounts above it already get — without it,
+    // currentFeeCycleYear() silently falls back to its own '01-01' default
+    // whenever this report is generated before setupRegFee() (admin-init.js)
+    // has finished loading the real renewal date. Verified live 2026-08-28
+    // against the center's real 09-01 renewal date: the '01-01' fallback
+    // computes THIS calendar year instead of the correct prior fiscal cycle
+    // for every day between Jan 1 and Sep 1, which — because this function
+    // actually STAMPS reg_fee_paid_year when it charges the fee, unlike the
+    // Ledger's read-only preview — would have charged and permanently
+    // marked ~117 children as paid for the wrong cycle. No such rows exist
+    // yet (checked reg_fee_paid_year = 2026 in production: zero), so nothing
+    // has been over-charged by this so far, but the landmine was live.
+    let regFeeRenewalDate = window._regFeeRenewalDate;
+    if (!regFeeRenewalDate) {
+        try {
+            const val = await fetchSetting('registration_fee_renewal_date');
+            regFeeRenewalDate = /^\d{2}-\d{2}$/.test(val) ? val : '01-01';
+        } catch (e) { /* ignore — currentFeeCycleYear() itself falls back to '01-01' */ }
+    }
+    const currentYear = currentFeeCycleYear(regFeeRenewalDate);
     const regFeeOwedByChild = new Map(); // childName key → { owed, studentId }
     const feeChargeStudentIds = [];
     families.forEach(fam => fam.children.forEach(c => {
@@ -739,6 +760,21 @@ function generateStaffSchedule() {
 // Renders one table per room: days across the top, kids counts + staff dropdowns down the side.
 // assignments: { date: { roomId: { am: [name,...], pm: [name,...] } } } or null for empty dropdowns.
 
+// Room × Shift is one row each (design_handoff_staff, 2026-08-28 — the
+// mockup's roomShiftGrid: one row per room+shift, day columns, "the
+// room/shift spreadsheet is the default because that's the format she
+// actually works from"). Replaced the earlier per-room block-of-rows
+// layout (a stacked AM-Staff-1/AM-Staff-2/.../PM-Staff-1/... table per
+// room) with a single compact table, matching the mockup's visual density.
+//
+// ⚠️ Every <select class="sched-staff-select" data-date data-room data-shift
+// data-slot> keeps the exact same classes and data attributes it always
+// had — only how they're grouped into rows/cells changed. _syncGroup(),
+// _readAssignmentsFromDOM() (which saveStaffSchedule(), the XLSX export,
+// and renderScheduleByWorker() all read through), and the day-print button
+// wiring below all key off those selectors, not DOM shape, so none of them
+// needed to change for this rebuild — verified by re-reading each one
+// before touching this function, not assumed.
 function renderScheduleTables(weekDates, counts, assignments) {
     _autoFillWeekDates = weekDates;
     _autoFillCounts    = counts;
@@ -760,9 +796,38 @@ function renderScheduleTables(weekDates, counts, assignments) {
         return html;
     }
 
-    const roomBlocks = getSortedRooms().map(room => {
+    const dayHeaders = weekDates.map(d => {
+        const dt = new Date(d + 'T00:00:00');
+        return `<th class="sched-grid-day-head">${DAY_ABBR[dt.getDay()]}<br><span class="sched-day-date">${friendlyShort(d)}</span> <button class="sched-day-print-btn" data-date="${d}" title="Print this day">🖨</button></th>`;
+    }).join('');
+
+    // One <select> stack per day cell, sized to that room+shift's peak
+    // weekly need (+1 optional slot) — same slot-count rule
+    // buildStaffRows() always used, just laid out as a stack inside one
+    // cell instead of one row per slot.
+    function selectStack(room, ratio, shift, maxNeed) {
+        return weekDates.map(d => {
+            const countKey = shift === 'am' ? 'total' : 'fullDay';
+            const dayCount = counts[d]?.[room.id]?.[countKey] || 0;
+            const needed   = dayCount > 0 ? Math.ceil(dayCount / ratio) : 0;
+            const selects  = [];
+            for (let slot = 0; slot < maxNeed + 1; slot++) {
+                const isOpt  = slot >= needed;
+                const preVal = assignments?.[d]?.[room.id]?.[shift]?.[slot] || '';
+                selects.push(`<select class="sched-staff-select${isOpt ? ' is-optional' : ''}" data-date="${d}" data-room="${escHtml(room.id)}" data-shift="${shift}" data-slot="${slot}">${buildOpts(preVal)}</select>`);
+            }
+            const flag = needed > 0 && needed % ratio === 0; // matches apStaffing()'s "at ratio" definition
+            return `<td class="sched-grid-cell">
+                <div class="sched-grid-need${flag ? ' is-edge' : ''}">${dayCount} kids · needs ${needed}</div>
+                <div class="sched-grid-selects">${selects.join('')}</div>
+            </td>`;
+        }).join('');
+    }
+
+    const rows = getSortedRooms().map(room => {
         const ratio = room.staffRatio || 10;
         const hasEnrollment = weekDates.some(d => (counts[d]?.[room.id]?.total || 0) > 0);
+        if (!hasEnrollment) return '';
 
         const maxAmNeed = weekDates.reduce((mx, d) => {
             const total = counts[d]?.[room.id]?.total || 0;
@@ -773,129 +838,37 @@ function renderScheduleTables(weekDates, counts, assignments) {
             return Math.max(mx, fd > 0 ? Math.ceil(fd / ratio) : 0);
         }, 0);
 
-        const numCols = weekDates.length + 1;
-
-        const dayHeaders = weekDates.map(d => {
-            const dt = new Date(d + 'T00:00:00');
-            return `<th class="sched-day-head">${DAY_ABBR[dt.getDay()]}<br><span class="sched-day-date">${friendlyShort(d)}</span><br><button class="sched-day-print-btn" data-date="${d}" title="Print this day">🖨</button></th>`;
-        }).join('');
-
-        if (!hasEnrollment) {
-            return `
-            <div class="room-schedule-block">
-                <div class="room-schedule-title">
-                    <span class="room-sched-label">${escHtml(room.label)}</span>
-                    <span class="room-sched-ratio">Ratio 1:${ratio}</span>
-                </div>
-                <div class="table-wrapper">
-                    <table class="report-table room-sched-table">
-                        <thead><tr><th class="sched-row-label-head"></th>${dayHeaders}</tr></thead>
-                        <tbody>
-                            <tr><td colspan="${numCols}" class="sched-no-enrollment">No enrollment this week</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>`;
-        }
-
-        const halfDayCells = weekDates.map(d => {
-            const v = counts[d]?.[room.id]?.halfDay || 0;
-            return `<td class="sched-kids-cell">${v || '—'}</td>`;
-        }).join('');
-        const fullDayCells = weekDates.map(d => {
-            const v = counts[d]?.[room.id]?.fullDay || 0;
-            return `<td class="sched-kids-cell">${v || '—'}</td>`;
-        }).join('');
-        const amKidsCells = weekDates.map(d => {
-            const v = counts[d]?.[room.id]?.total || 0;
-            return `<td class="sched-kids-cell sched-am-cell">${v || '—'}</td>`;
-        }).join('');
-        const amNeededCells = weekDates.map(d => {
-            const total = counts[d]?.[room.id]?.total || 0;
-            const need  = total > 0 ? Math.ceil(total / ratio) : 0;
-            return `<td class="sched-need-cell sched-am-cell">${need || '—'}</td>`;
-        }).join('');
-        const pmKidsCells = weekDates.map(d => {
-            const v = counts[d]?.[room.id]?.fullDay || 0;
-            return `<td class="sched-kids-cell sched-pm-cell">${v || '—'}</td>`;
-        }).join('');
-        const pmNeededCells = weekDates.map(d => {
-            const fd   = counts[d]?.[room.id]?.fullDay || 0;
-            const need = fd > 0 ? Math.ceil(fd / ratio) : 0;
-            return `<td class="sched-need-cell sched-pm-cell">${need || '—'}</td>`;
-        }).join('');
-
-        function buildStaffRows(shift, maxNeed, shiftClass) {
-            const rows = [];
-            for (let slot = 0; slot < maxNeed + 1; slot++) {
-                const isOptRow = slot >= maxNeed;
-                const label = isOptRow
-                    ? `<td class="sched-row-label sched-row-optional-label">+ optional</td>`
-                    : `<td class="sched-row-label sched-${shiftClass}-label">${shift.toUpperCase()} Staff ${slot + 1}</td>`;
-                const cells = weekDates.map(d => {
-                    const countKey = shift === 'am' ? 'total' : 'fullDay';
-                    const dayCount = counts[d]?.[room.id]?.[countKey] || 0;
-                    const needed   = dayCount > 0 ? Math.ceil(dayCount / ratio) : 0;
-                    const isOpt    = slot >= needed;
-                    const preVal   = assignments?.[d]?.[room.id]?.[shift]?.[slot] || '';
-                    const cls      = isOpt ? 'sched-cell-optional' : `sched-${shiftClass}-cell`;
-                    return `<td class="sched-staff-cell ${cls}"><select class="sched-staff-select" data-date="${d}" data-room="${escHtml(room.id)}" data-shift="${shift}" data-slot="${slot}">${buildOpts(preVal)}</select></td>`;
-                }).join('');
-                rows.push(`<tr class="sched-row-staff${isOptRow ? ' sched-row-optional' : ''}">${label}${cells}</tr>`);
-            }
-            return rows.join('');
-        }
+        const roomCell = shiftIdx => shiftIdx === 0
+            ? `<td class="sched-grid-room" rowspan="2">${escHtml(room.label)}<div class="sched-grid-ratio">Ratio 1:${ratio}</div></td>` : '';
 
         return `
-        <div class="room-schedule-block">
-            <div class="room-schedule-title">
-                <span class="room-sched-label">${escHtml(room.label)}</span>
-                <span class="room-sched-ratio">Ratio 1:${ratio}</span>
-            </div>
-            <div class="table-wrapper">
-                <table class="report-table room-sched-table">
-                    <thead>
-                        <tr><th class="sched-row-label-head"></th>${dayHeaders}</tr>
-                    </thead>
-                    <tbody>
-                        <tr class="sched-row-kids">
-                            <td class="sched-row-label sched-kids-label">Half-Day Kids</td>${halfDayCells}
-                        </tr>
-                        <tr class="sched-row-kids">
-                            <td class="sched-row-label sched-kids-label">Full-Day Kids</td>${fullDayCells}
-                        </tr>
-                        <tr class="sched-row-shift-header">
-                            <td colspan="${numCols}" class="sched-shift-header-cell sched-am-header">AM Shift · 8:15 am – 1:15 pm</td>
-                        </tr>
-                        <tr class="sched-row-kids">
-                            <td class="sched-row-label sched-kids-label">AM Kids (total)</td>${amKidsCells}
-                        </tr>
-                        <tr class="sched-row-needed">
-                            <td class="sched-row-label">AM Staff Needed</td>${amNeededCells}
-                        </tr>
-                        ${buildStaffRows('am', maxAmNeed, 'am')}
-                        <tr class="sched-row-shift-header">
-                            <td colspan="${numCols}" class="sched-shift-header-cell sched-pm-header">PM Shift · 12:00 pm – 5:00 pm</td>
-                        </tr>
-                        <tr class="sched-row-kids">
-                            <td class="sched-row-label sched-kids-label">PM Kids (full-day)</td>${pmKidsCells}
-                        </tr>
-                        <tr class="sched-row-needed">
-                            <td class="sched-row-label">PM Staff Needed</td>${pmNeededCells}
-                        </tr>
-                        ${buildStaffRows('pm', maxPmNeed, 'pm')}
-                    </tbody>
-                </table>
-            </div>
-        </div>`;
-    }).join('');
+        <tr class="sched-grid-row">
+            ${roomCell(0)}
+            <td class="sched-grid-shift"><span class="sched-shift-pill is-am">AM</span><div class="sched-grid-time">8:15a–1:15p</div></td>
+            ${selectStack(room, ratio, 'am', maxAmNeed)}
+        </tr>
+        <tr class="sched-grid-row sched-grid-row-pm">
+            <td class="sched-grid-shift"><span class="sched-shift-pill is-pm">PM</span><div class="sched-grid-time">12:00p–5:00p</div></td>
+            ${selectStack(room, ratio, 'pm', maxPmNeed)}
+        </tr>`;
+    }).filter(Boolean).join('');
 
     container.innerHTML = `
         <div class="sched-actions-bar">
-            <button id="printStaffAssignBtn" class="btn-secondary">🖨 Print</button>
-            <button id="exportStaffAssignBtn" class="btn-secondary">⬇ Export XLSX</button>
+            <button id="printStaffAssignBtn" class="btn-ghost">🖨 Print</button>
+            <button id="exportStaffAssignBtn" class="btn-ghost">⬇ Export XLSX</button>
         </div>
-        <div id="scheduleTablesWrap">${roomBlocks}</div>`;
+        <div id="scheduleTablesWrap">
+            ${rows ? `
+            <div class="sched-grid-card">
+                <div class="table-wrapper">
+                    <table class="report-table sched-grid-table">
+                        <thead><tr><th class="sched-grid-room-head">Room</th><th class="sched-grid-shift-head">Shift</th>${dayHeaders}</tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </div>` : '<p class="empty-hint">No enrollment this week — nobody needs to be scheduled.</p>'}
+        </div>`;
 
     document.getElementById('printStaffAssignBtn')?.addEventListener('click', () => {
         const weekOf = document.getElementById('staffWeekOf')?.value || '';
@@ -911,17 +884,11 @@ function renderScheduleTables(weekDates, counts, assignments) {
         win.document.write(`<!DOCTYPE html><html><head><title>Staff Schedule – ${escHtml(weekOf)}</title>
             <style>
             body{font-family:Arial,sans-serif;font-size:11px}
-            .room-schedule-block{margin-bottom:18px}
-            .room-schedule-title{font-weight:bold;font-size:13px;margin-bottom:4px;display:flex;gap:12px}
-            .room-sched-ratio{color:#666;font-weight:normal}
             table{border-collapse:collapse;width:100%}
-            th,td{border:1px solid #ccc;padding:4px 6px;text-align:center}
-            .sched-row-label{text-align:left;white-space:nowrap;font-size:10px}
-            .sched-shift-header-cell{font-weight:bold;text-align:left}
-            .sched-am-header{background:#dbeafe}
-            .sched-pm-header{background:#fef9c3}
-            .sched-row-optional td{color:#aaa}
-            .sched-no-enrollment{color:#999;font-style:italic}
+            th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;vertical-align:top}
+            .sched-grid-room-head,.sched-grid-shift-head,.sched-grid-day-head{text-align:center;font-weight:bold}
+            .sched-grid-ratio,.sched-grid-time,.sched-grid-need{color:#666;font-size:9px}
+            .sched-shift-pill{font-weight:bold}
             </style></head><body>
             <h2 style="font-size:14px">Staff Schedule – Week of ${escHtml(weekOf)}</h2>
             ${clone.innerHTML}
@@ -1071,6 +1038,14 @@ function _readAssignmentsFromDOM(weekDates) {
 // XLSX export already use — so it can never show an assignment that
 // disagrees with what Save would persist. No editing here; "By room &
 // shift" stays the only place assignments change.
+// One row per person per (room, shift) they're actually working this week
+// — matching the mockup's shape exactly (shift pill, name, "room · days ·
+// time", est. cost, a coverage pill) rather than a day-by-day pivot table.
+// Still read-only, still built from _readAssignmentsFromDOM() so it can
+// never disagree with "By room & shift" or what Save would persist.
+const SCHED_SHIFT_TIME = { am: '8:15a–1:15p', pm: '12:00p–5:00p' };
+const SCHED_SHIFT_HOURS = { am: 5, pm: 5 };
+
 function renderScheduleByWorker() {
     const host = document.getElementById('staffContentByWorker');
     if (!host) return;
@@ -1081,40 +1056,61 @@ function renderScheduleByWorker() {
     }
     const asgn  = _readAssignmentsFromDOM(weekDates);
     const rooms = getSortedRooms();
-    const byStaff = new Map(); // name -> { date -> [ "🐻 Bear Room · AM", ... ] }
+    const rateByName = new Map((allStaffData || []).map(s => [s.name, s]));
+
+    // key: name|roomId|shift -> { name, room, shift, days:[date,...] }
+    const groups = new Map();
     weekDates.forEach(d => {
         rooms.forEach(r => {
             ['am', 'pm'].forEach(shift => {
                 (asgn[d]?.[r.id]?.[shift] || []).forEach(name => {
                     if (!name) return;
-                    if (!byStaff.has(name)) byStaff.set(name, {});
-                    const days = byStaff.get(name);
-                    (days[d] = days[d] || []).push(`${r.label} · ${shift.toUpperCase()}`);
+                    const key = `${name}|${r.id}|${shift}`;
+                    if (!groups.has(key)) groups.set(key, { name, room: r, shift, days: [] });
+                    groups.get(key).days.push(d);
                 });
             });
         });
     });
-    const names = [...byStaff.keys()].sort((a, b) => a.localeCompare(b));
-    if (!names.length) {
+
+    const rows = [...groups.values()].sort((a, b) =>
+        a.name.localeCompare(b.name) || a.shift.localeCompare(b.shift));
+    if (!rows.length) {
         host.innerHTML = '<p class="empty-hint">No one is assigned yet — switch to "By room & shift" to assign staff.</p>';
         return;
     }
-    const dayHead = weekDates.map(d => {
-        const dt = new Date(d + 'T00:00:00');
-        return `<th>${DAY_ABBR[dt.getDay()]}<br><span style="font-weight:400">${friendlyShort(d)}</span></th>`;
+
+    let totalCost = 0;
+    const rowsHtml = rows.map(g => {
+        const dayLabel = g.days.map(d => DAY_ABBR[new Date(d + 'T00:00:00').getDay()]).join(', ');
+        const full     = g.days.length >= weekDates.length;
+        const staff    = rateByName.get(g.name);
+        const hasRate  = staff && staff.pay_type !== 'salary' && staff.hourly_rate;
+        const cost     = hasRate ? g.days.length * SCHED_SHIFT_HOURS[g.shift] * staff.hourly_rate : null;
+        if (cost) totalCost += cost;
+        return `
+        <div class="sched-worker-row">
+            <div class="sched-worker-who">
+                <span class="sched-shift-pill is-${g.shift}">${g.shift.toUpperCase()}</span>
+                <div>
+                    <div class="sched-worker-name">${escHtml(g.name)}</div>
+                    <div class="sched-worker-meta">${escHtml(g.room.label)} · ${escHtml(dayLabel)} · ${SCHED_SHIFT_TIME[g.shift]}</div>
+                </div>
+            </div>
+            <div class="sched-worker-right">
+                <span class="sched-worker-cost">${cost ? escHtml(apMoney(cost)) : '—'}</span>
+                <span class="wu-status ${full ? 'wu-status-signed' : 'wu-status-pending'}" style="cursor:default">${full ? 'Full week' : `${g.days.length} of ${weekDates.length} days`}</span>
+            </div>
+        </div>`;
     }).join('');
+
     host.innerHTML = `
-        <div class="table-wrapper">
-        <table class="report-table sched-by-worker-table">
-            <thead><tr><th style="text-align:left">Staff</th>${dayHead}</tr></thead>
-            <tbody>
-                ${names.map(name => `
-                <tr>
-                    <td style="text-align:left;font-weight:600;white-space:nowrap">${escHtml(name)}</td>
-                    ${weekDates.map(d => `<td>${(byStaff.get(name)[d] || []).map(escHtml).join('<br>') || '—'}</td>`).join('')}
-                </tr>`).join('')}
-            </tbody>
-        </table>
+        <div class="sched-worker-list">
+            ${rowsHtml}
+            <div class="sched-worker-total">
+                <span>Estimated labor cost — this week</span>
+                <span class="sched-worker-total-num">${totalCost ? escHtml(apMoney(totalCost)) : '—'}</span>
+            </div>
         </div>`;
 }
 
@@ -4777,6 +4773,17 @@ function exportDemandForecast() {
 function setupExtraReports() {
     document.getElementById('generateTrendsBtn')?.addEventListener('click', generateEnrollmentTrends);
     document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
+    // Per-room collapse/expand toggle, delegated since generateEnrollmentTrends()
+    // replaces #trendsContent's innerHTML on every run.
+    document.getElementById('trendsContent')?.addEventListener('click', e => {
+        const btn = e.target.closest('.trends-room-toggle');
+        if (!btn) return;
+        const w = document.getElementById(btn.dataset.roomTarget);
+        if (!w) return;
+        const collapsed = w.style.display === 'none';
+        w.style.display = collapsed ? '' : 'none';
+        btn.textContent = collapsed ? '▲ Collapse' : '▼ Expand';
+    });
     document.getElementById('generateRoomPnlBtn')?.addEventListener('click', generateRoomPnl);
     document.getElementById('exportRoomPnlBtn')?.addEventListener('click', exportRoomPnl);
     document.getElementById('generatePromotionsBtn')?.addEventListener('click', generatePromotionsReport);
@@ -5740,7 +5747,7 @@ function _renderTrendsTable(trendMap) {
         return `
             <h4 style="margin:18px 0 6px;font-size:1em;display:flex;align-items:center;gap:10px">
                 ${escHtml(room.label)}
-                <button onclick="(function(btn){var w=document.getElementById('trendsRoom_${room.id}');var collapsed=w.style.display==='none';w.style.display=collapsed?'':'none';btn.textContent=collapsed?'▲ Collapse':'▼ Expand';})(this)" style="font-size:.75em;padding:2px 8px;cursor:pointer;background:#f0f4ff;border:1px solid #c0c8e0;border-radius:4px">▲ Collapse</button>
+                <button class="trends-room-toggle" data-room-target="trendsRoom_${room.id}" style="font-size:.75em;padding:2px 8px;cursor:pointer;background:#f0f4ff;border:1px solid #c0c8e0;border-radius:4px">▲ Collapse</button>
             </h4>
             <div id="trendsRoom_${room.id}" class="table-wrapper report-table-wrap">
                 <table class="report-table" style="font-size:.85rem">

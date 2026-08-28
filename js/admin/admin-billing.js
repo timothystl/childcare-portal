@@ -58,6 +58,42 @@ function setupBilling() {
     document.getElementById('exportArCsvBtn')
         ?.addEventListener('click', exportArCsv);
 
+    // AR table + its detail rows + the payment-history rows inside them —
+    // one delegated listener on the stable wrapper, since renderArTable()/
+    // toggleArRowDetail()/renderPaymentHistory() all replace innerHTML on
+    // every reload and a listener on the buttons themselves would be lost.
+    const arWrap = document.getElementById('arTableWrap');
+    arWrap?.addEventListener('click', e => {
+        const lockBtn = e.target.closest('.ar-lock-btn');
+        if (lockBtn) { openLockWithReasonModal(lockBtn.dataset.familyId); return; }
+        const unlockBtn = e.target.closest('.ar-unlock-btn');
+        if (unlockBtn) { doSetFamilyLockWithReason(unlockBtn.dataset.familyId, false, null); return; }
+        const editBilled = e.target.closest('.ar-edit-billed');
+        if (editBilled) { startEditBilledAmount(editBilled.dataset.familyId, parseFloat(editBilled.dataset.billed)); return; }
+        const detailsBtn = e.target.closest('.ar-details-btn');
+        if (detailsBtn) { toggleArRowDetail(detailsBtn.dataset.familyId); return; }
+        const paymentBtn = e.target.closest('.ar-payment-btn');
+        if (paymentBtn) {
+            openRecordPaymentModal(
+                paymentBtn.dataset.familyId,
+                paymentBtn.dataset.invoiceId || null,
+                paymentBtn.dataset.billed !== '' ? parseFloat(paymentBtn.dataset.billed) : null,
+            );
+            return;
+        }
+        const refundBtn = e.target.closest('.pay-hist-refund-btn');
+        if (refundBtn) { refundOnlinePayment(Number(refundBtn.dataset.paymentId), refundBtn.dataset.processor); return; }
+    });
+    // blur doesn't bubble, so the "set a new billed amount" input's commit
+    // uses focusout (the bubbling equivalent) on the same delegated wrapper.
+    arWrap?.addEventListener('focusout', e => {
+        const input = e.target.closest('.ar-new-amount-input');
+        if (input) saveBilledAmount(input.dataset.familyId, input.value);
+    });
+    arWrap?.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && e.target.closest('.ar-new-amount-input')) e.target.blur();
+    });
+
     // AR lock modal
     document.getElementById('blmConfirmBtn')
         ?.addEventListener('click', _doLockModalConfirm);
@@ -536,20 +572,23 @@ async function savePaymentFromModal() {
 }
 
 /**
- * Refund/void an online card payment. Only asks Authorize.net to reverse
- * the charge — admin-refund-payment never touches billing_payments or the
- * invoice itself, so this button's job ends at "submitted," not "done."
- * The actual reversal lands via the webhook a few seconds later; the AR
- * view is reloaded here so it's current the next time it's opened, not
- * because the reversal is guaranteed to be reflected yet.
+ * Refund/void an online card payment. Only asks the processor (Authorize.net
+ * or Stax, whichever actually took the charge) to reverse it —
+ * admin-refund-payment / admin-refund-stax-payment never touch
+ * billing_payments or the invoice itself, so this button's job ends at
+ * "submitted," not "done." The actual reversal lands via that processor's
+ * webhook a few seconds later; the AR view is reloaded here so it's current
+ * the next time it's opened, not because the reversal is guaranteed to be
+ * reflected yet.
  */
-async function refundOnlinePayment(paymentId) {
-    if (!confirm('Refund or void this online payment? This asks Authorize.net to reverse the charge and cannot be undone from here.')) {
+async function refundOnlinePayment(paymentId, processor) {
+    const processorName = processor === 'stax' ? 'Stax' : 'Authorize.net';
+    if (!confirm(`Refund or void this online payment? This asks ${processorName} to reverse the charge and cannot be undone from here.`)) {
         return;
     }
     try {
-        const result = await adminRefundPayment(paymentId);
-        alert(`${result.kind === 'void' ? 'Void' : 'Refund'} submitted. It will show here once Authorize.net confirms it (usually a few seconds).`);
+        const result = await adminRefundPayment(paymentId, processor);
+        alert(`${result.kind === 'void' ? 'Void' : 'Refund'} submitted. It will show here once ${processorName} confirms it (usually a few seconds).`);
         await logAdminAction(`${result.kind}_submitted`, 'billing_payment', paymentId);
         _arLoaded = false;
         await loadArView();
@@ -1344,11 +1383,12 @@ async function confirmPaymentImport(matchResults) {
                     Import complete: <strong>${matched}</strong> payment${matched !== 1 ? 's' : ''} recorded,
                     <strong>${skipped}</strong> skipped.
                 </p>
-                <button class="btn-xs" onclick="
-                    document.getElementById('paymentCsvInput').value='';
-                    document.getElementById('paymentCsvFileName').textContent='No file chosen';
-                    document.getElementById('paymentImportWrap').innerHTML='';
-                ">Clear / Import Another</button>`;
+                <button class="btn-xs pci-clear-btn">Clear / Import Another</button>`;
+            wrap.querySelector('.pci-clear-btn')?.addEventListener('click', () => {
+                document.getElementById('paymentCsvInput').value = '';
+                document.getElementById('paymentCsvFileName').textContent = 'No file chosen';
+                document.getElementById('paymentImportWrap').innerHTML = '';
+            });
         }
 
         _arLoaded = false;
@@ -1368,17 +1408,19 @@ function renderPaymentHistory(payments, finalAmount, containerId) {
         return;
     }
 
-    // An online card charge can be reversed with a Refund button; a row
-    // already reversed (or itself a reversal) never gets one, so it can't
-    // be double-clicked into two refunds for the same charge.
+    // An online card charge (Authorize.net or Stax) can be reversed with a
+    // Refund button; a row already reversed (or itself a reversal) never
+    // gets one, so it can't be double-clicked into two refunds for the
+    // same charge.
     const reversedIds = new Set(payments.map(p => p.refund_of_payment_id).filter(Boolean));
+    const REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax']);
 
     let running = 0;
     const rows = payments.map(p => {
         const amt = parseFloat(p.amount || 0);
         running  += amt;
         const overPay = finalAmount != null && running > finalAmount && finalAmount > 0;
-        const canRefund = p.processor === 'authorizenet' && amt > 0
+        const canRefund = REFUNDABLE_PROCESSORS.has(p.processor) && amt > 0
             && !p.refund_of_payment_id && !reversedIds.has(p.id);
         return `<tr ${overPay ? 'class="bl-overpay-badge"' : ''}>
             <td>${_fmtDate(p.payment_date)}</td>
@@ -1387,7 +1429,7 @@ function renderPaymentHistory(payments, finalAmount, containerId) {
             <td>${escHtml(p.note || '—')}</td>
             <td>$${running.toFixed(2)}</td>
             <td>${canRefund
-                ? `<button class="btn-xs" onclick="refundOnlinePayment(${p.id})">↩ Refund</button>`
+                ? `<button class="btn-xs pay-hist-refund-btn" data-payment-id="${p.id}" data-processor="${escHtml(p.processor)}">↩ Refund</button>`
                 : ''}</td>
         </tr>`;
     }).join('');
@@ -1401,6 +1443,9 @@ function renderPaymentHistory(payments, finalAmount, containerId) {
                 <tbody>${rows}</tbody>
             </table>
         </div>`;
+    // Click handling for .pay-hist-refund-btn is delegated on #arTableWrap
+    // in setupBilling() — this container always lives inside it (a detail
+    // row opened from the AR table), so a listener here would double-fire.
 }
 
 // ============================================================
@@ -1521,13 +1566,29 @@ function _buildArRows(month, families, invoices, monthPayments) {
 
         const billed      = parseFloat(inv?.final_amount || 0);
         const collected   = payments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
-        const outstanding = Math.max(0, billed - collected);
+
+        // ⚠️ `outstanding`/`status` are gated on sent_at — `billed` itself is
+        // NOT (kept as the raw drafted-or-sent amount, since other callers,
+        // e.g. the Finance drawer's own "Base tuition" line, read `billed` to
+        // show what a draft says regardless of whether it's gone out yet).
+        // reconcileBillingInvoice() drafts a billing_invoices row for every
+        // clean family the moment Bill the Month computes them — well before
+        // Release/Send is ever clicked — so treating that draft amount as
+        // already "owed" is wrong: a family can't be nudged for a bill they
+        // were never shown. This mirrors FS29's own aging rule ("an invoice
+        // nobody has sent is not overdue") one step earlier — an invoice
+        // nobody has sent isn't owed yet either. Found live 2026-08-28: 94 of
+        // August's 95 drafted invoices had never been sent, and their
+        // $54,013.56 combined final_amount was the entire Ledger "owed"
+        // banner and "Nudge all" count.
+        const billedIfSent = inv?.sent_at ? billed : 0;
+        const outstanding  = Math.max(0, billedIfSent - collected);
 
         let status;
-        if (billed === 0 && collected === 0) status = 'no_invoice';
-        else if (outstanding <= 0 && billed > 0) status = 'paid';
-        else if (collected > 0)                  status = 'partial';
-        else                                     status = 'overdue';
+        if (billedIfSent === 0 && collected === 0) status = 'no_invoice';
+        else if (outstanding <= 0 && billedIfSent > 0) status = 'paid';
+        else if (collected > 0)                        status = 'partial';
+        else                                            status = 'overdue';
 
         // FS29: the AR CSV has carried a "Days Since Invoice" column since the
         // export shipped and it has been blank every single time, because
@@ -1609,15 +1670,14 @@ function renderArTable(data) {
 
     const rows = filtered.map(r => {
         const lockBtn = r.isLocked
-            ? `<button class="btn-xs btn-warn" onclick="doSetFamilyLockWithReason('${escHtml(r.familyId)}', false, null)">Unlock</button>`
-            : `<button class="btn-xs btn-danger" onclick="openLockWithReasonModal('${escHtml(r.familyId)}')">Lock</button>`;
+            ? `<button class="btn-xs btn-warn ar-unlock-btn" data-family-id="${escHtml(r.familyId)}">Unlock</button>`
+            : `<button class="btn-xs btn-danger ar-lock-btn" data-family-id="${escHtml(r.familyId)}">Lock</button>`;
 
         // Billed cell: editable input when no invoice; clickable value when invoice exists
         const billedCell = r.billed > 0
-            ? `<span class="bl-editable-amount" title="Click to edit" onclick="startEditBilledAmount('${escHtml(r.familyId)}',${r.billed})">$${r.billed.toFixed(2)} <small style="opacity:.45;cursor:pointer">✎</small></span>`
-            : `<input type="number" class="bl-adj-input" style="width:78px" step="0.01" min="0" placeholder="Set amount"
-                 onblur="saveBilledAmount('${escHtml(r.familyId)}',this.value)"
-                 onkeydown="if(event.key==='Enter')this.blur()">`;
+            ? `<span class="bl-editable-amount ar-edit-billed" title="Click to edit" data-family-id="${escHtml(r.familyId)}" data-billed="${r.billed}">$${r.billed.toFixed(2)} <small style="opacity:.45;cursor:pointer">✎</small></span>`
+            : `<input type="number" class="bl-adj-input ar-new-amount-input" style="width:78px" step="0.01" min="0" placeholder="Set amount"
+                 data-family-id="${escHtml(r.familyId)}">`;
 
         return `<tr data-family-id="${escHtml(r.familyId)}">
             <td>
@@ -1630,11 +1690,10 @@ function renderArTable(data) {
             <td>${r.outstanding > 0 ? '$' + r.outstanding.toFixed(2) : '—'}</td>
             <td>${getArStatusBadge(r.status)}</td>
             <td>
-                <button class="btn-xs" onclick="toggleArRowDetail('${escHtml(r.familyId)}')">▸ Details</button>
-                ${r.invoiceId
-                    ? `<button class="btn-xs" onclick="openRecordPaymentModal('${escHtml(r.familyId)}','${escHtml(String(r.invoiceId))}',${r.billed})">💳 Payment</button>`
-                    : `<button class="btn-xs" onclick="openRecordPaymentModal('${escHtml(r.familyId)}',null,null)">💳 Payment</button>`
-                }
+                <button class="btn-xs ar-details-btn" data-family-id="${escHtml(r.familyId)}">▸ Details</button>
+                <button class="btn-xs ar-payment-btn" data-family-id="${escHtml(r.familyId)}"
+                        data-invoice-id="${r.invoiceId ? escHtml(String(r.invoiceId)) : ''}"
+                        data-billed="${r.invoiceId ? r.billed : ''}">💳 Payment</button>
                 ${lockBtn}
             </td>
         </tr>`;
@@ -1759,11 +1818,9 @@ async function toggleArRowDetail(familyId) {
                 <h4 style="margin:12px 0 8px">Payment History</h4>
                 <div id="${payHistContainerId}"></div>
                 <br>
-                <button class="btn-xs" onclick="openRecordPaymentModal(
-                    '${escHtml(familyId)}',
-                    '${topInvoice ? escHtml(String(topInvoice)) : ''}',
-                    ${topFinalAmt != null ? topFinalAmt : 'null'}
-                )">💳 Record Payment</button>
+                <button class="btn-xs ar-payment-btn" data-family-id="${escHtml(familyId)}"
+                        data-invoice-id="${topInvoice ? escHtml(String(topInvoice)) : ''}"
+                        data-billed="${topFinalAmt != null ? topFinalAmt : ''}">💳 Record Payment</button>
             </div>`;
 
         // Include payments linked by invoice_id, or (for imports) by payment_date in the current AR month

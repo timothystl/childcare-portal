@@ -519,7 +519,7 @@ function renderStaffDirectory() {
                 <input type="file" accept="image/jpeg,image/png,image/webp" class="staff-dir-file-input" title="Click to upload a photo">
             </div>
             <div class="staff-dir-fields">
-                <input type="text" class="staff-dir-name" placeholder="Name" value="${escHtml(s.name || '')}">
+                <input type="text" class="staff-dir-name" placeholder="Name" value="${escHtml(s.name || '')}" autocomplete="off">
                 ${offSite ? '<span class="tag off-site" title="Inactive in Staff Roster, so the public site does not show this card. Reactivate them in Staff → Staff Roster to put it back.">Not on website</span>' : ''}
                 <select class="staff-dir-role">
                     <option value="Director" ${s.role === 'Director' ? 'selected' : ''}>Director</option>

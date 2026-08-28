@@ -172,7 +172,8 @@
                 <option value="">Loading…</option>
             </select>
             <input type="password" id="slPinInput" class="sl-pin-input" placeholder="••••"
-                   inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off">
+                   inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off"
+                   data-lpignore="true" data-1p-ignore data-bwignore>
             <button id="slPinBtn" class="btn-primary sl-btn mdo-signin-btn--staff">Sign In</button>
             <p class="sl-hint">Your PIN is not stored on this phone. You'll re-enter it if the page reloads.</p>
             <p class="mdo-signin-footer">Timothy Lutheran Church</p>
@@ -578,7 +579,7 @@
                 </label>
                 <label class="sl-field">
                     <span>Anyone who saw it <span class="sl-optional">(optional)</span></span>
-                    <input type="text" id="slInjWitness" placeholder="Name">
+                    <input type="text" id="slInjWitness" placeholder="Name" autocomplete="off">
                 </label>
                 <label class="sl-field">
                     <span>Medical treatment</span>
