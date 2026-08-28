@@ -38,6 +38,10 @@
 // Secrets: STAX_API_KEY, STAX_WEB_PAYMENTS_TOKEN, STAX_ENVIRONMENT,
 //          STAX_PAYMENTS_ENABLED
 //          ('sandbox' | 'production', default sandbox)
+// Optional: STAX_SANDBOX_TEST_ENABLED=true — deliberate, temporary opt-in
+//          for click-testing against the sandbox merchant ahead of a real
+//          production Stax account (see the sandbox-test-path comment
+//          below). Leave unset/false outside an active test.
 // ============================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -87,7 +91,29 @@ serve(async (req) => {
         if (Deno.env.get("STAX_PAYMENTS_ENABLED") !== "true") {
             return json({ error: "Stax payments are not currently available." }, 503, ch);
         }
-        if ((Deno.env.get("STAX_ENVIRONMENT") || "").toLowerCase() !== "production") {
+        // Parsed early so the sandbox-test gate below can read it. Body
+        // shape is unchanged for every other caller.
+        const body = await req.json().catch(() => ({}));
+        const isProduction = (Deno.env.get("STAX_ENVIRONMENT") || "").toLowerCase() === "production";
+        // ⚠️ Sandbox test path — mirrors the matching gate in
+        // charge-stax-payment. This exists so the real Stax.js/embedded-
+        // checkout flow can be click-tested against the sandbox merchant
+        // before a production Stax account exists, without weakening the
+        // real production gate for actual families. Requires BOTH signals:
+        //   1. STAX_SANDBOX_TEST_ENABLED=true — a server secret, off by
+        //      default, meant to be flipped on only while someone is
+        //      actively testing and reverted immediately after.
+        //   2. The request explicitly carries sandboxTest:true — sent only
+        //      when the browser tab has ?staxtest=1 in its URL
+        //      (pbStaxTestEnabled() in portal-billing.js).
+        // Neither signal alone is enough: leaving the server secret on by
+        // mistake does nothing to a real parent's normal "Pay online"
+        // click, because that request never sets sandboxTest. A charge
+        // made through this path still goes to Stax's real sandbox
+        // merchant and is recorded exactly like any other Stax payment —
+        // it is test money against a test merchant, not a fake success.
+        const sandboxTestAllowed = Deno.env.get("STAX_SANDBOX_TEST_ENABLED") === "true" && body?.sandboxTest === true;
+        if (!isProduction && !sandboxTestAllowed) {
             console.error("create-stax-charge: refusing parent payment outside production environment");
             return json({ error: "Online payments are not configured for production yet." }, 503, ch);
         }
@@ -109,7 +135,6 @@ serve(async (req) => {
         if (!myFamilyIds.size) return json({ error: "No family is linked to this account." }, 403, ch);
 
         // ── 2. Input: an invoice id, nothing else ──────────────────
-        const body = await req.json().catch(() => ({}));
         const invoiceId = Number(body?.invoiceId);
         if (!Number.isFinite(invoiceId)) return json({ error: "invoiceId is required." }, 400, ch);
 
@@ -219,7 +244,7 @@ serve(async (req) => {
         return json({
             customerId: staxCustomerId,
             webPaymentsToken,
-            environment: "production",
+            environment: isProduction ? "production" : "sandbox",
             amount: due,
             // The browser hides its installment control unless this exact
             // capability is present. That prevents a newer frontend from

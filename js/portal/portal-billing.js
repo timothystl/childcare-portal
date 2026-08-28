@@ -48,6 +48,26 @@ let pbStaxInstance = null;  // the live StaxJs() instance for the open modal, or
 /** Called from portal-auth.js when Authorize.net's hosted page redirects back. */
 function pbSetReturnState(kind) { pbReturnState = kind; }
 
+// Reintroduced 2026-08-28 for sandbox click-through testing ahead of a real
+// Stax production account. Hidden from every real family by default: only
+// ?staxtest=1 on the URL this tab loaded with turns it on, then it sticks in
+// sessionStorage for the rest of the tab's life so navigating within the app
+// doesn't drop it. This flag ALONE does nothing — create-stax-charge and
+// charge-stax-payment both also require the server secret
+// STAX_SANDBOX_TEST_ENABLED=true before a non-production charge is allowed
+// through, so a tester adding this to a URL and sending it to someone else
+// can't accidentally charge them against the sandbox merchant.
+function pbStaxTestEnabled() {
+    try {
+        if (new URLSearchParams(location.search).get('staxtest') === '1') {
+            sessionStorage.setItem('pbStaxTest', '1');
+        }
+        return sessionStorage.getItem('pbStaxTest') === '1';
+    } catch (_) {
+        return false;
+    }
+}
+
 function pbEl(id) { return document.getElementById(id); }
 function pbEsc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => (
@@ -352,7 +372,7 @@ async function pbStartStaxPayment(invoiceId) {
     const errEl = pbEl(`pbStaxError-${invoiceId}`);
     if (errEl) errEl.hidden = true;
     try {
-        const session = await createStaxChargeSession(invoiceId);
+        const session = await createStaxChargeSession(invoiceId, { sandboxTest: pbStaxTestEnabled() });
         await pbLoadStaxJs();
         pbOpenStaxModal(session);
     } catch (e) {
@@ -611,6 +631,7 @@ async function pbStaxTokenizeAndCharge() {
         const saveCard = !!pbEl('pbStaxSaveCard')?.checked;
         const chargeResult = await chargeStaxPayment(session.invoiceId, paymentMethodId, {
             saveCard, amount, paymentAttemptId: session.paymentAttemptId,
+            sandboxTest: pbStaxTestEnabled(),
         });
         if (!chargeResult || chargeResult.success !== true) {
             throw new Error('Payment was not confirmed. Please try again.');
@@ -639,6 +660,7 @@ async function pbStaxChargeSavedCard() {
         const amount = pbSelectedStaxAmount();
         const chargeResult = await chargeStaxPayment(session.invoiceId, null, {
             useSavedCard: true, amount, paymentAttemptId: session.paymentAttemptId,
+            sandboxTest: pbStaxTestEnabled(),
         });
         if (!chargeResult || chargeResult.success !== true) {
             throw new Error('Payment was not confirmed. Please try again.');

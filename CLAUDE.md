@@ -171,102 +171,6 @@ an `AP_TOOLS` entry, or it is unreachable.**
 
 ---
 
-## Enrollment Forms re-enabled as a Settings card (2026-08-28)
-
-The parent portal's Account → Documents → "Policies and forms" card
-(`js/portal/portal-documents.js` `pdFormsSection()`) reads the
-`enrollment_forms` setting and, when it's empty, says "The office hasn't
-posted any forms here yet." It had said that since the office had no way to
-post one: the admin tool that writes `enrollment_forms` — upload a PDF/Word
-file, name it, describe it — had its `admin.html` markup commented out in
-July ("hidden 2026-07, may bring back later") and was never given an
-`AP_TOOLS` entry, so it was unreachable from the sidebar even before that.
-The underlying JS (`setupEnrollmentForms()` / `renderEnrollmentFormsList()`
-in `admin-settings.js`, `loadEnrollmentForms()` / `saveEnrollmentForms()` /
-`uploadEnrollmentFormFile()` in `js/supabase.js`) was never touched and still
-worked — `setupEnrollmentForms()` has run unconditionally on every admin
-boot (`admin-init.js`) the whole time, same "load it regardless of which tab
-is visible" pattern as Staff Directory/PTO/geofence.
-
-**Re-enabled as a full-width `.ap-panel` card inside `#settingsUnifiedSection`**
-(`admin.html`, "📋 Policies & enrollment forms"), not as its own `AP_TOOLS`
-sidebar entry and not as the old standalone `.admin-section`. Settings became
-one continuous page in the 2026-08-26 redesign specifically so a director
-never has to pick a screen before picking a control (see the admin portal
-shell section above); reintroducing a second Settings sidebar entry, or a
-bare section sitting after the unified page in `#tab-settings`, would have
-undone that. The card reuses every id `setupEnrollmentForms()` already
-looks for (`enrollmentFormsList`, `newEnrollFormName`, `newEnrollFormDesc`,
-`newEnrollFormFile`, `uploadEnrollFormBtn`, `uploadEnrollFormStatus`)
-unchanged, so no JS needed to change at all — only the markup's location.
-
-The same feature also still populates the public `/enroll` page (unchanged,
-pre-existing behavior); the card's copy says so.
-
-**"New Family Enrollment Capacity" and "Offer Email Links"** — the two other
-sections hidden alongside Enrollment Forms in July — were deliberately left
-commented out. Nobody asked for those back, and re-enabling three unrelated
-tools in one pass on a repo that auto-merges every `claude/**` push to
-production is a bigger blast radius than the one card that was actually
-requested.
-
----
-
-## Admin can now see a family's "Approved for pickup" list (2026-08-28)
-
-Found while re-enabling Enrollment Forms above: a parent adds a safe pickup
-person from their own portal (`js/portal/portal-account.js`, "Approved for
-pickup"), which calls `add_pickup_contact`/`remove_pickup_contact` and writes
-into `pickup_contacts` (`family_id`, `name`, `relationship`, `note`). Nothing
-in the admin app read that table — grepped `js/admin/` for `pickup_contact`
-and got zero matches. The office had no way to see who a parent has approved
-for pickup short of asking the parent directly, which defeats the point of
-having the list at pickup time.
-
-⚠️ **`pickup_contacts`' own creation migration isn't in this repo** (same gap
-as `center_headcount_rows()` elsewhere in this file — grepping every
-migration file for `pickup_contacts` turns up only
-`add_profile_photo_to_parent_portal_payloads.sql`, which reads it, not the
-table's own `CREATE TABLE`). Checked the live catalog directly rather than
-guess: RLS is on, and the **only** policy is `"admin all pickup_contacts"
-FOR ALL TO authenticated USING (is_admin())` — no policy for a non-admin at
-all. A parent's own session has no direct table access; `add_pickup_contact`/
-`remove_pickup_contact` work for them only because they're `SECURITY
-DEFINER` and resolve `family_id` from `my_parent_context()`, bypassing RLS
-entirely. An **admin's** own authenticated session, though, already
-satisfies `is_admin()` — so reading the table straight, scoped to one
-family, needs no new RPC at all.
-
-Added `fetchPickupContactsAdmin(familyId)` (`js/supabase.js`) — a plain
-`.from('pickup_contacts').select(...).eq('family_id', familyId)` — and a
-new **"Approved for pickup"** section in the Family Directory edit modal
-(`admin.html`, wired in `js/admin/admin-families.js`), between Parent 2 and
-Program Group since the list is family-level, not per-child. **Read-only, on
-purpose** — the family still adds and removes their own entries from their
-own portal; this is the office's view of that same list, not a second editor
-for it that could drift from what the parent actually approved. Shows "Save
-this family first, then reopen Edit" for a family that hasn't been saved yet
-(same pattern as the per-child Documents block above it not rendering for an
-unsaved child).
-
----
-
-## Food Program (CACFP) sidebar removed (2026-08-28)
-
-At the director's request, the four Classrooms → Food Program tools (Daily
-Meal Counts, Menu Planner, Income Eligibility, Monthly Claim — `cacfpMeal`,
-`cacfpMenu`, `cacfpIncome`, `cacfpClaims` in `js/admin/admin-portal.js`'s
-`AP_TOOLS`) are removed from the sidebar and the Classrooms dashboard's
-"Food Program" panel. Same convention as every other retirement in this
-file: the entries are simply not registered in `AP_TOOLS`, which the shell
-already treats as unreachable — `cacfpMealSection`/`cacfpMenuSection`/
-`cacfpIncomeSection`/`cacfpClaimsSection` stay in `admin.html` and
-`js/admin/admin-cacfp.js` stays in the tree, both unreferenced, in case the
-program is revived later. Nothing about CACFP's data or the underlying
-`cacfp_*` tables/RPCs changed.
-
----
-
 ## Finance tab overhaul — the Bookkeeper tab (2026-08-27)
 
 Built from `Billing_UI_inconsistency_issues.zip` → `design_handoff_finance_hub/`
@@ -3705,6 +3609,63 @@ from the section above against all four touched pages
 them, confirming the externalized scripts load correctly under `'self'`.
 
 `npm test` — 192/192. `npm run build` — `dist/` rebuilt.
+
+### Sandbox click-through testing reintroduced — `?staxtest=1` is back, differently (2026-08-28)
+
+Asked directly to test the real Stax.js embedded-checkout flow. Turned out
+the two-button `?staxtest=1` design this file describes earlier in the Stax
+section (a second "Pay … with Stax (test)" button, visible only behind the
+flag) had at some point been replaced with the current single-button design
+(`pbStartStaxPayment()` always tries Stax first, silently falling back to
+Authorize.net on `"Online payments are not configured for production yet."`)
+— and nothing in this file had caught that the `?staxtest=1` mechanism was
+gone entirely along with it. **A parent asking to test the flow got routed
+straight to Authorize.net with no way to reach Stax at all**, because
+`STAX_ENVIRONMENT` is still sandbox and the single button's fallback is
+unconditional once that gate refuses.
+
+⚠️ **Flipping `STAX_ENVIRONMENT` to `production` to unblock this would have
+been exactly the mistake the last security review's hard blocker warned
+against** — `STAX_API_KEY` is still a sandbox key, and telling the app it's
+in production would record sandbox test money as if it were real tuition.
+There is no real Stax merchant account yet, so that path was never on the
+table.
+
+Fixed by reintroducing a narrow, explicitly-opt-in bypass — a **two-signal
+gate**, not a reopened hole:
+
+- `pbStaxTestEnabled()` is back in `portal-billing.js`, same shape as the
+  original: reads `?staxtest=1` off the URL once, then sticks in
+  `sessionStorage` for the tab. The button itself is unchanged (same class,
+  same "Pay $X online" label, no visible "(test)" marker) — this only
+  changes what `sandboxTest` value rides along in the request body of
+  `createStaxChargeSession()` and `chargeStaxPayment()`.
+- `create-stax-charge` and `charge-stax-payment` both gate on
+  `isProduction || (STAX_SANDBOX_TEST_ENABLED === "true" && body.sandboxTest === true)`.
+  **Both signals are required.** The server secret alone does nothing to a
+  real parent's normal click, since that request never sets `sandboxTest`.
+  The URL flag alone does nothing unless the operator has also deliberately
+  turned on `STAX_SANDBOX_TEST_ENABLED` — meant to be flipped on only for
+  the duration of an active test session and back off immediately after,
+  the same "belt and suspenders" reasoning the rest of this app's security
+  fixes use (e.g. SX1's revoke-from-both-anon-and-PUBLIC).
+- A charge that goes through this path is **real test money against Stax's
+  real sandbox merchant** — not a faked success. It gets recorded in
+  `billing_payments` exactly like any other Stax charge, which is the whole
+  point: verifying the actual invoice/payment allocation, not just that a
+  button doesn't error.
+- `create-stax-charge`'s response `environment` field now honestly reflects
+  `"sandbox"` when this path is taken, instead of being hardcoded to
+  `"production"` regardless of which gate let the request through.
+
+⚠️ **Setting `STAX_SANDBOX_TEST_ENABLED` is a manual dashboard step** — no
+tool available in this session can set a Supabase Function secret. Turn it
+on only while testing, and turn it back off when done; there's no code-side
+reminder that it's still on.
+
+`npm test` — 192/192 (2 of the older Stax tests were rewritten in place —
+their assumption that `pbStaxTestEnabled` should never exist was itself the
+thing this session found to be stale).
 
 ---
 
