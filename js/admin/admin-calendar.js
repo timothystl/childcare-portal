@@ -837,7 +837,7 @@ function renderCapacityOverview() {
     grid.querySelectorAll('.ec-month-cell[data-date]').forEach(btn => {
         btn.addEventListener('click', () => {
             const cell = cells.find(c => c && c.dateStr === btn.dataset.date);
-            if (cell) showDayRosterDetail(cell.dateStr, room.id, cell.enrolled, cap);
+            if (cell) showDayRosterDetail(cell.dateStr, room.id, cell.enrolled, cap, grid);
         });
     });
 }
@@ -964,14 +964,22 @@ async function renderRoomSchedule() {
     }
 }
 
-// ---- Day Roster Detail popup (inside room calendar) ----
-function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
+// ---- Day Roster Detail — an inline "move a child" panel ----
+// Expands directly below whichever grid was clicked, not a popup. `parentEl`
+// is the container to append the panel INTO as its last child (Day view's
+// content div, Month view's grid, or the per-room modal's scrollable body) —
+// so it always ends up below that container's own content and inside its
+// scroll area. There's one reused DOM node, not one per view: whichever
+// view's `innerHTML =` wipe happens to catch it while it's nested there
+// destroys it along with everything else, and the next open just lazily
+// recreates it — cheap, and the views are never open at once anyway.
+function showDayRosterDetail(dateStr, roomId, enrolled, cap, parentEl) {
     // Lazy-create the detail panel
     let panel = document.getElementById('dayDetailPanel');
     if (!panel) {
         panel = document.createElement('div');
         panel.id        = 'dayDetailPanel';
-        panel.className = 'day-detail-panel';
+        panel.className = 'day-detail-panel hidden';
         panel.innerHTML = `
             <div class="day-detail-inner">
                 <div class="day-detail-header">
@@ -980,17 +988,12 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
                 </div>
                 <div id="dayDetailBody" class="day-detail-body"></div>
             </div>`;
-        // Always body-level, never nested inside #roomCalModal's own dialog:
-        // that modal is `display:none` whenever it isn't itself open, and a
-        // display:none ancestor hides this panel too regardless of its own
-        // position:fixed — which is every call from Day/Week/Month view,
-        // since none of them open the per-room modal first. This panel is a
-        // full-screen fixed overlay on its own; it doesn't need the modal's
-        // DOM to stack above it (no transform/filter on .rcal-overlay traps
-        // z-index into a sub-context, so a higher z-index still wins from body).
-        document.body.appendChild(panel);
-        document.getElementById('dayDetailClose').addEventListener('click', closeDayRosterDetail);
+        // Scoped to panel, not document.getElementById: the append below is
+        // what actually attaches this node to the document, so a lookup by
+        // id wouldn't find its own not-yet-attached descendant here.
+        panel.querySelector('.day-detail-close').addEventListener('click', closeDayRosterDetail);
     }
+    (parentEl || document.body).appendChild(panel);
 
     const room = ROOMS.find(r => r.id === roomId);
     document.getElementById('dayDetailTitle').textContent =
@@ -1073,6 +1076,12 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
                     closeDayRosterDetail();
                     drawRoomCalendar();
                     renderCapacityOverview();
+                    // Day view isn't wired into the room-calendar-modal era's
+                    // refresh list above; it re-renders itself if it's the
+                    // one currently open (harmless no-op otherwise).
+                    if (typeof _ecRenderDay === 'function' && typeof _ecView !== 'undefined' && _ecView === 'day') {
+                        _ecRenderDay();
+                    }
                 } catch (err) {
                     alert('Move failed: ' + err.message);
                     sel.disabled = false;
@@ -1091,12 +1100,11 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
     bodyEl.appendChild(addBtn);
 
     panel.classList.remove('hidden');
-    panel.classList.add('visible');
 }
 
 function closeDayRosterDetail() {
     const panel = document.getElementById('dayDetailPanel');
-    if (panel) { panel.classList.remove('visible'); panel.classList.add('hidden'); }
+    if (panel) panel.classList.add('hidden');
 }
 
 // ── Admin Add Day Modal ─────────────────────────────────────
@@ -1392,7 +1400,7 @@ function drawRoomCalendar() {
         const el = document.querySelector(`#rcalBody [data-date="${cell.dateStr}"]`);
         if (el) {
             el.addEventListener('click', () =>
-                showDayRosterDetail(cell.dateStr, rcalRoomId, cell.enrolled, cell.cap));
+                showDayRosterDetail(cell.dateStr, rcalRoomId, cell.enrolled, cell.cap, document.getElementById('rcalBody')));
         }
     });
 }

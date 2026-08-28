@@ -714,10 +714,11 @@ FTE report table's trend/drawer was removed.
   day-by-day grid is what its own name (and the original "Capacity
   Overview (month grid)" description earlier in this file) always implied.
   The old `.cap-card` aggregate markup, `openRoomCalendar()`,
-  `drawRoomCalendar()` and the `#roomCalModal` dialog are **left in place,
-  now unreferenced** — same "unreachable, not deleted" convention as the
-  retired Classroom Roster and CACFP tools elsewhere in this file, kept
-  rather than removed in case the per-room modal view is ever wanted back.
+  `drawRoomCalendar()` and the `#roomCalModal` dialog were **left in place,
+  unreferenced** — same "unreachable, not deleted" convention as the retired
+  Classroom Roster and CACFP tools elsewhere in this file, kept rather than
+  removed in case the per-room modal view was ever wanted back. ⚠️ **It was
+  — see "Overview" below, added the next day.**
 - **FTE**: kept its richer report-table shape (Enrolled/FTE/seat-days
   occ.-avail./% full progress bar/6-mo trend, click a room for the
   per-weekday drawer) rather than rebuilding it down to the design's
@@ -845,6 +846,75 @@ has no delete/void path, and this file has stood against reconstructing
 `center_headcount_rows()`'s query blind for exactly this class of risk.
 Un-marking absent (clicking Absent again) doesn't lose anything: the row
 falls back to `attendance_status` and the real check-in time reappears.
+
+### Enrollment & Capacity: the Move panel was a popup, and the old % cards came back as "Overview" (2026-08-28)
+
+Sent as four screenshots of the design source's own mockup (the same ones
+already read earlier — placeholder room names "Infants/Toddlers/Preschool/
+School Age" confirm it's the mockup, not the live app) plus a direct ask:
+"no popup windows, its to go below." Every one of the four shows a
+"— move a child" panel sitting **in the page flow directly under the
+grid**, pushing content down, not floating over it.
+
+**`showDayRosterDetail()` was a fixed-position, full-screen overlay** —
+`position:fixed;inset:0;background:rgba(0,0,0,.55)` — a real modal, exactly
+what the screenshots say it shouldn't be. Converted to an inline panel:
+
+- CSS dropped the overlay entirely — `.day-detail-panel` is now a plain
+  bordered card (`margin-top`, border, radius, no `position`/`inset`/
+  backdrop) that simply sits wherever it's placed in the DOM.
+- JS: `showDayRosterDetail()` gained a `parentEl` argument — the container to
+  **append the panel into as its own last child** — so "below the grid"
+  literally means "last child of the grid's own container," not a separate
+  floating layer. Day view passes `ecDayContent`, Month view passes
+  `capacityGrid`, and the revived per-room modal below passes `rcalBody`.
+- ⚠️ **One reused DOM node, not one per view — and that's fine.** Whichever
+  view's own `innerHTML =` wipe happens to run while the panel is nested
+  inside it destroys the node along with everything else; the next open
+  just lazily recreates it. Cheap, and none of these views are ever open at
+  the same time, so there's never a case where destroying it drops a panel
+  someone still needs.
+- The close-button listener moved from `document.getElementById('dayDetailClose')`
+  to `panel.querySelector('.day-detail-close')` — the old code looked it up
+  by id *before* the panel was attached to the document, which happened to
+  work only because the panel was unconditionally appended to `body` right
+  there. Once attachment became conditional on `parentEl`, that ordering
+  would have silently failed to bind the listener on a freshly created panel.
+  Caught before shipping, not found live.
+- The success-move handler already refreshed the old room-calendar modal and
+  `renderCapacityOverview()` (Month) unconditionally; it now also re-renders
+  Day view if that's the one currently open — a real gap from before this
+  pass, where a move made from Day view's own Move button wouldn't visually
+  refresh Day view afterward.
+
+**Separately, asked directly: "we also had... cards that gave a percentage
+capacity overview and if you clicked on a card it opened a calendar."**
+That's the exact aggregate `.cap-card` view this session's Month rebuild
+retired — deliberately left unreferenced-but-in-place rather than deleted,
+per the note above. Asked where it should live now; **added back as a 5th
+pill, "Overview"** (own independent month picker, matching FTE's own
+already-established pattern) rather than replacing Month's room-tabs or
+folding it into an existing view — Month answers "what does one room's
+month look like," Overview answers "which rooms need attention this month,"
+and the director uses both.
+
+- `_ecRenderOverview()` is the exact pre-rebuild body of `renderCapacityOverview()`
+  moved verbatim into `admin-enrollment-capacity.js`, targeting a new
+  `#ecOverviewContent` container — same working-days-in-month math, same
+  `bar-green`/`bar-orange`/`bar-red` thresholds (already fixed to a real
+  3-tier distinction earlier this session).
+- **Zero new click-wiring was needed for card → calendar.** `setupRoomCalendar()`
+  (admin-init.js) has called its delegated `.cap-card[data-room-id]` click
+  listener unconditionally since before this session touched any of this —
+  rendering `.cap-card` markup again into a new container was the only
+  thing missing. This is exactly what "left in place, unreferenced" bought:
+  restoring the feature took zero changes to `openRoomCalendar()`,
+  `drawRoomCalendar()`, or `#roomCalModal`.
+- The per-room modal's own day-cell click already called `showDayRosterDetail()`
+  — it now passes `rcalBody` as the panel's `parentEl`, so a move made from
+  *inside* the calendar modal expands below the calendar grid, inside the
+  modal's own scrollable area, rather than reintroducing a fixed overlay
+  inside a fixed overlay.
 
 ### Director-authored records — she is signature 1, not a fourth role
 

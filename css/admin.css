@@ -2132,26 +2132,24 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 /* ============================================================
    DAY ROSTER DETAIL PANEL (inside room-cal modal)
    ============================================================ */
+/* An inline panel that expands directly below whichever grid opened it
+   (Day view's rows, Month view's day-grid) — not a modal. showDayRosterDetail()
+   repositions this node as a sibling right after its caller's container on
+   every open, so "below" always means below the thing that was clicked. */
 .day-detail-panel {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 3000;
+    margin-top: 14px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+    overflow: hidden;
 }
 .day-detail-panel.hidden { display: none; }
 
 .day-detail-inner {
-    background: var(--white);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,.2);
-    width: min(360px, 90%);
-    max-height: 70vh;
-    overflow: hidden;
     display: flex;
     flex-direction: column;
+    max-height: 60vh;
 }
 
 .day-detail-header {
