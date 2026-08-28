@@ -599,10 +599,20 @@
             <!-- Waitlist & Capacity Planner — one shared allocation drives every
                  view (Waitlist Queue / Capacity Planner → Grid or Board / Moving),
                  plus the demand-by-month and age-out rollups inline in the Grid.
-                 See renderWaitlistPlanner() in js/admin/admin-waitlist.js. -->
+                 See renderWaitlistPlanner() in js/admin/admin-waitlist.js.
+
+                 No static h2/p here on purpose. apShowSection()'s ap-dup-head
+                 logic (admin-portal.js) is meant to auto-hide a section's own
+                 duplicate heading under the shell's, but only ever targeted the
+                 h2 itself — a sibling <p class="section-desc"> was never covered,
+                 so this tool's own name+blurb rendered twice (once from the
+                 shell, once here) regardless. Same root cause and same fix as
+                 the Messages tab (see #messagesUnifiedSection's comment): since
+                 renderWaitlistPlanner() already renders a real header (icon,
+                 name, subtitle, tab pills) into #wlpRoot below, a static h2/p
+                 here was pure duplication, not a fallback anything depended on
+                 — deleted rather than patched to hide correctly. -->
             <section class="admin-section" id="waitlistPlannerSection">
-                <h2>🗂️ Waitlist &amp; Capacity Planner</h2>
-                <p class="section-desc">One shared allocation drives every view — Waitlist Queue, the Capacity Planner grid or board, and Moving — with demand-by-month and age-out rollups inline below the grid. The queue is first-come, first-served by inquiry date.</p>
                 <div id="wlpRoot" style="margin-bottom:20px;"><p class="empty-hint">Loading…</p></div>
             </section>
 

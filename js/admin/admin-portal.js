@@ -776,8 +776,25 @@ function apShowSection(tool) {
         // the Classroom tab's tools in the same session) is good hygiene but
         // was never going to be a complete fix on its own.
         const h2 = s.querySelector(':scope > h2');
-        if (h2) h2.classList.toggle('ap-dup-head',
-            open && !h2.querySelector('button:not(.collapse-toggle), input, select, a'));
+        const hideHeading = open && !!h2 && !h2.querySelector('button:not(.collapse-toggle), input, select, a');
+        if (h2) h2.classList.toggle('ap-dup-head', hideHeading);
+
+        // A <p class="section-desc"> directly under the h2 is the same
+        // duplicate-blurb pattern as the h2 itself — the shell already prints
+        // the tool's blurb above the card, so a section-desc restating it here
+        // reads as the tool's name+description printed twice. The check above
+        // only ever covered the h2; found live 2026-08-28 on the Waitlist &
+        // Capacity Planner (its own h2/p pair was deleted outright — its inner
+        // renderWaitlistPlanner() already renders a real header) and again on
+        // Import Waitlist from File, which has no inner header of its own, so
+        // hiding here — not deleting the markup — is the fix for it. Scoped to
+        // the paragraph immediately after the h2 specifically, so a section
+        // that uses .section-desc further down for real per-field help text
+        // is untouched.
+        const descP = h2 && h2.nextElementSibling;
+        if (descP && descP.tagName === 'P' && descP.classList.contains('section-desc')) {
+            descP.classList.toggle('ap-dup-head', hideHeading);
+        }
     });
 }
 
