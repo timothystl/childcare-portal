@@ -634,6 +634,31 @@ carry literal hex values.
   sweep) — was bumped again for this change, same as every prior CSS edit
   this session.
 
+### ⚠️ …and the single-column stack above was overridden by the director the same day
+
+Asked directly, minutes after the single-column fix above shipped: put two
+rooms side by side again, and make sure In/Out stamp a time that's visibly
+labeled and stays. `.ab-rooms` is a two-column grid again
+(`repeat(2, minmax(0, 1fr))`, collapsing to one column under 900px, same
+breakpoint the shell's own drawer uses) — this is not a revert of the fix
+above, it's the design mockup's own layout choice being overruled by the
+person who actually runs the room. **If `Classroom Tab Redesign.dc.html` is
+ever re-synced from, its single-column `sectionStyle` should not be
+re-applied here without checking this note first.**
+
+The check-in/check-out persistence half of the same ask turned out to
+already work — verified directly against the live catalog, not assumed:
+`admin_log_child_event()` writes an unconditional `child_day_events` row for
+both `check_in` and `check_out`, and `center_headcount_rows()` computes
+`attendance_status`/`last_event_at` fresh from the **latest** such row on
+every call — there is no client-side state to lose on a refresh. Confirmed
+against real rows already in production (a same-session round of manual
+testing had left a real check-in/check-out pair on a real student). The one
+actual gap: the "present" row showed a bare time (`8:45a`) with no label,
+while "left" already said `out 7:57p` — asymmetric and easy to misread as
+"nothing was stamped." Fixed by prefixing the present-state mark with `in `
+too, in `_abRoom()` (admin-attendance.js). No RPC or schema change needed.
+
 ### Director-authored records — she is signature 1, not a fourth role
 
 For Incident Reports, the open question was how signature 1 works when there
