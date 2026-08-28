@@ -23,7 +23,7 @@
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/admin.css?v=26">
-    <link rel="stylesheet" href="css/admin-portal.css?v=2">
+    <link rel="stylesheet" href="css/admin-portal.css?v=3">
 </head>
 <body class="admin-body">
 
@@ -484,19 +484,14 @@
                 <div id="fireDrillsBody"></div>
             </section>
 
-            <!-- ⚠️ Staff injuries, NOT child incidents. Nothing here is ever
-                 visible to a family — separate table, no parent policy. -->
-            <section class="admin-section collapsible-section" id="staffInjuriesSection">
-                <h2>🚑 Staff Injury Reports</h2>
-                <div id="staffInjuriesBody"></div>
-            </section>
-
-            <!-- Measures buddy punching rather than blocking it. Nothing on
-                 this screen refuses a clock-in. -->
-            <section class="admin-section collapsible-section" id="clockIntegritySection">
-                <h2>📱 Clock-In Integrity</h2>
-                <div id="clockIntegrityBody"></div>
-            </section>
+            <!-- Staff Injury Reports and Clock-In Integrity moved to
+                 Staff → HR & Handbook / Staff → Payroll → Time Clock
+                 (design_handoff_staff, 2026-08-28) — this is also the fix
+                 for a real bug: both carried pane:'staffing' in AP_TOOLS
+                 while living here in #tab-families, which apShowSection()
+                 hid whenever either tool was opened, leaving them
+                 permanently blank. See the AP_TOOLS comment in
+                 admin-portal.js. -->
 
             <section class="admin-section" id="familiesSection">
                 <h2>👨‍👩‍👧 Family Directory</h2>
@@ -1345,41 +1340,18 @@
         <!-- ── Tab: Staffing ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-staffing">
 
-            <!-- Daily Staffing Requirement — built entirely from booked
-                 registrations + the saved ratios. Rendered by apRenderStaffReq()
-                 in js/admin/admin-portal.js; it never reads clock-in room data. -->
-            <section class="admin-section" id="staffReqSection">
-                <h2>👥 Daily Staffing Requirement</h2>
-                <p class="section-desc">How many staff each room needs each day of the week, calculated from registered children and your saved ratios — plus staff-hours and estimated labor cost for the week.</p>
-                <div class="ap-callout">Built entirely from <strong>registrations</strong> — the days families booked. It never reads clock-in room assignments, so spotty room selection at the time clock can't distort it.</div>
-                <div class="ap-inputs">
-                    <div class="ap-input-field">
-                        <label for="staffReqWeekOf">Week of</label>
-                        <input type="date" id="staffReqWeekOf">
-                    </div>
-                    <div class="ap-input-field">
-                        <label for="staffReq_hours">Hours open per day</label>
-                        <input type="number" step="0.5" min="0" id="staffReq_hours" value="10.5">
-                    </div>
-                    <div class="ap-input-field">
-                        <label for="staffReq_floaters">Floaters / break relief</label>
-                        <input type="number" step="1" min="0" id="staffReq_floaters" value="1">
-                    </div>
-                    <div class="ap-input-field">
-                        <label for="staffReq_wage">Avg wage ($/hr)</label>
-                        <input type="number" step="0.25" min="0" id="staffReq_wage" value="15.5">
-                    </div>
-                    <div class="ap-input-field">
-                        <label for="staffReq_burden">Payroll burden (%)</label>
-                        <input type="number" step="0.5" min="0" id="staffReq_burden" value="12">
-                    </div>
-                </div>
-                <div id="staffReqBody"><p class="empty-hint">Loading…</p></div>
-            </section>
-
+            <!-- Build Staff Schedule + Daily Staffing Requirement, consolidated
+                 into one tool (design_handoff_staff, 2026-08-28): the
+                 Requirement is now a tab reading the same apStaffing() call
+                 Build Staff Schedule already checks assignments against,
+                 instead of a separate nav entry that could compute "enough
+                 staff" a different way. They share one "Week of" date field
+                 (#staffWeekOf) — apRenderStaffReq() in admin-portal.js reads
+                 it directly, so the two tabs can never disagree about which
+                 week they're looking at. -->
             <section class="admin-section collapsible-section" id="staffScheduleSection">
                 <h2>🗓️ Build Staff Schedule</h2>
-                <p class="section-desc">Lay out who works which room and shift each day. The requirement row comes from registered children and your saved ratios, so you can see at a glance whether the week is covered before you post it to staff. Closed days are excluded automatically.</p>
+                <p class="section-desc">Assign staff to rooms and shifts for the week, against what the ratios require. Closed days are excluded automatically.</p>
                 <div class="roster-controls">
                     <div class="roster-field">
                         <label for="staffWeekOf">Week of (Monday)</label>
@@ -1389,53 +1361,198 @@
                         <button id="saveScheduleBtn"   class="btn-primary">💾 Save Schedule</button>
                         <button id="exportStaffBtn"    class="btn-secondary">&#8595; Export Excel</button>
                         <button id="emailStaffScheduleBtn" class="btn-secondary">✉️ Email Schedules</button>
+                        <button id="printStaffScheduleBtn" class="btn-secondary">&#128424; Print schedule</button>
                     </div>
-                    <div class="ap-stats" id="apSchedStats" style="margin-left:auto"></div>
                 </div>
-                <!-- Time-off approval queue — the director half of the kiosk's
-                     "Ask for a day off" flow. Rendered by apRenderScheduleTimeOff(). -->
-                <div class="ap-sched-split">
-                    <div class="ap-sched-main">
-                        <div id="staffContent">
-                            <p class="empty-hint">Select a week above and click Generate Schedule.</p>
-                        </div>
-                        <!-- Ratio Step & Next Child, mounted a second time here (consolidation
-                             pass, design_handoff_planning_market, 2026-08-27) — same render
-                             function as the Planning tab's own Ratio Step tool, just pointed
-                             at this week's date instead of a second date picker. See
-                             apMountStaffRatioStep() in js/admin/admin-portal.js. -->
-                        <section class="ap-sched-ratiostep" id="staffRatioStepSection">
-                            <div class="wlp-section-label" style="margin:18px 0 6px">&#9878;&#65039; Ratio Step &amp; Next Child</div>
-                            <div id="staffRatioStepContent">
-                                <p class="empty-hint">Select a week above to see the next staffing step.</p>
-                            </div>
-                        </section>
+                <!-- Children this week / Est. labor cost — apSchedHeaderStats()
+                     in admin-portal.js, same figures apRenderStaffReq() computes
+                     for its own footer. Pinned above the tab strip since both
+                     tabs share them, per the handoff. -->
+                <div class="bk-stats" id="apSchedHeaderStats" style="margin-bottom:16px"></div>
+
+                <div class="bk-nav" id="apSchedTabs">
+                    <button class="bk-pill is-on" data-ap-sched-tab="week">This week's schedule</button>
+                    <button class="bk-pill" data-ap-sched-tab="req">Daily Staffing Requirement</button>
+                </div>
+
+                <div id="apSchedTabWeek">
+                    <div class="ap-seg" id="apSchedViewToggle" style="margin-bottom:10px">
+                        <button class="ap-seg-btn is-on" data-ap-sched-view="room">By room &amp; shift</button>
+                        <button class="ap-seg-btn" data-ap-sched-view="worker">By worker</button>
                     </div>
-                    <aside class="ap-sched-side" id="apSchedTimeOff"></aside>
+                    <p class="section-desc" style="margin:0 0 10px">Click any slot to assign or change who's working it.</p>
+                    <!-- Time-off approval queue — the director half of the kiosk's
+                         "Ask for a day off" flow. Rendered by apRenderScheduleTimeOff(). -->
+                    <div class="ap-sched-split">
+                        <div class="ap-sched-main">
+                            <div id="staffContent">
+                                <p class="empty-hint">Select a week above and click Generate Schedule.</p>
+                            </div>
+                            <!-- "By worker" — read-only pivot of the same assignments,
+                                 renderScheduleByWorker() in admin-reports.js. Toggled
+                                 with #staffContent by apSwitchSchedView(). -->
+                            <div id="staffContentByWorker" class="ap-hidden-tool">
+                                <p class="empty-hint">Select a week above and click Generate Schedule.</p>
+                            </div>
+                            <!-- Ratio Step & Next Child, mounted a second time here (consolidation
+                                 pass, design_handoff_planning_market, 2026-08-27) — same render
+                                 function as the Planning tab's own Ratio Step tool, just pointed
+                                 at this week's date instead of a second date picker. See
+                                 apMountStaffRatioStep() in js/admin/admin-portal.js. -->
+                            <section class="ap-sched-ratiostep" id="staffRatioStepSection">
+                                <div class="wlp-section-label" style="margin:18px 0 6px">&#9878;&#65039; Ratio Step &amp; Next Child</div>
+                                <div id="staffRatioStepContent">
+                                    <p class="empty-hint">Select a week above to see the next staffing step.</p>
+                                </div>
+                            </section>
+                        </div>
+                        <aside class="ap-sched-side" id="apSchedTimeOff"></aside>
+                    </div>
+                </div>
+
+                <!-- Daily Staffing Requirement tab — apRenderStaffReq() in
+                     admin-portal.js. Built entirely from booked registrations +
+                     the saved ratios; it never reads clock-in room data. -->
+                <div id="apSchedTabReq" class="ap-hidden-tool">
+                    <div class="ap-callout">Built entirely from <strong>registrations</strong> — the days families booked. It never reads clock-in room assignments, so spotty room selection at the time clock can't distort it.</div>
+                    <div class="ap-inputs">
+                        <div class="ap-input-field">
+                            <label for="staffReq_hours">Hours open per day</label>
+                            <input type="number" step="0.5" min="0" id="staffReq_hours" value="10.5">
+                        </div>
+                        <div class="ap-input-field">
+                            <label for="staffReq_floaters">Floaters / break relief</label>
+                            <input type="number" step="1" min="0" id="staffReq_floaters" value="1">
+                        </div>
+                        <div class="ap-input-field">
+                            <label for="staffReq_wage">Avg wage ($/hr)</label>
+                            <input type="number" step="0.25" min="0" id="staffReq_wage" value="15.5">
+                        </div>
+                        <div class="ap-input-field">
+                            <label for="staffReq_burden">Payroll burden (%)</label>
+                            <input type="number" step="0.5" min="0" id="staffReq_burden" value="12">
+                        </div>
+                    </div>
+                    <div id="staffReqBody"><p class="empty-hint">Loading…</p></div>
                 </div>
             </section>
 
             <!-- Payroll -->
+            <!-- Payroll + PTO Settings + Geofence & Clock Reminders + Clock-In
+                 Integrity, consolidated into one tool (design_handoff_staff,
+                 2026-08-28): the PTO rate only ever matters in the context of
+                 the balance it produces, and Time Clock's settings/integrity
+                 are one system (tune the rules / see whether they're actually
+                 working) for the person tuning them. Full-role gated as a
+                 whole via AP_FULL_ONLY_KEYS — Time Clock inherits that for
+                 free, which is the stricter of its two former gates. -->
             <section class="admin-section collapsible-section" id="payrollSection">
                 <h2>💵 Payroll</h2>
-                <p class="section-desc">Review and edit hours, PTO, and pay for a bi-weekly period. Expand any staff row to see daily clock events and enter or correct hours — changes save automatically.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="payrollPeriod">Pay Period</label>
-                        <select id="payrollPeriod" class="family-search-input" style="min-width:230px">
-                            <!-- populated by setupPayrollReport() -->
-                        </select>
+                <p class="section-desc">Hours, PTO, and pay for a bi-weekly period.</p>
+
+                <div class="bk-nav" id="apPayrollTabs">
+                    <button class="bk-pill is-on" data-ap-payroll-tab="period">Pay period</button>
+                    <button class="bk-pill" data-ap-payroll-tab="pto">PTO policy</button>
+                    <button class="bk-pill" data-ap-payroll-tab="clock">Time Clock</button>
+                </div>
+
+                <div id="apPayrollTabPeriod">
+                    <div class="roster-controls">
+                        <div class="roster-field">
+                            <label for="payrollPeriod">Pay Period</label>
+                            <select id="payrollPeriod" class="family-search-input" style="min-width:230px">
+                                <!-- populated by setupPayrollReport() -->
+                            </select>
+                        </div>
+                        <div class="roster-btns">
+                            <button id="generatePayrollBtn" class="btn-secondary">Load Period</button>
+                            <button id="exportPayrollBtn" class="btn-primary">&#8595; Export Excel</button>
+                            <button id="printPayrollBtn" class="btn-secondary">&#128424; Print for Approval</button>
+                            <button id="approveMdoPayrollBtn" class="btn-secondary" style="display:none">Approve MDO Payroll</button>
+                        </div>
                     </div>
-                    <div class="roster-btns">
-                        <button id="generatePayrollBtn" class="btn-secondary">Load Period</button>
-                        <button id="exportPayrollBtn" class="btn-primary">&#8595; Export Excel</button>
-                        <button id="printPayrollBtn" class="btn-secondary">&#128424; Print for Approval</button>
-                        <button id="approveMdoPayrollBtn" class="btn-secondary" style="display:none">Approve MDO Payroll</button>
+                    <p class="section-desc" style="margin-top:-.4rem">Expand any staff row to see daily clock events and enter or correct hours — changes save automatically.</p>
+                    <div id="mdoPayrollApprovalStatus" style="display:none;margin:6px 0 0;font-size:.9em;color:var(--text-secondary,#6a6858)"></div>
+                    <div id="payrollContent">
+                        <p class="empty-hint">Select a pay period and click Load Period.</p>
                     </div>
                 </div>
-                <div id="mdoPayrollApprovalStatus" style="display:none;margin:6px 0 0;font-size:.9em;color:var(--text-secondary,#6a6858)"></div>
-                <div id="payrollContent">
-                    <p class="empty-hint">Select a pay period and click Load Period.</p>
+
+                <!-- PTO policy tab — moved from the old standalone ptoSection.
+                     Same ids, same setupPtoSettings()/loadPtoRateSetting(). -->
+                <div id="apPayrollTabPto" class="ap-hidden-tool">
+                    <p class="section-desc">The rate at which hourly staff accrue paid time off (hours earned per hour worked — e.g. 0.04 ≈ 1 hour of PTO earned per 25 hours worked). Applied automatically in the Payroll report above. Salaried staff don't accrue PTO here.</p>
+                    <p class="section-desc" style="margin-top:-.5rem">Scheduling a new rate never changes the past — hours already worked keep accruing at whatever rate was in effect when they were worked. Past rates are locked and can't be edited; you can only remove a rate that hasn't taken effect yet.</p>
+                    <div id="ptoRateHistoryWrap" style="margin-bottom:1rem"></div>
+                    <div style="display:flex;align-items:flex-end;gap:.75rem;flex-wrap:wrap">
+                        <label style="font-weight:600;color:#1e3a5f;font-size:.9rem">
+                            Rate<br>
+                            <input type="number" id="newPtoRateInput" min="0" step="0.001" placeholder="0.00"
+                                style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;margin-top:4px">
+                        </label>
+                        <label style="font-weight:600;color:#1e3a5f;font-size:.9rem">
+                            Effective Date<br>
+                            <input type="date" id="newPtoRateDate"
+                                style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;margin-top:4px">
+                        </label>
+                        <button id="addPtoRateBtn" class="btn-primary">➕ Add Rate</button>
+                        <span id="ptoRateStatus" style="font-size:.85rem;"></span>
+                    </div>
+                </div>
+
+                <!-- Time Clock tab — Settings (moved from geofenceSection) /
+                     Integrity (moved from clockIntegritySection, which used
+                     to live in #tab-families with pane:'staffing' — a real
+                     mismatch that left it permanently blank; see the
+                     AP_TOOLS comment in admin-portal.js). -->
+                <div id="apPayrollTabClock" class="ap-hidden-tool">
+                    <div class="ap-seg" id="apTimeClockTabs" style="margin-bottom:14px">
+                        <button class="ap-seg-btn is-on" data-ap-tc-tab="settings">Settings</button>
+                        <button class="ap-seg-btn" data-ap-tc-tab="integrity">Integrity</button>
+                    </div>
+
+                    <div id="apTimeClockTabSettings">
+                        <p class="section-desc">Warn staff and notify the director when a clock-in or clock-out happens outside the school perimeter. Also sends reminders if scheduled staff haven't clocked in or out within the grace period.</p>
+                        <div class="geofence-fields">
+                            <label class="geofence-toggle-row">
+                                <input type="checkbox" id="geofenceEnabled">
+                                <span>Enable geofence warnings</span>
+                            </label>
+                            <div class="geofence-grid">
+                                <label>School Latitude
+                                    <div class="geofence-loc-row">
+                                        <input type="text" id="geofenceLat" placeholder="e.g. 30.2672" inputmode="decimal">
+                                        <button type="button" id="geofenceUseMyLocation" class="btn-secondary" style="white-space:nowrap">📍 Use My Location</button>
+                                    </div>
+                                </label>
+                                <label>School Longitude
+                                    <input type="text" id="geofenceLng" placeholder="e.g. -97.7431" inputmode="decimal">
+                                </label>
+                                <label>Radius (feet)
+                                    <input type="text" id="geofenceRadius" placeholder="e.g. 300" inputmode="numeric">
+                                </label>
+                                <label>Grace Period (minutes)
+                                    <input type="text" id="geofenceGrace" placeholder="e.g. 15" inputmode="numeric">
+                                    <small style="color:var(--text-muted,#888);font-size:.82em;">How long after shift start/end before a missed-clock alert fires.</small>
+                                </label>
+                                <label>Director Notify Email
+                                    <input type="email" id="geofenceNotifyEmail" placeholder="director@example.com">
+                                    <small style="color:var(--text-muted,#888);font-size:.82em;">Receives geofence alerts and missed-clock summaries.</small>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="rates-actions">
+                            <button id="saveGeofenceBtn" class="btn-primary">💾 Save</button>
+                            <span id="geofenceStatus" class="rates-status"></span>
+                        </div>
+                    </div>
+
+                    <!-- Measures buddy punching rather than blocking it. Nothing
+                         here refuses a clock-in. Lazy-rendered on first open —
+                         see apSwitchTimeClockTab() in admin-portal.js. -->
+                    <div id="apTimeClockTabIntegrity" class="ap-hidden-tool">
+                        <div id="clockIntegrityBody"></div>
+                    </div>
                 </div>
             </section>
 
@@ -1450,9 +1567,20 @@
             -->
 
             <!-- Staff Roster -->
+            <!-- Staff Roster + Staff Directory, consolidated into one tool
+                 (design_handoff_staff, 2026-08-28): one `staff` table, one
+                 nav entry — Directory is a read tab of the roster now,
+                 not a parallel screen reading the same table a second time. -->
             <section class="admin-section collapsible-section" id="staffRosterSection">
                 <h2>👥 Staff Roster</h2>
-                <p class="section-desc">Manage active staff members. Name, role, pay rate, and room assignment are used for the payroll report. Assign a 4-digit PIN so staff can clock in/out from the mobile clock-in page.</p>
+                <p class="section-desc">Staff records, pay type, rooms, and availability — the one place these get edited.</p>
+
+                <div class="bk-nav" id="apRosterTabs">
+                    <button class="bk-pill is-on" data-ap-roster-tab="roster">Roster</button>
+                    <button class="bk-pill" data-ap-roster-tab="directory">Directory (print)</button>
+                </div>
+
+                <div id="apRosterTabRoster">
                 <div class="families-dir-controls">
                     <button id="addStaffBtn" class="btn-primary">+ Add Staff Member</button>
                     <button id="toggleInactiveStaffBtn" class="btn-ghost">Show Inactive</button>
@@ -1599,79 +1727,56 @@
                 <div id="staffRosterContent">
                     <p class="empty-hint">Click Refresh to load staff.</p>
                 </div>
-            </section>
+                </div><!-- /#apRosterTabRoster -->
 
-            <!-- PTO Settings -->
-            <section class="admin-section collapsible-section" id="ptoSection">
-                <h2>🏖️ PTO Settings</h2>
-                <p class="section-desc">The rate at which hourly staff accrue paid time off (hours earned per hour worked — e.g. 0.04 ≈ 1 hour of PTO earned per 25 hours worked). Applied automatically in the Payroll report. Salaried staff don't accrue PTO here.</p>
-                <p class="section-desc" style="margin-top:-.5rem">Scheduling a new rate never changes the past — hours already worked keep accruing at whatever rate was in effect when they were worked. Past rates are locked and can't be edited; you can only remove a rate that hasn't taken effect yet.</p>
-                <div id="ptoRateHistoryWrap" style="margin-bottom:1rem"></div>
-                <div style="display:flex;align-items:flex-end;gap:.75rem;flex-wrap:wrap">
-                    <label style="font-weight:600;color:#1e3a5f;font-size:.9rem">
-                        Rate<br>
-                        <input type="number" id="newPtoRateInput" min="0" step="0.001" placeholder="0.00"
-                            style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;margin-top:4px">
-                    </label>
-                    <label style="font-weight:600;color:#1e3a5f;font-size:.9rem">
-                        Effective Date<br>
-                        <input type="date" id="newPtoRateDate"
-                            style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;margin-top:4px">
-                    </label>
-                    <button id="addPtoRateBtn" class="btn-primary">➕ Add Rate</button>
-                    <span id="ptoRateStatus" style="font-size:.85rem;"></span>
-                </div>
-            </section>
-
-            <!-- Staff Directory -->
-            <section class="admin-section collapsible-section" id="staffDirectorySection">
-                <h2>🧑‍🏫 Staff Directory</h2>
-                <p class="section-desc">Manage the photos, names, and room assignments shown in the "Our Staff" section on the public page. Rooms with no assigned Lead Teacher show a "Coming Soon" placeholder there automatically.</p>
-                <div id="staffDirectoryWrap">
-                    <p class="empty-hint">Loading staff…</p>
-                </div>
-                <div class="rates-actions">
-                    <button id="addStaffDirectoryBtn" class="btn-secondary" type="button">➕ Add Staff Member</button>
-                    <button id="saveStaffDirectoryBtn" class="btn-primary">💾 Save Staff Directory</button>
-                    <span id="staffDirectoryStatus" class="rates-status"></span>
-                </div>
-            </section>
-
-            <!-- Geofence & Clock Reminders -->
-            <section class="admin-section collapsible-section" id="geofenceSection">
-                <h2>📍 Geofence &amp; Clock Reminders</h2>
-                <p class="section-desc">Warn staff and notify the director when a clock-in or clock-out happens outside the school perimeter. Also sends reminders if scheduled staff haven't clocked in or out within the grace period.</p>
-                <div class="geofence-fields">
-                    <label class="geofence-toggle-row">
-                        <input type="checkbox" id="geofenceEnabled">
-                        <span>Enable geofence warnings</span>
-                    </label>
-                    <div class="geofence-grid">
-                        <label>School Latitude
-                            <div class="geofence-loc-row">
-                                <input type="text" id="geofenceLat" placeholder="e.g. 30.2672" inputmode="decimal">
-                                <button type="button" id="geofenceUseMyLocation" class="btn-secondary" style="white-space:nowrap">📍 Use My Location</button>
-                            </div>
-                        </label>
-                        <label>School Longitude
-                            <input type="text" id="geofenceLng" placeholder="e.g. -97.7431" inputmode="decimal">
-                        </label>
-                        <label>Radius (feet)
-                            <input type="text" id="geofenceRadius" placeholder="e.g. 300" inputmode="numeric">
-                        </label>
-                        <label>Grace Period (minutes)
-                            <input type="text" id="geofenceGrace" placeholder="e.g. 15" inputmode="numeric">
-                            <small style="color:var(--text-muted,#888);font-size:.82em;">How long after shift start/end before a missed-clock alert fires.</small>
-                        </label>
-                        <label>Director Notify Email
-                            <input type="email" id="geofenceNotifyEmail" placeholder="director@example.com">
-                            <small style="color:var(--text-muted,#888);font-size:.82em;">Receives geofence alerts and missed-clock summaries.</small>
-                        </label>
+                <!-- Directory (print) tab — moved from the old standalone
+                     staffDirectorySection. Same renderStaffDirectory(),
+                     same #staffDirectoryWrap id. -->
+                <div id="apRosterTabDirectory" class="ap-hidden-tool">
+                    <p class="section-desc">Manage the photos, names, and room assignments shown in the "Our Staff" section on the public page. Rooms with no assigned Lead Teacher show a "Coming Soon" placeholder there automatically.</p>
+                    <div id="staffDirectoryWrap">
+                        <p class="empty-hint">Loading staff…</p>
+                    </div>
+                    <div class="rates-actions">
+                        <button id="addStaffDirectoryBtn" class="btn-secondary" type="button">➕ Add Staff Member</button>
+                        <button id="saveStaffDirectoryBtn" class="btn-primary">💾 Save Staff Directory</button>
+                        <span id="staffDirectoryStatus" class="rates-status"></span>
                     </div>
                 </div>
-                <div class="rates-actions">
-                    <button id="saveGeofenceBtn" class="btn-primary">💾 Save</button>
-                    <span id="geofenceStatus" class="rates-status"></span>
+            </section>
+
+            <!-- HR & Handbook — new (design_handoff_staff, 2026-08-28):
+                 reference policy docs, a write-up log, and Staff Injury
+                 Reports (moved here from its own nav entry — same table,
+                 same full-role reasoning). The Injury Reports tab is hidden
+                 for anyone but a `full` admin by applyRoleRestrictions() in
+                 admin-safety.js; Policies and Write-ups stay open to
+                 `restricted`, which is why this whole tool is NOT in
+                 AP_FULL_ONLY_KEYS the way `staffInjury` used to be. -->
+            <section class="admin-section collapsible-section" id="hrHandbookSection">
+                <h2>📖 HR &amp; Handbook</h2>
+                <p class="section-desc">Policies every staff member has agreed to, and the written record when one wasn't followed.</p>
+
+                <div class="bk-nav" id="apHrTabs">
+                    <button class="bk-pill is-on" data-ap-hr-tab="policies">Policies</button>
+                    <button class="bk-pill" data-ap-hr-tab="writeups">Write-ups</button>
+                    <button class="bk-pill" data-ap-hr-tab="injury" id="apHrPillInjury">Injury Reports</button>
+                </div>
+
+                <div id="apHrTabPolicies">
+                    <div id="hrPoliciesBody"><p class="empty-hint">Loading…</p></div>
+                </div>
+
+                <div id="apHrTabWriteUps" class="ap-hidden-tool">
+                    <div id="hrWriteUpsBody"><p class="empty-hint">Loading…</p></div>
+                </div>
+
+                <!-- Moved from the old standalone staffInjuriesSection, which
+                     lived in #tab-families with pane:'staffing' — a real
+                     mismatch that left it permanently blank. Same
+                     #staffInjuriesBody id, same renderStaffInjuriesTool(). -->
+                <div id="apHrTabInjury" class="ap-hidden-tool">
+                    <div id="staffInjuriesBody"></div>
                 </div>
             </section>
 
