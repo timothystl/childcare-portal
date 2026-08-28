@@ -5402,8 +5402,8 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 
 .ab-kids { padding: 4px 15px 10px; }
 .ab-kid {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 0; border-bottom: 1px solid var(--linen); font-size: .9em;
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid var(--linen); font-size: .9em;
 }
 .ab-kid:last-child { border-bottom: none; }
 .ab-av {
@@ -5411,24 +5411,37 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     background: var(--warm-gray); color: var(--text-muted);
     font-size: .66em; font-weight: 800;
     display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
 }
 .ab-kid.is-in    .ab-av { background: var(--green-pale); color: var(--green-dark); }
 .ab-kid.is-out   .ab-av { background: var(--warm-gray); }
-.ab-kid.is-absent .ab-av { background: var(--tang-pale); color: var(--tang-dark); }
-/* Truncate rather than wrap: a wrapped name plus a vertically-centered row
-   (align-items: center on .ab-kid) put the mark text right in the middle of
-   the wrapped name, reading as an overlap. One line + ellipsis avoids that
-   at any card width; the full name is still available via the title attr. */
+.ab-kid.is-absent .ab-av { background: var(--tang-pale); color: var(--ap-deep-tang); }
+/* Name + badges stack in their own column so the badge row can wrap
+   independently of the action grid beside it. Name itself truncates rather
+   than wraps — the full name is still available via the title attribute —
+   since a wrapped name in a flex-start row reads as colliding with the
+   badge line right below it. */
+.ab-kid-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 2px; }
 .ab-kid-name {
-    flex: 1; min-width: 0; font-weight: 700; color: var(--navy);
+    font-weight: 700; color: var(--navy);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.ab-kid-mark { flex: none; font-size: .84em; color: var(--text-muted); font-weight: 700; }
+.ab-kid-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ab-kid-badges:empty { display: none; }
+.ab-daytype-pill {
+    background: var(--sun-pale); color: var(--navy);
+    border-radius: 999px; padding: 1px 8px; font-size: .68em; font-weight: 800; letter-spacing: .03em;
+}
+.ab-allergy-icon { font-size: .85em; cursor: help; line-height: 1; }
+.ab-absent-label { color: var(--ap-deep-tang); font-weight: 800; font-size: .74em; letter-spacing: .03em; }
+/* Read-only (no canAct) fallback only — the action grid below shows its own
+   in/out/absent state once a role can act, so this text is never doubled up. */
+.ab-kid-mark { flex: none; font-size: .84em; color: var(--text-muted); font-weight: 700; margin-top: 2px; }
 .ab-kid.is-in    .ab-kid-mark { color: var(--green-text); }
-.ab-kid.is-absent .ab-kid-mark { color: var(--tang-dark); }
+.ab-kid.is-absent .ab-kid-mark { color: var(--ap-deep-tang); }
 .ab-kid.is-waiting { opacity: .72; }
 .ab-dropin {
-    margin-left: 7px; background: var(--sun-pale); color: var(--mustard-dark);
+    background: var(--sun-pale); color: var(--mustard-dark);
     border-radius: 999px; padding: 1px 8px; font-size: .72em; font-weight: 800;
 }
 .ab-empty { margin: 10px 0; font-size: .88em; color: var(--text-muted); }
@@ -5475,43 +5488,47 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
    "write it yourself" compose panels.
    ============================================================ */
 
-/* Attendance Board — In / Out / Absent / Move, per child row. Same shape as
-   the retired Roster's .att-btn toggle pair, extended to three toggles plus
-   a move dropdown. */
+/* Attendance Board — In / Out stacked beside Move / Absent, a 2x2 grid per
+   child row rather than four controls in a single line, matching the
+   director's own screenshot (2026-08-28). */
 .ab-kid { flex-wrap: wrap; row-gap: 6px; }
 .ab-actions {
-    display: inline-flex; align-items: center; gap: 4px;
+    display: flex; align-items: flex-start; gap: 6px;
     flex: none; margin-left: auto;
 }
+.ab-actions-col { display: flex; flex-direction: column; gap: 5px; }
 /* Each action keeps its own color permanently (not just on hover/active) —
    matching the design handoff's inStyle/outStyle/absentStyle exactly: green
    for In, tangerine for Out, deep tangerine for Absent, filled when that's
    the current mark. */
 .ab-act-btn {
-    min-width: 40px; padding: 4px 10px; font-size: .78em; font-weight: 800;
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    min-width: 82px; padding: 4px 10px; font-size: .78em; font-weight: 800;
     line-height: 1; border-radius: 6px; cursor: pointer; background: #fff;
     transition: background .12s, color .12s;
 }
 .ab-act-btn:disabled { opacity: .5; cursor: progress; }
+.ab-act-time { font-weight: 700; opacity: .85; font-variant-numeric: tabular-nums; }
 .ab-act-btn[data-act="in"] { border: 1px solid var(--green-text); color: var(--green-text); }
 .ab-act-btn[data-act="in"]:hover:not(:disabled) { background: var(--green-pale); }
 .ab-act-btn[data-act="in"].is-on { background: var(--green-text); color: #fff; }
 .ab-act-btn[data-act="out"] { border: 1px solid var(--tang); color: var(--tang); }
 .ab-act-btn[data-act="out"]:hover:not(:disabled) { background: var(--tang-pale); }
 .ab-act-btn[data-act="out"].is-on { background: var(--tang); color: #fff; }
-.ab-act-btn[data-act="absent"] { border: 1px solid var(--ap-deep-tang); color: var(--ap-deep-tang); }
+.ab-act-btn[data-act="absent"] { border: 1px solid var(--ap-deep-tang); color: var(--ap-deep-tang); justify-content: center; }
 .ab-act-btn[data-act="absent"]:hover:not(:disabled) { background: var(--tang-pale); }
 .ab-act-btn[data-act="absent"].is-on { background: var(--ap-deep-tang); color: #fff; }
-/* Capped width + ellipsis: the two-column room layout leaves less room per
-   row than the select's own content (a picked room label can be long, e.g.
-   "🐢 Turtle Room"), and an unbounded select was pushing into the name/mark
-   text next to it. The placeholder stays "Move" — the dropdown's own
-   options still show full room names. */
+/* Fixed width matching the In/Out buttons beside it, with ellipsis safety:
+   a picked room label can be long (e.g. "🐢 Turtle Room"), and an unbounded
+   select could still push past the column's own width even though it no
+   longer sits inline next to the name/mark text the way the old single-row
+   layout did. The placeholder stays "Move ⌄" — the dropdown's own options
+   still show full room names. */
 .ab-move-select {
-    font-size: .72em; font-weight: 800; color: var(--green-text);
+    width: 82px; font-size: .72em; font-weight: 800; color: var(--green-text);
     border: 1px solid var(--green-lt); border-radius: 6px;
     padding: 4px 6px; background: var(--green-pale); cursor: pointer;
-    max-width: 62px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 @media (max-width: 700px) {
     .ab-kid { flex-wrap: wrap; }
