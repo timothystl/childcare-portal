@@ -3715,7 +3715,6 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-toast { background: var(--green-pale); color: var(--green-dark); padding: 10px 24px; font-size: 15px; font-weight: 700; }
 
 /* ── Capacity Planner — Grid view ─────────────────────────── */
-.wlp-movement-panel { border-bottom: 1px solid var(--border); background: var(--white); padding: 16px 24px; }
 .wlp-collapse-toggle {
     display: flex; align-items: center; gap: 8px; background: none; border: none; padding: 0;
     cursor: pointer; width: 100%; text-align: left;
@@ -3728,28 +3727,6 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     letter-spacing: .04em; margin-bottom: 2px;
 }
 .wlp-section-hint { font-size: 13.5px; color: var(--text-muted); margin-bottom: 12px; }
-.wlp-movement-grid { display: grid; gap: 10px; margin-top: 10px; }
-.wlp-movement-col { min-width: 0; }
-.wlp-movement-col-title { font-weight: 700; font-size: 15px; color: var(--text); margin-bottom: 8px; }
-.wlp-movement-events { display: flex; flex-direction: column; gap: 6px; }
-.wlp-event-card {
-    display: flex; align-items: flex-start; gap: 7px; background: var(--linen);
-    border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px;
-    min-width: 0;
-}
-.wlp-event-icon {
-    width: 24px; height: 24px; border-radius: 50%; color: var(--white);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13.5px; font-weight: 800; flex-shrink: 0; margin-top: 1px;
-}
-.wlp-event-icon-grad  { background: var(--wlp-grad-fg); }
-.wlp-event-icon-start { background: var(--wlp-start-fg); }
-.wlp-event-icon-promised { background: var(--wlp-promised-fg); }
-.wlp-event-body { flex: 1; min-width: 0; }
-.wlp-event-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.wlp-event-name { font-weight: 700; font-size: 14px; color: var(--text); overflow-wrap: anywhere; }
-.wlp-event-month { font-size: 12.5px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
-.wlp-event-action { font-size: 13px; color: var(--text-muted); margin: 2px 0 5px; }
 
 .wlp-cap-table { border-collapse: collapse; width: max-content; min-width: 100%; }
 .wlp-cap-table th.wlp-room-head {
@@ -3881,8 +3858,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-default-group { min-width: 200px; }
 
 /* ── Moving (top-level tab) ───────────────────────────────── */
-.wlp-moving-panel { padding: 16px 24px 0; }
-.wlp-moving-timeline { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; margin-top: 8px; }
+.wlp-moving-panel { padding: 16px 24px 20px; }
 .wlp-moving-tile {
     background: var(--linen); border: 1.5px solid var(--border); border-radius: 7px;
     padding: 8px 4px; text-align: center; cursor: pointer;
@@ -3893,10 +3869,29 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-moving-tile-count { font-size: 16px; font-weight: 800; color: var(--navy); }
 .wlp-moving-drawer { margin-top: 12px; border-top: 2px solid var(--sun); background: var(--linen); border-radius: 8px; padding: 12px 16px 18px; }
 .wlp-moving-drawer-head { font-weight: 800; color: var(--navy); font-size: 13.5px; margin-bottom: 8px; }
-.wlp-moving-drawer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.wlp-moving-drawer-card { background: var(--white); border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; font-size: 12px; }
 .wlp-moving-drawer-empty { color: var(--text-muted); font-size: 12.5px; font-style: italic; }
-.wlp-moving-allpanel { padding: 16px 24px 20px; border-top: 1px solid var(--border); }
+
+/* Month-pill nav + flat confirm-move card list — matches
+   design_handoff_planning_market's mockup exactly (a pill row with the
+   count inline, e.g. "Sep (1)", not a boxed tile-per-month grid). Shared
+   by nothing else — the Grid's own rollup strips keep the box-tile chrome
+   above, since that mockup screen used tiles, not pills. */
+.wlp-moving-pillrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 18px; }
+.wlp-moving-pill {
+    background: var(--linen); border: 1.5px solid var(--border); border-radius: 20px;
+    padding: 8px 16px; font-size: 13.5px; font-weight: 700; color: var(--navy); cursor: pointer;
+}
+.wlp-moving-pill.selected { background: var(--navy); border-color: var(--navy); color: var(--white); }
+.wlp-ageout-list { display: flex; flex-direction: column; gap: 10px; }
+.wlp-ageout-card {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    background: var(--white); border: 1px solid var(--border); border-radius: 9px; padding: 14px 18px;
+}
+.wlp-ageout-card-main { min-width: 0; }
+.wlp-ageout-card-name { font-weight: 800; color: var(--navy); font-size: 15px; }
+.wlp-ageout-card-rooms { font-size: 13.5px; color: var(--text); margin-top: 2px; }
+.wlp-ageout-card-date { font-size: 12.5px; font-weight: 700; color: var(--tang-dark); margin-top: 3px; }
+.wlp-ageout-card .wlp-confirm-move-btn { flex-shrink: 0; }
 
 /* ── Grid — inline demand-by-month / age-out rollup strips (consolidation
    pass, design_handoff_planning_market, 2026-08-27). Same tile chrome as
@@ -4502,8 +4497,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     .wlp-grid-wrap { flex-direction: column; }
     .wlp-board-wrap { flex-direction: column; }
     .wlp-sidebar { width: auto; border-left: none; border-top: 1px solid var(--border); }
-    .wlp-moving-timeline { grid-template-columns: repeat(4, 1fr); }
-    .wlp-moving-drawer-grid { grid-template-columns: 1fr; }
+    .wlp-ageout-card { flex-direction: column; align-items: flex-start; }
 
     /* Queue row: the 230px fixed name width and three nowrap trailing
        controls (status pill / Edit / chevron) don't fit a phone-width row
