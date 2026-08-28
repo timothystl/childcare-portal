@@ -590,7 +590,22 @@ function _fhRenderMonthHistory() {
     const root = _fhEl('fhRoot');
     if (!root) return;
     const rows = _fhRows.filter(r => r.status !== 'withdrawn' && (r.ar?.billed > 0 || r.total > 0));
+    // Same figure the "Charged" column below sums to — r.ar?.billed is the
+    // real invoice amount where one exists, r.total (computeBillMonthExceptions)
+    // otherwise. No second calculation, so this card can't disagree with the
+    // table under it.
+    const monthTotal = rows.reduce((s, r) => s + (r.ar?.billed || r.total), 0);
     root.innerHTML = `
+        <div class="fh-strip">
+            <div class="fh-stat fh-stat-month">
+                <div class="fh-stat-num">${_fhMoney(monthTotal)}</div>
+                <div class="fh-stat-label">Total invoiced, ${_fhMonthLabel(_fhMonth)}</div>
+            </div>
+            <div class="fh-stat">
+                <div class="fh-stat-num">${rows.length}</div>
+                <div class="fh-stat-label">Families, ${_fhMonthLabel(_fhMonth).split(' ')[0]}</div>
+            </div>
+        </div>
         <div class="fh-history-banner">
             <strong>${_fhMonthLabel(_fhMonth)} — read-only history</strong>
             <p>To record a late payment against this month, open the family (click a row) and use Record payment — it applies to whichever month you pick, regardless of today's date.</p>
