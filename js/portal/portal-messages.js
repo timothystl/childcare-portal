@@ -25,9 +25,15 @@ function pmTime(iso) {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
     const that  = d.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
     const time  = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' });
-    // A time alone is ambiguous once a message is a day old.
-    return that === today ? time
-         : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Chicago' }) + ', ' + time;
+    // A time alone is ambiguous once a message is a day old. Inside the last
+    // week the weekday is what a person actually remembers ("Mon 2:14 PM");
+    // past that it stops being a landmark and the date is clearer.
+    if (that === today) return time;
+    const ageDays = Math.round((new Date(today + 'T12:00:00') - new Date(that + 'T12:00:00')) / 86400000);
+    const fmt = (ageDays >= 0 && ageDays < 7)
+        ? { weekday: 'short' }
+        : { month: 'short', day: 'numeric' };
+    return d.toLocaleDateString('en-US', { ...fmt, timeZone: 'America/Chicago' }) + ' ' + time;
 }
 
 function pmRender(items) {
@@ -48,6 +54,11 @@ function pmRender(items) {
             ? `<span class="pm-receipt">${m.read_at ? 'Read' : 'Sent'}</span>`
             : '';
         const who = mine ? 'You' : (m.sender_name || (m.sender_type === 'admin' ? 'The office' : 'Teacher'));
+        // ⚠️ There is no per-child message thread. The design shows the child
+        // switcher on this screen, but a thread is per FAMILY (one row per
+        // family in message_threads) — rendering pills that filter nothing, or
+        // that silently show the same conversation twice, would be worse than
+        // not showing them. Splitting threads by child is its own piece of work.
         return `<div class="pm-msg ${mine ? 'pm-mine' : 'pm-theirs'}">
             <div class="pm-msg-head">
                 <span class="pm-who">${pmEsc(who)}</span>

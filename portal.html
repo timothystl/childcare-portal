@@ -201,11 +201,16 @@
 
         <!-- ══ TODAY ══════════════════════════════════════════ -->
         <section class="pt-tab" data-tab="today">
-        <div class="portal-logo">
-            <img src="/images/logo/myMDO_parent_wordmark_light.png" alt="myMDO">
+        <div class="pt-page-head">
+            <div>
+                <h1 id="portalGreeting" class="portal-greeting">Hi.</h1>
+                <p id="portalGreetingSub" class="portal-sub"></p>
+            </div>
+            <!-- Print produces the full-day report. On a phone it sits under the
+                 day (see .pt-print-btn); the wide layout has room for it up here,
+                 which is where the design puts it. One button, moved by CSS. -->
+            <button type="button" id="ptPrintBtn" class="pt-print-btn">🖨️ Print this day</button>
         </div>
-        <h1 id="portalGreeting" class="portal-greeting">Hi.</h1>
-        <p id="portalGreetingSub" class="portal-sub"></p>
 
         <!-- Today feed -->
         <div id="ptFeed" class="pt-feed hidden">
@@ -217,21 +222,32 @@
                 <div id="ptPrintMeta" class="pt-print-meta"></div>
             </div>
             <div id="ptSwitcher" class="pt-switcher hidden"></div>
-            <div class="pt-day-head">
-                <span id="ptChildName" class="pt-child-name"></span>
-                <span id="ptDate" class="pt-date"></span>
+
+            <div class="pt-cols">
+              <div class="pt-col-main">
+            <div class="pt-card">
+                <div class="pt-day-head">
+                    <span id="ptChildName" class="pt-child-name"></span>
+                    <span id="ptChildRoom" class="pt-child-room"></span>
+                </div>
+                <div id="ptSafety" class="pt-safety hidden"></div>
+                <!-- Above the timeline on purpose: an injury is not one entry among
+                     the diapers, and a parent must not have to find it. -->
+                <div id="ptIncidents" class="pt-incidents hidden"></div>
+                <ul id="ptTimeline" class="pt-timeline"></ul>
             </div>
-            <div id="ptSafety" class="pt-safety hidden"></div>
-            <!-- Above the timeline on purpose: an injury is not one entry among
-                 the diapers, and a parent must not have to find it. -->
-            <div id="ptIncidents" class="pt-incidents hidden"></div>
-            <ul id="ptTimeline" class="pt-timeline"></ul>
-            <div id="ptPhotos" class="pt-photos hidden"></div>
-            <!-- Print produces the full-day report. No separate screen: the
-                 feed already IS the day, and a second rendering of the same
-                 data is a second thing to keep correct. -->
-            <button type="button" id="ptPrintBtn" class="pt-print-btn">🖨️ Print this day</button>
-            <div id="ptAnnouncements" class="pt-announcements hidden"></div>
+            <div id="ptPhotos" class="pt-photos pt-card hidden"></div>
+              </div>
+
+              <div class="pt-col-side">
+                <!-- Announcements sit ABOVE the day, not under it. A closure or
+                     a picture-day notice is something a parent needs before they
+                     read the timeline; at the bottom of a scrolling feed it was
+                     the one thing they had to scroll past the whole day to reach. -->
+                <div id="ptAnnouncements" class="pt-announcements hidden"></div>
+                <div id="ptWeekCard" class="pt-card pt-week hidden"></div>
+              </div>
+            </div>
         </div>
 
         <div id="ptNoChildren" class="mdo-empty hidden">
@@ -248,20 +264,24 @@
              photos and incidents, for any date the parent picks rather than
              only the current one. js/portal/portal-recap.js. -->
         <section class="pt-tab hidden" data-tab="daily">
+        <div class="pt-page-head"><h1 class="portal-greeting">Recap</h1></div>
         <div id="prBody" class="pt-feed hidden">
             <div id="prSwitcher" class="pt-switcher hidden"></div>
             <div class="pr-daynav">
                 <button type="button" id="prPrevBtn" class="pr-nav-btn" aria-label="Previous day">‹</button>
                 <div class="pr-daynav-mid">
-                    <span id="prDateLabel" class="pt-child-name"></span>
+                    <span id="prDayLabel" class="pr-day-label"></span>
+                    <span id="prDateLabel" class="pr-date-label"></span>
                     <input type="date" id="prDateInput" class="pr-date-input" aria-label="Pick a date">
                 </div>
                 <button type="button" id="prNextBtn" class="pr-nav-btn" aria-label="Next day">›</button>
             </div>
             <div id="prQuickDays" class="pr-quick-days"></div>
             <div id="prIncidents" class="pt-incidents hidden"></div>
-            <ul id="prTimeline" class="pt-timeline"></ul>
-            <div id="prPhotos" class="pt-photos hidden"></div>
+            <div class="pt-card">
+                <ul id="prTimeline" class="pt-timeline"></ul>
+            </div>
+            <div id="prPhotos" class="pt-photos pt-card hidden"></div>
         </div>
         <div id="prNoChildren" class="mdo-empty hidden">
             <img src="/images/logo/empty-backpack.png" alt="">
@@ -281,6 +301,7 @@
              happens over there; moving day REQUESTS in here is its own piece of
              work, but the second sign-in is gone. -->
         <section class="pt-tab hidden" data-tab="schedule">
+            <div class="pt-page-head"><h1 class="portal-greeting">Schedule</h1></div>
             <div id="ptScheduleBody"></div>
         </section>
 
@@ -291,6 +312,7 @@
              processor, so "Pay" is a placeholder that says so rather than
              pretending a card can be charged. -->
         <section class="pt-tab hidden" data-tab="billing">
+            <div class="pt-page-head"><h1 class="portal-greeting">Billing</h1></div>
             <div id="pbBody"></div>
         </section>
 
@@ -299,21 +321,25 @@
              reading the thread marks it read, so loading eagerly would clear a
              parent's unread badge for messages they never looked at. -->
         <section class="pt-tab hidden" data-tab="messages">
+            <div class="pt-page-head"><h1 class="portal-greeting">Messages</h1></div>
             <div id="pmSection" class="pm-section hidden">
-                <div class="pm-head">Messages</div>
-                <div id="pmThread" class="pm-thread"></div>
-                <div class="pm-composer">
-                    <textarea id="pmInput" rows="2" placeholder="Message your teacher or the office…"></textarea>
-                    <button type="button" id="pmSendBtn" class="pm-send">Send</button>
+                <div class="pt-card">
+                    <div id="pmThread" class="pm-thread"></div>
+                    <div class="pm-composer">
+                        <textarea id="pmInput" rows="1" placeholder="Message your teacher…"></textarea>
+                        <button type="button" id="pmSendBtn" class="pm-send">Send</button>
+                    </div>
                 </div>
             </div>
         </section>
 
         <!-- ══ ACCOUNT ════════════════════════════════════════ -->
         <section class="pt-tab hidden" data-tab="account">
-            <div class="pt-account-head">
-                <span id="ptAccountName" class="pt-child-name"></span>
-                <span id="ptAccountEmail" class="pt-date"></span>
+            <div class="pt-page-head">
+                <div>
+                    <h1 id="ptAccountName" class="portal-greeting"></h1>
+                    <p id="ptAccountEmail" class="portal-sub"></p>
+                </div>
             </div>
             <div id="ptAccountBody"></div>
 
@@ -347,7 +373,18 @@
         </section>
 
       </main>
-      <nav id="ptTabs" class="tabbar" role="tablist" aria-label="Parent portal"></nav>
+
+      <!-- One navigation element, two layouts. Below 900px this is the fixed
+           bottom tab bar; at 900px and up it becomes the navy rail on the left
+           and the brand mark above it stops being decoration. Same buttons,
+           same #ptTabs render — CSS decides where they sit, so there is no
+           second nav to keep in step with this one. -->
+      <aside class="app-nav">
+        <div class="pt-brand">
+          <img src="/images/logo/myMDO_primary_wordmark_dark.png" alt="myMDO">
+        </div>
+        <nav id="ptTabs" class="tabbar" role="tablist" aria-label="Parent portal"></nav>
+      </aside>
     </div>
 
     <!-- Online payment (Authorize.net Accept Hosted), embedded via iframe so

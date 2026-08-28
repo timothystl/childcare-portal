@@ -4171,6 +4171,145 @@ for the same reason; the next phase (the actual UI) will need the standard
 
 ---
 
+## Parent app redesign — phone and desktop (2026-08-28)
+
+Built from the director's redesign screens for **Today, Recap, Schedule,
+Billing, Messages and Account**, phone and wide. Nothing about what the portal
+*reads* changed — no new RPC, no migration, no new query. This is the same six
+tabs, restyled, plus one genuinely new card (This week) built entirely from
+data three tabs already had in hand.
+
+### ⚠️ One navigation element, two layouts
+
+`#ptTabs` renders the same six buttons either way — **`portal-nav.js` is
+untouched**. Below 900px the new `<aside class="app-nav">` is the fixed bottom
+tab bar this app already had; at 900px and up CSS turns it into the navy rail
+with the myMDO mark above it and the active tab as a solid `--sun` pill. There
+is deliberately no second nav to keep in step with the first.
+
+- **The rail is `order: -1`, not a DOM move.** The nav stays last in the
+  document — it is the bottom bar on a phone, and a nav rendered before the
+  content it sits under would be wrong for a screen reader as well as for CSS.
+- ⚠️ **Every layout override is scoped to `.portal-app`.** `.app-shell`,
+  `.app-route` and `.tabbar` live in `css/styles.css` and are shared with the
+  **staff** app; widening those selectors here would have restyled an app this
+  redesign was never scoped to touch.
+- `.portal-app`'s `max-width: 560px` and `margin: 0 auto` (the phone shell is a
+  centered column) both have to be lifted inside the media query, or the rail
+  layout renders as a 560px strip floating in the middle of the window. Caught
+  in a real browser, not from the diff.
+- 900px is the same breakpoint the admin shell already uses for its drawer,
+  deliberately, rather than adding a seventh number to U4's list.
+
+### ⚠️ `.pt-tab` was two different things, and the CSS hit both
+
+Each full-page `<section>` in the shell is `class="pt-tab"` — and so was every
+button in the child switcher. So a rule written for a pill (`border-radius:
+999px`, `min-height: 44px`, `flex: 1`) was landing on six whole screens, and
+`.pt-tab { padding: 0 16px }` (the shell's page padding) was landing on the
+buttons. Both were live on `main` and neither was visible as a bug, because the
+section rules happened to be harmless and the page padding on a pill just made
+it wider.
+
+The switcher buttons are **`.pt-childbtn`** now, in all three files that render
+one (`portal-today.js`, `portal-recap.js`, `portal-schedule.js`), and the old
+`.pt-tab` pill rules are deleted rather than left to apply to sections.
+
+### One `my_schedule()` fetch, shared by three tabs
+
+`psSchedule()` (portal-schedule.js) memoizes the call. Schedule reads booked
+days from it, Billing reads invoices from it, and Today now reads the child's
+**room label** from it — three tabs asking the database the same question three
+times was three round trips for one answer. A rejection is **not** cached, so a
+failed load is retryable by reopening the tab rather than sticky for the
+session.
+
+### "This week" derives nothing of its own
+
+Days booked and balance due come out of that same payload; unread comes from
+`pmUnreadCount()`, which counts **without** marking anything read (see the note
+on that function — calling `pmLoad()` for the number would clear the badge for
+a parent who never opened the tab).
+
+⚠️ **Balance due counts ISSUED invoices only (`sent_at` set)**, exactly as the
+Billing tab does — the same "a draft is not a bill" rule this file already
+records for `psStatusPill` and `_buildArRows`. The card and Billing therefore
+cannot disagree.
+
+### Billing shows day counts per child, never dollars per child
+
+The redesign's month card lists each child with a figure beside them. The
+invoice carries **one** total, computed server-side; splitting it per child in
+the browser would be a second billing calculation that can drift from the bill
+itself. `pbChildLines()` shows each child's room and **days booked** — facts the
+payload already holds — and the invoice's own Total underneath. Same call, same
+reasoning, as the per-day amount already scoped out of the invoice detail
+screen.
+
+### ⚠️ There is no emergency-contact field in this database
+
+The Account design shows one. `families` / `parent_accounts` hold parent 1 and
+parent 2 and nothing else; the real emergency contact is on the paper
+enrollment form. `paEmergencyValue()` shows the **other parent on the record**
+when there is one — who the center actually calls second — and otherwise says
+plainly where the answer is kept.
+
+It deliberately does **not** reuse a pickup contact: "may collect your child"
+and "call this person in an emergency" are different permissions, and quietly
+treating one as the other is the kind of thing that only surfaces on the day it
+matters.
+
+### Deliberate deviations from the screens
+
+- **Messages has no child switcher.** The design shows one; a thread is per
+  **family** (one row per family in `message_threads`). Pills that filter
+  nothing, or that show the same conversation twice, would be worse than no
+  pills. Splitting threads per child is its own piece of work.
+- **Account keeps Parents & guardians, Approved for pickup and Notifications.**
+  The Account screens show only Children, Contact info and Documents. Those
+  three cards are the only place a family can manage the pickup list, their PIN
+  and their notification preferences, so they were kept below Contact info
+  rather than deleted on the strength of a screen that may simply be
+  abbreviated. **Worth confirming with the director** — if they are genuinely
+  meant to go, they need somewhere else to live first.
+- **Documents was not rebuilt.** `portal-documents.js` still renders its four
+  sections (incidents, forms, immunization, statements) rather than the
+  design's flat list of rows with a View button. It lays out in the new card
+  grid on a wide screen and is otherwise untouched.
+- **Recap's day strip is a window AROUND the selected day** (3 back, 3 forward),
+  oldest first, replacing "the last 8 days counting backwards" — so stepping
+  with ‹ / › reads as moving along a strip that stays put. A future day keeps
+  its place but is `disabled`: the strip does not change shape, and there is
+  still no peeking at a day that has not happened.
+- **Schedule renders every child's card every time.** Which ones are visible is
+  CSS: the phone shows one behind the switcher, the wide layout lays them side
+  by side and hides the switcher entirely. Both screens are satisfied by one
+  render rather than one of them being a special case in the JS.
+
+### ⚠️ `Parent Portal Desktop.dc.html` was NOT read
+
+The director pointed at the Claude Design project
+(`05e91ea7-93c5-43f5-9875-8f9b7d69ad93`) mid-session. `DesignSync` needs a
+`/design-login` this remote session cannot run, and the file is not in
+`docs/design_handoff/`, so **this was built from the screenshots**. This file's
+own Staff-tab entry says exactly why that is not good enough ("Read the
+`.dc.html` template directly rather than re-guessing from a screenshot a second
+time") — the source carries the literal hex values and the data-shaping the
+screens only imply. Seed that file into the repo and re-check this work against
+it before calling the redesign matched.
+
+### Verification
+
+`npm test` — 168/168. `npm run build` — `dist/` rebuilt and grepped for
+`pt-childbtn`, `ptWeekCard`, `pbChildLines`, `paEmergencyValue`,
+`portalGreetingWord` and `psSchedule`, per this file's standing "it shipped
+half-live" check.
+
+Rendered in a real browser at 390px and 1280px against a harness carrying the
+exact markup each renderer emits — which is what caught the 560px shell cap,
+the sidebar landing on the right, and the print button eating the header row.
+None of the three was visible in the diff.
+
 ## Finance summary API (for the church ChMS finance integration)
 
 `supabase/functions/finance-summary/index.ts` — `GET`, header `X-Api-Key: <FINANCE_API_KEY>`, returns 401 if missing/wrong. Returns `{ updated_at, accounts: [], budget: [...] }` for the current month + 12 prior (13 months, oldest first). Deploy like any other edge function (paste into the Supabase dashboard editor or `supabase functions deploy finance-summary`) and set the `FINANCE_API_KEY` secret — neither is automatic.

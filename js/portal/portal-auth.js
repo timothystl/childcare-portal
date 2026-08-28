@@ -39,6 +39,17 @@ const PORTAL_FORBIDDEN = [
 
 let portalContext = null;
 
+// Morning / afternoon / evening in the CENTER's timezone, so a parent checking
+// in from another time zone gets the greeting that matches their child's day.
+function portalGreetingWord() {
+    const hour = Number(new Date().toLocaleString('en-US', {
+        hour: 'numeric', hour12: false, timeZone: 'America/Chicago',
+    }));
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+}
+
 function pEl(id) { return document.getElementById(id); }
 
 function portalShowError(msg) {
@@ -131,14 +142,22 @@ async function portalShowSignedIn() {
     // of padding and the page scrolls a little on iOS, tab bar and all.
     document.body.classList.add('portal-app-open');
 
-    const name = portalContext?.parent_name || portalContext?.family_name || 'there';
+    const full  = portalContext?.parent_name || portalContext?.family_name || '';
+    // First name only — "Good afternoon, Sarah Carter." reads like a form letter.
+    const name  = full.trim().split(/\s+/)[0] || 'there';
     const greet = pEl('portalGreeting');
-    if (greet) greet.textContent = `Hi, ${name}.`;
+    if (greet) greet.textContent = `${portalGreetingWord()}, ${name}.`;
 
+    // The date moved up here from the day card, which now carries the child's
+    // room instead. Today's Time is the center's, not the device's — same
+    // reason ptToday() pins the timezone.
     const sub = pEl('portalGreetingSub');
     if (sub) {
         sub.textContent = portalContext
-            ? "Here's how the day is going."
+            ? new Date().toLocaleDateString('en-US', {
+                weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+                timeZone: 'America/Chicago',
+              })
             : 'You are signed in, but the database did not recognize this session as a parent. Contact the office.';
     }
 
