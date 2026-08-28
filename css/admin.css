@@ -257,8 +257,8 @@
     transition: width .4s ease;
 }
 .bar-green  { background: var(--green); }
-.bar-orange { background: var(--tang); }
-.bar-red    { background: var(--tang); }
+.bar-orange { background: var(--sun); }
+.bar-red    { background: var(--ap-deep-tang); }
 .cap-pct    { font-size: .8em; color: var(--text-muted); }
 
 /* Table */
@@ -3871,12 +3871,16 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 /* ============================================================
    ROOM SCHEDULE PLANNER
    ============================================================ */
-.sched-cell        { text-align: center; font-size: .9rem; padding: 6px 10px; }
-.sched-near        { background: var(--sun-pale); color: var(--mustard-dark); font-weight: 600; }
-.sched-full        { background: var(--tang-pale); color: var(--tang-dark); font-weight: 700; }
+/* Same three-tier tone as the Enrollment & Capacity day/week/month grids
+   (green-pale/gold-pale/tangerine-pale on navy/navy/deep-tang) — matches
+   the design source's capGridCells style exactly rather than this table's
+   own older mustard/tang-dark pairing. */
+.sched-cell        { text-align: center; font-size: .9rem; padding: 6px 10px; background: var(--green-pale); color: var(--navy); }
+.sched-near        { background: var(--sun-pale); color: var(--navy); font-weight: 700; }
+.sched-full        { background: var(--tang-pale); color: var(--ap-deep-tang); font-weight: 700; }
 .sched-legend      { font-size: .78em; color: var(--text-muted); margin-top: 8px; }
-.sched-near-swatch { display: inline-block; width: 10px; height: 10px; background: var(--sun-pale); border: 1px solid var(--mustard-dark); border-radius: 2px; vertical-align: middle; }
-.sched-full-swatch { display: inline-block; width: 10px; height: 10px; background: var(--tang-pale); border: 1px solid var(--tang); border-radius: 2px; vertical-align: middle; }
+.sched-near-swatch { display: inline-block; width: 10px; height: 10px; background: var(--sun-pale); border: 1px solid var(--sun); border-radius: 2px; vertical-align: middle; }
+.sched-full-swatch { display: inline-block; width: 10px; height: 10px; background: var(--tang-pale); border: 1px solid var(--ap-deep-tang); border-radius: 2px; vertical-align: middle; }
 
 /* YTD discount column */
 .ytd-discount-cell  { color: var(--mustard-dark); }
@@ -5489,34 +5493,86 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     .ab-actions { flex: 1 1 100%; margin-left: 0; justify-content: flex-end; }
 }
 
-/* Enrollment & Capacity — Day / Week / Month / FTE view switcher. Same pill
-   shape as Bookkeeper's .bk-pill (css/admin-portal.css), kept as its own
-   class rather than shared since the two live in different modules. */
-.ec-view-switch { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
-.ec-pill {
-    border: 1px solid var(--border); background: #fff; border-radius: 999px;
-    padding: 7px 15px; font-family: inherit; font-weight: 700; font-size: .85em;
-    color: var(--text-muted); cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+/* Enrollment & Capacity — Day / Week / Month / FTE view switcher. Matches
+   the design source's capViewsList exactly: a single warm-gray pill track
+   with a solid-navy active segment, not individually bordered pills. */
+.ec-view-switch {
+    display: inline-flex; background: var(--warm-gray); border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px; gap: 2px; margin-bottom: 20px; flex-wrap: wrap;
 }
-.ec-pill:hover:not(.is-active) { background: var(--linen); }
-.ec-pill.is-active { background: var(--navy); color: #fff; border-color: var(--navy); }
+.ec-pill {
+    border: none; background: transparent; border-radius: 999px;
+    padding: 7px 16px; font-family: inherit; font-weight: 800; font-size: .83em;
+    color: var(--navy); cursor: pointer; transition: background .15s, color .15s;
+}
+.ec-pill:hover:not(.is-active) { background: rgba(1,41,74,.08); }
+.ec-pill.is-active { background: var(--navy); color: #fff; }
 .ec-day-nav { align-items: center; }
 .ec-day-nav input[type="date"] { padding: 8px 12px; border: 2px solid var(--border); border-radius: 7px; }
 
-.ec-day-rows { display: grid; gap: 10px; }
+.ec-day-rows { display: flex; flex-direction: column; gap: 10px; }
 .ec-day-row {
-    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
-    background: #fff; border: 1px solid var(--border); border-radius: 12px;
-    padding: 12px 16px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    background: #fff; border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px;
 }
-.ec-day-row.is-near { border-left: 4px solid var(--sun); }
-.ec-day-row.is-full { border-left: 4px solid var(--tang); }
-.ec-day-room-name { font-weight: 800; color: var(--navy); flex: 1 1 160px; min-width: 140px; }
-.ec-day-stat { display: flex; flex-direction: column; align-items: center; min-width: 70px; }
-.ec-day-stat strong { font-family: var(--font-head); font-size: 1.1em; color: var(--navy); }
-.ec-day-stat span { font-size: .7em; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
-.ec-day-flag { flex: none; }
-.ec-move-btn { flex: none; font-size: .82em; padding: 7px 12px; }
+.ec-day-room-name { flex: 1 1 140px; min-width: 120px; font-weight: 800; color: var(--navy); }
+.ec-day-ratio { display: block; font-weight: 400; font-size: .78em; color: var(--text-muted); margin-top: 1px; }
+.ec-day-stat { text-align: center; min-width: 80px; }
+.ec-day-stat strong { display: block; font-family: var(--font-head); font-weight: 700; font-size: 1.3em; color: var(--navy); }
+.ec-day-stat span { font-size: .72em; color: var(--text-muted); }
+/* AT CAPACITY / AT RATIO STEP — silent (hidden, not removed, so the row
+   height and the Move button's position never shift depending on which
+   rooms happen to have something to flag) unless one applies. */
+.ec-day-flag {
+    flex: none; font-size: .7em; font-weight: 800; padding: 4px 9px;
+    border-radius: 999px; letter-spacing: .02em;
+}
+.ec-day-flag.is-hidden { visibility: hidden; }
+.ec-day-flag.is-edge { background: var(--sun-pale); color: var(--navy); }
+.ec-day-flag.is-over { background: var(--tang-pale); color: var(--ap-deep-tang); }
+.ec-move-btn {
+    flex: none; font-size: .78em; font-weight: 800; padding: 7px 14px;
+    border-radius: 7px; cursor: pointer; font-family: inherit;
+    background: var(--green-pale); border: 1px solid var(--green-lt); color: var(--green-text);
+}
+.ec-move-btn:hover { background: var(--green-lt); }
+
+/* Month view — a room-tab switcher over a Mon–Fri day grid, one room's whole
+   month at a time. Same three-tier tone as the Day view's flag and the Week
+   view's cells: green-pale default, gold-pale near (≥85%), tangerine-pale
+   full, matching the design source's monthCells bg/color pairs exactly. */
+.ec-room-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.ec-room-tab {
+    border: none; border-radius: 999px; padding: 7px 14px;
+    font-family: inherit; font-weight: 800; font-size: .82em; cursor: pointer;
+    background: var(--warm-gray); color: var(--navy);
+}
+.ec-room-tab:hover:not(.is-active) { background: var(--green-pale); }
+.ec-room-tab.is-active { background: var(--navy); color: #fff; }
+.ec-month-dow {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 4px;
+}
+.ec-month-dow-cell {
+    text-align: center; font-size: .74em; font-weight: 800; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--text-muted);
+}
+.ec-month-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.ec-month-cell {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    width: 100%; border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 4px; cursor: pointer; font-family: inherit;
+    background: var(--green-pale); color: var(--navy);
+}
+.ec-month-cell.is-near { background: var(--sun-pale); }
+.ec-month-cell.is-full { background: var(--tang-pale); color: var(--ap-deep-tang); }
+.ec-month-cell.is-closed { background: var(--warm-gray); color: var(--text-muted); cursor: default; }
+.ec-month-cell-empty { background: transparent; border: none; cursor: default; }
+.ec-month-date  { font-size: .68em; color: var(--text-muted); }
+.ec-month-cell.is-near .ec-month-date,
+.ec-month-cell.is-full .ec-month-date { color: inherit; opacity: .75; }
+.ec-month-count  { font-weight: 800; font-size: .95em; }
+.ec-month-closed { font-size: .78em; font-weight: 700; }
 
 /* Incident Reports — "+ Write a report" */
 .inc-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }

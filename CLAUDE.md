@@ -659,6 +659,76 @@ while "left" already said `out 7:57p` — asymmetric and easy to misread as
 "nothing was stamped." Fixed by prefixing the present-state mark with `in `
 too, in `_abRoom()` (admin-attendance.js). No RPC or schema change needed.
 
+### Enrollment & Capacity's Week/Month/FTE sub-views were also still the pre-merge tools' own look (fixed 2026-08-28)
+
+Reported live with four screenshots — one per sub-view — of the design
+source's actual Day/Week/Month/FTE screens. Day was close (fixed alongside
+the Attendance Board colors above), but Week, Month and FTE were still
+rendering **the three original tools' pre-merge markup and styling**
+unchanged, exactly as "Enrollment & Capacity — relocated, not rebuilt"
+above says was done deliberately when this tool was first merged. Asked
+the director directly rather than guessing: rebuild to match the
+screenshots even where that would drop live functionality (the Week
+view's AM/PM staffing split, the FTE view's 6-month trend and per-room
+drawer), or match the visual language while keeping that data. **She chose
+the latter** — so nothing enumerated in "One dataset, still" above or the
+FTE report table's trend/drawer was removed.
+
+- **Day**: rewrote `_ecRenderDay()`'s row markup and `.ec-day-*` CSS to the
+  design's exact row shape — ratio printed under the room name instead of
+  a separate flag pill, the enrolled count in the head serif at 1.3em, and
+  the AT CAPACITY / AT RATIO STEP flag now genuinely silent (not just a
+  muted "Open" pill) unless the room is actually over capacity or has just
+  crossed a ratio boundary. `.ec-view-switch`/`.ec-pill` (shared by all
+  four sub-views) changed from individually bordered gray pills to the
+  design's single warm-gray track with a solid-navy active segment — the
+  same "muted gray instead of the design's real color" pattern the
+  Attendance Board buttons had.
+- **Week**: `renderRoomSchedule()`'s AM/PM staffing table (admin-calendar.js)
+  is **unchanged in structure** — same rooms-as-columns, dates-as-rows,
+  AM/PM sub-columns. Only `.sched-cell`/`.sched-near`/`.sched-full` were
+  recolored to the same green-pale/gold-pale/tangerine-pale-on-navy/
+  deep-tang scheme the Day view and Month grid use, replacing the older
+  mustard/tang-dark pairing — the exact color mismatch this file's earlier
+  fixes describe, just on a table this session hadn't touched yet. The
+  navy `<thead>` fill (`.staff-room-header`/`.staff-sub-head`) was left
+  alone on purpose: those classes are shared with the real staff schedule
+  tables in Staff → Build Staff Schedule, and recoloring them to match a
+  single sub-view here would have restyled tools this redesign was never
+  scoped to touch.
+- **Month**: this was the one genuine layout gap, not just color.
+  `renderCapacityOverview()` was showing the old **aggregate monthly
+  utilization cards** (`.cap-card`, a progress bar per room for the whole
+  month) — the design's Month view is a **day-by-day grid for one room**,
+  switched by room-tab pills. Rewrote `renderCapacityOverview()` to render
+  exactly that: room tabs + a Mon–Fri day grid, reusing the same
+  `dayMap`-from-`registration_dates` construction `drawRoomCalendar()` (the
+  pre-existing per-room calendar modal) already used, so the two can't
+  disagree about what's booked. Clicking a day still opens
+  `showDayRosterDetail()` — the same move panel Day view's "Move a child"
+  button already opens, so nothing new had to be built for the move flow
+  itself. ⚠️ **No data was dropped** — the aggregate monthly utilization %
+  the old cards showed lives on in the FTE / Seat-Day sub-view's
+  Capacity/Seat-Day Occupancy columns, which already computed the same
+  number at the same whole-month grain; Month regaining a genuine
+  day-by-day grid is what its own name (and the original "Capacity
+  Overview (month grid)" description earlier in this file) always implied.
+  The old `.cap-card` aggregate markup, `openRoomCalendar()`,
+  `drawRoomCalendar()` and the `#roomCalModal` dialog are **left in place,
+  now unreferenced** — same "unreachable, not deleted" convention as the
+  retired Classroom Roster and CACFP tools elsewhere in this file, kept
+  rather than removed in case the per-room modal view is ever wanted back.
+- **FTE**: kept its richer report-table shape (Enrolled/FTE/seat-days
+  occ.-avail./% full progress bar/6-mo trend, click a room for the
+  per-weekday drawer) rather than rebuilding it down to the design's
+  plainer 5-column table — the director's own choice. Only recolored two
+  spots that had drifted from this session's palette:
+  `_renderCapacityOverviewTable()`'s over-95%-full bar and negative-trend
+  text both moved from a hardcoded `var(--tang)` / literal `#7a2a18` to
+  `var(--ap-deep-tang)`, matching the same deep-tangerine "something needs
+  attention" tone used everywhere else this session touched.
+- `css/admin.css?v=21`.
+
 ### Director-authored records — she is signature 1, not a fourth role
 
 For Incident Reports, the open question was how signature 1 works when there
