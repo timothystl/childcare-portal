@@ -2486,24 +2486,6 @@ async function removePickupContact(id) {
     return data === true;
 }
 
-// Admin read of a family's pickup list. Direct table read, not an RPC — the
-// only policy on pickup_contacts is `FOR ALL ... USING (is_admin())`, which
-// an admin's own authenticated session already satisfies; the two RPCs above
-// are SECURITY DEFINER wrappers for the *parent* side, which has no policy
-// of its own on this table at all. Read-only here on purpose: the family adds
-// and removes their own pickup list from their portal, and this is the
-// office's view of it, not a second place to edit it.
-async function fetchPickupContactsAdmin(familyId) {
-    if (!sbClient || !familyId) return [];
-    const { data, error } = await sbClient
-        .from('pickup_contacts')
-        .select('id, name, relationship, note')
-        .eq('family_id', familyId)
-        .order('name');
-    if (error) throw friendlyError(error);
-    return data || [];
-}
-
 /** Flips one child's photo consent. Returns false if the child isn't theirs. */
 async function setPhotoRelease(studentId, released) {
     if (!sbClient) throw new Error('Supabase not configured.');
@@ -4713,6 +4695,11 @@ async function createPaymentSession(invoiceId) {
  * amount and confirms ownership server-side.
  *
  * @param {number} invoiceId
+ * @param {{sandboxTest?: boolean}} [opts] sandboxTest is only ever true when
+ *   the tab has ?staxtest=1 — see pbStaxTestEnabled() in portal-billing.js.
+ *   It lets a real click-through against Stax's sandbox merchant bypass the
+ *   production-only gate, but only when the server has ALSO explicitly
+ *   turned on STAX_SANDBOX_TEST_ENABLED — this flag alone does nothing.
  * @returns {Promise<{customerId: string, webPaymentsToken: string,
  *   environment: string, amount: number, supportsPartialPayments: boolean,
  *   paymentAttemptId: string, priorBalance: number,
@@ -4720,13 +4707,13 @@ async function createPaymentSession(invoiceId) {
  *   invoiceId: number, firstname: string, lastname: string, phone: string,
  *   savedCard: {last4: string, brand: string}|null}>}
  */
-async function createStaxChargeSession(invoiceId) {
+async function createStaxChargeSession(invoiceId, opts) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: { session } } = await sbClient.auth.getSession();
     const token = session?.access_token;
     if (!token) throw new Error('Not authenticated.');
     const { data, error } = await sbClient.functions.invoke('create-stax-charge', {
-        body: { invoiceId },
+        body: { invoiceId, sandboxTest: !!opts?.sandboxTest },
         headers: { Authorization: `Bearer ${token}` },
     });
     if (error) {
@@ -4746,10 +4733,12 @@ async function createStaxChargeSession(invoiceId) {
  *
  * @param {number} invoiceId
  * @param {string|null} paymentMethodId - omit/null when useSavedCard is true
- * @param {{useSavedCard?: boolean, saveCard?: boolean, amount?: number, paymentAttemptId: string}} [opts]
+ * @param {{useSavedCard?: boolean, saveCard?: boolean, amount?: number, paymentAttemptId: string, sandboxTest?: boolean}} [opts]
  *   useSavedCard charges the family's card on file instead of paymentMethodId;
  *   saveCard remembers a freshly-tokenized card for next time; only Stax's
  *   opaque payment_method_id + last4/brand are stored, never PAN or CVV.
+ *   sandboxTest mirrors createStaxChargeSession's — only true behind
+ *   ?staxtest=1, and only effective when the server has also opted in.
  * @returns {Promise<{success: boolean, transactionId: string, amount: number, touchedInvoiceIds: number[]}>}
  */
 async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
@@ -4764,6 +4753,7 @@ async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
             saveCard: !!opts?.saveCard,
             amount: opts?.amount,
             paymentAttemptId: opts?.paymentAttemptId,
+            sandboxTest: !!opts?.sandboxTest,
         },
         headers: { Authorization: `Bearer ${token}` },
     });

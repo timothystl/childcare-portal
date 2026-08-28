@@ -74,6 +74,8 @@
 // Secrets: STAX_API_KEY, STAX_PAYMENTS_ENABLED, RESEND_API_KEY,
 //          RESEND_FROM_EMAIL, RESEND_REPLY_TO
 //          (shared with authorizenet-webhook / send-invoice)
+// Optional: STAX_SANDBOX_TEST_ENABLED=true — see create-stax-charge's
+//          matching comment. Deliberate, temporary opt-in only.
 // ============================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -244,7 +246,18 @@ serve(async (req) => {
         if (Deno.env.get("STAX_PAYMENTS_ENABLED") !== "true") {
             return json({ error: "Stax payments are not currently available." }, 503, ch);
         }
-        if ((Deno.env.get("STAX_ENVIRONMENT") || "").toLowerCase() !== "production") {
+        // Parsed early so the sandbox-test gate below can read it; the rest
+        // of the body is destructured further down as before.
+        const body = await req.json().catch(() => ({}));
+        const isProduction = (Deno.env.get("STAX_ENVIRONMENT") || "").toLowerCase() === "production";
+        // ⚠️ Sandbox test path — see create-stax-charge's matching comment
+        // for the full reasoning. Same two-signal requirement: the server
+        // secret STAX_SANDBOX_TEST_ENABLED must be explicitly on, AND this
+        // exact request must carry sandboxTest:true (only sent when the tab
+        // has ?staxtest=1). Either signal missing means the ordinary
+        // production gate applies untouched.
+        const sandboxTestAllowed = Deno.env.get("STAX_SANDBOX_TEST_ENABLED") === "true" && body?.sandboxTest === true;
+        if (!isProduction && !sandboxTestAllowed) {
             console.error("charge-stax-payment: refusing parent payment outside production environment");
             return json({ error: "Online payments are not configured for production yet." }, 503, ch);
         }
@@ -267,7 +280,6 @@ serve(async (req) => {
         if (!myFamilyIds.size) return json({ error: "No family is linked to this account." }, 403, ch);
 
         // ── 2. Validate non-card input. Raw PAN/CVV never reaches here. ─
-        const body = await req.json().catch(() => ({}));
         const invoiceId = Number(body?.invoiceId);
         const paymentAttemptId = String(body?.paymentAttemptId || "").toLowerCase();
         const bodyPaymentMethodId = String(body?.paymentMethodId || "");

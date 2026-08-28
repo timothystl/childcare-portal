@@ -1432,19 +1432,35 @@ describe('Stax payment security guards', () => {
         expect(chargeFn.includes('idempotency_id: paymentAttemptId')).toBe(true);
     });
 
-    test('normal parent Pay online button uses Stax without a test query flag', () => {
+    test('normal parent Pay online button never sends sandboxTest true without the URL flag', () => {
+        // The button itself is unchanged — same class, same label, no
+        // "(test)" text a real parent could be confused by. pbStaxTestEnabled()
+        // gates whether the underlying calls carry sandboxTest:true, and it
+        // reads sessionStorage/the URL rather than defaulting true.
         const portal = read('js/portal/portal-billing.js');
         expect(portal.includes('class="pb-pay-btn pb-stax-btn"')).toBe(true);
-        expect(portal.includes('pbStaxTestEnabled')).toBe(false);
         expect(portal.includes('with Stax (test)')).toBe(false);
+        expect(portal.includes('function pbStaxTestEnabled()')).toBe(true);
+        expect(portal.includes("get('staxtest') === '1'")).toBe(true);
+        expect(portal.includes('sandboxTest: pbStaxTestEnabled()')).toBe(true);
     });
 
-    test('parent Stax endpoints fail closed unless explicitly configured for production', () => {
+    test('parent Stax endpoints fail closed unless production OR an explicit two-signal sandbox test', () => {
+        // Reintroduced 2026-08-28 so the real Stax.js flow can be
+        // click-tested against the sandbox merchant before a production
+        // Stax account exists. Must require BOTH a server secret
+        // (STAX_SANDBOX_TEST_ENABLED) and a per-request client signal
+        // (sandboxTest) — either alone must never be enough, since a real
+        // parent's normal request never sets sandboxTest and the server
+        // secret is meant to be a deliberate, temporary opt-in.
         const createFn = read('supabase/functions/create-stax-charge/index.ts');
-        expect(createFn.includes('STAX_ENVIRONMENT')).toBe(true);
-        expect(createFn.includes('!== "production"')).toBe(true);
-        expect(chargeFn.includes('STAX_ENVIRONMENT')).toBe(true);
-        expect(chargeFn.includes('!== "production"')).toBe(true);
+        for (const fn of [createFn, chargeFn]) {
+            expect(fn.includes('STAX_ENVIRONMENT')).toBe(true);
+            expect(fn.includes('=== "production"')).toBe(true);
+            expect(fn.includes('STAX_SANDBOX_TEST_ENABLED')).toBe(true);
+            expect(fn.includes('body?.sandboxTest === true')).toBe(true);
+            expect(fn.includes('!isProduction && !sandboxTestAllowed')).toBe(true);
+        }
     });
 
     test('portal falls back to the existing hosted checkout while Stax is gated', () => {
