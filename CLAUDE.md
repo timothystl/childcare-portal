@@ -504,6 +504,45 @@ whose true deployed source isn't in the tree risks silently dropping a field
 (`marked`, `allergies`) that the live board depends on. Resolving the id
 client-side avoided touching it at all.
 
+### ⚠️ The board was never actually rendering — `allergies` is an array, not a string (found 2026-08-28)
+
+Reported live: the Attendance Board sat on "Loading…" forever for every
+room, on every day, for every admin. Root cause, found by calling
+`center_headcount_admin()` directly against production and reading its real
+shape: `allergies` comes back as an **array of `{label, severity}` chips** —
+the same structure `admin-families.js`'s allergy editor writes — not a
+string. `_abRender()` (written when the Attendance Board first shipped,
+2026-08-16, before this session touched the file) did `(c.allergies ||
+'').trim()` in three places. An array is always truthy, even `[]`, so that
+line called `.trim()` on an array and threw a `TypeError` on the very first
+child processed — **synchronously, inside `_abRender()`, which
+`renderAttendanceBoard()` calls outside its own try/catch.** The exception
+had nowhere to go but the browser console; the DOM was left exactly as the
+loading placeholder had set it, forever.
+
+⚠️ **This predates the Classroom Tab Redesign and was not introduced by
+it** — confirmed by diffing: none of the three broken lines were touched by
+this session's earlier work, which only added new code around them. It is
+unknown how long the board was actually broken; nothing in the earlier
+session's notes tested it against a room that had a child with any
+allergies value at all (even an empty array), which is what it took to
+hit this.
+
+Fixed with one helper, `_abAllergySummary(allergies)`, used everywhere the
+file reads a child's allergies: array → `.map(a => a.label).join(', ')`;
+anything else → the old string-trim behavior, kept as a fallback rather
+than assumed impossible. Verified the exact shape against a live,
+rolled-back call to `center_headcount_admin()` before writing the fix, not
+guessed from the column name.
+
+**The lesson to keep:** a function called outside its own try/catch that
+builds its output as one big template literal fails silently by construction
+— any thrown error inside it leaves the DOM at whatever it was before the
+call, which reads to a user as "stuck loading" with no error surfaced
+anywhere they can see. Worth an eventual pass to wrap `_abRender()`'s own
+body, not just the network call, so a future bug here fails loud instead of
+quiet — not done in this fix, which was scoped to the one confirmed cause.
+
 ### Director-authored records — she is signature 1, not a fourth role
 
 For Incident Reports, the open question was how signature 1 works when there

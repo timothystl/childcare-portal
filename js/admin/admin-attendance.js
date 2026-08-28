@@ -225,7 +225,7 @@ function _abRender() {
     const absent     = kids.filter(c => c.marked === 'absent');
     const expected   = kids.filter(c => c.marked !== 'absent');
     const hasCheckins = kids.some(c => c.attendance_status !== 'not_arrived');
-    const allergyKids = kids.filter(c => (c.allergies || '').trim());
+    const allergyKids = kids.filter(c => _abAllergySummary(c.allergies));
 
     // Rooms in ROOMS order, plus anything unexpected the data threw up.
     const roomIds = [...new Set([
@@ -285,12 +285,23 @@ function _abTile(label, value, sub, tone) {
     </div>`;
 }
 
+// center_headcount_rows() returns allergies as an array of {label, severity}
+// chips (the same shape admin-families.js's allergy editor writes), not a
+// string — this flattens it to one displayable line. Defensive against a
+// bare string too, in case a caller somewhere still has the older shape.
+function _abAllergySummary(allergies) {
+    if (Array.isArray(allergies)) {
+        return allergies.map(a => (a && a.label) || '').filter(Boolean).join(', ');
+    }
+    return String(allergies || '').trim();
+}
+
 // The three or four distinct allergens, not a list of children — the tile
 // answers "what is in the building today", which is what a kitchen needs.
 function _abAllergyWords(kids) {
     const words = new Set();
     for (const k of kids) {
-        for (const part of String(k.allergies).split(/[,;\n]/)) {
+        for (const part of _abAllergySummary(k.allergies).split(/[,;\n]/)) {
             const w = part.trim().split(/\s+/)[0];
             if (w) words.add(w.replace(/[^a-zA-Z-]/g, '').toLowerCase());
         }
@@ -330,7 +341,7 @@ function _abRoom(roomId, kids, staff, hasCheckins) {
 
     const canAct = _abCanAct();
     const rows = roomKids.map(c => {
-        const allergy = (c.allergies || '').trim();
+        const allergy = _abAllergySummary(c.allergies);
         let mark, cls;
         if (c.marked === 'absent')                  { mark = 'ABSENT'; cls = 'is-absent'; }
         else if (c.attendance_status === 'present') { mark = _abTime(c.last_event_at); cls = 'is-in'; }
