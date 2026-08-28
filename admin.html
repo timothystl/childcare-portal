@@ -425,7 +425,7 @@
                     </button>
                 </h2>
                 <div class="filters">
-                    <input type="text" id="searchInput" placeholder="Search by parent, child, or email…">
+                    <input type="text" id="searchInput" placeholder="Search by parent, child, or email…" autocomplete="off">
                     <select id="roomFilter">
                         <option value="">All rooms</option>
                     </select>
@@ -561,7 +561,7 @@
 
                 <div class="msg-toolbar">
                     <div class="ap-seg" id="msgFilterSeg"></div>
-                    <input type="text" id="msgSearch" placeholder="Search by name…" class="family-search-input" style="flex:1;min-width:160px">
+                    <input type="text" id="msgSearch" placeholder="Search by name…" class="family-search-input" style="flex:1;min-width:160px" autocomplete="off">
                     <button type="button" id="msgOpenComposeBtn" class="btn-secondary">✎ Message a family</button>
                     <button type="button" id="msgOpenAnnounceBtn" class="btn-primary">📣 New announcement</button>
                 </div>
@@ -629,7 +629,7 @@
                         </div>
                         <div class="wl-notify-field">
                             <label>Notify This Email on New Inquiries</label>
-                            <input type="email" id="wlNotifyEmail" placeholder="director@timothystl.org">
+                            <input type="email" id="wlNotifyEmail" placeholder="director@timothystl.org" autocomplete="off">
                         </div>
                     </div>
                     <div class="wl-notify-field">
@@ -785,11 +785,11 @@
                         <div class="admin-wl-section-label">Parent / Guardian</div>
                         <div class="admin-wl-row">
                             <label>Name <span class="req">*</span></label>
-                            <input type="text" id="adminWlParentName" required placeholder="Full name">
+                            <input type="text" id="adminWlParentName" required placeholder="Full name" autocomplete="off">
                         </div>
                         <div class="admin-wl-row">
                             <label>Email <span class="req">*</span></label>
-                            <input type="email" id="adminWlParentEmail" required placeholder="email@example.com">
+                            <input type="email" id="adminWlParentEmail" required placeholder="email@example.com" autocomplete="off">
                         </div>
                         <div class="admin-wl-row">
                             <label>Phone <span class="req">*</span></label>
@@ -799,7 +799,7 @@
                         <div class="admin-wl-section-label" style="margin-top:14px">Child</div>
                         <div class="admin-wl-row">
                             <label>Child's Name <span class="req">*</span></label>
-                            <input type="text" id="adminWlChildName" required placeholder="Child's full name">
+                            <input type="text" id="adminWlChildName" required placeholder="Child's full name" autocomplete="off">
                         </div>
                         <div class="admin-wl-row">
                             <label></label>
@@ -867,7 +867,7 @@
                         <div id="adminWlSibRow" class="hidden">
                             <div class="admin-wl-row">
                                 <label>Sibling's Name</label>
-                                <input type="text" id="adminWlSibName" placeholder="Sibling's name">
+                                <input type="text" id="adminWlSibName" placeholder="Sibling's name" autocomplete="off">
                             </div>
                             <div class="admin-wl-row">
                                 <label>Sibling's Room</label>
@@ -1231,7 +1231,7 @@
                             <p class="section-desc" style="margin-top:16px;font-weight:600;color:#444">Add Admin User</p>
                             <form id="addAdminRoleForm" autocomplete="off">
                             <div class="add-role-row">
-                                <input type="email" id="newRoleEmail" placeholder="email@example.com" class="family-search-input" style="flex:1;min-width:160px" autocomplete="off">
+                                <input type="email" id="newRoleEmail" placeholder="email@example.com" class="family-search-input" style="flex:1;min-width:160px" autocomplete="username">
                                 <input type="password" id="newRolePassword" placeholder="Password (min 6 chars)" class="family-search-input" style="width:190px" autocomplete="new-password">
                                 <select id="newRoleLevel" class="family-search-input">
                                     <option value="full">Full Access</option>
@@ -1575,7 +1575,7 @@
                                     <small style="color:var(--text-muted,#888);font-size:.82em;">How long after shift start/end before a missed-clock alert fires.</small>
                                 </label>
                                 <label>Director Notify Email
-                                    <input type="email" id="geofenceNotifyEmail" placeholder="director@example.com">
+                                    <input type="email" id="geofenceNotifyEmail" placeholder="director@example.com" autocomplete="off">
                                     <small style="color:var(--text-muted,#888);font-size:.82em;">Receives geofence alerts and missed-clock summaries.</small>
                                 </label>
                             </div>
@@ -1695,7 +1695,7 @@
                         <div class="fm-field">
                             <label>Clock-In PIN (4 digits)</label>
                             <input type="text" id="sfPin" maxlength="4" placeholder="e.g. 1234"
-                                class="rate-input" style="width:90px" inputmode="numeric" pattern="\d{4}">
+                                class="rate-input" style="width:90px" inputmode="numeric" pattern="\d{4}" autocomplete="off">
                         </div>
                         <div class="fm-field">
                             <label>PTO Starting Balance (hrs)</label>
@@ -2327,7 +2327,8 @@
                         <div class="fm-field fm-field-pin">
                             <label>PIN</label>
                             <div class="fm-pin-row">
-                                <input type="text" id="fmPin" class="fm-pin-input" maxlength="8" placeholder="4-8 digits">
+                                <input type="text" id="fmPin" class="fm-pin-input" maxlength="8" placeholder="4-8 digits"
+                                       inputmode="numeric" pattern="\d{4,8}" autocomplete="off">
                                 <button type="button" id="fmNewPinBtn" class="btn-ghost fm-pin-btn" title="Generate new PIN">&#8635;</button>
                             </div>
                         </div>
@@ -2355,7 +2356,8 @@
                         <div class="fm-field fm-field-pin">
                             <label>PIN</label>
                             <div class="fm-pin-row">
-                                <input type="text" id="fmParent2Pin" class="fm-pin-input" maxlength="8" placeholder="4-8 digits">
+                                <input type="text" id="fmParent2Pin" class="fm-pin-input" maxlength="8" placeholder="4-8 digits"
+                                       inputmode="numeric" pattern="\d{4,8}" autocomplete="off">
                                 <button type="button" id="fmNewPin2Btn" class="btn-ghost fm-pin-btn" title="Generate new PIN">&#8635;</button>
                             </div>
                         </div>

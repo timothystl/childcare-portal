@@ -1029,7 +1029,7 @@ function _bkReconHtml() {
             <div class="bk-card-head"><h4 class="bk-h">Parent payments (from processor) &middot; ${payments.filter(p => !_bkRecon.assign[p.id]).length} unassigned</h4><button type="button" class="bk-link" id="bkAddItem">+ Add item</button></div>
             <div class="bk-form bk-form-green" id="bkItemForm" style="display:none">
                 <label class="bk-field"><span>Date</span><input type="date" id="bkItemDate" value="${escHtml(_bkToday())}"></label>
-                <label class="bk-field"><span>Family name</span><input type="text" id="bkItemName" placeholder="Family name"></label>
+                <label class="bk-field"><span>Family name</span><input type="text" id="bkItemName" placeholder="Family name" autocomplete="off"></label>
                 <label class="bk-field"><span>Amount</span><input type="number" step="0.01" id="bkItemAmount" placeholder="Amount"></label>
                 <div class="bk-form-btns">
                     <button type="button" class="bk-btn-solid" id="bkItemSave">Add</button>

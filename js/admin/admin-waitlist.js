@@ -906,7 +906,7 @@ function wlpRenderQueue(alloc) {
     return `
         <div>
             <div class="wlp-filter-bar">
-                <input type="search" id="wlpSearch" class="family-search-input" placeholder="Search by child or parent name…" value="${escHtml(_wlp.search)}" style="min-width:220px">
+                <input type="search" id="wlpSearch" class="family-search-input" placeholder="Search by child or parent name…" value="${escHtml(_wlp.search)}" style="min-width:220px" autocomplete="off">
                 <select id="wlpRoomFilterSel" class="family-search-input" style="width:auto;">
                     <option value="">All Rooms</option>
                     ${roomOptions}
