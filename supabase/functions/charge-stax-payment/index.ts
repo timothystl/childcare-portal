@@ -111,30 +111,25 @@ function escHtml(s: string): string {
     )[c]);
 }
 
-function monthLabel(month: string): string {
-    const m = /^(\d{4})-(\d{2})$/.exec(String(month || ""));
-    if (!m) return String(month || "");
-    return new Date(Number(m[1]), Number(m[2]) - 1, 1)
-        .toLocaleDateString("en-US", { month: "long", year: "numeric" });
-}
-
 /**
  * A payment receipt, sent only for a genuinely new charge (never a retry —
  * the caller only reaches here when the billing_payments insert itself
  * succeeded, not the idempotent-duplicate branch). Deliberately the same
- * branding as authorizenet-webhook's sendReceiptEmail — a family paying by
- * Stax should get the identical-looking receipt as one paying by
+ * branding and markup as authorizenet-webhook's sendReceiptEmail — a family
+ * paying by Stax should get the identical-looking receipt as one paying by
  * Authorize.net, not a Stax-branded one, since from the family's side this
  * is the same church, the same bill, just a different processor under the
- * hood they never need to know about.
+ * hood they never need to know about. Redesigned 2026-08-28 from a director
+ * design mockup (checkmark, Invoice/Paid on/Payment method/Confirmation#
+ * box, current-month/prior-balance breakdown, "View billing account" link).
  */
 async function sendReceiptEmail(admin: any, o: {
     familyId: string; invoiceId: number; amountPaid: number;
     balanceRemaining: number; transId: string;
+    cardBrand?: string | null; cardLast4?: string | null;
 }): Promise<void> {
     const apiKey = Deno.env.get("RESEND_API_KEY");
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
-    const replyTo = Deno.env.get("RESEND_REPLY_TO") || fromEmail;
     if (!apiKey) { console.warn("charge-stax-payment: RESEND_API_KEY not set, skipping receipt"); return; }
 
     const { data: fam } = await admin.from("families")
@@ -145,78 +140,44 @@ async function sendReceiptEmail(admin: any, o: {
         .select("billing_cycles(month)")
         .eq("id", o.invoiceId).maybeSingle();
     const balanceRemaining = Math.max(0, o.balanceRemaining);
-    const month = (invoice as any)?.billing_cycles?.month || "";
+    const anchorMonth = (invoice as any)?.billing_cycles?.month || "";
 
-    // How many care days this invoice's month actually covers — same
-    // family-matching logic as compute_family_month_charges, so it can
-    // never disagree with the amount charged. 0 for a manually-priced
-    // invoice with no real bookings (e.g. this Stax comparison's own test
-    // invoices) — the line below is simply omitted in that case rather
-    // than showing a confusing "0 days of care".
-    const { data: daysOfCare } = await admin.rpc("count_family_month_care_days", {
-        p_family_id: o.familyId, p_month: month,
+    // ⚠️ stax_finalize_charge() can roll this one card charge across
+    // several unpaid invoices (oldest first), tagging each resulting
+    // billing_payments row's processor_transaction_id with "-inv<id>" —
+    // see that function and its own comment. Re-reading those rows (rather
+    // than trusting o.amountPaid alone) is what lets this receipt show the
+    // real current-month/prior-balance split instead of one undifferentiated
+    // total, and it can never disagree with what was actually recorded
+    // since it's reading the same rows the ledger reads.
+    const { data: paymentRows } = await admin.from("billing_payments")
+        .select("amount, invoice_id, billing_invoices(billing_cycles(month))")
+        .eq("processor", "stax")
+        .or(`processor_transaction_id.eq.${o.transId},processor_transaction_id.like.${o.transId}-inv%`);
+    let currentMonthAmount = 0, priorBalanceAmount = 0;
+    for (const row of (paymentRows || []) as any[]) {
+        const rowMonth = row?.billing_invoices?.billing_cycles?.month || "";
+        if (rowMonth && anchorMonth && rowMonth === anchorMonth) currentMonthAmount += Number(row.amount) || 0;
+        else priorBalanceAmount += Number(row.amount) || 0;
+    }
+    // Fall back to the plain total if the rows above somehow didn't match
+    // (e.g. the unapplied-credit branch, which has no invoice_id) — a
+    // receipt with one total line is still correct, just not itemized.
+    const totalPaid = (currentMonthAmount + priorBalanceAmount) > 0
+        ? currentMonthAmount + priorBalanceAmount : Number(o.amountPaid) || 0;
+
+    const invoiceNumber = `INV-${o.invoiceId}`;
+    const paidOn = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const paymentMethodLine = o.cardLast4
+        ? `${escHtml(o.cardBrand || "Card")} &middot;&middot;&middot;&middot;${escHtml(o.cardLast4)}` : null;
+
+    const html = buildReceiptHtml({
+        familyName: fam.parent_name || "there",
+        invoiceNumber, paidOn, paymentMethodLine,
+        confirmationNumber: o.transId,
+        totalPaid, currentMonthAmount, priorBalanceAmount,
+        balanceRemaining,
     });
-
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#F5F0E4;font-family:'Nunito',Helvetica,Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F0E4;padding:32px 16px;">
-    <tr><td align="center">
-      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(1,41,74,.08);">
-        <tr>
-          <td style="background:#C9E6DC;padding:26px 32px;border-bottom:3px solid #F5B731;text-align:center;">
-            <p style="margin:0;color:#01294A;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;">Timothy Lutheran Church</p>
-            <h1 style="margin:6px 0 0;color:#01294A;font-size:22px;font-weight:800;">Mother's Day Out</h1>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:30px 32px 8px;">
-            <p style="margin:0 0 6px;color:#7A6E5A;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;">Payment Receipt</p>
-            <h2 style="margin:0 0 18px;color:#01294A;font-size:20px;font-weight:700;">${escHtml(monthLabel(month))}</h2>
-            <p style="margin:0 0 18px;color:#2E2A22;font-size:15px;line-height:1.6;">
-              Hello ${escHtml(fam.parent_name || "there")},<br>
-              We've received your online payment. Thank you!
-            </p>
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 6px;">
-              <tr>
-                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#2E2A22;font-size:15px;">Amount paid</td>
-                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#01294A;font-size:15px;text-align:right;font-weight:700;">${escHtml(money(o.amountPaid))}</td>
-              </tr>
-              ${Number(daysOfCare) > 0 ? `<tr>
-                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#2E2A22;font-size:15px;">Days of care</td>
-                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#01294A;font-size:15px;text-align:right;">${Number(daysOfCare)}</td>
-              </tr>` : ""}
-              <tr>
-                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#2E2A22;font-size:15px;">Confirmation #</td>
-                <td style="padding:9px 0;border-bottom:1px solid #F0EADA;color:#01294A;font-size:15px;text-align:right;">${escHtml(o.transId)}</td>
-              </tr>
-              <tr>
-                <td style="padding:9px 0;color:#2E2A22;font-size:15px;">${balanceRemaining > 0 ? "Account balance remaining" : "Status"}</td>
-                <td style="padding:9px 0;color:#01294A;font-size:15px;text-align:right;font-weight:700;">${balanceRemaining > 0 ? escHtml(money(balanceRemaining)) : "Paid in full"}</td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:8px 32px 28px;">
-            <p style="margin:0;color:#7A6E5A;font-size:14px;line-height:1.6;">
-              If anything here looks wrong, just reply to this email and we'll take a look — it's no trouble at all.
-            </p>
-            <p style="margin:20px 0 0;color:#2E2A22;font-size:15px;">Thank you,<br>
-              <strong style="color:#01294A;">Timothy Lutheran MDO</strong></p>
-          </td>
-        </tr>
-        <tr>
-          <td style="background:#FDFAF0;padding:16px 32px;text-align:center;border-top:1px solid #E8E0CC;">
-            <p style="margin:0;color:#7A6E5A;font-size:12px;">You're receiving this because your child is enrolled at Timothy Lutheran Church MDO.</p>
-          </td>
-        </tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
 
     try {
         await fetch("https://api.resend.com/emails", {
@@ -225,7 +186,6 @@ async function sendReceiptEmail(admin: any, o: {
             body: JSON.stringify({
                 from: fromEmail,
                 to: [String(fam.parent_email).trim()],
-                reply_to: replyTo,
                 subject: `Payment received — Timothy Lutheran MDO`,
                 html,
             }),
@@ -235,6 +195,106 @@ async function sendReceiptEmail(admin: any, o: {
         // itself — the charge already happened and is already stored.
         console.error("charge-stax-payment: receipt email failed", e);
     }
+}
+
+/**
+ * Shared receipt markup — identical between charge-stax-payment and
+ * authorizenet-webhook (each keeps its own copy; this repo's edge functions
+ * have no shared import path between them, see this file's own header
+ * comment). No-reply on purpose: the mockup's own contact line (phone +
+ * billing email) is the deliberate replacement for "just reply to this
+ * email" — a receipt is a confirmation, not a support channel, and this app
+ * already has a real staffed billing inbox to point to instead.
+ */
+function buildReceiptHtml(o: {
+    familyName: string; invoiceNumber: string; paidOn: string;
+    paymentMethodLine: string | null; confirmationNumber: string;
+    totalPaid: number; currentMonthAmount: number; priorBalanceAmount: number;
+    balanceRemaining: number;
+}): string {
+    const showBreakdown = o.priorBalanceAmount > 0.005 && o.currentMonthAmount > 0.005;
+    return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#F5F0E4;font-family:'Nunito',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F0E4;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(1,41,74,.08);">
+        <tr>
+          <td style="background:#01294A;padding:28px 32px;text-align:center;">
+            <img src="https://mdo.timothystl.org/images/logo/myMDO_primary_logo_light.png"
+                 alt="my MDO" width="120" height="auto" style="display:block;margin:0 auto 10px;">
+            <p style="margin:0;color:#F5B731;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;">Timothy Lutheran Church</p>
+            <p style="margin:4px 0 0;color:rgba(255,255,255,.75);font-size:13px;">Mother's Day Out</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:34px 32px 8px;text-align:center;">
+            <table cellpadding="0" cellspacing="0" style="margin:0 auto 16px;">
+              <tr><td width="52" height="52" style="background:#C9E6DC;border-radius:50%;text-align:center;vertical-align:middle;font-size:26px;color:#3A7B60;">&#10003;</td></tr>
+            </table>
+            <h1 style="margin:0 0 4px;color:#01294A;font-size:22px;font-weight:800;font-family:Georgia,'Times New Roman',serif;">Payment received</h1>
+            <p style="margin:0 0 18px;color:#7A6E5A;font-size:14px;">Thank you, ${escHtml(o.familyName)}.</p>
+            <p style="margin:0 0 26px;color:#01294A;font-size:34px;font-weight:800;font-family:Georgia,'Times New Roman',serif;">${escHtml(money(o.totalPaid))}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 32px;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #E8E0CC;border-radius:10px;">
+              <tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #F0EADA;color:#7A6E5A;font-size:14px;">Invoice</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #F0EADA;color:#01294A;font-size:14px;text-align:right;font-weight:700;">${escHtml(o.invoiceNumber)}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;${o.paymentMethodLine ? 'border-bottom:1px solid #F0EADA;' : ''}color:#7A6E5A;font-size:14px;">Paid on</td>
+                <td style="padding:12px 16px;${o.paymentMethodLine ? 'border-bottom:1px solid #F0EADA;' : ''}color:#01294A;font-size:14px;text-align:right;font-weight:700;">${escHtml(o.paidOn)}</td>
+              </tr>
+              ${o.paymentMethodLine ? `<tr>
+                <td style="padding:12px 16px;border-bottom:1px solid #F0EADA;color:#7A6E5A;font-size:14px;">Payment method</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #F0EADA;color:#01294A;font-size:14px;text-align:right;font-weight:700;">${o.paymentMethodLine}</td>
+              </tr>` : ""}
+              <tr>
+                <td style="padding:12px 16px;color:#7A6E5A;font-size:14px;">Confirmation #</td>
+                <td style="padding:12px 16px;color:#01294A;font-size:14px;text-align:right;font-weight:700;">${escHtml(o.confirmationNumber)}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 32px 8px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              ${showBreakdown ? `<tr>
+                <td style="padding:5px 0;color:#7A6E5A;font-size:14px;">Current month charges</td>
+                <td style="padding:5px 0;color:#01294A;font-size:14px;text-align:right;">${escHtml(money(o.currentMonthAmount))}</td>
+              </tr>
+              <tr>
+                <td style="padding:5px 0 12px;border-bottom:1px dashed #E8E0CC;color:#7A2A18;font-size:14px;">Prior balance</td>
+                <td style="padding:5px 0 12px;border-bottom:1px dashed #E8E0CC;color:#7A2A18;font-size:14px;text-align:right;">${escHtml(money(o.priorBalanceAmount))}</td>
+              </tr>` : ""}
+              <tr>
+                <td style="padding:${showBreakdown ? '12px' : '0'} 0 0;color:#01294A;font-size:15px;font-weight:800;">Total paid</td>
+                <td style="padding:${showBreakdown ? '12px' : '0'} 0 0;color:#01294A;font-size:15px;font-weight:800;text-align:right;">${escHtml(money(o.totalPaid))}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:22px 32px 30px;text-align:center;">
+            <a href="https://mdo.timothystl.org/portal.html"
+               style="display:inline-block;background:#01294A;color:#fff;text-decoration:none;font-size:14px;font-weight:700;padding:13px 28px;border-radius:8px;">View billing account</a>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#FDFAF0;padding:18px 32px;text-align:center;border-top:1px solid #E8E0CC;">
+            <p style="margin:0 0 6px;color:#7A6E5A;font-size:13px;">Questions about this charge? Contact the front office at (314) 781-8673 or at mdo@timothystl.org.</p>
+            <p style="margin:0;color:#B5AB90;font-size:11px;">This is a receipt for a payment you made and does not accept replies.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
 }
 
 serve(async (req) => {
@@ -317,7 +377,7 @@ serve(async (req) => {
 
         const { data: family, error: famErr } = await admin
             .from("families")
-            .select("id, stax_customer_id, stax_default_payment_method_id")
+            .select("id, stax_customer_id, stax_default_payment_method_id, stax_default_card_brand, stax_default_card_last_four")
             .eq("id", invoice.family_id)
             .maybeSingle();
         if (famErr) return json({ error: "Could not load the payment customer." }, 500, ch);
@@ -465,13 +525,18 @@ serve(async (req) => {
             return json({ error: "Payment succeeded but could not be recorded. Contact the office; do not retry.", ambiguous: true }, 500, ch);
         }
 
+        // Read once, regardless of saveCard — used both to persist the saved
+        // card below and to show "Card ····1234" on the receipt. Only
+        // meaningful on a fresh-card charge; a useSavedCard charge falls
+        // back to the family's own already-stored card metadata instead.
+        const cardInfo = chargeData?.payment_method || chargeData?.response?.payment_method || {};
+        const rawLast4 = String(cardInfo?.card_last_four || cardInfo?.last_four_digits || "");
+        const last4 = /^[0-9]{4}$/.test(rawLast4) ? rawLast4 : null;
+        const brand = cardInfo?.card_type ? String(cardInfo.card_type).slice(0, 40) : null;
+
         // Save only an opaque token and display metadata, and only after the
         // successful family-bound charge has been durably recorded.
         if (saveCard && !useSavedCard) {
-            const cardInfo = chargeData?.payment_method || chargeData?.response?.payment_method || {};
-            const rawLast4 = String(cardInfo?.card_last_four || cardInfo?.last_four_digits || "");
-            const last4 = /^[0-9]{4}$/.test(rawLast4) ? rawLast4 : null;
-            const brand = cardInfo?.card_type ? String(cardInfo.card_type).slice(0, 40) : null;
             const { error: saveErr } = await admin.from("families").update({
                 stax_default_payment_method_id: paymentMethodId,
                 stax_default_card_last_four: last4,
@@ -487,6 +552,8 @@ serve(async (req) => {
                     amountPaid: Number(finalized.amount) || chargeAmount,
                     balanceRemaining: Number(finalized.balanceRemaining) || 0,
                     transId: transactionId,
+                    cardBrand: useSavedCard ? (family as any).stax_default_card_brand : brand,
+                    cardLast4: useSavedCard ? (family as any).stax_default_card_last_four : last4,
                 });
             } catch (_err) {
                 console.error("charge-stax-payment: receipt email failed");
