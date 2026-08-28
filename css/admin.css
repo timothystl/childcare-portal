@@ -5263,6 +5263,16 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     color: #B8AC97; font-size: .78em; font-weight: 700;
 }
 
+.inc-add-item {
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.inc-add-item:last-of-type { border-bottom: none; }
+.inc-add-item p { margin: 3px 0 0; font-size: .9em; line-height: 1.5; color: var(--text); }
+.inc-add-meta { font-size: .78em; font-weight: 700; color: var(--text-muted); }
+.inc-add-empty { font-size: .88em; margin: 0 0 4px; }
+.inc-add-form { margin-top: 10px; }
+.inc-add-form .inc-dr-note { margin-bottom: 8px; }
+
 .inc-dr-actions {
     padding: 18px 26px; background: var(--linen); border-top: 1px solid var(--border);
 }
