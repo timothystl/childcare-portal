@@ -2127,10 +2127,14 @@
                 <div id="fhSkeleton" class="empty-hint" style="padding:60px 0;text-align:center">Loading&hellip;</div>
                 <div id="fhBody" style="display:none">
                     <div class="ap-head fh-head">
-                        <div>
-                            <h2>Finance</h2>
-                            <p>One place for billing, invoices, and who owes</p>
-                        </div>
+                        <!-- Title/blurb removed per director request (2026-08-28) — the
+                             sidebar already names the open tool and highlights it, and
+                             the tab strip right below (Ledger/Billing Report/Bookkeeper)
+                             makes it obvious what screen this is. Kept as an empty div,
+                             not deleted outright, so .fh-toolbar (month switcher +
+                             search) stays right-aligned via .ap-head's own
+                             justify-content: space-between. -->
+                        <div></div>
                         <div class="fh-toolbar">
                             <div class="fh-month-switch">
                                 <button type="button" id="fhMonthPrev" class="fh-month-arrow" aria-label="Previous month">&#9664;</button>

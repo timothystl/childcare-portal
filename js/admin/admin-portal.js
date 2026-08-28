@@ -183,8 +183,11 @@ const AP_TOOLS = [
     // (admin.html's own .fh-head). apRenderDetail() no longer renders a shell
     // header for any tool (see that function), so this needs no special
     // handling anymore — it just always worked out that way.
-    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance',
-      blurb: 'One place for billing, invoices, and who owes' },
+    // No `blurb` — apRenderDetail() hasn't rendered a shell header for any
+    // tool since 2026-08-28 (see that function's own comment), and this
+    // entry's own on-screen title was removed from #fhBody the same day, so
+    // the field had nothing left reading it.
+    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
 
