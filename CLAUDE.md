@@ -3415,6 +3415,13 @@ this session did not attempt; one is a migration-history footnote.
   real, multi-page refactor that needs its own scoped session with a reviewer, the
   same call this file already made for R13's `alert()`/`confirm()` cleanup — not
   something to fold into a security-fix pass blind.
+  ⚠️ **Half of this turned out wrong on closer inventory — see "CSP tightening" below
+  (2026-08-28).** `script-src`'s `unsafe-inline`/`unsafe-eval` were removed the same
+  day: only 23 inline event-handler attributes existed repo-wide (not "every admin
+  table row" — that estimate was actually describing `style-src`'s inline `style="..."`
+  attributes, a different directive), and neither CDN library nor this app's own code
+  uses `eval`/`new Function`. `style-src`'s `unsafe-inline` genuinely does stay, for
+  the reason given here — the multi-page refactor call was right for that half.
 - **Low — `stax-webhook-admin-tmp` and `debug-list-webhooks` remain deployed as inert
   stubs.** Re-confirmed both are still the safe 410 stubs (not the original dangerous
   code) via `get_edge_function` — no live exposure — but both are still `ACTIVE` and
@@ -3431,6 +3438,132 @@ this session did not attempt; one is a migration-history footnote.
 
 `npm test` — 188/188 (5 new guards for the reconciliation job). `npm run build` —
 `dist/` rebuilt.
+
+### CSP tightening — script-src locked to a hash allowlist (2026-08-28)
+
+The second review round scoped this out as "a real, multi-page refactor, not a
+safe blind fix" — and that was the right call for `style-src` (see below), but
+`script-src`'s `unsafe-inline`/`unsafe-eval` turned out to be far more
+tractable once actually inventoried instead of estimated. Removed both.
+
+**Inline event-handler attributes: 23 total, not "every admin table row."**
+`onclick=`/`onchange=`/`oninput=`/`onblur=`/`onkeydown=` across the whole
+repo — `js/admin/admin-billing.js` (11, all in the Accounts Receivable table:
+lock/unlock, edit-billed, Details, Payment, and the payment-history Refund
+button), one each in `admin-reports.js` (a per-room collapse toggle),
+`admin-finance-hub.js` and `admin-billing-report.js` (both a bare
+`event.stopPropagation()` — dead code, verified no ancestor click listener
+existed for either to guard against, so removed outright rather than
+converted), plus 9 in `payroll.html` (a church-ChMS mockup — "nothing here
+calls it," per this file's Stax section — but still served statically at
+`/payroll.html` under the same global `_headers` CSP, so still had to be
+fixed) and one in `docs/manual.html` (a print button — found only by the new
+drift-guard test below; a root-only file scan had missed it, see that test's
+own comment). All converted to `data-*` attributes plus a **delegated**
+listener on the nearest container that survives every re-render — the
+existing pattern this codebase already used in a few spots (e.g.
+`admin-billing.js`'s own `.inv-adj-issue`/`.inv-adj-discard` buttons), just
+not yet applied to the AR table.
+
+⚠️ **A duplicate-handler bug was caught and fixed before shipping.** The
+first pass added a delegated `.pay-hist-refund-btn` listener on
+`#arTableWrap` in `setupBilling()` *and* left the direct
+`el.querySelectorAll('.pay-hist-refund-btn').forEach(...)` binding already
+sitting in `renderPaymentHistory()` — since that container always renders
+inside `#arTableWrap` (a detail row opened from the AR table), a refund
+click would have fired `refundOnlinePayment()` twice. Removed the direct
+binding; the delegated one covers it.
+
+⚠️ **`blur` doesn't bubble.** The "type a new billed amount" input's old
+`onblur="saveBilledAmount(...)"` needed a bubbling equivalent to delegate
+correctly — used `focusout` (fires in the same cases `blur` does, but
+bubbles), not a capture-phase `blur` listener.
+
+**Inline `<script>` blocks: 22 unique, locked to `'sha256-...'` hashes
+instead of `'unsafe-inline'`.** Verified none are build-time templated —
+`scripts/build.js`'s `patchHtml()` only replaces `<script src="js/...">` dev
+tags with `dist/*.min.js` references; it never touches inline `<script>`
+content, confirmed by reading the function, not assumed. So a hash computed
+from the committed source is exactly what a browser hashes at request time,
+stable across every future `npm run build`.
+
+⚠️ **The first hash-generation pass only scanned root-level `.html` files —
+missed 5 real pages.** `wrangler.jsonc` serves `assets.directory: "."`, and
+`.assetsignore`'s own header comment says it plainly: "everything NOT listed
+here is public on the live site." `docs/manual.html`, `marketing/email.html`,
+`marketing/poster.html`, `marketing/website/index.html`, and the two
+`docs/design_handoff/*.dc.html` mockups are all real, publicly-servable
+files under the same global CSP — a root-only `fs.readdirSync('.')` scan
+silently missed all of them, which is exactly how `docs/manual.html`'s own
+`onclick="printPartB()"` almost shipped unconverted (caught only because the
+new drift-guard test below walks the whole tree and failed on it). Both the
+hash generation and the test that verifies it now walk the full repo,
+respecting the same ignore list as `.assetsignore`.
+
+**`unsafe-eval`: removed, based on evidence, not assumption.** Grepped this
+app's own `js/` for `eval(`/`new Function(` — zero matches (the two
+sub-strings in `js/tests/business-logic.test.js` are the Node test runner's
+own `eval` calls, never shipped to a browser). Downloaded and grepped the
+actual CDN bundles: `xlsx@0.18.5` and `chart.js@4.4.4` — zero
+eval/`new Function` calls in either. `staxjs-captcha.js`, Spreedly's
+`iframe-v1.min.js`, and Google's `recaptcha__en.js` (all loaded by the
+gated, not-yet-production `?staxtest=1` flow) each contain a `new Function`
+or `eval` call, but every one checked is the same well-known
+`globalThis`-detection bundler-polyfill fallback (`n=n||new
+Function("return this")()`, guarded by a `typeof globalThis`/`typeof
+self`/try-catch chain ahead of it) or a legacy `JSON.parse`-unavailable
+shim — dead code in any modern browser, which is why reCAPTCHA is
+extensively deployed on sites with strict `script-src` and no
+`unsafe-eval`. ⚠️ Not proven by executing the code, only by reading it — if
+Stax's flow is ever exercised for real (the existing `?staxtest=1`
+browser-verification TODO elsewhere in this file), watch the console
+specifically for "Refused to evaluate a string as JavaScript" as the
+tell-tale sign this reasoning was wrong for this specific bundle version.
+
+**`style-src`'s `unsafe-inline` was measured, not just estimated, and stays
+for now.** 758 `style="..."` occurrences in `js/*.js` alone (49 confirmed
+dynamic — built with a template-literal `${...}` directly in the attribute
+value), on top of 431+ static ones in the `.html` files themselves
+(CLAUDE.md's earlier count). `'unsafe-hashes'` only allowlists an *exact*
+attribute string, so it cannot cover a value that's different on every
+render (a computed percentage, a data-driven color) — the only real fix for
+those is converting every such call site to `el.style.propertyName = value`
+(individual CSSOM property assignment, which CSP's `style-src` has never
+restricted, unlike `.style.cssText =` or `setAttribute('style', ...)` —
+confirmed only 2 of those exist in `js/`, both easy, but they don't unlock
+anything on their own while everything else still needs `'unsafe-inline'`).
+Converting hundreds of render functions across most of the admin surface is
+a genuinely different scale of change from the 23 event handlers above, and
+this session did not attempt it.
+
+**New drift guards** (`js/tests/business-logic.test.js`, describe block "CSP
+tightening"): script-src carries neither unsafe keyword; every inline
+`<script>` block across the whole repo tree has a matching hash (fails loud
+if someone edits a script's content without recomputing it — the "shipped
+half-live" failure shape this file warns about elsewhere, except here the
+browser's own refusal-to-execute would be the symptom instead of a stale
+bundle); and a repo-wide grep confirms zero inline event-handler attributes
+remain anywhere in `js/` or any `.html` file.
+
+**Verified two ways, not just by reading the diff.** A local Node server
+served the actual repo with the actual `_headers` CSP value enforced,
+Chromium (the browser already available in this environment) loaded all 12
+real app pages plus a hand-written sanity page with a deliberately unhashed
+inline script — the sanity page's script was correctly refused (proving the
+test harness itself can detect a real violation, not just report "clean"
+against a broken check), and all 12 real pages loaded with **zero** CSP
+violations. Two unrelated `pageerror`s did appear on `clockin.html`/
+`payroll.html` (`Cannot read properties of undefined (reading
+'createClient')`) — traced to `net::ERR_CONNECTION_RESET` fetching
+`cdn.jsdelivr.net` from the sandboxed test environment's browser process,
+not a CSP refusal (a real CSP block reads as "Refused to load the script
+... because it violates the following Content Security Policy directive,"
+which never appeared) — a sandbox networking limitation, not a regression.
+
+`npm test` — 191/191 (3 new CSP guards). `npm run build` — `dist/` rebuilt
+and grepped for the new class names (`ar-lock-btn`, `ar-payment-btn`,
+`trends-room-toggle`, etc.) to confirm the delegated-listener conversion
+actually shipped in the bundle, not just the source.
 
 ---
 

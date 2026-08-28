@@ -58,6 +58,42 @@ function setupBilling() {
     document.getElementById('exportArCsvBtn')
         ?.addEventListener('click', exportArCsv);
 
+    // AR table + its detail rows + the payment-history rows inside them —
+    // one delegated listener on the stable wrapper, since renderArTable()/
+    // toggleArRowDetail()/renderPaymentHistory() all replace innerHTML on
+    // every reload and a listener on the buttons themselves would be lost.
+    const arWrap = document.getElementById('arTableWrap');
+    arWrap?.addEventListener('click', e => {
+        const lockBtn = e.target.closest('.ar-lock-btn');
+        if (lockBtn) { openLockWithReasonModal(lockBtn.dataset.familyId); return; }
+        const unlockBtn = e.target.closest('.ar-unlock-btn');
+        if (unlockBtn) { doSetFamilyLockWithReason(unlockBtn.dataset.familyId, false, null); return; }
+        const editBilled = e.target.closest('.ar-edit-billed');
+        if (editBilled) { startEditBilledAmount(editBilled.dataset.familyId, parseFloat(editBilled.dataset.billed)); return; }
+        const detailsBtn = e.target.closest('.ar-details-btn');
+        if (detailsBtn) { toggleArRowDetail(detailsBtn.dataset.familyId); return; }
+        const paymentBtn = e.target.closest('.ar-payment-btn');
+        if (paymentBtn) {
+            openRecordPaymentModal(
+                paymentBtn.dataset.familyId,
+                paymentBtn.dataset.invoiceId || null,
+                paymentBtn.dataset.billed !== '' ? parseFloat(paymentBtn.dataset.billed) : null,
+            );
+            return;
+        }
+        const refundBtn = e.target.closest('.pay-hist-refund-btn');
+        if (refundBtn) { refundOnlinePayment(Number(refundBtn.dataset.paymentId)); return; }
+    });
+    // blur doesn't bubble, so the "set a new billed amount" input's commit
+    // uses focusout (the bubbling equivalent) on the same delegated wrapper.
+    arWrap?.addEventListener('focusout', e => {
+        const input = e.target.closest('.ar-new-amount-input');
+        if (input) saveBilledAmount(input.dataset.familyId, input.value);
+    });
+    arWrap?.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && e.target.closest('.ar-new-amount-input')) e.target.blur();
+    });
+
     // AR lock modal
     document.getElementById('blmConfirmBtn')
         ?.addEventListener('click', _doLockModalConfirm);
@@ -1344,11 +1380,12 @@ async function confirmPaymentImport(matchResults) {
                     Import complete: <strong>${matched}</strong> payment${matched !== 1 ? 's' : ''} recorded,
                     <strong>${skipped}</strong> skipped.
                 </p>
-                <button class="btn-xs" onclick="
-                    document.getElementById('paymentCsvInput').value='';
-                    document.getElementById('paymentCsvFileName').textContent='No file chosen';
-                    document.getElementById('paymentImportWrap').innerHTML='';
-                ">Clear / Import Another</button>`;
+                <button class="btn-xs pci-clear-btn">Clear / Import Another</button>`;
+            wrap.querySelector('.pci-clear-btn')?.addEventListener('click', () => {
+                document.getElementById('paymentCsvInput').value = '';
+                document.getElementById('paymentCsvFileName').textContent = 'No file chosen';
+                document.getElementById('paymentImportWrap').innerHTML = '';
+            });
         }
 
         _arLoaded = false;
@@ -1387,7 +1424,7 @@ function renderPaymentHistory(payments, finalAmount, containerId) {
             <td>${escHtml(p.note || '—')}</td>
             <td>$${running.toFixed(2)}</td>
             <td>${canRefund
-                ? `<button class="btn-xs" onclick="refundOnlinePayment(${p.id})">↩ Refund</button>`
+                ? `<button class="btn-xs pay-hist-refund-btn" data-payment-id="${p.id}">↩ Refund</button>`
                 : ''}</td>
         </tr>`;
     }).join('');
@@ -1401,6 +1438,9 @@ function renderPaymentHistory(payments, finalAmount, containerId) {
                 <tbody>${rows}</tbody>
             </table>
         </div>`;
+    // Click handling for .pay-hist-refund-btn is delegated on #arTableWrap
+    // in setupBilling() — this container always lives inside it (a detail
+    // row opened from the AR table), so a listener here would double-fire.
 }
 
 // ============================================================
@@ -1609,15 +1649,14 @@ function renderArTable(data) {
 
     const rows = filtered.map(r => {
         const lockBtn = r.isLocked
-            ? `<button class="btn-xs btn-warn" onclick="doSetFamilyLockWithReason('${escHtml(r.familyId)}', false, null)">Unlock</button>`
-            : `<button class="btn-xs btn-danger" onclick="openLockWithReasonModal('${escHtml(r.familyId)}')">Lock</button>`;
+            ? `<button class="btn-xs btn-warn ar-unlock-btn" data-family-id="${escHtml(r.familyId)}">Unlock</button>`
+            : `<button class="btn-xs btn-danger ar-lock-btn" data-family-id="${escHtml(r.familyId)}">Lock</button>`;
 
         // Billed cell: editable input when no invoice; clickable value when invoice exists
         const billedCell = r.billed > 0
-            ? `<span class="bl-editable-amount" title="Click to edit" onclick="startEditBilledAmount('${escHtml(r.familyId)}',${r.billed})">$${r.billed.toFixed(2)} <small style="opacity:.45;cursor:pointer">✎</small></span>`
-            : `<input type="number" class="bl-adj-input" style="width:78px" step="0.01" min="0" placeholder="Set amount"
-                 onblur="saveBilledAmount('${escHtml(r.familyId)}',this.value)"
-                 onkeydown="if(event.key==='Enter')this.blur()">`;
+            ? `<span class="bl-editable-amount ar-edit-billed" title="Click to edit" data-family-id="${escHtml(r.familyId)}" data-billed="${r.billed}">$${r.billed.toFixed(2)} <small style="opacity:.45;cursor:pointer">✎</small></span>`
+            : `<input type="number" class="bl-adj-input ar-new-amount-input" style="width:78px" step="0.01" min="0" placeholder="Set amount"
+                 data-family-id="${escHtml(r.familyId)}">`;
 
         return `<tr data-family-id="${escHtml(r.familyId)}">
             <td>
@@ -1630,11 +1669,10 @@ function renderArTable(data) {
             <td>${r.outstanding > 0 ? '$' + r.outstanding.toFixed(2) : '—'}</td>
             <td>${getArStatusBadge(r.status)}</td>
             <td>
-                <button class="btn-xs" onclick="toggleArRowDetail('${escHtml(r.familyId)}')">▸ Details</button>
-                ${r.invoiceId
-                    ? `<button class="btn-xs" onclick="openRecordPaymentModal('${escHtml(r.familyId)}','${escHtml(String(r.invoiceId))}',${r.billed})">💳 Payment</button>`
-                    : `<button class="btn-xs" onclick="openRecordPaymentModal('${escHtml(r.familyId)}',null,null)">💳 Payment</button>`
-                }
+                <button class="btn-xs ar-details-btn" data-family-id="${escHtml(r.familyId)}">▸ Details</button>
+                <button class="btn-xs ar-payment-btn" data-family-id="${escHtml(r.familyId)}"
+                        data-invoice-id="${r.invoiceId ? escHtml(String(r.invoiceId)) : ''}"
+                        data-billed="${r.invoiceId ? r.billed : ''}">💳 Payment</button>
                 ${lockBtn}
             </td>
         </tr>`;
@@ -1759,11 +1797,9 @@ async function toggleArRowDetail(familyId) {
                 <h4 style="margin:12px 0 8px">Payment History</h4>
                 <div id="${payHistContainerId}"></div>
                 <br>
-                <button class="btn-xs" onclick="openRecordPaymentModal(
-                    '${escHtml(familyId)}',
-                    '${topInvoice ? escHtml(String(topInvoice)) : ''}',
-                    ${topFinalAmt != null ? topFinalAmt : 'null'}
-                )">💳 Record Payment</button>
+                <button class="btn-xs ar-payment-btn" data-family-id="${escHtml(familyId)}"
+                        data-invoice-id="${topInvoice ? escHtml(String(topInvoice)) : ''}"
+                        data-billed="${topFinalAmt != null ? topFinalAmt : ''}">💳 Record Payment</button>
             </div>`;
 
         // Include payments linked by invoice_id, or (for imports) by payment_date in the current AR month
