@@ -3838,6 +3838,69 @@ drawer wiring, and the double-refund guard). `npm run build` — `dist/`
 rebuilt and grepped for `_fhRefundPayment`/`_fhCanRefund` to confirm the
 *actually reachable* version shipped, not just the first one.
 
+### ⚠️ It shipped half-live a THIRD time in the same evening — and this time the root cause was in the auto-merge workflow itself, not in this feature
+
+The director tested the fix above from a fresh admin login (version badge
+correctly reading the new build) and the Refund link still wasn't there —
+twice. Both times, `git show origin/main:dist/admin.min.js | grep -c
+_fhRefundPayment` came back `0` while the *source* on `main` had it the
+whole time. Not a browser cache issue either time (ruled out directly: the
+version banner embedded inside `dist/admin.min.js` itself, not just the
+HTML, matched the deployed `package.json` version — so the exact bundle
+running in the browser really was the one just deployed, and it genuinely
+lacked the fix). Two more `claude/**` branches had each merged into `main`
+within the same half hour, each hitting the identical dist conflict this
+file already documents twice above (Bookkeeper, Enrollment & Capacity) —
+except by the third occurrence in one evening it was clear the fix each
+time ("rebuild and re-push") was treating a symptom, not the disease.
+
+**Root cause, found by finally reading `.github/workflows/auto-merge-claude.yml`
+line by line instead of re-patching around it a fourth time:** the
+conflict-resolution step's own comment said "take the branch's dist
+bundles (they were built on top of main's JS)" and unconditionally ran
+`git checkout --theirs` for every conflicting `dist/*.min.js` — with
+**no check on which side was actually newer**. That assumption holds for
+exactly one merge in isolation. It silently breaks the moment a *second*
+`claude/**` branch is queued behind a first: branch B was forked from (and
+last built its own `dist/` against) a `main` that predates branch A's
+merge. By the time B's own turn to merge arrives, "theirs" is B's
+own bundle — stale relative to the `main` this merge is about to produce —
+and the workflow took it anyway, every time, because nothing about the
+rule was version-aware. The `sort -V | tail -1` logic just above it in the
+same step only ever decided the **version number string** written into
+`package.json`/`build-version.js`; it never gated which side's `dist/*.min.js`
+bytes got used. Two completely different questions were being resolved by
+one comparison that only answered the first.
+
+**Fixed by not picking a side at all.** On any conflict that reaches this
+step, `dist/` is now unconditionally **rebuilt from the just-merged source**
+(`npm run build`, then a follow-up commit if it produced a diff) instead of
+`git checkout --theirs` on the bundle files. A bundle generated from the
+tree this exact merge just produced cannot be stale relative to that tree —
+there's no side to pick wrong. This also fixes a subtler case the old rule
+never touched at all: two branches whose `dist/*.min.js` happened to merge
+with **no textual conflict** (neither touched the same bytes) still ended
+up carrying the *old* `__BUILD_VERSION__` banner from whichever side's
+un-conflicting copy git kept, mismatched against the version number the
+`package.json` conflict resolution had just forced to something higher.
+Rebuilding fixes that silently-wrong case too, which a "pick the right
+side" rule could never have covered because there was no wrong side to
+avoid — both were stale relative to the version just written.
+
+⚠️ **This needed Node available earlier in the job.** `actions/setup-node`
++ `npm ci` were previously only run right before the deploy step, after the
+merge had already been pushed. Both moved up to before the merge step, so
+`npm run build` has a working toolchain available mid-conflict-resolution.
+
+**Not chased further:** the `verify` job (which runs per-branch, before
+this) still cannot catch this class of bug on its own — it rebuilds and
+diffs `dist/` against that one branch's own `js/`, which was correct
+*for that branch in isolation* at push time. The staleness only exists
+relative to whatever `main` looks like at the moment its merge is actually
+processed, which `verify` has no way to know in advance. The fix has to
+live in `merge-to-main`, where the real merged tree exists — which is
+exactly where it now does.
+
 ---
 
 ## Ledger's "Total to bill" was a net figure with nothing showing its parts — broken into a 4-box strip (2026-08-28)

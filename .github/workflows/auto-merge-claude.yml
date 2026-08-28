@@ -54,6 +54,17 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Moved ahead of the merge step (was previously only before deploy):
+      # resolving a dist/*.min.js conflict now rebuilds from source rather
+      # than picking a side, and that rebuild needs npm available mid-merge.
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Merge Claude branch into main
         run: |
           git config user.name "github-actions[bot]"
@@ -65,8 +76,8 @@ jobs:
             # Two Claude branches both bump the version, which collides in
             # package.json + js/build-version.js, and both rebuild dist/, which
             # collides in whichever bundles they touched. Auto-resolve those
-            # (keep the higher version, take the branch's bundles); any other
-            # conflict is a real one and must stop for a human.
+            # (keep the higher version, rebuild dist/ from the merged source);
+            # any other conflict is a real one and must stop for a human.
             #
             # The dist rule matches every dist/*.min.js rather than a hand-kept
             # list — the list had drifted and omitted dist/supabase.min.js,
@@ -103,13 +114,19 @@ jobs:
             sed -i -E "s/(\"version\": *\")[^\"]+/\1${high}/" package.json
             printf 'window.__BUILD_VERSION__ = "v%s";\n' "$high" > js/build-version.js
 
-            # Take the branch's dist bundles (they were built on top of main's JS).
-            # EVERY dist/*.min.js, not a hand-listed subset: these are build
-            # artifacts, never hand-edited, and a bundle missing from the list
-            # fails the whole auto-merge for a conflict that has no meaning.
-            # dist/supabase.min.js was the one omitted, and it blocked two
-            # merges in a row whenever a concurrent branch touched
-            # js/supabase.js.
+            # ⚠️ Do NOT just `git checkout --theirs` a conflicting dist bundle.
+            # The old rule assumed "theirs" (the incoming branch) was always
+            # built on top of main's current JS, which is false the moment a
+            # second claude/** branch merges before this one's dist was
+            # rebuilt against the first branch's changes — the incoming
+            # branch's own bundle can be stale relative to the tree this
+            # merge is about to produce, and a straight --theirs silently
+            # ships an old bundle even though every source file is correct.
+            # This shipped half-live at least three times in one evening
+            # before being caught here. Instead: stage either side's copy
+            # just to clear the conflict marker, then unconditionally
+            # rebuild dist/ from the just-merged source below, which can
+            # never be stale because it is generated from this exact tree.
             for f in $(echo "$conflicts" | grep -E '^dist/.*\.min\.js$' || true); do
               git checkout --theirs "$f"
               git add "$f"
@@ -117,14 +134,26 @@ jobs:
 
             git add package.json js/build-version.js
             git commit --no-edit
+
+            # Rebuild dist/ whenever THIS merge needed any conflict
+            # resolution at all — even if the only conflict was in
+            # package.json/build-version.js and every dist/*.min.js merged
+            # with no textual conflict. A textually clean 3-way merge of a
+            # dist bundle only means neither side touched the same bytes; it
+            # says nothing about whether that bundle matches the version
+            # number just written above, or the js/ this merge just produced.
+            # Rebuilding here is the only path that cannot ship a stale or
+            # mismatched bundle. (A fully clean `git merge` with no conflicts
+            # at all skips this whole branch, per the `verify` job's own
+            # guarantee for that case.)
+            npm run build
+            if ! git diff --quiet -- dist; then
+              git add dist
+              git commit -m "Rebuild dist/ after auto-merge conflict resolution"
+            fi
           fi
 
           git push origin main
-
-      - name: Install Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
       - name: Deploy to Cloudflare Workers
         run: npx wrangler deploy
