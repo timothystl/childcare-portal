@@ -253,12 +253,17 @@ const AP_TOOLS = [
       blurb: 'Bulk-import waitlist applications from CSV or Excel.' },
 
     // ── Planning · Enrollment Outlook ──
-    // `capacityOverview` (Room Capacity Overview / FTE / seat-day) is retired
-    // from here: its content is now the FTE/Seat-Day sub-view of Classrooms →
-    // Planning → Enrollment & Capacity (`enrollCap`, above), per the Classroom
-    // Tab Redesign handoff. roomCapacityOverviewSection's markup is removed
-    // from admin.html rather than left behind, since its content relocated
-    // rather than being wholesale retired — see enrollCap's comment.
+    // `capacityOverview` was retired from here in the Classroom Tab Redesign
+    // (its content folded into the FTE/Seat-Day sub-view of Classrooms →
+    // Planning → Enrollment & Capacity, `enrollCap`, above) but restored
+    // 2026-08-28: design_handoff_planning_market's own sidebar mock shows it
+    // as its own tool under Planning, and that handoff is what this
+    // consolidation pass is implementing. Same renderCapacityOverviewTool()
+    // as enrollCap's sub-view, second mount point with its own container/
+    // drawer ids — see the comment on that function in admin-reports.js.
+    { key: 'capacityOverview', pane: 'waitlist', section: 'roomCapacityOverviewSection', tab: 'planning',
+      group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📆', name: 'Room Capacity Overview',
+      blurb: 'Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as before.' },
     { key: 'ratioStep',   pane: 'waitlist', section: 'ratioStepSection',       tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '⚖️', name: 'Ratio Step & Next Child',
       blurb: 'Where the next child tips a room into another staff member.' },
 
@@ -773,6 +778,9 @@ function apOnToolOpened(tool) {
         if (tool.key === 'staffreq')  apRenderStaffReq();
         if (tool.key === 'scenario')  apRenderScenario();
         if (tool.key === 'enrollCap' && typeof renderEnrollCapTool === 'function') renderEnrollCapTool();
+        if (tool.key === 'capacityOverview' && typeof renderCapacityOverviewTool === 'function') {
+            renderCapacityOverviewTool(undefined, { containerId: 'roomCapacityOverviewContent', idPrefix: 'pcapov' });
+        }
     } catch (err) {
         console.error('apOnToolOpened:', tool.key, err);
     }
