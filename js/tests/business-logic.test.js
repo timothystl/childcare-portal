@@ -1504,6 +1504,65 @@ describe('Stax payment security guards', () => {
     });
 });
 
+describe('admin-refund-stax-payment — the AR "Refund" button now covers Stax too', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const refundFn = read('supabase/functions/admin-refund-stax-payment/index.ts');
+    const billingJs = read('js/admin/admin-billing.js');
+    const supabaseJs = read('js/supabase.js');
+
+    test('requires a full-admin session, same gate as the Authorize.net refund function', () => {
+        expect(refundFn.includes('callerRole !== "full"')).toBe(true);
+        expect(refundFn.includes('auth.getUser()')).toBe(true);
+    });
+
+    test('only a stax-processed positive charge, not yet reversed, can be refunded', () => {
+        expect(refundFn.includes('payment.processor !== "stax"')).toBe(true);
+        expect(refundFn.includes('payment.refund_of_payment_id')).toBe(true);
+        expect(refundFn.includes('existingReversal')).toBe(true);
+    });
+
+    test('void vs refund is read from Stax\'s own is_voidable flag, never guessed locally', () => {
+        const lookupAt = refundFn.indexOf('/transaction/${encodeURIComponent(transactionId)}`');
+        const voidableAt = refundFn.indexOf('tx.is_voidable === true');
+        expect(lookupAt).toBeGreaterThan(-1);
+        expect(voidableAt).toBeGreaterThan(lookupAt);
+    });
+
+    test('the refund amount is always this payment\'s own recorded amount, never client input', () => {
+        expect(refundFn.includes('body?.paymentId')).toBe(true);
+        expect(refundFn.includes('Number(payment.amount).toFixed(2)')).toBe(true);
+        expect(/body\??\.(amount|total)/.test(refundFn)).toBe(false);
+    });
+
+    test('the "-inv<id>"/"-credit" suffix is stripped before calling Stax, never sent to the processor', () => {
+        expect(refundFn.includes('function baseTransactionId')).toBe(true);
+        expect(refundFn.includes('replace(/-inv\\d+$/')).toBe(true);
+        const callSite = refundFn.indexOf('baseTransactionId(payment.processor_transaction_id)');
+        expect(callSite).toBeGreaterThan(-1);
+    });
+
+    test('does not touch billing_payments or invoice status — the webhook records the reversal', () => {
+        expect(refundFn.includes(".from(\"billing_payments\")\n            .update")).toBe(false);
+        expect(refundFn.includes('billing_invoices')).toBe(false);
+    });
+
+    test('the admin AR refund button now shows for stax payments too, keyed off the real processor', () => {
+        expect(billingJs.includes("REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax'])")).toBe(true);
+        expect(billingJs.includes('data-processor="${escHtml(p.processor)}"')).toBe(true);
+        expect(billingJs.includes("refundOnlinePayment(Number(refundBtn.dataset.paymentId), refundBtn.dataset.processor)")).toBe(true);
+    });
+
+    test('adminRefundPayment routes to the stax edge function only when asked, else the authorizenet one', () => {
+        const start = supabaseJs.indexOf('async function adminRefundPayment');
+        const end = supabaseJs.indexOf('async function unmarkInvoiceSent');
+        expect(start).toBeGreaterThan(-1);
+        expect(end).toBeGreaterThan(start);
+        const fnBody = supabaseJs.slice(start, end);
+        expect(fnBody.includes("processor === 'stax' ? 'admin-refund-stax-payment' : 'admin-refund-payment'")).toBe(true);
+    });
+});
+
 describe('Stax payment reconciliation job', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');

@@ -82,7 +82,7 @@ function setupBilling() {
             return;
         }
         const refundBtn = e.target.closest('.pay-hist-refund-btn');
-        if (refundBtn) { refundOnlinePayment(Number(refundBtn.dataset.paymentId)); return; }
+        if (refundBtn) { refundOnlinePayment(Number(refundBtn.dataset.paymentId), refundBtn.dataset.processor); return; }
     });
     // blur doesn't bubble, so the "set a new billed amount" input's commit
     // uses focusout (the bubbling equivalent) on the same delegated wrapper.
@@ -572,20 +572,23 @@ async function savePaymentFromModal() {
 }
 
 /**
- * Refund/void an online card payment. Only asks Authorize.net to reverse
- * the charge — admin-refund-payment never touches billing_payments or the
- * invoice itself, so this button's job ends at "submitted," not "done."
- * The actual reversal lands via the webhook a few seconds later; the AR
- * view is reloaded here so it's current the next time it's opened, not
- * because the reversal is guaranteed to be reflected yet.
+ * Refund/void an online card payment. Only asks the processor (Authorize.net
+ * or Stax, whichever actually took the charge) to reverse it —
+ * admin-refund-payment / admin-refund-stax-payment never touch
+ * billing_payments or the invoice itself, so this button's job ends at
+ * "submitted," not "done." The actual reversal lands via that processor's
+ * webhook a few seconds later; the AR view is reloaded here so it's current
+ * the next time it's opened, not because the reversal is guaranteed to be
+ * reflected yet.
  */
-async function refundOnlinePayment(paymentId) {
-    if (!confirm('Refund or void this online payment? This asks Authorize.net to reverse the charge and cannot be undone from here.')) {
+async function refundOnlinePayment(paymentId, processor) {
+    const processorName = processor === 'stax' ? 'Stax' : 'Authorize.net';
+    if (!confirm(`Refund or void this online payment? This asks ${processorName} to reverse the charge and cannot be undone from here.`)) {
         return;
     }
     try {
-        const result = await adminRefundPayment(paymentId);
-        alert(`${result.kind === 'void' ? 'Void' : 'Refund'} submitted. It will show here once Authorize.net confirms it (usually a few seconds).`);
+        const result = await adminRefundPayment(paymentId, processor);
+        alert(`${result.kind === 'void' ? 'Void' : 'Refund'} submitted. It will show here once ${processorName} confirms it (usually a few seconds).`);
         await logAdminAction(`${result.kind}_submitted`, 'billing_payment', paymentId);
         _arLoaded = false;
         await loadArView();
@@ -1405,17 +1408,19 @@ function renderPaymentHistory(payments, finalAmount, containerId) {
         return;
     }
 
-    // An online card charge can be reversed with a Refund button; a row
-    // already reversed (or itself a reversal) never gets one, so it can't
-    // be double-clicked into two refunds for the same charge.
+    // An online card charge (Authorize.net or Stax) can be reversed with a
+    // Refund button; a row already reversed (or itself a reversal) never
+    // gets one, so it can't be double-clicked into two refunds for the
+    // same charge.
     const reversedIds = new Set(payments.map(p => p.refund_of_payment_id).filter(Boolean));
+    const REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax']);
 
     let running = 0;
     const rows = payments.map(p => {
         const amt = parseFloat(p.amount || 0);
         running  += amt;
         const overPay = finalAmount != null && running > finalAmount && finalAmount > 0;
-        const canRefund = p.processor === 'authorizenet' && amt > 0
+        const canRefund = REFUNDABLE_PROCESSORS.has(p.processor) && amt > 0
             && !p.refund_of_payment_id && !reversedIds.has(p.id);
         return `<tr ${overPay ? 'class="bl-overpay-badge"' : ''}>
             <td>${_fmtDate(p.payment_date)}</td>
@@ -1424,7 +1429,7 @@ function renderPaymentHistory(payments, finalAmount, containerId) {
             <td>${escHtml(p.note || '—')}</td>
             <td>$${running.toFixed(2)}</td>
             <td>${canRefund
-                ? `<button class="btn-xs pay-hist-refund-btn" data-payment-id="${p.id}">↩ Refund</button>`
+                ? `<button class="btn-xs pay-hist-refund-btn" data-payment-id="${p.id}" data-processor="${escHtml(p.processor)}">↩ Refund</button>`
                 : ''}</td>
         </tr>`;
     }).join('');

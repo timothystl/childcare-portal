@@ -3667,6 +3667,110 @@ reminder that it's still on.
 their assumption that `pbStaxTestEnabled` should never exist was itself the
 thing this session found to be stale).
 
+### A real sandbox click-through surfaced a real bug: a fake test phone number, rejected by Stax's own validator
+
+With `?staxtest=1` working, an actual embedded-checkout charge was run
+against a disposable test family in production (`stax-test-20260828@…`,
+invoice `3992`) — the first time this flow had been driven through a real
+browser rather than curl. The modal loaded and the card fields rendered
+correctly, but `pbStaxInstance.tokenize()` failed every time with a bare
+"Payment failed. Please check the card details and try again." — no detail,
+because the thrown error in `pbStaxTokenizeAndCharge()`'s catch block had no
+`.message`, meaning the failure never reached our own server at all.
+
+Traced via the browser's own Network tab, not guesswork: BlockChyp's iframe
+tokenized the test Visa fine, Stax.js then generated a reCAPTCHA token, and
+the actual `POST … /token` request to Stax's API — the one that creates the
+payment method — came back **422** with `{"phone":["The phone format is
+invalid."]}`. `create-stax-charge` passes `family.parent_phone` straight
+through as `extraDetails.phone` in the `tokenize()` call (no local
+formatting or validation of its own — Stax's own validator is authoritative
+here, correctly), and the disposable test family's `parent_phone` had been
+set to `"555-0100"` — 7 digits, no area code. Not a code bug: fixed by
+correcting the test fixture's phone to a properly formatted number
+(`314-555-0100`). Stax's customer record (already created with the bad
+phone on the first attempt) didn't need to be recreated — `tokenize()` sends
+`phone` fresh on every call, so the very next attempt with the corrected
+family row succeeded end to end (BlockChyp tokenize → Stax charge → this
+app's own `charge-stax-payment` recording the `billing_payments` row).
+**Worth remembering for the next sandbox test**: give the disposable test
+family a real-shaped phone number, not an obviously-fake placeholder — Stax
+validates it server-side and will reject a malformed one before ever
+reaching this app's own code.
+
+### Refunding a Stax payment had no admin path at all — built and deployed same session
+
+Testing continued into "can the office refund a Stax charge" — and the
+answer was no, not even partially. `renderPaymentHistory()`'s `canRefund`
+check (`js/admin/admin-billing.js`) was `p.processor === 'authorizenet'`
+only, so a Stax-processed row in the AR payment history got **no Refund
+button at all** — not a broken button, an invisible one. The only edge
+function that submits a reversal to a processor, `admin-refund-payment`,
+explicitly rejects anything but `processor === "authorizenet"`
+(`"Only an online card payment can be reversed this way."`). Confirmed by
+reading both files, not assumed from the symptom: there was no dead code
+to fix, the capability had simply never been built for the second
+processor this app now takes real money through.
+
+Fixed with a direct Stax counterpart, **`admin-refund-stax-payment`**
+(deployed), mirroring `admin-refund-payment`'s exact security posture:
+
+- Same gate — a valid Supabase Auth session **and** `admin_role() = 'full'`
+  (read from the `admin_roles` setting, the same code path
+  `admin-refund-payment` uses).
+- Request body carries **only a `billing_payments` row id** — never an
+  amount. The reversal amount is always that row's own `amount`.
+- **Void vs. refund is decided from Stax's own `is_voidable` flag**, read
+  fresh via `GET /transaction/{id}` before acting — never guessed locally
+  from a locally-stored settlement guess, mirroring how
+  `admin-refund-payment` reads Authorize.net's own `transactionStatus`
+  rather than assuming. Voidable → `POST /transaction/{id}/void`; otherwise
+  → `POST /transaction/{id}/refund` with `{total: <payment's own amount>}`.
+  Both endpoint shapes confirmed against Stax's own API reference
+  (`docs.staxpayments.com/reference/refund-transaction`,
+  `.../void-transaction`) before writing the call — **not** the
+  `/terminal/void-or-refund` endpoint, which is for card-present terminal
+  transactions and requires a `register` id this app has no such thing as.
+- ⚠️ **`billing_payments.processor_transaction_id` can carry this app's own
+  `-inv<id>` or `-credit` suffix** (see `stax_finalize_charge` in
+  `harden_stax_payments.sql` — a charge rolled up across several unpaid
+  invoices is recorded as one row per invoice, all sharing the same real
+  Stax transaction id with a different suffix). `baseTransactionId()` strips
+  that suffix before ever calling Stax's API — sending the suffixed id would
+  have 404'd on a real refund attempt for any rolled-up charge.
+- Already-reversed payments, and payments Stax itself already shows as
+  `is_refunded`/`is_voided`, are both rejected up front — belt and
+  suspenders against a double-click submitting two reversals.
+- **Does not touch `billing_payments` or invoice status** — same "request
+  here, record on confirmation" split as the Authorize.net path and as the
+  charge path itself. The actual reversal is recorded by the already-live
+  `stax-webhook` (`stax_record_reversal`, applied and verified in production
+  earlier this session) once Stax's own `create_transaction` event for the
+  refund/void arrives and is independently re-verified — this function
+  never writes billing state itself, only asks Stax to act.
+- `js/admin/admin-billing.js`'s `canRefund` now checks
+  `REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax'])`; the button
+  carries `data-processor` so the click handler
+  (`refundOnlinePayment(paymentId, processor)`) and `adminRefundPayment()`
+  (`js/supabase.js`) route to the right edge function — the Authorize.net
+  path is completely unchanged, just no longer the only one.
+- Not independently curl-tested end-to-end by this session (doing so would
+  need a real admin login, which this session doesn't have) — verified by
+  reading the deployed source and by the existing security-guard tests
+  below; the live click-through is the director's own test, same as the
+  charge flow above.
+
+`npm test` — 200/200 (8 new guards: full-admin gate, processor/status
+checks, the `is_voidable`-driven branch, the amount always coming from the
+stored row, the suffix-stripping, no direct `billing_payments`/
+`billing_invoices` write, and both the button and the JS routing).
+`npm run build` — `dist/` rebuilt and grepped for
+`admin-refund-stax-payment` (in `dist/supabase.min.js`) and
+`Set(["authorizenet","stax"])` (in `dist/admin.min.js`) to confirm the
+feature actually shipped in the bundles the live site loads, not just the
+source — the standing check this file has asked for since the Bookkeeper
+and Enrollment & Capacity tabs each shipped half-live.
+
 ---
 
 ## Finance summary API (for the church ChMS finance integration)
