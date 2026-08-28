@@ -3361,15 +3361,39 @@ async function fetchClockEventsForDate(workDate) {
     return data || [];
 }
 
+// ⚠️ Paginated on purpose — PostgREST silently truncates a `.select()` at its
+// default row cap (1,000) with no error, and this table now holds 1,600+
+// rows for this year alone and grows by ~300/month. Confirmed live: a
+// Jan1–Aug28 call to the unpaginated version dropped every clock event from
+// mid-June onward, because the running row count crosses 1,000 right around
+// then — undercounting real labor cost for June/July/August in Room P&L and
+// Bookkeeper, and undercounting YTD hours/PTO in the Payroll Report, whose
+// `ytdStart`-to-today and PTO-cutoff-to-today calls hit the exact same wide,
+// growing range. Same bug class as this file's own documented R12
+// (fetchAllRegistrations) — a date-bounded query is not the same thing as a
+// row-bounded one once a table grows past the cap. The explicit `.order()`
+// makes page boundaries deterministic; without it, PostgREST's return order
+// is unspecified and consecutive `.range()` calls could skip or repeat rows.
 async function fetchClockEventsForRange(startDate, endDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
-        .from('staff_clock_events')
-        .select('id, staff_id, clock_in, clock_out, work_date, room_id')
-        .gte('work_date', startDate)
-        .lte('work_date', endDate);
-    if (error) throw error;
-    return data || [];
+    const pageSize = 1000;
+    let all = [];
+    let offset = 0;
+    for (;;) {
+        const { data, error } = await sbClient
+            .from('staff_clock_events')
+            .select('id, staff_id, clock_in, clock_out, work_date, room_id')
+            .gte('work_date', startDate)
+            .lte('work_date', endDate)
+            .order('work_date', { ascending: true })
+            .order('id', { ascending: true })
+            .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        all = all.concat(data || []);
+        if (!data || data.length < pageSize) break;
+        offset += pageSize;
+    }
+    return all;
 }
 
 async function insertManualClockEvent(staffId, workDate, clockInISO, clockOutISO) {
