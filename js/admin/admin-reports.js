@@ -5972,9 +5972,9 @@ function _renderCapacityOverviewTable(rows, idPrefix) {
         </tr></thead>
         <tbody>
         ${rows.map(r => {
-            const pctColor   = r.pct >= 95 ? 'var(--tang)' : 'var(--navy)';
+            const pctColor   = r.pct >= 95 ? 'var(--ap-deep-tang)' : 'var(--navy)';
             const trendLabel = r.delta > 0 ? `▲ +${r.delta}` : r.delta < 0 ? `▼ ${r.delta}` : '— flat';
-            const trendColor = r.delta > 0 ? 'var(--green-text)' : r.delta < 0 ? '#7a2a18' : 'var(--text-muted)';
+            const trendColor = r.delta > 0 ? 'var(--green-text)' : r.delta < 0 ? 'var(--ap-deep-tang)' : 'var(--text-muted)';
             return `
             <tr class="capov-row" data-capov-room="${r.room.id}" style="cursor:pointer">
                 <td><strong>${escHtml(r.room.label)}</strong></td>

@@ -102,26 +102,28 @@ async function _ecRenderDay() {
 
     const rows = getSortedRooms().filter(r => r.status !== 'coming_soon').map(room => {
         const enrolled     = _ecDayRoomChildren(_ecDate, room.id);
+        const count        = enrolled.length;
         const cap          = room.capacity || 0;
         const ratio        = Number(room.staffRatio) || null;
-        const staffNeeded  = ratio ? Math.ceil(enrolled.length / ratio) : null;
-        const pct          = cap ? enrolled.length / cap : 0;
-        const flag         = cap && enrolled.length >= cap ? 'full' : pct >= 0.8 ? 'near' : 'ok';
-        return { room, enrolled, cap, staffNeeded, flag };
+        const staffNeeded  = ratio ? Math.ceil(count / ratio) : null;
+        // Matches the design source's capDayRows exactly: the flag is silent
+        // unless the room is over its own capacity or just crossed a ratio
+        // boundary (one more child needs one more staff member) — there is no
+        // "near capacity" state here.
+        const over  = !!cap && count >= cap;
+        const edge  = !over && !!ratio && count > 0 && count % ratio === 0;
+        return { room, enrolled, cap, staffNeeded, over, edge };
     });
 
     if (!rows.length) { container.innerHTML = '<p class="empty-hint">No active rooms found.</p>'; return; }
 
     container.innerHTML = `<div class="ec-day-rows">${rows.map(r => `
-        <div class="ec-day-row${r.flag === 'full' ? ' is-full' : r.flag === 'near' ? ' is-near' : ''}">
-            <div class="ec-day-room-name">${escHtml(r.room.label)}</div>
+        <div class="ec-day-row">
+            <div class="ec-day-room-name">${escHtml(r.room.label)}${r.room.staffRatio ? `<span class="ec-day-ratio">1 : ${r.room.staffRatio}</span>` : ''}</div>
             <div class="ec-day-stat"><strong>${r.enrolled.length}${r.cap ? ' / ' + r.cap : ''}</strong><span>enrolled</span></div>
             <div class="ec-day-stat"><strong>${r.staffNeeded ?? '—'}</strong><span>staff needed</span></div>
-            <div class="ec-day-flag">${
-                r.flag === 'full' ? '<span class="ab-pill bad">At capacity</span>'
-                : r.flag === 'near' ? '<span class="ab-pill warn">Near capacity</span>'
-                : '<span class="ab-pill ok">Open</span>'}</div>
-            <button type="button" class="btn-secondary ec-move-btn" data-room="${r.room.id}">Move a child &rarr;</button>
+            <span class="ec-day-flag${r.over ? ' is-over' : r.edge ? ' is-edge' : ' is-hidden'}">${r.over ? 'AT CAPACITY' : r.edge ? 'AT RATIO STEP' : ''}</span>
+            <button type="button" class="ec-move-btn" data-room="${r.room.id}">Move a child &rarr;</button>
         </div>`).join('')}</div>`;
 
     container.querySelectorAll('.ec-move-btn').forEach(btn => {

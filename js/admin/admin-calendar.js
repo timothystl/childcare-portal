@@ -650,7 +650,8 @@ document.getElementById('editBillRemoveBtn')?.addEventListener('click', async ()
 // ============================================================
 // CAPACITY OVERVIEW
 // ============================================================
-let capOverviewDate = null; // JS Date set to 1st of currently displayed month
+let capOverviewDate   = null; // JS Date set to 1st of currently displayed month
+let capOverviewRoomId = null; // room id currently selected in the Month view's room tabs
 
 function initCapacityMonthNav() {
     const today = new Date();
@@ -755,56 +756,90 @@ async function _recomputeAndShow(parentEmail, monthKey) {
     el.textContent = `${label} total for this family: $${Number(invoice.final_amount).toFixed(2)}`;
 }
 
+// Room-tabs + a Mon–Fri day grid for whichever room is selected — matches the
+// design source's Month view exactly (one room's whole month, click a day to
+// move a child) rather than the aggregate progress-bar cards this replaced.
+// The aggregate monthly utilization % those cards showed didn't disappear —
+// it's the FTE / Seat-Day sub-view's Capacity/Seat-Day Occupancy columns,
+// which read the same registrations at the whole-month grain this view no
+// longer needs to also carry.
 function renderCapacityOverview() {
     const grid = document.getElementById('capacityGrid');
+    if (!grid) return;
     if (!capOverviewDate) capOverviewDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
-    const y = capOverviewDate.getFullYear();
-    const m = capOverviewDate.getMonth();
+    const rooms = getSortedRooms().filter(r => r.status !== 'coming_soon');
+    if (!rooms.length) { grid.innerHTML = '<p class="empty-hint">No active rooms found.</p>'; return; }
+    if (!capOverviewRoomId || !rooms.some(r => r.id === capOverviewRoomId)) capOverviewRoomId = rooms[0].id;
+    const room = rooms.find(r => r.id === capOverviewRoomId);
+
+    const y   = capOverviewDate.getFullYear();
+    const m   = capOverviewDate.getMonth();
     const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+    const cap = room.capacity || 0;
 
-    // Count Mon–Fri working days in the month
-    const daysInMonth = new Date(y, m + 1, 0).getDate();
-    let workingDays = 0;
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dow = new Date(y, m, day).getDay();
-        if (dow !== 0 && dow !== 6) workingDays++;
-    }
-
-    // Count confirmed bookings per room for this month
-    const counts = {};
-    ROOMS.forEach(r => { counts[r.id] = 0; });
+    // dayMap: 'YYYY-MM-DD' → [{ childName, dayType, dateId }]. Filtered by the
+    // date's own room_id (not the registration's) so a per-day move is reflected
+    // — same rule drawRoomCalendar() uses for the pre-existing per-room modal.
+    const dayMap = {};
     allRegistrations.forEach(reg => {
         (reg.registration_dates || []).forEach(d => {
-            if (d.waitlisted || !d.care_date) return;
-            if (d.care_date.startsWith(key)) {
-                const roomKey = d.room_id || reg.room_id;
-                counts[roomKey] = (counts[roomKey] || 0) + 1;
-            }
+            if (d.room_id !== room.id) return;
+            if (d.waitlisted || !d.care_date || !d.care_date.startsWith(key)) return;
+            (dayMap[d.care_date] = dayMap[d.care_date] || []).push({ childName: reg.child_name, dayType: d.day_type, dateId: d.id });
         });
     });
 
-    const cards = getSortedRooms().map(room => {
-        const used    = counts[room.id] || 0;
-        const hasCap  = room.capacity != null && room.capacity > 0;
-        const cap     = hasCap ? room.capacity * workingDays : 0;
-        const pct     = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
-        const color   = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
-        const metaTxt = hasCap
-            ? `Max ${room.capacity}/day &middot; ${used} booking${used !== 1 ? 's' : ''}`
-            : `Capacity TBD &middot; ${used} booking${used !== 1 ? 's' : ''}`;
-        const pctTxt  = hasCap ? `${pct}% utilization` : 'Utilization pending capacity';
-        return `
-            <div class="cap-card" data-room-id="${room.id}" data-month-key="${key}" role="button" tabindex="0" title="View ${room.label} calendar">
-                <h3>${room.label}</h3>
-                <p class="cap-meta">${metaTxt}</p>
-                <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
-                <p class="cap-pct">${pctTxt}</p>
-                <p class="cap-card-hint">Click to view calendar →</p>
-            </div>`;
+    // Lead in enough empty cells that the 1st actually lands under its real
+    // weekday column — a month starting on, say, a Wednesday shouldn't render
+    // the 1st under Monday.
+    const firstDow    = new Date(y, m, 1).getDay(); // 0=Sun … 6=Sat
+    const monBased    = firstDow === 0 ? 6 : firstDow - 1; // 0=Mon … 4=Fri, 5=Sat, 6=Sun
+    const leadEmpties = monBased < 5 ? monBased : 0;
+
+    const monAbbr = MONTH_NAMES[m].slice(0, 3);
+
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < leadEmpties; i++) cells.push(null);
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dow = new Date(y, m, day).getDay();
+        if (dow === 0 || dow === 6) continue;
+        const dateStr  = `${key}-${String(day).padStart(2, '0')}`;
+        const enrolled = (dayMap[dateStr] || []).slice().sort((a, b) => a.childName.localeCompare(b.childName));
+        const isClosed = typeof allClosureDates !== 'undefined' && allClosureDates.has(dateStr);
+        cells.push({ day, dateStr, enrolled, isClosed });
+    }
+
+    const tabsHtml = rooms.map(r => `
+        <button type="button" class="ec-room-tab${r.id === capOverviewRoomId ? ' is-active' : ''}" data-room="${r.id}">${escHtml(r.label)}</button>`).join('');
+
+    const cellsHtml = cells.map(c => {
+        if (!c) return `<div class="ec-month-cell ec-month-cell-empty"></div>`;
+        if (c.isClosed) return `<div class="ec-month-cell is-closed"><span class="ec-month-date">${monAbbr} ${c.day}</span><span class="ec-month-closed">Closed</span></div>`;
+        const count = c.enrolled.length;
+        const full  = !!cap && count >= cap;
+        const near  = !full && !!cap && count >= cap * 0.85;
+        return `<button type="button" class="ec-month-cell${full ? ' is-full' : near ? ' is-near' : ''}" data-date="${c.dateStr}">
+            <span class="ec-month-date">${monAbbr} ${c.day}</span>
+            <span class="ec-month-count">${count}${cap ? '/' + cap : ''}</span>
+        </button>`;
     }).join('');
 
-    grid.innerHTML = `<div class="capacity-grid">${cards}</div>`;
+    grid.innerHTML = `
+        <div class="ec-room-tabs">${tabsHtml}</div>
+        <div class="ec-month-dow">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(d => `<div class="ec-month-dow-cell">${d}</div>`).join('')}</div>
+        <div class="ec-month-grid">${cellsHtml}</div>`;
+
+    grid.querySelectorAll('.ec-room-tab').forEach(btn => {
+        btn.addEventListener('click', () => { capOverviewRoomId = btn.dataset.room; renderCapacityOverview(); });
+    });
+    grid.querySelectorAll('.ec-month-cell[data-date]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const cell = cells.find(c => c && c.dateStr === btn.dataset.date);
+            if (cell) showDayRosterDetail(cell.dateStr, room.id, cell.enrolled, cap);
+        });
+    });
 }
 
 // ============================================================
