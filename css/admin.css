@@ -3654,8 +3654,8 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     font-weight: 700; padding: 3px 5px; border-radius: 4px;
 }
 .wlp-chip-open { background: var(--green-pale); color: var(--green-dark); }
-.wlp-chip-full { background: var(--wlp-red-bg); color: var(--wlp-red-fg); }
-.wlp-chip-off  { background: var(--warm-gray); color: #c4bda8; }
+.wlp-chip-full { background: var(--tang-pale); color: var(--wlp-red-fg); }
+.wlp-chip-off  { background: var(--warm-gray); color: #B0A88F; }
 .wlp-chip-grad  { background: var(--wlp-grad-bg);  color: var(--wlp-grad-fg); }
 .wlp-chip-start { background: var(--wlp-start-bg); color: var(--wlp-start-fg); }
 .wlp-chip-promised { background: var(--wlp-promised-bg); color: var(--wlp-promised-fg); }
@@ -3830,12 +3830,14 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-suggestion-name { font-weight: 700; font-size: 15.5px; }
 .wlp-suggestion-waiting { font-size: 13px; color: var(--text-muted); }
 .wlp-suggestion-priority { font-size: 13.5px; color: var(--text-muted); margin: 3px 0 6px; }
+/* White with a gold border when actionable — matches blockCandidateCard()'s
+   buttonStyle exactly, not a solid-fill button. */
 .wlp-suggestion-offer {
-    width: 100%; border: none; padding: 7px; border-radius: 6px; font-weight: 800;
-    font-size: 14px; cursor: pointer;
+    width: 100%; padding: 10px; border-radius: 8px; font-weight: 800;
+    font-size: 13px; cursor: pointer;
 }
-.wlp-suggestion-offer-full { background: var(--sun); color: var(--navy); }
-.wlp-suggestion-offer-partial { background: var(--white); color: var(--navy); border: 1.5px solid var(--sun); }
+.wlp-suggestion-offer-full { background: var(--white); color: var(--navy); border: 2px solid var(--sun); }
+.wlp-suggestion-offer:disabled { background: var(--linen); color: var(--text-muted); border: 2px solid var(--border); cursor: default; }
 
 .wlp-moving-card {
     display: flex; align-items: flex-start; gap: 8px; background: var(--white);
@@ -3884,13 +3886,17 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-moving-pill.selected { background: var(--navy); border-color: var(--navy); color: var(--white); }
 .wlp-ageout-list { display: flex; flex-direction: column; gap: 10px; }
 .wlp-ageout-card {
-    display: flex; align-items: center; justify-content: space-between; gap: 16px;
-    background: var(--white); border: 1px solid var(--border); border-radius: 9px; padding: 14px 18px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 13px 16px;
 }
+.wlp-ageout-card.done { opacity: .6; }
 .wlp-ageout-card-main { min-width: 0; }
-.wlp-ageout-card-name { font-weight: 800; color: var(--navy); font-size: 15px; }
-.wlp-ageout-card-rooms { font-size: 13.5px; color: var(--text); margin-top: 2px; }
-.wlp-ageout-card-date { font-size: 12.5px; font-weight: 700; color: var(--tang-dark); margin-top: 3px; }
+.wlp-ageout-card-name { font-weight: 800; color: var(--navy); font-size: 14px; }
+.wlp-ageout-card-rooms { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+/* #B3452B is the mockup's own literal hex for this text — closer to a
+   saturated rust than this app's --tang-dark (#7a2a18), so used directly
+   rather than force-fit an existing token that doesn't match it. */
+.wlp-ageout-card-reason { color: #B3452B; font-weight: 700; }
 .wlp-ageout-card .wlp-confirm-move-btn { flex-shrink: 0; }
 
 /* ── Grid — inline demand-by-month / age-out rollup strips (consolidation

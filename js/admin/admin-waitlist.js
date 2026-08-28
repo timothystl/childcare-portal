@@ -120,12 +120,14 @@ let _wlp = {
     expandedKidB: null,       // Queue: waitlist_applications.id
     selStripB: null,          // Queue: {kidId, monthIdx}
     archivingKidId: null,     // Queue: id whose inline archive-reason form is open
-    boardMonthIdx: 0,         // Board: 0-11
+    boardMonthIdx: 0,         // Board: 0-5 (same 6-month, current-month-first window as the Grid)
     boardSelectedKidId: null, // Board: waitlist_applications.id — the candidate selected on the left
     search: '',
     roomFilter: '',
     queueSortMode: 'priority',   // Queue: 'priority'|'days_desc'|'days_asc'|'waiting'|'room' — display order only, never priority badges
-    movingSelectedMonthIdx: 0,   // Moving: 0-11
+    movingSelectedMonthIdx: 0,   // Moving: the visible window is idx 1-6 (next 6 months, not
+                                  // the current one — see wlpRenderMoving); 0 self-corrects to
+                                  // the window's first month on render.
     toastText: null,
     rollupDrawer: null,       // Grid: { type: 'demand'|'ageout', monthIdx } — the demand-by-month / age-out strips below the grid table
     movedKeys: new Set(),     // Moving: "monthLabel|name" keys of confirmed moves this session — see wlpConfirmMove()
@@ -474,12 +476,17 @@ function wlpChipHtml(c) { return `<span class="wlp-chip ${c.cls}">${c.day}</span
 function wlpDayTypeTag(k) { return k.dayType === 'half' ? ' <span class="wlp-row-room">(half day)</span>' : ''; }
 function wlpPriorityLabel(k) { return k.sibling ? '👨‍👩‍👧 Sibling priority' : 'Standard priority'; }
 
+// Thresholds are absolute open-seat counts, not a fraction of room capacity
+// — matches design_handoff_planning_market's statusFor() exactly (open<=0
+// red, open<=2 amber, else green). `capacity` is unused for the threshold
+// itself; kept as a parameter only to distinguish "at zero" (wlp-avail-red)
+// from "already overbooked" (wlp-avail-over) — negative, a real over-
+// capacity condition the mockup's own hint text calls out for its own
+// darker shade, not just a fourth arbitrary tier.
 function wlpAvailClass(open, capacity) {
-    const cap = capacity || 0;
-    const frac = cap > 0 ? open / cap : 0;
     if (open < 0) return 'wlp-avail-over';
-    if (open === 0) return 'wlp-avail-red';
-    if (frac < 0.2) return 'wlp-avail-amber';
+    if (open <= 0) return 'wlp-avail-red';
+    if (open <= 2) return 'wlp-avail-amber';
     return 'wlp-avail-green';
 }
 
@@ -535,12 +542,12 @@ function wlpAgeOutMoveCardHtml(ev) {
     const roomsLine = ev.toRoomLabel
         ? `${escHtml(ev.fromRoomLabel)} → ${escHtml(ev.toRoomLabel)}`
         : `${escHtml(ev.fromRoomLabel)} → graduates the program`;
+    const reason = `ages out ${wlpFmtAgeOutDate(ev.ageOutDate)}`;
     return `
-        <div class="wlp-ageout-card" data-wlp-move-event="${wlpMoveKey(ev)}">
+        <div class="wlp-ageout-card${done ? ' done' : ''}" data-wlp-move-event="${wlpMoveKey(ev)}">
             <div class="wlp-ageout-card-main">
                 <div class="wlp-ageout-card-name">${escHtml(ev.name)}</div>
-                <div class="wlp-ageout-card-rooms">${roomsLine}</div>
-                <div class="wlp-ageout-card-date">ages out ${escHtml(wlpFmtAgeOutDate(ev.ageOutDate))}</div>
+                <div class="wlp-ageout-card-rooms">${roomsLine} <span class="wlp-ageout-card-reason">· ${escHtml(reason)}</span></div>
             </div>
             <button type="button" class="btn-secondary wlp-confirm-move-btn" data-wlp-confirm-move="${wlpMoveKey(ev)}" ${done ? 'disabled' : ''}>${done ? '✓ Moved' : 'Confirm move'}</button>
         </div>`;
@@ -1254,8 +1261,12 @@ function wlpRenderGridSidebar(sel, alloc) {
         const chips = k.days.length
             ? wlpDayChips(k, dayMap).map(wlpChipHtml).join('')
             : `<span class="wlp-chip wlp-chip-off" style="width:auto;padding:2px 8px">any ${k.flexibleCount}/wk — no fit</span>`;
-        const offerLabel = !someFit ? 'No open days' : missing.length ? `✅ Enroll (${avail.length} of ${k.days.length} days)` : `✅ Enroll (all ${k.days.length} days)`;
-        const offerCls = missing.length ? 'wlp-suggestion-offer-partial' : 'wlp-suggestion-offer-full';
+        // Matches design_handoff_planning_market's blockCandidateCard() exactly:
+        // "N open days", no "of 5"/"of k.days.length" denominator — this panel
+        // is scoped to one room+week, not the whole 5-day request, so a
+        // denominator here would be answering a question this card doesn't ask.
+        const offerLabel = someFit ? `✅ Enroll (${avail.length} open day${avail.length === 1 ? '' : 's'})` : 'No open days';
+        const offerCls = 'wlp-suggestion-offer-full';
         const noFitReason = !someFit ? wlpNoFitReason(alloc, roomId, monthIdx, k.days) : null;
         return `
             <div class="wlp-suggestion-card">
@@ -1303,9 +1314,10 @@ function wlpWaitingCount(alloc, roomId, mi, day) {
 }
 
 function wlpRenderGrid(alloc) {
-    const monthHeads = alloc.months.map(m => `<th class="wlp-month-head">${escHtml(m.label)}</th>`).join('');
+    const gridMonths = alloc.months.slice(0, 6);
+    const monthHeads = gridMonths.map(m => `<th class="wlp-month-head">${escHtml(m.label)}</th>`).join('');
     const roomRows = alloc.rooms.map(room => {
-        const cells = alloc.months.map(mo => {
+        const cells = gridMonths.map(mo => {
             const dayMap = alloc.finalGrid[room.id][mo.idx];
             const sel = _wlp.selCellA;
             const isSel = sel && sel.roomId === room.id && sel.monthIdx === mo.idx;
@@ -1328,8 +1340,8 @@ function wlpRenderGrid(alloc) {
         <div class="wlp-grid-wrap">
             <div class="wlp-grid-main">
                 <div class="wlp-grid-panel">
-                    <div class="wlp-section-label">Open seats per weekday — next 12 months</div>
-                    <div class="wlp-section-hint">Number shown = unfilled seats that day, after known graduations and already-matched waitlist admits (not enrolled headcount, not waitlist demand). A negative number (dark red) means already-enrolled kids overbook that room that month — before any waitlist offers. Click a month to see who fits.</div>
+                    <div class="wlp-section-label">Open seats per weekday — next 6 months</div>
+                    <div class="wlp-section-hint">Number shown = unfilled seats that day, after known graduations and already-matched waitlist admits (not enrolled headcount, not waitlist demand). A negative number (dark red) means already-enrolled kids overbook that room before any waitlist offers. Small pill = families waiting for that exact weekday. Click a cell to see who fits.</div>
                     <div style="overflow-x:auto;">
                         <table class="wlp-cap-table">
                             <thead><tr><th class="wlp-room-head">Room</th>${monthHeads}</tr></thead>
@@ -1395,9 +1407,13 @@ function wlpAttachGridListeners() {
 // drawer reuses wlpMovingMonthEvents()/wlpAgeOutMoveCardHtml() verbatim, the
 // exact card the Moving tab itself renders, filtered to graduation events.
 
+// Deliberately the NEXT 6 months (skipping the current one), not the Grid
+// table's own current-month-first window — matches design_handoff_planning_
+// market's two separate month arrays (CAP_MONTH_LABELS starts at the current
+// month, the generic MONTHS used here and by Moving starts one month later).
 function wlpDemandByMonth(alloc) {
     const active = (_allWaitlistApps || []).filter(a => ['pending', 'offered', 'accepted'].includes(a.status));
-    return alloc.months.slice(0, 6).map(mo => ({
+    return alloc.months.slice(1, 7).map(mo => ({
         label: mo.label.split(' ')[0], monthIdx: mo.idx,
         count: active.filter(a => (a.desired_start_date || '').slice(0, 7) === mo.key).length,
     }));
@@ -1409,7 +1425,7 @@ function wlpAgeOutEventsForMonth(monthIdx, alloc) {
 
 function wlpAgeOutByMonth(alloc) {
     const chain = wlpPromotionChain();
-    return alloc.months.slice(0, 6).map(mo => {
+    return alloc.months.slice(1, 7).map(mo => {
         const pairs = {};
         let count = 0;
         alloc.rooms.forEach(room => {
@@ -1548,7 +1564,7 @@ function wlpRenderBoard(alloc) {
     const mi = _wlp.boardMonthIdx;
     const selId = _wlp.boardSelectedKidId;
 
-    const monthPills = alloc.months.map(mo => `
+    const monthPills = alloc.months.slice(0, 6).map(mo => `
         <button type="button" class="wlp-board-month-pill ${mo.idx === mi ? 'active' : ''}" data-wlp-board-month="${mo.idx}">${escHtml(mo.label)}</button>`).join('');
 
     const dayCountsHtml = wlpBoardWaitingByDay(alloc, mi).map(dc => `
@@ -1809,13 +1825,6 @@ function wlpMovingMonthEvents(monthIdx, alloc) {
     return events;
 }
 
-// Grad-only per-month counts across all rooms — the Moving tab's pill row
-// ("Sep (1)") and the age-out drawer's rollup share this one count, same as
-// they share wlpAgeOutMoveCardHtml for the card itself.
-function wlpAgeOutMonthCounts(alloc) {
-    return alloc.months.map((mo, i) => wlpAgeOutEventsForMonth(i, alloc).length);
-}
-
 // A graduation event ("ages out of this room") is the only kind that IS a
 // room move an admin can confirm — a waitlist start or an accepted offer
 // gets seated through the ordinary Enroll flow instead, not this button.
@@ -1892,21 +1901,24 @@ function wlpAttachMoveConfirmListeners(alloc, monthIdx) {
 // over) — this tab's whole point is "who do I need to click Confirm move
 // for," and a promised-spot or waitlist-start row has no such button.
 function wlpRenderMoving(alloc) {
-    const selIdx = Math.max(0, Math.min(11, _wlp.movingSelectedMonthIdx));
-    const counts = wlpAgeOutMonthCounts(alloc);
+    const movingMonths = alloc.months.slice(1, 7);
+    const selIdx = movingMonths.some(mo => mo.idx === _wlp.movingSelectedMonthIdx) ? _wlp.movingSelectedMonthIdx : movingMonths[0].idx;
 
-    const pills = alloc.months.map((mo, i) => `
-        <button type="button" class="wlp-moving-pill${i === selIdx ? ' selected' : ''}" data-wlp-moving-month="${i}">${escHtml(mo.label.split(' ')[0])} (${counts[i]})</button>`).join('');
+    const pills = movingMonths.map(mo => {
+        const count = wlpAgeOutEventsForMonth(mo.idx, alloc).length;
+        return `<button type="button" class="wlp-moving-pill${mo.idx === selIdx ? ' selected' : ''}" data-wlp-moving-month="${mo.idx}">${escHtml(mo.label.split(' ')[0])} <span style="opacity:.75">(${count})</span></button>`;
+    }).join('');
 
     const events = wlpAgeOutEventsForMonth(selIdx, alloc);
     const cards = events.map(wlpAgeOutMoveCardHtml).join('');
+    const selLabel = alloc.months.find(mo => mo.idx === selIdx)?.label || '';
 
     return `
         <div class="wlp-moving-panel">
             <div class="wlp-moving-pillrow">${pills}</div>
             ${events.length
                 ? `<div class="wlp-ageout-list">${cards}</div>`
-                : `<div class="wlp-empty-note">No moves scheduled for ${escHtml(alloc.months[selIdx].label)}.</div>`}
+                : `<div class="wlp-empty-note">No promotions land in ${escHtml(selLabel)}.</div>`}
         </div>
         ${_wlp.toastText ? `<div class="wlp-toast" style="margin:14px 24px 0;border-radius:7px;">${escHtml(_wlp.toastText)}</div>` : ''}`;
 }
