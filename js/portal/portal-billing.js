@@ -52,57 +52,75 @@ function pbRender() {
     }
 
     const invoices = pbIssuedInvoices();
-    if (!invoices.length) {
-        body.innerHTML = `<div class="tab-placeholder">
-            <h2>No bills issued yet</h2>
-            <p>Once the office issues a bill for a month, it will show up here
-               with what's owed. Until then, nothing has changed about how you pay.</p>
-        </div>`;
-        return;
-    }
-
     const totalDue = invoices.reduce((sum, i) =>
         sum + Math.max(0, (Number(i.final_amount) || 0) - (Number(i.paid_amount) || 0)), 0);
 
-    body.innerHTML = `
-        <section class="pd-card pb-summary">
-            <div class="pd-card-head"><span aria-hidden="true">💳</span>Total balance due</div>
-            <div class="pd-card-body">
-                <p class="pb-total">${pbMoney(totalDue)}</p>
-                <p class="pb-fine">Online payment is coming soon. For now, bills are paid
-                   the same way they are today — contact the office if you have questions
-                   about a balance.</p>
-            </div>
-        </section>
-        ${invoices.map(pbInvoiceCard).join('')}
-    `;
+    // The balance card renders even with no invoices at all. "$0.00, nothing
+    // owed" is a real answer to the question this tab exists for; the old empty
+    // state answered a different one ("no bills issued yet") and made a parent
+    // work out for themselves whether that meant they were square.
+    const balanceCard = `<section class="pb-card pb-balance">
+        <div class="pb-label">Balance due</div>
+        <p class="pb-total">${pbMoney(totalDue)}</p>
+        <button type="button" class="pb-pay-btn" disabled
+            title="Online payment is coming soon">Pay online (coming soon)</button>
+        <p class="pb-fine">${totalDue > 0
+            ? `Online payment is coming soon. For now, bills are paid the same way
+               they are today — contact the office with any questions about a balance.`
+            : `Nothing owed right now. Your next statement will appear here as soon
+               as the office sends it.`}</p>
+    </section>`;
+
+    body.innerHTML = `<div class="pb-cards">${balanceCard}${invoices.map(pbInvoiceCard).join('')}</div>`;
+}
+
+// Which children were booked in the invoice's month, and how many days each.
+// ⚠️ Day counts only — deliberately no per-child dollar figure. The invoice
+// carries ONE total, computed server-side; splitting it per child in the
+// browser would be a second billing calculation that can drift from the bill
+// itself, which is the same reason a per-day amount was kept off the invoice
+// detail screen. Days booked are a fact this payload already holds.
+function pbChildLines(monthKey) {
+    const byChild = new Map();
+    (pbData?.registrations || []).forEach(r => {
+        const days = (r.dates || []).filter(d => !d.waitlisted && String(d.care_date).startsWith(monthKey));
+        if (!days.length) return;
+        const prev = byChild.get(r.child_name) || { days: 0, roomId: r.room_id };
+        byChild.set(r.child_name, { days: prev.days + days.length, roomId: prev.roomId || r.room_id });
+    });
+    if (!byChild.size) return '';
+
+    return [...byChild.entries()].map(([name, v]) => {
+        const room = (typeof ROOMS !== 'undefined' && ROOMS.find(x => x.id === v.roomId)) || null;
+        const label = room ? room.label.replace(/^[^A-Za-z]+/, '').trim() : '';
+        return `<div class="pb-row">
+            <span class="pb-row-label">${pbEsc(name)}${label ? ' — ' + pbEsc(label) : ''}</span>
+            <span class="pb-row-value">${v.days} ${v.days === 1 ? 'day' : 'days'}</span>
+        </div>`;
+    }).join('');
 }
 
 function pbInvoiceCard(inv) {
-    const due = Math.max(0, (Number(inv.final_amount) || 0) - (Number(inv.paid_amount) || 0));
+    const due  = Math.max(0, (Number(inv.final_amount) || 0) - (Number(inv.paid_amount) || 0));
     const paid = inv.status === 'paid';
     const pill = paid
         ? '<span class="ps-status ps-paid">PAID</span>'
         : `<span class="ps-status ps-due">${inv.status === 'partial' ? 'PARTIAL' : 'DUE'}</span>`;
 
-    return `<section class="pd-card">
-        <div class="pd-card-head"><span aria-hidden="true">🧾</span>${pbEsc(pbMonthLabel(inv.month))}</div>
-        <div class="pd-card-body">
-            <div class="pb-row">
-                <span class="pb-row-label">Billed</span>
-                <span class="pb-row-value">${pbMoney(inv.final_amount)}</span>
-            </div>
-            ${inv.paid_amount > 0 ? `<div class="pb-row">
-                <span class="pb-row-label">Paid</span>
-                <span class="pb-row-value">${pbMoney(inv.paid_amount)}</span>
-            </div>` : ''}
-            <div class="pb-row pb-row-strong">
-                <span class="pb-row-label">${paid ? 'Balance' : 'Balance due'}</span>
-                <span class="pb-row-value">${pbMoney(due)} ${pill}</span>
-            </div>
-            ${!paid ? `<button type="button" class="pb-pay-btn" disabled
-                title="Online payment is coming soon">Pay online — coming soon</button>` : ''}
+    return `<section class="pb-card">
+        <div class="pb-label">${pbEsc(pbMonthLabel(inv.month))}</div>
+        ${pbChildLines(inv.month)}
+        <div class="pb-row pb-row-total">
+            <span class="pb-row-label">Total</span>
+            <span class="pb-row-value">${pbMoney(inv.final_amount)}</span>
         </div>
+        ${inv.paid_amount > 0 && !paid ? `<div class="pb-row">
+            <span class="pb-row-label">Paid so far</span>
+            <span class="pb-row-value">${pbMoney(inv.paid_amount)}</span>
+        </div>
+        <div class="pb-row"><span class="pb-row-label">Balance due</span>
+            <span class="pb-row-value">${pbMoney(due)}</span></div>` : ''}
+        <div class="pb-status-row">${pill}</div>
     </section>`;
 }
 
@@ -110,7 +128,7 @@ async function pbLoad() {
     const body = pbEl('pbBody');
     if (body) body.innerHTML = '<p class="pa-empty">Loading…</p>';
     try {
-        pbData = await fetchMySchedule();
+        pbData = await psSchedule();   // shared with Schedule and Today — one fetch, not three
     } catch (e) {
         console.warn('billing:', e);
         pbData = null;

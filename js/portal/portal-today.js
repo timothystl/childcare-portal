@@ -81,6 +81,11 @@ function ptRenderTimeline(events) {
     }).join('');
 }
 
+// ⚠️ The buttons are .pt-childbtn, NOT .pt-tab. Each <section> in the app shell
+// is also a .pt-tab, so the old class name meant every rule written for the
+// child switcher also hit six full-page sections (and vice versa — .pt-tab's
+// own 16px page padding was landing on these buttons). Same collision exists in
+// portal-recap.js and portal-schedule.js; all three use .pt-childbtn now.
 function ptRenderSwitcher() {
     const wrap = ptEl('ptSwitcher');
     if (!wrap) return;
@@ -88,10 +93,10 @@ function ptRenderSwitcher() {
     if (ptChildren.length < 2) { wrap.classList.add('hidden'); return; }
     wrap.classList.remove('hidden');
     wrap.innerHTML = ptChildren.map(c =>
-        `<button type="button" class="pt-tab ${c.id === ptActiveId ? 'active' : ''}"
+        `<button type="button" class="pt-childbtn ${c.id === ptActiveId ? 'active' : ''}"
                  data-child="${ptEsc(c.id)}">${ptEsc((c.child_name || '').split(' ')[0])}</button>`
     ).join('');
-    wrap.querySelectorAll('.pt-tab').forEach(b => {
+    wrap.querySelectorAll('.pt-childbtn').forEach(b => {
         b.addEventListener('click', () => ptSelectChild(b.dataset.child));
     });
 }
@@ -160,7 +165,7 @@ function ptRenderSafety(child) {
              <button type="button" class="pt-ask-none pt-check-fix">No — update it</button>
            </div>`;
 
-    wrap.innerHTML = `<div class="pt-safety-title">On file for ${first}</div>${body}${footer}`;
+    wrap.innerHTML = `<div class="pt-safety-label">On file for ${first}</div>${body}${footer}`;
 
     const upd = wrap.querySelector('.pt-ask-link') || wrap.querySelector('.pt-check-fix');
     if (upd) upd.onclick = () => ptOpenAllergyEditor(child.id);
@@ -276,6 +281,46 @@ async function ptSaveAllergies(child, allergies, careNotes, btn) {
     }
 }
 
+// ── Which room the child is in ──────────────────────────────
+// students.room_override is only set when the office has deliberately moved a
+// child off their age room, so it is right when present and absent for most
+// children. The real answer is the room on their booked days, which lives in
+// the schedule payload — read through psSchedule(), the same memoized fetch the
+// Schedule and Billing tabs use, so this costs no extra round trip.
+//
+// Best-effort by design: the room is a label next to a name. If the schedule
+// fetch fails, the name shows without it rather than the card not rendering.
+function ptRoomLabelFor(roomId) {
+    if (!roomId || typeof ROOMS === 'undefined') return '';
+    const r = ROOMS.find(x => x.id === roomId);
+    return r ? r.label.replace(/^[^A-Za-z]+/, '').trim() : '';
+}
+
+async function ptRenderRoom(child) {
+    const el = ptEl('ptChildRoom');
+    if (!el) return;
+    el.textContent = '';
+    if (!child) return;
+
+    if (child.room_override) {
+        el.textContent = ptRoomLabelFor(child.room_override);
+        return;
+    }
+    if (typeof psSchedule !== 'function') return;
+    try {
+        const data = await psSchedule();
+        const regs = (data?.registrations || [])
+            .filter(r => r.child_name === child.child_name && r.room_id);
+        if (!regs.length) return;
+        // Newest registration wins — a child who moved rooms mid-year should
+        // read as the room they are in now, not the one they started in.
+        regs.sort((a, b) => String(a.month_key || '').localeCompare(String(b.month_key || '')));
+        // Still the right child? A parent can switch children while this awaits.
+        if (String(ptActiveId) !== String(child.id)) return;
+        el.textContent = ptRoomLabelFor(regs[regs.length - 1].room_id);
+    } catch (_) { /* label only — never worth an error state */ }
+}
+
 async function ptSelectChild(childId) {
     ptActiveId = childId;
     const child = ptChildren.find(c => String(c.id) === String(childId));
@@ -283,6 +328,7 @@ async function ptSelectChild(childId) {
     ptRenderSafety(child);
 
     ptEl('ptChildName').textContent = child ? child.child_name : '';
+    ptRenderRoom(child);
     ptEl('ptTimeline').innerHTML = '<li class="pt-loading">Loading…</li>';
 
     try {
@@ -360,7 +406,7 @@ async function ptRenderPhotos(childId) {
         wrap.classList.remove('hidden');
         wrap.innerHTML = `
             <div class="pt-photos-head">
-                <span>Today's photos</span>
+                <span class="pt-photos-title">Today's photos</span>
                 <span class="pt-photos-note">Saved for about a week — download any you'd like to keep.</span>
             </div>
             <div class="pt-photo-strip">
@@ -373,6 +419,58 @@ async function ptRenderPhotos(childId) {
     }
 }
 
+// ── "This week" ─────────────────────────────────────────────
+// Three numbers a parent glances at, each read from the tab that owns it
+// rather than recomputed here: days booked and balance due come out of
+// psSchedule() (the same my_schedule() payload Schedule and Billing render),
+// unread comes from pmUnreadCount(), which counts WITHOUT marking anything
+// read — see the note on that function.
+//
+// ⚠️ Balance due counts ISSUED invoices only (sent_at set), exactly as the
+// Billing tab does. A draft is the office still working the month out; showing
+// one here would tell a parent they owe money nobody has billed them for.
+// This card and Billing can therefore never disagree.
+function ptWeekBounds() {
+    // Monday–Sunday containing today, in the center's timezone.
+    const today = ptToday();
+    const dow   = new Date(today + 'T12:00:00').getDay();   // 0 = Sunday
+    const back  = (dow + 6) % 7;
+    const start = new Date(today + 'T12:00:00');
+    start.setDate(start.getDate() - back);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const fmt = d => d.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+    return { start: fmt(start), end: fmt(end) };
+}
+
+async function ptRenderWeek() {
+    const wrap = ptEl('ptWeekCard');
+    if (!wrap || typeof psSchedule !== 'function') return;
+
+    let data;
+    try { data = await psSchedule(); }
+    catch (_) { wrap.classList.add('hidden'); return; }
+
+    const { start, end } = ptWeekBounds();
+    const booked = (data?.registrations || []).reduce((n, r) => n + (r.dates || []).filter(
+        d => !d.waitlisted && d.care_date >= start && d.care_date <= end).length, 0);
+
+    const balance = (data?.invoices || [])
+        .filter(i => i.sent_at)
+        .reduce((sum, i) => sum + Math.max(0,
+            (Number(i.final_amount) || 0) - (Number(i.paid_amount) || 0)), 0);
+
+    const unread = typeof pmUnreadCount === 'function'
+        ? await pmUnreadCount().catch(() => 0) : 0;
+
+    wrap.classList.remove('hidden');
+    wrap.innerHTML = `
+        <div class="pt-week-head">This week</div>
+        <div class="pt-week-row"><span>Days booked</span><span class="pt-week-val">${booked}</span></div>
+        <div class="pt-week-row"><span>Unread messages</span><span class="pt-week-val">${unread}</span></div>
+        <div class="pt-week-row"><span>Balance due</span><span class="pt-week-val">$${balance.toFixed(2)}</span></div>`;
+}
+
 async function ptRenderAnnouncements() {
     const wrap = ptEl('ptAnnouncements');
     if (!wrap) return;
@@ -381,6 +479,7 @@ async function ptRenderAnnouncements() {
         if (!list.length) { wrap.classList.add('hidden'); return; }
         wrap.classList.remove('hidden');
         wrap.innerHTML = list.slice(0, 3).map(a => `<div class="pt-ann">
+            <div class="pt-ann-kind">${ptEsc(a.kind === 'closure' ? 'Closure' : 'Announcement')}</div>
             <div class="pt-ann-title">${ptEsc(a.title)}</div>
             <div class="pt-ann-body">${ptEsc(a.body)}</div>
         </div>`).join('');
@@ -419,4 +518,5 @@ async function ptLoadToday() {
     ptEl('ptFeed')?.classList.remove('hidden');
     await ptSelectChild(ptChildren[0].id);
     ptRenderAnnouncements();
+    ptRenderWeek();
 }

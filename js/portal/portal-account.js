@@ -104,7 +104,7 @@ function paRender() {
                 <button type="button" class="pa-row-tap pa-child-open" data-child="${paEsc(c.id)}">
                     <span class="pa-row-main">
                         <span class="pa-row-name">${paEsc(c.child_name)}</span>
-                        <span class="pa-row-sub">${paEsc(paRoomLabel(c))}${c.child_dob ? ' · ' + paEsc(paAge(c.child_dob)) : ''}</span>
+                        <span class="pa-row-sub">${paEsc(paRoomLabel(c))}</span>
                     </span>
                     ${paAllergyBadge(c)}
                     <span class="pa-chev" aria-hidden="true">›</span>
@@ -112,6 +112,27 @@ function paRender() {
             </div>`).join('') || '<p class="pa-empty">No children on file yet.</p>')}
         <input type="file" id="paChildPhotoInput" accept="image/jpeg,image/png,image/webp" class="pa-hidden-file-input">
         <p class="pa-photo-status" id="paPhotoStatus" aria-live="polite"></p>
+
+        ${paCard('Contact info', `
+            <div class="pa-field">
+                <span class="pa-field-label">Phone</span>
+                <span class="pa-field-value" id="paPhoneValue">${paEsc(parents.find(p => p.slot === mySlot)?.phone || 'Not set')}</span>
+                <button type="button" class="pa-edit" id="paPhoneEdit">Edit</button>
+            </div>
+            <div class="pa-field">
+                <span class="pa-field-label">Emergency contact</span>
+                ${paEmergencyValue(parents, mySlot)}
+            </div>
+            <div class="pa-field">
+                <span class="pa-field-label">Email</span>
+                <span class="pa-field-value">${paEsc(parents.find(p => p.slot === mySlot)?.email || '')}</span>
+                <span class="pa-field-note">This is your sign-in — the office changes it</span>
+            </div>
+            <div class="pa-field">
+                <span class="pa-field-label">PIN</span>
+                <span class="pa-field-value">••••</span>
+                <a class="pa-edit" href="reset-pin.html">Change</a>
+            </div>`)}
 
         ${paCard('Parents &amp; guardians', parents.map(p => `
             <div class="pa-row">
@@ -121,22 +142,7 @@ function paRender() {
                         ${p.slot === mySlot ? '<span class="pa-you">you</span>' : ''}</span>
                     <span class="pa-row-sub">${p.has_pin ? 'Has a PIN' : 'No PIN set'}</span>
                 </span>
-            </div>`).join('') + `
-            <div class="pa-field">
-                <span class="pa-field-label">Email</span>
-                <span class="pa-field-value">${paEsc(parents.find(p => p.slot === mySlot)?.email || '')}</span>
-                <span class="pa-field-note">This is your sign-in — the office changes it</span>
-            </div>
-            <div class="pa-field">
-                <span class="pa-field-label">Mobile</span>
-                <span class="pa-field-value" id="paPhoneValue">${paEsc(parents.find(p => p.slot === mySlot)?.phone || 'Not set')}</span>
-                <button type="button" class="pa-edit" id="paPhoneEdit">Edit</button>
-            </div>
-            <div class="pa-field">
-                <span class="pa-field-label">PIN</span>
-                <span class="pa-field-value">••••</span>
-                <a class="pa-edit" href="reset-pin.html">Change</a>
-            </div>`)}
+            </div>`).join(''))}
 
         ${paCard('Approved for pickup', `
             <div id="paPickupList">${paPickupRows()}</div>
@@ -175,16 +181,44 @@ function paCard(title, inner) {
     </section>`;
 }
 
+// Three states, three badges — and the middle one is why this is not a
+// boolean. "Nobody has ever checked" is not "there are none", and rendering it
+// as silence (or as NONE ON FILE) would tell a parent their child's allergy
+// record is settled when it has never been looked at.
+//
+// The labels themselves are deliberately NOT listed here any more: the design
+// shows one word, and the actual chips ("Peanuts", "Dairy") are on the Today
+// card next to the child's name, which is where a teacher-facing fact belongs.
+// Tapping the row opens that same record.
 function paAllergyBadge(c) {
     const list = Array.isArray(c.allergies) ? c.allergies : [];
     if (list.length) {
         const severe = list.some(a => a.severity === 'severe');
-        return `<span class="pa-allergy ${severe ? 'pa-allergy-severe' : ''}">${
-            paEsc(list.map(a => a.label).join(' · ').toUpperCase())}</span>`;
+        return `<span class="pa-allergy ${severe ? 'pa-allergy-severe' : ''}">ALLERGIES</span>`;
     }
-    // Never reviewed is NOT the same as none, and must not render as silence.
     if (!c.allergies_reviewed_at) return '<span class="pa-allergy pa-allergy-unknown">NOT CHECKED</span>';
-    return '';
+    return '<span class="pa-allergy pa-allergy-none">NONE ON FILE</span>';
+}
+
+// ⚠️ THERE IS NO EMERGENCY-CONTACT FIELD IN THIS DATABASE. The design shows one;
+// families/parent_accounts hold parent 1 and parent 2 and nothing else, and the
+// real emergency contact lives on the paper enrollment form in the office.
+//
+// So this shows the OTHER parent on the record when there is one — which is who
+// the center actually calls second — and otherwise says plainly where the answer
+// is kept. It does not invent a field, and it does not reuse a pickup contact:
+// "may collect your child" and "call this person in an emergency" are different
+// permissions, and quietly treating one as the other is the kind of thing that
+// only shows up on the day it matters.
+function paEmergencyValue(parents, mySlot) {
+    const other = parents.find(p => p.slot !== mySlot && (p.name || p.phone));
+    if (other) {
+        return `<span class="pa-field-value">${paEsc(other.name || 'Second parent')}${
+            other.phone ? ' — ' + paEsc(other.phone) : ''}</span>
+            <span class="pa-field-note">Second parent on your record</span>`;
+    }
+    return `<span class="pa-field-value pa-field-empty">Not in the app</span>
+        <span class="pa-field-note">Held on your enrollment form — call the office to change it</span>`;
 }
 
 function paPickupRows() {
