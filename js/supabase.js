@@ -2486,6 +2486,24 @@ async function removePickupContact(id) {
     return data === true;
 }
 
+// Admin read of a family's pickup list. Direct table read, not an RPC — the
+// only policy on pickup_contacts is `FOR ALL ... USING (is_admin())`, which
+// an admin's own authenticated session already satisfies; the two RPCs above
+// are SECURITY DEFINER wrappers for the *parent* side, which has no policy
+// of its own on this table at all. Read-only here on purpose: the family adds
+// and removes their own pickup list from their portal, and this is the
+// office's view of it, not a second place to edit it.
+async function fetchPickupContactsAdmin(familyId) {
+    if (!sbClient || !familyId) return [];
+    const { data, error } = await sbClient
+        .from('pickup_contacts')
+        .select('id, name, relationship, note')
+        .eq('family_id', familyId)
+        .order('name');
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
 /** Flips one child's photo consent. Returns false if the child isn't theirs. */
 async function setPhotoRelease(studentId, released) {
     if (!sbClient) throw new Error('Supabase not configured.');
