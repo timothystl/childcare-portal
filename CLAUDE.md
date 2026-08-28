@@ -596,6 +596,44 @@ Fixed both ways, on purpose:
 `apShowSection()` fix already makes that a cosmetic cleanup rather than a
 correctness fix, so it's a fine follow-up, not an urgent one.
 
+### ⚠️ Attendance Board's action colors and room-card layout drifted from the design source (fixed 2026-08-28)
+
+Reported live with two side-by-side screenshots (the mockup vs. v2.11.2):
+the In/Out/Absent buttons and the "Move →" select all rendered in a single
+muted gray, and the room cards sat in a responsive multi-column grid.
+Neither matches `Classroom Tab Redesign.dc.html`, and the fix was to go
+back to that file's exact computed-style strings rather than eyeball the
+screenshots again — `inStyle`/`outStyle`/`absentStyle`/`pillStyleFor()` all
+carry literal hex values.
+
+- **Each action now keeps its own color permanently**, not just on
+  hover/focus: `.ab-act-btn[data-act="in"]` is green
+  (`--green-text`/`--green-pale`), `[data-act="out"]` is tangerine
+  (`--tang`/`--tang-pale`), `[data-act="absent"]` is deep tangerine
+  (`--ap-deep-tang`/`--tang-pale`), filled solid when `.is-on`. No JS
+  changes were needed — `_abActionsHtml()` (admin-attendance.js) already
+  stamped `data-act="in|out|absent"` on each button; only the CSS was
+  wrong. `.ab-move-select` is now the same green-pale/green-lt/green-text
+  "pill" the design uses, not a plain gray border.
+- **`.ab-pill` (the ratio badge) now matches `pillStyleFor()`'s bg/color
+  pairs exactly**, not the `ok`/`warn`/`bad` tone convention used
+  elsewhere in the admin: over-ratio is tangerine-pale on
+  `--ap-deep-tang` (was `--tang-dark` — close but not the design's hex),
+  at-limit is gold-pale on **navy** (was `--mustard-dark` — the design
+  deliberately does not use the mustard warning color here), and ok is
+  green-pale on `--green-text` (was `--green-dark`). Also dropped the
+  pill's border — the design has none.
+- **`.ab-rooms` changed from `grid-template-columns: repeat(auto-fit,
+  minmax(300px, 1fr))` to a single-column flex stack.** The design source
+  never wraps room sections into columns — `sectionStyle` is one div per
+  room with `margin-bottom:16px`, rendered in sequence — so a wide admin
+  screen showing three rooms side by side was a real layout deviation, not
+  a viewport artifact of the mockup's narrower preview pane.
+- `css/admin.css?v=20` in `admin.html` — the cache-busting query param this
+  repo uses in place of content-hashed filenames (see R9 in the sixth
+  sweep) — was bumped again for this change, same as every prior CSS edit
+  this session.
+
 ### Director-authored records — she is signature 1, not a fourth role
 
 For Incident Reports, the open question was how signature 1 works when there
