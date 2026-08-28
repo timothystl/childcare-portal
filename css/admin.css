@@ -5300,6 +5300,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     gap: 14px; flex-wrap: wrap; margin-bottom: 14px;
 }
 .ab-live { margin: 0; font-size: .88em; color: var(--text-muted); }
+.ab-head-btns { display: flex; align-items: center; gap: 8px; }
 
 /* Says out loud that the counts are bookings, not bodies. The loudest thing on
    the page when it applies, because a calm number that is not a head count is
@@ -5385,7 +5386,14 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .ab-kid.is-in    .ab-av { background: var(--green-pale); color: var(--green-dark); }
 .ab-kid.is-out   .ab-av { background: var(--warm-gray); }
 .ab-kid.is-absent .ab-av { background: var(--tang-pale); color: var(--tang-dark); }
-.ab-kid-name { flex: 1; min-width: 0; font-weight: 700; color: var(--navy); }
+/* Truncate rather than wrap: a wrapped name plus a vertically-centered row
+   (align-items: center on .ab-kid) put the mark text right in the middle of
+   the wrapped name, reading as an overlap. One line + ellipsis avoids that
+   at any card width; the full name is still available via the title attr. */
+.ab-kid-name {
+    flex: 1; min-width: 0; font-weight: 700; color: var(--navy);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .ab-kid-mark { flex: none; font-size: .84em; color: var(--text-muted); font-weight: 700; }
 .ab-kid.is-in    .ab-kid-mark { color: var(--green-text); }
 .ab-kid.is-absent .ab-kid-mark { color: var(--tang-dark); }
@@ -5465,10 +5473,16 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .ab-act-btn[data-act="absent"] { border: 1px solid var(--ap-deep-tang); color: var(--ap-deep-tang); }
 .ab-act-btn[data-act="absent"]:hover:not(:disabled) { background: var(--tang-pale); }
 .ab-act-btn[data-act="absent"].is-on { background: var(--ap-deep-tang); color: #fff; }
+/* Capped width + ellipsis: the two-column room layout leaves less room per
+   row than the select's own content (a picked room label can be long, e.g.
+   "🐢 Turtle Room"), and an unbounded select was pushing into the name/mark
+   text next to it. The placeholder stays "Move" — the dropdown's own
+   options still show full room names. */
 .ab-move-select {
     font-size: .72em; font-weight: 800; color: var(--green-text);
     border: 1px solid var(--green-lt); border-radius: 6px;
-    padding: 4px 10px; background: var(--green-pale); cursor: pointer;
+    padding: 4px 6px; background: var(--green-pale); cursor: pointer;
+    max-width: 62px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 @media (max-width: 700px) {
     .ab-kid { flex-wrap: wrap; }
