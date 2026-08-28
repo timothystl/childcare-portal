@@ -23,7 +23,7 @@
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/admin.css?v=27">
-    <link rel="stylesheet" href="css/admin-portal.css?v=5">
+    <link rel="stylesheet" href="css/admin-portal.css?v=6">
 </head>
 <body class="admin-body">
 
@@ -543,13 +543,11 @@
              tab's only tool; there is no dashboard/tool split here. -->
         <div class="tab-pane hidden" id="tab-messages">
             <section class="admin-section" id="messagesUnifiedSection">
-                <!-- The notify toggle used to live inside the h2, which meant
-                     apShowSection()'s ap-dup-head logic (admin-portal.js) —
-                     which only auto-hides an h2 with no interactive children —
-                     never hid it. That put "💬 Messages" plus the identical
-                     blurb sentence on screen twice: once from the shell, once
-                     here. Moved to its own row so the h2 is plain again and
-                     hides like every other tool's does. -->
+                <!-- The notify toggle used to live inside this h2. The shell
+                     no longer prints its own duplicate header for any tool
+                     (see apRenderDetail() in admin-portal.js), so this h2 is
+                     the only heading Messages shows — moved the toggle to its
+                     own row below rather than crowding it into the title. -->
                 <h2>💬 Messages</h2>
                 <div class="msg-toolbar-top">
                     <label id="apPushToggleWrap" class="msg-notify-toggle">
@@ -738,8 +736,15 @@
                  css/admin-portal.css's ".ap-on .admin-section.is-collapsed
                  .collapsible-body { display: block !important; }" forces the
                  body open inside this shell regardless. Dropping the class
-                 removes a dead control and lets the intended single-header
-                 behavior apply. -->
+                 removed a dead control, but the underlying duplication (the
+                 shell's own name+blurb tile sitting on top of every section's
+                 own heading) was still there for sections whose <h2> DID hide
+                 correctly — the section's .section-desc paragraph right below
+                 it was never covered by that hiding logic at all. Fixed for
+                 good 2026-08-28 by removing the shell's tile entirely
+                 (apRenderDetail() no longer renders anything into
+                 #apDetailHead) rather than continuing to patch which parts of
+                 a section's own heading get hidden underneath it. -->
             <section class="admin-section" id="roomCapacityOverviewSection">
                 <h2>📆 Room Capacity Overview</h2>
                 <p class="section-desc">Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as the three screens it replaces. Click a room to see the same month broken out by weekday.</p>
@@ -2091,12 +2096,9 @@
                      page header; the design handoff shows it on one row with
                      the month switcher and search, not stacked as a separate
                      shell heading above a second toolbar row underneath. The
-                     generic shell (apRenderDetail()) renders nothing for this
-                     tool (customHeader: true on its AP_TOOLS entry) so there
-                     is exactly one header, not two. h2 is NOT a direct child
-                     of the section (it's nested in .fh-head), so
-                     apShowSection()'s ap-dup-head logic — which only targets
-                     `:scope > h2` — leaves it alone.
+                     generic shell (apRenderDetail()) no longer renders a
+                     header for any tool, so there is exactly one header here,
+                     same as everywhere else.
 
                      #fhBody stays hidden behind #fhSkeleton until the first
                      _fhLoad() resolves (see renderFinanceHubTool()), so the

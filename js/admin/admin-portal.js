@@ -177,16 +177,13 @@ const AP_TOOLS = [
     // Report survives as this tool's own second tab (Ledger / Billing
     // Report), not a separate nav entry — see admin-finance-hub.js and the
     // nested #billingReportSection markup in admin.html.
-    // customHeader: Finance is the tab's one real tool (AP_TABS.finance's own
-    // defaultTool), and the design handoff puts its title/subtitle on the
-    // SAME row as the month switcher and search — those live inside
-    // financeHubSection (admin.html's own .fh-head), not in the generic
-    // shell. apRenderDetail() renders nothing into #apDetailHead for this
-    // tool, so there is exactly one header, not a shell heading stacked
-    // above a second toolbar row. The icon still shows in the sidebar nav
-    // item; only the page header omits it, matching the handoff's plain
-    // "Finance" title.
-    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance', customHeader: true,
+    // Finance is the tab's one real tool (AP_TABS.finance's own defaultTool),
+    // and the design handoff puts its title/subtitle on the SAME row as the
+    // month switcher and search — those live inside financeHubSection
+    // (admin.html's own .fh-head). apRenderDetail() no longer renders a shell
+    // header for any tool (see that function), so this needs no special
+    // handling anymore — it just always worked out that way.
+    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance',
       blurb: 'One place for billing, invoices, and who owes' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
@@ -755,49 +752,29 @@ function apShowSection(tool) {
         const open = !!tool && s.id === tool.section;
         s.classList.toggle('ap-hidden-tool', !open);
 
-        // The shell now renders the tool's name above the card, so the
-        // section's own <h2> is a duplicate — but only hide it when it is
-        // inert text. Several carry controls inside the heading (Care
-        // Calendar's "New Registration" button), and those must stay
-        // reachable.
-        //
-        // ⚠️ EXCLUDE .collapse-toggle. setupCollapsibles() (admin-settings.js)
-        // injects a collapse/expand <button> into every .collapsible-section's
-        // <h2>, and that button used to be a legitimate reason to keep a
-        // heading visible — until css/admin-portal.css's
-        // ".ap-on .admin-section.is-collapsed .collapsible-body { display:
-        // block !important; }" made it a dead control inside this shell (every
-        // section renders open regardless of the toggle's state). Counting it
-        // as a "real control" left every .collapsible-section's own <h2>
-        // visibly duplicated under the shell's header, on every tool, on every
-        // page — found live 2026-08-28. Fixing the class check here, once,
-        // covers every section that has this pattern; removing
-        // `collapsible-section` from individual sections' markup (done for
-        // the Classroom tab's tools in the same session) is good hygiene but
-        // was never going to be a complete fix on its own.
-        const h2 = s.querySelector(':scope > h2');
-        if (h2) h2.classList.toggle('ap-dup-head',
-            open && !h2.querySelector('button:not(.collapse-toggle), input, select, a'));
+        // Never hide a section's own heading. This used to strip it whenever
+        // the shell printed the tool's name+blurb above it — but that shell
+        // tile (icon + name + blurb, from apRenderDetail below) was itself
+        // the unwanted repetition: the sidebar already names the open tool,
+        // and the section's own heading already carries a more specific
+        // description. The shell tile is gone now (see apRenderDetail), so
+        // there is nothing left for a section's own <h2> to duplicate.
     });
 }
 
 function apRenderDetail(tool) {
     // No back link: the sidebar keeps its place and highlights where you
-    // are, which is the way back. A heading instead, so a tool page starts
-    // at the same left edge as a dashboard heading and nothing shifts.
-    // customHeader tools (Finance) render their own header inline in their
-    // own section — see the AP_TOOLS comment on financeHub — so the shell
-    // renders nothing here rather than stacking a duplicate above it.
+    // are, which is the way back. No shell heading either — every section
+    // already carries its own <h2> + description, and printing the tool's
+    // name and blurb again above it just retyped the same header a second
+    // time on every tab (found live 2026-08-28, screenshotted on Waitlist &
+    // Capacity Planner: the shell's "Waitlist & Capacity Planner" tile sat
+    // directly on top of the section's own near-identical subtitle). Finance
+    // (`customHeader: true`) already skipped this shell tile for the same
+    // reason; every tool now gets that same treatment instead of carrying a
+    // one-off flag.
     const head = document.getElementById('apDetailHead');
-    if (head) {
-        head.innerHTML = tool.customHeader ? '' : `
-            <div class="ap-head">
-                <div>
-                    <h2>${tool.icon} ${escHtml(tool.name)}</h2>
-                    <p>${escHtml(tool.blurb)}</p>
-                </div>
-            </div>`;
-    }
+    if (head) head.innerHTML = '';
 
     apShowSection(tool);
 
