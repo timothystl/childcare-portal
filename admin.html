@@ -22,7 +22,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=27">
+    <link rel="stylesheet" href="css/admin.css?v=28">
     <link rel="stylesheet" href="css/admin-portal.css?v=7">
 </head>
 <body class="admin-body">
@@ -2370,6 +2370,22 @@
                             <input type="tel" id="fmParent2Phone" placeholder="555-123-4567" autocomplete="off">
                         </div>
                     </div>
+                </div>
+
+                <!-- Approved for pickup — the family's own list, read-only here.
+                     Added 2026-08-28: parents record this in their own portal
+                     (portal-account.js "Approved for pickup") via
+                     add_pickup_contact/remove_pickup_contact, writing into
+                     pickup_contacts (family_id, name, relationship, note).
+                     Nothing in the admin app read that table before this —
+                     the office had no way to see who a parent has approved
+                     to pick up their child without asking the parent
+                     directly. Read-only: the family still owns adding and
+                     removing entries from their own portal. -->
+                <div class="fm-section" id="fmPickupSection">
+                    <div class="fm-section-label">Approved for pickup</div>
+                    <p class="section-desc" style="margin-top:0">Added by the family in their own portal — read-only here.</p>
+                    <div id="fmPickupList"></div>
                 </div>
 
                 <!-- Group -->

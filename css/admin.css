@@ -2089,6 +2089,12 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 .fmc-doc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .fmc-doc-pick { display: inline-flex; align-items: center; cursor: pointer; }
 
+.fm-pickup-row {
+    background: var(--white); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: .88em; margin-bottom: 6px;
+}
+.fm-pickup-note { color: var(--text-muted); font-size: .9em; margin-top: 2px; }
+
 /* ============================================================
    RESPONSIVE ADMIN
    ============================================================ */

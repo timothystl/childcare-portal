@@ -212,6 +212,45 @@ requested.
 
 ---
 
+## Admin can now see a family's "Approved for pickup" list (2026-08-28)
+
+Found while re-enabling Enrollment Forms above: a parent adds a safe pickup
+person from their own portal (`js/portal/portal-account.js`, "Approved for
+pickup"), which calls `add_pickup_contact`/`remove_pickup_contact` and writes
+into `pickup_contacts` (`family_id`, `name`, `relationship`, `note`). Nothing
+in the admin app read that table — grepped `js/admin/` for `pickup_contact`
+and got zero matches. The office had no way to see who a parent has approved
+for pickup short of asking the parent directly, which defeats the point of
+having the list at pickup time.
+
+⚠️ **`pickup_contacts`' own creation migration isn't in this repo** (same gap
+as `center_headcount_rows()` elsewhere in this file — grepping every
+migration file for `pickup_contacts` turns up only
+`add_profile_photo_to_parent_portal_payloads.sql`, which reads it, not the
+table's own `CREATE TABLE`). Checked the live catalog directly rather than
+guess: RLS is on, and the **only** policy is `"admin all pickup_contacts"
+FOR ALL TO authenticated USING (is_admin())` — no policy for a non-admin at
+all. A parent's own session has no direct table access; `add_pickup_contact`/
+`remove_pickup_contact` work for them only because they're `SECURITY
+DEFINER` and resolve `family_id` from `my_parent_context()`, bypassing RLS
+entirely. An **admin's** own authenticated session, though, already
+satisfies `is_admin()` — so reading the table straight, scoped to one
+family, needs no new RPC at all.
+
+Added `fetchPickupContactsAdmin(familyId)` (`js/supabase.js`) — a plain
+`.from('pickup_contacts').select(...).eq('family_id', familyId)` — and a
+new **"Approved for pickup"** section in the Family Directory edit modal
+(`admin.html`, wired in `js/admin/admin-families.js`), between Parent 2 and
+Program Group since the list is family-level, not per-child. **Read-only, on
+purpose** — the family still adds and removes their own entries from their
+own portal; this is the office's view of that same list, not a second editor
+for it that could drift from what the parent actually approved. Shows "Save
+this family first, then reopen Edit" for a family that hasn't been saved yet
+(same pattern as the per-child Documents block above it not rendering for an
+unsaved child).
+
+---
+
 ## Food Program (CACFP) sidebar removed (2026-08-28)
 
 At the director's request, the four Classrooms → Food Program tools (Daily
