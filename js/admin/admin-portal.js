@@ -758,6 +758,14 @@ function apShowSection(tool) {
         // and the section's own heading already carries a more specific
         // description. The shell tile is gone now (see apRenderDetail), so
         // there is nothing left for a section's own <h2> to duplicate.
+        //
+        // waitlistPlannerSection is the one exception: it carries no static
+        // <h2>/<p> at all (deleted, not just hidden) because its inner
+        // renderWaitlistPlanner() already renders a real header of its own
+        // (icon, name, subtitle, tab pills) into #wlpRoot — keeping a static
+        // pair there would still have duplicated against THAT header even
+        // with the shell tile gone. Every other section keeps its own
+        // heading as its one and only header.
     });
 }
 
