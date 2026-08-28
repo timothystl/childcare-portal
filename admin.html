@@ -22,7 +22,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=21">
+    <link rel="stylesheet" href="css/admin.css?v=22">
     <link rel="stylesheet" href="css/admin-portal.css?v=2">
 </head>
 <body class="admin-body">
@@ -572,8 +572,18 @@
                 <div id="wlpRoot" style="margin-bottom:20px;"><p class="empty-hint">Loading…</p></div>
             </section>
 
-            <!-- Waitlist inquiry link + notify email -->
-            <section class="admin-section collapsible-section" id="wlNotifySection">
+            <!-- Waitlist inquiry link + notify email. Not collapsible-section:
+                 this is an AP_TOOLS Detail page (one tool, one page, nothing
+                 stacked below it to declutter), and the shell already forces
+                 collapsible-body open anyway (css/admin-portal.css ".ap-on
+                 .admin-section.is-collapsed .collapsible-body" — collapsing
+                 does nothing here). Keeping the class only added a
+                 collapse-toggle button into the <h2>, which made apShowSection()
+                 treat the heading as "has a real control" and skip hiding it —
+                 so the section's own h2 stayed visible under the shell's
+                 identical name+blurb header. See roomCapacityOverviewSection
+                 below for the screenshot-confirmed case. -->
+            <section class="admin-section" id="wlNotifySection">
                 <h2>📨 Waitlist Inquiries</h2>
                 <div class="wl-notify-panel">
                     <div class="wl-notify-row">
@@ -654,8 +664,9 @@
                 </div>
             </div>
 
-            <!-- Waitlist Import -->
-            <section class="admin-section collapsible-section" id="wlImportSection">
+            <!-- Waitlist Import. Not collapsible-section — see wlNotifySection's
+                 comment above for why. -->
+            <section class="admin-section" id="wlImportSection">
                 <h2>📥 Import Waitlist from File</h2>
                 <p class="section-desc">Upload a CSV or Excel file to bulk-import waitlist applications. Required columns: <strong>Parent Name</strong>, <strong>Email</strong>, <strong>Child Name</strong>, <strong>Desired Start Date</strong>. Optional: Phone, Child DOB, Days Requested, Day Type, Notes.</p>
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
@@ -676,8 +687,26 @@
                  second mount point, own container/drawer ids
                  (id="roomCapacityOverviewContent", idPrefix "pcapov") so it
                  can't collide with the Classrooms mount's ids. See
-                 apOnToolOpened()'s 'capacityOverview' case in admin-portal.js. -->
-            <section class="admin-section collapsible-section" id="roomCapacityOverviewSection">
+                 apOnToolOpened()'s 'capacityOverview' case in admin-portal.js.
+
+                 ⚠️ Also not collapsible-section, unlike the first cut of this
+                 restore. Screenshotted live 2026-08-28: the heading and
+                 description rendered TWICE — the shell's own name+blurb
+                 header, then this section's own <h2>+.section-desc directly
+                 below it, unhidden. Root cause: apShowSection() (admin-portal.js)
+                 only hides a section's own <h2> when it "carries no real
+                 control" — deliberately, so Care Calendar's inline
+                 "New Registration" button stays reachable — but
+                 setupCollapsibles() (admin-settings.js) injects a
+                 collapse-toggle <button> into every .collapsible-section's
+                 <h2>, which trips that same check and keeps the duplicate
+                 visible. That toggle was never doing anything here anyway:
+                 css/admin-portal.css's ".ap-on .admin-section.is-collapsed
+                 .collapsible-body { display: block !important; }" forces the
+                 body open inside this shell regardless. Dropping the class
+                 removes a dead control and lets the intended single-header
+                 behavior apply. -->
+            <section class="admin-section" id="roomCapacityOverviewSection">
                 <h2>📆 Room Capacity Overview</h2>
                 <p class="section-desc">Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as the three screens it replaces. Click a room to see the same month broken out by weekday.</p>
                 <div id="roomCapacityOverviewContent">
@@ -685,8 +714,9 @@
                 </div>
             </section>
 
-            <!-- Ratio-Step / Next-Child Calculator -->
-            <section class="admin-section collapsible-section" id="ratioStepSection">
+            <!-- Ratio-Step / Next-Child Calculator. Not collapsible-section —
+                 see wlNotifySection's comment above for why. -->
+            <section class="admin-section" id="ratioStepSection">
                 <h2>&#9878;&#65039; Ratio Step &amp; Next Child</h2>
                 <p class="section-desc">Staffing moves in steps, not inches: a room needs one teacher per ratio block, so the child who crosses a boundary carries the whole cost of another teacher that day. Shows how much headroom each room has left, and what the next booking is really worth.</p>
                 <div class="roster-btns" style="margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
