@@ -22,7 +22,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=24">
+    <link rel="stylesheet" href="css/admin.css?v=25">
     <link rel="stylesheet" href="css/admin-portal.css?v=2">
 </head>
 <body class="admin-body">
@@ -295,6 +295,7 @@
                     <button type="button" class="ec-pill" data-ec-view="week" role="tab" aria-selected="false">Week</button>
                     <button type="button" class="ec-pill" data-ec-view="month" role="tab" aria-selected="false">Month</button>
                     <button type="button" class="ec-pill" data-ec-view="fte" role="tab" aria-selected="false">FTE / Seat-Day</button>
+                    <button type="button" class="ec-pill" data-ec-view="overview" role="tab" aria-selected="false">Overview</button>
                 </div>
 
                 <!-- Day -->
@@ -348,6 +349,25 @@
                         </div>
                     </div>
                     <div id="capacityOverviewContent">
+                        <p class="empty-hint">Loading…</p>
+                    </div>
+                </div>
+
+                <!-- Overview — the original per-room % utilization cards. Click
+                     a card to open that room's own month calendar; click a day
+                     in that calendar to move a child, same as the old Capacity
+                     Overview always did. This view's month picker is
+                     independent of Month view's and FTE's. -->
+                <div class="ec-subview hidden" id="ecOverviewView">
+                    <p class="section-desc">Per-room % utilization for the month. Click a card to open that room's calendar and see who's booked on a given day.</p>
+                    <div class="capacity-header">
+                        <div class="capacity-month-nav">
+                            <button id="ecOverviewPrevMonth" class="btn-ghost" title="Previous month">&#8592;</button>
+                            <select id="ecOverviewMonthSelect" class="cap-month-select"></select>
+                            <button id="ecOverviewNextMonth" class="btn-ghost" title="Next month">&#8594;</button>
+                        </div>
+                    </div>
+                    <div id="ecOverviewContent">
                         <p class="empty-hint">Loading…</p>
                     </div>
                 </div>

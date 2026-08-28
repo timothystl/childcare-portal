@@ -23,6 +23,7 @@
 let _ecView         = 'day';
 let _ecDate         = null;
 let _ecFteMonthDate = null;
+let _ecOverviewMonthDate = null;
 
 function setupEnrollCapTool() {
     _ecDate = new Date().toISOString().split('T')[0];
@@ -41,6 +42,7 @@ function setupEnrollCapTool() {
     });
 
     _ecSetupFteMonthNav();
+    _ecSetupOverviewMonthNav();
 }
 
 /** Called each time the Enrollment & Capacity tool is opened from the nav. */
@@ -50,6 +52,7 @@ async function renderEnrollCapTool() {
     }
     if (_ecView === 'day') _ecRenderDay();
     else if (_ecView === 'fte') _ecRenderFte();
+    else if (_ecView === 'overview') _ecRenderOverview();
     // Week starts on its own "select a week and click View Week" hint, same
     // as before the merge. Month's grid is kept fresh by the unconditional
     // renderCapacityOverview() call at dashboard init, same as before.
@@ -64,7 +67,7 @@ function _ecShiftDay(delta) {
     _ecRenderDay();
 }
 
-const _EC_VIEW_ID = { day: 'ecDayView', week: 'ecWeekView', month: 'ecMonthView', fte: 'ecFteView' };
+const _EC_VIEW_ID = { day: 'ecDayView', week: 'ecWeekView', month: 'ecMonthView', fte: 'ecFteView', overview: 'ecOverviewView' };
 
 function _ecSwitchView(view) {
     if (!_EC_VIEW_ID[view]) return;
@@ -79,6 +82,7 @@ function _ecSwitchView(view) {
     });
     if (view === 'day') _ecRenderDay();
     if (view === 'fte') _ecRenderFte();
+    if (view === 'overview') _ecRenderOverview();
 }
 
 // ── Day view ─────────────────────────────────────────────────
@@ -129,7 +133,7 @@ async function _ecRenderDay() {
     container.querySelectorAll('.ec-move-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const row = rows.find(r => r.room.id === btn.dataset.room);
-            if (row) showDayRosterDetail(_ecDate, row.room.id, row.enrolled, row.cap);
+            if (row) showDayRosterDetail(_ecDate, row.room.id, row.enrolled, row.cap, container);
         });
     });
 }
@@ -205,4 +209,116 @@ function _ecSyncFteSelect() {
 
 function _ecRenderFte() {
     if (typeof renderCapacityOverviewTool === 'function') renderCapacityOverviewTool(_ecFteMonthDate);
+}
+
+// ── Overview — per-room % utilization cards ─────────────────
+// The original Capacity Overview: one card per room, whole-month booked-day
+// utilization against capacity × working days, click a card to open that
+// room's own calendar (openRoomCalendar()/drawRoomCalendar(), unchanged) and
+// from there click a day to move a child (showDayRosterDetail(), now an
+// inline panel — see admin-calendar.js). Retired when Month became a
+// room-tabs + day-grid, restored as its own view at the director's request:
+// the day-grid answers "what does one room's month look like," this answers
+// "which rooms need attention this month" at a glance. Same own-month-picker
+// pattern as FTE, independent of Month's and FTE's.
+function _ecSetupOverviewMonthNav() {
+    const today = new Date();
+    _ecOverviewMonthDate = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    const sel = document.getElementById('ecOverviewMonthSelect');
+    if (sel) {
+        sel.innerHTML = '';
+        for (let offset = -6; offset <= 12; offset++) {
+            const d   = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear();
+            if (offset === 0) opt.selected = true;
+            sel.appendChild(opt);
+        }
+        sel.addEventListener('change', () => {
+            const [y, m] = sel.value.split('-').map(Number);
+            _ecOverviewMonthDate = new Date(y, m - 1, 1);
+            _ecRenderOverview();
+        });
+    }
+
+    document.getElementById('ecOverviewPrevMonth')?.addEventListener('click', () => {
+        _ecOverviewMonthDate = new Date(_ecOverviewMonthDate.getFullYear(), _ecOverviewMonthDate.getMonth() - 1, 1);
+        _ecSyncOverviewSelect();
+        _ecRenderOverview();
+    });
+    document.getElementById('ecOverviewNextMonth')?.addEventListener('click', () => {
+        _ecOverviewMonthDate = new Date(_ecOverviewMonthDate.getFullYear(), _ecOverviewMonthDate.getMonth() + 1, 1);
+        _ecSyncOverviewSelect();
+        _ecRenderOverview();
+    });
+}
+
+function _ecSyncOverviewSelect() {
+    const sel = document.getElementById('ecOverviewMonthSelect');
+    if (!sel || !_ecOverviewMonthDate) return;
+    const key = `${_ecOverviewMonthDate.getFullYear()}-${String(_ecOverviewMonthDate.getMonth() + 1).padStart(2, '0')}`;
+    let opt = [...sel.options].find(o => o.value === key);
+    if (!opt) {
+        opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = MONTH_NAMES[_ecOverviewMonthDate.getMonth()] + ' ' + _ecOverviewMonthDate.getFullYear();
+        sel.appendChild(opt);
+    }
+    sel.value = key;
+}
+
+function _ecRenderOverview() {
+    const grid = document.getElementById('ecOverviewContent');
+    if (!grid) return;
+    if (!_ecOverviewMonthDate) _ecOverviewMonthDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+    const y   = _ecOverviewMonthDate.getFullYear();
+    const m   = _ecOverviewMonthDate.getMonth();
+    const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+
+    // Count Mon–Fri working days in the month
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    let workingDays = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dow = new Date(y, m, day).getDay();
+        if (dow !== 0 && dow !== 6) workingDays++;
+    }
+
+    // Count confirmed bookings per room for this month
+    const counts = {};
+    ROOMS.forEach(r => { counts[r.id] = 0; });
+    allRegistrations.forEach(reg => {
+        (reg.registration_dates || []).forEach(d => {
+            if (d.waitlisted || !d.care_date) return;
+            if (d.care_date.startsWith(key)) {
+                const roomKey = d.room_id || reg.room_id;
+                counts[roomKey] = (counts[roomKey] || 0) + 1;
+            }
+        });
+    });
+
+    const cards = getSortedRooms().map(room => {
+        const used    = counts[room.id] || 0;
+        const hasCap  = room.capacity != null && room.capacity > 0;
+        const cap     = hasCap ? room.capacity * workingDays : 0;
+        const pct     = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+        const color   = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
+        const metaTxt = hasCap
+            ? `Max ${room.capacity}/day &middot; ${used} booking${used !== 1 ? 's' : ''}`
+            : `Capacity TBD &middot; ${used} booking${used !== 1 ? 's' : ''}`;
+        const pctTxt  = hasCap ? `${pct}% utilization` : 'Utilization pending capacity';
+        return `
+            <div class="cap-card" data-room-id="${room.id}" data-month-key="${key}" role="button" tabindex="0" title="View ${room.label} calendar">
+                <h3>${room.label}</h3>
+                <p class="cap-meta">${metaTxt}</p>
+                <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
+                <p class="cap-pct">${pctTxt}</p>
+                <p class="cap-card-hint">Click to view calendar →</p>
+            </div>`;
+    }).join('');
+
+    grid.innerHTML = `<div class="capacity-grid">${cards}</div>`;
 }
