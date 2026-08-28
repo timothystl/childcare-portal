@@ -22,7 +22,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=25">
+    <link rel="stylesheet" href="css/admin.css?v=26">
     <link rel="stylesheet" href="css/admin-portal.css?v=2">
 </head>
 <body class="admin-body">
@@ -234,6 +234,25 @@
 
         <!-- ── Tab: Daily ─────────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-daily">
+
+            <!-- Print Attendance — a blank paper sign-in/sign-out sheet, one
+                 per room, for a parent or staff member to hand-sign at drop-off
+                 and pickup. Distinct from Classroom Roster's print grid (a
+                 reference list, no signature lines) and from the Attendance
+                 Board's live In/Out marking (digital, not a paper record). -->
+            <section class="admin-section" id="printAttendanceSection">
+                <h2>🖨️ Print Attendance</h2>
+                <div class="pa-controls">
+                    <div class="pa-field">
+                        <label for="paRoomFilter">Room</label>
+                        <select id="paRoomFilter">
+                            <option value="">All rooms</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn-primary pa-print-btn" id="paPrintBtn">&#128438; Print</button>
+                </div>
+                <div id="paPreview"><p class="empty-hint">Loading…</p></div>
+            </section>
 
             <!-- Classroom Roster (most-used — at top) -->
             <section class="admin-section collapsible-section" id="dailyRosterSection">
