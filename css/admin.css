@@ -4723,6 +4723,69 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 }
 
 /* ============================================================
+   By room & shift — compact grid (design_handoff_staff, 2026-08-28).
+   One row per room+shift, day columns; replaces the old per-room
+   block-of-rows table above (.room-schedule-block etc., now unreferenced
+   — same "unreachable markup/CSS stays" convention as every prior
+   consolidation in this app; nothing reads it, nothing breaks).
+   ============================================================ */
+.sched-grid-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(1, 41, 74, .06); padding: 16px 18px;
+}
+.sched-grid-table { border-collapse: collapse; width: 100%; min-width: 720px; }
+.sched-grid-room-head, .sched-grid-shift-head, .sched-grid-day-head {
+    text-align: center; padding: 8px 10px; font-size: .78em; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--text-muted); border-bottom: 1px solid var(--border);
+    font-weight: 800; white-space: nowrap;
+}
+.sched-day-print-btn {
+    background: none; border: none; cursor: pointer; font-size: .85em; opacity: .55;
+    vertical-align: middle; padding: 0 0 0 2px;
+}
+.sched-day-print-btn:hover { opacity: 1; }
+.sched-grid-row td { border-bottom: 1px solid var(--ap-border-lt, #F0EADA); padding: 9px 10px; vertical-align: top; }
+.sched-grid-row-pm td { border-bottom: 1px solid var(--border); }
+.sched-grid-room {
+    text-align: left; font-weight: 700; font-size: .92em; color: var(--navy);
+    white-space: nowrap; vertical-align: middle !important;
+}
+.sched-grid-ratio { font-weight: 400; font-size: .82em; color: var(--text-muted); margin-top: 2px; }
+.sched-grid-shift { text-align: center; white-space: nowrap; }
+.sched-grid-time { font-size: .68em; color: var(--text-muted); margin-top: 3px; }
+.sched-shift-pill {
+    display: inline-block; font-size: .68em; font-weight: 800; letter-spacing: .04em;
+    border-radius: 6px; padding: 2px 7px;
+}
+.sched-shift-pill.is-am { background: var(--ap-tint-blue, #E4EEF6); color: var(--navy); }
+.sched-shift-pill.is-pm { background: var(--sun-pale, #FFF8E1); color: #7a5a00; }
+.sched-grid-cell { min-width: 108px; text-align: center; }
+.sched-grid-need { font-size: .68em; color: var(--text-muted); margin-bottom: 4px; white-space: nowrap; }
+.sched-grid-need.is-edge { color: var(--ap-deep-tang, #B3452B); font-weight: 700; }
+.sched-grid-selects { display: flex; flex-direction: column; gap: 3px; }
+
+/* By worker — one row per person per room+shift they hold this week. */
+.sched-worker-list { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.sched-worker-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 14px 16px; border-bottom: 1px solid var(--ap-border-lt, #F0EADA);
+}
+.sched-worker-who { display: flex; align-items: center; gap: 10px; }
+.sched-worker-name { font-weight: 800; color: var(--navy); font-size: .95em; }
+.sched-worker-meta { font-size: .8em; color: var(--text-muted); margin-top: 2px; }
+.sched-worker-right { display: flex; align-items: center; gap: 14px; }
+.sched-worker-cost { font-size: .85em; font-weight: 700; color: var(--navy); }
+.sched-worker-total {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 13px 16px; background: var(--cream, #FDFAF0);
+}
+.sched-worker-total > span:first-child {
+    font-size: .82em; font-weight: 800; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .05em;
+}
+.sched-worker-total-num { font-family: var(--font-head); font-size: 1.2em; font-weight: 700; color: var(--navy); }
+
+/* ============================================================
    GEOFENCE SETTINGS SECTION
    ============================================================ */
 .geofence-fields { display: flex; flex-direction: column; gap: 14px; }

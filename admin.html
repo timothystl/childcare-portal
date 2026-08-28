@@ -22,8 +22,8 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=26">
-    <link rel="stylesheet" href="css/admin-portal.css?v=4">
+    <link rel="stylesheet" href="css/admin.css?v=27">
+    <link rel="stylesheet" href="css/admin-portal.css?v=5">
 </head>
 <body class="admin-body">
 
@@ -1352,23 +1352,40 @@
             <section class="admin-section collapsible-section" id="staffScheduleSection">
                 <h2>🗓️ Build Staff Schedule</h2>
                 <p class="section-desc">Assign staff to rooms and shifts for the week, against what the ratios require. Closed days are excluded automatically.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="staffWeekOf">Week of (Monday)</label>
-                        <input type="date" id="staffWeekOf">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="saveScheduleBtn"   class="btn-primary">💾 Save Schedule</button>
-                        <button id="exportStaffBtn"    class="btn-ghost">&#8595; Export Excel</button>
-                        <button id="emailStaffScheduleBtn" class="btn-ghost">✉️ Email Schedules</button>
-                        <button id="printStaffScheduleBtn" class="btn-ghost">&#128424; Print schedule</button>
-                    </div>
+                <!-- ⚠️ h2/p must stay DIRECT children of .admin-section: apShowSection()
+                     (admin-portal.js) only recognizes a section's own heading via
+                     `:scope > h2`, and only hides it (avoiding a duplicate under the
+                     shell's own header) when it carries no real control. Nesting h2
+                     inside a flex wrapper — tried first, to put Print top-right next
+                     to the title like the mockup — silently broke that selector and
+                     brought back the exact double-heading bug this app already spent
+                     a session fixing (see "Every redesigned Classroom-tab tool showed
+                     its own heading twice" below). Kept the button row as its own
+                     sibling instead. -->
+                <div class="roster-btns" style="margin-bottom:16px">
+                    <button id="saveScheduleBtn"   class="btn-primary">💾 Save Schedule</button>
+                    <button id="exportStaffBtn"    class="btn-ghost">&#8595; Export Excel</button>
+                    <button id="emailStaffScheduleBtn" class="btn-ghost">✉️ Email Schedules</button>
+                    <button id="printStaffScheduleBtn" class="btn-ghost">&#128424; Print schedule</button>
                 </div>
-                <!-- Children this week / Est. labor cost — apSchedHeaderStats()
-                     in admin-portal.js, same figures apRenderStaffReq() computes
-                     for its own footer. Pinned above the tab strip since both
-                     tabs share them, per the handoff. -->
-                <div class="bk-stats" id="apSchedHeaderStats" style="margin-bottom:16px"></div>
+                <!-- Week of / Children this week / Est. labor cost, one row of
+                     three cards — apSchedHeaderStats() (admin-portal.js) only
+                     owns the last two (display:contents so its own two
+                     .bk-stat divs land as siblings of the static "Week of"
+                     card in the same grid, not nested inside a third cell).
+                     The date input itself stays static, wired once by
+                     setupStaffScheduling() — regenerating it on every render
+                     the way a dynamic mount would have dropped its listener
+                     and any in-progress typing. Both Requirement inputs read
+                     it directly, so the two tabs can't disagree about which
+                     week they're looking at. -->
+                <div class="bk-stats" style="margin-bottom:16px">
+                    <div class="bk-stat">
+                        <div class="bk-stat-label">Week of</div>
+                        <input type="date" id="staffWeekOf" class="bk-stat-date-input">
+                    </div>
+                    <div id="apSchedHeaderStats" style="display:contents"></div>
+                </div>
 
                 <div class="bk-nav" id="apSchedTabs">
                     <button class="bk-pill is-on" data-ap-sched-tab="week">This week's schedule</button>

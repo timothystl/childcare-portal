@@ -550,6 +550,69 @@ half-live for a day" incidents (Bookkeeper tab, Classroom tab) say to run.
 as of this commit — apply it in the Supabase SQL Editor before the Write-ups
 or Policies tabs will do anything beyond render an empty list.
 
+### ⚠️ The first pass only fixed the nav — the schedule grid still didn't match the mockup
+
+Shipped, then flagged live: the director's screenshots of the actual mockup
+(`design_handoff_staff/Staff Tab Redesign.dc.html`) showed a genuinely
+different **Build Staff Schedule** grid than what went out — one compact
+table (Room | Shift | day columns, one row per room+shift) versus the app's
+pre-existing per-room block table (a tall stack of "AM Staff 1/2/3", "+
+optional" rows, repeated per room). The first fix only reclassed two buttons
+from `.btn-secondary` to `.btn-ghost`; the real gap was structural, and
+`renderScheduleTables()`/`renderScheduleByWorker()` were never actually
+compared against the mockup's own source before this session called the
+work done. Read the `.dc.html` template directly (its `roomShiftGrid`/
+`scheduleRows` data-shaping functions in `support.js`) rather than
+re-guessing from a screenshot a second time.
+
+Rebuilt both to match:
+
+- **By room & shift** — one `<table>`, not one block per room. Every
+  `<select class="sched-staff-select" data-date data-room data-shift
+  data-slot>` kept its exact classes/attributes; only how they're grouped
+  into rows/cells changed (a small stack of selects inside one day-cell
+  instead of one table row per slot). This is what made the rebuild safe:
+  `_syncGroup()`, `_readAssignmentsFromDOM()` (which `saveStaffSchedule()`,
+  the XLSX export, and `renderScheduleByWorker()` all read through), and the
+  day-print click wiring all key off those selectors, not DOM shape — none
+  of them needed to change, verified by re-reading each one before touching
+  `renderScheduleTables()`, not assumed. Kids-count/staff-needed figures
+  (real, valuable, and not in the mockup's plain data-only cells) were kept
+  as a small caption inside each cell rather than dropped — same "match the
+  visual language while keeping the data" call this app made for
+  Enrollment & Capacity's FTE table.
+- **By worker** — rebuilt from a day-by-day pivot table (this session's
+  first draft) into the mockup's actual shape: one row per person per
+  (room, shift) they hold this week, with a real per-person cost (their own
+  `hourly_rate` × assigned hours, not the header's wage-model estimate —
+  salaried staff show `—` since a per-shift dollar figure isn't meaningful
+  for them) and a coverage pill (`Full week` vs `N of 5 days`). Still
+  read-only, still built from `_readAssignmentsFromDOM()`.
+- **Week of / Children this week / Est. labor cost** — one row of three
+  cards, matching the mockup, instead of the date field sitting separately
+  above two stat cards. ⚠️ The date `<input>` itself had to stay a *static*
+  DOM element (`apSchedHeaderStats()`'s mount uses `display:contents` so its
+  two dynamic `.bk-stat` divs land as grid siblings of it) — folding the
+  input into the JS-rendered mount would have destroyed and recreated it on
+  every render, dropping its one-time `change` listener and any in-progress
+  typing.
+- **A real near-miss, caught before shipping**: the first attempt at this
+  also wrapped the section's `<h2>` in a flex container to put the Print
+  button top-right next to the title, matching the mockup exactly.
+  `apShowSection()` only recognizes a section's own heading via `:scope >
+  h2` — nesting it inside a wrapper div silently broke that selector and
+  would have reintroduced the exact double-heading bug this app already
+  spent a session fixing (see "Every redesigned Classroom-tab tool showed
+  its own heading twice" below). Reverted to keeping `h2`/`p` as direct
+  children of `.admin-section` and the button row as their sibling — Print
+  sits in the button row, not next to the title, which is a real (small,
+  deliberate) deviation from the mockup in favor of not reopening a closed
+  bug class.
+
+`npm test` — 183/183 (grew by one from another PR merged in between).
+`npm run build` — rebuilt and grepped for the new grid/worker CSS classes
+and `apSchedHeaderStats` before committing, same discipline as above.
+
 ---
 
 ## Classroom tab consolidation — Daily / Planning (2026-08-27)
