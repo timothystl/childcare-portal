@@ -171,6 +171,47 @@ an `AP_TOOLS` entry, or it is unreachable.**
 
 ---
 
+## Enrollment Forms re-enabled as a Settings card (2026-08-28)
+
+The parent portal's Account → Documents → "Policies and forms" card
+(`js/portal/portal-documents.js` `pdFormsSection()`) reads the
+`enrollment_forms` setting and, when it's empty, says "The office hasn't
+posted any forms here yet." It had said that since the office had no way to
+post one: the admin tool that writes `enrollment_forms` — upload a PDF/Word
+file, name it, describe it — had its `admin.html` markup commented out in
+July ("hidden 2026-07, may bring back later") and was never given an
+`AP_TOOLS` entry, so it was unreachable from the sidebar even before that.
+The underlying JS (`setupEnrollmentForms()` / `renderEnrollmentFormsList()`
+in `admin-settings.js`, `loadEnrollmentForms()` / `saveEnrollmentForms()` /
+`uploadEnrollmentFormFile()` in `js/supabase.js`) was never touched and still
+worked — `setupEnrollmentForms()` has run unconditionally on every admin
+boot (`admin-init.js`) the whole time, same "load it regardless of which tab
+is visible" pattern as Staff Directory/PTO/geofence.
+
+**Re-enabled as a full-width `.ap-panel` card inside `#settingsUnifiedSection`**
+(`admin.html`, "📋 Policies & enrollment forms"), not as its own `AP_TOOLS`
+sidebar entry and not as the old standalone `.admin-section`. Settings became
+one continuous page in the 2026-08-26 redesign specifically so a director
+never has to pick a screen before picking a control (see the admin portal
+shell section above); reintroducing a second Settings sidebar entry, or a
+bare section sitting after the unified page in `#tab-settings`, would have
+undone that. The card reuses every id `setupEnrollmentForms()` already
+looks for (`enrollmentFormsList`, `newEnrollFormName`, `newEnrollFormDesc`,
+`newEnrollFormFile`, `uploadEnrollFormBtn`, `uploadEnrollFormStatus`)
+unchanged, so no JS needed to change at all — only the markup's location.
+
+The same feature also still populates the public `/enroll` page (unchanged,
+pre-existing behavior); the card's copy says so.
+
+**"New Family Enrollment Capacity" and "Offer Email Links"** — the two other
+sections hidden alongside Enrollment Forms in July — were deliberately left
+commented out. Nobody asked for those back, and re-enabling three unrelated
+tools in one pass on a repo that auto-merges every `claude/**` push to
+production is a bigger blast radius than the one card that was actually
+requested.
+
+---
+
 ## Food Program (CACFP) sidebar removed (2026-08-28)
 
 At the director's request, the four Classrooms → Food Program tools (Daily
