@@ -543,6 +543,59 @@ anywhere they can see. Worth an eventual pass to wrap `_abRender()`'s own
 body, not just the network call, so a future bug here fails loud instead of
 quiet — not done in this fix, which was scoped to the one confirmed cause.
 
+### ⚠️ Every redesigned Classroom-tab tool showed its own heading twice (found 2026-08-28)
+
+Reported live, with screenshots: Attendance Board, Fire Drills, and by
+extension every other tool this redesign touched showed the shell's header
+("🚸 Attendance Board" + blurb) immediately followed by the section's own
+identical `<h2>`, stacked right above the real content.
+
+Root cause was in `apShowSection()` (admin-portal.js), not in any of this
+session's own new markup. It hides a section's own duplicate `<h2>` only
+when that heading "carries no real control" — deliberately, so e.g. Care
+Calendar's inline "New Registration" button stays reachable — checked via
+`h2.querySelector('button, input, select, a')`. But `setupCollapsibles()`
+(admin-settings.js) injects a `.collapse-toggle` **button** into the `<h2>`
+of *every* `.collapsible-section`, and every section this redesign
+delivered (`attendanceBoardSection`, `incidentsSection`,
+`fireDrillsSection`, `enrollmentCapacitySection`, `familiesSection`,
+`allRegistrationsSection`, `missingCalendarSection`) still carried that
+class from before the portal-shell redesign. The check found that button,
+concluded the heading "carries a real control," and kept the duplicate
+visible — on every one of them, every time.
+
+⚠️ **The collapse toggle has been a dead control inside this shell for a
+while, not just for these seven.** `css/admin-portal.css`'s
+`.ap-on .admin-section.is-collapsed .collapsible-body { display: block
+!important; }` forces every section's body open regardless of the
+toggle's state — added when the shell itself shipped. A concurrent
+session (`claude/planning-tab-design-v7aymy`, same week) had already found
+and fixed this exact pattern for two Planning-tab sections
+(`roomCapacityOverviewSection`, `ratioStepSection`) by dropping their
+`collapsible-section` class — see that fix's own comment, still in
+`admin.html` above `roomCapacityOverviewSection`. That was the right fix
+for those two sections specifically, but it could never be a complete fix
+on its own: **every other `.collapsible-section` in the app, present and
+future, has the identical bug**, because the root cause is the shared
+`apShowSection()` check, not any one section's markup.
+
+Fixed both ways, on purpose:
+- `apShowSection()`'s control check now excludes `.collapse-toggle`
+  specifically (`button:not(.collapse-toggle), input, select, a`) — this
+  is the fix that actually closes the bug class, for every section that
+  has this pattern, including ones neither this session nor the concurrent
+  one has touched.
+- The seven sections above also had `collapsible-section` dropped from
+  their markup, same as the concurrent session's fix — not required
+  anymore given the check above, but it removes a genuinely dead button
+  from the DOM rather than leaving it present-but-harmless, which is
+  better hygiene and matches the established precedent.
+
+**Not chased further in this pass:** a repo-wide sweep to drop
+`collapsible-section` from every other section that doesn't need it. The
+`apShowSection()` fix already makes that a cosmetic cleanup rather than a
+correctness fix, so it's a fine follow-up, not an urgent one.
+
 ### Director-authored records — she is signature 1, not a fourth role
 
 For Incident Reports, the open question was how signature 1 works when there

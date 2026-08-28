@@ -693,11 +693,26 @@ function apShowSection(tool) {
         // The shell now renders the tool's name above the card, so the
         // section's own <h2> is a duplicate — but only hide it when it is
         // inert text. Several carry controls inside the heading (Care
-        // Calendar's "New Registration" button, the collapse chevron),
-        // and those must stay reachable.
+        // Calendar's "New Registration" button), and those must stay
+        // reachable.
+        //
+        // ⚠️ EXCLUDE .collapse-toggle. setupCollapsibles() (admin-settings.js)
+        // injects a collapse/expand <button> into every .collapsible-section's
+        // <h2>, and that button used to be a legitimate reason to keep a
+        // heading visible — until css/admin-portal.css's
+        // ".ap-on .admin-section.is-collapsed .collapsible-body { display:
+        // block !important; }" made it a dead control inside this shell (every
+        // section renders open regardless of the toggle's state). Counting it
+        // as a "real control" left every .collapsible-section's own <h2>
+        // visibly duplicated under the shell's header, on every tool, on every
+        // page — found live 2026-08-28. Fixing the class check here, once,
+        // covers every section that has this pattern; removing
+        // `collapsible-section` from individual sections' markup (done for
+        // the Classroom tab's tools in the same session) is good hygiene but
+        // was never going to be a complete fix on its own.
         const h2 = s.querySelector(':scope > h2');
         if (h2) h2.classList.toggle('ap-dup-head',
-            open && !h2.querySelector('button, input, select, a'));
+            open && !h2.querySelector('button:not(.collapse-toggle), input, select, a'));
     });
 }
 

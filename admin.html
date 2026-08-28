@@ -286,7 +286,7 @@
                  render functions (renderRoomSchedule/renderCapacityOverview/
                  renderCapacityOverviewTool) still target the same element
                  ids, just from a new home. See js/admin/admin-enrollment-capacity.js. -->
-            <section class="admin-section collapsible-section" id="enrollmentCapacitySection">
+            <section class="admin-section" id="enrollmentCapacitySection">
                 <h2>📆 Enrollment &amp; Capacity</h2>
                 <p class="section-desc">How full each room is — by day, week, month, or FTE/seat-day occupancy. Click any day to move a child.</p>
 
@@ -359,7 +359,7 @@
         <div class="tab-pane hidden" id="tab-registrations">
 
             <!-- Missing Care Calendar Report -->
-            <section class="admin-section collapsible-section" id="missingCalendarSection">
+            <section class="admin-section" id="missingCalendarSection">
                 <h2>⚠️ Missing Care Calendar Report</h2>
                 <p class="section-desc">Shows which active children do not have a care calendar (registration) submitted for the selected month. Use this after the registration window closes to follow up with families who haven't registered.</p>
                 <div class="roster-controls">
@@ -377,7 +377,7 @@
                 </div>
             </section>
 
-            <section class="table-section collapsible-section" id="allRegistrationsSection">
+            <section class="table-section" id="allRegistrationsSection">
                 <h2 style="display:flex;align-items:center;flex:1;min-width:0">
                     <span style="flex:1">All Registrations</span>
                     <button id="adminNewRegBtn" class="btn-primary"
@@ -427,12 +427,12 @@
                  of the teachers' head count — same RPC body, so the two screens
                  cannot disagree about who is in the building. A missing-child
                  alert lights up here at the same moment it hits every phone. -->
-            <section class="admin-section collapsible-section" id="attendanceBoardSection">
+            <section class="admin-section" id="attendanceBoardSection">
                 <h2>🚸 Attendance Board</h2>
                 <div id="attendanceBoardBody"></div>
             </section>
 
-            <section class="admin-section collapsible-section" id="incidentsSection">
+            <section class="admin-section" id="incidentsSection">
                 <h2>🩹 Incident Reports</h2>
                 <div id="incidentsBody"></div>
             </section>
@@ -440,7 +440,7 @@
             <!-- Fire drills. The record is written from the staff app's Count
                  tab; this is where it is read, and where the "it has been N
                  days" nag lives. -->
-            <section class="admin-section collapsible-section" id="fireDrillsSection">
+            <section class="admin-section" id="fireDrillsSection">
                 <h2>🔥 Fire Drills</h2>
                 <div id="fireDrillsBody"></div>
             </section>
@@ -459,7 +459,7 @@
                 <div id="clockIntegrityBody"></div>
             </section>
 
-            <section class="admin-section collapsible-section" id="familiesSection">
+            <section class="admin-section" id="familiesSection">
                 <h2>👨‍👩‍👧 Family Directory</h2>
                 <p class="section-desc">Browse and manage the family roster used for parent look-up. You can force-assign a child to a specific room or set per-child discounts inline.</p>
 
