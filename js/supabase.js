@@ -4732,6 +4732,16 @@ async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
         if (payload.nextPaymentAttemptId) paymentError.nextPaymentAttemptId = payload.nextPaymentAttemptId;
         throw paymentError;
     }
+    // A Stax PENDING result comes back as HTTP 202 — a 2xx status, so
+    // supabase-js resolves it here instead of treating it as `error`. The
+    // body still carries the same {error, ambiguous} shape a real failure
+    // would, and it must never be read as a confirmed charge.
+    if (data && data.success !== true && (data.ambiguous || data.error)) {
+        const paymentError = new Error(data.error || 'Your payment could not be confirmed.');
+        if (data.ambiguous) paymentError.ambiguous = true;
+        if (data.nextPaymentAttemptId) paymentError.nextPaymentAttemptId = data.nextPaymentAttemptId;
+        throw paymentError;
+    }
     return data;
 }
 

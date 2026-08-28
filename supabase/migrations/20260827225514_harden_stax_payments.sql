@@ -1,6 +1,14 @@
 -- ============================================================
 -- HARDEN STAX PAYMENTS
 -- ============================================================
+-- NOTE (2026-08-28): this file was originally committed as
+-- 20260827193636_harden_stax_payments.sql; the live catalog recorded it as
+-- 20260827225514. Renamed to match what was actually applied, per this
+-- repo's own rule that a migration's filename/content should match the
+-- deployed state — found and fixed during an external security review that
+-- diffed the repo against the live migration history. Content is unchanged
+-- and was verified to match the deployed function bodies before renaming.
+--
 -- The processor call cannot participate in a Postgres transaction, but all
 -- database work on either side of it can. This migration provides four
 -- service-role-only primitives:

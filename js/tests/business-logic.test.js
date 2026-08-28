@@ -1358,7 +1358,7 @@ describe('billing invoice integrity guards', () => {
 describe('Stax payment security guards', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const migration = read('supabase/migrations/20260827193636_harden_stax_payments.sql');
+    const migration = read('supabase/migrations/20260827225514_harden_stax_payments.sql');
     const chargeFn = read('supabase/functions/charge-stax-payment/index.ts');
     const webhookFn = read('supabase/functions/stax-webhook/index.ts');
 
@@ -1398,6 +1398,22 @@ describe('Stax payment security guards', () => {
         expect(lookupAt).toBeGreaterThan(-1);
         expect(chargeFn.includes('verifiedMethod?.customer_id')).toBe(true);
         expect(reserveAt).toBeGreaterThan(lookupAt);
+    });
+
+    test('client never reads a Stax PENDING (HTTP 202) response as a confirmed charge', () => {
+        // The edge function returns 202 for PENDING — a 2xx status, so
+        // supabase-js resolves it as `data` rather than `error`. Without an
+        // explicit check, the caller's generic "!== true" guard discards the
+        // real ambiguous/still-processing message the server sent.
+        const supabaseJs = read('js/supabase.js');
+        const start = supabaseJs.indexOf('async function chargeStaxPayment');
+        const end = supabaseJs.indexOf('async function adminRefundPayment');
+        expect(start).toBeGreaterThan(-1);
+        expect(end).toBeGreaterThan(start);
+        const fnBody = supabaseJs.slice(start, end);
+        expect(fnBody.includes('data.success !== true')).toBe(true);
+        expect(fnBody.includes('data.ambiguous')).toBe(true);
+        expect(fnBody.includes("data.error || 'Your payment could not be confirmed.'")).toBe(true);
     });
 
     test('webhook records only processor-verified successful transactions', () => {
