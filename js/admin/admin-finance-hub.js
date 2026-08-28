@@ -259,6 +259,15 @@ async function _fhLoad() {
             return {
                 familyId, name: r.name, email: r.email,
                 total: r.total, causes: r.causes || [],
+                // Carried through from computeBillMonthExceptions() so the
+                // strip can show gross tuition / discounts / fees separately
+                // instead of just the one net number. base is already net of
+                // both the individual and sibling discount (see that
+                // function's own comment); discount is the sum of both, so
+                // base + discount is the pre-discount "sticker" tuition.
+                base: r.base || 0, discount: r.discount || 0,
+                changeFees: r.changeFees || 0, regFee: r.regFee || 0,
+                familyNewFee: r.familyNewFee || 0, creditTotal: r.creditTotal || 0,
                 withdrawn: !!r.withdrawn, status,
                 ar, owed: owedRow.outstanding, owedMonths: owedRow.months,
             };
@@ -439,6 +448,22 @@ function _fhRenderLedger() {
     // running balance across every open month.
     const monthTotal = active.reduce((s, r) => s + r.total, 0);
 
+    // The single "Total to bill" figure above reads as the final answer, but
+    // it's a net number — discounts are already subtracted into it and fees
+    // already added — so a director asking "why is it this much" had no way
+    // to see either piece. Broken out here from the same per-row fields
+    // computeBillMonthExceptions() already computes (nothing new calculated):
+    // grossTuition is the sticker-price tuition before any discount (r.base
+    // is already net of both the individual and sibling discount, so adding
+    // r.discount back gives the pre-discount figure); discountsTotal is what
+    // came off; feesTotal is what got added on top (registration fee,
+    // new-family fee, schedule-change fees, net of any account credit
+    // applied). grossTuition − discountsTotal + feesTotal === monthTotal.
+    const grossTuition   = active.reduce((s, r) => s + (r.base || 0) + (r.discount || 0), 0);
+    const discountsTotal = active.reduce((s, r) => s + (r.discount || 0), 0);
+    const feesTotal      = active.reduce((s, r) =>
+        s + (r.changeFees || 0) + (r.regFee || 0) + (r.familyNewFee || 0) - (r.creditTotal || 0), 0);
+
     // ⚠️ NOT `active.filter(...)`. r.owed is the real cross-month balance
     // (_fhOwed) — a family with no booking this month ("withdrawn" for this
     // month's exceptions only) can still owe every dollar of an earlier
@@ -465,9 +490,24 @@ function _fhRenderLedger() {
 
     root.innerHTML = `
         <div class="fh-strip">
+            <div class="fh-stat">
+                <div class="fh-stat-num">${_fhMoney(grossTuition)}</div>
+                <div class="fh-stat-label">Tuition, ${_fhMonthLabel(_fhMonth)} — before discounts</div>
+            </div>
+            <span class="fh-arrow">→</span>
+            <div class="fh-stat fh-stat-muted">
+                <div class="fh-stat-num">${_fhMoney(-discountsTotal)}</div>
+                <div class="fh-stat-label">Discounts</div>
+            </div>
+            <span class="fh-arrow">→</span>
+            <div class="fh-stat">
+                <div class="fh-stat-num">${_fhMoney(feesTotal)}</div>
+                <div class="fh-stat-label">Fees</div>
+            </div>
+            <span class="fh-arrow">→</span>
             <div class="fh-stat fh-stat-month">
                 <div class="fh-stat-num">${_fhMoney(monthTotal)}</div>
-                <div class="fh-stat-label">Total to bill, ${_fhMonthLabel(_fhMonth)} — this month alone</div>
+                <div class="fh-stat-label">Amount to collect, ${_fhMonthLabel(_fhMonth)} — this month alone</div>
             </div>
             <div class="fh-stat">
                 <div class="fh-stat-num">${active.length}</div>

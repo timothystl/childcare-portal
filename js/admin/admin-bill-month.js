@@ -180,7 +180,16 @@ async function computeBillMonthExceptions(month) {
             causes.push({ kind: 'sibling', text: 'New sibling added since last month' });
         }
 
-        const total = Math.max(0, base + regFee + familyNewFee - creditTotal);
+        // ⚠️ changeFees belongs here — prevFamilyTotal above (line 115) already
+        // folds it in, and leaving it out of THIS total made a family's
+        // schedule-change fee vanish from every number this engine feeds
+        // (Bill the Month's own total, and the Ledger's month-total strip),
+        // even though the same fee is listed as its own line in the
+        // exception card just below. Found while building the Ledger's
+        // gross/discounts/fees/total breakdown (2026-08-28) — a display-only
+        // fix, not a billing write: reconcileBillingInvoice() recomputes the
+        // real invoice amount server-side regardless of what this preview shows.
+        const total = Math.max(0, base + changeFees + regFee + familyNewFee - creditTotal);
 
         return {
             familyId: match?.id || null,
