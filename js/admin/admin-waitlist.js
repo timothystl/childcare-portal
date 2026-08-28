@@ -549,7 +549,7 @@ function wlpAgeOutMoveCardHtml(ev) {
                 <div class="wlp-ageout-card-name">${escHtml(ev.name)}</div>
                 <div class="wlp-ageout-card-rooms">${roomsLine} <span class="wlp-ageout-card-reason">· ${escHtml(reason)}</span></div>
             </div>
-            <button type="button" class="btn-secondary wlp-confirm-move-btn" data-wlp-confirm-move="${wlpMoveKey(ev)}" ${done ? 'disabled' : ''}>${done ? '✓ Moved' : 'Confirm move'}</button>
+            <button type="button" class="wlp-confirm-move-btn" data-wlp-confirm-move="${wlpMoveKey(ev)}" ${done ? 'disabled' : ''}>${done ? '✓ Moved' : 'Confirm move'}</button>
         </div>`;
 }
 
@@ -783,18 +783,23 @@ function wlpRenderHeader() {
         : isMoving
             ? 'Children ready to move rooms this month, matched against the seat that just opened.'
             : 'Open slots per room, 12 months out — click a month to see who fits.';
+    // Two rows, per the design mockup: the title block (title, sub, and the
+    // tab pills beneath them) on the left, and "+ Add to Waitlist" alone on
+    // the right, vertically centered against that whole stack. The pills are
+    // deliberately NOT in the same row as the button — they belong to the
+    // title block, not to the actions.
     return `
         <div class="wlp-header">
-            <div>
+            <div class="wlp-header-main">
                 <div class="wlp-header-title">Waitlist &amp; Capacity Planner</div>
                 <div class="wlp-header-sub">${escHtml(sub)}</div>
-            </div>
-            <div class="wlp-header-actions">
                 <div class="wlp-pill-group">
                     <button type="button" class="wlp-pill-btn ${isQueue ? 'active' : ''}" data-wlp-tab="queue">Waitlist Queue</button>
                     <button type="button" class="wlp-pill-btn ${isCapacity ? 'active' : ''}" data-wlp-tab="capacity">Capacity Planner</button>
                     <button type="button" class="wlp-pill-btn ${isMoving ? 'active' : ''}" data-wlp-tab="moving">Moving</button>
                 </div>
+            </div>
+            <div class="wlp-header-actions">
                 <button type="button" class="btn-secondary" id="wlpAddBtn">+ Add to Waitlist</button>
             </div>
         </div>`;
@@ -1353,8 +1358,10 @@ function wlpRenderGrid(alloc) {
             </div>
             ${sel ? wlpRenderGridSidebar(sel, alloc) : ''}
         </div>
-        ${wlpRenderDemandStrip(alloc)}
-        ${wlpRenderAgeOutStrip(alloc)}
+        <div class="wlp-rollup-panel">
+            ${wlpRenderDemandStrip(alloc)}
+            ${wlpRenderAgeOutStrip(alloc)}
+        </div>
         ${_wlp.toastText ? `<div class="wlp-toast" style="margin-top:14px;border-radius:7px;">${escHtml(_wlp.toastText)}</div>` : ''}`;
 }
 
@@ -1568,7 +1575,7 @@ function wlpRenderBoard(alloc) {
         <button type="button" class="wlp-board-month-pill ${mo.idx === mi ? 'active' : ''}" data-wlp-board-month="${mo.idx}">${escHtml(mo.label)}</button>`).join('');
 
     const dayCountsHtml = wlpBoardWaitingByDay(alloc, mi).map(dc => `
-        <div class="wlp-moving-tile" style="cursor:default;">
+        <div class="wlp-moving-tile wlp-board-day-tile">
             <div class="wlp-moving-tile-label">${dc.day}</div>
             <div class="wlp-moving-tile-count">${dc.count}</div>
             <div class="wlp-rollup-tile-sub">waiting</div>
@@ -1610,10 +1617,14 @@ function wlpRenderBoard(alloc) {
         rightHtml = `<div class="wlp-board-assign-empty">Select a child on the left to see their room's open days for ${escHtml(alloc.months[mi].label)}.</div>`;
     }
 
+    // .wlp-board-panel supplies the same 24px card inset the Moving tab's
+    // .wlp-moving-panel already had — without it every element in this view
+    // sat flush against the card's own edge, which no mockup screen does.
     return `
-        <div class="wlp-section-hint" style="margin-bottom:14px;">Pick a month, pick a waitlisted child, then assign them into an open day for their room — one month at a time, the same allocation as the Grid.</div>
+        <div class="wlp-board-panel">
+        <div class="wlp-section-hint" style="margin-bottom:16px;">Pick a month, pick a waitlisted child, then assign them into an open day for their room — one month at a time, the same allocation as the Grid.</div>
         <div class="wlp-board-month-row">${monthPills}</div>
-        <div class="wlp-rollup-strip" style="grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:18px;">${dayCountsHtml}</div>
+        <div class="wlp-board-day-strip">${dayCountsHtml}</div>
         <div class="wlp-board-columns">
             <div>
                 <div class="wlp-section-label" style="margin-bottom:10px;">Waitlist (${kids.length})</div>
@@ -1621,7 +1632,8 @@ function wlpRenderBoard(alloc) {
             </div>
             <div>${rightHtml}</div>
         </div>
-        ${_wlp.toastText ? `<div class="wlp-toast" style="margin-top:14px;border-radius:7px;">${escHtml(_wlp.toastText)}</div>` : ''}`;
+        ${_wlp.toastText ? `<div class="wlp-toast" style="margin-top:14px;border-radius:7px;">${escHtml(_wlp.toastText)}</div>` : ''}
+        </div>`;
 }
 
 function wlpMovingCardHtml(ev) {
