@@ -141,6 +141,18 @@
     text-wrap: pretty;
 }
 
+/* apRenderDashboard()'s per-tab landing page. Used to open with an <h2> of
+   the tab's own name — pure repeat of the sidebar's highlighted tab and the
+   header chip (#currentTabLabel) right above it. Only the live-data caption
+   (a week, a count, a source) carries real information, so it's what's left. */
+.ap-dash-stamp {
+    color: var(--text-muted);
+    font-size: .95em;
+    margin: 0 0 22px;
+    max-width: 62ch;
+    text-wrap: pretty;
+}
+
 /* ── Buttons ─────────────────────────────────────────────── */
 .ap-pill {
     background: var(--cream);

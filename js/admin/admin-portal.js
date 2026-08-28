@@ -1017,11 +1017,12 @@ async function apLoadLive() {
 function apRenderDashboard(page) {
     const live = apState.live;
     if (!live) {
-        page.innerHTML = `
-            <div class="ap-head"><div>
-                <h2>${escHtml(AP_TABS[apState.tab].label)}</h2>
-                <p>Loading today's figures…</p>
-            </div></div>`;
+        // No tab-name heading here: the sidebar already highlights the open
+        // tab, and the header chip (#currentTabLabel) already names it — a
+        // third "Planning"/"Market Analysis" as a page <h2> was pure repeat,
+        // the same class of retyping fixed in apRenderDetail() above (found
+        // live 2026-08-28, on the dashboard rather than a tool this time).
+        page.innerHTML = `<p class="ap-dash-stamp">Loading today's figures…</p>`;
         apLoadLive().then(() => { if (!apState.view) apRender(); })
                     .catch(err => {
                         console.error('apLoadLive:', err);
@@ -1030,7 +1031,6 @@ function apRenderDashboard(page) {
         return;
     }
 
-    const meta = AP_TABS[apState.tab];
     const builder = {
         director:   apDashDirector,
         classrooms: apDashClassrooms,
@@ -1041,13 +1041,11 @@ function apRenderDashboard(page) {
     }[apState.tab] || apDashSimple;
     const dash = builder(live);
 
+    // No tab-name heading here either — see the loading-state comment above.
+    // dash.stamp is real per-load context (a week, a count, a data source),
+    // not a repeat of the tab's own name, so it stays as a plain caption.
     page.innerHTML = `
-        <div class="ap-head">
-            <div>
-                <h2>${escHtml(meta.label)}</h2>
-                <p>${escHtml(dash.stamp)}</p>
-            </div>
-        </div>
+        <p class="ap-dash-stamp">${escHtml(dash.stamp)}</p>
         ${dash.needsYou && dash.needsYou.length ? apNeedsYouHtml(dash.needsYou) : ''}
         ${dash.kpis.length ? `<div class="ap-metrics">${dash.kpis.map(apKpiHtml).join('')}</div>` : ''}
         <div class="ap-body">
