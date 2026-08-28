@@ -5293,16 +5293,22 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .inc-stage.ok    { background: var(--green-pale); color: var(--green-dark);  border: 1px solid var(--green-lt); }
 .inc-stage.no    { background: var(--warm-gray);  color: var(--text-muted);  border: 1px solid var(--border); }
 
+/* ⚠️ Must clear .admin-header's own z-index: 100 (it's `position: sticky`,
+   not merely in-flow, so it still stacks against a `position: fixed`
+   drawer). At 60/61 the header's green bar rendered on top of the drawer's
+   own head, cutting off the family name every time the drawer opened —
+   found on the Finance drawer (#fhDrawer) but the bug is in this shared
+   component, so it hit every .inc-drawer user. */
 .inc-scrim {
     position: fixed; inset: 0; background: rgba(1, 41, 74, .28);
-    z-index: 60;
+    z-index: 150;
 }
 
 .inc-drawer {
     position: fixed; top: 0; right: 0; bottom: 0; width: 520px; max-width: 94vw;
     background: #fff; border-left: 1px solid var(--border);
     box-shadow: -18px 0 40px rgba(1, 41, 74, .10);
-    z-index: 61; overflow-y: auto;
+    z-index: 151; overflow-y: auto;
     transform: translateX(100%); transition: transform .18s ease-out;
 }
 .inc-drawer.is-open { transform: none; }
