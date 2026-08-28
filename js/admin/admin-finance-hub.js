@@ -355,6 +355,33 @@ function _fhRowDisplayStatus(row) {
     return row.status;
 }
 
+/** One row per family that owes money — deduplicated by familyId.
+ *  ⚠️ _fhRows can carry TWO rows for the same family in the same month.
+ *  computeBillMonthExceptions() flags "withdrawn" by comparing which
+ *  parent's email is on *this* month's registration-derived row against
+ *  *last* month's — so a family where either parent can register, and a
+ *  different parent happens to submit each month, reads as "present last
+ *  month, absent this month" even though they never actually left. That
+ *  produces a real active row AND a spurious withdrawn row, both resolved
+ *  to the same familyId in _fhLoad() (it matches on both parent_email and
+ *  parent2_email) and both carrying the identical _fhOwed balance. Verified
+ *  live: the Scheetz family registered under lindseymartie@gmail.com in
+ *  July and fscheetz31@yahoo.com in August — same family, same three kids,
+ *  never withdrew. Summing every row with owed > 0 double-counts every
+ *  family this happens to. Preferring the non-withdrawn row when both
+ *  exist keeps the real, current one. */
+function _fhOwingRowsDeduped() {
+    const byFamily = new Map();
+    _fhRows.forEach(r => {
+        if (r.owed <= 0 || !r.familyId) return;
+        const existing = byFamily.get(r.familyId);
+        if (!existing || (existing.status === 'withdrawn' && r.status !== 'withdrawn')) {
+            byFamily.set(r.familyId, r);
+        }
+    });
+    return [...byFamily.values()];
+}
+
 function _fhFilterCounts() {
     const active = _fhRows.filter(r => r.status !== 'withdrawn');
     return {
@@ -367,7 +394,8 @@ function _fhFilterCounts() {
         // balance (_fhOwed), not this month's invoice — a family with no
         // booking in the viewed month still owes whatever they owed before,
         // and "withdrawn" here only ever means "no days booked this month."
-        owing:         _fhRows.filter(r => r.owed > 0).length,
+        // Deduplicated per _fhOwingRowsDeduped — see its own comment.
+        owing:         _fhOwingRowsDeduped().length,
         paid:          active.filter(r => r.owed <= 0 && (r.ar?.billed > 0 || r.status === 'sent')).length,
         withdrawn:     _fhRows.filter(r => r.status === 'withdrawn').length,
     };
@@ -375,6 +403,7 @@ function _fhFilterCounts() {
 
 function _fhVisibleRows() {
     const q = _fhSearch.trim().toLowerCase();
+    const owingRows = _fhFilter === 'owing' ? _fhOwingRowsDeduped() : null;
     return _fhRows.filter(r => {
         if (q && !r.name.toLowerCase().includes(q)) return false;
         switch (_fhFilter) {
@@ -383,7 +412,7 @@ function _fhVisibleRows() {
             case 'drafted':       return r.status === 'drafted';
             case 'sent':          return r.status === 'sent';
             case 'card_declined': return false;
-            case 'owing':         return r.owed > 0; // see _fhFilterCounts — not scoped to this month's booking
+            case 'owing':         return owingRows.includes(r); // deduplicated — see _fhOwingRowsDeduped
             case 'paid':          return r.status !== 'withdrawn' && r.owed <= 0 && (r.ar?.billed > 0 || r.status === 'sent');
             case 'withdrawn':     return r.status === 'withdrawn';
             default:              return true;
@@ -418,8 +447,11 @@ function _fhRenderLedger() {
     // any family not currently billed, which made the total (and the
     // aging detail, and Nudge all's own displayed count below) collapse
     // toward zero the moment registrations thinned out for a future month
-    // — read as "paid off" when nothing had actually been paid.
-    const owingRows = _fhRows.filter(r => r.owed > 0);
+    // — read as "paid off" when nothing had actually been paid. Deduplicated
+    // by family — see _fhOwingRowsDeduped — so a family whose withdrawal
+    // flag is a false positive (a different parent registered this month)
+    // is counted once, not twice.
+    const owingRows = _fhOwingRowsDeduped();
     const owedTotal = owingRows.reduce((s, r) => s + r.owed, 0);
 
     const counts = _fhFilterCounts();
@@ -655,7 +687,9 @@ async function _fhReleaseDrafts() {
 }
 
 async function _fhNudgeAll() {
-    const owing = _fhRows.filter(r => r.owed > 0 && r.familyId);
+    // Deduplicated — see _fhOwingRowsDeduped. Without it, a family whose
+    // withdrawal flag is a false positive would get nudged twice in one click.
+    const owing = _fhOwingRowsDeduped();
     if (!owing.length) return;
     if (!confirm(`Nudge ${owing.length} famil${owing.length === 1 ? 'y' : 'ies'} with a balance?`)) return;
     const btn = _fhEl('fhNudgeAllBtn');

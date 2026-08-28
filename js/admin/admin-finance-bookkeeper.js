@@ -287,12 +287,14 @@ function _bkParseState(raw, fallback) {
 
 /** AR list = exactly the Ledger's owing rows. The banner copy promises
  *  "same figures as the Ledger" and this is what makes that true rather
- *  than aspirational. */
+ *  than aspirational. Reuses _fhOwingRowsDeduped() (admin-finance-hub.js) —
+ *  a second, differently-scoped filter here (this used to exclude
+ *  `status === 'withdrawn'`, which was the Ledger's *old* scoping) would
+ *  silently stop being "the same figures" the moment either file changed. */
 function _bkArRowsFromLedger() {
-    const rows = (typeof _fhRows !== 'undefined' && Array.isArray(_fhRows)) ? _fhRows : [];
+    const rows = (typeof _fhOwingRowsDeduped === 'function') ? _fhOwingRowsDeduped() : [];
     const now = Date.now();
     return rows
-        .filter(r => r.status !== 'withdrawn' && r.owed > 0)
         .map(r => {
             const sentAt = r.ar?.sentAt || null;
             const days   = sentAt ? Math.floor((now - new Date(sentAt).getTime()) / 86400000) : null;
