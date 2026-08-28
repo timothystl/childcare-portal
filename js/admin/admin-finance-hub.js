@@ -140,6 +140,18 @@ function _fhGoToMonth(month) {
     _fhMonth = month;
     _fhFilter = 'all';
     _fhLoad();
+    // The header's month nav is shared across all three tabs, but Billing
+    // Report and Bookkeeper each keep their own month state (_brMonth /
+    // _bkMonth) — _fhLoad() only refreshes the Ledger pane, so without this
+    // the tab actually on screen kept showing the *old* month while the
+    // header above it already said the new one.
+    if (_fhTab === 'report') {
+        const brMonth = _fhEl('brMonth');
+        if (brMonth) brMonth.value = _fhMonth;
+        if (typeof renderBillingReportTool === 'function') renderBillingReportTool();
+    } else if (_fhTab === 'bookkeeper' && typeof renderFinanceBookkeeper === 'function') {
+        renderFinanceBookkeeper(_fhMonth);
+    }
 }
 
 function _fhSwitchTab(tab) {
@@ -351,7 +363,11 @@ function _fhFilterCounts() {
         drafted:       active.filter(r => r.status === 'drafted').length,
         sent:          active.filter(r => r.status === 'sent').length,
         card_declined: 0, // no payment-processor decline signal exists yet — see BILLING_MODEL.md
-        owing:         active.filter(r => r.owed > 0).length,
+        // ⚠️ Deliberately NOT scoped to `active`. r.owed is the cross-month
+        // balance (_fhOwed), not this month's invoice — a family with no
+        // booking in the viewed month still owes whatever they owed before,
+        // and "withdrawn" here only ever means "no days booked this month."
+        owing:         _fhRows.filter(r => r.owed > 0).length,
         paid:          active.filter(r => r.owed <= 0 && (r.ar?.billed > 0 || r.status === 'sent')).length,
         withdrawn:     _fhRows.filter(r => r.status === 'withdrawn').length,
     };
@@ -367,7 +383,7 @@ function _fhVisibleRows() {
             case 'drafted':       return r.status === 'drafted';
             case 'sent':          return r.status === 'sent';
             case 'card_declined': return false;
-            case 'owing':         return r.status !== 'withdrawn' && r.owed > 0;
+            case 'owing':         return r.owed > 0; // see _fhFilterCounts — not scoped to this month's booking
             case 'paid':          return r.status !== 'withdrawn' && r.owed <= 0 && (r.ar?.billed > 0 || r.status === 'sent');
             case 'withdrawn':     return r.status === 'withdrawn';
             default:              return true;
@@ -385,7 +401,16 @@ function _fhRenderLedger() {
     const sent       = active.filter(r => r.status === 'sent');
     const draftedTotal = drafted.reduce((s, r) => s + r.total, 0);
 
-    const owingRows = active.filter(r => r.owed > 0);
+    // ⚠️ NOT `active.filter(...)`. r.owed is the real cross-month balance
+    // (_fhOwed) — a family with no booking this month ("withdrawn" for this
+    // month's exceptions only) can still owe every dollar of an earlier
+    // month's unpaid invoice, and this banner promises "across every open
+    // month, not just [this month]." Scoping to `active` silently dropped
+    // any family not currently billed, which made the total (and the
+    // aging detail, and Nudge all's own displayed count below) collapse
+    // toward zero the moment registrations thinned out for a future month
+    // — read as "paid off" when nothing had actually been paid.
+    const owingRows = _fhRows.filter(r => r.owed > 0);
     const owedTotal = owingRows.reduce((s, r) => s + r.owed, 0);
 
     const counts = _fhFilterCounts();
