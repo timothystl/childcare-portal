@@ -651,6 +651,98 @@ export default {
       });
     }
 
+    // ── POST /notify-admin-incident — push admins the moment staff files one ─
+    // Raised directly: the director should know about an incident as soon as
+    // it's filed, not only once the parent has signed at pickup — she was
+    // only ever finding out by opening the tool herself, since "Needs you"
+    // deliberately filters to parent-signed rows (see apDashDirector) and
+    // nothing pushed her before this.
+    //
+    // ⚠️ THE CLIENT SENDS AN INCIDENT ID, NEVER A MESSAGE — same send-invoice /
+    // send-staff-broadcast posture as every other sender in this file. The
+    // worker re-reads the report with the service role and composes the text
+    // itself; no title, no body, no recipient travels from a browser.
+    //
+    // Caller is a teacher's phone on the public anon key, same as
+    // /send-staff-broadcast, so authorization is the same PIN check rather
+    // than a Supabase Auth bearer token — there is no admin session on this
+    // device to check a role against.
+    //
+    // ⚠️ Deliberately reuses admin_push_subscriptions and the existing
+    // "Notify me" toggle rather than a second subscription list — a director
+    // who already turned notifications on for new parent messages should not
+    // have to find and flip a second switch to hear about an incident too.
+    // Sent to whoever is already subscribed there today (full admins only —
+    // /admin-push-subscribe's own gate, unchanged by this route).
+    if (url.pathname === '/notify-admin-incident' && request.method === 'POST') {
+      const reqOrigin = request.headers.get('Origin');
+      if (reqOrigin && !ALLOWED_ORIGINS.has(reqOrigin)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      const { staff_id: claimedStaffId, pin, incident_id } = await request.json().catch(() => ({}));
+      if (!claimedStaffId || !pin || !incident_id) return new Response('Missing fields', { status: 400 });
+      if (!/^\d{4,8}$/.test(String(pin))) return new Response('Unauthorized', { status: 401 });
+
+      const pinRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/staff_id_for_pin`, {
+        method: 'POST',
+        headers: {
+          'apikey':        env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({ p_staff_id: claimedStaffId, p_pin: parseInt(String(pin), 10) }),
+      });
+      if (!pinRes.ok) return new Response('Unauthorized', { status: 401 });
+      const callerStaffId = await pinRes.json().catch(() => null);
+      if (!callerStaffId) return new Response('Unauthorized', { status: 401 });
+
+      // Everything the notification says comes from this row — never from
+      // the request body.
+      const incRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/incident_reports?id=eq.${encodeURIComponent(incident_id)}` +
+        `&select=id,incident_kind,incident_type,reported_by_name,students(child_name)&limit=1`,
+        { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      );
+      if (!incRes.ok) return new Response('Failed to read report', { status: 500 });
+      const [incident] = await incRes.json().catch(() => []);
+      if (!incident) return new Response('No such report', { status: 404 });
+
+      const childName = incident.students?.child_name || 'A child';
+      const kind = incident.incident_kind || incident.incident_type || 'Incident';
+      const payload = {
+        title: `🩹 ${kind} — ${childName}`,
+        body:  `Filed by ${incident.reported_by_name || 'staff'}. Open Incident Reports to review.`,
+        tag:   `incident-${incident.id}`,
+      };
+
+      const subsRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/admin_push_subscriptions?select=*`,
+        { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      );
+      if (!subsRes.ok) return new Response('Failed to fetch subscriptions', { status: 500 });
+      const subs = await subsRes.json();
+      if (!subs.length) return new Response(JSON.stringify({ sent: 0 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+
+      const results = await Promise.allSettled(subs.map(sub => sendWebPush(sub, payload, env)));
+
+      const expired = subs
+        .filter((_, i) => results[i].status === 'fulfilled' && results[i].value.status === 410)
+        .map(s => s.id);
+      if (expired.length) {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/admin_push_subscriptions?id=in.(${expired.join(',')})`,
+          { method: 'DELETE', headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+        );
+      }
+
+      return new Response(JSON.stringify({ sent: subs.length - expired.length }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // ── POST /send-staff-broadcast — every staff phone at once ───────────────
     // The missing-child alert. /send-staff-push next door sends to ONE staff_id
     // and demands the service role key, so neither half of it fits: this has to
