@@ -1182,6 +1182,43 @@
 
                 </div>
 
+                <!-- Policies & enrollment forms — re-enabled 2026-08-28 (was
+                     "hidden 2026-07, may bring back later" as its own
+                     collapsible tab-level section; now a card inside the
+                     unified Settings page instead, matching how ChMS Finance
+                     API was folded in below). Feeds two places from the same
+                     `enrollment_forms` setting: the public /enroll page and
+                     the parent portal's Account → Documents → "Policies and
+                     forms" card (js/portal/portal-documents.js
+                     pdFormsSection()) — that card has said "The office
+                     hasn't posted any forms here yet" since forms were
+                     retired, because nothing let the office post one.
+                     setupEnrollmentForms()/loadEnrollmentForms()/
+                     saveEnrollmentForms()/uploadEnrollmentFormFile()
+                     (admin-settings.js / js/supabase.js) were never removed —
+                     only this markup was — so no JS changes were needed. -->
+                <div class="ap-panel" id="enrollmentFormsCard">
+                    <div class="ap-panel-head"><h3>📋 Policies &amp; enrollment forms</h3></div>
+                    <div class="set-card-body">
+                        <p class="section-desc" style="margin-top:0">Upload the forms and policies families need. They appear as download cards on the public <a href="/enroll" target="_blank">/enroll page</a> and in every family's portal under Account → Documents → "Policies and forms." PDF or Word (.doc/.docx), 10&nbsp;MB max per file.</p>
+                        <div id="enrollmentFormsList" style="margin-top:12px;">
+                            <p class="empty-hint">Loading…</p>
+                        </div>
+                        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                            <p style="font-weight:600;font-size:.9em;margin-bottom:10px;">Add a form</p>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                                <input type="text" id="newEnrollFormName" placeholder="Form name (e.g. Child Enrollment Form)" class="form-input">
+                                <input type="text" id="newEnrollFormDesc" placeholder="Short description (optional)" class="form-input">
+                            </div>
+                            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                                <input type="file" id="newEnrollFormFile" accept=".pdf,.doc,.docx" style="font-size:.9em;">
+                                <button id="uploadEnrollFormBtn" class="btn-primary" style="padding:6px 16px;">⬆️ Upload</button>
+                                <span id="uploadEnrollFormStatus" class="rates-status"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Access & oversight — full width, lesser-used -->
                 <div class="ap-panel" id="setAccessCard">
                     <div class="ap-panel-head"><h3>Access &amp; oversight</h3></div>
@@ -1272,26 +1309,6 @@
                     </label>
                     <button id="saveEnrollmentCapacityBtn" class="btn-primary" style="padding:6px 16px;">💾 Save</button>
                     <span id="enrollmentCapacityStatus" class="rates-status"></span>
-                </div>
-            </section>
-            -->
-
-            <!-- Enrollment Forms — hidden 2026-07, may bring back later
-            <section class="admin-section collapsible-section" id="enrollmentFormsSection">
-                <h2>📋 Enrollment Forms</h2>
-                <p class="section-desc">Upload the forms new families need to complete. They appear as download cards on the public <a href="/enroll" target="_blank">/enroll page</a>. PDF, Word (.doc/.docx), 10 MB max per file.</p>
-                <div id="enrollmentFormsList" style="margin-top:12px;"></div>
-                <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
-                    <p style="font-weight:600;font-size:.9em;margin-bottom:10px;">Add a form</p>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-                        <input type="text" id="newEnrollFormName" placeholder="Form name (e.g. Child Enrollment Form)" class="form-input">
-                        <input type="text" id="newEnrollFormDesc" placeholder="Short description (optional)" class="form-input">
-                    </div>
-                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-                        <input type="file" id="newEnrollFormFile" accept=".pdf,.doc,.docx" style="font-size:.9em;">
-                        <button id="uploadEnrollFormBtn" class="btn-primary" style="padding:6px 16px;">⬆️ Upload</button>
-                        <span id="uploadEnrollFormStatus" class="rates-status"></span>
-                    </div>
                 </div>
             </section>
             -->
