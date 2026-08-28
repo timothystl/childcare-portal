@@ -852,7 +852,7 @@ function renderModalChildRows() {
                     </div>
                     <div class="fm-field fm-field-grow">
                         <label>Name *</label>
-                        <input type="text" class="fmc-name" value="${escHtml(child.child_name || '')}" placeholder="Child's full name">
+                        <input type="text" class="fmc-name" value="${escHtml(child.child_name || '')}" placeholder="Child's full name" autocomplete="off">
                     </div>
                     <div class="fm-field">
                         <label>Date of Birth</label>

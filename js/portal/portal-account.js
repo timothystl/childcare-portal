@@ -143,7 +143,7 @@ function paRender() {
             <div class="pa-caution">Anyone new shows ID at the desk, and the office
                 reviews additions. Add someone here before they come.</div>
             <div class="pa-add-row">
-                <input type="text" id="paPickupName" placeholder="Name" maxlength="60">
+                <input type="text" id="paPickupName" placeholder="Name" maxlength="60" autocomplete="off">
                 <input type="text" id="paPickupRel" placeholder="Relationship" maxlength="40">
             </div>
             <div class="pa-add-row">
