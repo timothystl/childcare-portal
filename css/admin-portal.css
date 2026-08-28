@@ -367,6 +367,8 @@
 .ap-grid-cell.is-edge { background: var(--tang-pale); border-color: var(--tang); }
 .ap-grid-staff { font-size: 1.12em; font-weight: 800; color: var(--navy); line-height: 1.1; }
 .ap-grid-cell.is-edge .ap-grid-staff { color: var(--ap-deep-tang); }
+.ap-grid-staff-pm { font-size: .92em; margin-top: 1px; }
+.ap-grid-shift { font-size: .58em; font-weight: 700; color: var(--text-muted); letter-spacing: .05em; margin-left: 3px; vertical-align: middle; }
 .ap-grid-kids  { font-size: .7em; color: var(--text-muted); margin-top: 2px; }
 .ap-grid-foot {
     font-size: .78em;
@@ -709,6 +711,7 @@
 .ap-req-table td.ap-td-ratio { text-align: left; font-size: .86em; color: var(--text-muted); white-space: nowrap; }
 .ap-req-staff { font-weight: 800; font-size: 1.05em; color: var(--navy); }
 .ap-req-staff.is-edge { color: var(--tang); }
+.ap-req-shift { font-size: .62em; font-weight: 700; color: var(--text-muted); letter-spacing: .05em; margin-left: 3px; vertical-align: middle; }
 .ap-req-kids  { font-size: .76em; color: var(--text-muted); }
 .ap-req-table tfoot td { border-bottom: none; padding-top: 9px; }
 .ap-req-table tfoot tr.is-strong td { font-weight: 800; color: var(--navy); }

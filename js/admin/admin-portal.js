@@ -430,6 +430,20 @@ function apFmtDayShort(dateStr) {
  * Built ONLY from booked registrations and the saved ratios. Clock-in room
  * data is deliberately never read: room selection at the time clock is
  * spotty and would distort the requirement.
+ *
+ * Each cell carries an AM and a PM figure, not one blended number — a room
+ * full of morning-only half-day children needs its full AM staff count and
+ * a genuinely smaller PM count once they leave, and showing only one number
+ * hid that split. AM = every child booked that day; PM = full-day children
+ * only, since a half-day booking here is a morning slot that drops for the
+ * afternoon. This mirrors the "AM = all enrolled · PM = full-day only" rule
+ * `_buildShiftCounts()` (admin-reports.js) already uses for Build Staff
+ * Schedule's own AM/PM columns — same rule, same source data, so the two
+ * tools can't disagree about which shift needs more coverage.
+ * `staff`/`kids` stay the AM figures (unchanged field names, since AM is
+ * always the day's peak — a half-day booking only ever removes a PM child,
+ * never adds one) so every existing "needed" comparison elsewhere in this
+ * file keeps reading the conservative, whole-day figure without change.
  */
 function apStaffing(weekDates) {
     const rooms = getSortedRooms().filter(r => !r.hidden);
@@ -437,29 +451,35 @@ function apStaffing(weekDates) {
         const ratio = room.staffRatio || 10;
         const cells = weekDates.map(date => {
             const closed = allClosureDates.has(date);
-            let kids = 0;
+            let kids = 0, kidsPm = 0;
             if (!closed) {
                 (allRegistrations || []).forEach(reg => {
                     if (reg.room_id !== room.id) return;
                     (reg.registration_dates || []).forEach(d => {
-                        if (!d.waitlisted && d.care_date === date) kids++;
+                        if (!d.waitlisted && d.care_date === date) {
+                            kids++;
+                            if (d.day_type !== 'half') kidsPm++;
+                        }
                     });
                 });
             }
-            const staff = kids > 0 ? Math.ceil(kids / ratio) : 0;
+            const staff   = kids   > 0 ? Math.ceil(kids   / ratio) : 0;
+            const staffPm = kidsPm > 0 ? Math.ceil(kidsPm / ratio) : 0;
             return {
-                kids, staff, closed,
-                // "at ratio" — one more child adds another staff member
-                atEdge: kids > 0 && kids % ratio === 0,
+                kids, kidsPm, staff, staffPm, closed,
+                // "at ratio" — one more child adds another staff member, AM or PM
+                atEdge:   kids   > 0 && kids   % ratio === 0,
+                atEdgePm: kidsPm > 0 && kidsPm % ratio === 0,
             };
         });
         return { room, label: room.label, ratio, ratioLabel: `1 : ${ratio}`, cells };
     }).filter(r => r.cells.some(c => c.kids > 0));
 
-    const classroom = weekDates.map((_, i) => rows.reduce((a, r) => a + r.cells[i].staff, 0));
+    const classroom   = weekDates.map((_, i) => rows.reduce((a, r) => a + r.cells[i].staff,   0));
+    const classroomPm = weekDates.map((_, i) => rows.reduce((a, r) => a + r.cells[i].staffPm, 0));
     const kids      = weekDates.map((_, i) => rows.reduce((a, r) => a + r.cells[i].kids, 0));
     const closed    = weekDates.map(d => allClosureDates.has(d));
-    return { rows, classroom, kids, closed, weekDates };
+    return { rows, classroom, classroomPm, kids, closed, weekDates };
 }
 
 // ── Persistence ──────────────────────────────────────────────
@@ -1153,12 +1173,18 @@ function apStaffGridHtml(sf) {
                 <div class="ap-grid-ratio">${escHtml(r.ratioLabel)}</div>
             </div>
             ${r.cells.map(c => `
-            <div class="ap-grid-cell${c.atEdge ? ' is-edge' : ''}">
-                <div class="ap-grid-staff">${c.closed ? '—' : c.staff}</div>
-                <div class="ap-grid-kids">${c.closed ? 'closed' : c.kids + ' kids'}</div>
+            <div class="ap-grid-cell${(c.atEdge || c.atEdgePm) ? ' is-edge' : ''}">
+                ${c.closed ? `
+                <div class="ap-grid-staff">—</div>
+                <div class="ap-grid-kids">closed</div>` : c.staffPm !== c.staff ? `
+                <div class="ap-grid-staff">${c.staff}<span class="ap-grid-shift">AM</span></div>
+                <div class="ap-grid-staff ap-grid-staff-pm">${c.staffPm}<span class="ap-grid-shift">PM</span></div>
+                <div class="ap-grid-kids">${c.kids}→${c.kidsPm} kids</div>` : `
+                <div class="ap-grid-staff">${c.staff}</div>
+                <div class="ap-grid-kids">${c.kids} kids</div>`}
             </div>`).join('')}
         </div>`).join('')}
-        <p class="ap-grid-foot">A shaded cell is a room exactly at ratio that day — one more child adds another staff member. Built from booked registrations; clock-in room data is never used.</p>
+        <p class="ap-grid-foot">AM = every child booked that day · PM = full-day children only, since a half-day booking drops for the afternoon — shown split whenever the two differ. A shaded cell is at ratio for either shift, meaning one more child adds another staff member. Built from booked registrations; clock-in room data is never used.</p>
     </div></div>`;
 }
 
@@ -1794,14 +1820,21 @@ function apRenderStaffReq() {
                         <td class="ap-td-ratio">${escHtml(r.ratioLabel)}</td>
                         ${r.cells.map(c => `
                         <td>
-                            <div class="ap-req-staff${c.atEdge ? ' is-edge' : ''}">${c.closed ? '—' : c.staff}</div>
-                            <div class="ap-req-kids">${c.closed ? 'closed' : c.kids + ' kids'}</div>
+                            ${c.closed ? `
+                            <div class="ap-req-staff">—</div>
+                            <div class="ap-req-kids">closed</div>` : c.staffPm !== c.staff ? `
+                            <div class="ap-req-staff${c.atEdge ? ' is-edge' : ''}">${c.staff}<span class="ap-req-shift">AM</span></div>
+                            <div class="ap-req-staff${c.atEdgePm ? ' is-edge' : ''}">${c.staffPm}<span class="ap-req-shift">PM</span></div>
+                            <div class="ap-req-kids">${c.kids}→${c.kidsPm} kids</div>` : `
+                            <div class="ap-req-staff${c.atEdge ? ' is-edge' : ''}">${c.staff}</div>
+                            <div class="ap-req-kids">${c.kids} kids</div>`}
                         </td>`).join('')}
                     </tr>`).join('')}
                 </tbody>
                 <tfoot>
                     ${footRow('Children registered',      sf.kids,                          'is-soft')}
-                    ${footRow('Classroom staff required', sf.classroom,                     'is-strong')}
+                    ${footRow('AM staff required',        sf.classroom,                     'is-strong')}
+                    ${footRow('PM staff required',        sf.classroomPm,                   'is-soft')}
                     ${footRow('Floaters / break relief',  total.map((_, i) => sf.closed[i] ? 0 : floaters), 'is-soft')}
                     ${footRow('Total on the floor',       total,                            'is-total')}
                     ${footRow('Staff-hours',              hrs.map(h => Math.round(h)),      'is-soft')}
@@ -1810,7 +1843,7 @@ function apRenderStaffReq() {
             </table>
         </div>
         <p style="color:var(--text-muted);font-size:.86em;margin-top:14px;max-width:76ch;text-wrap:pretty">
-            Ratios come from Settings → Staff-to-Child Ratios. An orange count means the room is exactly at ratio that day — one more child adds another staff member.
+            Ratios come from Settings → Staff-to-Child Ratios. AM counts every child booked that day; PM counts full-day children only, since a half-day booking drops for the afternoon — a room shows one number when AM and PM match, and both when they don't. An orange count means that shift is exactly at ratio — one more child adds another staff member. "Total on the floor" and the cost estimate are built from the AM figure, since it is always the day's peak.
         </p>`;
 }
 
