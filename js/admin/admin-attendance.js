@@ -197,18 +197,27 @@ function _abBindActions() {
 // the single latest `last_event_at`), so only the side matching the child's
 // *current* status ever has a real time — the other side reads '—', which
 // is the honest state rather than a guessed or carried-over time.
+// ⚠️ Absent is exclusive with In/Out on the display, even though a real
+// check-in event may still exist underneath: showing "in 8:59p" next to
+// "ABSENT" reads as a contradiction (checked in AND absent), and the office
+// marking someone absent is a correction, not a fact that should coexist
+// with a stale check-in stamp. This clears the *display* only — the real
+// child_day_events row is untouched, so un-marking absent restores it.
 function _abActionsHtml(c, roomId) {
     const otherRooms = (typeof ROOMS !== 'undefined' ? ROOMS : [])
         .filter(r => r.id !== roomId && r.status !== 'coming_soon');
     const moveOptions = otherRooms.map(r => `<option value="${r.id}">${escHtml(r.label)}</option>`).join('');
-    const inTime  = c.attendance_status === 'present' ? _abTime(c.last_event_at) : '';
-    const outTime = c.attendance_status === 'left'    ? _abTime(c.last_event_at) : '';
+    const isAbsent = c.marked === 'absent';
+    const isIn  = !isAbsent && c.attendance_status === 'present';
+    const isOut = !isAbsent && c.attendance_status === 'left';
+    const inTime  = isIn  ? _abTime(c.last_event_at) : '';
+    const outTime = isOut ? _abTime(c.last_event_at) : '';
     return `<span class="ab-actions" data-student="${escHtml(c.student_id)}"
                   data-name="${escHtml(c.child_name)}" data-room="${escHtml(roomId)}">
         <span class="ab-actions-col">
-            <button type="button" class="ab-act-btn${c.attendance_status === 'present' ? ' is-on' : ''}"
+            <button type="button" class="ab-act-btn${isIn ? ' is-on' : ''}"
                     data-act="in" title="Mark ${escHtml(c.child_name)} checked in">In <span class="ab-act-time">${inTime ? escHtml(inTime) : '—'}</span></button>
-            <button type="button" class="ab-act-btn${c.attendance_status === 'left' ? ' is-on' : ''}"
+            <button type="button" class="ab-act-btn${isOut ? ' is-on' : ''}"
                     data-act="out" title="Mark ${escHtml(c.child_name)} checked out">Out <span class="ab-act-time">${outTime ? escHtml(outTime) : '—'}</span></button>
         </span>
         <span class="ab-actions-col">
