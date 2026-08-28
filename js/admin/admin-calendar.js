@@ -980,8 +980,15 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
                 </div>
                 <div id="dayDetailBody" class="day-detail-body"></div>
             </div>`;
-        document.getElementById('roomCalModal')?.querySelector('.rcal-dialog')?.appendChild(panel)
-            || document.body.appendChild(panel);
+        // Always body-level, never nested inside #roomCalModal's own dialog:
+        // that modal is `display:none` whenever it isn't itself open, and a
+        // display:none ancestor hides this panel too regardless of its own
+        // position:fixed — which is every call from Day/Week/Month view,
+        // since none of them open the per-room modal first. This panel is a
+        // full-screen fixed overlay on its own; it doesn't need the modal's
+        // DOM to stack above it (no transform/filter on .rcal-overlay traps
+        // z-index into a sub-context, so a higher z-index still wins from body).
+        document.body.appendChild(panel);
         document.getElementById('dayDetailClose').addEventListener('click', closeDayRosterDetail);
     }
 

@@ -5924,7 +5924,13 @@ async function _buildCapacityOverviewRows(targetMonth) {
         const fte  = full + half * 0.5;
         const seatDaysOcc   = curEntries.reduce((s, e) => s + e.childDays, 0);
         const seatDaysAvail = weekdays * (room.capacity || 0);
-        const pct   = room.capacity ? Math.round((enrolled / room.capacity) * 100) : 0;
+        // Average daily occupancy, not `enrolled / capacity` — `enrolled` is
+        // a whole-month distinct-child count, so it routinely exceeds a
+        // single day's capacity once more than one part-time pattern shares
+        // the same seats (11 different children through a 9-seat room in a
+        // month is normal, not 122% full). Seat-days already carries the
+        // correct daily-average math the Day/Week/Month grids show.
+        const pct   = seatDaysAvail ? Math.round((seatDaysOcc / seatDaysAvail) * 100) : 0;
         const delta = enrolled - priorEntries.length;
         return { room, curMo, priorMo, enrolled, fte, seatDaysOcc, seatDaysAvail, pct, delta };
     });
