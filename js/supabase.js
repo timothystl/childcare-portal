@@ -4778,21 +4778,25 @@ async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
 }
 
 /**
- * Ask Authorize.net to void or refund one online card payment (admin only,
- * full role). Only a billing_payments row id travels — the amount and
- * whether it's a void or refund are both decided server-side from the
- * transaction's own state. Does NOT itself mark anything reversed; the
- * authorizenet-webhook function does that once Authorize.net confirms it.
+ * Ask the payment processor to void or refund one online card payment
+ * (admin only, full role). Only a billing_payments row id travels — the
+ * amount and whether it's a void or refund are both decided server-side
+ * from the transaction's own state. Does NOT itself mark anything
+ * reversed; authorizenet-webhook / stax-webhook does that once the
+ * processor confirms it.
  *
  * @param {number} paymentId
+ * @param {'authorizenet'|'stax'} [processor] — which edge function to call;
+ *   defaults to 'authorizenet' for older call sites.
  * @returns {Promise<{submitted: boolean, kind: 'void'|'refund', processorTransactionId: string}>}
  */
-async function adminRefundPayment(paymentId) {
+async function adminRefundPayment(paymentId, processor) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: { session } } = await sbClient.auth.getSession();
     const token = session?.access_token;
     if (!token) throw new Error('Not authenticated.');
-    const { data, error } = await sbClient.functions.invoke('admin-refund-payment', {
+    const fnName = processor === 'stax' ? 'admin-refund-stax-payment' : 'admin-refund-payment';
+    const { data, error } = await sbClient.functions.invoke(fnName, {
         body: { paymentId },
         headers: { Authorization: `Bearer ${token}` },
     });
