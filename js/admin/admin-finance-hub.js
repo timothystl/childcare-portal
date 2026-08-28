@@ -65,6 +65,12 @@ function _fhMonthLabel(month) {
 
 function _fhIsCurrentMonth(month) { return month === _fhDefaultMonth(); }
 
+// "Read-only history" means the month already happened — a future month has
+// no history yet and should get the same live, editable Ledger the current
+// month gets. String comparison is safe here: month keys are zero-padded
+// 'YYYY-MM', which sorts identically to chronological order.
+function _fhIsLedgerMonth(month) { return month >= _fhDefaultMonth(); }
+
 // ── Entry point ──────────────────────────────────────────────
 // #fhBody (header + tabs + panes, all of it — see admin.html) stays behind
 // #fhSkeleton until this first _fhLoad() resolves, so the header — grouped
@@ -308,7 +314,7 @@ function _fhRenderShell() {
     const prevBtn = _fhEl('fhMonthPrev');
     if (prevBtn) prevBtn.disabled = false;
 
-    if (_fhIsCurrentMonth(_fhMonth)) {
+    if (_fhIsLedgerMonth(_fhMonth)) {
         _fhRenderLedger();
     } else {
         _fhRenderMonthHistory();
