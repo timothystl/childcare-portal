@@ -282,7 +282,7 @@ function wlpGradEvents(months) {
         if (idx == null) return;
         Object.entries(byRoom).forEach(([roomId, kidsArr]) => {
             if (!out[roomId]) return;
-            out[roomId][idx] = kidsArr.map(k => ({ name: k.childName, days: Object.keys(k.weekdays) }));
+            out[roomId][idx] = kidsArr.map(k => ({ name: k.childName, days: Object.keys(k.weekdays), ageOutDate: k.ageOutDate }));
         });
     });
     Object.entries(gradIn).forEach(([moKey, byRoom]) => {
@@ -490,6 +490,8 @@ function wlpAvailClass(open, capacity) {
 function wlpMovementEvents(roomId, alloc) {
     const nextId = wlpPromotionChain()[roomId]?.nextRoom;
     const nextLabel = nextId ? alloc.roomMeta[nextId]?.room.label.replace(/^\S+\s/, '') : null;
+    const fromRoomLabel = alloc.roomMeta[roomId]?.room.label || '';
+    const toRoomLabel = nextId ? (alloc.roomMeta[nextId]?.room.label || '') : null;
     const out = [];
     alloc.months.forEach(mo => {
         (alloc.gradOut[roomId][mo.idx] || []).forEach(ev => {
@@ -498,6 +500,7 @@ function wlpMovementEvents(roomId, alloc) {
                 iconCls: 'wlp-event-icon-grad', icon: '↑',
                 actionLabel: nextId ? `moves up to ${nextLabel}` : 'graduates the program',
                 fromRoomId: roomId, toRoomId: nextId || null,
+                fromRoomLabel, toRoomLabel, ageOutDate: ev.ageOutDate,
             });
         });
         (alloc.incoming[roomId][mo.idx] || []).forEach(k => {
@@ -516,23 +519,30 @@ function wlpMovementEvents(roomId, alloc) {
     return out;
 }
 
-function wlpEventChipClass(iconCls) {
-    if (iconCls === 'wlp-event-icon-grad') return 'wlp-chip-grad';
-    if (iconCls === 'wlp-event-icon-promised') return 'wlp-chip-promised';
-    return 'wlp-chip-start';
+const WLP_MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function wlpFmtAgeOutDate(d) {
+    return d ? `${WLP_MONTH_ABBR[d.getMonth()]} ${d.getDate()}` : '';
 }
-function wlpEventCardHtml(ev) {
-    const chips = TREND_DAYS.map(d => ev.days.includes(d)
-        ? `<span class="wlp-chip ${wlpEventChipClass(ev.iconCls)}">${d}</span>`
-        : `<span class="wlp-chip wlp-chip-off">${d}</span>`).join('');
+
+// A single graduation-triggered room move, as a flat confirm-move card —
+// shared by the Moving tab and the Grid's inline age-out drawer (see
+// wlpRenderMoving / wlpRenderAgeOutDrawer) so the same event never renders
+// two different ways depending on where it's opened from. Deliberately
+// grad-only (no promised/waitlist-start variant) — those aren't a room MOVE
+// an admin confirms here, they're seated through the ordinary Enroll flow.
+function wlpAgeOutMoveCardHtml(ev) {
+    const done = _wlp.movedKeys.has(wlpMoveKey(ev));
+    const roomsLine = ev.toRoomLabel
+        ? `${escHtml(ev.fromRoomLabel)} → ${escHtml(ev.toRoomLabel)}`
+        : `${escHtml(ev.fromRoomLabel)} → graduates the program`;
     return `
-        <div class="wlp-event-card">
-            <div class="wlp-event-icon ${ev.iconCls}">${ev.icon}</div>
-            <div class="wlp-event-body">
-                <div class="wlp-event-top"><span class="wlp-event-name">${escHtml(ev.name)}</span><span class="wlp-event-month">${escHtml(ev.monthLabel)}</span></div>
-                <div class="wlp-event-action">${escHtml(ev.actionLabel)}</div>
-                <div class="wlp-chip-row" style="margin:0">${chips}</div>
+        <div class="wlp-ageout-card" data-wlp-move-event="${wlpMoveKey(ev)}">
+            <div class="wlp-ageout-card-main">
+                <div class="wlp-ageout-card-name">${escHtml(ev.name)}</div>
+                <div class="wlp-ageout-card-rooms">${roomsLine}</div>
+                <div class="wlp-ageout-card-date">ages out ${escHtml(wlpFmtAgeOutDate(ev.ageOutDate))}</div>
             </div>
+            <button type="button" class="btn-secondary wlp-confirm-move-btn" data-wlp-confirm-move="${wlpMoveKey(ev)}" ${done ? 'disabled' : ''}>${done ? '✓ Moved' : 'Confirm move'}</button>
         </div>`;
 }
 
@@ -764,7 +774,7 @@ function wlpRenderHeader() {
     const sub = isQueue
         ? "Every waitlisted child, ranked by priority — expand any row for their 12-month outlook."
         : isMoving
-            ? "Who's graduating up, who's promised a spot, and who's projected to start — next 12 months, every room."
+            ? 'Children ready to move rooms this month, matched against the seat that just opened.'
             : 'Open slots per room, 12 months out — click a month to see who fits.';
     return `
         <div class="wlp-header">
@@ -1382,8 +1392,8 @@ function wlpAttachGridListeners() {
 // reads `_allWaitlistApps` (already loaded for this whole tool) and age-out
 // reads `alloc.gradOut`/`alloc.gradIn` (already computed by
 // wlpRunAllocation() for the Grid/Board/Moving views) — the age-out detail
-// drawer reuses wlpMovingMonthEvents()/wlpMovingDrawerCardHtml() verbatim,
-// the exact card Moving's own drawer renders, filtered to graduation events.
+// drawer reuses wlpMovingMonthEvents()/wlpAgeOutMoveCardHtml() verbatim, the
+// exact card the Moving tab itself renders, filtered to graduation events.
 
 function wlpDemandByMonth(alloc) {
     const active = (_allWaitlistApps || []).filter(a => ['pending', 'offered', 'accepted'].includes(a.status));
@@ -1453,9 +1463,9 @@ function wlpRenderAgeOutDrawer(monthIdx, alloc) {
     const label = alloc.months[monthIdx].label;
     return `
         <div class="wlp-moving-drawer">
-            <div class="wlp-moving-drawer-head">${escHtml(label)} — ${events.length} age${events.length === 1 ? 's' : ''} out</div>
+            <div class="wlp-moving-drawer-head">Moving up · ${escHtml(label.split(' ')[0])} — ${events.length} child${events.length === 1 ? '' : 'ren'} promoted</div>
             ${events.length
-                ? `<div class="wlp-moving-drawer-grid">${events.map(wlpMovingDrawerCardHtml).join('')}</div>`
+                ? `<div class="wlp-ageout-list">${events.map(wlpAgeOutMoveCardHtml).join('')}</div>`
                 : '<div class="wlp-moving-drawer-empty">No promotions scheduled this month.</div>'}
         </div>`;
 }
@@ -1799,15 +1809,11 @@ function wlpMovingMonthEvents(monthIdx, alloc) {
     return events;
 }
 
-function wlpMovingMonthCounts(alloc) {
-    const counts = alloc.months.map(() => 0);
-    alloc.rooms.forEach(room => {
-        wlpMovementEvents(room.id, alloc).forEach(ev => {
-            const idx = alloc.months.findIndex(mo => mo.label === ev.monthLabel);
-            if (idx >= 0) counts[idx]++;
-        });
-    });
-    return counts;
+// Grad-only per-month counts across all rooms — the Moving tab's pill row
+// ("Sep (1)") and the age-out drawer's rollup share this one count, same as
+// they share wlpAgeOutMoveCardHtml for the card itself.
+function wlpAgeOutMonthCounts(alloc) {
+    return alloc.months.map((mo, i) => wlpAgeOutEventsForMonth(i, alloc).length);
 }
 
 // A graduation event ("ages out of this room") is the only kind that IS a
@@ -1815,24 +1821,6 @@ function wlpMovingMonthCounts(alloc) {
 // gets seated through the ordinary Enroll flow instead, not this button.
 function wlpMoveKey(ev) {
     return `${ev.monthLabel}|${ev.name}`;
-}
-
-function wlpMovingDrawerCardHtml(ev) {
-    const fg = ev.iconCls === 'wlp-event-icon-grad' ? 'var(--wlp-grad-fg)'
-        : ev.iconCls === 'wlp-event-icon-promised' ? 'var(--wlp-promised-fg)' : 'var(--wlp-start-fg)';
-    const chips = TREND_DAYS.map(d => ev.days.includes(d)
-        ? `<span class="wlp-chip ${wlpEventChipClass(ev.iconCls)}">${d}</span>`
-        : `<span class="wlp-chip wlp-chip-off">${d}</span>`).join('');
-    const done = ev.iconCls === 'wlp-event-icon-grad' && _wlp.movedKeys.has(wlpMoveKey(ev));
-    const confirmBtn = ev.iconCls === 'wlp-event-icon-grad'
-        ? `<button type="button" class="btn-secondary wlp-confirm-move-btn" data-wlp-confirm-move="${wlpMoveKey(ev)}" ${done ? 'disabled' : ''} style="margin-top:7px;padding:5px 12px;font-size:11.5px;${done ? 'opacity:.6;' : ''}">${done ? '✓ Moved' : 'Confirm move'}</button>`
-        : '';
-    return `
-        <div class="wlp-moving-drawer-card" data-wlp-move-event="${wlpMoveKey(ev)}">
-            <div><span style="color:${fg};font-weight:800;">${ev.icon}</span> <b>${escHtml(ev.name)}</b> ${escHtml(ev.actionLabel)}</div>
-            <div class="wlp-chip-row" style="margin:5px 0 0">${chips}</div>
-            ${confirmBtn}
-        </div>`;
 }
 
 // Confirm a graduation move: writes the child's room assignment forward via
@@ -1896,43 +1884,29 @@ function wlpAttachMoveConfirmListeners(alloc, monthIdx) {
     });
 }
 
+// Moving (top-level tab) — matches design_handoff_planning_market's mockup:
+// a flat month-pill row (count inline, "Sep (1)") and, for whichever month is
+// selected, a plain list of confirm-move cards — one per child aging out of
+// a room that month. Deliberately grad-only, not "every kind of move" (that
+// broader picture already lives in the Grid's inline age-out rollup one tab
+// over) — this tab's whole point is "who do I need to click Confirm move
+// for," and a promised-spot or waitlist-start row has no such button.
 function wlpRenderMoving(alloc) {
     const selIdx = Math.max(0, Math.min(11, _wlp.movingSelectedMonthIdx));
-    const counts = wlpMovingMonthCounts(alloc);
+    const counts = wlpAgeOutMonthCounts(alloc);
 
-    const tiles = alloc.months.map((mo, i) => {
-        const isSel = i === selIdx;
-        return `<div class="wlp-moving-tile ${isSel ? 'selected' : ''}" data-wlp-moving-month="${i}">
-            <div class="wlp-moving-tile-label">${mo.label.split(' ')[0]}</div>
-            <div class="wlp-moving-tile-count">${counts[i]}</div>
-        </div>`;
-    }).join('');
+    const pills = alloc.months.map((mo, i) => `
+        <button type="button" class="wlp-moving-pill${i === selIdx ? ' selected' : ''}" data-wlp-moving-month="${i}">${escHtml(mo.label.split(' ')[0])} (${counts[i]})</button>`).join('');
 
-    const monthEvents = wlpMovingMonthEvents(selIdx, alloc);
-    const drawerCards = monthEvents.map(wlpMovingDrawerCardHtml).join('');
-
-    const movementCols = alloc.rooms.map(room => ({ room, events: wlpMovementEvents(room.id, alloc) })).filter(x => x.events.length);
-    const movementCount = movementCols.reduce((sum, c) => sum + c.events.length, 0);
-    const movementHtml = movementCols.map(({ room, events }) => `
-        <div class="wlp-movement-col">
-            <div class="wlp-movement-col-title">${escHtml(room.label)}</div>
-            <div class="wlp-movement-events">${events.map(wlpEventCardHtml).join('')}</div>
-        </div>`).join('');
+    const events = wlpAgeOutEventsForMonth(selIdx, alloc);
+    const cards = events.map(wlpAgeOutMoveCardHtml).join('');
 
     return `
         <div class="wlp-moving-panel">
-            <div class="wlp-section-label" style="margin-bottom:2px">Moves timeline — next 12 months, all rooms</div>
-            <div class="wlp-moving-timeline">${tiles}</div>
-            <div class="wlp-moving-drawer">
-                <div class="wlp-moving-drawer-head">${escHtml(alloc.months[selIdx].label)} — ${monthEvents.length} move${monthEvents.length === 1 ? '' : 's'}, all rooms</div>
-                ${monthEvents.length ? `<div class="wlp-moving-drawer-grid">${drawerCards}</div>` : '<div class="wlp-moving-drawer-empty">No moves this month.</div>'}
-            </div>
-        </div>
-        <div class="wlp-moving-allpanel">
-            <div class="wlp-section-label" style="margin-bottom:2px">Who's moving — next 12 months</div>
-            <div class="wlp-collapse-count" style="display:block;margin-bottom:6px;">${movementCount} move${movementCount === 1 ? '' : 's'}</div>
-            <div class="wlp-section-hint">↑ graduating up to the next room · 🎯 promised a spot (offer accepted, reserved regardless of capacity) · + projected to start from the waitlist (simulated, not guaranteed)</div>
-            <div class="wlp-movement-grid" style="grid-template-columns: repeat(${Math.max(movementCols.length, 1)}, minmax(0, 1fr));">${movementHtml || '<div class="wlp-empty-note">No graduations or waitlist starts in the next 12 months.</div>'}</div>
+            <div class="wlp-moving-pillrow">${pills}</div>
+            ${events.length
+                ? `<div class="wlp-ageout-list">${cards}</div>`
+                : `<div class="wlp-empty-note">No moves scheduled for ${escHtml(alloc.months[selIdx].label)}.</div>`}
         </div>
         ${_wlp.toastText ? `<div class="wlp-toast" style="margin:14px 24px 0;border-radius:7px;">${escHtml(_wlp.toastText)}</div>` : ''}`;
 }
@@ -2144,12 +2118,19 @@ function _buildGraduationIndex() {
         if (!Object.keys(weekdays).length) return; // no known schedule to carry forward
 
         const dob       = new Date(reg.child_dob);
-        const graduates = new Date(dob.getFullYear(), dob.getMonth() + chain.ageOutMonths, 1);
+        // The exact day, not just the month — "ages out Jan 9", not "ages out
+        // January" — is what the Moving tab's confirm cards need to show. JS
+        // Date rolls a day past a short month into the next one on its own
+        // (e.g. dob day 31 into a 30-day target month), so moKey is derived
+        // FROM this exact date rather than computed separately, keeping the
+        // month a child's card appears under always the same month its own
+        // printed date says.
+        const graduates = new Date(dob.getFullYear(), dob.getMonth() + chain.ageOutMonths, dob.getDate());
         const moKey     = `${graduates.getFullYear()}-${String(graduates.getMonth() + 1).padStart(2, '0')}`;
 
         if (!gradOut[moKey]) gradOut[moKey] = {};
         if (!gradOut[moKey][reg.room_id]) gradOut[moKey][reg.room_id] = [];
-        gradOut[moKey][reg.room_id].push({ childName: reg.child_name, weekdays });
+        gradOut[moKey][reg.room_id].push({ childName: reg.child_name, weekdays, ageOutDate: graduates });
 
         if (chain.nextRoom) {
             if (!gradIn[moKey]) gradIn[moKey] = {};
