@@ -22,7 +22,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=17">
+    <link rel="stylesheet" href="css/admin.css?v=18">
     <link rel="stylesheet" href="css/admin-portal.css?v=2">
 </head>
 <body class="admin-body">
@@ -395,25 +395,18 @@
                     </select>
                 </div>
                 <div class="table-wrapper">
-                    <table id="regTable">
+                    <table id="regTable" class="rc-table">
                         <thead>
                             <tr>
-                                <th data-col="submitted" class="sortable">Submitted</th>
-                                <th>Entered By</th>
                                 <th data-col="parent" class="sortable">Parent</th>
-                                <th data-col="email" class="sortable">Email</th>
-                                <th>Phone</th>
-                                <th data-col="child" class="sortable">Child</th>
-                                <th data-col="room" class="sortable">Room</th>
-                                <th>Dates</th>
-                                <th data-col="tally" class="sortable">Full/Half</th>
+                                <th data-col="child" class="sortable">Child / Room</th>
+                                <th>Pattern</th>
                                 <th data-col="bill" class="sortable">Bill</th>
-                                <th>Discount</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="regTableBody">
-                            <tr><td colspan="12" class="loading-cell">Loading registrations…</td></tr>
+                            <tr><td colspan="5" class="loading-cell">Loading registrations…</td></tr>
                         </tbody>
                     </table>
                 </div>
