@@ -2627,6 +2627,12 @@ async function adminSubmitIncidentReport(r) {
         p_body_area:     r.bodyArea || null,
         p_occurred_at:   r.occurredAt || null,
         p_signed_name:   r.signedName || null,
+        p_body_view:     r.bodyView || null,
+        p_body_part:     r.bodyPart || null,
+        p_witnesses:     r.witnesses?.length  ? r.witnesses  : null,
+        p_first_aid:     r.firstAid?.length   ? r.firstAid   : null,
+        p_after_notes:   r.afterNotes?.length ? r.afterNotes : null,
+        p_ratio_note:    r.ratioNote || null,
     });
     if (error) throw friendlyError(error);
     return data ?? null;

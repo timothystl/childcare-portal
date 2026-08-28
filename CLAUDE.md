@@ -742,6 +742,38 @@ everything after it exactly as it does for a staff-filed report — the parent
 still has to sign at pickup on a teacher's phone before the director can close
 it. No schema change, no new signature role.
 
+⚠️ **The "+ Write a report" form only captured five of the eleven fields the
+staff app's own incident form does, until 2026-08-28.** `admin_submit_incident_report`
+took `p_body_area`/`p_location`/`p_occurred_at` as parameters from day one, but
+the compose UI in `admin-incidents.js` never rendered controls for them, and
+the RPC had no parameters at all for `body_view`/`body_part`/`witnesses`/
+`first_aid`/`after_notes`/`ratio_note` — six columns `submit_incident_report`
+(the staff/PIN-gated path) has carried since `incident_three_signatures.sql`
+and `incident_kind_and_after_notes.sql`. A report the director filed herself
+printed a visibly thinner record than one a teacher filed, for no reason tied
+to who typed it — the same "when it happened," "where," "what mark," "what
+was done," "how the child was afterward," "who else saw it" and "the ratio at
+the time" a teacher's form always asked for.
+
+Fixed by `admin_incident_report_full_fields.sql` (**applied and verified in
+production 2026-08-28**, same DROP-then-CREATE discipline as the two staff-side
+incident migrations — a named-argument call from supabase-js would otherwise
+match both the old 9-arg signature and a wider one, and PostgREST refuses to
+pick between them). `admin_submit_incident_report` now takes the same six
+extra parameters `submit_incident_report` does and writes all eleven columns.
+The compose panel gained: a date+time picker with the same "Just now / 15 min
+ago / An hour ago / Before lunch" quick chips, a location field, front/back +
+quick-pick body chips (shown only when the kind maps to `injury`, hidden for
+Illness/Other), first-aid chips, an "Since then" checklist, a witnesses
+add/remove list, and a ratio-at-the-time field **prefilled from
+`centerHeadcountAdmin()`** — the same present-children count the staff app
+derives automatically rather than asks for, best-effort so a failed read just
+leaves the field blank instead of blocking the form. Chip/checkbox/witness
+state lives in `_incComposeState`, mutated by direct DOM toggles the same way
+`staff-incident.js`'s `slIncState` is — never by re-rendering the whole tool,
+which would have discarded whatever was already typed into the description or
+action boxes on every click.
+
 `admin_log_fire_drill` is the same shape for Fire Drills: an admin-gated twin
 of `log_fire_drill`, same explicit column allow-list, `drill_date` and the
 conductor still server-side.
