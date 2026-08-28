@@ -401,6 +401,15 @@ function _fhRenderLedger() {
     const sent       = active.filter(r => r.status === 'sent');
     const draftedTotal = drafted.reduce((s, r) => s + r.total, 0);
 
+    // What this one month's care actually costs, full stop — every active
+    // family's row.total (drafted, sent, or already paid, doesn't matter),
+    // summed. Same source as Billing Report's own "Total to bill" (no second
+    // calculation, per this file's header note), just surfaced right here so
+    // it doesn't take a tab switch to see. Deliberately NOT the owed banner's
+    // number: this is what this month alone bills for; the banner below is a
+    // running balance across every open month.
+    const monthTotal = active.reduce((s, r) => s + r.total, 0);
+
     // ⚠️ NOT `active.filter(...)`. r.owed is the real cross-month balance
     // (_fhOwed) — a family with no booking this month ("withdrawn" for this
     // month's exceptions only) can still owe every dollar of an earlier
@@ -424,6 +433,10 @@ function _fhRenderLedger() {
 
     root.innerHTML = `
         <div class="fh-strip">
+            <div class="fh-stat fh-stat-month">
+                <div class="fh-stat-num">${_fhMoney(monthTotal)}</div>
+                <div class="fh-stat-label">Total to bill, ${_fhMonthLabel(_fhMonth)} — this month alone</div>
+            </div>
             <div class="fh-stat">
                 <div class="fh-stat-num">${active.length}</div>
                 <div class="fh-stat-label">Families, ${_fhMonthLabel(_fhMonth).split(' ')[0]}</div>

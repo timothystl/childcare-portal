@@ -1175,6 +1175,13 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 }
 .fh-stat-tang { background: var(--tang-pale); border-color: #f6d3c2; }
 .fh-stat-muted { background: var(--warm-gray); }
+/* This month's own total (not the running owed banner) — a dollar figure
+   reads wider than a bare count at the same font size, so it gets a
+   slightly smaller number and a label that's allowed to wrap onto a
+   second line instead of forcing the card wider than the rest of the strip. */
+.fh-stat-month { max-width: 220px; }
+.fh-stat-month .fh-stat-num { font-size: 21px; }
+.fh-stat-month .fh-stat-label { white-space: normal; }
 .fh-stat-num { font-family: var(--font-head); font-size: 26px; font-weight: 800; color: var(--navy); line-height: 1; }
 .fh-stat-tang .fh-stat-num { color: var(--tang); }
 .fh-stat-muted .fh-stat-num { color: var(--text-muted); }
