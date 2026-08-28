@@ -97,8 +97,11 @@ function _abCanAct() {
 }
 
 // Resolve the registration behind one child's TODAY, for the Absent mark
-// (needs registration_id) and the Move dropdown (needs registration_dates.id).
-// The head-count RPC returns student_id/child_name/room_id, not either of
+// (needs registration_id), the Move dropdown (needs registration_dates.id),
+// and the day-type pill (needs day_type — the head-count RPC doesn't return
+// it; center_headcount_rows()'s own SQL source isn't committed to this repo,
+// so extending its SELECT isn't done blind, per this file's standing rule).
+// The head-count RPC returns student_id/child_name/room_id, not any of
 // those, so this reads them from the same allRegistrations array every other
 // admin day-view tool already uses.
 function _abResolveReg(childName) {
@@ -108,7 +111,7 @@ function _abResolveReg(childName) {
     for (const reg of allRegistrations) {
         if (String(reg.child_name || '').toLowerCase() !== lower) continue;
         const d = (reg.registration_dates || []).find(x => x.care_date === dateStr && !x.waitlisted);
-        if (d) return { registrationId: reg.id, dateId: d.id, roomId: d.room_id || reg.room_id };
+        if (d) return { registrationId: reg.id, dateId: d.id, roomId: d.room_id || reg.room_id, dayType: d.day_type };
     }
     return null;
 }
@@ -181,22 +184,35 @@ function _abBindActions() {
     });
 }
 
+// Two stacked columns — [In, Out] beside [Move, Absent] — not one inline
+// row of four controls, matching the design screenshot. In/Out show the
+// actual check time next to the button once marked; there is no separate
+// check-in-time vs. check-out-time field to draw on (the RPC exposes only
+// the single latest `last_event_at`), so only the side matching the child's
+// *current* status ever has a real time — the other side reads '—', which
+// is the honest state rather than a guessed or carried-over time.
 function _abActionsHtml(c, roomId) {
     const otherRooms = (typeof ROOMS !== 'undefined' ? ROOMS : [])
         .filter(r => r.id !== roomId && r.status !== 'coming_soon');
     const moveOptions = otherRooms.map(r => `<option value="${r.id}">${escHtml(r.label)}</option>`).join('');
+    const inTime  = c.attendance_status === 'present' ? _abTime(c.last_event_at) : '';
+    const outTime = c.attendance_status === 'left'    ? _abTime(c.last_event_at) : '';
     return `<span class="ab-actions" data-student="${escHtml(c.student_id)}"
                   data-name="${escHtml(c.child_name)}" data-room="${escHtml(roomId)}">
-        <button type="button" class="ab-act-btn${c.attendance_status === 'present' ? ' is-on' : ''}"
-                data-act="in" title="Mark ${escHtml(c.child_name)} checked in">In</button>
-        <button type="button" class="ab-act-btn${c.attendance_status === 'left' ? ' is-on' : ''}"
-                data-act="out" title="Mark ${escHtml(c.child_name)} checked out">Out</button>
-        <button type="button" class="ab-act-btn ab-act-absent${c.marked === 'absent' ? ' is-on' : ''}"
-                data-act="absent" title="Mark ${escHtml(c.child_name)} absent">Absent</button>
-        <select class="ab-move-select" title="Move ${escHtml(c.child_name)} to another room today">
-            <option value="">Move &rarr;</option>
-            ${moveOptions}
-        </select>
+        <span class="ab-actions-col">
+            <button type="button" class="ab-act-btn${c.attendance_status === 'present' ? ' is-on' : ''}"
+                    data-act="in" title="Mark ${escHtml(c.child_name)} checked in">In <span class="ab-act-time">${inTime ? escHtml(inTime) : '—'}</span></button>
+            <button type="button" class="ab-act-btn${c.attendance_status === 'left' ? ' is-on' : ''}"
+                    data-act="out" title="Mark ${escHtml(c.child_name)} checked out">Out <span class="ab-act-time">${outTime ? escHtml(outTime) : '—'}</span></button>
+        </span>
+        <span class="ab-actions-col">
+            <select class="ab-move-select" title="Move ${escHtml(c.child_name)} to another room today">
+                <option value="">Move &#9662;</option>
+                ${moveOptions}
+            </select>
+            <button type="button" class="ab-act-btn ab-act-absent${c.marked === 'absent' ? ' is-on' : ''}"
+                    data-act="absent" title="Mark ${escHtml(c.child_name)} absent">Absent</button>
+        </span>
     </span>`;
 }
 
@@ -261,7 +277,7 @@ function _abRender() {
             ${_abTile('Marked absent', absent.length,
                       absent.length ? 'recorded by the office' : 'none recorded', '')}
             ${_abTile('Ratio watch', over.length ? `${over.length} room${over.length > 1 ? 's' : ''}`
-                                    : atLimit.length ? `${atLimit.length} room${atLimit.length > 1 ? 's' : ''}` : 'Clear',
+                                    : atLimit.length ? `${atLimit.length} room${atLimit.length > 1 ? 's' : ''}` : 'OK',
                       over.length ? 'over ratio' : atLimit.length ? 'at the limit' : 'every room inside ratio',
                       over.length ? 'bad' : atLimit.length ? 'warn' : 'ok')}
             ${_abTile('Allergies present', allergyKids.length,
@@ -341,19 +357,32 @@ function _abRoom(roomId, kids, staff, hasCheckins) {
 
     const canAct = _abCanAct();
     const rows = roomKids.map(c => {
-        const allergy = _abAllergySummary(c.allergies);
+        const allergy  = _abAllergySummary(c.allergies);
+        const isAbsent = c.marked === 'absent';
+        const dayType  = _abResolveReg(c.child_name)?.dayType;
         let mark, cls;
-        if (c.marked === 'absent')                  { mark = 'ABSENT'; cls = 'is-absent'; }
+        if (isAbsent)                                { mark = 'ABSENT'; cls = 'is-absent'; }
         else if (c.attendance_status === 'present') { mark = `in ${_abTime(c.last_event_at)}`; cls = 'is-in'; }
         else if (c.attendance_status === 'left')    { mark = `out ${_abTime(c.last_event_at)}`; cls = 'is-out'; }
         else                                        { mark = hasCheckins ? 'not in' : 'booked'; cls = 'is-waiting'; }
 
+        // Name-line badges: day type, an allergy flag, ABSENT (redundant with
+        // the filled Absent button below, but visible without scanning all the
+        // way to the action grid), and drop-in — all independent facts that
+        // can coexist, unlike `mark` above (which is one mutually exclusive
+        // status used only for the read-only/no-action fallback).
+        const badges = `${dayType ? `<span class="ab-daytype-pill">${escHtml(dayType.toUpperCase())}</span>` : ''}${
+            allergy ? `<span class="ab-allergy-icon" title="${escHtml(allergy)}">⚠️</span>` : ''}${
+            isAbsent ? '<span class="ab-absent-label">ABSENT</span>' : ''}${
+            c.dropin ? '<span class="ab-dropin">drop-in</span>' : ''}`;
+
         return `<div class="ab-kid ${cls}">
             <span class="ab-av">${escHtml(_abInitials(c.child_name))}</span>
-            <span class="ab-kid-name">${escHtml(c.child_name)}${
-                c.dropin ? '<span class="ab-dropin">drop-in</span>' : ''}</span>
-            <span class="ab-kid-mark">${allergy ? `<span title="${escHtml(allergy)}">⚠️</span> ` : ''}${escHtml(mark)}</span>
-            ${canAct ? _abActionsHtml(c, roomId) : ''}
+            <span class="ab-kid-info">
+                <span class="ab-kid-name">${escHtml(c.child_name)}</span>
+                <span class="ab-kid-badges">${badges}</span>
+            </span>
+            ${canAct ? _abActionsHtml(c, roomId) : `<span class="ab-kid-mark">${escHtml(mark)}</span>`}
         </div>`;
     }).join('');
 

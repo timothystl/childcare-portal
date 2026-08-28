@@ -777,6 +777,54 @@ one of them long-standing and unrelated to this session's redesign work.
   the contrast now.
 - `css/admin.css?v=23`.
 
+### Attendance Board row layout reworked to a 2x2 action grid (2026-08-28)
+
+Reported live with a screenshot of the intended layout, sent mid-turn while
+the EC bugfixes above were still in flight. The five summary tiles (Here
+now / Not in yet / Marked absent / Ratio watch / Allergies present) already
+matched almost exactly — `_abTile()` already built them — except the Ratio
+Watch tile's clear-state value read `'Clear'` where the screenshot wants
+`'OK'`. Fixed as a one-word string change.
+
+The child rows were the real rework: In/Out/Absent/Move used to sit in one
+inline row of four controls; the screenshot shows In and Out stacked in
+one column with their check time printed next to the button, Move and
+Absent stacked in a second column beside it, and the name line carrying a
+day-type pill, an allergy flag, an ABSENT label, and a drop-in badge as
+independent, simultaneously-visible facts rather than one mutually
+exclusive status string.
+
+- **`_abActionsHtml()` rebuilt as two `.ab-actions-col` flex columns**
+  (`[In, Out]` beside `[Move, Absent]`) instead of one inline row. No event
+  wiring changed — `_abBindActions()`'s delegated listeners key off
+  `data-act`/`.ab-move-select`, both still present, so the click/change
+  handlers needed no changes at all.
+- ⚠️ **There is no separate check-in-time vs. check-out-time field to draw
+  on.** `center_headcount_rows()` exposes a single `last_event_at` (the
+  *latest* event, whichever direction), not a pair. So In's time only ever
+  populates while `attendance_status === 'present'`, Out's only while
+  `'left'` — the other side reads `—` rather than a guessed or stale time.
+  A child who was checked in and back out today will show a real time on
+  Out and `—` on In, not both filled in.
+- **The day-type (FULL/HALF) pill needed a new field the head-count RPC
+  doesn't return.** Rather than extend `center_headcount_rows()` — its SQL
+  source isn't committed to this repo, and this file already warns against
+  reconstructing it blind — `_abResolveReg()` (already used for the Absent
+  mark and the Move dropdown) now also returns `dayType` from the matching
+  `registration_dates` row in `allRegistrations`, the same client-side
+  resolution pattern every other admin day-view tool in this file already
+  uses. Verified live via `center_headcount_rows()`'s actual jsonb shape
+  (`dropin, marked, room_id, allergies, child_name, student_id,
+  last_event_at, attendance_status`) before assuming the field was missing,
+  not inferred from the JS alone.
+- **Name-line badges are independent facts, not one exclusive `mark`
+  string.** A child can be FULL-day *and* allergic *and* absent *and* a
+  drop-in all at once; the old `mark` variable could only ever say one of
+  those. `mark` is kept only as the read-only (`!canAct`, staff role)
+  fallback text, where there's no action grid to carry the same
+  information.
+- `css/admin.css?v=24`.
+
 ### Director-authored records — she is signature 1, not a fourth role
 
 For Incident Reports, the open question was how signature 1 works when there
