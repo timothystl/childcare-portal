@@ -3565,6 +3565,67 @@ and grepped for the new class names (`ar-lock-btn`, `ar-payment-btn`,
 `trends-room-toggle`, etc.) to confirm the delegated-listener conversion
 actually shipped in the bundle, not just the source.
 
+### ⚠️ That PR broke the deploy — `_headers` has a 2,000-character-per-line limit (2026-08-28)
+
+Cloudflare's `Workers Builds` check failed on the CSP-tightening PR within
+minutes of opening it. Not a code bug — the CSP line in `_headers` had grown
+to **2,151 characters** (22 sha256 hashes plus the existing directives), and
+Cloudflare's own `_headers` docs are explicit: *"Each line in the `_headers`
+file has a 2,000 character limit. The entire line, including spacing, header
+name, and value, counts toward this limit."* This repo already has one prior
+incident from exactly this file (the blank-`Pragma:` deploy failure
+documented above) — worth remembering that `_headers` has hard, silent-ish
+limits a normal code review won't catch.
+
+Fixed two ways, one of them a real correctness fix rather than just a
+line-length trim:
+
+- **Extracted the 3 least-critical inline `<script>` blocks to external
+  `.js` files** (`docs/manual.js`, `marketing/poster.js`,
+  `marketing/website/site.js`) instead of hashing them. `script-src 'self'`
+  already covers same-origin external scripts with no hash needed, so this
+  drops 3 hashes (~150 characters) with zero behavior change, and as a
+  side benefit these three pages' JS no longer needs a CSP-hash update
+  every time someone edits their script content.
+- ⚠️ **A real bug in the hash generation, not just a size optimization**:
+  `<script type="text/x-dc" ...>` (the two `docs/design_handoff/*.dc.html`
+  mockups' data blocks) and `<script type="application/ld+json">`
+  (`index.html`'s SEO structured data) were being hashed and counted toward
+  the line **even though browsers never execute either as JavaScript**.
+  Verified empirically before relying on it: a `type="text/x-dc"` block
+  with content matching nothing in the CSP produced **zero** CSP violation
+  in a real browser — script-src simply doesn't gate a `<script>` tag the
+  parser was never going to execute as script in the first place. Excluding
+  non-JS `type` values dropped 3 more hashes and is the *correct* fix, not
+  a shortcut — those hashes were dead weight that would have made every
+  future JSON-LD or `.dc.html` edit falsely look like it needed a CSP
+  update too.
+- Final line: **1,827 characters** (was 2,151), with margin restored
+  specifically so the next inline script or CDN host addition doesn't
+  immediately reopen this exact failure.
+
+**New guards**, both structural (would have caught this before it ever
+reached Cloudflare):
+- A dedicated test asserts the raw `_headers` CSP line stays under 1,950
+  characters — checked against the actual line as written, including the
+  `Content-Security-Policy:` label and leading whitespace, not just the
+  directive value, since that's what Cloudflare actually counts.
+- The script-hash drift guard now excludes non-executable `type=` script
+  tags using the same allowlist a real browser does (absent/empty/
+  `text/javascript`/`application/javascript`/`text/ecmascript`/
+  `application/ecmascript`/`module`), so it stops falsely demanding hashes
+  for content that was never going to run.
+
+**Verified against the actual constraint, not just the test suite**:
+recomputed the real full line (`Content-Security-Policy: ` prefix +
+directives) at 1,827 characters, re-ran the same real-browser CSP check
+from the section above against all four touched pages
+(`payroll.html`/`docs/manual.html`/`marketing/poster.html`/
+`marketing/website/index.html`) — zero script-src violations on any of
+them, confirming the externalized scripts load correctly under `'self'`.
+
+`npm test` — 192/192. `npm run build` — `dist/` rebuilt.
+
 ---
 
 ## Finance summary API (for the church ChMS finance integration)
