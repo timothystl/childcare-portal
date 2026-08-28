@@ -194,7 +194,7 @@ function _abActionsHtml(c, roomId) {
         <button type="button" class="ab-act-btn ab-act-absent${c.marked === 'absent' ? ' is-on' : ''}"
                 data-act="absent" title="Mark ${escHtml(c.child_name)} absent">Absent</button>
         <select class="ab-move-select" title="Move ${escHtml(c.child_name)} to another room today">
-            <option value="">Move &rarr;</option>
+            <option value="">Move</option>
             ${moveOptions}
         </select>
     </span>`;
@@ -248,7 +248,10 @@ function _abRender() {
         <div class="ab-head">
             <p class="ab-live">Live · ${escHtml(_abTime(_abData.as_of))} ·
                updates as teachers check children in on the floor</p>
-            <button class="btn-ghost ab-refresh" id="abRefresh">Refresh</button>
+            <span class="ab-head-btns">
+                <button class="btn-secondary ab-print" id="abPrint">&#128438; Print</button>
+                <button class="btn-ghost ab-refresh" id="abRefresh">Refresh</button>
+            </span>
         </div>
 
         <div class="ab-tiles">
@@ -275,6 +278,13 @@ function _abRender() {
         </div>`;
 
     _abEl('abRefresh')?.addEventListener('click', renderAttendanceBoard);
+    // Reuses Classroom Roster's own print/PDF grid (_printDayRoster,
+    // admin-classrooms.js) — same "one page, every room" layout as that
+    // tool's Print All Rooms, against this board's own live care_date
+    // rather than the Roster tool's (possibly never-opened) date input.
+    _abEl('abPrint')?.addEventListener('click', () => {
+        if (typeof _printDayRoster === 'function') _printDayRoster(_abData.care_date, null);
+    });
 }
 
 function _abTile(label, value, sub, tone) {
@@ -350,7 +360,7 @@ function _abRoom(roomId, kids, staff, hasCheckins) {
 
         return `<div class="ab-kid ${cls}">
             <span class="ab-av">${escHtml(_abInitials(c.child_name))}</span>
-            <span class="ab-kid-name">${escHtml(c.child_name)}${
+            <span class="ab-kid-name" title="${escHtml(c.child_name)}">${escHtml(c.child_name)}${
                 c.dropin ? '<span class="ab-dropin">drop-in</span>' : ''}</span>
             <span class="ab-kid-mark">${allergy ? `<span title="${escHtml(allergy)}">⚠️</span> ` : ''}${escHtml(mark)}</span>
             ${canAct ? _abActionsHtml(c, roomId) : ''}
