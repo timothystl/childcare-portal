@@ -77,14 +77,11 @@ async function _brBuild(month) {
 
     const rows = [];
     famRows.forEach(fam => {
-        if (fam.withdrawn) {
-            rows.push({
-                childName: '(withdrawn)', roomLabel: '—', roomId: 'zzz',
-                familyName: fam.name, payer: fam.email, days: 0, rate: 0,
-                adjustments: 'No days booked this month', amount: 0, withdrawn: true,
-            });
-            return;
-        }
+        // Withdrawn families never billed anything this month — surfacing
+        // them as a dimmed "(withdrawn)" row/section just cluttered the
+        // report with rows that are always $0. They're still excluded from
+        // childCount/familyCount below; this just stops rendering them too.
+        if (fam.withdrawn) return;
         // Re-derive per-child figures from the same source computeBillMonthExceptions
         // used, so a room subtotal and the family total it rolls up into can
         // never disagree — no second pass over registrations here.
@@ -236,7 +233,7 @@ function _brChildRow(r) {
 }
 
 function _brNameTable() {
-    const rows = _brFamilyRows.map(f => {
+    const rows = _brFamilyRows.filter(f => !f.withdrawn).map(f => {
         const kids = f.children.map((name, i) => `${escHtml(name)} <small>(${escHtml(_brRows.find(r => r.childName === name)?.roomLabel || '')})</small>`).join(', ');
         return `<tr class="br-row${f.isException ? ' br-exc' : ''}${f.withdrawn ? ' br-withdrawn' : ''}" data-br-email="${escHtml(f.email || '')}">
             <td>${escHtml(f.name)}<br><small style="color:var(--text-muted)">${escHtml(f.email)}</small></td>
@@ -282,6 +279,8 @@ function _brBindToggle() {
     });
     _brEl('brPrintBtn')?.addEventListener('click', _brPrint);
     _brEl('brCsvBtn')?.addEventListener('click', _brExportCsv);
+    const monthEl = _brEl('brMonth');
+    if (monthEl) monthEl.onchange = () => renderBillingReportTool();
     _brBindNotes();
 }
 
