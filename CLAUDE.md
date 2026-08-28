@@ -662,6 +662,87 @@ Revisit if that trade turns out to be the wrong one.
 landed tests of its own in between). `npm run build` — `dist/` rebuilt and
 re-verified against `origin/main` after merge, per the incident above.
 
+### Family Directory redesign (2026-08-27/28, from `design_handoff_classroom_tab_full`)
+
+Second of the three Records screens, after Care Calendar. Most of the
+prototype's per-child field list — photo, name, `type="date"` DOB, room,
+allergies, photo release, notes — turned out to already exist in
+`renderModalChildRows()` almost exactly as specified; the real deltas were
+the list view's button count, one confirmed live bug found while touching
+this code, and a genuinely new feature (Documents).
+
+**List → card actions: 5+ buttons → Edit, Calendar, and a "⋯" menu.**
+`renderFamiliesList()`'s per-row Archive/Restore, Lock/Unlock Reg,
+Login-unlock and Delete buttons moved into a `.fm-kebab-menu` dropdown;
+Edit and Calendar stay visible (the handoff's "one Edit action instead of
+5 buttons"). ⚠️ **Every existing button class and its delegated handler in
+`setupFamilies()` is untouched** — only the markup that wraps them moved.
+That was deliberate: the archive/lock/delete logic is already correct and
+already logs to `admin_audit_log`, so the redesign only needed to relocate
+buttons, not re-implement what they do. The kebab toggle/close-on-outside-
+click/Escape wiring is new, added ahead of the existing per-button checks
+in the same delegated `document` click handler rather than a second one.
+
+**FS21 fixed while in this file — allergies dropped only on the CREATE
+path.** CLAUDE.md has carried this as open since the fourth sweep:
+`saveFamilyModal()`'s CREATE branch passed `addStudent()` only
+name/dob/room/discount/photo, while the UPDATE branch a few lines below
+also passed `recurringDays`/`allergies`/`careNotes`/`photoRelease`. A child
+added while creating a brand-new family started with no allergy record and
+no `allergies_reviewed_at` stamp — a safety field silently dropped, not a
+convenience one. Fixed by mirroring the UPDATE branch's four fields into
+the CREATE branch's `addStudent()` call. The severity note this file
+already carried (0/150 live students were ever created through this path,
+so latent rather than active) is now moot — the path is fixed, not just
+documented as risky.
+
+**Documents — built as real per-child file storage, not a placeholder.**
+New private bucket `child-documents` (`add_child_documents_bucket.sql`,
+**applied and verified live 2026-08-27/28**: `pg_policy` inspection
+confirmed the single policy is scoped to `authenticated` + `is_admin()`,
+`FOR ALL`, no anon or parent access at all). ⚠️ **Deliberately no metadata
+table.** One folder per child, named by `students.id` — `listChildDocuments()`
+reads `storage.list(studentId)` directly, so there is nothing to keep in
+sync if a file is removed from the Supabase dashboard instead of the app,
+unlike a join-table design that could silently orphan a row. This mirrors
+`child-profile-photos`' existing parent-facing upload path
+(`uploadChildProfilePhotoAsParent`), which already scopes by
+`<studentId>/...` for exactly the same folder-based-RLS reason — Documents
+just doesn't need the parent half of that policy, since this bucket has none.
+- **Admin-only, unlike the photo bucket, on purpose.** The handoff's
+  Documents section is office paperwork (immunization records, signed
+  forms), not something the redesign asked to expose in the parent app.
+  Adding a parent-read policy later is a strictly additive change if it's
+  ever wanted — nothing here forecloses it.
+- **"📷 Scan document" is a camera-capture file input** (`capture="environment"`,
+  `accept="image/*"`), and "⬆ Upload file" is a plain file input
+  (`image/jpeg|png|webp`, `application/pdf`). There is no OCR or actual
+  scanning pipeline — "scan" means "take a photo with the device camera,"
+  which is what capture-attribute file inputs actually do on a phone
+  browser, and is the honest, buildable interpretation of the handoff's
+  copy rather than a bigger feature nobody asked for.
+- **Upload/remove write immediately, not deferred to Save.** Unlike the
+  profile photo (which stages deletes in `_fmPhotosToDelete` until the
+  family record itself saves successfully, so a cancelled edit can't orphan
+  a still-referenced path), a document has no DB row pointing at it to keep
+  in sync — there's nothing for an unsaved edit to leave inconsistent, so
+  it writes straight through.
+- **Gated on the child already being saved** (`child.id` must exist) — a
+  child row added in the modal but not yet saved has no id to fold into a
+  storage path, so its Documents block shows "Save this child first, then
+  reopen Edit to attach documents" instead of controls that would fail.
+
+**Also fixed in passing:** the PIN fields' `maxlength="4"` didn't match the
+`/^\d{4,8}$/` validation already enforced in `saveFamilyModal()` — an admin
+literally could not type a 5–8 digit PIN the app would otherwise accept.
+Bumped to `maxlength="8"` in both fields, with the placeholder text updated
+to say "4-8 digits" instead of "4-digit" throughout.
+
+`npm test` — 182/182. `npm run build` — `dist/` rebuilt and re-verified
+against `origin/main` after merge, same discipline as Care Calendar above
+(this is now the standing practice for every `claude/**` merge on this repo,
+not just the two sessions that got burned by it).
+
 ---
 
 ## Design handoff build — staff, parent, director (2026-08-16)
