@@ -425,6 +425,133 @@ needed to move to Settings.
 
 ---
 
+## Staff tab consolidation (2026-08-28)
+
+Built from `design_handoff_staff/` (README + `Staff Tab Redesign.dc.html`),
+same lens as the Classroom/Finance/Planning consolidations below. **Audit
+finding: 9 tools, 3 groups → 4 tools, 3 groups.** Every retired key's real
+logic is untouched — this only changes which tools are separate nav entries
+versus tabs inside one screen.
+
+| Kept as | Was | Tabs |
+|---|---|---|
+| **Build Staff Schedule** | Build Staff Schedule + Daily Staffing Requirement | This week's schedule (with a By room & shift / By worker view toggle) · Daily Staffing Requirement |
+| **Staff Roster** | Staff Roster + Staff Directory | Roster · Directory (print) |
+| **Payroll** | Payroll + PTO Settings + Geofence & Clock Reminders + Clock-In Integrity | Pay period · PTO policy · Time Clock (Settings / Integrity sub-tabs) |
+| **HR & Handbook** (new) | — | Policies · Write-ups · Staff Injury Reports (moved here) |
+
+Three single-source-of-truth pairs, same reasoning as every prior
+consolidation: the `staff` table (Roster owns it, Directory reads it),
+`apStaffing()` (Schedule owns it, the Requirement tab reads the same call
+instead of a separate entry that could compute "enough staff" differently),
+and Payroll (the PTO rate and the Time Clock config only ever matter in the
+context of the numbers they feed).
+
+### ⚠️ A real bug found and fixed on the way in: staffInjury/clockIntegrity were permanently blank
+
+`staffInjuriesSection` and `clockIntegritySection` carried `pane: 'staffing'`
+in `AP_TOOLS`, but their actual markup lived in `#tab-families` (next to Fire
+Drills). `apShowSection()` hides every `.tab-pane` whose id isn't
+`'tab-' + tool.pane` — so opening either tool from the sidebar hid
+`#tab-families` (and the section along with it) while showing the empty
+`#tab-staffing`. Same bug class as the Classroom tab's `attBoard`/
+`incidents`/`drills` pane mismatch from the day before, in the opposite
+direction (there the DOM was in the tab the tool's `pane` pointed away from;
+here the DOM was in a *different* tab than `pane` claimed). Found by reading
+`apShowSection()` against the two tools' real DOM location, not assumed from
+a symptom report — nobody had filed one. Fixed by physically moving both
+sections' bodies into `#tab-staffing` as part of the consolidation (Injury
+Reports → HR & Handbook's third tab, Clock-In Integrity → Payroll → Time
+Clock's Integrity sub-tab), so `pane` finally matches where the DOM is.
+
+### Build Staff Schedule and Daily Staffing Requirement share one date field
+
+They used to carry two independent "week of" pickers (`staffWeekOf` for the
+schedule, `staffReqWeekOf` for the requirement) that could show two different
+weeks at once. Now one field (`staffWeekOf`) drives both tabs —
+`apRenderStaffReq()` reads it directly. The header cards above the tab strip
+("Children this week" / "Est. labor cost") are the exact figures
+`apRenderStaffReq()` already computes for its own footer (`apSchedHeaderStats()`
+takes the same `sf`/`cost` values as a parameter rather than recomputing them),
+so the shared header and the Requirement tab's own totals can never disagree.
+
+⚠️ **The labor-cost estimate is deliberately the wage-model number (avg wage
+× hours × payroll burden), not a sum of each assigned staff member's real
+rate.** Build Staff Schedule's own room/shift grid is frequently incomplete
+mid-week, and a cost built from "whoever's been assigned so far" would swing
+on every single slot filled in, reading as broken rather than live.
+
+### "By worker" is a read-only pivot, not a second editable grid
+
+`renderScheduleByWorker()` (admin-reports.js) reads the room/shift grid's
+*live DOM state* through `_readAssignmentsFromDOM()` — the exact same helper
+`saveStaffSchedule()` and the XLSX export already use — and pivots it to
+staff × day. It can never show an assignment that disagrees with what Save
+would persist, and no new editing surface had to be built: "By room & shift"
+stays the only place an assignment changes, matching the handoff's own
+framing ("the room/shift spreadsheet is the default because that's the
+format she actually works from; the per-person list is the alternate view").
+
+### Time Clock's role gate falls out for free
+
+The handoff's own open question — confirm `full`-only for the merged
+Settings/Integrity tool — resolved itself: Time Clock is now a tab *inside*
+Payroll, which was already gated to `full` via `AP_FULL_ONLY_KEYS`. No new
+gating code needed, and it's automatically the stricter of the two former
+gates (Clock-In Integrity's), exactly what the handoff asked for.
+
+### HR & Handbook is open to `restricted`, except one tab
+
+Policies and Write-ups don't carry the wage/PII sensitivity that gated
+`staffInjury` on its own — so unlike Payroll, this whole tool is **not** in
+`AP_FULL_ONLY_KEYS`. Only the Injury Reports tab needs the old gate (an
+injury report names an employee, the part of their body, and where they were
+treated). `applyRoleRestrictions()` (admin-settings.js) hides `apHrTabInjury`
+and its pill button (`apHrPillInjury`) with inline `display:none` for any
+role but `full` — the same "hide a specific control, not the whole tool"
+pattern used for `financeApiCard` elsewhere in that function.
+
+### Write-ups and Policies are genuinely new — everything else is a relocation
+
+`add_staff_write_ups_and_hr_policies.sql` (**written this session, needs to
+be applied manually per this file's standing migration process**) adds:
+
+- **`staff_write_ups`** — one row per write-up (kind/note/occurred_at/
+  issued_by_name/status). Two `SECURITY DEFINER` RPCs,
+  `admin_submit_staff_write_up` and `admin_mark_write_up_signed`, both gated
+  on `admin_role() IN ('full', 'restricted')` — same tier as filing an
+  incident report. `authenticated` gets `SELECT` only; every write goes
+  through the RPCs, closing the same dead-grant trap (`SX1`/`NEW-1`
+  elsewhere in this file) a fresh `CREATE TABLE` would otherwise reopen.
+  ⚠️ **There is no staff-facing e-signature flow in this pass** — the
+  handoff's own screenshots show only the admin list view, so "Mark signed"
+  records that the office has the acknowledgment on file (in person, on
+  paper, verbally), the same way a real write-up binder would. A future pass
+  could add a PIN-gated staff-side signature RPC without changing the
+  table's shape.
+- **`hr-policies`** storage bucket — private, `is_admin()`-gated, same shape
+  as `child-documents` (not `enrollment-forms`, which is public — these are
+  internal staff documents, not something meant for a public link). "View
+  PDF" mints a short-lived signed URL per click (`fetchHrPolicyUrl()`) rather
+  than embedding a long-lived public URL. Metadata (title/icon/"Updated"
+  label/storage path) lives in a `settings` key, `hr_handbook_policies` —
+  same "metadata in settings, file in storage" split `enrollment_forms`
+  already uses.
+
+### Verification run this session
+
+`npm test` — 182/182, all drift guards green (nothing in the test suite's
+hand-maintained copies touches code this session changed). `npm run build` —
+`dist/admin.min.js` and `dist/supabase.min.js` rebuilt and grepped for new
+symbols (`hrHandbookSection`, `renderStaffWriteUpsTool`, `admin_submit_staff_write_up`,
+etc.) before committing — the exact check this file's own "it shipped
+half-live for a day" incidents (Bookkeeper tab, Classroom tab) say to run.
+**Not yet verified live**: the migration has not been applied to production
+as of this commit — apply it in the Supabase SQL Editor before the Write-ups
+or Policies tabs will do anything beyond render an empty list.
+
+---
+
 ## Classroom tab consolidation — Daily / Planning (2026-08-27)
 
 Built from `design_handoff_classroom_tab/` (README + prototype `Classroom Tab

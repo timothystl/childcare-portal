@@ -2759,6 +2759,84 @@ async function fetchIncidentReports({ status = 'submitted', limit = 200 } = {}) 
     return data || [];
 }
 
+/**
+ * Staff write-ups (HR & Handbook → Write-ups). File a new one — the acting
+ * admin's name is derived server-side from their own session, never taken
+ * from the browser. Gated to admin_role() IN ('full','restricted').
+ */
+async function submitStaffWriteUp({ staffId, kind, note, occurredAt }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_submit_staff_write_up', {
+        p_staff_id:    staffId,
+        p_kind:        kind,
+        p_note:        note,
+        p_occurred_at: occurredAt || null,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** Records that the staff member's acknowledgment is on file. */
+async function markStaffWriteUpSigned(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_mark_write_up_signed', { p_id: id });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/** Every write-up, newest first, with the staff member's name/role along for display. */
+async function fetchStaffWriteUps(limit = 200) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_write_ups')
+        .select('*, staff(name, role)')
+        .order('occurred_at', { ascending: false })
+        .limit(limit);
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
+ * HR & Handbook → Policies. A curated metadata list ({id, title,
+ * updatedLabel, path}) in settings, backed by files in the private
+ * hr-policies bucket — same "metadata in settings, file in storage" split
+ * enrollment_forms already uses, but a private bucket + signed URLs since
+ * these are internal staff documents, not something meant for a public link.
+ */
+async function loadHrPolicies() {
+    const val = await fetchSetting('hr_handbook_policies');
+    return Array.isArray(val) ? val : [];
+}
+
+async function saveHrPolicies(policies) {
+    await upsertSetting('hr_handbook_policies', policies);
+}
+
+async function uploadHrPolicyFile(file) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${Date.now()}-${safeName}`;
+    const { error } = await sbClient.storage.from('hr-policies').upload(path, file, {
+        contentType: file.type || 'application/pdf',
+    });
+    if (error) throw error;
+    return path;
+}
+
+async function deleteHrPolicyFile(path) {
+    if (!sbClient || !path) return;
+    const { error } = await sbClient.storage.from('hr-policies').remove([path]);
+    if (error) throw error;
+}
+
+/** Short-lived signed URL for "View PDF" — minted per click, never stored. */
+async function fetchHrPolicyUrl(path, ttlSeconds = 300) {
+    if (!sbClient || !path) return null;
+    const { data, error } = await sbClient.storage.from('hr-policies').createSignedUrl(path, ttlSeconds);
+    if (error) throw friendlyError(error);
+    return data?.signedUrl || null;
+}
+
 /** Admin: approve or return one. Approval stamps the reviewer server-side. */
 async function reviewIncidentReport(id, status, notes = '') {
     if (!sbClient) throw new Error('Supabase not configured.');

@@ -1063,6 +1063,61 @@ function _readAssignmentsFromDOM(weekDates) {
     return assignments;
 }
 
+// Read-only alternate view of Build Staff Schedule's current assignments,
+// pivoted from room×shift to worker×day (design_handoff_staff, 2026-08-28:
+// "the room/shift spreadsheet is the default... the per-person list is the
+// alternate view, not the primary one"). Reads live DOM state through
+// _readAssignmentsFromDOM() — the same source saveStaffSchedule() and the
+// XLSX export already use — so it can never show an assignment that
+// disagrees with what Save would persist. No editing here; "By room &
+// shift" stays the only place assignments change.
+function renderScheduleByWorker() {
+    const host = document.getElementById('staffContentByWorker');
+    if (!host) return;
+    const weekDates = _autoFillWeekDates || [];
+    if (!weekDates.length) {
+        host.innerHTML = '<p class="empty-hint">Select a week above and click Generate Schedule.</p>';
+        return;
+    }
+    const asgn  = _readAssignmentsFromDOM(weekDates);
+    const rooms = getSortedRooms();
+    const byStaff = new Map(); // name -> { date -> [ "🐻 Bear Room · AM", ... ] }
+    weekDates.forEach(d => {
+        rooms.forEach(r => {
+            ['am', 'pm'].forEach(shift => {
+                (asgn[d]?.[r.id]?.[shift] || []).forEach(name => {
+                    if (!name) return;
+                    if (!byStaff.has(name)) byStaff.set(name, {});
+                    const days = byStaff.get(name);
+                    (days[d] = days[d] || []).push(`${r.label} · ${shift.toUpperCase()}`);
+                });
+            });
+        });
+    });
+    const names = [...byStaff.keys()].sort((a, b) => a.localeCompare(b));
+    if (!names.length) {
+        host.innerHTML = '<p class="empty-hint">No one is assigned yet — switch to "By room & shift" to assign staff.</p>';
+        return;
+    }
+    const dayHead = weekDates.map(d => {
+        const dt = new Date(d + 'T00:00:00');
+        return `<th>${DAY_ABBR[dt.getDay()]}<br><span style="font-weight:400">${friendlyShort(d)}</span></th>`;
+    }).join('');
+    host.innerHTML = `
+        <div class="table-wrapper">
+        <table class="report-table sched-by-worker-table">
+            <thead><tr><th style="text-align:left">Staff</th>${dayHead}</tr></thead>
+            <tbody>
+                ${names.map(name => `
+                <tr>
+                    <td style="text-align:left;font-weight:600;white-space:nowrap">${escHtml(name)}</td>
+                    ${weekDates.map(d => `<td>${(byStaff.get(name)[d] || []).map(escHtml).join('<br>') || '—'}</td>`).join('')}
+                </tr>`).join('')}
+            </tbody>
+        </table>
+        </div>`;
+}
+
 function exportStaffSchedule() {
     const weekOf = document.getElementById('staffWeekOf')?.value;
     if (!weekOf) { alert('Please select a week first.'); return; }

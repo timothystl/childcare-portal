@@ -1847,3 +1847,62 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     .bk-match-row, .bk-pay-row { grid-template-columns: minmax(0, 1fr) auto; }
     .bk-match-meta, .bk-pay-meta { grid-column: 1 / -1; }
 }
+
+/* ============================================================
+   STAFF TAB CONSOLIDATION — design_handoff_staff, 2026-08-28
+   ------------------------------------------------------------
+   Sub-tab nav reuses .bk-nav/.bk-pill and .ap-seg/.ap-seg-btn (defined
+   above) as-is. What's new here: HR & Handbook's Policies list and
+   Write-ups cards, and the by-worker schedule pivot.
+   ============================================================ */
+
+/* Policies */
+.hr-policy-list { display: flex; flex-direction: column; gap: 8px; }
+.hr-policy-row {
+    display: flex; align-items: center; gap: 12px;
+    background: #fff; border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px;
+}
+.hr-policy-icon { font-size: 22px; flex-shrink: 0; }
+.hr-policy-main { flex: 1; min-width: 0; }
+.hr-policy-title { font-weight: 700; color: var(--navy); font-size: 14.5px; }
+.hr-policy-updated { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+.hr-policy-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.hr-policy-add {
+    margin-top: 14px; padding: 14px; background: var(--warm-gray, #F5F0E4);
+    border: 1px solid var(--border); border-radius: 10px;
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+}
+
+/* Write-ups */
+.wu-compose {
+    margin-bottom: 16px; padding: 14px; background: var(--warm-gray, #F5F0E4);
+    border: 1px solid var(--border); border-radius: 10px;
+    display: flex; flex-wrap: wrap; gap: 12px;
+}
+.wu-compose .fm-field-grow { flex: 1 1 100%; }
+.wu-list { display: flex; flex-direction: column; gap: 12px; }
+.wu-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px;
+}
+.wu-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.wu-name { font-weight: 700; color: var(--navy); font-size: 14.5px; }
+.wu-kind-chip {
+    background: var(--tang-pale); color: var(--ap-deep-tang);
+    border-radius: 999px; padding: 3px 10px; font-size: 11.5px; font-weight: 800;
+}
+.wu-date { margin-left: auto; color: var(--text-muted); font-size: 12.5px; }
+.wu-note { font-size: 13.5px; color: var(--text); margin-bottom: 10px; }
+.wu-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.wu-issuer { font-size: 12px; color: var(--text-muted); }
+.wu-status {
+    border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 800;
+    border: none; white-space: nowrap;
+}
+.wu-status-pending { background: var(--tang-pale); color: var(--ap-deep-tang); cursor: pointer; }
+.wu-status-pending:hover { filter: brightness(0.96); }
+.wu-status-signed { background: var(--green-pale); color: var(--green-text); }
+
+/* Build Staff Schedule: "By worker" pivot table */
+.sched-by-worker-table td { font-size: 12.5px; line-height: 1.5; }

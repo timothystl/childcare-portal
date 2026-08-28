@@ -830,6 +830,14 @@ function applyRoleRestrictions() {
     // AP_FULL_ONLY_TABS); same gate here now that it sits on a tab
     // `restricted` can otherwise open.
     _hide('financeApiCard');
+    // HR & Handbook's Injury Reports tab is the one part of that tool that
+    // needs `full` — same reasoning `staffInjury` carried as its own
+    // AP_FULL_ONLY_KEYS entry before the Staff tab consolidation (the report
+    // names an employee, the part of their body, and where they were
+    // treated). Policies and Write-ups stay open to `restricted`, so the
+    // whole tool can't be gated the way Payroll is — only this one tab.
+    _hide('apHrTabInjury');
+    _hide('apHrPillInjury');
 
     if (currentAdminRole === 'restricted') {
         // Staffing tab: hide everything except the schedule planner

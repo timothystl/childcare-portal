@@ -307,38 +307,53 @@ const AP_TOOLS = [
     { key: 'model',       pane: 'finance', section: 'financeModelSection',   tab: 'planning', group: 'What-If', tint: AP_TINT.tang, icon: '🔧', name: 'Rate & Wage Modeling',
       blurb: 'Project the impact of tuition and wage changes before you make them.' },
 
+    // ── Staff tab consolidation (design_handoff_staff, 2026-08-28) ──
+    // Audit finding: 9 tools, 3 groups → 4 tools, 3 groups. Every retired
+    // key's real logic is untouched — this only changes which tools are
+    // separate nav entries versus tabs inside one screen. Three
+    // single-source-of-truth pairs: the `staff` table (Roster, with
+    // Directory now a read tab of it, not a parallel table), `apStaffing()`
+    // (Schedule, with the Requirement now a tab reading the same call
+    // instead of a separate entry that could compute it differently), and
+    // Payroll (PTO rate + Time Clock settings/integrity now tabs of the
+    // screen whose numbers they actually feed).
+    //
+    // ⚠️ Fixed in the same pass: staffInjuriesSection/clockIntegritySection
+    // carried `pane:'staffing'` here but their markup lived in `#tab-families`
+    // — apShowSection() hides every pane whose id isn't `tab-<pane>`, so
+    // opening either tool from the sidebar hid `#tab-families` and showed the
+    // empty `#tab-staffing`, leaving both tools permanently blank. Never
+    // caught because nothing else in `#tab-families` depends on them. Their
+    // markup is now physically inside `#tab-staffing`, so `pane` finally
+    // matches where the DOM actually is.
+
     // ── Staff · Scheduling ──
     { key: 'schedule',    pane: 'staffing', section: 'staffScheduleSection',  tab: 'staff', group: 'Scheduling', tint: AP_TINT.sand, icon: '🗓️', name: 'Build Staff Schedule',
       blurb: 'Assign staff to rooms and shifts for the week, against what the ratios require.' },
-    { key: 'staffreq',    pane: 'staffing', section: 'staffReqSection',       tab: 'staff', group: 'Scheduling', tint: AP_TINT.tang, icon: '👥', name: 'Daily Staffing Requirement',
-      blurb: 'Exactly how many staff each day needs, from the kids actually registered.' },
 
     // ── Staff · Your Team ──
     { key: 'staffRoster', pane: 'staffing', section: 'staffRosterSection',    tab: 'staff', group: 'Your Team', tint: AP_TINT.sand, icon: '🧑‍🏫', name: 'Staff Roster',
-      blurb: 'Staff records, pay type, rooms, and availability.' },
-    { key: 'staffDir',    pane: 'staffing', section: 'staffDirectorySection', tab: 'staff', group: 'Your Team', tint: AP_TINT.sand, icon: '📇', name: 'Staff Directory',
-      blurb: 'Printable contact list for the team.' },
+      blurb: 'Staff records, pay type, rooms, and availability — the one place these get edited.' },
 
     // ── Staff · Pay & Policy ──
     // Payroll is money but it is about people, and everything it needs
-    // (hours, PTO balances, pay type) lives in the Staff tools. It keeps
-    // its full-role gate via AP_FULL_ONLY_KEYS even though the tab is open
-    // to `restricted`.
+    // (hours, PTO balances, pay type, the time clock that produces the
+    // punches) lives in the Staff tools. It keeps its full-role gate via
+    // AP_FULL_ONLY_KEYS even though the tab is open to `restricted` — and
+    // since Time Clock is now a tab inside it, Time Clock inherits the same
+    // gate for free (the stricter of its two former gates, Clock-In
+    // Integrity's, is the one that wins).
     { key: 'payroll',     pane: 'staffing', section: 'payrollSection',        tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.sand, icon: '💵', name: 'Payroll',
       blurb: 'Hours, PTO, and pay for a bi-weekly period.' },
-    { key: 'pto',         pane: 'staffing', section: 'ptoSection',            tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.sand, icon: '🏖️', name: 'PTO Settings',
-      blurb: 'Accrual rules and starting balances.' },
-    { key: 'geofence',    pane: 'staffing', section: 'geofenceSection',       tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.sand, icon: '📍', name: 'Geofence & Clock Reminders',
-      blurb: 'Where the time clock will accept a punch, and when to nudge.' },
-    // ⚠️ Under Staff, not Classrooms, and gated to `full` below. An injury
-    // report names an employee, their body and their medical treatment — it
-    // belongs with pay data, not with the child incident queue.
-    { key: 'staffInjury', pane: 'staffing', section: 'staffInjuriesSection',  tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.tang, icon: '🚑', name: 'Staff Injury Reports',
-      blurb: "Work injuries staff filed, and the 30-day clock on the carrier's First Report." },
-    // Full-role only as well: it names who clocked in from whose phone, which
-    // is an HR conversation before it is anything else.
-    { key: 'clockIntegrity', pane: 'staffing', section: 'clockIntegritySection', tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.tang, icon: '📱', name: 'Clock-In Integrity',
-      blurb: 'Whether the geofence is recording anything, and whether two staff share a phone.' },
+    // HR & Handbook is new — reference policy docs, a write-up log for
+    // documenting lateness/rule breaks, and Staff Injury Reports (moved here
+    // from its own nav entry, same table, same full-role reasoning: an
+    // injury report names an employee, their body and their medical
+    // treatment). The tool itself is open to `restricted` for Policies and
+    // Write-ups; the Injury Reports tab specifically is hidden client-side
+    // for anyone but `full` — see applyRoleRestrictions() in admin-safety.js.
+    { key: 'hrHandbook',  pane: 'staffing', section: 'hrHandbookSection',     tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.tang, icon: '📖', name: 'HR & Handbook',
+      blurb: "Policies every staff member has agreed to, and the written record when one wasn't followed." },
 
     // ── Messages ──
     // One working inbox (design handoff design_handoff_messages_settings/
@@ -523,14 +538,19 @@ function apSavePrefs() {
 const AP_FULL_ONLY_TABS = ['finance', 'market'];
 // Financial tools that live outside the Finance tab, so the tab rule
 // above cannot catch them. Payroll sits under Staff because it is about
-// people, but it is still pay data.
-// staffInjury for the same reason as payroll but more so: the report names an
-// employee, the part of their body, and where they were treated. A `restricted`
-// admin who plans schedules has no business reading it.
+// people, but it is still pay data. Time Clock (settings + integrity) and
+// PTO policy are now tabs inside Payroll, so gating `payroll` alone covers
+// them — no separate keys needed for what used to be `geofence` and
+// `clockIntegrity`.
 // `scenario` and `model` moved to the Planning tab (see above). Planning is
 // open to `restricted`; Finance was not, so without these two keys the move
 // would have quietly widened who can see wage and rate modeling.
-const AP_FULL_ONLY_KEYS = ['payroll', 'staffInjury', 'clockIntegrity', 'scenario', 'model'];
+// HR & Handbook (`hrHandbook`) is deliberately NOT in this list — Policies
+// and Write-ups are fine for `restricted`. Only its Injury Reports tab needs
+// the stricter gate (the report names an employee, the part of their body,
+// and where they were treated), so that tab is hidden client-side inside the
+// tool itself rather than the whole tool being pulled from `restricted`.
+const AP_FULL_ONLY_KEYS = ['payroll', 'scenario', 'model'];
 
 function apToolAvailable(tool) {
     const el = document.getElementById(tool.section);
@@ -811,7 +831,6 @@ function apOnToolOpened(tool) {
             case 'schedule':
             case 'payroll':
             case 'histPayroll':
-            case 'staffDir':
                 if (typeof allStaffData !== 'undefined' && !allStaffData.length) loadStaffList();
                 break;
             case 'wlPlanner':
@@ -830,13 +849,26 @@ function apOnToolOpened(tool) {
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
-        if (tool.key === 'staffInjury' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();
-        if (tool.key === 'clockIntegrity' && typeof renderClockIntegrityTool === 'function') renderClockIntegrityTool();
         if (tool.key === 'messages' && typeof renderMessagesUnifiedTool === 'function') renderMessagesUnifiedTool();
         if (tool.key === 'settingsHub' && typeof renderSettingsUnifiedTool === 'function') renderSettingsUnifiedTool();
         if (tool.key === 'schedule')  apRenderScheduleTimeOff();
         if (tool.key === 'schedule' && typeof apMountStaffRatioStep === 'function') apMountStaffRatioStep();
-        if (tool.key === 'staffreq')  apRenderStaffReq();
+        // Daily Staffing Requirement is now the schedule's second tab, not a
+        // separate tool key — render it whenever Build Staff Schedule opens
+        // so switching tabs never shows a stale/empty pane.
+        if (tool.key === 'schedule')  apRenderStaffReq();
+        // Staff Directory, PTO policy, and Time Clock → Settings (geofence)
+        // are all already loaded unconditionally at portal boot
+        // (setupStaffDirectory()/setupPtoSettings()/setupGeofence() in
+        // admin-init.js) regardless of which tab is visible, same as before
+        // this consolidation — only their markup moved. Only Staff Injury
+        // Reports and Time Clock → Integrity were previously lazy, gated on
+        // their own AP_TOOLS key being opened; Injury Reports keeps that
+        // here, Integrity is lazy-rendered from the Time Clock sub-tab
+        // switch instead (apSwitchTimeClockTab()).
+        if (tool.key === 'hrHandbook' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();
+        if (tool.key === 'hrHandbook' && typeof renderStaffWriteUpsTool === 'function') renderStaffWriteUpsTool();
+        if (tool.key === 'hrHandbook' && typeof renderHrPoliciesTool === 'function') renderHrPoliciesTool();
         if (tool.key === 'scenario')  apRenderScenario();
         if (tool.key === 'enrollCap' && typeof renderEnrollCapTool === 'function') renderEnrollCapTool();
         if (tool.key === 'capacityOverview' && typeof renderCapacityOverviewTool === 'function') {
@@ -1398,12 +1430,12 @@ function apDashDirector(live) {
             title: `${rooms.map(r => r.label).join(', ')} at ratio on ${peakDay}`,
             pill: 'RATIO',
             context: 'one more child that day adds a staff member',
-            actions: [{ key: 'staffreq', label: 'Daily staffing', primary: false }],
+            actions: [{ key: 'schedule', label: 'Daily staffing', primary: false }],
         });
     }
 
     const attention = [];
-    if (peak > 0) attention.push({ icon: '👥', key: 'staffreq',
+    if (peak > 0) attention.push({ icon: '👥', key: 'schedule',
         text: `${peakDay} needs ${peak} staff on the floor — the heaviest day of the week.`, cta: 'Open Daily Staffing' });
     if (live.pending.length) attention.push({ icon: '🚫', key: 'schedule', urgent: true,
         text: `${live.pending.length} time-off request${live.pending.length > 1 ? 's are' : ' is'} waiting on your approval.`, cta: 'Review requests' });
@@ -1431,7 +1463,7 @@ function apDashDirector(live) {
         left: [
             apPanel({ title: 'Staff needed this week',
                 sub: 'Each room, each day — from registered children and your saved ratios. Clock-in room data is never used.',
-                body: apStaffGridHtml(sf), tools: ['staffreq', 'settingsHub'] }),
+                body: apStaffGridHtml(sf), tools: ['schedule', 'settingsHub'] }),
             apPanel({ title: 'How full each room is',
                 sub: 'Average booked children per day against capacity.',
                 body: apBarsHtml(apFillBars(sf)), tools: ['settingsHub', 'capacityOverview'] }),
@@ -1499,7 +1531,7 @@ function apDashPlanning(live) {
                 body: '', tools: ['enrollCap', 'ratioStep'] }),
         ],
         attention: [
-            { icon: '👥', key: 'staffreq',   text: `The heaviest day this week needs ${peak} staff on the floor.`, cta: 'Open Daily Staffing' },
+            { icon: '👥', key: 'schedule',   text: `The heaviest day this week needs ${peak} staff on the floor.`, cta: 'Open Daily Staffing' },
             { icon: '🎂', key: 'wlPlanner', text: 'The Capacity Planner grid shows who ages up out of their room next, and where unmet demand sits by month.', cta: 'Open the Capacity Planner' },
         ],
     };
@@ -1653,8 +1685,8 @@ function apDashStaff(live) {
         text: `${shortDays.map(x => AP_DAYS[x.i]).join(', ')} ${shortDays.length === 1 ? 'is' : 'are'} short of what the ratios ask for.`, cta: 'Build staff schedule' });
     if (live.pending.length) attention.push({ icon: '✅', key: 'schedule', urgent: true,
         text: `${live.pending.length} day-off request${live.pending.length === 1 ? '' : 's'} from the time clock ${live.pending.length === 1 ? 'is' : 'are'} waiting on you.`, cta: 'Review requests' });
-    attention.push({ icon: '📍', key: 'geofence',
-        text: 'Check where the time clock accepts a punch and when staff get nudged.', cta: 'Open clock reminders' });
+    attention.push({ icon: '📍', key: 'payroll',
+        text: 'Check where the time clock accepts a punch and when staff get nudged.', cta: 'Open Time Clock (Payroll)' });
 
     return {
         stamp: `Week of ${friendlyShort(live.weekOf)} · ${roster.length || 'no'} staff on the roster`,
@@ -1662,10 +1694,10 @@ function apDashStaff(live) {
         left: [
             apPanel({ title: 'Staff needed this week',
                 sub: 'From registered children and saved ratios — no clock-in data involved.',
-                body: apStaffGridHtml(sf), tools: ['staffreq', 'schedule'] }),
+                body: apStaffGridHtml(sf), tools: ['schedule'] }),
             apPanel({ title: 'Coverage against requirement',
                 sub: 'What the saved schedule puts on the floor, against what the ratios ask for that day.',
-                body: apBarsHtml(bars), tools: ['schedule', 'staffreq', 'staffRoster', 'pto'] }),
+                body: apBarsHtml(bars), tools: ['schedule', 'staffRoster', 'payroll'] }),
         ],
         right: offRows.length ? [
             apPanel({ title: 'Time off this week', tone: 'gold',
@@ -1769,12 +1801,16 @@ function apDashSimple() {
 // ============================================================
 const apReqInputs = { hours: 10.5, floaters: 1, wage: 15.5, burden: 12 };
 
+// Build Staff Schedule and Daily Staffing Requirement are tabs of one tool
+// now (design_handoff_staff, 2026-08-28) and share a single "Week of" date
+// field (#staffWeekOf) instead of two independent pickers that could drift
+// apart. apSchedHeaderStats() reads the exact same apStaffing()+apReqInputs
+// figures this function computes — one calculation, so the header cards and
+// the Requirement tab's own totals can never disagree.
 function apRenderStaffReq() {
     const host = document.getElementById('staffReqBody');
     if (!host) return;
-    const weekEl = document.getElementById('staffReqWeekOf');
-    if (weekEl && !weekEl.value) weekEl.value = apWeekStart();
-    const weekOf    = weekEl?.value || apWeekStart();
+    const weekOf    = document.getElementById('staffWeekOf')?.value || apWeekStart();
     const weekDates = apWeekDates(weekOf);
     const sf        = apStaffing(weekDates);
 
@@ -1784,6 +1820,8 @@ function apRenderStaffReq() {
     const cost     = hrs.map(h => h * (Number(apReqInputs.wage) || 0) * (1 + (Number(apReqInputs.burden) || 0) / 100));
     const peak     = Math.max(0, ...total);
     const peakDay  = AP_DAYS[total.indexOf(peak)] || AP_DAYS[0];
+
+    apSchedHeaderStats(sf, cost);
 
     if (!sf.rows.length) {
         host.innerHTML = '<p class="empty-hint">No children are registered for this week yet — pick another week above.</p>';
@@ -1855,6 +1893,106 @@ function apRenderStaffReq() {
         <p style="color:var(--text-muted);font-size:.86em;margin-top:14px;max-width:76ch;text-wrap:pretty">
             Ratios come from Settings → Staff-to-Child Ratios. AM counts every child booked that day; PM counts full-day children only, since a half-day booking drops for the afternoon — a room shows one number when AM and PM match, and both when they don't. An orange count means that shift is exactly at ratio — one more child adds another staff member. "Total on the floor" and the cost estimate are built from the AM figure, since it is always the day's peak.
         </p>`;
+}
+
+// Shared header cards (Children this week / Est. labor cost) above the tab
+// strip — same figures apRenderStaffReq() computes for its own footer, so
+// the two can never disagree. Deliberately the wage-model estimate (avg
+// wage × hours × burden), not a sum of individually assigned staff's real
+// rates — Build Staff Schedule's own assignments are frequently incomplete
+// mid-week, and a cost built from "who's actually filled in so far" would
+// swing every time a slot is assigned, reading as broken rather than live.
+function apSchedHeaderStats(sf, cost) {
+    const host = document.getElementById('apSchedHeaderStats');
+    if (!host) return;
+    const kids  = sf.kids.reduce((a, b) => a + b, 0);
+    const labor = cost.reduce((a, b) => a + b, 0);
+    host.innerHTML = `
+        <div class="bk-stat">
+            <div class="bk-stat-label">Children this week</div>
+            <div class="bk-stat-num">${kids}</div>
+        </div>
+        <div class="bk-stat">
+            <div class="bk-stat-label">Est. labor cost</div>
+            <div class="bk-stat-num">${escHtml(apMoney(labor))}</div>
+        </div>`;
+}
+
+// Build Staff Schedule: "This week's schedule" / "Daily Staffing
+// Requirement" tabs, and — inside the schedule tab — "By room & shift"
+// (editable, the director's own working format, default) / "By worker"
+// (read-only pivot of the same assignments, for a quick per-person glance).
+let _apSchedTab  = 'week';
+let _apSchedView = 'room';
+
+function apSwitchSchedTab(key) {
+    _apSchedTab = key;
+    document.querySelectorAll('#apSchedTabs [data-ap-sched-tab]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apSchedTab === key));
+    document.getElementById('apSchedTabWeek')?.classList.toggle('ap-hidden-tool', key !== 'week');
+    document.getElementById('apSchedTabReq')?.classList.toggle('ap-hidden-tool', key !== 'req');
+}
+
+function apSwitchSchedView(key) {
+    _apSchedView = key;
+    document.querySelectorAll('#apSchedViewToggle [data-ap-sched-view]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apSchedView === key));
+    document.getElementById('staffContent')?.classList.toggle('ap-hidden-tool', key !== 'room');
+    const byWorker = document.getElementById('staffContentByWorker');
+    if (byWorker) {
+        byWorker.classList.toggle('ap-hidden-tool', key !== 'worker');
+        if (key === 'worker' && typeof renderScheduleByWorker === 'function') renderScheduleByWorker();
+    }
+}
+
+// Staff Roster: "Roster" (editable, the staff table) / "Directory (print)"
+// (renderStaffDirectory(), the public-site list, read here as a tab of the
+// same table rather than a parallel screen).
+function apSwitchRosterTab(key) {
+    document.querySelectorAll('#apRosterTabs [data-ap-roster-tab]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apRosterTab === key));
+    document.getElementById('apRosterTabRoster')?.classList.toggle('ap-hidden-tool', key !== 'roster');
+    document.getElementById('apRosterTabDirectory')?.classList.toggle('ap-hidden-tool', key !== 'directory');
+}
+
+// Payroll: "Pay period" / "PTO policy" / "Time Clock" tabs. Time Clock
+// itself has "Settings" (geofence config) / "Integrity" (the diagnostic
+// report on whether that config is actually working) sub-tabs — one merged
+// tool for tuning the time clock's rules and seeing whether they hold, per
+// design_handoff_staff. Integrity is lazy-rendered on first open of its
+// sub-tab, matching how it was lazy before this consolidation (Pay period
+// and PTO policy are both already loaded unconditionally at portal boot).
+let _apClockIntegrityLoaded = false;
+
+function apSwitchPayrollTab(key) {
+    document.querySelectorAll('#apPayrollTabs [data-ap-payroll-tab]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apPayrollTab === key));
+    document.getElementById('apPayrollTabPeriod')?.classList.toggle('ap-hidden-tool', key !== 'period');
+    document.getElementById('apPayrollTabPto')?.classList.toggle('ap-hidden-tool', key !== 'pto');
+    document.getElementById('apPayrollTabClock')?.classList.toggle('ap-hidden-tool', key !== 'clock');
+}
+
+function apSwitchTimeClockTab(key) {
+    document.querySelectorAll('#apTimeClockTabs [data-ap-tc-tab]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apTcTab === key));
+    document.getElementById('apTimeClockTabSettings')?.classList.toggle('ap-hidden-tool', key !== 'settings');
+    document.getElementById('apTimeClockTabIntegrity')?.classList.toggle('ap-hidden-tool', key !== 'integrity');
+    if (key === 'integrity' && !_apClockIntegrityLoaded && typeof renderClockIntegrityTool === 'function') {
+        _apClockIntegrityLoaded = true;
+        renderClockIntegrityTool();
+    }
+}
+
+// HR & Handbook: "Policies" / "Write-ups" / "Injury Reports" tabs. Injury
+// Reports is hidden client-side for anyone but a `full` admin — see
+// applyRoleRestrictions() in admin-safety.js — same reasoning `staffInjury`
+// carried as its own AP_FULL_ONLY_KEYS entry before this consolidation.
+function apSwitchHrTab(key) {
+    document.querySelectorAll('#apHrTabs [data-ap-hr-tab]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apHrTab === key));
+    document.getElementById('apHrTabPolicies')?.classList.toggle('ap-hidden-tool', key !== 'policies');
+    document.getElementById('apHrTabWriteUps')?.classList.toggle('ap-hidden-tool', key !== 'writeups');
+    document.getElementById('apHrTabInjury')?.classList.toggle('ap-hidden-tool', key !== 'injury');
 }
 
 // ── Ratio Step & Next Child, embedded in Build Staff Schedule ──────────
@@ -2127,24 +2265,6 @@ function apDrawScheduleTimeOff() {
             ${_apTimeOff.addOpen ? '' : '<button class="ap-add-off" data-ap-off-toggle>+ Enter a day off someone told you</button>'}
             <p class="ap-note">Requests staff send from the time clock land above under <strong>Needs your OK</strong>. Nothing changes the schedule until you approve it. Days you enter here apply immediately — you have already vetted them.</p>
         </div>`;
-
-    const stats = document.getElementById('apSchedStats');
-    if (stats) {
-        const offCount = Object.keys(apApprovedOffForWeek(weekDates)).length;
-        stats.innerHTML = `
-            <div class="ap-stat">
-                <div class="ap-stat-label">Needs your OK</div>
-                <div class="ap-stat-value ${pending.length ? 'is-alert' : 'is-ok'}">${pending.length}</div>
-            </div>
-            <div class="ap-stat">
-                <div class="ap-stat-label">Off this week</div>
-                <div class="ap-stat-value">${offCount} staff</div>
-            </div>
-            <div class="ap-stat">
-                <div class="ap-stat-label">Staff on roster</div>
-                <div class="ap-stat-value">${staffList.length}</div>
-            </div>`;
-    }
 }
 
 // Ids stay opaque strings end to end: the request id is a bigserial and
@@ -2246,6 +2366,22 @@ function setupAdminPortal() {
             return;
         }
         if (e.target.closest('#apOffSave')) { apSaveDirectorOff(); return; }
+        const schedTab = e.target.closest('[data-ap-sched-tab]');
+        if (schedTab) { apSwitchSchedTab(schedTab.dataset.apSchedTab); return; }
+        const schedView = e.target.closest('[data-ap-sched-view]');
+        if (schedView) { apSwitchSchedView(schedView.dataset.apSchedView); return; }
+        if (e.target.closest('#printStaffScheduleBtn')) {
+            document.getElementById('printStaffAssignBtn')?.click();
+            return;
+        }
+        const rosterTab = e.target.closest('[data-ap-roster-tab]');
+        if (rosterTab) { apSwitchRosterTab(rosterTab.dataset.apRosterTab); return; }
+        const payrollTab = e.target.closest('[data-ap-payroll-tab]');
+        if (payrollTab) { apSwitchPayrollTab(payrollTab.dataset.apPayrollTab); return; }
+        const tcTab = e.target.closest('[data-ap-tc-tab]');
+        if (tcTab) { apSwitchTimeClockTab(tcTab.dataset.apTcTab); return; }
+        const hrTab = e.target.closest('[data-ap-hr-tab]');
+        if (hrTab) { apSwitchHrTab(hrTab.dataset.apHrTab); return; }
         if (e.target.closest('[data-ap-scen-reset]')) {
             apScenario.inc = {}; apScenario.regFee = 0; apScenario.supFee = 0; apScenario.wageAdd = 0;
             apRenderScenario();
@@ -2270,10 +2406,10 @@ function setupAdminPortal() {
             apRenderScenario();
             return;
         }
-        if (e.target.id === 'staffReqWeekOf') { apRenderStaffReq(); return; }
         if (e.target.id === 'staffWeekOf' && apState.view === 'schedule') {
             _apTimeOff.loaded = false;
             apRenderScheduleTimeOff();
+            apRenderStaffReq();
         }
     });
 
