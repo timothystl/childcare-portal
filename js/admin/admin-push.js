@@ -1,5 +1,6 @@
 // ============================================================
 // admin-push — director/admin push subscription for new parent messages
+// (and, since 2026-08-28, incident reports)
 // ============================================================
 // Push plumbing (worker.js VAPID signing + RFC 8291 encryption) has existed
 // for parents and named staff for months, but nothing ever subscribed an
@@ -11,9 +12,20 @@
 //
 // ⚠️ Gated to 'full' admins only, both here and server-side
 // (/admin-push-subscribe checks admin_role() itself — never trust this
-// client-side check alone). A 'restricted' or 'staff' login never sees the
-// office-wide Messages inbox, so pushing them would alert someone who has
-// nowhere to act on it.
+// client-side check alone). Originally because a 'restricted' or 'staff'
+// login never sees the office-wide Messages inbox, so pushing them would
+// alert someone who has nowhere to act on it — that reasoning is now only
+// half true (a 'restricted' admin CAN act on an incident), but the gate was
+// left as-is rather than widened without being asked: it is one subscription
+// list serving two features, and Messages alone is still the reason it
+// exists.
+//
+// ⚠️ ONE SUBSCRIPTION, TWO SENDERS. worker.js's /notify-admin-message (new
+// parent message) and /notify-admin-incident (a staff-filed incident report,
+// pushed independent of whether the parent has signed yet) both read
+// admin_push_subscriptions and this same toggle controls both — a director
+// who already turned notifications on for messages should not have to find
+// and flip a second switch to hear about incidents too.
 
 const AP_PUSH_VAPID_PUBLIC_KEY =
     'BBIxNz5wAh3wt5Rb3OXdirHU8_25JKle9pTDtWRHmFNkv5gLuTOX5lckdNdV0pNPaXx-qj6N9lFwrdW8auBnAhk';
@@ -80,7 +92,7 @@ async function apPushOnToggle(checked) {
                 body: JSON.stringify({ endpoint, p256dh, auth }),
             });
             if (!res.ok) throw new Error(`subscribe failed (${res.status})`);
-            if (note) note.textContent = "You'll be notified here when a parent sends a message.";
+            if (note) note.textContent = "You'll be notified here when a parent sends a message or staff files an incident report.";
         } catch (err) {
             console.warn('admin push subscribe:', err);
             if (box) box.checked = false;

@@ -1014,6 +1014,57 @@ point of the append-only signature trigger in the first place.
   alongside the report and signatures; all test rows deleted immediately
   after.
 
+### A staff-filed incident never pushed the director — fixed 2026-08-28
+
+Raised directly: the director should know about a report the moment staff
+files it, not only once the parent has signed at pickup. Tracing the actual
+code turned up two things, not one.
+
+**The real gap:** nothing ever pushed her at all. `apDashDirector`'s "Needs
+you" dashboard widget deliberately filters incident rows to `parentSigned`
+only (she's signature 3, and a row she can't act on teaches her to scroll
+past the queue) — so a freshly-filed report was invisible there by design.
+That's correct for the *dashboard nag*, but the Incident Reports tool's own
+"Awaiting sign-off" tab always showed it immediately, labeled "Waiting on
+parent" — she just had to think to open that tab. There was no push telling
+her a report existed until she did.
+
+Fixed with a new worker route, `/notify-admin-incident`, fired from
+`slSubmitIncident()` in `staff-incident.js` right alongside
+`slNotifyParentOfIncident()` — same send-invoice posture as every other
+sender in `worker.js`: the client sends an incident id and nothing else,
+the worker re-reads the report with the service role and composes the
+notification itself. ⚠️ **Caller auth is a staff PIN check, not a Supabase
+Auth bearer token** (same shape as `/send-staff-broadcast`), because the
+device filing the report is a teacher's phone on the public anon key with no
+admin session to check a role against.
+
+**Deliberately reuses `admin_push_subscriptions` and the existing "Notify
+me" toggle** rather than a second subscription list — a director who
+already turned notifications on for new parent messages (`admin-push.js`,
+`/notify-admin-message`) should not have to find and flip a second switch to
+hear about incidents too. The toggle label and its "you'll be notified"
+copy were updated to say so. Still gated to `full` admins only at
+`/admin-push-subscribe` — that gate was Messages-specific reasoning
+("`restricted` never sees the inbox") that is now only half true (a
+`restricted` admin *can* act on an incident), but it was left alone rather
+than widened without being asked; one subscription list is now serving two
+features on the narrower of the two gates.
+
+⚠️ **A second thing was found while tracing this, and is still open — the
+early PARENT notification this file has long documented may never have
+actually pushed anyone either.** `notify_parent_of_incident()`
+(`incident_three_signatures.sql`) only does `UPDATE incident_reports SET
+parent_notified_at = ...` — no `net.http_post`, no call to `/send-push`
+anywhere in `staff-incident.js`. Every description of this feature elsewhere
+in this file ("stamps `parent_notified_at` early and the push carries no
+detail") describes the *intended* design, not something re-verified against
+the code before now. **Not fixed in this session** — flagged here so it
+isn't lost, and because fixing it needs a design decision this session
+wasn't asked to make: the missing-child alert's no-detail-on-a-lock-screen
+reasoning applies here too, so the push text needs the same care
+`/send-staff-broadcast`'s "opposite requirement" comment gives that one.
+
 `admin_log_fire_drill` is the same shape for Fire Drills: an admin-gated twin
 of `log_fire_drill`, same explicit column allow-list, `drill_date` and the
 conductor still server-side.
@@ -2521,6 +2572,21 @@ note is now **disproven** — they are live.
 - **Don't run two `claude/**` branches editing shared files at once** — that caused a
   silent revert of a `supabase.js` line and the version-conflict merge failures. Sync
   with `main` before pushing.
+- **⚠️ The MCP `execute_sql` tool does not share session/transaction state across
+  `;`-separated statements in one call, at least not reliably** — `set_config(...,
+  true)` (or even `false`) in one statement was invisible to `admin_role()` in the
+  next statement of the *same* call, including inside an explicit `BEGIN … ROLLBACK`
+  block. A test built that way silently inserted a real row (the RPC's own guard
+  returned early on what looked like a failed impersonation, but the surrounding
+  `BEGIN`/insert/`ROLLBACK` shape masked that nothing had actually rolled back what
+  a *different*, earlier statement in the chain had committed) and it sat live in
+  `incident_reports` for the rest of the session before being found and deleted.
+  **Do the whole impersonate-and-call sequence in ONE `SELECT`** (a `WITH cfg AS
+  (SELECT set_config(...))` CTE feeding the RPC call in the same statement, as this
+  file's own applied-migration verification blocks now do) — never split
+  `set_config` from the call it's meant to gate across separate statements, and
+  never trust "the result looked like null/failure" as proof nothing was written.
+  Re-query the table afterward to be sure, every time.
 
 ---
 

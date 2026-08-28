@@ -140,3 +140,29 @@ async function slBroadcastMissing(alertId, cleared = false) {
         return 0;
     }
 }
+
+/**
+ * Push the admins subscribed to "Notify me" the moment an incident is filed —
+ * independent of whether the parent has signed yet. Sends an incident id and
+ * nothing else; worker.js re-reads the report and writes the notification
+ * itself, same posture as slBroadcastMissing() above.
+ *
+ * Best-effort, same rule as the rest of this file's push calls: a report that
+ * filed successfully must not read as failed because a push didn't land.
+ */
+async function slNotifyAdminsOfIncident(incidentId) {
+    if (!slStaffId || !slPin || !incidentId) return 0;
+    try {
+        const res = await fetch('/notify-admin-incident', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ staff_id: slStaffId, pin: slPin, incident_id: incidentId }),
+        });
+        if (!res.ok) { console.warn('admin incident notify:', res.status); return 0; }
+        const { sent } = await res.json().catch(() => ({ sent: 0 }));
+        return sent || 0;
+    } catch (err) {
+        console.warn('admin incident notify:', err);
+        return 0;
+    }
+}
