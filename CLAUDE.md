@@ -838,6 +838,91 @@ everything after it exactly as it does for a staff-filed report — the parent
 still has to sign at pickup on a teacher's phone before the director can close
 it. No schema change, no new signature role.
 
+⚠️ **The "+ Write a report" form only captured five of the eleven fields the
+staff app's own incident form does, until 2026-08-28.** `admin_submit_incident_report`
+took `p_body_area`/`p_location`/`p_occurred_at` as parameters from day one, but
+the compose UI in `admin-incidents.js` never rendered controls for them, and
+the RPC had no parameters at all for `body_view`/`body_part`/`witnesses`/
+`first_aid`/`after_notes`/`ratio_note` — six columns `submit_incident_report`
+(the staff/PIN-gated path) has carried since `incident_three_signatures.sql`
+and `incident_kind_and_after_notes.sql`. A report the director filed herself
+printed a visibly thinner record than one a teacher filed, for no reason tied
+to who typed it — the same "when it happened," "where," "what mark," "what
+was done," "how the child was afterward," "who else saw it" and "the ratio at
+the time" a teacher's form always asked for.
+
+Fixed by `admin_incident_report_full_fields.sql` (**applied and verified in
+production 2026-08-28**, same DROP-then-CREATE discipline as the two staff-side
+incident migrations — a named-argument call from supabase-js would otherwise
+match both the old 9-arg signature and a wider one, and PostgREST refuses to
+pick between them). `admin_submit_incident_report` now takes the same six
+extra parameters `submit_incident_report` does and writes all eleven columns.
+The compose panel gained: a date+time picker with the same "Just now / 15 min
+ago / An hour ago / Before lunch" quick chips, a location field, front/back +
+quick-pick body chips (shown only when the kind maps to `injury`, hidden for
+Illness/Other), first-aid chips, an "Since then" checklist, a witnesses
+add/remove list, and a ratio-at-the-time field **prefilled from
+`centerHeadcountAdmin()`** — the same present-children count the staff app
+derives automatically rather than asks for, best-effort so a failed read just
+leaves the field blank instead of blocking the form. Chip/checkbox/witness
+state lives in `_incComposeState`, mutated by direct DOM toggles the same way
+`staff-incident.js`'s `slIncState` is — never by re-rendering the whole tool,
+which would have discarded whatever was already typed into the description or
+action boxes on every click.
+
+### Addenda — how to add to a filed report, since it can't be edited
+
+Raised directly, immediately after the field-parity fix above shipped: once
+"+ Write a report" is saved, the drawer offers **no way to add anything to
+it** — no edit, no append, nothing. That is deliberate at the *signature*
+level (`incident_signatures` rows are append-only by trigger, and
+`incident_three_signatures.sql`'s own comment says "correcting a report means
+the director returns it and the teacher files again"), but `incident_reports`
+itself was never given any path to add information either — not a rewrite,
+just an addition. "Return to the teacher" doesn't help: it flips `status` to
+`returned` and nothing in the staff app has ever read or re-filed a
+`returned` report, so that button was already a dead end before this session.
+
+**Decided: an addendum, not an edit.** `incident_report_addenda.sql`
+(**applied and verified in production 2026-08-28**) adds a new
+`incident_report_addenda` table — one row per note, `incident_id` +
+`note` + `added_by_name` + `created_at`, append-only by the same
+`BEFORE UPDATE` trigger pattern as `incident_signatures`. `admin_submit_incident_report`
+and `submit_incident_report` gain **no** new UPDATE path; the original
+filing's fields never change once written. This mirrors how a real
+incident/licensing record gets corrected — a dated note added to the file,
+never a rewrite of what's already there — and it means a signed record's
+content can never drift from what was actually signed, which is the whole
+point of the append-only signature trigger in the first place.
+
+- **Works at any stage** — before any other signature, after the parent has
+  signed, even after the director has closed the record — because it writes
+  to a different table entirely and never touches the signature order-guard.
+  There's nothing about "the record is closed" that should stop the office
+  from adding a clarifying note to it later.
+- **Gated the same as filing**: `admin_add_incident_addendum` requires
+  `admin_role() IN ('full','restricted')`, not `is_admin()` alone — same
+  reasoning as every other write in this feature (the `staff` admin-portal
+  role is documented read-only).
+- ⚠️ **`incident_print_record()` was extended to return the addenda too**,
+  not just the admin drawer. An addendum the director added has to show up on
+  the document that actually leaves the building — otherwise the office UI
+  and the printed/licensing copy could disagree about what's known. Same
+  function signature, so this was a plain `CREATE OR REPLACE`, not a
+  drop-and-recreate. `incident-print.html`/`incident-print.js` render an
+  "Added since filing" section, shown only when at least one addendum exists
+  — a report with none looks exactly as it did before this change.
+- Parent visibility mirrors the report's own: an addendum is readable by the
+  family only once the underlying report is `approved`, same condition as
+  `incident_reports`' own "parent read own approved" policy — an addendum on
+  a report the family can't read yet stays invisible until the report itself
+  publishes.
+- Verified live: a direct `UPDATE` on an inserted addendum raised the
+  append-only exception (`23514`); `incident_print_record()` on a fully
+  signed test report returned the addendum inside its `addenda` array
+  alongside the report and signatures; all test rows deleted immediately
+  after.
+
 `admin_log_fire_drill` is the same shape for Fire Drills: an admin-gated twin
 of `log_fire_drill`, same explicit column allow-list, `drill_date` and the
 conductor still server-side.

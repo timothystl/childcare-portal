@@ -5267,6 +5267,16 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     color: #B8AC97; font-size: .78em; font-weight: 700;
 }
 
+.inc-add-item {
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.inc-add-item:last-of-type { border-bottom: none; }
+.inc-add-item p { margin: 3px 0 0; font-size: .9em; line-height: 1.5; color: var(--text); }
+.inc-add-meta { font-size: .78em; font-weight: 700; color: var(--text-muted); }
+.inc-add-empty { font-size: .88em; margin: 0 0 4px; }
+.inc-add-form { margin-top: 10px; }
+.inc-add-form .inc-dr-note { margin-bottom: 8px; }
+
 .inc-dr-actions {
     padding: 18px 26px; background: var(--linen); border-top: 1px solid var(--border);
 }
@@ -5304,6 +5314,22 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     gap: 14px; flex-wrap: wrap; margin-bottom: 14px;
 }
 .ab-live { margin: 0; font-size: .88em; color: var(--text-muted); }
+
+/* Print bar: a date (defaults to today, editable) plus Day/Week/Month — this
+   board is always "today", so printing a different day's roster needs its
+   own picker rather than reusing _abData.care_date. */
+.ab-print-bar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 14px; padding: 10px 12px;
+    background: var(--linen); border: 1px solid var(--border); border-radius: 8px;
+}
+.ab-print-label { font-size: .82em; font-weight: 700; color: var(--text-muted); }
+.ab-print-bar input[type="date"] {
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: .85em; background: #fff;
+}
+.ab-print-bar input[type="date"]:focus { outline: none; border-color: var(--navy); }
+.ab-print-btn { padding: 5px 14px; font-size: .85em; }
 
 /* Says out loud that the counts are bookings, not bodies. The loudest thing on
    the page when it applies, because a calm number that is not a head count is
@@ -5391,9 +5417,15 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .ab-kid.is-out   .ab-av { background: var(--warm-gray); }
 .ab-kid.is-absent .ab-av { background: var(--tang-pale); color: var(--ap-deep-tang); }
 /* Name + badges stack in their own column so the badge row can wrap
-   independently of the action grid beside it. */
+   independently of the action grid beside it. Name itself truncates rather
+   than wraps — the full name is still available via the title attribute —
+   since a wrapped name in a flex-start row reads as colliding with the
+   badge line right below it. */
 .ab-kid-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 2px; }
-.ab-kid-name { font-weight: 700; color: var(--navy); }
+.ab-kid-name {
+    font-weight: 700; color: var(--navy);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .ab-kid-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .ab-kid-badges:empty { display: none; }
 .ab-daytype-pill {
@@ -5486,11 +5518,17 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .ab-act-btn[data-act="absent"] { border: 1px solid var(--ap-deep-tang); color: var(--ap-deep-tang); justify-content: center; }
 .ab-act-btn[data-act="absent"]:hover:not(:disabled) { background: var(--tang-pale); }
 .ab-act-btn[data-act="absent"].is-on { background: var(--ap-deep-tang); color: #fff; }
+/* Fixed width matching the In/Out buttons beside it, with ellipsis safety:
+   a picked room label can be long (e.g. "🐢 Turtle Room"), and an unbounded
+   select could still push past the column's own width even though it no
+   longer sits inline next to the name/mark text the way the old single-row
+   layout did. The placeholder stays "Move ⌄" — the dropdown's own options
+   still show full room names. */
 .ab-move-select {
-    min-width: 82px; font-size: .72em; font-weight: 800; color: var(--green-text);
+    width: 82px; font-size: .72em; font-weight: 800; color: var(--green-text);
     border: 1px solid var(--green-lt); border-radius: 6px;
-    padding: 4px 10px; background: var(--green-pale); cursor: pointer;
-    text-align: center;
+    padding: 4px 6px; background: var(--green-pale); cursor: pointer;
+    text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 @media (max-width: 700px) {
     .ab-kid { flex-wrap: wrap; }
@@ -5599,6 +5637,41 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     font-size: .95em; font-family: inherit;
 }
 .inc-compose-btns { display: flex; gap: 10px; }
+.inc-compose-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.inc-compose-grid2 .inc-compose-field { margin-bottom: 0; }
+
+.inc-chip-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.inc-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--border);
+    background: #fff; font-size: .85em; font-weight: 600; color: var(--text);
+    cursor: pointer;
+}
+.inc-chip:hover  { border-color: var(--navy); }
+.inc-chip.is-on  { background: var(--green-lt); border-color: var(--green); color: var(--green-dark); }
+.inc-chip-x {
+    border: none; background: none; padding: 0; margin-left: 2px;
+    font-size: .85em; line-height: 1; color: inherit; cursor: pointer;
+}
+.inc-witness-empty { font-size: .85em; }
+
+.inc-compose-checks { display: flex; flex-direction: column; gap: 8px; }
+.inc-compose-check {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: .88em; color: var(--text); cursor: pointer;
+}
+.inc-compose-check input { margin-top: 3px; }
+
+.inc-witness-add { display: flex; gap: 8px; margin-top: 8px; }
+.inc-witness-add input {
+    flex: 1; padding: 8px 11px; border: 2px solid var(--border); border-radius: 7px;
+    font-size: .9em; font-family: inherit;
+}
+.inc-witness-add .btn-ghost { flex: none; font-size: .85em; padding: 7px 12px; }
+
+@media (max-width: 640px) {
+    .inc-compose-grid2 { grid-template-columns: 1fr; }
+}
 
 /* Fire Drills — "+ Log a Drill" */
 .fd-banner-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }

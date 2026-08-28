@@ -123,6 +123,15 @@
 .ip-sig-cap  { font-size: 9.5px; color: var(--text-muted); line-height: 1.4; }
 .ip-sig-cap strong { color: var(--navy); }
 
+/* ── Addenda — added after filing, never a rewrite of what's above ──── */
+.ip-addenda {
+    padding: 10px 0 0; border-top: 1px solid var(--border); margin-top: 10px;
+}
+.ip-addendum { margin-bottom: 6px; }
+.ip-addendum:last-child { margin-bottom: 0; }
+.ip-addendum-meta { font-size: 9px; font-weight: 800; color: var(--text-muted); }
+.ip-addendum p { margin: 2px 0 0; font-size: 11.5px; line-height: 1.45; }
+
 .ip-foot {
     display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
     margin-top: 16px; padding-top: 9px; border-top: 1px solid var(--border);

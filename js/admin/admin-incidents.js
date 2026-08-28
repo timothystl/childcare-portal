@@ -25,9 +25,11 @@
 
 let _incData    = [];
 let _incSigs    = {};     // incident_id -> { teacher, parent, director }
+let _incAddenda = {};     // incident_id -> [{ note, added_by_name, created_at }, …]
 let _incFilter  = 'submitted';
 let _incOpenId  = null;
-let _incComposeOpen = false;   // "+ Write a report" panel
+let _incComposeOpen  = false;   // "+ Write a report" panel
+let _incComposeState = null;    // chip/checkbox/witness state — see staff-incident.js's slIncState
 
 function _incEl(id) { return document.getElementById(id); }
 
@@ -43,6 +45,24 @@ const INC_KIND_TO_TYPE = {
     Fall: 'injury', 'Bump or bruise': 'injury', Bite: 'injury', Scratch: 'injury',
     Illness: 'illness', Other: 'other',
 };
+
+// The rest of this file's "+ Write a report" fields mirror staff-incident.js's
+// form exactly — same chip lists, same body/first-aid/after-notes semantics —
+// so a report the director files herself carries the same information a
+// teacher's does. See admin_incident_report_full_fields.sql.
+const INC_TIME_CHIPS = [
+    { label: 'Just now',     mins: 0   },
+    { label: '15 min ago',   mins: 15  },
+    { label: 'An hour ago',  mins: 60  },
+    { label: 'Before lunch', mins: 190 },
+];
+const INC_BODY_CHIPS = ['Forehead', 'Knee', 'Elbow', 'Lip', 'Hand', 'Back of head'];
+const INC_AID = ['Cold pack', 'Comfort / rest', 'Cleaned', 'Bandage', 'None needed'];
+const INC_AFTER = [
+    'Back to playing within 5 minutes',
+    'Parent called at the time',
+    'Medical attention recommended',
+];
 
 const INC_TABS = [
     { key: 'submitted', label: 'Awaiting sign-off' },
@@ -90,10 +110,18 @@ async function renderIncidentsTool() {
     wrap.innerHTML = '<p class="muted">Loading…</p>';
     try {
         _incData = await fetchIncidentReports({ status: _incFilter || null });
-        const sigs = await fetchIncidentSignatures(_incData.map(r => r.id));
+        const ids = _incData.map(r => r.id);
+        const [sigs, addenda] = await Promise.all([
+            fetchIncidentSignatures(ids),
+            fetchIncidentAddenda(ids),
+        ]);
         _incSigs = {};
         for (const s of sigs) {
             (_incSigs[s.incident_id] ||= {})[s.role] = s;
+        }
+        _incAddenda = {};
+        for (const a of addenda) {
+            (_incAddenda[a.incident_id] ||= []).push(a);
         }
     } catch (e) {
         wrap.innerHTML = `<p class="muted">Could not load reports: ${escHtml(e.message || e)}</p>`;
@@ -157,6 +185,7 @@ function _incRender() {
                role="dialog" aria-modal="true" aria-labelledby="incDrawerName"></aside>`;
 
     _incBind();
+    if (_incComposeOpen) _incComposeWireExtras();
     if (_incOpenId) _incRenderDrawer();
 }
 
@@ -187,21 +216,53 @@ function _incComposeStudentList() {
         .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function _incComposeFreshState() {
+    return {
+        occurred:    new Date(),      // clamped to never-future, same rule as staff
+        bodyView:    'front',
+        bodyPart:    '',
+        aid:         new Set(),
+        after:       new Set(),
+        witnesses:   [],
+        location:    '',
+        description: '',
+        actionTaken: '',
+        ratioNote:   '',
+    };
+}
+
 async function _incOpenCompose() {
-    _incComposeOpen = true;
+    _incComposeOpen  = true;
+    _incComposeState = _incComposeFreshState();
     if (typeof allFamiliesData !== 'undefined' && !allFamiliesData.length && typeof loadFamilies === 'function') {
         try { await loadFamilies(); } catch (e) { console.warn('incident compose: loadFamilies failed', e); }
+    }
+    // Staff-to-child ratio, prefilled the same way slIncRatioNote() derives it
+    // for a teacher's own report — a number counted by the office, not typed
+    // from memory. Best-effort: an empty/failed read just leaves the field
+    // blank rather than blocking the form.
+    if (typeof centerHeadcountAdmin === 'function') {
+        try {
+            const board = await centerHeadcountAdmin();
+            const present = (board?.children || []).filter(c => c.attendance_status === 'present').length;
+            if (present) _incComposeState.ratioNote = `${present} children present in the room at the time`;
+        } catch (e) { console.warn('incident compose: ratio note fetch failed', e); }
     }
     _incRender();
 }
 
 function _incCloseCompose() {
-    _incComposeOpen = false;
+    _incComposeOpen  = false;
+    _incComposeState = null;
     _incRender();
 }
 
 function _incComposeHtml(students) {
     const options = students.map(s => `<option value="${escHtml(s.id)}">${escHtml(s.name)}</option>`).join('');
+    const pad = n => String(n).padStart(2, '0');
+    const d = _incComposeState?.occurred || new Date();
+    const dateVal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const timeVal = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
     return `<div class="inc-compose">
         <h3 class="inc-compose-title">Write a report</h3>
         <div class="inc-compose-field">
@@ -216,13 +277,60 @@ function _incComposeHtml(students) {
             <select id="incComposeKind">${INC_KIND_OPTIONS.map(k =>
                 `<option value="${escHtml(k)}">${escHtml(k)}</option>`).join('')}</select>
         </div>
+        <div class="inc-compose-grid2">
+            <div class="inc-compose-field">
+                <label for="incComposeDate">Date it happened</label>
+                <input type="date" id="incComposeDate" value="${dateVal}">
+            </div>
+            <div class="inc-compose-field">
+                <label for="incComposeTime">Time it happened</label>
+                <input type="time" id="incComposeTime" value="${timeVal}">
+            </div>
+        </div>
+        <div class="inc-compose-field">
+            <label>Quick pick</label>
+            <div class="inc-chip-row" id="incComposeTimeChips"></div>
+        </div>
+        <div class="inc-compose-field">
+            <label for="incComposeLocation">Location</label>
+            <input type="text" id="incComposeLocation" placeholder="Where did it happen?"
+                   value="${escHtml(_incComposeState?.location || '')}">
+        </div>
+        <div class="inc-compose-field" id="incComposeBodyBlock">
+            <label>Mark on skin</label>
+            <div class="inc-chip-row" id="incComposeBodyViews"></div>
+            <div class="inc-chip-row" id="incComposeBodyChips"></div>
+        </div>
         <div class="inc-compose-field">
             <label for="incComposeDesc">What happened</label>
-            <textarea id="incComposeDesc" rows="3" placeholder="Describe what happened…"></textarea>
+            <textarea id="incComposeDesc" rows="3"
+                      placeholder="Describe what happened…">${escHtml(_incComposeState?.description || '')}</textarea>
+        </div>
+        <div class="inc-compose-field">
+            <label>Care given</label>
+            <div class="inc-chip-row" id="incComposeAidChips"></div>
         </div>
         <div class="inc-compose-field">
             <label for="incComposeAction">What we did</label>
-            <textarea id="incComposeAction" rows="2" placeholder="First aid, comfort given, etc."></textarea>
+            <textarea id="incComposeAction" rows="2"
+                      placeholder="First aid, comfort given, etc.">${escHtml(_incComposeState?.actionTaken || '')}</textarea>
+        </div>
+        <div class="inc-compose-field">
+            <label>Since then</label>
+            <div class="inc-compose-checks" id="incComposeAfterChecks"></div>
+        </div>
+        <div class="inc-compose-field">
+            <label>Witnesses</label>
+            <div class="inc-chip-row" id="incComposeWitnesses"></div>
+            <div class="inc-witness-add">
+                <input type="text" id="incComposeWitnessInput" placeholder="Who else saw it?">
+                <button type="button" class="btn-ghost" id="incComposeWitnessAdd">&#43; Add</button>
+            </div>
+        </div>
+        <div class="inc-compose-field">
+            <label for="incComposeRatio">Staff-to-child ratio at the time</label>
+            <input type="text" id="incComposeRatio" placeholder="e.g. 3 children present in the room at the time"
+                   value="${escHtml(_incComposeState?.ratioNote || '')}">
         </div>
         <div class="inc-compose-btns">
             <button type="button" class="btn-primary" id="incComposeSave">Save</button>
@@ -231,14 +339,195 @@ function _incComposeHtml(students) {
     </div>`;
 }
 
-async function _incComposeSave() {
-    const studentId    = _incEl('incComposeChild')?.value;
-    const kind         = _incEl('incComposeKind')?.value;
-    const description  = _incEl('incComposeDesc')?.value?.trim();
-    const actionTaken  = _incEl('incComposeAction')?.value?.trim();
-    if (!studentId) { alert('Choose a child.'); return; }
-    if (!description || !actionTaken) { alert('Describe what happened and what you did about it.'); return; }
+// ── Compose extras — chips, checkboxes, witnesses, the time picker ──
+// Wired once per render, same as slIncRenderChips()/slIncRenderTime() in the
+// staff app: each control mutates _incComposeState and toggles its own DOM
+// directly, rather than re-rendering the whole tool (which would blow away
+// whatever the director had already typed into the description/action boxes).
 
+function _incComposeWireExtras() {
+    if (!_incComposeState) return;
+
+    // Kept in state (not just read from the DOM at save time) so a re-render
+    // triggered by something else on the page — opening a drawer row while
+    // this panel is still open — doesn't wipe out what was already typed.
+    _incEl('incComposeLocation')?.addEventListener('input', e => { _incComposeState.location = e.target.value; });
+    _incEl('incComposeDesc')?.addEventListener('input', e => { _incComposeState.description = e.target.value; });
+    _incEl('incComposeAction')?.addEventListener('input', e => { _incComposeState.actionTaken = e.target.value; });
+    _incEl('incComposeRatio')?.addEventListener('input', e => { _incComposeState.ratioNote = e.target.value; });
+
+    const syncBodyVisibility = () => {
+        const kind = _incEl('incComposeKind')?.value;
+        _incEl('incComposeBodyBlock')?.classList.toggle('hidden', INC_KIND_TO_TYPE[kind] !== 'injury');
+    };
+    _incEl('incComposeKind')?.addEventListener('change', syncBodyVisibility);
+    syncBodyVisibility();
+
+    _incEl('incComposeDate')?.addEventListener('change', _incComposeSyncTimeFromInputs);
+    _incEl('incComposeTime')?.addEventListener('change', _incComposeSyncTimeFromInputs);
+
+    _incRenderComposeTimeChips();
+    _incRenderComposeBodyViews();
+    _incRenderComposeBodyChips();
+    _incRenderComposeAidChips();
+    _incRenderComposeAfterChecks();
+    _incRenderComposeWitnesses();
+
+    const addWitness = () => {
+        const input = _incEl('incComposeWitnessInput');
+        const name = (input?.value || '').trim();
+        if (!name) return;
+        _incComposeState.witnesses.push(name);
+        input.value = '';
+        _incRenderComposeWitnesses();
+    };
+    _incEl('incComposeWitnessAdd')?.addEventListener('click', addWitness);
+    _incEl('incComposeWitnessInput')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); addWitness(); }
+    });
+}
+
+// Date + time inputs are the source of truth; a step here re-derives
+// _incComposeState.occurred and clamps it the same way slIncStepTime() does —
+// no back-date limit, but never into the future.
+function _incComposeSyncTimeFromInputs() {
+    const dateVal = _incEl('incComposeDate')?.value;
+    const timeVal = _incEl('incComposeTime')?.value || '00:00';
+    if (!dateVal) return;
+    const [y, m, day] = dateVal.split('-').map(Number);
+    const [hh, mm] = timeVal.split(':').map(Number);
+    const next = new Date(_incComposeState.occurred);
+    next.setFullYear(y, m - 1, day);
+    next.setHours(hh, mm, 0, 0);
+    if (next.getTime() > Date.now()) {
+        showToast('That would be in the future.', 'error');
+        _incComposeSetTimeInputs(_incComposeState.occurred);
+        return;
+    }
+    _incComposeState.occurred = next;
+    _incRenderComposeTimeChips();
+}
+
+function _incComposeSetTimeInputs(d) {
+    const pad = n => String(n).padStart(2, '0');
+    const dateEl = _incEl('incComposeDate');
+    const timeEl = _incEl('incComposeTime');
+    if (dateEl) dateEl.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    if (timeEl) timeEl.value = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function _incRenderComposeTimeChips() {
+    const wrap = _incEl('incComposeTimeChips');
+    if (!wrap) return;
+    wrap.innerHTML = INC_TIME_CHIPS.map(c =>
+        `<button type="button" class="inc-chip" data-mins="${c.mins}">${escHtml(c.label)}</button>`).join('');
+    wrap.querySelectorAll('[data-mins]').forEach(b => {
+        const target = Date.now() - Number(b.dataset.mins) * 60000;
+        b.classList.toggle('is-on', Math.abs(target - _incComposeState.occurred.getTime()) < 60000);
+        b.onclick = () => {
+            _incComposeState.occurred = new Date(Date.now() - Number(b.dataset.mins) * 60000);
+            _incComposeSetTimeInputs(_incComposeState.occurred);
+            _incRenderComposeTimeChips();
+        };
+    });
+}
+
+function _incRenderComposeBodyViews() {
+    const wrap = _incEl('incComposeBodyViews');
+    if (!wrap) return;
+    wrap.innerHTML = ['front', 'back'].map(v =>
+        `<button type="button" class="inc-chip" data-view="${v}">${v === 'front' ? 'Front' : 'Back'}</button>`
+    ).join('');
+    wrap.querySelectorAll('[data-view]').forEach(b => {
+        b.classList.toggle('is-on', b.dataset.view === _incComposeState.bodyView);
+        b.onclick = () => { _incComposeState.bodyView = b.dataset.view; _incRenderComposeBodyViews(); };
+    });
+}
+
+function _incRenderComposeBodyChips() {
+    const wrap = _incEl('incComposeBodyChips');
+    if (!wrap) return;
+    wrap.innerHTML = INC_BODY_CHIPS.map(c =>
+        `<button type="button" class="inc-chip" data-part="${escHtml(c)}">${escHtml(c)}</button>`).join('');
+    wrap.querySelectorAll('[data-part]').forEach(b => {
+        b.classList.toggle('is-on', b.dataset.part === _incComposeState.bodyPart);
+        b.onclick = () => {
+            // A second tap clears it — same as tapping the same figure zone twice.
+            _incComposeState.bodyPart = _incComposeState.bodyPart === b.dataset.part ? '' : b.dataset.part;
+            _incRenderComposeBodyChips();
+        };
+    });
+}
+
+function _incRenderComposeAidChips() {
+    const wrap = _incEl('incComposeAidChips');
+    if (!wrap) return;
+    wrap.innerHTML = INC_AID.map(a =>
+        `<button type="button" class="inc-chip" data-aid="${escHtml(a)}">${escHtml(a)}</button>`).join('');
+    wrap.querySelectorAll('[data-aid]').forEach(b => {
+        b.classList.toggle('is-on', _incComposeState.aid.has(b.dataset.aid));
+        b.onclick = () => {
+            const v = b.dataset.aid;
+            if (_incComposeState.aid.has(v)) _incComposeState.aid.delete(v); else _incComposeState.aid.add(v);
+            b.classList.toggle('is-on', _incComposeState.aid.has(v));
+        };
+    });
+}
+
+function _incRenderComposeAfterChecks() {
+    const wrap = _incEl('incComposeAfterChecks');
+    if (!wrap) return;
+    wrap.innerHTML = INC_AFTER.map(a =>
+        `<label class="inc-compose-check"><input type="checkbox" data-after="${escHtml(a)}">
+            <span>${escHtml(a)}</span></label>`).join('');
+    wrap.querySelectorAll('[data-after]').forEach(b => {
+        b.checked = _incComposeState.after.has(b.dataset.after);
+        b.onchange = () => {
+            const v = b.dataset.after;
+            if (b.checked) _incComposeState.after.add(v); else _incComposeState.after.delete(v);
+        };
+    });
+}
+
+// Free text rather than a staff picker, same rationale as staff-incident.js:
+// the witness to an office-filed report is as likely a parent or a sub as
+// someone on the roster.
+function _incRenderComposeWitnesses() {
+    const wrap = _incEl('incComposeWitnesses');
+    if (!wrap) return;
+    wrap.innerHTML = (_incComposeState.witnesses.map((w, i) =>
+        `<span class="inc-chip is-on">${escHtml(w)}
+            <button type="button" class="inc-chip-x" data-drop="${i}"
+                    aria-label="Remove ${escHtml(w)}">&#10005;</button></span>`
+    ).join('')) || '<span class="muted inc-witness-empty">None added</span>';
+    wrap.querySelectorAll('[data-drop]').forEach(b => {
+        b.onclick = () => {
+            _incComposeState.witnesses.splice(Number(b.dataset.drop), 1);
+            _incRenderComposeWitnesses();
+        };
+    });
+}
+
+async function _incComposeSave() {
+    const studentId   = _incEl('incComposeChild')?.value;
+    const kind        = _incEl('incComposeKind')?.value;
+    const description = _incEl('incComposeDesc')?.value?.trim();
+    const typedAction = _incEl('incComposeAction')?.value?.trim();
+    const location     = _incEl('incComposeLocation')?.value?.trim();
+    const ratioNote    = _incEl('incComposeRatio')?.value?.trim();
+    if (!studentId) { showToast('Choose a child.', 'error'); return; }
+
+    const aid = [..._incComposeState.aid];
+    // action_taken is NOT NULL and the RPC rejects an empty one — same rule
+    // as the staff form: a checked "Cold pack" chip with nothing typed has in
+    // fact told us what was done, so build the sentence rather than blocking.
+    const actionTaken = typedAction || (aid.length ? aid.join(', ') : '');
+    if (!description || !actionTaken) {
+        showToast('Describe what happened and what you did about it.', 'error');
+        return;
+    }
+
+    const isInjury = INC_KIND_TO_TYPE[kind] === 'injury';
     const btn = _incEl('incComposeSave');
     btn.disabled = true;
     const label = btn.textContent;
@@ -247,13 +536,22 @@ async function _incComposeSave() {
         const id = await adminSubmitIncidentReport({
             studentId, incidentType: INC_KIND_TO_TYPE[kind] || 'other',
             incidentKind: kind, description, actionTaken,
+            location, occurredAt: _incComposeState.occurred.toISOString(),
+            bodyArea: isInjury ? _incComposeState.bodyPart : '',
+            bodyPart: isInjury ? _incComposeState.bodyPart : '',
+            bodyView: isInjury ? _incComposeState.bodyView : null,
+            witnesses:  _incComposeState.witnesses,
+            firstAid:   aid,
+            afterNotes: [..._incComposeState.after],
+            ratioNote,
         });
         if (id == null) {
             showToast("Couldn't save — check your admin role.", 'error');
             return;
         }
         showToast('Report filed. It needs the parent’s signature at pickup before you can sign off.');
-        _incComposeOpen = false;
+        _incComposeOpen  = false;
+        _incComposeState = null;
         _incFilter = 'submitted';
         await renderIncidentsTool();
     } catch (e) {
@@ -331,6 +629,8 @@ function _incRenderDrawer() {
             </div>
 
             ${_incSigBlock(sig)}
+
+            ${_incAddendaBlock(r)}
         </div>
 
         ${r.status === 'submitted' ? `
@@ -363,6 +663,69 @@ function _incRenderDrawer() {
     el.querySelector('.inc-sign')?.addEventListener('click', e => _incSign(r.id, e.currentTarget));
     el.querySelector('.inc-return')?.addEventListener('click', e => _incReturn(r.id, e.currentTarget));
     el.querySelector('.inc-pdf')?.addEventListener('click', () => incidentPrint(r.id));
+    _incEl('incAddendumSave')?.addEventListener('click', () => _incAddAddendum(r.id));
+}
+
+// ── Addenda — adding to a report without rewriting it ───────
+// Deliberately not an edit: incident_reports has no UPDATE path here, and a
+// signed record's fields never change after the fact. This is how the
+// director adds something she forgot — a witness, a follow-up detail — after
+// she's already saved a report, or how the office adds a later development to
+// any report at any stage, even a closed one. See incident_report_addenda.sql.
+
+function _incAddedStamp(iso) {
+    if (!iso) return '';
+    const day = new Date(iso).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', timeZone: 'America/Chicago',
+    });
+    return `${day} · ${_incTime(iso)}`;
+}
+
+function _incAddendaBlock(r) {
+    const items = _incAddenda[r.id] || [];
+    const list = items.map(a => `<div class="inc-add-item">
+        <div class="inc-add-meta">${escHtml(a.added_by_name || 'Office')} · ${escHtml(_incAddedStamp(a.created_at))}</div>
+        <p>${escHtml(a.note)}</p>
+    </div>`).join('');
+
+    return `<div class="inc-dr-field">
+        <div class="inc-dr-label">Addenda</div>
+        ${list || '<p class="muted inc-add-empty">Nothing added yet.</p>'}
+        <div class="inc-add-form">
+            <textarea class="inc-dr-note" id="incAddendumInput" rows="2"
+                      placeholder="Add something to this report — a detail you forgot, a later development. This does not change what was already signed."></textarea>
+            <button type="button" class="btn-ghost" id="incAddendumSave">&#43; Add to this report</button>
+        </div>
+    </div>`;
+}
+
+async function _incAddAddendum(id) {
+    const input = _incEl('incAddendumInput');
+    const note = (input?.value || '').trim();
+    if (!note) { showToast('Write something to add first.', 'error'); return; }
+
+    const btn = _incEl('incAddendumSave');
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = 'Adding…';
+    try {
+        const addendumId = await addIncidentAddendum(id, note);
+        if (addendumId == null) {
+            showToast("Couldn't add that — check your admin role.", 'error');
+            return;
+        }
+        _incAddenda[id] = await fetchIncidentAddenda([id]);
+        _incRenderDrawer();
+        showToast('Added to the report.');
+    } catch (e) {
+        showToast('Error: ' + (e.message || e), 'error');
+    } finally {
+        // _incRenderDrawer() rebuilds this button fresh on success; this
+        // restore only matters on the error path, where the old node is
+        // still the one on the page.
+        const stillThere = _incEl('incAddendumSave');
+        if (stillThere) { stillThere.disabled = false; stillThere.textContent = label; }
+    }
 }
 
 function _incSigBlock(sig) {
