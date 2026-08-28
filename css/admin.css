@@ -5332,8 +5332,16 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 }
 .ab-tile-sub { font-size: .8em; color: var(--text-muted); line-height: 1.4; }
 
+/* Two columns so a typical admin-width screen shows two rooms side by side
+   instead of one full-width card at a time; collapses to a single column
+   once a column would get too narrow for the action-button row to read
+   comfortably (matches the drawer breakpoint the rest of the shell uses). */
 .ab-rooms {
-    display: flex; flex-direction: column; gap: 16px;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
+    align-items: start;
+}
+@media (max-width: 900px) {
+    .ab-rooms { grid-template-columns: 1fr; }
 }
 .ab-room {
     background: #fff; border: 1px solid var(--border); border-radius: 12px;

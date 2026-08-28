@@ -344,7 +344,7 @@ function _abRoom(roomId, kids, staff, hasCheckins) {
         const allergy = _abAllergySummary(c.allergies);
         let mark, cls;
         if (c.marked === 'absent')                  { mark = 'ABSENT'; cls = 'is-absent'; }
-        else if (c.attendance_status === 'present') { mark = _abTime(c.last_event_at); cls = 'is-in'; }
+        else if (c.attendance_status === 'present') { mark = `in ${_abTime(c.last_event_at)}`; cls = 'is-in'; }
         else if (c.attendance_status === 'left')    { mark = `out ${_abTime(c.last_event_at)}`; cls = 'is-out'; }
         else                                        { mark = hasCheckins ? 'not in' : 'booked'; cls = 'is-waiting'; }
 
