@@ -774,6 +774,59 @@ state lives in `_incComposeState`, mutated by direct DOM toggles the same way
 which would have discarded whatever was already typed into the description or
 action boxes on every click.
 
+### Addenda — how to add to a filed report, since it can't be edited
+
+Raised directly, immediately after the field-parity fix above shipped: once
+"+ Write a report" is saved, the drawer offers **no way to add anything to
+it** — no edit, no append, nothing. That is deliberate at the *signature*
+level (`incident_signatures` rows are append-only by trigger, and
+`incident_three_signatures.sql`'s own comment says "correcting a report means
+the director returns it and the teacher files again"), but `incident_reports`
+itself was never given any path to add information either — not a rewrite,
+just an addition. "Return to the teacher" doesn't help: it flips `status` to
+`returned` and nothing in the staff app has ever read or re-filed a
+`returned` report, so that button was already a dead end before this session.
+
+**Decided: an addendum, not an edit.** `incident_report_addenda.sql`
+(**applied and verified in production 2026-08-28**) adds a new
+`incident_report_addenda` table — one row per note, `incident_id` +
+`note` + `added_by_name` + `created_at`, append-only by the same
+`BEFORE UPDATE` trigger pattern as `incident_signatures`. `admin_submit_incident_report`
+and `submit_incident_report` gain **no** new UPDATE path; the original
+filing's fields never change once written. This mirrors how a real
+incident/licensing record gets corrected — a dated note added to the file,
+never a rewrite of what's already there — and it means a signed record's
+content can never drift from what was actually signed, which is the whole
+point of the append-only signature trigger in the first place.
+
+- **Works at any stage** — before any other signature, after the parent has
+  signed, even after the director has closed the record — because it writes
+  to a different table entirely and never touches the signature order-guard.
+  There's nothing about "the record is closed" that should stop the office
+  from adding a clarifying note to it later.
+- **Gated the same as filing**: `admin_add_incident_addendum` requires
+  `admin_role() IN ('full','restricted')`, not `is_admin()` alone — same
+  reasoning as every other write in this feature (the `staff` admin-portal
+  role is documented read-only).
+- ⚠️ **`incident_print_record()` was extended to return the addenda too**,
+  not just the admin drawer. An addendum the director added has to show up on
+  the document that actually leaves the building — otherwise the office UI
+  and the printed/licensing copy could disagree about what's known. Same
+  function signature, so this was a plain `CREATE OR REPLACE`, not a
+  drop-and-recreate. `incident-print.html`/`incident-print.js` render an
+  "Added since filing" section, shown only when at least one addendum exists
+  — a report with none looks exactly as it did before this change.
+- Parent visibility mirrors the report's own: an addendum is readable by the
+  family only once the underlying report is `approved`, same condition as
+  `incident_reports`' own "parent read own approved" policy — an addendum on
+  a report the family can't read yet stays invisible until the report itself
+  publishes.
+- Verified live: a direct `UPDATE` on an inserted addendum raised the
+  append-only exception (`23514`); `incident_print_record()` on a fully
+  signed test report returned the addendum inside its `addenda` array
+  alongside the report and signatures; all test rows deleted immediately
+  after.
+
 `admin_log_fire_drill` is the same shape for Fire Drills: an admin-gated twin
 of `log_fire_drill`, same explicit column allow-list, `drill_date` and the
 conductor still server-side.

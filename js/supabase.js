@@ -2714,6 +2714,34 @@ async function fetchIncidentSignatures(ids) {
     return data || [];
 }
 
+/**
+ * Addenda — a way to add to a report without rewriting anything already
+ * signed. Never an edit: incident_reports has no UPDATE RPC, and this is the
+ * intended path for "I need to add something" after the fact. Works at any
+ * stage, including after the record is fully signed.
+ */
+async function fetchIncidentAddenda(ids) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    if (!ids?.length) return [];
+    const { data, error } = await sbClient
+        .from('incident_report_addenda')
+        .select('id, incident_id, note, added_by_name, created_at')
+        .in('incident_id', ids)
+        .order('created_at', { ascending: true });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/** Admin: append a note to an already-filed report. Returns the new addendum id, or null if refused. */
+async function addIncidentAddendum(incidentId, note) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_add_incident_addendum', {
+        p_incident_id: incidentId, p_note: note,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
 /** Admin: the review queue. Defaults to what is waiting on the director. */
 async function fetchIncidentReports({ status = 'submitted', limit = 200 } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');

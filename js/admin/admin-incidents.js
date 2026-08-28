@@ -25,6 +25,7 @@
 
 let _incData    = [];
 let _incSigs    = {};     // incident_id -> { teacher, parent, director }
+let _incAddenda = {};     // incident_id -> [{ note, added_by_name, created_at }, …]
 let _incFilter  = 'submitted';
 let _incOpenId  = null;
 let _incComposeOpen  = false;   // "+ Write a report" panel
@@ -109,10 +110,18 @@ async function renderIncidentsTool() {
     wrap.innerHTML = '<p class="muted">Loading…</p>';
     try {
         _incData = await fetchIncidentReports({ status: _incFilter || null });
-        const sigs = await fetchIncidentSignatures(_incData.map(r => r.id));
+        const ids = _incData.map(r => r.id);
+        const [sigs, addenda] = await Promise.all([
+            fetchIncidentSignatures(ids),
+            fetchIncidentAddenda(ids),
+        ]);
         _incSigs = {};
         for (const s of sigs) {
             (_incSigs[s.incident_id] ||= {})[s.role] = s;
+        }
+        _incAddenda = {};
+        for (const a of addenda) {
+            (_incAddenda[a.incident_id] ||= []).push(a);
         }
     } catch (e) {
         wrap.innerHTML = `<p class="muted">Could not load reports: ${escHtml(e.message || e)}</p>`;
@@ -620,6 +629,8 @@ function _incRenderDrawer() {
             </div>
 
             ${_incSigBlock(sig)}
+
+            ${_incAddendaBlock(r)}
         </div>
 
         ${r.status === 'submitted' ? `
@@ -652,6 +663,69 @@ function _incRenderDrawer() {
     el.querySelector('.inc-sign')?.addEventListener('click', e => _incSign(r.id, e.currentTarget));
     el.querySelector('.inc-return')?.addEventListener('click', e => _incReturn(r.id, e.currentTarget));
     el.querySelector('.inc-pdf')?.addEventListener('click', () => incidentPrint(r.id));
+    _incEl('incAddendumSave')?.addEventListener('click', () => _incAddAddendum(r.id));
+}
+
+// ── Addenda — adding to a report without rewriting it ───────
+// Deliberately not an edit: incident_reports has no UPDATE path here, and a
+// signed record's fields never change after the fact. This is how the
+// director adds something she forgot — a witness, a follow-up detail — after
+// she's already saved a report, or how the office adds a later development to
+// any report at any stage, even a closed one. See incident_report_addenda.sql.
+
+function _incAddedStamp(iso) {
+    if (!iso) return '';
+    const day = new Date(iso).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', timeZone: 'America/Chicago',
+    });
+    return `${day} · ${_incTime(iso)}`;
+}
+
+function _incAddendaBlock(r) {
+    const items = _incAddenda[r.id] || [];
+    const list = items.map(a => `<div class="inc-add-item">
+        <div class="inc-add-meta">${escHtml(a.added_by_name || 'Office')} · ${escHtml(_incAddedStamp(a.created_at))}</div>
+        <p>${escHtml(a.note)}</p>
+    </div>`).join('');
+
+    return `<div class="inc-dr-field">
+        <div class="inc-dr-label">Addenda</div>
+        ${list || '<p class="muted inc-add-empty">Nothing added yet.</p>'}
+        <div class="inc-add-form">
+            <textarea class="inc-dr-note" id="incAddendumInput" rows="2"
+                      placeholder="Add something to this report — a detail you forgot, a later development. This does not change what was already signed."></textarea>
+            <button type="button" class="btn-ghost" id="incAddendumSave">&#43; Add to this report</button>
+        </div>
+    </div>`;
+}
+
+async function _incAddAddendum(id) {
+    const input = _incEl('incAddendumInput');
+    const note = (input?.value || '').trim();
+    if (!note) { showToast('Write something to add first.', 'error'); return; }
+
+    const btn = _incEl('incAddendumSave');
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = 'Adding…';
+    try {
+        const addendumId = await addIncidentAddendum(id, note);
+        if (addendumId == null) {
+            showToast("Couldn't add that — check your admin role.", 'error');
+            return;
+        }
+        _incAddenda[id] = await fetchIncidentAddenda([id]);
+        _incRenderDrawer();
+        showToast('Added to the report.');
+    } catch (e) {
+        showToast('Error: ' + (e.message || e), 'error');
+    } finally {
+        // _incRenderDrawer() rebuilds this button fresh on success; this
+        // restore only matters on the error path, where the old node is
+        // still the one on the page.
+        const stillThere = _incEl('incAddendumSave');
+        if (stillThere) { stillThere.disabled = false; stillThere.textContent = label; }
+    }
 }
 
 function _incSigBlock(sig) {
