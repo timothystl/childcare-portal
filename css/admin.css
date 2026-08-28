@@ -433,6 +433,47 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     gap: 10px;
     align-items: flex-end;
 }
+
+/* ============================================================
+   Print Attendance — blank paper sign-in/sign-out sheet
+   ============================================================ */
+.pa-controls {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 18px;
+}
+.pa-field { display: flex; flex-direction: column; gap: 5px; }
+.pa-field label { font-size: .85em; font-weight: 600; color: var(--text-muted); }
+.pa-field select {
+    padding: 9px 13px; border: 2px solid var(--border); border-radius: 7px;
+    font-size: .95em;
+}
+/* On-page preview — same content/classes the print popup builds from, styled
+   for the app's own layout rather than a printed page. */
+.pa-sheet {
+    background: #fff; border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px 22px; margin-bottom: 20px;
+}
+.pa-sheet-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    border-bottom: 2px solid var(--navy); padding-bottom: 10px; margin-bottom: 14px;
+    gap: 16px; flex-wrap: wrap;
+}
+.pa-org { font-family: var(--font-head); font-size: 1.3em; font-weight: 700; color: var(--navy); }
+.pa-room-title { font-size: 1.05em; font-weight: 600; color: var(--text); margin-top: 2px; }
+.pa-meta { text-align: right; font-size: .85em; color: var(--text-muted); line-height: 1.6; }
+.pa-table { width: 100%; border-collapse: collapse; }
+.pa-table th, .pa-table td {
+    border: 1px solid var(--border); padding: 9px 12px; text-align: left; font-size: .9em;
+}
+.pa-table th { background: var(--linen); font-weight: 700; color: var(--text); }
+.pa-blank-cell { height: 34px; }
+.pa-empty { text-align: center; color: var(--text-muted); font-style: italic; padding: 18px; }
+.pa-sheet-foot {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 18px; font-size: .92em; flex-wrap: wrap; gap: 10px;
+}
+.pa-blank-line { display: inline-block; width: 220px; border-bottom: 1px solid var(--text-muted); }
+.pa-blank-short { display: inline-block; width: 40px; border-bottom: 1px solid var(--text-muted); }
 .roster-group { margin-bottom: 28px; }
 .roster-room-title {
     font-size: 1.05em;

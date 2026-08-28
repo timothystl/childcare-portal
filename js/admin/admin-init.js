@@ -13,6 +13,7 @@ async function initDashboard() {
     if (versionBadge) versionBadge.textContent = window.__BUILD_VERSION__ || 'dev';
     populateRoomFilter();
     populateRosterRoomFilter();
+    if (typeof populatePrintAttendanceRoomFilter === 'function') populatePrintAttendanceRoomFilter();
     try {
         await Promise.all([
             loadRegistrations(),
@@ -32,6 +33,7 @@ async function initDashboard() {
     renderCapacityOverview();
     setupFilters();
     setupRoster();
+    if (typeof setupPrintAttendance === 'function') setupPrintAttendance();
     setupClosures();
     if (typeof apPushInit === 'function') apPushInit();
     setupAttendanceRevenue();

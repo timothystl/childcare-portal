@@ -109,6 +109,15 @@ const AP_TOOLS = [
     // ("+ Write a report" / "+ Log a Drill") alongside reviewing what staff
     // filed — see admin-attendance.js/admin-incidents.js/admin-safety.js.
     //
+    // Print Attendance — added 2026-08-28, first in the group: a blank paper
+    // sign-in/sign-out sheet per room, for a parent or staff member to
+    // hand-sign at drop-off/pickup. Distinct from both `roster` below (a
+    // reference list, no signature lines) and `attBoard` (digital, live
+    // In/Out marking) — this is the paper backup licensing still expects at
+    // the door. Its section lives in #tab-daily, so pane:'daily' is correct
+    // here (unlike the three below it).
+    { key: 'printAttendance', pane: 'daily', section: 'printAttendanceSection', tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '🖨️', name: 'Print Attendance',
+      blurb: 'A blank sign-in/sign-out sheet per room — Time In/Out and a parent signature line for each child.' },
     // ⚠️ `pane` must be 'families', not 'daily': all three sections
     // (attendanceBoardSection/incidentsSection/fireDrillsSection) live inside
     // admin.html's #tab-families, not #tab-daily. They previously carried
@@ -817,6 +826,7 @@ function apOnToolOpened(tool) {
             window._apMarketInit = true; initMarketTab();
         }
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
+        if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();

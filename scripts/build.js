@@ -180,6 +180,11 @@ const ENTRIES = [
                 'js/admin/admin-init.js',
                 'js/admin/admin-calendar.js',
                 'js/admin/admin-classrooms.js',
+                // Reads getRosterForDate()/getSortedRooms() from admin-classrooms.js
+                // above and centerHeadcountAdmin() from admin-attendance.js below —
+                // load order doesn't gate calls in one concatenated script, but
+                // keeping it after both is the honest place to read it.
+                'js/admin/admin-print-attendance.js',
                 // After admin-calendar.js: reuses showDayRosterDetail(),
                 // renderCapacityOverview() and renderRoomSchedule() as the
                 // Enrollment & Capacity tool's Day/Month/Week sub-views.
