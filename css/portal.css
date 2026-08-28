@@ -893,7 +893,7 @@
 
 /* ============================================================
    BILLING TAB (portal-billing.js) — reuses .pd-card for its own cards;
-   these rules are just the row layout and the placeholder Pay button.
+   these rules are just the row layout and the Pay button/return states.
    ============================================================ */
 .pb-summary .pd-card-body { padding-top: 10px; }
 .pb-total { font-family: var(--font-head); font-size: 1.7em; color: var(--navy); margin: 0; }
@@ -914,10 +914,157 @@
 
 .pb-pay-btn {
     width: 100%; margin-top: 12px; min-height: 44px;
-    background: var(--linen); border: 1px dashed var(--border); border-radius: 10px;
-    color: var(--text-muted); font-family: inherit; font-size: .88em; font-weight: 700;
-    cursor: not-allowed;
+    background: var(--navy); border: none; border-radius: 10px;
+    color: #fff; font-family: inherit; font-size: .88em; font-weight: 700;
+    cursor: pointer;
 }
+.pb-pay-btn:hover:not(:disabled) { background: var(--navy-lt); }
+.pb-pay-btn:disabled {
+    background: var(--linen); border: 1px dashed var(--border);
+    color: var(--text-muted); cursor: not-allowed;
+}
+.pb-pay-error {
+    margin: 8px 0 0; font-size: .82em; line-height: 1.5; color: #B3261E;
+}
+
+.pb-return-banner .pd-card-body { padding: 14px 18px; font-size: .9em; line-height: 1.55; }
+.pb-return-paid      .pd-card-body { background: var(--green-pale); color: var(--green-dark, var(--green-text)); border-radius: 10px; }
+.pb-return-cancelled .pd-card-body { background: var(--linen); color: var(--text-muted); border-radius: 10px; }
+
+/* Pay-online modal — Authorize.net's Accept Hosted form embedded in an
+   iframe (see portal-billing.js). Sits above the tab bar/app shell, which is
+   why it lives outside #portalSignedIn rather than inside a tab pane. */
+.pb-pay-modal {
+    position: fixed; inset: 0; z-index: 500;
+    display: flex; align-items: flex-end; justify-content: center;
+    background: rgba(1, 41, 74, .55);
+    padding: 0;
+}
+@media (min-width: 520px) {
+    .pb-pay-modal { align-items: center; padding: 24px; }
+}
+.pb-pay-modal-inner {
+    position: relative; width: 100%; max-width: 480px;
+    background: #fff; border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 24px rgba(1, 41, 74, .25);
+    max-height: 92vh; display: flex; flex-direction: column;
+    overflow: hidden;
+}
+@media (min-width: 520px) {
+    .pb-pay-modal-inner { border-radius: 16px; box-shadow: 0 8px 32px rgba(1, 41, 74, .3); }
+}
+.pb-pay-modal-close {
+    position: absolute; top: 8px; right: 8px; z-index: 1;
+    width: 36px; height: 36px; border-radius: 999px;
+    background: var(--linen); border: none; color: var(--navy);
+    font-size: 22px; line-height: 1; cursor: pointer;
+}
+.pb-pay-modal-status {
+    margin: 0; padding: 32px 20px 20px; text-align: center;
+    font-size: .9em; font-weight: 700; color: var(--navy);
+}
+.pb-pay-frame {
+    width: 100%; height: 640px; max-height: 78vh; border: none;
+    /* Authorize.net's own "resizeWindow" message (relayed through
+       iframe-communicator.html) sets a precise inline height once the form
+       has loaded; this is just a sane starting size before that arrives. */
+}
+.pb-prior-balance-note {
+    margin: 0; padding: 0 20px 12px; text-align: center;
+    font-size: .82em; color: var(--tang-dark, #7a2a18);
+}
+body.pb-modal-open { overflow: hidden; }
+
+/* Stax comparison modal — the card-number/CVV fields are Stax.js iframes,
+   but everything around them is this app's own markup, styled the same as
+   the rest of the portal rather than left to a processor's hosted page.
+   See portal.html's pbStaxModal and portal-billing.js's pbOpenStaxModal. */
+.pb-stax-btn {
+    background: var(--tang); margin-top: 10px;
+}
+.pb-stax-btn:hover:not(:disabled) { background: var(--tang-dark, #7a2a18); }
+.pb-stax-modal-inner { max-width: 420px; }
+.pb-stax-modal-body { padding: 20px 24px 26px; }
+.pb-stax-badge {
+    display: inline-block; margin: 0 0 6px; padding: 3px 10px;
+    background: var(--tang-pale); color: var(--tang-dark, #7a2a18);
+    border-radius: 999px; font-size: .72em; font-weight: 800;
+    letter-spacing: .04em; text-transform: uppercase;
+}
+.pb-stax-title {
+    margin: 0 0 2px; color: var(--navy); font-family: var(--font-head);
+    font-size: 1.3em; font-weight: 800;
+}
+.pb-stax-name { margin: 0 0 16px; color: var(--text-muted); font-size: .85em; }
+.pb-stax-label {
+    display: block; margin: 14px 0 6px; color: var(--text);
+    font-size: .8em; font-weight: 700;
+}
+.pb-stax-field {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--white); overflow: hidden;
+}
+.pb-stax-field iframe { display: block; }
+.pb-stax-row { display: flex; gap: 16px; align-items: flex-start; }
+.pb-stax-row > div:first-child { flex: 1.3; }
+.pb-stax-row > div:last-child { flex: 1; }
+.pb-stax-exp-row { display: flex; gap: 8px; }
+.pb-stax-select {
+    flex: 1; height: 44px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--white);
+    font-family: inherit; font-size: .9em; color: var(--text);
+    padding: 0 8px;
+}
+.pb-stax-fine {
+    margin: 14px 0 0; font-size: .78em; line-height: 1.5;
+    color: var(--text-muted);
+}
+.pb-stax-line-items {
+    margin: 0 0 16px; padding: 10px 12px; background: var(--linen);
+    border-radius: var(--radius-sm); font-size: .85em;
+}
+.pb-stax-line-item {
+    display: flex; justify-content: space-between; gap: 10px; padding: 3px 0;
+}
+.pb-stax-line-item-child { color: var(--text); }
+.pb-stax-line-item-detail { color: var(--text-muted); font-size: .9em; }
+.pb-stax-line-item-amount { color: var(--navy); font-weight: 700; white-space: nowrap; }
+.pb-stax-prior-balance {
+    display: flex; justify-content: space-between; gap: 10px; padding: 6px 0 0;
+    margin-top: 4px; border-top: 1px solid var(--border); color: var(--tang-dark, #7a2a18);
+    font-weight: 700;
+}
+.pb-stax-payment-amount {
+    margin: 0 0 16px; padding: 12px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--white);
+}
+.pb-stax-balance { margin: 0; color: var(--text); font-size: .9em; }
+.pb-stax-payment-amount .pb-stax-link-btn { margin-left: 0; }
+.pb-stax-money-input {
+    display: flex; align-items: center; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--white); overflow: hidden;
+}
+.pb-stax-money-input span { padding-left: 12px; color: var(--text-muted); }
+.pb-stax-money-input input {
+    width: 100%; height: 44px; border: 0; outline: 0; padding: 0 12px 0 4px;
+    background: transparent; color: var(--text); font: inherit;
+}
+.pb-stax-payment-amount .pb-stax-fine { margin-top: 8px; }
+.pb-stax-saved-card {
+    margin: 0 0 18px; padding: 12px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--linen);
+}
+.pb-stax-saved-card-label { margin: 0 0 8px; font-size: .88em; color: var(--text); }
+.pb-stax-link-btn {
+    display: block; margin: 8px auto 0; background: none; border: none;
+    color: var(--navy); font-size: .82em; text-decoration: underline;
+    cursor: pointer; padding: 4px;
+}
+.pb-stax-save-card-label {
+    display: flex; align-items: center; gap: 8px; margin: 14px 0 0;
+    font-size: .82em; color: var(--text); cursor: pointer;
+}
+.pb-stax-save-card-label input { margin: 0; }
 
 /* ============================================================
    PARENT APP REDESIGN (2026-08-28)
@@ -1256,18 +1403,11 @@
     color: var(--navy);
     margin: 0 0 14px;
 }
-.pb-pay-btn {
-    display: block;
-    width: 100%;
-    padding: 14px;
-    border: 1px dashed var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--linen);
-    color: var(--text-muted);
-    font: inherit;
-    font-weight: 700;
-    cursor: not-allowed;
-}
+/* ⚠️ NO .pb-pay-btn rule here on purpose. The redesign screen shows a
+   disabled "Pay online (coming soon)" — that is the state this app was in
+   before the Stax flow shipped. The real, working navy Pay button is styled
+   earlier in this file; overriding it here would have dressed a live payment
+   button up as a placeholder. */
 .pb-fine { font-size: .8em; color: var(--text-muted); line-height: 1.55; margin: 10px 0 0; }
 .pb-row {
     display: flex;

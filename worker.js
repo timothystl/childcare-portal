@@ -651,6 +651,98 @@ export default {
       });
     }
 
+    // ── POST /notify-admin-incident — push admins the moment staff files one ─
+    // Raised directly: the director should know about an incident as soon as
+    // it's filed, not only once the parent has signed at pickup — she was
+    // only ever finding out by opening the tool herself, since "Needs you"
+    // deliberately filters to parent-signed rows (see apDashDirector) and
+    // nothing pushed her before this.
+    //
+    // ⚠️ THE CLIENT SENDS AN INCIDENT ID, NEVER A MESSAGE — same send-invoice /
+    // send-staff-broadcast posture as every other sender in this file. The
+    // worker re-reads the report with the service role and composes the text
+    // itself; no title, no body, no recipient travels from a browser.
+    //
+    // Caller is a teacher's phone on the public anon key, same as
+    // /send-staff-broadcast, so authorization is the same PIN check rather
+    // than a Supabase Auth bearer token — there is no admin session on this
+    // device to check a role against.
+    //
+    // ⚠️ Deliberately reuses admin_push_subscriptions and the existing
+    // "Notify me" toggle rather than a second subscription list — a director
+    // who already turned notifications on for new parent messages should not
+    // have to find and flip a second switch to hear about an incident too.
+    // Sent to whoever is already subscribed there today (full admins only —
+    // /admin-push-subscribe's own gate, unchanged by this route).
+    if (url.pathname === '/notify-admin-incident' && request.method === 'POST') {
+      const reqOrigin = request.headers.get('Origin');
+      if (reqOrigin && !ALLOWED_ORIGINS.has(reqOrigin)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      const { staff_id: claimedStaffId, pin, incident_id } = await request.json().catch(() => ({}));
+      if (!claimedStaffId || !pin || !incident_id) return new Response('Missing fields', { status: 400 });
+      if (!/^\d{4,8}$/.test(String(pin))) return new Response('Unauthorized', { status: 401 });
+
+      const pinRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/staff_id_for_pin`, {
+        method: 'POST',
+        headers: {
+          'apikey':        env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({ p_staff_id: claimedStaffId, p_pin: parseInt(String(pin), 10) }),
+      });
+      if (!pinRes.ok) return new Response('Unauthorized', { status: 401 });
+      const callerStaffId = await pinRes.json().catch(() => null);
+      if (!callerStaffId) return new Response('Unauthorized', { status: 401 });
+
+      // Everything the notification says comes from this row — never from
+      // the request body.
+      const incRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/incident_reports?id=eq.${encodeURIComponent(incident_id)}` +
+        `&select=id,incident_kind,incident_type,reported_by_name,students(child_name)&limit=1`,
+        { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      );
+      if (!incRes.ok) return new Response('Failed to read report', { status: 500 });
+      const [incident] = await incRes.json().catch(() => []);
+      if (!incident) return new Response('No such report', { status: 404 });
+
+      const childName = incident.students?.child_name || 'A child';
+      const kind = incident.incident_kind || incident.incident_type || 'Incident';
+      const payload = {
+        title: `🩹 ${kind} — ${childName}`,
+        body:  `Filed by ${incident.reported_by_name || 'staff'}. Open Incident Reports to review.`,
+        tag:   `incident-${incident.id}`,
+      };
+
+      const subsRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/admin_push_subscriptions?select=*`,
+        { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+      );
+      if (!subsRes.ok) return new Response('Failed to fetch subscriptions', { status: 500 });
+      const subs = await subsRes.json();
+      if (!subs.length) return new Response(JSON.stringify({ sent: 0 }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+
+      const results = await Promise.allSettled(subs.map(sub => sendWebPush(sub, payload, env)));
+
+      const expired = subs
+        .filter((_, i) => results[i].status === 'fulfilled' && results[i].value.status === 410)
+        .map(s => s.id);
+      if (expired.length) {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/admin_push_subscriptions?id=in.(${expired.join(',')})`,
+          { method: 'DELETE', headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
+        );
+      }
+
+      return new Response(JSON.stringify({ sent: subs.length - expired.length }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // ── POST /send-staff-broadcast — every staff phone at once ───────────────
     // The missing-child alert. /send-staff-push next door sends to ONE staff_id
     // and demands the service role key, so neither half of it fits: this has to
@@ -967,7 +1059,28 @@ export default {
       // what THIS page may embed (the Maps iframe), frame-ancestors is who may
       // embed this page.
       "frame-ancestors 'self'; " +
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; " +
+      // staxjs.staxpayments.com: Stax.js (Bolt), the embedded-checkout
+      // comparison in portal-billing.js — see its pbLoadStaxJs().
+      // core.spreedly.com: Stax.js itself loads Spreedly's iframe tokenization
+      // library (core.spreedly.com/iframe/iframe-v1.min.js) to actually
+      // collect the card number/CVV — found by grepping staxjs-captcha.js's
+      // own bundled source, not documented anywhere Stax publishes. Without
+      // this the number/CVV fields render as a refused-iframe placeholder
+      // (a blank gray box with a broken-page icon) even though the outer
+      // Stax.js library itself loads fine — a second, separate CSP miss from
+      // the first one (staxjs.staxpayments.com), caught only by actually
+      // clicking through the flow.
+      // www.google.com (recaptcha/api.js): Stax.js's own fraud-prevention
+      // captcha, loaded unconditionally by the library itself.
+      // www.gstatic.com: a THIRD, separate CSP miss on the same captcha —
+      // google.com's api.js loader was allowed above, but it then loads the
+      // actual recaptcha payload (recaptcha__en.js) from gstatic.com, which
+      // wasn't. Without this, tokenize() doesn't error — it just hangs on
+      // "Processing payment…" forever, because the library is waiting on a
+      // captcha script that silently never finishes loading. Caught live
+      // from a real Pay attempt that never completed; the console showed a
+      // blocked script-src request for gstatic.com and nothing else.
+      "script-src 'self' 'sha256-7ukUEU0HbQk9LYpgmbPE9MqGzatu6rzksJn1AYYw+2Y=' 'sha256-ALMh8fut/JHHMeP2T/kM/nHWJax99rJ7egy7UofChXU=' 'sha256-aGIMO7Vlhq6Ve/meGqKde1A3T79E/OD1yrByOQjBZEs=' 'sha256-d5i+v5L8VusXhEGQOmuyU+EkXjSx6GzmGomWRzUra5E=' 'sha256-dTRmBgLLPM8GxN9hmnDU3nEMwlrkK674AC3bzP8oBwg=' 'sha256-fI8T92E60IJncE+OcbC++7XsYQdClalyTG+sT6hOqjU=' 'sha256-h/EXOjMCF9Rgr2ZXcKL04RuCl+rAmgCHPfu+j8lv+C4=' 'sha256-mvVo0ENcU3SS5xg3ePKPQAekybTJ3D42djIbf0IYr3U=' 'sha256-n6CQ/BTNYeil2JNqHWbFGXfnDHnjETuGFmwVFH3n0EE=' 'sha256-ne+dzcRgNOXDz83q9TjqqPWPaEmzzwNuQkGLyRJE+a0=' 'sha256-q38aS/Rx1qwP415vLwMVtE7TDcO32hS5FXg5lEImBkw=' 'sha256-qrg7scMqtNWjm70X6OTSMAvNP7CnjeDya3YC/hXSBEE=' 'sha256-r5ECVyxfLY+rle5ekHeP4wZC/bZ4bgxBT5+2Fsc2l+k=' 'sha256-sLrSHxNtqFHjQT/zbfGa3pxd/G5xWp/cHbuTHNVkOZA=' 'sha256-vQzgczDFy/iatRc6pEF4+sxzSIrVGotATlJfQz7EfO0=' 'sha256-xUsYOmO9r3fzMGx/xi/FR/mUY4mSa6Wb5E/IFBsSWU0=' https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://staxjs.staxpayments.com https://core.spreedly.com https://www.google.com https://www.gstatic.com; " +
       // R25: style-src/font-src previously omitted the Google Fonts hosts that
       // every page links (Lora, Nunito, Dancing Script), and the brand
       // typography fell back to Georgia / system-ui in production.
@@ -980,7 +1093,27 @@ export default {
       // effective policy for everything else — so the two MUST stay in sync,
       // and a change made only here will silently do nothing.
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com; " +
+      // apiprod/fattqueryprod/transactions.fattlabs.com: the three hosts
+      // Stax.js itself calls, read directly out of its own bundled source
+      // (grepped staxjs-captcha.js for fattlabs.com/fattmerchant.com/
+      // staxpayments.com references) rather than guessed from docs.
+      // test.blockchyp.com / api.blockchyp.com: the real vault vendor for
+      // THIS merchant's Stax gateway, per its own console log ("Vendor
+      // lookup complete: using BlockChyp") — Stax bundles several possible
+      // vault backends (Spreedly above is one; BlockChyp is the one this
+      // merchant's test gateway actually routes through), so which one
+      // matters can only be learned from the actual browser session, not
+      // from reading the library's source.
+      // www.google.com: recaptcha itself calls back to
+      // recaptcha/api2/clr for its own internal analytics/logging beacon,
+      // after everything else (script-src's gstatic.com fix, the BlockChyp
+      // card enroll, the recaptcha token) already succeeded — a FOURTH
+      // separate CSP miss on the same captcha, caught from a real payment
+      // attempt whose console showed the enroll succeed and the recaptcha
+      // token generate, immediately followed by this connect-src block on
+      // repeat with backoff. www.google.com was already allowed in
+      // script-src/frame-src for other reasons but never added here.
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://cloudflareinsights.com https://apiprod.fattlabs.com https://fattqueryprod.fattlabs.com https://transactions.fattlabs.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com https://www.google.com; " +
       "img-src 'self' data:; " +
       // frame-src for the Google Maps embed on the home page contact section.
       // There is no frame-src default: without this it falls back to
@@ -988,7 +1121,22 @@ export default {
       // console error to say why — the same silent-failure shape as R25 above.
       // Both hosts are needed: the /maps?output=embed URL is served by
       // maps.google.com and redirects to www.google.com/maps/embed.
-      "frame-src https://maps.google.com https://www.google.com; " +
+      // test.authorize.net (sandbox) / accept.authorize.net (production) are
+      // the online-payment iframe in the parent portal — see
+      // portal-billing.js and create-payment-session.
+      // staxjs.staxpayments.com / omni.fattmerchant.com: Stax.js mounts the
+      // card-number/CVV fields as small iframes from one of these — the
+      // charge response's own merchant_location_descriptor names
+      // omni.fattmerchant.com, so both are allowed rather than guessed at.
+      // core.spreedly.com is the actual card-number/CVV iframe host — see
+      // the script-src comment above for how this was found.
+      // test.blockchyp.com / api.blockchyp.com: the actual card-number/CVV
+      // iframe origin for this merchant's gateway, confirmed live from a
+      // browser console postMessage error naming
+      // https://test.blockchyp.com as the target origin the iframe never
+      // reached (blocked here, so it stayed at origin 'null' — the
+      // "flash of real fields, then reverts to blocked" symptom).
+      "frame-src https://maps.google.com https://www.google.com https://test.authorize.net https://accept.authorize.net https://staxjs.staxpayments.com https://omni.fattmerchant.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com; " +
       "font-src 'self' data: https://fonts.gstatic.com"
     );
     // SX4: the rest of the baseline security headers. Kept byte-identical to

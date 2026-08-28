@@ -188,6 +188,15 @@ function ipRender(rec) {
 
     ipEl('ipComplete').textContent = `RECORD COMPLETE · ${ipStamp(rec.completed_at)}`;
 
+    // Addenda supplement the signed record above without altering it — shown
+    // only when at least one exists, so a report with none looks unchanged.
+    const addenda = rec.addenda || [];
+    ipEl('ipAddendaBlock').classList.toggle('hidden', addenda.length === 0);
+    ipEl('ipAddendaList').innerHTML = addenda.map(a => `<div class="ip-addendum">
+        <span class="ip-addendum-meta">${escHtml(a.added_by_name || 'Office')} · ${escHtml(ipStamp(a.created_at))}</span>
+        <p>${escHtml(a.note)}</p>
+    </div>`).join('');
+
     ipEl('ipSigLines').innerHTML = ['teacher', 'parent', 'director'].map((role, i) => {
         const s = byRole[role];
         return `<div class="ip-sig">

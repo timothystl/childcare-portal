@@ -1,86 +1,11 @@
 // ============================================================
-// MODULE: Admin Staffing (staff roster, ratios, hours entry)
-// Sections: Staff Ratios Settings, Staff Roster, Log Hours
+// MODULE: Admin Staffing (staff roster, hours entry)
+// Sections: Staff Roster, Log Hours
 // ============================================================
-
-// STAFF RATIOS SETTINGS
-// ============================================================
-function setupRatios() {
-    renderRatiosTable();
-    document.getElementById('saveRatiosBtn')?.addEventListener('click', onSaveRatios);
-}
-
-function renderRatiosTable() {
-    const wrap = document.getElementById('ratiosTableWrap');
-    if (!wrap) return;
-    wrap.innerHTML = `
-        <table class="rates-table">
-            <thead>
-                <tr>
-                    <th>Room</th>
-                    <th>Age Group</th>
-                    <th>Max Children per Staff</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${getSortedRooms().map(room => `
-                    <tr data-room-id="${room.id}">
-                        <td class="rates-room-label">
-                            <strong>${escHtml(room.label)}</strong>
-                        </td>
-                        <td class="rates-ages">${escHtml(room.ages)}</td>
-                        <td>
-                            <input type="number" class="ratio-input rate-input"
-                                value="${room.staffRatio ?? ''}" min="1" step="1" placeholder="e.g. 4"
-                                style="width:80px;">
-                        </td>
-                    </tr>`).join('')}
-            </tbody>
-        </table>
-        <p class="rates-hint">💡 Enter the maximum number of children one staff member may supervise. Typical state minimums: infants 4, young toddlers 5, 2-year-olds 8, 3-year-olds 10.</p>`;
-}
-
-async function onSaveRatios() {
-    const btn      = document.getElementById('saveRatiosBtn');
-    const statusEl = document.getElementById('ratiosStatus');
-    if (!btn) return;
-    btn.disabled    = true;
-    btn.textContent = 'Saving…';
-    if (statusEl) statusEl.textContent = '';
-
-    try {
-        const ratios = {};
-        document.querySelectorAll('#ratiosTableWrap tbody tr[data-room-id]').forEach(row => {
-            const id  = row.dataset.roomId;
-            const val = row.querySelector('.ratio-input')?.value.trim();
-            ratios[id] = val === '' ? null : parseInt(val, 10);
-        });
-
-        await saveRatioSettings(ratios);
-        // Merge directly into ROOMS to avoid a silent DB round-trip failure.
-        ROOMS.forEach(room => {
-            if (ratios[room.id] != null) room.staffRatio = ratios[room.id];
-        });
-        renderRatiosTable();
-
-        if (statusEl) {
-            statusEl.textContent = '✓ Saved!';
-            statusEl.style.color = '#2e7d32';
-            setTimeout(() => { statusEl.textContent = ''; }, 3000);
-        }
-    } catch (err) {
-        if (statusEl) {
-            statusEl.textContent = '⚠️ ' + err.message;
-            statusEl.style.color = '#c62828';
-        }
-        console.error('onSaveRatios:', err);
-    } finally {
-        btn.disabled    = false;
-        btn.textContent = '💾 Save Ratios';
-    }
-}
-
-// ============================================================
+// Staff-to-child ratio editing lives in the Settings tab's combined Rooms &
+// rates table now (js/admin/admin-settings-unified.js) — saveRatioSettings()
+// / loadRatioSettings() (js/supabase.js) are unchanged; only the standalone
+// table+save UI that used to live here was retired.
 
 // STAFF ROSTER
 // ============================================================

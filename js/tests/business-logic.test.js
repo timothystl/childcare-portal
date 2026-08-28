@@ -205,6 +205,54 @@ function escHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
+function _buildArRows(month, families, invoices, monthPayments) {
+    const invoiceByFamily = new Map(invoices.map(inv => [String(inv.family_id), inv]));
+
+    const paymentsByFamily = {};
+    monthPayments.forEach(p => {
+        const fid = String(p.family_id);
+        if (!paymentsByFamily[fid]) paymentsByFamily[fid] = [];
+        paymentsByFamily[fid].push(p);
+    });
+
+    return families.map(family => {
+        const inv      = invoiceByFamily.get(String(family.id));
+        const payments = paymentsByFamily[String(family.id)] || [];
+
+        const billed      = parseFloat(inv?.final_amount || 0);
+        const collected   = payments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+
+        const billedIfSent = inv?.sent_at ? billed : 0;
+        const outstanding  = Math.max(0, billedIfSent - collected);
+
+        let status;
+        if (billedIfSent === 0 && collected === 0) status = 'no_invoice';
+        else if (outstanding <= 0 && billedIfSent > 0) status = 'paid';
+        else if (collected > 0)                        status = 'partial';
+        else                                            status = 'overdue';
+
+        const daysSince = inv?.sent_at
+            ? Math.max(0, Math.floor((Date.now() - new Date(inv.sent_at).getTime()) / 86400000))
+            : null;
+
+        return {
+            familyId:    family.id,
+            familyName:  family.parent_name || '(unnamed)',
+            familyEmail: family.parent_email || '',
+            invoiceId:   inv?.id || null,
+            sentAt:      inv?.sent_at || null,
+            daysSince,
+            billed,
+            collected,
+            outstanding,
+            status,
+            payments,
+            isLocked:    !!family.registration_locked,
+            lockReason:  family.registration_lock_reason || '',
+        };
+    });
+}
+
 // ============================================================
 // TESTS
 // ============================================================
@@ -442,6 +490,46 @@ describe('calcTotalForTest — billing totals', () => {
     test('no children → 0', () => {
         const dates = new Map([['2026-03-23', { dayType: 'full' }]]);
         expect(calcTotalForTest(dates, [])).toBe(0);
+    });
+});
+
+describe('_buildArRows — an unsent draft is not money a family owes', () => {
+    // reconcileBillingInvoice() drafts a billing_invoices row for every clean
+    // family the moment Bill the Month computes them, well before Release/Send
+    // is clicked — found live 2026-08-28: 94 of August's 95 drafted invoices
+    // had never been sent, and their combined final_amount was the entire
+    // Ledger "owed" banner and "Nudge all" count.
+    const family = { id: 'fam-1', parent_name: 'Test Family', parent_email: 't@example.com' };
+
+    test('a drafted-but-unsent invoice is not outstanding, owed, or overdue', () => {
+        const invoices = [{ family_id: 'fam-1', final_amount: 360, sent_at: null }];
+        const [row] = _buildArRows('2026-08', [family], invoices, []);
+        expect(row.billed).toBe(360);        // the draft amount is still visible for display purposes
+        expect(row.outstanding).toBe(0);     // but nothing is actually owed yet
+        expect(row.status).toBe('no_invoice');
+    });
+
+    test('once sent, the same amount becomes real outstanding balance', () => {
+        const invoices = [{ family_id: 'fam-1', final_amount: 360, sent_at: '2026-08-28T12:00:00Z' }];
+        const [row] = _buildArRows('2026-08', [family], invoices, []);
+        expect(row.billed).toBe(360);
+        expect(row.outstanding).toBe(360);
+        expect(row.status).toBe('overdue');
+    });
+
+    test('a sent invoice fully paid reads as paid, not owed', () => {
+        const invoices = [{ family_id: 'fam-1', final_amount: 360, sent_at: '2026-08-28T12:00:00Z' }];
+        const payments = [{ family_id: 'fam-1', amount: 360 }];
+        const [row] = _buildArRows('2026-08', [family], invoices, payments);
+        expect(row.outstanding).toBe(0);
+        expect(row.status).toBe('paid');
+    });
+
+    test('a payment against an unsent draft cannot go negative', () => {
+        const invoices = [{ family_id: 'fam-1', final_amount: 360, sent_at: null }];
+        const payments = [{ family_id: 'fam-1', amount: 50 }];
+        const [row] = _buildArRows('2026-08', [family], invoices, payments);
+        expect(row.outstanding).toBe(0);
     });
 });
 
@@ -1199,6 +1287,7 @@ describe('source-drift guard — copies must match js/ source', () => {
         ['_forecastShowRate',   'js/admin/admin-reports.js'],
         ['_forecastConfidence', 'js/admin/admin-reports.js'],
         ['_buildForecastRows',  'js/admin/admin-reports.js'],
+        ['_buildArRows',        'js/admin/admin-billing.js'],
     ];
 
     for (const [fnName, relPath] of GUARDED) {
@@ -1312,7 +1401,7 @@ describe('cross-file drift guard — worker.js SSR copies must match js/ source'
 describe('billing invoice integrity guards', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const migration = read('supabase/migrations/20260824_billing_invoice_integrity.sql');
+    const migration = read('supabase/migrations/20260825040000_billing_invoice_integrity.sql');
     const billingUi = read('js/admin/admin-billing.js');
     const billMonth = read('js/admin/admin-bill-month.js');
 
@@ -1352,6 +1441,433 @@ describe('billing invoice integrity guards', () => {
         const monitor = read('js/error-monitor.js');
         expect(app.includes('window.reportClientError?.(')).toBe(true);
         expect(monitor.includes('window.reportClientError = reportError')).toBe(true);
+    });
+});
+
+describe('Stax payment security guards', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const migration = read('supabase/migrations/20260827225514_harden_stax_payments.sql');
+    const chargeFn = read('supabase/functions/charge-stax-payment/index.ts');
+    const webhookFn = read('supabase/functions/stax-webhook/index.ts');
+
+    test('active payment attempts are unique per family, not merely invoice', () => {
+        expect(/payment_charge_locks_active_family_idx[\s\S]*?\(family_id\)[\s\S]*?processor_succeeded/.test(migration)).toBe(true);
+    });
+
+    test('charge allocation and reversal recording use atomic database functions', () => {
+        expect(chargeFn.includes('admin.rpc("stax_finalize_charge"')).toBe(true);
+        expect(webhookFn.includes('admin.rpc("stax_record_reversal"')).toBe(true);
+        expect(migration.includes('CREATE OR REPLACE FUNCTION public.stax_finalize_charge')).toBe(true);
+        expect(migration.includes('CREATE OR REPLACE FUNCTION public.stax_record_reversal')).toBe(true);
+    });
+
+    test('privileged Stax database functions are not browser-executable', () => {
+        for (const signature of [
+            'stax_quote_balance(bigint, uuid)',
+            'stax_prepare_charge(bigint, uuid, numeric, text)',
+            'stax_set_charge_state(bigint, text, text, text)',
+            'stax_finalize_charge(bigint)',
+            'stax_record_reversal(text, text, text, numeric)',
+        ]) {
+            expect(migration.includes(`REVOKE ALL ON FUNCTION public.${signature} FROM PUBLIC, anon, authenticated`)).toBe(true);
+        }
+    });
+
+    test('webhook re-fetches the transaction from Stax before mutation', () => {
+        const verifyAt = webhookFn.indexOf('/transaction/${encodeURIComponent(eventTransactionId)}');
+        const mutateAt = webhookFn.indexOf('admin.rpc("stax_record_reversal"');
+        expect(verifyAt).toBeGreaterThan(-1);
+        expect(mutateAt).toBeGreaterThan(verifyAt);
+    });
+
+    test('charge verifies the payment method belongs to the family customer', () => {
+        const lookupAt = chargeFn.indexOf('/payment-method/${encodeURIComponent(paymentMethodId)}');
+        const reserveAt = chargeFn.indexOf('admin.rpc("stax_prepare_charge"');
+        expect(lookupAt).toBeGreaterThan(-1);
+        expect(chargeFn.includes('verifiedMethod?.customer_id')).toBe(true);
+        expect(reserveAt).toBeGreaterThan(lookupAt);
+    });
+
+    test('client never reads a Stax PENDING (HTTP 202) response as a confirmed charge', () => {
+        // The edge function returns 202 for PENDING — a 2xx status, so
+        // supabase-js resolves it as `data` rather than `error`. Without an
+        // explicit check, the caller's generic "!== true" guard discards the
+        // real ambiguous/still-processing message the server sent.
+        const supabaseJs = read('js/supabase.js');
+        const start = supabaseJs.indexOf('async function chargeStaxPayment');
+        const end = supabaseJs.indexOf('async function adminRefundPayment');
+        expect(start).toBeGreaterThan(-1);
+        expect(end).toBeGreaterThan(start);
+        const fnBody = supabaseJs.slice(start, end);
+        expect(fnBody.includes('data.success !== true')).toBe(true);
+        expect(fnBody.includes('data.ambiguous')).toBe(true);
+        expect(fnBody.includes("data.error || 'Your payment could not be confirmed.'")).toBe(true);
+    });
+
+    test('webhook records only processor-verified successful transactions', () => {
+        const successAt = webhookFn.indexOf('const verifiedSuccess = transaction?.success === true');
+        const reversalAt = webhookFn.indexOf('admin.rpc("stax_record_reversal"');
+        expect(successAt).toBeGreaterThan(-1);
+        expect(webhookFn.indexOf('if (!verifiedSuccess)', successAt)).toBeGreaterThan(successAt);
+        expect(reversalAt).toBeGreaterThan(successAt);
+    });
+
+    test('client request carries the stable server-created payment attempt id', () => {
+        const createFn = read('supabase/functions/create-stax-charge/index.ts');
+        const client = read('js/supabase.js');
+        expect(createFn.includes('paymentAttemptId: crypto.randomUUID()')).toBe(true);
+        expect(client.includes('paymentAttemptId: opts?.paymentAttemptId')).toBe(true);
+        expect(chargeFn.includes('idempotency_id: paymentAttemptId')).toBe(true);
+    });
+
+    test('normal parent Pay online button never sends sandboxTest true without the URL flag', () => {
+        // The button itself is unchanged — same class, same label, no
+        // "(test)" text a real parent could be confused by. pbStaxTestEnabled()
+        // gates whether the underlying calls carry sandboxTest:true, and it
+        // reads sessionStorage/the URL rather than defaulting true.
+        const portal = read('js/portal/portal-billing.js');
+        expect(portal.includes('class="pb-pay-btn pb-stax-btn"')).toBe(true);
+        expect(portal.includes('with Stax (test)')).toBe(false);
+        expect(portal.includes('function pbStaxTestEnabled()')).toBe(true);
+        expect(portal.includes("get('staxtest') === '1'")).toBe(true);
+        expect(portal.includes('sandboxTest: pbStaxTestEnabled()')).toBe(true);
+    });
+
+    test('parent Stax endpoints fail closed unless production OR an explicit two-signal sandbox test', () => {
+        // Reintroduced 2026-08-28 so the real Stax.js flow can be
+        // click-tested against the sandbox merchant before a production
+        // Stax account exists. Must require BOTH a server secret
+        // (STAX_SANDBOX_TEST_ENABLED) and a per-request client signal
+        // (sandboxTest) — either alone must never be enough, since a real
+        // parent's normal request never sets sandboxTest and the server
+        // secret is meant to be a deliberate, temporary opt-in.
+        const createFn = read('supabase/functions/create-stax-charge/index.ts');
+        for (const fn of [createFn, chargeFn]) {
+            expect(fn.includes('STAX_ENVIRONMENT')).toBe(true);
+            expect(fn.includes('=== "production"')).toBe(true);
+            expect(fn.includes('STAX_SANDBOX_TEST_ENABLED')).toBe(true);
+            expect(fn.includes('body?.sandboxTest === true')).toBe(true);
+            expect(fn.includes('!isProduction && !sandboxTestAllowed')).toBe(true);
+        }
+    });
+
+    test('portal falls back to the existing hosted checkout while Stax is gated', () => {
+        const portal = read('js/portal/portal-billing.js');
+        expect(portal.includes("e?.message === 'Online payments are not configured for production yet.'")).toBe(true);
+        expect(portal.includes('return pbStartPayment(invoiceId)')).toBe(true);
+    });
+
+    test('saved-card response does not expose the opaque payment method id', () => {
+        const createFn = read('supabase/functions/create-stax-charge/index.ts');
+        const savedCardBlock = createFn.match(/savedCard:[\s\S]*?\} : null/);
+        if (!savedCardBlock) throw new Error('savedCard response block not found');
+        expect(savedCardBlock[0].includes('paymentMethodId')).toBe(false);
+    });
+
+    test('temporary webhook-admin function is inert and JWT protected in source config', () => {
+        const tempFn = read('supabase/functions/stax-webhook-admin-tmp/index.ts');
+        const config = read('supabase/config.toml');
+        expect(tempFn.includes('status: 410')).toBe(true);
+        expect(tempFn.includes('Deno.env')).toBe(false);
+        expect(/\[functions\.stax-webhook-admin-tmp\][\s\S]*?verify_jwt\s*=\s*true/.test(config)).toBe(true);
+    });
+
+    test('_headers and worker.js ship identical CSP values', () => {
+        const headersMatch = read('_headers').match(/^\s*Content-Security-Policy:\s*(.+)$/m);
+        if (!headersMatch) throw new Error('CSP missing from _headers');
+        const workerMatch = read('worker.js').match(/newHeaders\.set\(\s*'Content-Security-Policy',([\s\S]*?)\n\s*\);/);
+        if (!workerMatch) throw new Error('CSP setter missing from worker.js');
+        // The captured expression is a concatenation of repository-owned
+        // string literals and comments; evaluating it yields the actual header.
+        // eslint-disable-next-line no-eval
+        const workerCsp = eval(workerMatch[1]);
+        expect(workerCsp).toBe(headersMatch[1].trim());
+    });
+
+    test('public bundles contain no server-side Stax or Supabase secret names', () => {
+        const bundles = read('dist/portal.min.js') + read('dist/supabase.min.js');
+        for (const secretName of ['STAX_API_KEY', 'STAX_WEBHOOK_SECRET', 'SUPABASE_SERVICE_ROLE_KEY']) {
+            expect(bundles.includes(secretName)).toBe(false);
+        }
+    });
+});
+
+describe('admin-refund-stax-payment — Stax reversal support, wired into the LIVE Ledger drawer', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const refundFn = read('supabase/functions/admin-refund-stax-payment/index.ts');
+    const billingJs = read('js/admin/admin-billing.js');
+    const financeHubJs = read('js/admin/admin-finance-hub.js');
+    const portalJs = read('js/admin/admin-portal.js');
+    const supabaseJs = read('js/supabase.js');
+
+    test('requires a full-admin session, same gate as the Authorize.net refund function', () => {
+        expect(refundFn.includes('callerRole !== "full"')).toBe(true);
+        expect(refundFn.includes('auth.getUser()')).toBe(true);
+    });
+
+    test('only a stax-processed positive charge, not yet reversed, can be refunded', () => {
+        expect(refundFn.includes('payment.processor !== "stax"')).toBe(true);
+        expect(refundFn.includes('payment.refund_of_payment_id')).toBe(true);
+        expect(refundFn.includes('existingReversal')).toBe(true);
+    });
+
+    test('void vs refund is read from Stax\'s own is_voidable flag, never guessed locally', () => {
+        const lookupAt = refundFn.indexOf('/transaction/${encodeURIComponent(transactionId)}`');
+        const voidableAt = refundFn.indexOf('tx.is_voidable === true');
+        expect(lookupAt).toBeGreaterThan(-1);
+        expect(voidableAt).toBeGreaterThan(lookupAt);
+    });
+
+    test('the refund amount is always this payment\'s own recorded amount, never client input', () => {
+        expect(refundFn.includes('body?.paymentId')).toBe(true);
+        expect(refundFn.includes('Number(payment.amount).toFixed(2)')).toBe(true);
+        expect(/body\??\.(amount|total)/.test(refundFn)).toBe(false);
+    });
+
+    test('the "-inv<id>"/"-credit" suffix is stripped before calling Stax, never sent to the processor', () => {
+        expect(refundFn.includes('function baseTransactionId')).toBe(true);
+        expect(refundFn.includes('replace(/-inv\\d+$/')).toBe(true);
+        const callSite = refundFn.indexOf('baseTransactionId(payment.processor_transaction_id)');
+        expect(callSite).toBeGreaterThan(-1);
+    });
+
+    test('does not touch billing_payments or invoice status — the webhook records the reversal', () => {
+        expect(refundFn.includes(".from(\"billing_payments\")\n            .update")).toBe(false);
+        expect(refundFn.includes('billing_invoices')).toBe(false);
+    });
+
+    test('adminRefundPayment routes to the stax edge function only when asked, else the authorizenet one', () => {
+        const start = supabaseJs.indexOf('async function adminRefundPayment');
+        const end = supabaseJs.indexOf('async function unmarkInvoiceSent');
+        expect(start).toBeGreaterThan(-1);
+        expect(end).toBeGreaterThan(start);
+        const fnBody = supabaseJs.slice(start, end);
+        expect(fnBody.includes("processor === 'stax' ? 'admin-refund-stax-payment' : 'admin-refund-payment'")).toBe(true);
+    });
+
+    // ⚠️ billingArSection (the old admin-billing.js AR table this refund
+    // logic was first added to) was retired from AP_TOOLS in the Bookkeeper
+    // overhaul (2026-08-27) and is unreachable in the live admin shell — its
+    // own comment in admin-portal.js says so. A Refund button added only
+    // there would be dead code nobody could ever click. This guard fails if
+    // that ever silently becomes reachable again without someone re-checking
+    // whether admin-billing.js's refund wiring should move with it.
+    test('billingArSection (admin-billing.js\'s AR table) is still unreferenced by AP_TOOLS — confirms it is dead code', () => {
+        expect(billingJs.includes('pay-hist-refund-btn')).toBe(true); // the old wiring still exists...
+        expect(portalJs.includes('billingArSection')).toBe(false);   // ...but is not reachable from the shell.
+    });
+
+    test('the LIVE Ledger drawer (Finance → Ledger, the reachable Accounts Receivable view) shows a Refund control per payment', () => {
+        expect(financeHubJs.includes('function _fhCanRefund(')).toBe(true);
+        expect(financeHubJs.includes("REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax'])")).toBe(true);
+        expect(financeHubJs.includes('data-processor="${escHtml(p.processor)}"')).toBe(true);
+        expect(financeHubJs.includes('async function _fhRefundPayment(')).toBe(true);
+        expect(financeHubJs.includes("adminRefundPayment(paymentId, processor)")).toBe(true);
+    });
+
+    test('drawer refund keeps _fhRows/Bookkeeper in sync afterward, same reload pattern as recording a payment', () => {
+        const submitPaymentAt = financeHubJs.indexOf('async function _fhSubmitPayment');
+        const refundAt = financeHubJs.indexOf('async function _fhRefundPayment');
+        expect(submitPaymentAt).toBeGreaterThan(-1);
+        expect(refundAt).toBeGreaterThan(-1);
+        const refundBody = financeHubJs.slice(refundAt, financeHubJs.indexOf('\n}', refundAt));
+        expect(refundBody.includes('await _fhLoad()')).toBe(true);
+        expect(refundBody.includes('_fhRenderDrawer()')).toBe(true);
+    });
+
+    test('a payment already reversed, or itself a reversal, never shows a second Refund button', () => {
+        const start = financeHubJs.indexOf('function _fhCanRefund');
+        const end = financeHubJs.indexOf('\n}', start);
+        const fnBody = financeHubJs.slice(start, end);
+        expect(fnBody.includes('p.refund_of_payment_id')).toBe(true);
+        expect(fnBody.includes('allPayments.some(o => o.refund_of_payment_id === p.id)')).toBe(true);
+    });
+});
+
+describe('Stax payment reconciliation job', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const reconcileFn = read('supabase/functions/reconcile-stax-payments/index.ts');
+
+    test('the list endpoint is used only for discovery, never trusted for a decision', () => {
+        // Every decision (recover vs. release) must be made from a
+        // verifyTransaction() result, not from listCandidateTransactionIds().
+        const decisionBlock = reconcileFn.slice(
+            reconcileFn.indexOf('let matched: any = null;'),
+            reconcileFn.indexOf('await admin.from("admin_audit_log")'),
+        );
+        expect(decisionBlock.includes('verifyTransaction(')).toBe(true);
+        expect(/matched\.(success|status|id)/.test(decisionBlock)).toBe(true);
+        // listCandidateTransactionIds' own return value (candidateIds) is only
+        // ever iterated to call verifyTransaction — never read for success/status.
+        expect(/candidateIds\.(success|status)/.test(decisionBlock)).toBe(false);
+    });
+
+    test('recovery reuses the same atomic RPCs the webhook already uses, no new billing logic', () => {
+        expect(reconcileFn.includes('admin.rpc("stax_set_charge_state"')).toBe(true);
+        expect(reconcileFn.includes('admin.rpc("stax_finalize_charge"')).toBe(true);
+    });
+
+    test('a stale lock with no matching Stax transaction is eventually released, not locked out forever', () => {
+        expect(reconcileFn.includes("p_status: \"failed\"")).toBe(true);
+        expect(reconcileFn.includes('RELEASE_HOURS')).toBe(true);
+        expect(reconcileFn.includes('releaseBeforeMs')).toBe(true);
+    });
+
+    test('the release-window comparison uses numeric timestamps, not raw string comparison', () => {
+        // A DB-returned timestamp string and a JS toISOString() string can
+        // format offsets differently ("+00:00" vs "Z"), which breaks a plain
+        // string `<` comparison at the boundary. Must compare as epoch ms.
+        expect(reconcileFn.includes('new Date(lock.updated_at).getTime() < releaseBeforeMs')).toBe(true);
+    });
+
+    test('scheduled via cron, service role key never committed to the migration', () => {
+        const schedule = read('supabase/migrations/schedule_stax_reconciliation.sql');
+        expect(schedule.includes("cron.schedule(\n  'reconcile-stax-payments'")).toBe(true);
+        expect(schedule.includes('{SERVICE_ROLE_KEY}')).toBe(true);
+        expect(/sb_secret_|sb_[a-z]+_[A-Za-z0-9_-]{20,}/.test(schedule)).toBe(false);
+    });
+});
+
+describe('Waitlist Planner — Grid drawer is reachable, weekday headers print once', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const wl = read('js/admin/admin-waitlist.js');
+
+    test('the Grid renders weekday labels in a header row, not inside every cell', () => {
+        // The old markup stamped a .wlp-cap-chip-day label into all five chips
+        // of every room/month cell — thirty per row — which is what made the
+        // table too wide to show more than two months. The header row prints
+        // them once instead.
+        expect(wl.includes('wlp-cap-chip-day')).toBe(false);
+        expect(wl.includes('class="wlp-day-head')).toBe(true);
+        expect(wl.includes('colspan="5"')).toBe(true);
+    });
+
+    test('all three Grid detail panels route through the one drawer', () => {
+        // wlpRenderGridSidebar / wlpRenderDemandDrawer / wlpRenderAgeOutDrawer
+        // return {title, sub, body} for the shared shell now. If one is ever
+        // interpolated straight into markup again it renders "[object Object]"
+        // on the page — which is exactly what happened while building this.
+        const dispatch = wl.match(/function wlpDrawerContent[\s\S]*?\n}/)[0];
+        ['wlpRenderGridSidebar', 'wlpRenderDemandDrawer', 'wlpRenderAgeOutDrawer']
+            .forEach(fn => expect(dispatch.includes(fn)).toBe(true));
+        // No caller may interpolate a drawer builder into a template literal.
+        expect(/\$\{[^}]*wlpRender(Demand|AgeOut)Drawer\(/.test(wl)).toBe(false);
+        expect(/\$\{[^}]*wlpRenderGridSidebar\(/.test(wl)).toBe(false);
+    });
+
+    test('the drawer is actually rendered and wired, not just defined', () => {
+        // The lesson from the refund button that shipped into a dead section:
+        // a symbol present in the bundle is not the same claim as a feature
+        // the shell will ever reach.
+        expect(/\$\{isGrid \? wlpRenderDrawer\(alloc\) : ''\}/.test(wl)).toBe(true);
+        expect(wl.includes('wlpAttachDrawerListeners();')).toBe(true);
+        expect(wl.includes('data-wlp-drawer-close')).toBe(true);
+    });
+});
+
+describe('CSP tightening — script-src hash allowlist, no inline handlers', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const crypto = require('crypto');
+    // The RAW line as it appears in _headers — including the leading
+    // whitespace and "Content-Security-Policy:" label — is what counts
+    // against Cloudflare's 2,000-character-per-line limit (see the dedicated
+    // test below). cspValue is just the directive value, used everywhere
+    // else in this block.
+    const rawCspLine = read('_headers').split('\n').find(l => l.includes('Content-Security-Policy:'));
+    const cspValue = rawCspLine.match(/Content-Security-Policy:\s*(.+)$/)[1];
+    const scriptSrc = cspValue.match(/script-src ([^;]+);/)[1];
+
+    test('script-src carries no unsafe-inline or unsafe-eval', () => {
+        expect(scriptSrc.includes('unsafe-inline')).toBe(false);
+        expect(scriptSrc.includes('unsafe-eval')).toBe(false);
+    });
+
+    test('every inline <script> block in every HTML page has a matching CSP hash', () => {
+        // Drift guard: if anyone edits an inline script's content without
+        // recomputing its hash, the browser will silently refuse to run it —
+        // the exact "shipped half-live" failure shape this file warns about
+        // elsewhere. Recompute from the real HTML and compare, the same way
+        // the source-drift guard above catches a stale copied function.
+        //
+        // Walks the WHOLE repo, not just the root — wrangler.jsonc serves
+        // `assets.directory: "."` (everything not listed in .assetsignore is
+        // public), so docs/manual.html and marketing/*.html are just as live
+        // under this CSP as admin.html. A root-only scan is exactly how this
+        // test's first draft missed docs/manual.html's own inline handler.
+        const IGNORE_DIRS = new Set(['.git', 'node_modules', '.wrangler', '.github', '.claude', 'dist']);
+        const htmlFiles = [];
+        (function walk(dir) {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (IGNORE_DIRS.has(entry.name)) continue;
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (entry.name.endsWith('.html')) htmlFiles.push(full);
+            }
+        })(repoRoot);
+        // Browsers only execute a <script> as JS if its `type` is absent,
+        // empty, or one of these — a data block like type="text/x-dc" (the
+        // design_handoff mockups) or type="application/ld+json" (index.html's
+        // SEO structured data) is inert and never gated by script-src at all.
+        // Verified empirically, not assumed: a type="text/x-dc" block with
+        // content matching nothing in the CSP produced zero CSP violation in
+        // a real browser. Confirming this class of exclusion is what took
+        // the CSP line from 1989 characters (11 short of the 2,000-char-per-
+        // line limit Cloudflare's _headers enforces — see the section below)
+        // down to a safer 1827.
+        const JS_TYPES = new Set(['', 'text/javascript', 'application/javascript', 'text/ecmascript', 'application/ecmascript', 'module']);
+        const isExecutableScriptTag = tagOpen => {
+            if (/\bsrc=/.test(tagOpen)) return false;
+            const typeMatch = tagOpen.match(/\btype=["']([^"']*)["']/i);
+            if (!typeMatch) return true;
+            return JS_TYPES.has(typeMatch[1].toLowerCase().trim());
+        };
+        const missing = [];
+        for (const file of htmlFiles) {
+            const html = fs.readFileSync(file, 'utf8');
+            const re = /<script([^>]*)>([\s\S]*?)<\/script>/g;
+            let m;
+            while ((m = re.exec(html))) {
+                if (!isExecutableScriptTag(`<script${m[1]}>`)) continue;
+                const content = m[2];
+                if (!content.trim()) continue;
+                const hash = crypto.createHash('sha256').update(content, 'utf8').digest('base64');
+                if (!scriptSrc.includes(`'sha256-${hash}'`)) missing.push(`${path.relative(repoRoot, file)}: sha256-${hash}`);
+            }
+        }
+        expect(missing.join(', ')).toBe('');
+    });
+
+    test('the CSP line stays under Cloudflare\'s 2,000-character-per-line _headers limit', () => {
+        // Found live: the first version of this line was 2,151 characters and
+        // Cloudflare's Workers Build silently failed on it. Regression guard
+        // with real margin, not the line at the wire — a future inline
+        // script or CDN host addition should fail this test long before it
+        // fails a production deploy.
+        expect(rawCspLine.length < 1950).toBe(true);
+    });
+
+    test('no inline event-handler attributes remain in js/ or any HTML page (all would need unsafe-inline)', () => {
+        const repoFiles = [];
+        (function walk(dir) {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name.startsWith('.')) continue;
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (/\.(js|html)$/.test(entry.name)) repoFiles.push(full);
+            }
+        })(repoRoot);
+
+        const pattern = /\son(click|change|submit|input|keyup|keydown|focus|blur|dblclick)=["']/;
+        const offenders = repoFiles
+            .filter(f => !f.endsWith('business-logic.test.js')) // this file's own pattern string is not a violation
+            .filter(f => pattern.test(fs.readFileSync(f, 'utf8')))
+            .map(f => path.relative(repoRoot, f));
+        expect(offenders.join(', ')).toBe('');
     });
 });
 

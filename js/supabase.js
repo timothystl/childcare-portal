@@ -1490,25 +1490,44 @@ async function fetchMessages(showArchived = false) {
     // Try with is_archived column; fall back gracefully if it hasn't been added yet
     let query = sbClient
         .from('messages')
-        .select('id, parent_name, parent_email, message, created_at, is_read, is_archived')
+        .select('id, parent_name, parent_email, message, created_at, is_read, is_archived, needs_email_followup, replied_by_email, replied_by_email_at')
         .order('created_at', { ascending: false })
         .limit(75);
     if (!showArchived) query = query.eq('is_archived', false);
     const { data, error } = await query;
     if (error) {
-        // Column doesn't exist yet — fetch without it and default is_archived to false
-        if (error.message && error.message.includes('is_archived')) {
+        // Columns don't exist yet (e.g. add_message_email_followup.sql not
+        // applied) — fall back to the older column set rather than fail the
+        // whole inbox.
+        if (error.message && /is_archived|needs_email_followup|replied_by_email/.test(error.message)) {
             const fallback = await sbClient
                 .from('messages')
                 .select('id, parent_name, parent_email, message, created_at, is_read')
                 .order('created_at', { ascending: false })
                 .limit(75);
             if (fallback.error) throw fallback.error;
-            return (fallback.data || []).map(m => ({ ...m, is_archived: false }));
+            return (fallback.data || []).map(m => ({
+                ...m, is_archived: false,
+                needs_email_followup: false, replied_by_email: false, replied_by_email_at: null,
+            }));
         }
         throw error;
     }
     return data || [];
+}
+
+/** Toggle the "needs an email" flag and/or the "replied by email" checkbox on a
+ *  Contact Us message. Setting repliedByEmail=true stamps replied_by_email_at. */
+async function setMessageEmailFollowup(id, { needsEmail, repliedByEmail } = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const patch = {};
+    if (needsEmail !== undefined) patch.needs_email_followup = !!needsEmail;
+    if (repliedByEmail !== undefined) {
+        patch.replied_by_email = !!repliedByEmail;
+        patch.replied_by_email_at = repliedByEmail ? new Date().toISOString() : null;
+    }
+    const { error } = await sbClient.from('messages').update(patch).eq('id', id);
+    if (error) throw error;
 }
 
 async function markMessageRead(id, isRead = true) {
@@ -1763,6 +1782,60 @@ async function fetchChildProfilePhotoUrls(paths, ttlSeconds = 3600) {
     const urlByPath = new Map();
     (signed || []).forEach(s => { if (s.signedUrl) urlByPath.set(s.path, s.signedUrl); });
     return urlByPath;
+}
+
+// ── Child documents (Family Directory modal — admin-only paperwork) ──────
+// Arbitrary per-child files (immunization records, signed forms, a scanned
+// photo ID), NOT the profile photo. One folder per child, named by
+// students.id — this is what lets listChildDocuments()/deleteChildDocument()
+// work directly off storage.objects with no metadata table to keep in sync.
+// Admin-only bucket: no parent policy exists on child-documents.
+
+async function uploadChildDocument(studentId, file) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const ext  = (file.name.split('.').pop() || 'bin').replace(/[^a-zA-Z0-9]/g, '') || 'bin';
+    const base = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'document';
+    const path = `${studentId}/${Date.now()}-${base}.${ext}`;
+    const { error } = await sbClient.storage.from('child-documents').upload(path, file, {
+        contentType: file.type || 'application/octet-stream',
+    });
+    if (error) throw error;
+    return path;
+}
+
+// Every file in a child's folder, newest first. Returns {path, name, size,
+// createdAt} — `name` is the original filename with the timestamp prefix
+// stripped back off, for display.
+async function listChildDocuments(studentId) {
+    if (!sbClient || !studentId) return [];
+    const { data, error } = await sbClient.storage.from('child-documents')
+        .list(String(studentId), { sortBy: { column: 'created_at', order: 'desc' } });
+    if (error) throw friendlyError(error);
+    return (data || [])
+        .filter(f => f.id) // storage.list() can return a placeholder row for an empty "folder"
+        .map(f => ({
+            path:      `${studentId}/${f.name}`,
+            name:      f.name.replace(/^\d+-/, ''),
+            size:      f.metadata?.size ?? null,
+            createdAt: f.created_at,
+        }));
+}
+
+async function deleteChildDocument(path) {
+    if (!sbClient || !path) return;
+    const { error } = await sbClient.storage.from('child-documents').remove([path]);
+    if (error) throw error;
+}
+
+// Signed URL for viewing/downloading one document. Short-lived — documents
+// aren't previewed inline the way a profile photo is, so there's no need to
+// batch-sign a whole child's folder up front.
+async function fetchChildDocumentUrl(path, ttlSeconds = 300) {
+    if (!sbClient || !path) return null;
+    const { data, error } = await sbClient.storage.from('child-documents')
+        .createSignedUrl(path, ttlSeconds);
+    if (error) throw friendlyError(error);
+    return data?.signedUrl || null;
 }
 
 // ── Parent-editable child profile photo (portal.html Account tab) ─────────
@@ -2283,6 +2356,26 @@ async function logChildEvent(staffId, pin, entry) {
 }
 
 /**
+ * The merged Attendance Board's office In/Out mark. Admin session, no PIN —
+ * writes into the SAME child_day_events table log_child_event does, so the
+ * parent app's daily record and the office's manual mark can never disagree.
+ * Restricted to check_in/check_out; the database refuses anything else.
+ * @returns {Promise<number|null>} New event id, or null if the caller's admin
+ *   role isn't 'full'/'restricted' or event_type was rejected.
+ */
+async function adminLogChildEvent(studentId, eventType, occurredAt = null, careDate = null) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_log_child_event', {
+        p_student_id:  studentId,
+        p_event_type:  eventType,
+        p_occurred_at: occurredAt,
+        p_care_date:   careDate,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/**
  * A child's logged day, newest last — the parent Today feed and the full-day
  * report both read this. RLS restricts it to the signed-in parent's children,
  * so there is no family filter here on purpose: the database owns that rule.
@@ -2515,6 +2608,37 @@ async function submitIncidentReport(staffId, pin, r) {
 }
 
 /**
+ * Incident Reports' "+ Write a report" — the director files it herself, from
+ * an admin session (no PIN). Filing IS signing, same as the staff path: this
+ * writes the teacher-role signature (signature 1) from her own name, and the
+ * existing three-signature order-guard trigger enforces everything after it
+ * unchanged — a parent signature at pickup is still required before this
+ * report can be closed. Restricted to admin_role() 'full'/'restricted'.
+ */
+async function adminSubmitIncidentReport(r) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_submit_incident_report', {
+        p_student_id:    r.studentId,
+        p_incident_type: r.incidentType,
+        p_description:   r.description,
+        p_action_taken:  r.actionTaken,
+        p_incident_kind: r.incidentKind || null,
+        p_location:      r.location || null,
+        p_body_area:     r.bodyArea || null,
+        p_occurred_at:   r.occurredAt || null,
+        p_signed_name:   r.signedName || null,
+        p_body_view:     r.bodyView || null,
+        p_body_part:     r.bodyPart || null,
+        p_witnesses:     r.witnesses?.length  ? r.witnesses  : null,
+        p_first_aid:     r.firstAid?.length   ? r.firstAid   : null,
+        p_after_notes:   r.afterNotes?.length ? r.afterNotes : null,
+        p_ratio_note:    r.ratioNote || null,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/**
  * Signature 2 — the parent, at pickup, on the teacher's phone.
  *
  * ⚠️ PIN-gated on the TEACHER, not the parent. The parent has no login standing
@@ -2590,6 +2714,34 @@ async function fetchIncidentSignatures(ids) {
     return data || [];
 }
 
+/**
+ * Addenda — a way to add to a report without rewriting anything already
+ * signed. Never an edit: incident_reports has no UPDATE RPC, and this is the
+ * intended path for "I need to add something" after the fact. Works at any
+ * stage, including after the record is fully signed.
+ */
+async function fetchIncidentAddenda(ids) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    if (!ids?.length) return [];
+    const { data, error } = await sbClient
+        .from('incident_report_addenda')
+        .select('id, incident_id, note, added_by_name, created_at')
+        .in('incident_id', ids)
+        .order('created_at', { ascending: true });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/** Admin: append a note to an already-filed report. Returns the new addendum id, or null if refused. */
+async function addIncidentAddendum(incidentId, note) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_add_incident_addendum', {
+        p_incident_id: incidentId, p_note: note,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
 /** Admin: the review queue. Defaults to what is waiting on the director. */
 async function fetchIncidentReports({ status = 'submitted', limit = 200 } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
@@ -2605,6 +2757,84 @@ async function fetchIncidentReports({ status = 'submitted', limit = 200 } = {}) 
     const { data, error } = await q;
     if (error) throw friendlyError(error);
     return data || [];
+}
+
+/**
+ * Staff write-ups (HR & Handbook → Write-ups). File a new one — the acting
+ * admin's name is derived server-side from their own session, never taken
+ * from the browser. Gated to admin_role() IN ('full','restricted').
+ */
+async function submitStaffWriteUp({ staffId, kind, note, occurredAt }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_submit_staff_write_up', {
+        p_staff_id:    staffId,
+        p_kind:        kind,
+        p_note:        note,
+        p_occurred_at: occurredAt || null,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** Records that the staff member's acknowledgment is on file. */
+async function markStaffWriteUpSigned(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_mark_write_up_signed', { p_id: id });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+/** Every write-up, newest first, with the staff member's name/role along for display. */
+async function fetchStaffWriteUps(limit = 200) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('staff_write_ups')
+        .select('*, staff(name, role)')
+        .order('occurred_at', { ascending: false })
+        .limit(limit);
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
+ * HR & Handbook → Policies. A curated metadata list ({id, title,
+ * updatedLabel, path}) in settings, backed by files in the private
+ * hr-policies bucket — same "metadata in settings, file in storage" split
+ * enrollment_forms already uses, but a private bucket + signed URLs since
+ * these are internal staff documents, not something meant for a public link.
+ */
+async function loadHrPolicies() {
+    const val = await fetchSetting('hr_handbook_policies');
+    return Array.isArray(val) ? val : [];
+}
+
+async function saveHrPolicies(policies) {
+    await upsertSetting('hr_handbook_policies', policies);
+}
+
+async function uploadHrPolicyFile(file) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${Date.now()}-${safeName}`;
+    const { error } = await sbClient.storage.from('hr-policies').upload(path, file, {
+        contentType: file.type || 'application/pdf',
+    });
+    if (error) throw error;
+    return path;
+}
+
+async function deleteHrPolicyFile(path) {
+    if (!sbClient || !path) return;
+    const { error } = await sbClient.storage.from('hr-policies').remove([path]);
+    if (error) throw error;
+}
+
+/** Short-lived signed URL for "View PDF" — minted per click, never stored. */
+async function fetchHrPolicyUrl(path, ttlSeconds = 300) {
+    if (!sbClient || !path) return null;
+    const { data, error } = await sbClient.storage.from('hr-policies').createSignedUrl(path, ttlSeconds);
+    if (error) throw friendlyError(error);
+    return data?.signedUrl || null;
 }
 
 /** Admin: approve or return one. Approval stamps the reviewer server-side. */
@@ -2789,6 +3019,21 @@ async function logFireDrill(staffId, pin, payload = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('log_fire_drill', {
         p_staff_id: staffId, p_pin: parseInt(pin, 10), p_payload: payload,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/**
+ * Fire Drills' "+ Log a Drill" — the director enters a drill she ran or a
+ * paper record, from an admin session (no PIN). Same explicit column
+ * allow-list as log_fire_drill; drill_date and the conductor stay
+ * server-side. Restricted to admin_role() 'full'/'restricted'.
+ */
+async function adminLogFireDrill(payload = {}) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_log_fire_drill', {
+        p_payload: payload,
     });
     if (error) throw friendlyError(error);
     return data ?? null;
@@ -3116,15 +3361,39 @@ async function fetchClockEventsForDate(workDate) {
     return data || [];
 }
 
+// ⚠️ Paginated on purpose — PostgREST silently truncates a `.select()` at its
+// default row cap (1,000) with no error, and this table now holds 1,600+
+// rows for this year alone and grows by ~300/month. Confirmed live: a
+// Jan1–Aug28 call to the unpaginated version dropped every clock event from
+// mid-June onward, because the running row count crosses 1,000 right around
+// then — undercounting real labor cost for June/July/August in Room P&L and
+// Bookkeeper, and undercounting YTD hours/PTO in the Payroll Report, whose
+// `ytdStart`-to-today and PTO-cutoff-to-today calls hit the exact same wide,
+// growing range. Same bug class as this file's own documented R12
+// (fetchAllRegistrations) — a date-bounded query is not the same thing as a
+// row-bounded one once a table grows past the cap. The explicit `.order()`
+// makes page boundaries deterministic; without it, PostgREST's return order
+// is unspecified and consecutive `.range()` calls could skip or repeat rows.
 async function fetchClockEventsForRange(startDate, endDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
-        .from('staff_clock_events')
-        .select('id, staff_id, clock_in, clock_out, work_date, room_id')
-        .gte('work_date', startDate)
-        .lte('work_date', endDate);
-    if (error) throw error;
-    return data || [];
+    const pageSize = 1000;
+    let all = [];
+    let offset = 0;
+    for (;;) {
+        const { data, error } = await sbClient
+            .from('staff_clock_events')
+            .select('id, staff_id, clock_in, clock_out, work_date, room_id')
+            .gte('work_date', startDate)
+            .lte('work_date', endDate)
+            .order('work_date', { ascending: true })
+            .order('id', { ascending: true })
+            .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        all = all.concat(data || []);
+        if (!data || data.length < pageSize) break;
+        offset += pageSize;
+    }
+    return all;
 }
 
 async function insertManualClockEvent(staffId, workDate, clockInISO, clockOutISO) {
@@ -4090,6 +4359,39 @@ async function deleteBillingOverride(month, parentEmail, childName) {
 }
 
 // ============================================================
+// BILLING NOTES
+// Free-text per-family-per-month notes on the billing report — separate
+// from the automated "days changed since last month" exception causes.
+// ============================================================
+
+// Fetch all billing notes for a given month ('YYYY-MM').
+async function fetchBillingNotes(month) {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient
+        .from('billing_notes')
+        .select('parent_email, note, updated_at, updated_by')
+        .eq('month', month);
+    if (error) { console.warn('fetchBillingNotes:', error); return []; }
+    return data || [];
+}
+
+// Insert, update, or (given an empty note) clear a family's note for one
+// month. Unique by month + parent_email, matching billing_overrides.
+async function upsertBillingNote(month, parentEmail, note, updatedBy) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('billing_notes')
+        .upsert({
+            month: month,
+            parent_email: parentEmail,
+            note: note || '',
+            updated_by: updatedBy || null,
+            updated_at: new Date().toISOString(),
+        }, { onConflict: 'month,parent_email' });
+    if (error) throw error;
+}
+
+// ============================================================
 // HTML SANITIZATION UTILITY
 // Shared by admin, app, and lookup pages (and any future ones).
 // Escapes characters that could be used for XSS when injecting
@@ -4189,14 +4491,24 @@ async function insertBillingCycle(month) {
     return data;
 }
 
-async function getOrCreateBillingCycle(month) {
+/** Read-only lookup — never creates a row. For a month that was never
+ *  billed (e.g. Finance Hub reading a trailing month's history just to show
+ *  a balance), a missing cycle means "nothing happened," not something to
+ *  write into existence. Returns null if no cycle exists yet. */
+async function fetchBillingCycle(month) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data: existing, error: findErr } = await sbClient
+    const { data, error } = await sbClient
         .from('billing_cycles')
         .select('*')
         .eq('month', month)
         .maybeSingle();
-    if (findErr) throw findErr;
+    if (error) throw error;
+    return data || null;
+}
+
+async function getOrCreateBillingCycle(month) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const existing = await fetchBillingCycle(month);
     if (existing) return existing;
     const { data, error } = await sbClient
         .from('billing_cycles')
@@ -4345,6 +4657,153 @@ async function emailInvoices(invoiceIds, { resend = false, test = false } = {}) 
         let detail = '';
         try { detail = (await error.context?.json())?.error || ''; } catch (_) { /* ignore */ }
         throw new Error(detail || error.message || 'Invoice email failed.');
+    }
+    return data;
+}
+
+/**
+ * Start an online payment for one of the signed-in parent's own invoices.
+ * Only an invoice id travels — create-payment-session reads the amount and
+ * confirms ownership server-side, and never trusts anything else from here.
+ *
+ * @param {number} invoiceId
+ * @returns {Promise<{token: string, formUrl: string, amount: number}>}
+ *   `token` + `formUrl` are handed straight to Authorize.net's Accept
+ *   Hosted page (see portal-billing.js) — this app never sees card data.
+ */
+async function createPaymentSession(invoiceId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated.');
+    const { data, error } = await sbClient.functions.invoke('create-payment-session', {
+        body: { invoiceId },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) {
+        let detail = '';
+        try { detail = (await error.context?.json())?.error || ''; } catch (_) { /* ignore */ }
+        throw new Error(detail || error.message || 'Could not start payment.');
+    }
+    return data;
+}
+
+/**
+ * Start a Stax evaluation payment — same shape as createPaymentSession,
+ * but for the Stax comparison flow (see portal-billing.js's staxtest
+ * gate). Only an invoice id travels; create-stax-charge computes the
+ * amount and confirms ownership server-side.
+ *
+ * @param {number} invoiceId
+ * @param {{sandboxTest?: boolean}} [opts] sandboxTest is only ever true when
+ *   the tab has ?staxtest=1 — see pbStaxTestEnabled() in portal-billing.js.
+ *   It lets a real click-through against Stax's sandbox merchant bypass the
+ *   production-only gate, but only when the server has ALSO explicitly
+ *   turned on STAX_SANDBOX_TEST_ENABLED — this flag alone does nothing.
+ * @returns {Promise<{customerId: string, webPaymentsToken: string,
+ *   environment: string, amount: number, supportsPartialPayments: boolean,
+ *   paymentAttemptId: string, priorBalance: number,
+ *   lineItems: Array<{childName: string, fullDays: number, halfDays: number, amount: number}>,
+ *   invoiceId: number, firstname: string, lastname: string, phone: string,
+ *   savedCard: {last4: string, brand: string}|null}>}
+ */
+async function createStaxChargeSession(invoiceId, opts) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated.');
+    const { data, error } = await sbClient.functions.invoke('create-stax-charge', {
+        body: { invoiceId, sandboxTest: !!opts?.sandboxTest },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) {
+        let detail = '';
+        try { detail = (await error.context?.json())?.error || ''; } catch (_) { /* ignore */ }
+        throw new Error(detail || error.message || 'Could not start payment.');
+    }
+    return data;
+}
+
+/**
+ * Charge a Stax payment_method id (produced client-side by Stax.js/Bolt —
+ * this app never sees the card) against an invoice. Recomputes the amount
+ * server-side. The optional amount is a parent-requested installment; the
+ * server recomputes the live balance and rejects zero, negative, malformed,
+ * or over-balance amounts before calling Stax.
+ *
+ * @param {number} invoiceId
+ * @param {string|null} paymentMethodId - omit/null when useSavedCard is true
+ * @param {{useSavedCard?: boolean, saveCard?: boolean, amount?: number, paymentAttemptId: string, sandboxTest?: boolean}} [opts]
+ *   useSavedCard charges the family's card on file instead of paymentMethodId;
+ *   saveCard remembers a freshly-tokenized card for next time; only Stax's
+ *   opaque payment_method_id + last4/brand are stored, never PAN or CVV.
+ *   sandboxTest mirrors createStaxChargeSession's — only true behind
+ *   ?staxtest=1, and only effective when the server has also opted in.
+ * @returns {Promise<{success: boolean, transactionId: string, amount: number, touchedInvoiceIds: number[]}>}
+ */
+async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated.');
+    const { data, error } = await sbClient.functions.invoke('charge-stax-payment', {
+        body: {
+            invoiceId, paymentMethodId,
+            useSavedCard: !!opts?.useSavedCard,
+            saveCard: !!opts?.saveCard,
+            amount: opts?.amount,
+            paymentAttemptId: opts?.paymentAttemptId,
+            sandboxTest: !!opts?.sandboxTest,
+        },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) {
+        let payload = {};
+        try { payload = (await error.context?.json()) || {}; } catch (_) { /* ignore */ }
+        const paymentError = new Error(payload.error || error.message || 'Payment failed.');
+        if (payload.nextPaymentAttemptId) paymentError.nextPaymentAttemptId = payload.nextPaymentAttemptId;
+        throw paymentError;
+    }
+    // A Stax PENDING result comes back as HTTP 202 — a 2xx status, so
+    // supabase-js resolves it here instead of treating it as `error`. The
+    // body still carries the same {error, ambiguous} shape a real failure
+    // would, and it must never be read as a confirmed charge.
+    if (data && data.success !== true && (data.ambiguous || data.error)) {
+        const paymentError = new Error(data.error || 'Your payment could not be confirmed.');
+        if (data.ambiguous) paymentError.ambiguous = true;
+        if (data.nextPaymentAttemptId) paymentError.nextPaymentAttemptId = data.nextPaymentAttemptId;
+        throw paymentError;
+    }
+    return data;
+}
+
+/**
+ * Ask the payment processor to void or refund one online card payment
+ * (admin only, full role). Only a billing_payments row id travels — the
+ * amount and whether it's a void or refund are both decided server-side
+ * from the transaction's own state. Does NOT itself mark anything
+ * reversed; authorizenet-webhook / stax-webhook does that once the
+ * processor confirms it.
+ *
+ * @param {number} paymentId
+ * @param {'authorizenet'|'stax'} [processor] — which edge function to call;
+ *   defaults to 'authorizenet' for older call sites.
+ * @returns {Promise<{submitted: boolean, kind: 'void'|'refund', processorTransactionId: string}>}
+ */
+async function adminRefundPayment(paymentId, processor) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data: { session } } = await sbClient.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated.');
+    const fnName = processor === 'stax' ? 'admin-refund-stax-payment' : 'admin-refund-payment';
+    const { data, error } = await sbClient.functions.invoke(fnName, {
+        body: { paymentId },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) {
+        let detail = '';
+        try { detail = (await error.context?.json())?.error || ''; } catch (_) { /* ignore */ }
+        throw new Error(detail || error.message || 'Refund failed.');
     }
     return data;
 }

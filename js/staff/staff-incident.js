@@ -398,6 +398,14 @@ async function slSubmitIncident(e) {
         // no detail on purpose — a lock-screen preview is read in public.
         slNotifyParentOfIncident(id);
 
+        // Tell the office too, independent of whether the parent has signed
+        // yet — "Needs you" deliberately filters incident rows to
+        // parent-signed only (she's signature 3), so without this push a
+        // freshly-filed report sat unannounced until she happened to open
+        // Incident Reports herself. Best-effort: a report that filed
+        // successfully must not read as failed because a push didn't land.
+        if (typeof slNotifyAdminsOfIncident === 'function') slNotifyAdminsOfIncident(id);
+
         // The name shown here is cosmetic — the stored signature was written
         // server-side from the PIN holder, so this only has to match it.
         slIncReport = { id, signatures: [{ role: 'teacher',

@@ -192,6 +192,23 @@ async function portalShowSignedIn() {
         pEl('portalCheck')?.classList.remove('hidden');
         await portalRunChecks();
     }
+
+    // Authorize.net's Accept Hosted page returns here after a payment
+    // attempt. There is no router (see portal-nav.js's note on why), so this
+    // one redirect target is handled by hand: jump to Billing and let it
+    // show what actually happened — the query param only says a payment was
+    // attempted, never that it succeeded, since the webhook is the only
+    // thing that marks an invoice paid.
+    const returnParams = new URLSearchParams(location.search);
+    const paidId = returnParams.get('paid');
+    const cancelledId = returnParams.get('cancelled');
+    if ((paidId || cancelledId) && typeof ptGoTab === 'function') {
+        if (typeof pbSetReturnState === 'function') {
+            pbSetReturnState(paidId ? 'paid' : 'cancelled');
+        }
+        ptGoTab('billing');
+        history.replaceState(null, '', location.pathname + location.hash);
+    }
 }
 
 // ── The isolation check ──────────────────────────────────────

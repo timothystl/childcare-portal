@@ -1,0 +1,57 @@
+-- ============================================================
+-- Revoke `authenticated` EXECUTE on add_day_to_invoice_by_email
+-- ============================================================
+-- NOTE (2026-08-28): this file was originally committed as
+-- 20260828030000_revoke_add_day_invoice_authenticated.sql — a timestamp I
+-- picked when writing the migration locally, before applying it. The apply
+-- tool assigns its own version at apply time (20260828135150) rather than
+-- using the filename's timestamp, so the two never matched to begin with.
+-- Renamed to the applied version, per this repo's own rule that a
+-- migration's filename should match what was actually deployed. Same class
+-- of drift as the harden_stax_payments rename earlier this file — the
+-- lesson to keep is to re-check `list_migrations` immediately after every
+-- `apply_migration` call and name the local file from that result, not from
+-- whatever timestamp was picked while drafting it.
+--
+-- Found in an external security review of the Stax payment work
+-- (2026-08-28), verified against the live catalog before fixing.
+--
+-- WHAT WAS WRONG
+-- --------------
+-- fs5_phase1_revoke_add_day_anon.sql (2026-08-11) clamped the delta to a
+-- non-negative amount and revoked anon/PUBLIC, but left EXECUTE granted to
+-- the whole `authenticated` role. At the time the only authenticated
+-- callers were admin sessions. That stopped being true the same day this
+-- repo shipped a genuine parent Supabase Auth portal
+-- (parent_portal_option_b_accounts_APPLIED.sql) — parents now also hold
+-- `authenticated` JWTs.
+--
+-- The function itself still has no admin-role check, no status guard (it
+-- updates a `finalized`/`paid` invoice the same as a `draft` one), and takes
+-- an arbitrary `p_email` naming ANY family, not just the caller's own. So
+-- any signed-in parent portal account could call this RPC directly against
+-- PostgREST (bypassing the admin-only UI entirely) and add an arbitrary
+-- positive amount to another family's already-issued invoice.
+--
+-- WHY THE REVOKE IS SAFE
+-- -----------------------
+-- "Billing writes are now recompute-only" (2026-08-11, CLAUDE.md) replaced
+-- every caller of this function with `_recomputeInvoice()` in
+-- admin-calendar.js. Verified before this migration:
+--   * grep of js/ and supabase/ finds no remaining `.rpc('add_day_to_invoice_by_email'`
+--     call site — js/supabase.js only has a comment noting it was removed.
+--   * pg_stat_statements still shows exactly 30 historical `authenticated`
+--     calls, the same count fs5_phase1 recorded in 2026-08-11 — zero calls
+--     since the recompute-only rewrite landed.
+-- The function is fully dead from this app's own UI. Revoking `authenticated`
+-- removes the only remaining path to it without touching the function body,
+-- so it stays available to `service_role` in case anything else depends on
+-- its existence.
+-- ============================================================
+
+REVOKE EXECUTE ON FUNCTION public.add_day_to_invoice_by_email(TEXT, CHAR(7), NUMERIC, NUMERIC)
+    FROM authenticated;
+
+-- Verification — expect only postgres/service_role to remain:
+-- SELECT proacl FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+-- WHERE n.nspname = 'public' AND proname = 'add_day_to_invoice_by_email';

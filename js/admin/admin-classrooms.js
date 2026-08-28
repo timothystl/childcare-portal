@@ -643,6 +643,80 @@ function _printWeekRoster(weekOf, roomId) {
     w.document.close();
 }
 
+// All weekdays (Mon-Fri) in monthVal ('YYYY-MM'), excluding closure dates —
+// same rule _buildWeekDates (admin-reports.js) already applies to a week,
+// generalized to a whole month. Deliberately NOT _buildMonthlyRosterRoomSections's
+// workingDays: that list is used for the compact calendar-grid print below and
+// does not exclude closures, which would print an empty daily page for a day
+// the center wasn't even open.
+function _buildMonthWeekdays(monthVal) {
+    const [y, m] = monthVal.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const dates = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+        const d = new Date(y, m - 1, day);
+        const dow = d.getDay();
+        if (dow === 0 || dow === 6) continue;
+        const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        if (!allClosureDates.has(dateStr)) dates.push(dateStr);
+    }
+    return dates;
+}
+
+// "Print day by day", extended to a whole month — one full daily-roster grid
+// page per weekday, in a single print job. Same per-page layout _printWeekRoster
+// uses above (the autoscale script already handles any number of .print-page
+// elements independently), just a longer date list. This is a different
+// artifact from _printMonthRoster below: that one is a single-page compact
+// calendar grid; this is the same "one child list per room, per day" sheet a
+// teacher already knows from the day/week prints, one page per weekday.
+function _printMonthDailyRoster(monthVal, roomId) {
+    if (!monthVal) { alert('Please select a month first.'); return; }
+    const monthDates = _buildMonthWeekdays(monthVal);
+    if (!monthDates.length) { alert('No open weekdays found for that month.'); return; }
+
+    const [y, m]    = monthVal.split('-').map(Number);
+    const monthLabel = MONTH_NAMES[m - 1] + ' ' + y;
+
+    const pages = monthDates.map((date, i) => {
+        const roster    = getRosterForDate(date, roomId);
+        const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US',
+            { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        return _rosterGridPageHtml(dateLabel, roster, roomId, i > 0);
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Daily Rosters — ${escHtml(monthLabel)}</title>
+<style>${_ROSTER_GRID_PRINT_STYLE}</style>
+</head>
+<body>
+  ${pages}
+  <script>${_ROSTER_GRID_AUTOSCALE_SCRIPT}<\/script>
+</body>
+</html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) { alert('Pop-up was blocked. Please allow pop-ups for this site and try again.'); return; }
+    w.document.write(html);
+    w.document.close();
+}
+
+// Monday of the ISO week containing dateStr ('YYYY-MM-DD'), as an ISO date
+// string — generalizes _currentWeekMonday() to an arbitrary date, for the
+// Attendance Board's "print this week" against whatever date is picked
+// there rather than always the current week.
+function _mondayOfWeek(dateStr) {
+    const d    = new Date(dateStr + 'T00:00:00');
+    const day  = d.getDay();
+    const diff = (day === 0 ? -6 : 1 - day);
+    const mon  = new Date(d);
+    mon.setDate(d.getDate() + diff);
+    return mon.toISOString().split('T')[0];
+}
+
 function _printMonthRoster(monthVal, roomId) {
     if (!monthVal) { alert('Please select a month first.'); return; }
     const { monthLabel, workingDays, rooms } = _buildMonthlyRosterRoomSections(monthVal, roomId);

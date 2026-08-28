@@ -106,6 +106,33 @@ function setupFamilies() {
 
     // Document-level delegation for Edit / Archive / Restore / Delete / Merge buttons in family rows
     document.addEventListener('click', e => {
+        // Kebab ("more actions") menu: toggle on its own button, otherwise
+        // close every open menu when the click lands outside all of them.
+        // This runs first and never `return`s, so a click on one of the
+        // buttons the menu contains still falls through to its own handler
+        // below (only #fm-kebab-btn needs to stop here).
+        const kebabBtn = e.target.closest('.fm-kebab-btn[data-family-id]');
+        if (kebabBtn) {
+            const menu = kebabBtn.nextElementSibling;
+            const wasOpen = menu && !menu.classList.contains('hidden');
+            document.querySelectorAll('.fm-kebab-menu').forEach(m => m.classList.add('hidden'));
+            document.querySelectorAll('.fm-kebab-btn').forEach(b => b.setAttribute('aria-expanded', 'false'));
+            if (menu && !wasOpen) {
+                menu.classList.remove('hidden');
+                kebabBtn.setAttribute('aria-expanded', 'true');
+            }
+            return;
+        }
+        if (!e.target.closest('.fm-kebab')) {
+            document.querySelectorAll('.fm-kebab-menu').forEach(m => m.classList.add('hidden'));
+            document.querySelectorAll('.fm-kebab-btn').forEach(b => b.setAttribute('aria-expanded', 'false'));
+        } else if (e.target.closest('.fm-kebab-menu button')) {
+            // Acting on a menu item closes the menu — the row re-renders
+            // anyway once the action completes, but this avoids a stale open
+            // menu flashing during that re-render.
+            e.target.closest('.fm-kebab-menu')?.classList.add('hidden');
+        }
+
         const editBtn = e.target.closest('.fm-edit-btn[data-family-id]');
         if (editBtn) {
             const fam = allFamiliesData.find(f => f.id === editBtn.dataset.familyId);
@@ -156,11 +183,13 @@ function setupFamilies() {
         }
     });
 
-    // Escape closes family modal (visibility-safe)
+    // Escape closes family modal (visibility-safe) and any open kebab menu
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
             const fm = document.getElementById('familyModal');
-            if (fm && !fm.classList.contains('hidden')) closeFamilyModal();
+            if (fm && !fm.classList.contains('hidden')) { closeFamilyModal(); return; }
+            document.querySelectorAll('.fm-kebab-menu').forEach(m => m.classList.add('hidden'));
+            document.querySelectorAll('.fm-kebab-btn').forEach(b => b.setAttribute('aria-expanded', 'false'));
         }
     });
 }
@@ -571,18 +600,30 @@ function renderFamiliesList(families) {
                                     ${f.group === 'summer' ? '<span class="family-badge-summer">Summer</span>' : ''}
                                     ${archived ? '<span class="family-badge-archived">Archived</span>' : ''}
                                     ${f.registration_locked ? '<span class="family-badge-locked" title="Registration locked for nonpayment">🔒 Reg Locked</span>' : ''}
-                                    ${f.login_locked ? `<span class="family-badge-login-locked" title="Login locked — too many failed attempts">🚫 Login Locked</span><button class="fm-login-unlock-btn btn-secondary" data-family-id="${f.id}" title="Unlock login access">🔓 Unlock Login</button>` : ''}
+                                    ${f.login_locked ? '<span class="family-badge-login-locked" title="Login locked — too many failed attempts">🚫 Login Locked</span>' : ''}
                                     ${!archived
                                         ? `<button class="fm-edit-btn" data-family-id="${f.id}" title="Edit family">✏ Edit</button>
-                                           <button class="fm-cal-btn btn-secondary" data-family-id="${f.id}" title="${allRegistrations.some(r => (r.parent_email||'').toLowerCase() === (f.parent_email||'').toLowerCase()) ? 'Edit care calendar for this family' : 'Enter care calendar for this family'}">&#128197; ${allRegistrations.some(r => (r.parent_email||'').toLowerCase() === (f.parent_email||'').toLowerCase()) ? 'Edit Calendar' : 'Enter Calendar'}</button>
-                                           <button class="fm-archive-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Archive family">Archive</button>`
-                                        : `<button class="fm-restore-btn" data-family-id="${f.id}" title="Restore family">↩ Restore</button>`
+                                           <button class="fm-cal-btn btn-secondary" data-family-id="${f.id}" title="${allRegistrations.some(r => (r.parent_email||'').toLowerCase() === (f.parent_email||'').toLowerCase()) ? 'Edit care calendar for this family' : 'Enter care calendar for this family'}">&#128197; ${allRegistrations.some(r => (r.parent_email||'').toLowerCase() === (f.parent_email||'').toLowerCase()) ? 'Edit Calendar' : 'Enter Calendar'}</button>`
+                                        : ''
                                     }
-                                    ${f.registration_locked
-                                        ? `<button class="fm-unlock-btn btn-secondary" data-family-id="${f.id}" title="Unlock registration">🔓 Unlock Reg</button>`
-                                        : `<button class="fm-lock-btn btn-warning" data-family-id="${f.id}" title="Lock registration for nonpayment">🔒 Lock Reg</button>`
-                                    }
-                                    <button class="fm-delete-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" title="Permanently delete this family">🗑 Delete</button>
+                                    <div class="fm-kebab">
+                                        <button type="button" class="fm-kebab-btn" data-family-id="${f.id}" title="More actions" aria-haspopup="true" aria-expanded="false">&#8942;</button>
+                                        <div class="fm-kebab-menu hidden" role="menu">
+                                            ${archived
+                                                ? `<button class="fm-restore-btn" data-family-id="${f.id}" role="menuitem">&#8617; Restore family</button>`
+                                                : `<button class="fm-archive-btn" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" role="menuitem">Archive family</button>`
+                                            }
+                                            ${f.registration_locked
+                                                ? `<button class="fm-unlock-btn" data-family-id="${f.id}" role="menuitem">🔓 Unlock registration</button>`
+                                                : `<button class="fm-lock-btn" data-family-id="${f.id}" role="menuitem">🔒 Lock registration</button>`
+                                            }
+                                            ${f.login_locked
+                                                ? `<button class="fm-login-unlock-btn" data-family-id="${f.id}" role="menuitem">🔓 Unlock login</button>`
+                                                : ''
+                                            }
+                                            <button class="fm-delete-btn fm-kebab-danger" data-family-id="${f.id}" data-family-name="${escHtml(f.parent_name || 'this family')}" role="menuitem">🗑 Delete family</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             ${(f.parent2_name || f.parent2_email) ? parentRow(f.parent2_name, f.parent2_email, f.parent2_phone, f.has_parent2_pin) : ''}
@@ -719,8 +760,8 @@ async function openFamilyModal(family = null) {
         const p2PinInput = document.getElementById('fmParent2Pin');
         pinInput.value = '';
         p2PinInput.value = '';
-        pinInput.placeholder  = family.has_pin         ? 'Leave blank to keep current PIN' : '4-digit';
-        p2PinInput.placeholder = family.has_parent2_pin ? 'Leave blank to keep current PIN' : '4-digit';
+        pinInput.placeholder  = family.has_pin         ? 'Leave blank to keep current PIN' : '4-8 digits';
+        p2PinInput.placeholder = family.has_parent2_pin ? 'Leave blank to keep current PIN' : '4-8 digits';
         document.getElementById('fmParent2Name').value   = family.parent2_name  || '';
         document.getElementById('fmParent2Email').value  = family.parent2_email || '';
         document.getElementById('fmParent2Phone').value  = family.parent2_phone || '';
@@ -741,23 +782,26 @@ async function openFamilyModal(family = null) {
         const photoPaths = familyModalChildren.map(c => c.profile_photo_path).filter(Boolean);
         _fmPhotoUrlCache = photoPaths.length ? await fetchChildProfilePhotoUrls(photoPaths).catch(() => new Map()) : new Map();
         _fmPhotosToDelete = [];
+        _fmLoadPickupContacts(family.id);
     } else {
         // Clear all fields
         ['fmParentName','fmParentEmail','fmParentPhone',
          'fmParent2Name','fmParent2Email','fmParent2Phone','fmParent2Pin'].forEach(id => {
             const el = document.getElementById(id);
             el.value = '';
-            if (id === 'fmParent2Pin') el.placeholder = '4-digit';
+            if (id === 'fmParent2Pin') el.placeholder = '4-8 digits';
         });
         const pinInput = document.getElementById('fmPin');
         pinInput.value = generateLocalPin();
-        pinInput.placeholder = '4-digit';
+        pinInput.placeholder = '4-8 digits';
         document.querySelectorAll('input[name="fmGroup"]').forEach(r => {
             r.checked = (r.value === 'regular');
         });
         familyModalChildren = [];
         _fmPhotoUrlCache = new Map();
         _fmPhotosToDelete = [];
+        const pickupList = document.getElementById('fmPickupList');
+        if (pickupList) pickupList.innerHTML = '<p class="empty-hint">Save this family first, then reopen Edit to see their pickup list.</p>';
     }
 
     renderModalChildRows();
@@ -808,7 +852,7 @@ function renderModalChildRows() {
                     </div>
                     <div class="fm-field fm-field-grow">
                         <label>Name *</label>
-                        <input type="text" class="fmc-name" value="${escHtml(child.child_name || '')}" placeholder="Child's full name">
+                        <input type="text" class="fmc-name" value="${escHtml(child.child_name || '')}" placeholder="Child's full name" autocomplete="off">
                     </div>
                     <div class="fm-field">
                         <label>Date of Birth</label>
@@ -888,6 +932,20 @@ function renderModalChildRows() {
                             return `<label style="font-size:.85em;display:flex;align-items:center;gap:3px"><input type="checkbox" class="fmc-recurring-day" value="${day}" ${rd.includes(day) ? 'checked' : ''}> ${day}</label>`;
                         }).join('')}
                     </div>
+                </div>
+                <div class="fm-child-documents">
+                    <label class="fm-doc-label">Documents</label>
+                    ${child.id ? `
+                        <div class="fmc-doc-list" data-index="${i}"><p class="fm-doc-loading">Loading…</p></div>
+                        <div class="fmc-doc-actions">
+                            <label class="btn-secondary btn-sm fmc-doc-pick">📷 Scan document
+                                <input type="file" accept="image/*" capture="environment" class="fmc-doc-scan hidden-file-input" data-index="${i}">
+                            </label>
+                            <label class="btn-secondary btn-sm fmc-doc-pick">&#8593; Upload file
+                                <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" class="fmc-doc-upload hidden-file-input" data-index="${i}">
+                            </label>
+                        </div>`
+                        : '<p class="fm-doc-hint">Save this child first, then reopen Edit to attach documents.</p>'}
                 </div>
                 <button type="button" class="fmc-remove-btn" data-index="${i}" title="Remove child">✕</button>
             </div>`;
@@ -971,6 +1029,119 @@ function renderModalChildRows() {
     });
 
     container.querySelectorAll('.fm-child-row').forEach(row => _fmBindPhotoRow(row));
+    container.querySelectorAll('.fm-child-row').forEach(row => _fmBindDocumentsRow(row));
+}
+
+// ── Documents (Family Directory modal — per-child paperwork) ────────────
+// Storage-only, no metadata table (see add_child_documents_bucket.sql) — the
+// list is read fresh from the bucket every time a row opens or changes,
+// which is why this repaints just `.fmc-doc-list` rather than tracking state
+// in familyModalChildren the way allergies/photo do.
+function _fmDocSize(bytes) {
+    if (bytes == null) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function _fmRenderDocList(listEl, docs) {
+    if (!docs.length) {
+        listEl.innerHTML = '<p class="fm-doc-empty">No documents attached.</p>';
+        return;
+    }
+    listEl.innerHTML = docs.map(d => `
+        <div class="fmc-doc-item" data-path="${escHtml(d.path)}">
+            <span class="fmc-doc-name">${escHtml(d.name)}</span>
+            <span class="fmc-doc-meta">${escHtml(_fmDocSize(d.size))}</span>
+            <button type="button" class="fmc-doc-view" data-path="${escHtml(d.path)}" title="View / download">View</button>
+            <button type="button" class="fmc-doc-remove" data-path="${escHtml(d.path)}" title="Remove">✕</button>
+        </div>`).join('');
+}
+
+async function _fmLoadDocuments(row) {
+    const idx = parseInt(row.dataset.index);
+    const child = familyModalChildren[idx];
+    const listEl = row.querySelector('.fmc-doc-list');
+    if (!child?.id || !listEl) return;
+    try {
+        const docs = await listChildDocuments(child.id);
+        _fmRenderDocList(listEl, docs);
+    } catch (err) {
+        listEl.innerHTML = `<p class="import-error">Couldn't load documents: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function _fmBindDocumentsRow(row) {
+    const idx = parseInt(row.dataset.index);
+    const child = familyModalChildren[idx];
+    if (!child?.id) return; // unsaved child — no Documents controls rendered
+
+    _fmLoadDocuments(row);
+
+    const upload = async (file) => {
+        if (!file) return;
+        try {
+            await uploadChildDocument(child.id, file);
+            await _fmLoadDocuments(row);
+        } catch (err) {
+            alert("Couldn't attach that file: " + err.message);
+        }
+    };
+    row.querySelector('.fmc-doc-scan')?.addEventListener('change', e => upload(e.target.files[0]));
+    row.querySelector('.fmc-doc-upload')?.addEventListener('change', e => upload(e.target.files[0]));
+
+    row.querySelector('.fmc-doc-list')?.addEventListener('click', async e => {
+        const path = e.target.closest('[data-path]')?.dataset.path;
+        if (!path) return;
+        if (e.target.closest('.fmc-doc-view')) {
+            try {
+                const url = await fetchChildDocumentUrl(path);
+                if (url) window.open(url, '_blank', 'noopener');
+            } catch (err) {
+                alert("Couldn't open that file: " + err.message);
+            }
+        } else if (e.target.closest('.fmc-doc-remove')) {
+            const name = e.target.closest('.fmc-doc-item')?.querySelector('.fmc-doc-name')?.textContent || 'this document';
+            if (!confirm(`Remove ${name}? This can't be undone.`)) return;
+            try {
+                await deleteChildDocument(path);
+                await _fmLoadDocuments(row);
+            } catch (err) {
+                alert("Couldn't remove that file: " + err.message);
+            }
+        }
+    });
+}
+
+// ── Approved for pickup (Family Directory modal — read-only) ───────────
+// Family-level, not per-child (pickup_contacts keys on family_id), so this
+// renders once for the whole modal rather than once per child row. The
+// family adds/removes their own entries from the parent portal; this is
+// the office's view of that same list, not a second editor for it.
+function _fmRenderPickupList(list) {
+    const el = document.getElementById('fmPickupList');
+    if (!el) return;
+    if (!list.length) {
+        el.innerHTML = '<p class="empty-hint">No one approved for pickup yet.</p>';
+        return;
+    }
+    el.innerHTML = list.map(p => `
+        <div class="fm-pickup-row">
+            <strong>${escHtml(p.name)}</strong>
+            ${p.relationship ? ` — ${escHtml(p.relationship)}` : ''}
+            ${p.note ? `<div class="fm-pickup-note">${escHtml(p.note)}</div>` : ''}
+        </div>`).join('');
+}
+
+async function _fmLoadPickupContacts(familyId) {
+    const el = document.getElementById('fmPickupList');
+    if (!el) return;
+    el.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        _fmRenderPickupList(await fetchPickupContactsAdmin(familyId));
+    } catch (err) {
+        el.innerHTML = `<p class="import-error">Couldn't load the pickup list: ${escHtml(err.message)}</p>`;
+    }
 }
 
 // Uploads/removes a profile picture for the row's child. Repaints only the
@@ -1169,6 +1340,15 @@ async function saveFamilyModal() {
                     discountNote:  child.discount_note,
                     discountExpiresAt: child.discount_expires_at,
                     profilePhotoPath: child.profile_photo_path,
+                    // FS21: these four were dropped on the CREATE path only —
+                    // a child added while creating a new family started with
+                    // no allergy record and no recurring-days reminder, a
+                    // silent divergence from the UPDATE branch just below.
+                    // Allergies is a safety field, not a convenience one.
+                    recurringDays: child.recurring_days?.length ? child.recurring_days : null,
+                    allergies:     child.allergies || [],
+                    careNotes:     child.care_notes,
+                    photoRelease:  child.photo_release,
                 });
             }
         } else {

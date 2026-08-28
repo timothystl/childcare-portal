@@ -108,12 +108,13 @@
     background: var(--warm-gray);
 }
 
-/* The tool's own heading, so a tool page starts at the same left edge as
-   a dashboard heading and nothing shifts when you move between them. The
-   section's own <h2> then duplicates it — hidden by apShowSection(), but
-   only where the heading is inert text (see the comment there). */
-.ap-detail-head .ap-head { margin-bottom: 18px; }
-.ap-dup-head { display: none !important; }
+/* apRenderDetail() (admin-portal.js) no longer renders a shell tile into
+   #apDetailHead for any tool — it used to print the tool's own name+blurb
+   here, which duplicated the section's own heading directly below it (found
+   live 2026-08-28, e.g. Waitlist & Capacity Planner). Each section's own
+   <h2> is now the only heading a tool shows. .ap-detail-head itself is kept
+   as an empty mount point rather than removed from admin.html, in case a
+   future tool needs a header row the section can't own itself. */
 
 
 /* ── Page heading ────────────────────────────────────────── */
@@ -136,6 +137,18 @@
     color: var(--text-muted);
     font-size: .95em;
     margin: 6px 0 0;
+    max-width: 62ch;
+    text-wrap: pretty;
+}
+
+/* apRenderDashboard()'s per-tab landing page. Used to open with an <h2> of
+   the tab's own name — pure repeat of the sidebar's highlighted tab and the
+   header chip (#currentTabLabel) right above it. Only the live-data caption
+   (a week, a count, a source) carries real information, so it's what's left. */
+.ap-dash-stamp {
+    color: var(--text-muted);
+    font-size: .95em;
+    margin: 0 0 22px;
     max-width: 62ch;
     text-wrap: pretty;
 }
@@ -367,6 +380,8 @@
 .ap-grid-cell.is-edge { background: var(--tang-pale); border-color: var(--tang); }
 .ap-grid-staff { font-size: 1.12em; font-weight: 800; color: var(--navy); line-height: 1.1; }
 .ap-grid-cell.is-edge .ap-grid-staff { color: var(--ap-deep-tang); }
+.ap-grid-staff-pm { font-size: .92em; margin-top: 1px; }
+.ap-grid-shift { font-size: .58em; font-weight: 700; color: var(--text-muted); letter-spacing: .05em; margin-left: 3px; vertical-align: middle; }
 .ap-grid-kids  { font-size: .7em; color: var(--text-muted); margin-top: 2px; }
 .ap-grid-foot {
     font-size: .78em;
@@ -478,6 +493,9 @@
     .ap-sched-split { grid-template-columns: 1fr; }
     .ap-sched-side  { position: static; }
 }
+/* Ratio Step's second mount (consolidation pass, 2026-08-27) — a plain
+   divider above it is enough; the widget itself carries its own card. */
+.ap-sched-ratiostep { border-top: 1px solid var(--border); padding-top: 4px; }
 
 /* ── "Needs your OK" — time-off approval queue ───────────── */
 .ap-ok-panel {
@@ -706,6 +724,7 @@
 .ap-req-table td.ap-td-ratio { text-align: left; font-size: .86em; color: var(--text-muted); white-space: nowrap; }
 .ap-req-staff { font-weight: 800; font-size: 1.05em; color: var(--navy); }
 .ap-req-staff.is-edge { color: var(--tang); }
+.ap-req-shift { font-size: .62em; font-weight: 700; color: var(--text-muted); letter-spacing: .05em; margin-left: 3px; vertical-align: middle; }
 .ap-req-kids  { font-size: .76em; color: var(--text-muted); }
 .ap-req-table tfoot td { border-bottom: none; padding-top: 9px; }
 .ap-req-table tfoot tr.is-strong td { font-weight: 800; color: var(--navy); }
@@ -997,6 +1016,13 @@ tr.br-withdrawn td { opacity: .62; }
 tr.br-grand-total td { background: var(--navy); color: #fff; font-weight: 800; }
 tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15em; }
 
+.br-note-input {
+    width: 100%; min-width: 140px; border: 1px solid transparent; background: transparent;
+    font: inherit; color: inherit; padding: 3px 6px; border-radius: var(--radius-sm);
+}
+.br-note-input:hover { border-color: var(--border); }
+.br-note-input:focus { border-color: var(--tang); background: #fff; outline: none; }
+
 .br-ties {
     margin-top: 16px; padding: 12px 16px; background: var(--linen); border: 1px solid var(--border);
     border-radius: var(--radius-md); font-size: .85em; color: var(--text-muted);
@@ -1095,3 +1121,816 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .afh-owe-why { font-size: .84em; color: var(--text-muted); margin-top: 2px; }
 .afh-owe-decide { display: flex; gap: 8px; margin-top: 8px; }
 .afh-owes-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; }
+
+/* ============================================================
+   FINANCE HUB — Ledger (design handoff: Finance Hub, 2026-08-26 +
+   IMPLEMENTATION_SPEC.md "Component Spec Sheet" — values below are taken
+   literally from that spec, not approximated, per its own instruction.)
+   ============================================================
+   Consolidates Bill This Month, Who Owes, Invoices, and Family Billing
+   Summary. See js/admin/admin-finance-hub.js. The family drawer reuses
+   .inc-drawer/.inc-scrim (css/admin.css) rather than a second component,
+   overridden below to the spec's own drawer dimensions.
+   One deliberate deviation from the spec: the reconciliation strip's four
+   stats render as cards (shadow, radius) rather than bare numbers — a
+   director's explicit ask after seeing the first build — with the spec's
+   exact number/label colors kept inside each card. */
+
+.fh-toolbar {
+    display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: -6px 0 4px;
+}
+.fh-month-switch {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--linen); border: 1px solid var(--border); border-radius: 999px;
+    padding: 3px 4px; font-weight: 700; color: var(--navy); font-family: var(--font-body);
+}
+.fh-month-arrow {
+    background: none; border: none; cursor: pointer; color: var(--navy);
+    font-weight: 800; font-size: 14px; line-height: 1; padding: 4px 8px; border-radius: 6px;
+    transition: background .15s;
+}
+.fh-month-arrow:hover:not(:disabled) { background: var(--warm-gray); }
+.fh-month-arrow:disabled { opacity: .3; cursor: default; }
+.fh-month-label { min-width: 9ch; text-align: center; padding: 0 2px; }
+.fh-search {
+    background: #fff; border: 1px solid var(--border); border-radius: 999px;
+    padding: 8px 14px; font-family: var(--font-body); font-size: 13px; width: 160px;
+    transition: border-color .15s, box-shadow .15s;
+}
+.fh-search:focus { outline: none; border-color: var(--navy-lt); box-shadow: 0 0 0 3px rgba(1,41,74,.08); }
+
+.fh-tabs { display: flex; gap: 4px; margin: 18px 0 0; border-bottom: 1.5px solid var(--border); }
+.fh-tab {
+    border: none; cursor: pointer; font-family: var(--font-body); font-weight: 800; font-size: 13px;
+    padding: 9px 16px; border-radius: 9px 9px 0 0;
+    background: var(--linen); color: var(--navy);
+    transition: background .15s, color .15s;
+    position: relative; top: 1px;
+}
+.fh-tab:hover:not(.is-on) { background: var(--warm-gray); }
+.fh-tab.is-on { background: var(--navy); color: #fff; }
+
+#fhLedgerPane { padding-top: 20px; }
+.fh-report-pane { padding-top: 20px; }
+.fh-report-pane > h3 { margin: 0 0 4px; font-family: var(--font-head); color: var(--navy); }
+
+/* Reconciliation strip */
+.fh-strip {
+    display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap;
+    padding: 4px 0 20px;
+}
+.fh-stat {
+    background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: 0 2px 10px rgba(1,41,74,.05);
+    padding: 14px 20px; min-width: 118px;
+    transition: box-shadow .15s, transform .15s;
+}
+.fh-stat-tang { background: var(--tang-pale); border-color: #f6d3c2; }
+.fh-stat-muted { background: var(--warm-gray); }
+/* This month's own total (not the running owed banner) — a dollar figure
+   reads wider than a bare count at the same font size, so it gets a
+   slightly smaller number and a label that's allowed to wrap onto a
+   second line instead of forcing the card wider than the rest of the strip. */
+.fh-stat-month { max-width: 220px; }
+.fh-stat-month .fh-stat-num { font-size: 21px; }
+.fh-stat-month .fh-stat-label { white-space: normal; }
+.fh-stat-num { font-family: var(--font-head); font-size: 26px; font-weight: 800; color: var(--navy); line-height: 1; }
+.fh-stat-tang .fh-stat-num { color: var(--tang); }
+.fh-stat-muted .fh-stat-num { color: var(--text-muted); }
+.fh-stat-label { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); margin-top: 6px; }
+.fh-stat-muted .fh-stat-label { color: var(--text-muted); }
+/* "Need a look" is clickable, so its label is darker than its own number
+   (spec: tang-dark, not the tang the number uses) and underlined. */
+.fh-stat-tang .fh-stat-label { color: var(--tang-dark); }
+.fh-underline { text-decoration: underline; text-decoration-color: currentColor; text-underline-offset: 2px; }
+.fh-arrow { color: #C9C2AA; font-size: 18px; align-self: center; padding: 0 4px; }
+.fh-stat.is-clickable { cursor: pointer; }
+.fh-stat.is-clickable:hover { box-shadow: 0 6px 18px rgba(1,41,74,.10); transform: translateY(-1px); }
+.fh-strip-spacer { flex: 1; min-width: 8px; }
+.fh-release-btn {
+    align-self: center; white-space: nowrap; background: var(--navy); color: #fff; border: none;
+    border-radius: 10px; padding: 11px 16px; font-family: var(--font-body); font-weight: 800;
+    font-size: 13.5px; cursor: pointer; transition: background .15s;
+}
+.fh-release-btn:hover:not(:disabled) { background: var(--navy-lt); }
+.fh-release-btn:disabled { opacity: .45; cursor: default; }
+
+/* Owed banner */
+.fh-owed-banner {
+    display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--sun-pale); border: 1.5px solid var(--sun-lt); border-radius: var(--radius-md);
+    padding: 13px 18px; margin-bottom: 16px;
+}
+.fh-owed-main strong { font-family: var(--font-body); font-size: 14.5px; font-weight: 800; color: var(--navy); }
+.fh-owed-famcount { color: var(--mustard-dark); font-weight: 700; }
+.fh-owed-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.fh-owed-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.fh-owed-btn-primary, .fh-owed-btn-outline {
+    border-radius: 9px; padding: 8px 13px; font-family: var(--font-body); font-weight: 800;
+    font-size: 12.5px; cursor: pointer; transition: background .15s, color .15s;
+}
+.fh-owed-btn-primary { background: var(--navy); color: #fff; border: none; }
+.fh-owed-btn-primary:hover:not(:disabled) { background: var(--navy-lt); }
+.fh-owed-btn-primary:disabled { opacity: .45; cursor: default; }
+.fh-owed-btn-outline { background: #fff; color: var(--navy); border: 1.5px solid var(--navy); }
+.fh-owed-btn-outline:hover { background: var(--linen); }
+
+/* Aging cards — only the label color escalates by severity; every card
+   keeps a plain white background and the dollar figure stays navy. */
+.fh-aging { display: flex; gap: 12px; margin-bottom: 14px; }
+.fh-aging-col { flex: 1; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; text-align: center; }
+.fh-aging-label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.fh-aging-col.fh-aging-watch .fh-aging-label { color: var(--mustard-dark); }
+.fh-aging-col.fh-aging-severe .fh-aging-label { color: var(--tang-dark); }
+.fh-aging-amt { font-family: var(--font-head); font-size: 20px; font-weight: 800; color: var(--navy); margin-top: 2px; }
+.fh-aging-count { font-size: .8em; color: var(--text-muted); }
+
+/* Filter chips */
+.fh-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.fh-chip {
+    border: 1px solid var(--border); background: #fff; border-radius: 999px;
+    padding: 6px 12px; font-family: var(--font-body); font-weight: 700; font-size: 12.5px;
+    color: var(--text-muted); cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.fh-chip:hover { background: var(--linen); }
+.fh-chip-count { color: inherit; opacity: .75; font-weight: 700; }
+.fh-chip.is-on { background: var(--navy); color: #fff; border-color: var(--navy); }
+/* Active tone follows the status the chip represents, not a uniform navy —
+   Needs review/Owing use the tang-pale "caution" tone, Paid in full uses
+   the green-pale "resolved" tone (spec: never a solid color fill here). */
+.fh-chip-needs_review.is-on, .fh-chip-owing.is-on {
+    background: var(--tang-pale); color: var(--tang-dark); border-color: var(--tang-soft, #f2b89a);
+}
+.fh-chip-paid.is-on { background: var(--green-pale); color: var(--green-text); border-color: var(--green-lt); }
+
+/* Table */
+.fh-table { border-radius: var(--radius-md); overflow: hidden; }
+.fh-table thead th {
+    background: transparent !important; color: var(--text-muted) !important;
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
+    border-bottom: 2px solid var(--border) !important; padding: 8px 10px !important;
+    text-align: left !important;
+}
+.fh-table tbody td { font-size: 13.5px; padding: 10px !important; }
+.fh-table tbody tr { border-bottom: 1px solid var(--warm-gray); transition: background .1s; }
+.fh-table tbody tr:hover { background: var(--linen); }
+.fh-row-open { cursor: pointer; }
+.fh-row-open strong { color: var(--navy); font-weight: 700; }
+.fh-row-open:hover strong { text-decoration: underline; }
+.fh-note { color: var(--text-muted); font-size: .88em; max-width: 30ch; }
+.fh-money-col { text-align: right; font-variant-numeric: tabular-nums; }
+.fh-bal-owed { color: var(--tang-dark); font-weight: 700; }
+.fh-bal-clear { color: var(--green-text); font-weight: 700; }
+/* Fixed two-slot layout (Send invoice / Remind-or-Retry-charge), each
+   right-aligned within its own slot — a row with only one of the two
+   buttons no longer lands at a different x-position than a row with both.
+   See the fh-action-slot markup in _fhRowHtml(). The slot widths already
+   fix the column's total width, so there's no separate width on
+   .fh-row-actions the way an earlier version of this rule had. */
+.fh-row-actions { white-space: nowrap; display: flex; gap: 6px; justify-content: flex-end; }
+.fh-action-slot { display: flex; justify-content: flex-end; }
+.fh-action-slot:first-child { width: 100px; }
+.fh-action-slot:last-child  { width: 92px; }
+.fh-send-btn, .fh-row-actions .btn-xs {
+    display: inline-block; border-radius: 8px; padding: 6px 10px; font-size: 11.5px; font-weight: 700;
+    cursor: pointer; margin-left: 0; transition: background .15s;
+}
+/* .btn-xs alone (admin.css) sets a white background with no color of its
+   own — combined with .btn-primary's white text (styles.css) that reads as
+   an invisible box. .fh-send-btn is Finance Hub's own small primary action,
+   styled on purpose rather than reusing that collision-prone combo. */
+.fh-send-btn { border: none; background: var(--navy); color: #fff; }
+.fh-send-btn:hover { background: var(--navy-lt); }
+.fh-row-actions .btn-xs { background: #fff; border: 1px solid var(--border); color: var(--navy); }
+
+.fh-pill { display: inline-block; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 3px 9px; }
+.fh-pill-review    { background: #FDEEE8; color: #7a2a18; }
+.fh-pill-drafted   { background: var(--linen); color: var(--navy); border: 1px solid var(--border); }
+.fh-pill-sent      { background: #FFF8E1; color: #7a5a00; border: 1px solid #FDE598; }
+.fh-pill-paid      { background: #EAF5EF; color: #3A7B60; border: 1px solid #C9E6DC; }
+.fh-pill-declined  { background: #FDEEE8; color: #7a2a18; border: 1.5px solid var(--tang); font-weight: 800; }
+.fh-pill-withdrawn { background: #F5F0E4; color: var(--text-muted); }
+
+/* Month history (read-only) */
+.fh-history-banner {
+    background: var(--linen); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 14px 18px; margin-bottom: 16px;
+}
+.fh-history-banner strong { color: var(--navy); font-family: var(--font-head); font-size: 1.05em; }
+.fh-history-banner p { margin: 6px 0 0; font-size: .88em; color: var(--text-muted); }
+.fh-history-foot { text-align: center; margin-top: 16px; }
+
+/* Billing Report rows are a click target into the Ledger drawer (spec §5) —
+   this file owns the interaction, admin-billing-report.js only carries the
+   data-br-email hook. */
+.br-room-table tr[data-br-email], #brBody tr[data-br-email] { cursor: pointer; }
+.br-room-table tr[data-br-email]:hover, #brBody tr[data-br-email]:hover { background: var(--linen); }
+
+/* Footer note — always visible on both the Ledger and month-history views,
+   "Billing Report" is a live tab-switch link, not just prose. */
+.fh-footer-note { margin-top: 14px; text-align: center; }
+.fh-footer-note .fh-link-btn { font-family: var(--font-body); }
+
+/* Note editor footer */
+.fh-note-editor { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); max-width: 76ch; }
+.fh-note-editor label { display: block; font-weight: 600; font-size: .9em; margin-bottom: 6px; }
+.fh-note-hint { font-weight: 400; color: var(--text-muted); }
+.fh-note-editor textarea {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-family: var(--font-body); font-size: .92em; background: #fff;
+}
+.fh-note-row { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.fh-note-status { font-size: .85em; color: var(--green-text); font-weight: 700; }
+
+/* ── Family drawer ──────────────────────────────────────────
+   Overrides the shared .inc-drawer/.inc-scrim chrome (css/admin.css) to the
+   spec's own dimensions/colors, scoped so the incident drawer elsewhere in
+   the app is untouched. */
+#fhDrawer.inc-drawer {
+    width: 440px; max-width: 92vw; background: var(--cream);
+    box-shadow: -12px 0 40px rgba(1,41,74,.18); padding: 26px 24px 40px;
+}
+#fhDrawerScrim.inc-scrim { background: rgba(1,41,74,.35); }
+#fhDrawer .inc-dr-x { color: var(--text-muted); font-weight: 700; font-size: 14px; }
+#fhDrawer .inc-dr-head h3 { font-family: var(--font-head); font-size: 22px; }
+#fhDrawer .inc-dr-field {
+    background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+}
+
+.fh-dr-card-title { font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+.fh-dr-card-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.fh-dr-line { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13.5px; }
+/* The quietest text color used anywhere in the app — deliberately lighter
+   than --text-muted, so a line-item's "who/when" reads as background
+   detail, never competing with the number above it. */
+.fh-dr-line-sub { font-size: 11px; color: #B5AC94; margin: -2px 0 6px; }
+.fh-dr-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; font-weight: 800; font-size: 14px; }
+.fh-dr-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
+.fh-dr-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+
+.fh-dr-action-btn {
+    flex: 1; min-width: 90px; border-radius: 9px; padding: 9px 10px; font-family: var(--font-body);
+    font-weight: 800; font-size: 12.5px; cursor: pointer; transition: background .15s, color .15s;
+}
+.fh-dr-action-fee    { background: #fff; border: 1px solid var(--navy); color: var(--navy); }
+.fh-dr-action-fee:hover    { background: var(--navy); color: #fff; }
+.fh-dr-action-credit { background: #fff; border: 1px solid var(--green-text); color: var(--green-text); }
+.fh-dr-action-credit:hover { background: var(--green-text); color: #fff; }
+.fh-dr-action-send   { background: var(--navy); border: none; color: #fff; }
+.fh-dr-action-send:hover   { background: var(--navy-lt); }
+.fh-dr-action-print  { background: #fff; border: 1px solid var(--border); color: var(--navy); }
+.fh-dr-action-print:hover  { background: var(--linen); }
+
+.fh-override-btn {
+    background: #fff; border: 1px solid var(--tang-soft, #f2b89a); color: var(--tang-dark);
+    border-radius: 8px; padding: 7px 12px; font-family: var(--font-body);
+    font-weight: 700; font-size: 12px; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.fh-override-btn:hover { background: var(--tang-pale); }
+.fh-required { color: var(--tang-dark); font-weight: 400; font-size: .85em; }
+
+.btn-approve {
+    background: var(--green-text); border: none; color: #fff; border-radius: 8px;
+    padding: 7px 12px; font-family: var(--font-body); font-weight: 800; font-size: 12px;
+    cursor: pointer; transition: background .15s;
+}
+.btn-approve:hover { background: var(--green-dark); }
+
+/* Inline mini-forms — no modal, expand directly below the trigger. Each
+   kind gets its own tint: sun-pale for fee/credit, tang-pale (danger) for
+   override, green-pale (success) for a payment. */
+.fh-mini-form {
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 7px;
+}
+.fh-mini-form-title { font-weight: 700; font-size: 13px; color: var(--navy); margin-bottom: 2px; }
+.fh-mini-form-fee { background: var(--sun-pale); border: 1.5px solid var(--sun-lt); }
+.fh-mini-form-caution { background: var(--tang-pale); border: 1.5px solid var(--tang-soft, #f2b89a); }
+.fh-mini-form-caution .fh-mini-form-title { color: var(--tang-dark); }
+.fh-mini-form-pay { background: var(--green-pale); border: 1.5px solid var(--green-lt); border-radius: 10px; padding: 10px 12px; }
+.fh-mini-form input, .fh-mini-form select {
+    font-family: var(--font-body); font-size: 13px; padding: 7px 9px;
+    border: 1px solid var(--border); border-radius: 8px; font-weight: 400; background: #fff;
+}
+.fh-mini-form-fee input, .fh-mini-form-fee select { border-color: var(--sun-lt); }
+.fh-mini-form-caution input, .fh-mini-form-caution select { border-color: var(--tang-soft, #f2b89a); }
+.fh-mini-form-pay input, .fh-mini-form-pay select { border-color: var(--green-lt); }
+.fh-mini-form-btns { display: flex; gap: 8px; margin-top: 2px; }
+.fh-mini-confirm {
+    border: none; border-radius: 8px; padding: 7px 14px; font-family: var(--font-body);
+    font-weight: 700; font-size: 12.5px; color: #fff; cursor: pointer; transition: background .15s;
+}
+.fh-mini-confirm-fee { background: var(--navy); }
+.fh-mini-confirm-fee:hover { background: var(--navy-lt); }
+.fh-mini-confirm-override { background: var(--tang-dark); }
+.fh-mini-confirm-override:hover { background: #611f11; }
+.fh-mini-confirm-pay { background: var(--green-dark); }
+.fh-mini-confirm-pay:hover { background: #123f2a; }
+.fh-mini-cancel { background: none; border: none; color: var(--text-muted); font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.fh-mini-cancel:hover { text-decoration: underline; }
+
+.fh-link-btn { background: none; border: none; color: var(--navy-lt); font-weight: 700; font-size: .86em; cursor: pointer; text-decoration: underline; }
+.fh-pay-amt { font-weight: 700; color: var(--green-text); }
+.inc-sig-list .fh-pay-amt { font-size: 13px; }
+
+.fh-dr-save-btn, .fh-dr-remind-btn {
+    flex: 1; border: none; border-radius: 10px; padding: 11px; font-family: var(--font-body);
+    font-weight: 800; font-size: 13.5px; color: #fff; cursor: pointer; transition: background .15s;
+}
+.fh-dr-save-btn { background: var(--navy); }
+.fh-dr-save-btn:hover { background: var(--navy-lt); }
+.fh-dr-remind-btn { background: var(--tang); }
+.fh-dr-remind-btn:hover { background: #d1653f; }
+
+/* Print statement overlay — in-DOM, not window.open() (popups get blocked
+   in sandboxed/embedded contexts). @media print hides everything else. */
+.fh-print-scrim {
+    position: fixed; inset: 0; background: #fff; z-index: 200;
+    display: flex; flex-direction: column; align-items: center; overflow-y: auto; padding: 40px 20px;
+}
+.fh-print-sheet {
+    max-width: 680px; width: 100%; font-family: Arial, Helvetica, sans-serif; color: #222;
+}
+.fh-print-sheet h1 { font-size: 20px; margin: 0 0 16px; }
+.fh-print-sheet h2 { font-size: 15px; margin: 22px 0 8px; }
+.fh-print-sheet table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fh-print-sheet th, .fh-print-sheet td { border-bottom: 1px solid #ddd; padding: 6px 4px; text-align: left; }
+.fh-print-balance { font-size: 15px; font-weight: 700; margin-top: 20px; }
+.fh-print-btns { margin-top: 24px; display: flex; gap: 10px; }
+.fh-print-btn, .fh-print-close {
+    background: var(--navy); color: #fff; border: none; border-radius: var(--radius-sm);
+    padding: 9px 18px; font-family: var(--font-body); font-weight: 700; cursor: pointer;
+}
+.fh-print-close { background: #fff; color: var(--navy); border: 1px solid var(--border); }
+.fh-print-close:hover { background: var(--linen); }
+.fh-print-btn:hover { background: var(--navy-lt); }
+@media print {
+    body > *:not(.fh-print-scrim) { display: none !important; }
+    .fh-print-scrim { position: static; padding: 0; }
+    .no-print { display: none !important; }
+}
+
+@media (max-width: 720px) {
+    .fh-toolbar { justify-content: flex-start; }
+    .fh-strip { gap: 8px; }
+    .fh-arrow { display: none; }
+    .fh-strip-spacer { display: none; }
+    .fh-release-btn { width: 100%; }
+    .fh-search { width: 100%; }
+    .fh-row-actions { width: auto; }
+    #fhDrawer.inc-drawer { width: 100%; }
+}
+
+/* ============================================================
+   Messages & Settings consolidation (design handoff
+   design_handoff_messages_settings/, 2026-08-26)
+   ============================================================ */
+
+/* ── Messages ─────────────────────────────────────────────── */
+.msg-toolbar-top { display: flex; justify-content: flex-end; margin: -6px 0 4px; }
+.msg-notify-toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--white); border: 1px solid var(--border); border-radius: 999px;
+    padding: 7px 14px; font-size: .68em; font-weight: 700; color: var(--navy);
+    cursor: pointer; vertical-align: middle; margin-left: 14px;
+    box-shadow: var(--shadow-card);
+}
+.msg-notify-toggle input { width: 15px; height: 15px; cursor: pointer; }
+
+.msg-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 18px 0 16px; }
+.msg-kpi {
+    display: flex; flex-direction: column; gap: 4px; text-align: left;
+    background: var(--white); border: 1.5px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; cursor: pointer; box-shadow: var(--shadow-card);
+    font-family: var(--font-body);
+}
+.msg-kpi.tone-tang.is-on  { border-color: var(--tang); }
+.msg-kpi.tone-gold.is-on  { border-color: var(--sun); }
+.msg-kpi.tone-green.is-on { border-color: var(--green); }
+.msg-kpi-label { font-size: .75em; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--ap-deep-tang); }
+.msg-kpi.tone-gold  .msg-kpi-label { color: var(--mustard-dark, #7a5a00); }
+.msg-kpi.tone-green .msg-kpi-label { color: var(--green-text); }
+.msg-kpi-count { font-family: var(--font-head); font-size: 1.7em; font-weight: 700; color: var(--navy); }
+.msg-kpi-sub { font-size: .8em; color: var(--text-muted); }
+
+.msg-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.msg-toolbar .family-search-input { margin: 0; }
+
+.msg-compose-panel {
+    background: var(--white); border: 1px solid var(--border); border-top: 4px solid var(--navy);
+    border-radius: 14px; padding: 18px 20px; margin-bottom: 18px; box-shadow: var(--shadow-card);
+}
+.msg-compose-announce { border-top-color: var(--sun); }
+.msg-compose-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.msg-compose-head h3 { margin: 0; font-family: var(--font-head); font-size: 1.1em; color: var(--navy); }
+#msgComposeFamily, #msgComposeBody { width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+#msgComposeBody { resize: vertical; }
+
+.msg-feed { display: flex; flex-direction: column; gap: 10px; }
+.msg-row {
+    background: var(--white); border: 1px solid var(--border); border-left: 4px solid var(--border);
+    border-radius: 12px; padding: 4px 4px 4px 0; box-shadow: var(--shadow-card);
+}
+.msg-row-head {
+    display: flex; gap: 8px; align-items: flex-start; width: 100%; padding: 10px 12px;
+    font-family: var(--font-body);
+}
+/* The expand/collapse control — everything except the Read/Archive
+   checkboxes, which need to sit outside it. A <button> can't legally
+   contain interactive children (checkboxes), and even set aside from
+   validity, a click on a checkbox nested in a clickable row would also
+   fire the row's own expand toggle. */
+.msg-row-clickable {
+    display: flex; gap: 12px; align-items: flex-start; flex: 1; min-width: 0; text-align: left;
+    background: none; border: none; cursor: pointer; padding: 0; font-family: inherit;
+}
+.msg-row-actions { flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px; align-self: center; }
+.msg-row-check {
+    display: flex; align-items: center; gap: 5px; font-size: .76em; font-weight: 700;
+    color: var(--text-muted); white-space: nowrap; cursor: pointer;
+}
+.msg-row-check input { width: 14px; height: 14px; cursor: pointer; }
+.msg-row-check:has(input:checked) { color: var(--green-text); }
+.msg-row-icon {
+    flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; font-size: 1.05em; font-weight: 800; color: var(--navy);
+}
+.msg-row-main { flex: 1; min-width: 0; }
+.msg-row-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.msg-row-name { font-weight: 800; color: var(--navy); font-size: .98em; }
+.msg-row-when { font-size: .78em; color: var(--text-muted); white-space: nowrap; }
+.msg-row-meta {
+    display: block; font-size: .78em; color: var(--text-muted); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.msg-row-preview {
+    display: block; font-size: .9em; color: var(--text); margin-top: 5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.msg-status-pill {
+    flex: 0 0 auto; font-size: .7em; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap; align-self: center;
+    background: var(--ap-tint-sand); color: var(--text-muted);
+}
+.msg-status-pill.tone-tang  { background: var(--tang-pale);  color: var(--ap-deep-tang); }
+.msg-status-pill.tone-gold  { background: var(--sun-pale);   color: var(--mustard-dark, #7a5a00); }
+.msg-status-pill.tone-green { background: var(--green-pale); color: var(--green-text); }
+.msg-row-body { padding: 0 16px 14px 66px; }
+.msg-row-body.hidden { display: none; }
+.msg-email-tracker {
+    display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+    background: var(--warm-gray); border: 1px solid var(--border); border-radius: 9px;
+    padding: 10px 14px; margin-top: 4px;
+}
+.msg-email-tracker label { display: flex; align-items: center; gap: 7px; font-size: .85em; font-weight: 700; color: var(--navy); cursor: pointer; }
+.msg-email-tracker label.is-green { color: var(--green-text); }
+.msg-email-tracker input { width: 15px; height: 15px; cursor: pointer; }
+
+/* ── Settings ─────────────────────────────────────────────── */
+/* minmax(0, 1fr), not 1fr — a grid track defaults to min-width:auto, sized
+   to its widest child's intrinsic content. The rooms table is wider than
+   either card, and without the 0 floor it would stretch this whole row
+   (and the page under it) past the viewport instead of scrolling inside
+   #roomsTableWrap. Same pattern as .ap-col elsewhere in this file. */
+.set-top-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-bottom: 20px; align-items: start; }
+@media (max-width: 900px) { .set-top-row { grid-template-columns: minmax(0, 1fr); } }
+.set-card-body { padding: 16px 22px 20px; display: flex; flex-direction: column; gap: 18px; }
+/* The combined rates+ratios+capacity fields are wider than the half-width
+   card on anything but a very wide screen. Rather than scroll them inside
+   their own box (which hid the ratio/capacity fields off the right edge
+   unless you noticed and scrolled), each room's fields sit in a real CSS
+   grid that reflows as whole rows and wraps onto a second line as the card
+   narrows — see _renderRoomsTable() in admin-settings-unified.js.
+   ⚠️ Not flex-wrap: a plain flex-wrap row of the room name + 7 fields as
+   siblings wrapped one item at a time with no shared columns, so which
+   fields landed on which line was arbitrary per room and the room name
+   (just another flex item) ended up vertically centered against whichever
+   field happened to be on its own line — it read as misaligned because it
+   effectively was. The room name is its own full-width row here, and the
+   fields are a `.rf-fields` grid so every room's columns line up. */
+.rf-rows { border-top: 1px solid var(--warm-gray); }
+.rf-row { padding: 12px 4px; border-bottom: 1px solid var(--warm-gray); }
+.rf-row:hover { background: var(--cream); }
+.rf-room-head { margin-bottom: 8px; }
+.rf-room-head strong { color: var(--text); font-size: 1.02em; }
+.rf-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 10px 14px;
+}
+.rf-field { min-width: 0; }
+.rf-field-ages { grid-column: span 2; min-width: 130px; }
+.rf-age-inputs { display: flex; gap: 4px; align-items: center; }
+.rf-age-inputs input { flex: 1 1 0; min-width: 0; }
+.rf-label {
+    display: block;
+    font-size: .72em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    white-space: nowrap;
+}
+.rf-field input { width: 100%; box-sizing: border-box; }
+/* Registration window: the longest option ("Force Closed — block
+   registration right now") is wider than a native <select> can render
+   inside the half-width Registration card without the browser's own
+   arrow overlapping the text. Stack the select above the Save button so
+   the select gets the card's full width instead of sharing a row. */
+.set-field .override-row { flex-direction: column; align-items: stretch; }
+.set-field .override-select { max-width: none; align-self: stretch; }
+.set-field .override-row .btn-primary { align-self: flex-start; }
+.set-field-label { display: block; font-weight: 800; font-size: .85em; color: var(--navy); margin-bottom: 6px; }
+.set-caption { margin: 6px 0 0; font-size: .8em; color: var(--text-muted); font-style: italic; }
+.set-fee-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--ap-border-lt); }
+.set-fee-fields label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 700; font-size: .85em; color: var(--navy); }
+.set-fee-fields input { width: 90px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; }
+@media (max-width: 560px) { .set-fee-fields { grid-template-columns: 1fr; } }
+.set-access-grid { padding: 16px 22px 20px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+/* The admin-users list (email/role/last-login/actions) is wider than its
+   column's content when the natural widths don't fit. Rather than scroll
+   it inside its own box (which hid "Reset Password"/"Delete" off the right
+   edge unless you noticed and scrolled), each row is a deterministic
+   stack — email, then an Access Level + Last Login grid, then the action
+   buttons — that reflows the same way at every width instead of wrapping
+   wherever flex happens to break the line. See _renderAdminUsersTable()
+   in admin-settings.js for why plain flex-wrap looked misaligned here. */
+.au-rows { border-top: 1px solid var(--warm-gray); }
+.au-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--warm-gray);
+}
+.au-row:hover { background: var(--cream); }
+.au-email { font-weight: 700; color: var(--text); word-break: break-word; }
+.au-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px 16px;
+}
+.au-field { min-width: 0; }
+.au-field select { width: 100%; box-sizing: border-box; }
+.au-last-value { color: #888; font-size: .85em; }
+.au-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (max-width: 900px) { .set-access-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ============================================================
+   Finance Hub — Bookkeeper tab (design handoff Finance Hub §6)
+   ============================================================
+   Sub-nav pills use the navy-fill/white toggle, deliberately NOT the
+   tone-colored fills the Ledger's filter chips use: those chips carry a
+   status meaning (tang = caution, green = resolved) and reusing that
+   vocabulary for plain navigation would say something the pills don't mean.
+   ------------------------------------------------------------ */
+.fh-bk-pane { padding-top: 20px; }
+.bk-title { font-family: var(--font-head); font-size: 20px; font-weight: 700; color: var(--navy); margin: 0 0 4px; }
+.bk-subtitle { margin: 0 0 18px; }
+.bk-gl-head { align-items: flex-start; margin-bottom: 14px; }
+.bk-gl-head .bk-lede { margin: 0; flex: 1; }
+
+.bk-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.bk-pill {
+    border: 1px solid var(--border); background: #fff; border-radius: 999px;
+    padding: 6px 12px; font-family: var(--font-body); font-weight: 700; font-size: 12.5px;
+    color: var(--text-muted); cursor: pointer; white-space: nowrap;
+    transition: background .15s, color .15s, border-color .15s;
+}
+.bk-pill:hover:not(.is-on) { background: var(--linen); }
+.bk-pill.is-on { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+.bk-h { font-family: var(--font-head); font-size: 15px; font-weight: 700; color: var(--navy); margin: 0 0 8px; }
+.bk-lede { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; max-width: 78ch; }
+.bk-progress { font-size: 13.5px; font-weight: 700; color: var(--navy); margin: 0 0 12px; }
+.bk-scope-note { margin: 12px 0 20px; }
+
+/* Stat cards */
+.bk-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.bk-stat { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.bk-stat-sun { background: var(--sun-pale); border-color: var(--sun-lt); }
+.bk-stat-label { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); }
+.bk-stat-num { font-family: var(--font-head); font-size: 24px; font-weight: 800; color: var(--navy); line-height: 1.15; margin-top: 4px; }
+.bk-stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+/* A live input inside a .bk-stat card (Build Staff Schedule's "Week of"),
+   rather than a computed number — sized/colored to read as part of the
+   same card row instead of a stray form field. */
+.bk-stat-date-input {
+    width: 100%; margin-top: 6px; padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 7px; font-family: inherit; font-size: 15px; font-weight: 700;
+    color: var(--navy); background: #fff;
+}
+.is-pos { color: var(--green-text); }
+.is-neg { color: var(--tang-dark); }
+
+/* Revenue vs. labor bars — CSS bars, never a wide table: the horizontal
+   scroll on the old dashboard is the specific complaint this replaces. */
+.bk-legend { font-size: 11.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+.bk-key { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.bk-key-rev { background: var(--green-text); }
+.bk-key-lab { background: var(--tang); margin-left: 12px; }
+.bk-bars { display: flex; flex-direction: column; gap: 10px; }
+.bk-bar-row { display: flex; align-items: center; gap: 16px; }
+.bk-bar-label { flex: 0 0 34px; font-size: 11.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+/* Revenue and labor are two independent bar+value pairs side by side, each
+   sized against its own series' peak — not one shared track with two
+   stacked segments, which reads as one split bar instead of two figures. */
+.bk-bar-pair { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.bk-bar-track { flex: 1; min-width: 0; background: #fff; border: 1px solid var(--border); border-radius: 4px; height: 8px; }
+.bk-bar { height: 8px; border-radius: 4px; min-width: 2px; }
+.bk-bar-rev { background: var(--green-text); }
+.bk-bar-lab { background: var(--tang); }
+.bk-bar-val { flex: 0 0 78px; text-align: right; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.bk-bar-rev-val { color: var(--green-text); font-weight: 700; }
+.bk-bar-lab-val { color: var(--tang-dark); font-weight: 700; }
+
+/* Cards, forms, buttons */
+.bk-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; }
+.bk-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.bk-card-head .bk-h { margin-bottom: 0; }
+.bk-link { background: none; border: none; padding: 0; cursor: pointer; color: var(--green-text); font-family: var(--font-body); font-weight: 700; font-size: 12.5px; text-decoration: underline; }
+.bk-budget-grid, .bk-room-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin-top: 10px; }
+
+/* Budget lines — absorbed from the retired Expense Lines tool. */
+.bk-exp-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--warm-gray); }
+.bk-exp-list { margin-top: 8px; }
+.bk-exp-row {
+    display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px;
+    padding: 7px 0; border-bottom: 1px solid var(--warm-gray); font-size: 13px;
+}
+.bk-exp-row:last-child { border-bottom: none; }
+.bk-exp-name { font-weight: 700; color: var(--navy); }
+.bk-exp-val { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bk-exp-del {
+    background: none; border: none; color: var(--text-muted); font-size: 16px; line-height: 1;
+    cursor: pointer; padding: 2px 6px; border-radius: 6px; transition: background .15s, color .15s;
+}
+.bk-exp-del:hover { background: var(--tang-pale); color: var(--tang-dark); }
+.bk-kv-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.bk-kv-val { display: block; font-size: 14px; font-weight: 800; color: var(--navy); font-variant-numeric: tabular-nums; }
+
+/* Inline forms — expansions, never a modal (implementation spec §6). */
+.bk-form { border-radius: 12px; padding: 12px 14px; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.bk-form-sun   { background: var(--sun-pale);   border: 1.5px solid var(--sun-lt); }
+.bk-form-green { background: var(--green-pale); border: 1.5px solid var(--green-lt); }
+.bk-field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.bk-field input {
+    border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px;
+    font-family: var(--font-body); font-size: 13px; font-weight: 400; color: var(--text); background: #fff;
+}
+.bk-field input:focus { outline: none; border-color: var(--navy-lt); box-shadow: 0 0 0 3px rgba(1,41,74,.08); }
+.bk-form-btns { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.bk-btn-solid {
+    background: var(--navy); color: #fff; border: none; border-radius: 8px; padding: 8px 14px;
+    font-family: var(--font-body); font-weight: 800; font-size: 12.5px; cursor: pointer; transition: background .15s;
+}
+.bk-btn-solid:hover:not(:disabled) { background: var(--navy-lt); }
+.bk-btn-solid:disabled { opacity: .45; cursor: default; }
+.bk-btn-text { background: none; border: none; color: var(--text-muted); font-family: var(--font-body); font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.bk-btn-mini {
+    background: #fff; border: 1px solid var(--border); color: var(--navy); border-radius: 8px;
+    padding: 6px 10px; font-family: var(--font-body); font-weight: 700; font-size: 11.5px; cursor: pointer;
+    transition: background .15s; white-space: nowrap;
+}
+.bk-btn-mini:hover:not(:disabled) { background: var(--linen); }
+.bk-btn-mini:disabled { opacity: .45; cursor: default; }
+.bk-why { color: var(--text-muted); font-size: .9em; }
+
+/* Room P&L — a card grid, never a table. */
+.bk-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.bk-select {
+    border: 1px solid var(--border); border-radius: 999px; background: #fff;
+    padding: 7px 12px; font-family: var(--font-body); font-size: 13px; color: var(--navy); font-weight: 700;
+}
+.bk-room-grid-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.bk-room-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.bk-room-name { font-family: var(--font-head); font-size: 15px; font-weight: 700; color: var(--navy); }
+
+/* Month-end close checklist */
+.bk-check-card { padding: 4px 6px; }
+.bk-check-row {
+    display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
+    background: none; border: none; border-bottom: 1px solid var(--warm-gray);
+    padding: 12px 10px; cursor: pointer; font-family: var(--font-body); transition: background .12s;
+}
+.bk-check-row:last-child { border-bottom: none; }
+.bk-check-row:hover { background: var(--linen); }
+.bk-check-box {
+    flex: 0 0 20px; height: 20px; border: 1.5px solid var(--border); border-radius: 6px; background: #fff;
+    display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 12px;
+}
+.bk-check-row.is-done .bk-check-box { background: var(--green-text); border-color: var(--green-text); }
+.bk-check-label { display: block; font-size: 13.5px; font-weight: 700; color: var(--navy); }
+.bk-check-row.is-done .bk-check-label { text-decoration: line-through; color: var(--text-muted); }
+.bk-check-detail { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+/* Reconciliation */
+.bk-dep { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+.bk-dep.is-open { border-color: var(--navy); box-shadow: 0 0 0 3px rgba(1,41,74,.06); }
+.bk-dep-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bk-dep-amt { font-family: var(--font-head); font-size: 17px; font-weight: 800; color: var(--navy); }
+.bk-dep-meta { font-size: 12px; color: var(--text-muted); }
+.bk-dep-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bk-match { border-top: 1px solid var(--warm-gray); margin-top: 10px; padding-top: 8px; }
+.bk-match-row {
+    display: grid; grid-template-columns: 20px minmax(0, 1.4fr) minmax(0, 1.6fr) auto;
+    align-items: center; gap: 8px; padding: 6px 2px; font-size: 13px; cursor: pointer;
+}
+.bk-match-row:hover { background: var(--linen); }
+.bk-match-name { font-weight: 700; color: var(--navy); }
+.bk-match-meta { color: var(--text-muted); font-size: 12px; }
+.bk-match-amt { text-align: right; font-weight: 700; color: var(--green-text); font-variant-numeric: tabular-nums; }
+.bk-match-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--warm-gray); }
+.bk-match-total { font-size: 13px; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.bk-match-total.is-exact { color: var(--green-text); }
+.bk-pay-row {
+    display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.4fr) minmax(0, 1fr) auto;
+    align-items: center; gap: 8px; padding: 8px 2px; font-size: 13px; border-bottom: 1px solid var(--warm-gray);
+}
+.bk-pay-row:last-child { border-bottom: none; }
+.bk-pay-name { font-weight: 700; color: var(--navy); }
+.bk-pay-meta, .bk-pay-dep { color: var(--text-muted); font-size: 12px; }
+.bk-pay-amt { text-align: right; font-weight: 700; color: var(--green-text); font-variant-numeric: tabular-nums; }
+.bk-tag { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--mustard-dark); background: var(--sun-pale); border-radius: 999px; padding: 1px 6px; }
+
+/* GL export */
+.bk-gl-table { max-width: 460px; }
+.bk-gl-net td { font-weight: 800; color: var(--navy); border-top: 2px solid var(--border) !important; }
+
+/* Month-lock indicators — never let a frozen month look indistinguishable
+   from a live one; see admin-finance-bookkeeper.js _bkLockMonth(). */
+.bk-lock-dot { font-size: 10px; cursor: help; }
+.bk-lock-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--sun-pale); border: 1px solid var(--sun-lt); color: var(--mustard-dark);
+    border-radius: 999px; padding: 3px 10px; font-size: 11.5px; font-weight: 800;
+    white-space: nowrap; cursor: help;
+}
+
+@media (max-width: 900px) {
+    .bk-room-grid-wrap { grid-template-columns: minmax(0, 1fr); }
+    .bk-bar-row { flex-wrap: wrap; row-gap: 4px; }
+    .bk-bar-pair { flex-basis: 100%; }
+    .bk-match-row, .bk-pay-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .bk-match-meta, .bk-pay-meta { grid-column: 1 / -1; }
+}
+
+/* ============================================================
+   STAFF TAB CONSOLIDATION — design_handoff_staff, 2026-08-28
+   ------------------------------------------------------------
+   Sub-tab nav reuses .bk-nav/.bk-pill and .ap-seg/.ap-seg-btn (defined
+   above) as-is. What's new here: HR & Handbook's Policies list and
+   Write-ups cards, and the by-worker schedule pivot.
+   ============================================================ */
+
+/* Policies */
+.hr-policy-list { display: flex; flex-direction: column; gap: 8px; }
+.hr-policy-row {
+    display: flex; align-items: center; gap: 12px;
+    background: #fff; border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px;
+}
+.hr-policy-icon { font-size: 22px; flex-shrink: 0; }
+.hr-policy-main { flex: 1; min-width: 0; }
+.hr-policy-title { font-weight: 700; color: var(--navy); font-size: 14.5px; }
+.hr-policy-updated { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+.hr-policy-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.hr-policy-add {
+    margin-top: 14px; padding: 14px; background: var(--warm-gray, #F5F0E4);
+    border: 1px solid var(--border); border-radius: 10px;
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+}
+
+/* Write-ups */
+.wu-compose {
+    margin-bottom: 16px; padding: 14px; background: var(--warm-gray, #F5F0E4);
+    border: 1px solid var(--border); border-radius: 10px;
+    display: flex; flex-wrap: wrap; gap: 12px;
+}
+.wu-compose .fm-field-grow { flex: 1 1 100%; }
+.wu-list { display: flex; flex-direction: column; gap: 12px; }
+.wu-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px;
+}
+.wu-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.wu-name { font-weight: 700; color: var(--navy); font-size: 14.5px; }
+.wu-kind-chip {
+    background: var(--tang-pale); color: var(--ap-deep-tang);
+    border-radius: 999px; padding: 3px 10px; font-size: 11.5px; font-weight: 800;
+}
+.wu-date { margin-left: auto; color: var(--text-muted); font-size: 12.5px; }
+.wu-note { font-size: 13.5px; color: var(--text); margin-bottom: 10px; }
+.wu-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.wu-issuer { font-size: 12px; color: var(--text-muted); }
+.wu-status {
+    border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 800;
+    border: none; white-space: nowrap;
+}
+.wu-status-pending { background: var(--tang-pale); color: var(--ap-deep-tang); cursor: pointer; }
+.wu-status-pending:hover { filter: brightness(0.96); }
+.wu-status-signed { background: var(--green-pale); color: var(--green-text); }
+
+/* Build Staff Schedule: "By worker" pivot table */
+.sched-by-worker-table td { font-size: 12.5px; line-height: 1.5; }

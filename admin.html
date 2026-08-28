@@ -22,8 +22,8 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=16">
-    <link rel="stylesheet" href="css/admin-portal.css?v=1">
+    <link rel="stylesheet" href="css/admin.css?v=30">
+    <link rel="stylesheet" href="css/admin-portal.css?v=7">
 </head>
 <body class="admin-body">
 
@@ -31,15 +31,44 @@
          Hidden on window 'load' with a fallback timeout so it never sticks
          around if something else stalls. -->
     <div id="mdoSplash" class="mdo-splash" aria-hidden="true">
-        <img src="/images/logo/splash/splash-admin.svg" alt="" width="1290" height="2796">
+        <div class="mdo-splash-top">
+            <img class="mdo-splash-wordmark" src="/images/logo/myMDO_admin_wordmark_light.png" alt="">
+            <p class="mdo-splash-tagline">Welcome.<span class="t-div">|</span><span class="t-blue">Receive.</span><span class="t-div">|</span>Grow.<span class="t-div">|</span><span class="t-gold">Go.</span></p>
+        </div>
+        <div class="mdo-splash-silhouette" aria-hidden="true">
+            <img src="/images/logo/splash-church-pale.png" alt="">
+        </div>
+        <div class="mdo-splash-footer">
+            <div class="mdo-splash-spinner" id="mdoSplashSpinner"></div>
+            <svg id="mdoSplashCheck" width="34" height="34" viewBox="0 0 34 34" hidden>
+                <circle cx="17" cy="17" r="17" fill="#F5B731"/>
+                <path d="M9.5 17.5l5 5 10-11" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+            <p id="mdoSplashText">Loading <strong>myMDO</strong> Admin&hellip;</p>
+        </div>
     </div>
     <script>
       (function () {
         var el = document.getElementById('mdoSplash');
         if (!el) return;
+        var textEl = document.getElementById('mdoSplashText');
+        var spinnerEl = document.getElementById('mdoSplashSpinner');
+        var checkEl = document.getElementById('mdoSplashCheck');
+        var almostTimer = setTimeout(function () {
+          textEl.innerHTML = 'Almost there&hellip;';
+        }, 1400);
+        var hidden = false;
         function hide() {
-          el.classList.add('mdo-splash-hidden');
-          setTimeout(function () { el.remove(); }, 400);
+          if (hidden) return;
+          hidden = true;
+          clearTimeout(almostTimer);
+          spinnerEl.hidden = true;
+          checkEl.hidden = false;
+          textEl.textContent = 'Welcome!';
+          setTimeout(function () {
+            el.classList.add('mdo-splash-hidden');
+            setTimeout(function () { el.remove(); }, 400);
+          }, 450);
         }
         if (document.readyState === 'complete') hide();
         else window.addEventListener('load', hide);
@@ -47,10 +76,99 @@
       })();
     </script>
 
+    <!-- Onboarding carousel: shown once per browser, before the login card. -->
+    <div id="mdoOnboard" class="mdo-onboard mdo-onboard-hidden" aria-hidden="true">
+        <div class="mdo-onboard-slides">
+            <div class="mdo-onboard-slide is-active">
+                <img class="mdo-onboard-scene" src="/images/logo/onboarding-scene.png" alt="">
+                <h2>All in one place</h2>
+                <p>Tools for our team. Updates for you. A better day for your child.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--clockin"><img src="/images/logo/icon-clockin-icon.png" alt=""></div>
+                <h2>Clock In with Ease</h2>
+                <p>Quick and simple time tracking for staff on the go.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--staff"><img src="/images/logo/icon-staff-icon.png" alt=""></div>
+                <h2>Support Your Team</h2>
+                <p>Everything staff need to manage their day and care for kids.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--admin"><img src="/images/logo/icon-admin-icon.png" alt=""></div>
+                <h2>Secure &amp; Reliable</h2>
+                <p>Secure access for administrators to manage and oversee.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--parent"><img src="/images/logo/icon-parent-icon.png" alt=""></div>
+                <h2>Stay Connected</h2>
+                <p>Stay connected with your child's day, updates, and important info.</p>
+            </div>
+        </div>
+        <div class="mdo-onboard-bottom">
+            <div class="mdo-onboard-dots" id="mdoOnboardDots"></div>
+            <div class="mdo-onboard-actions">
+                <button type="button" class="mdo-onboard-skip" id="mdoOnboardSkip">Skip</button>
+                <button type="button" class="mdo-onboard-next" id="mdoOnboardNext">Next</button>
+            </div>
+        </div>
+    </div>
+    <script>
+      (function () {
+        var KEY = 'mdoOnboardSeen_admin';
+        var el = document.getElementById('mdoOnboard');
+        if (!el) return;
+        var seen = false;
+        try { seen = !!localStorage.getItem(KEY); } catch (e) {}
+        if (seen) { el.remove(); return; }
+        var slides = Array.prototype.slice.call(el.querySelectorAll('.mdo-onboard-slide'));
+        var dotsWrap = document.getElementById('mdoOnboardDots');
+        var nextBtn = document.getElementById('mdoOnboardNext');
+        var skipBtn = document.getElementById('mdoOnboardSkip');
+        var idx = 0;
+        slides.forEach(function (_, i) {
+          var d = document.createElement('span');
+          if (i === 0) d.className = 'is-active';
+          dotsWrap.appendChild(d);
+        });
+        var dots = Array.prototype.slice.call(dotsWrap.children);
+        function render() {
+          slides.forEach(function (s, i) { s.classList.toggle('is-active', i === idx); });
+          dots.forEach(function (d, i) { d.classList.toggle('is-active', i === idx); });
+          nextBtn.textContent = idx === slides.length - 1 ? "Let's get started" : 'Next';
+        }
+        function finish() {
+          try { localStorage.setItem(KEY, '1'); } catch (e) {}
+          el.classList.add('mdo-onboard-hidden');
+          setTimeout(function () { el.remove(); }, 350);
+        }
+        nextBtn.addEventListener('click', function () {
+          if (idx === slides.length - 1) { finish(); return; }
+          idx++; render();
+        });
+        skipBtn.addEventListener('click', finish);
+        render();
+        function reveal() { el.classList.remove('mdo-onboard-hidden'); }
+        var splash = document.getElementById('mdoSplash');
+        if (splash) {
+          var t = setTimeout(reveal, 900);
+          splash.addEventListener('transitionend', function () { clearTimeout(t); reveal(); }, { once: true });
+        } else {
+          reveal();
+        }
+      })();
+    </script>
+
     <!-- Login Screen -->
     <div id="loginScreen" class="login-screen">
         <div class="login-card">
             <img src="/images/logo/myMDO_admin_wordmark_light.png" alt="myMDO Admin" style="height:80px;display:block;margin:0 auto 28px;">
+            <h1 class="sr-only">Admin Login</h1>
+            <div class="mdo-signin-badge mdo-signin-badge--admin">
+                <img src="/images/logo/icon-admin-icon.png" alt="">
+                <p class="mdo-signin-app">Admin</p>
+                <p class="mdo-signin-sub">Sign in to your account</p>
+            </div>
             <form id="loginForm" autocomplete="on">
             <div class="form-group">
                 <label for="adminEmail">Email</label>
@@ -60,11 +178,12 @@
                 <label for="adminPassword">Password</label>
                 <input type="password" id="adminPassword" placeholder="Password" autocomplete="current-password">
             </div>
-            <button id="loginBtn" type="button" class="btn-primary">Login</button>
+            <button id="loginBtn" type="button" class="btn-primary mdo-signin-btn--admin">Login</button>
             <p id="loginError" class="login-error hidden"></p>
             <p style="margin-top:14px"><a href="#" id="forgotPasswordLink" style="color:#01294A;text-decoration:underline;cursor:pointer;font-size:.9em">Forgot password?</a></p>
             <p id="forgotPasswordStatus" class="login-error hidden" style="color:#2e7d32"></p>
             </form>
+            <p class="mdo-signin-footer">Timothy Lutheran Church</p>
         </div>
     </div>
 
@@ -116,6 +235,25 @@
         <!-- ── Tab: Daily ─────────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-daily">
 
+            <!-- Print Attendance — a blank paper sign-in/sign-out sheet, one
+                 per room, for a parent or staff member to hand-sign at drop-off
+                 and pickup. Distinct from Classroom Roster's print grid (a
+                 reference list, no signature lines) and from the Attendance
+                 Board's live In/Out marking (digital, not a paper record). -->
+            <section class="admin-section" id="printAttendanceSection">
+                <h2>🖨️ Print Attendance</h2>
+                <div class="pa-controls">
+                    <div class="pa-field">
+                        <label for="paRoomFilter">Room</label>
+                        <select id="paRoomFilter">
+                            <option value="">All rooms</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn-primary pa-print-btn" id="paPrintBtn">&#128438; Print</button>
+                </div>
+                <div id="paPreview"><p class="empty-hint">Loading…</p></div>
+            </section>
+
             <!-- Classroom Roster (most-used — at top) -->
             <section class="admin-section collapsible-section" id="dailyRosterSection">
                 <h2>📋 Classroom Roster</h2>
@@ -157,35 +295,100 @@
                 </div>
             </section>
 
-            <!-- Capacity Overview — its own tool in the portal shell, so it
-                 needs an id for AP_TOOLS to point at. -->
-            <section class="capacity-section" id="capacityOverviewSection">
-                <div class="capacity-header">
-                    <h2>Capacity Overview</h2>
-                    <div class="capacity-month-nav">
-                        <button id="capPrevMonth" class="btn-ghost" title="Previous month">&#8592;</button>
-                        <select id="capMonthSelect" class="cap-month-select"></select>
-                        <button id="capNextMonth" class="btn-ghost" title="Next month">&#8594;</button>
-                    </div>
-                </div>
-                <div id="capacityGrid"></div>
-            </section>
+            <!-- Enrollment & Capacity (Classroom Tab Redesign, 2026-08-27) —
+                 replaces Capacity Overview's month grid, Room Schedule
+                 Planner's weekly AM/PM view, and Planning's FTE/seat-day Room
+                 Capacity Overview with one Day/Week/Month/FTE view switcher.
+                 Same underlying registrations, one screen instead of three
+                 that could disagree. Week/Month/FTE sub-views are the
+                 original tools' own markup relocated here unchanged — their
+                 render functions (renderRoomSchedule/renderCapacityOverview/
+                 renderCapacityOverviewTool) still target the same element
+                 ids, just from a new home. See js/admin/admin-enrollment-capacity.js. -->
+            <section class="admin-section" id="enrollmentCapacitySection">
+                <h2>📆 Enrollment &amp; Capacity</h2>
+                <p class="section-desc">How full each room is — by day, week, month, or FTE/seat-day occupancy. Click any day to move a child.</p>
 
-            <!-- Room Schedule Planner -->
-            <section class="admin-section collapsible-section" id="roomSchedSection">
-                <h2>📅 Room Schedule Planner</h2>
-                <p class="section-desc">Weekly enrollment by classroom — shows how full each room is for each day. AM = all enrolled children, PM = full-day only.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="roomSchedWeekOf">Week of (Monday)</label>
-                        <input type="date" id="roomSchedWeekOf">
+                <div class="ec-view-switch" role="tablist" aria-label="View">
+                    <button type="button" class="ec-pill is-active" data-ec-view="day" role="tab" aria-selected="true">Day</button>
+                    <button type="button" class="ec-pill" data-ec-view="week" role="tab" aria-selected="false">Week</button>
+                    <button type="button" class="ec-pill" data-ec-view="month" role="tab" aria-selected="false">Month</button>
+                    <button type="button" class="ec-pill" data-ec-view="fte" role="tab" aria-selected="false">FTE / Seat-Day</button>
+                    <button type="button" class="ec-pill" data-ec-view="overview" role="tab" aria-selected="false">Overview</button>
+                </div>
+
+                <!-- Day -->
+                <div class="ec-subview" id="ecDayView">
+                    <div class="roster-controls">
+                        <div class="roster-btns ec-day-nav">
+                            <button type="button" id="ecDayPrev" class="btn-ghost" title="Previous day">&#8592;</button>
+                            <input type="date" id="ecDayDate">
+                            <button type="button" id="ecDayNext" class="btn-ghost" title="Next day">&#8594;</button>
+                        </div>
                     </div>
-                    <div class="roster-btns">
-                        <button id="viewRoomSchedBtn" class="btn-secondary">View Week</button>
+                    <div id="ecDayContent"><p class="empty-hint">Loading…</p></div>
+                </div>
+
+                <!-- Week -->
+                <div class="ec-subview hidden" id="ecWeekView">
+                    <div class="roster-controls">
+                        <div class="roster-field">
+                            <label for="roomSchedWeekOf">Week of (Monday)</label>
+                            <input type="date" id="roomSchedWeekOf">
+                        </div>
+                        <div class="roster-btns">
+                            <button id="viewRoomSchedBtn" class="btn-secondary">View Week</button>
+                        </div>
+                    </div>
+                    <div id="roomSchedContent">
+                        <p class="empty-hint">Select a week above and click View Week.</p>
                     </div>
                 </div>
-                <div id="roomSchedContent">
-                    <p class="empty-hint">Select a week above and click View Week.</p>
+
+                <!-- Month -->
+                <div class="ec-subview hidden" id="ecMonthView">
+                    <div class="capacity-header">
+                        <div class="capacity-month-nav">
+                            <button id="capPrevMonth" class="btn-ghost" title="Previous month">&#8592;</button>
+                            <select id="capMonthSelect" class="cap-month-select"></select>
+                            <button id="capNextMonth" class="btn-ghost" title="Next month">&#8594;</button>
+                        </div>
+                    </div>
+                    <div id="capacityGrid"></div>
+                </div>
+
+                <!-- FTE / Seat-Day -->
+                <div class="ec-subview hidden" id="ecFteView">
+                    <p class="section-desc">Enrollment, FTE, and seat-day occupancy — the same underlying data as the Month view, aggregated for the month. Click a room to see the same month broken out by weekday. This view's month picker is independent of Month view's.</p>
+                    <div class="capacity-header">
+                        <div class="capacity-month-nav">
+                            <button id="ecFtePrevMonth" class="btn-ghost" title="Previous month">&#8592;</button>
+                            <select id="ecFteMonthSelect" class="cap-month-select"></select>
+                            <button id="ecFteNextMonth" class="btn-ghost" title="Next month">&#8594;</button>
+                        </div>
+                    </div>
+                    <div id="capacityOverviewContent">
+                        <p class="empty-hint">Loading…</p>
+                    </div>
+                </div>
+
+                <!-- Overview — the original per-room % utilization cards. Click
+                     a card to open that room's own month calendar; click a day
+                     in that calendar to move a child, same as the old Capacity
+                     Overview always did. This view's month picker is
+                     independent of Month view's and FTE's. -->
+                <div class="ec-subview hidden" id="ecOverviewView">
+                    <p class="section-desc">Per-room % utilization for the month. Click a card to open that room's calendar and see who's booked on a given day.</p>
+                    <div class="capacity-header">
+                        <div class="capacity-month-nav">
+                            <button id="ecOverviewPrevMonth" class="btn-ghost" title="Previous month">&#8592;</button>
+                            <select id="ecOverviewMonthSelect" class="cap-month-select"></select>
+                            <button id="ecOverviewNextMonth" class="btn-ghost" title="Next month">&#8594;</button>
+                        </div>
+                    </div>
+                    <div id="ecOverviewContent">
+                        <p class="empty-hint">Loading…</p>
+                    </div>
                 </div>
             </section>
 
@@ -195,7 +398,7 @@
         <div class="tab-pane hidden" id="tab-registrations">
 
             <!-- Missing Care Calendar Report -->
-            <section class="admin-section collapsible-section" id="missingCalendarSection">
+            <section class="admin-section" id="missingCalendarSection">
                 <h2>⚠️ Missing Care Calendar Report</h2>
                 <p class="section-desc">Shows which active children do not have a care calendar (registration) submitted for the selected month. Use this after the registration window closes to follow up with families who haven't registered.</p>
                 <div class="roster-controls">
@@ -213,7 +416,7 @@
                 </div>
             </section>
 
-            <section class="table-section collapsible-section" id="allRegistrationsSection">
+            <section class="table-section" id="allRegistrationsSection">
                 <h2 style="display:flex;align-items:center;flex:1;min-width:0">
                     <span style="flex:1">All Registrations</span>
                     <button id="adminNewRegBtn" class="btn-primary"
@@ -222,7 +425,7 @@
                     </button>
                 </h2>
                 <div class="filters">
-                    <input type="text" id="searchInput" placeholder="Search by parent, child, or email…">
+                    <input type="text" id="searchInput" placeholder="Search by parent, child, or email…" autocomplete="off">
                     <select id="roomFilter">
                         <option value="">All rooms</option>
                     </select>
@@ -231,25 +434,18 @@
                     </select>
                 </div>
                 <div class="table-wrapper">
-                    <table id="regTable">
+                    <table id="regTable" class="rc-table">
                         <thead>
                             <tr>
-                                <th data-col="submitted" class="sortable">Submitted</th>
-                                <th>Entered By</th>
                                 <th data-col="parent" class="sortable">Parent</th>
-                                <th data-col="email" class="sortable">Email</th>
-                                <th>Phone</th>
-                                <th data-col="child" class="sortable">Child</th>
-                                <th data-col="room" class="sortable">Room</th>
-                                <th>Dates</th>
-                                <th data-col="tally" class="sortable">Full/Half</th>
+                                <th data-col="child" class="sortable">Child / Room</th>
+                                <th>Pattern</th>
                                 <th data-col="bill" class="sortable">Bill</th>
-                                <th>Discount</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="regTableBody">
-                            <tr><td colspan="12" class="loading-cell">Loading registrations…</td></tr>
+                            <tr><td colspan="5" class="loading-cell">Loading registrations…</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -266,23 +462,16 @@
                  told yet. Registered in AP_TOOLS as `incidents`; without that
                  entry this section would be unreachable. -->
 
-            <!-- Announcement composer (design handoff `1h`). Write once, and
-                 see exactly who gets it and where it lands. -->
-            <section class="admin-section collapsible-section" id="announcementsSection">
-                <h2>📣 Announcements</h2>
-                <div id="announcementsBody"></div>
-            </section>
-
             <!-- Live attendance board (design handoff `1d`). The office mirror
                  of the teachers' head count — same RPC body, so the two screens
                  cannot disagree about who is in the building. A missing-child
                  alert lights up here at the same moment it hits every phone. -->
-            <section class="admin-section collapsible-section" id="attendanceBoardSection">
+            <section class="admin-section" id="attendanceBoardSection">
                 <h2>🚸 Attendance Board</h2>
                 <div id="attendanceBoardBody"></div>
             </section>
 
-            <section class="admin-section collapsible-section" id="incidentsSection">
+            <section class="admin-section" id="incidentsSection">
                 <h2>🩹 Incident Reports</h2>
                 <div id="incidentsBody"></div>
             </section>
@@ -290,26 +479,21 @@
             <!-- Fire drills. The record is written from the staff app's Count
                  tab; this is where it is read, and where the "it has been N
                  days" nag lives. -->
-            <section class="admin-section collapsible-section" id="fireDrillsSection">
+            <section class="admin-section" id="fireDrillsSection">
                 <h2>🔥 Fire Drills</h2>
                 <div id="fireDrillsBody"></div>
             </section>
 
-            <!-- ⚠️ Staff injuries, NOT child incidents. Nothing here is ever
-                 visible to a family — separate table, no parent policy. -->
-            <section class="admin-section collapsible-section" id="staffInjuriesSection">
-                <h2>🚑 Staff Injury Reports</h2>
-                <div id="staffInjuriesBody"></div>
-            </section>
+            <!-- Staff Injury Reports and Clock-In Integrity moved to
+                 Staff → HR & Handbook / Staff → Payroll → Time Clock
+                 (design_handoff_staff, 2026-08-28) — this is also the fix
+                 for a real bug: both carried pane:'staffing' in AP_TOOLS
+                 while living here in #tab-families, which apShowSection()
+                 hid whenever either tool was opened, leaving them
+                 permanently blank. See the AP_TOOLS comment in
+                 admin-portal.js. -->
 
-            <!-- Measures buddy punching rather than blocking it. Nothing on
-                 this screen refuses a clock-in. -->
-            <section class="admin-section collapsible-section" id="clockIntegritySection">
-                <h2>📱 Clock-In Integrity</h2>
-                <div id="clockIntegrityBody"></div>
-            </section>
-
-            <section class="admin-section collapsible-section" id="familiesSection">
+            <section class="admin-section" id="familiesSection">
                 <h2>👨‍👩‍👧 Family Directory</h2>
                 <p class="section-desc">Browse and manage the family roster used for parent look-up. You can force-assign a child to a specific room or set per-child discounts inline.</p>
 
@@ -351,49 +535,96 @@
         </div><!-- /#tab-families -->
 
         <!-- ── Tab: Messages ─────────────────────────────────── -->
-        <!-- Two separate tools, deliberately not merged into one inbox: different
-             tables, different lifecycles (see the AP_TOOLS comment above `threads`
-             and `msgHistory`). Both live under this one tab, with distinct names,
-             so nobody mistakes one empty inbox for the other again. -->
+        <!-- One working inbox, merging family threads (message_threads), the
+             Contact Us form (messages) and sent announcements into a single
+             feed. Replaces the old three-surface split (design handoff
+             design_handoff_messages_settings/Messages.dc.html) — see
+             js/admin/admin-messages-unified.js. Registered in AP_TOOLS as the
+             tab's only tool; there is no dashboard/tool split here. -->
         <div class="tab-pane hidden" id="tab-messages">
-
-            <!-- Parent messaging (Phase 2) — two-way conversation with enrolled
-                 families. Registered in AP_TOOLS as `threads`; without that entry
-                 this section is unreachable. -->
-            <section class="admin-section collapsible-section" id="threadsSection">
-                <h2>💬 Family Conversations</h2>
-                <div id="threadsBody"></div>
-            </section>
-
-            <section class="admin-section collapsible-section" id="messagesSection">
-                <h2>📮 Contact Us Messages</h2>
-                <p class="section-desc">One-off messages sent by parents via the Contact Us button on the registration portal.</p>
-                <div class="messages-header">
-                    <button id="refreshMessagesBtn" class="btn-secondary">&#8635; Refresh</button>
-                    <button id="toggleArchivedBtn" class="btn-secondary">Show Archived</button>
-                    <span id="unreadBadge" class="unread-badge hidden"></span>
+            <section class="admin-section" id="messagesUnifiedSection">
+                <!-- The notify toggle used to live inside this h2. The shell
+                     no longer prints its own duplicate header for any tool
+                     (see apRenderDetail() in admin-portal.js), so this h2 is
+                     the only heading Messages shows — moved the toggle to its
+                     own row below rather than crowding it into the title. -->
+                <h2>💬 Messages</h2>
+                <div class="msg-toolbar-top">
+                    <label id="apPushToggleWrap" class="msg-notify-toggle">
+                        <input type="checkbox" id="apPushToggle">
+                        🔔 Notify me of new messages &amp; incidents
+                        <span id="apPushStatus" class="rates-status"></span>
+                    </label>
                 </div>
-                <div id="messagesList">
-                    <p class="empty-hint">Loading messages…</p>
-                </div>
-            </section>
 
+                <div class="msg-kpis" id="msgKpis"></div>
+
+                <div class="msg-toolbar">
+                    <div class="ap-seg" id="msgFilterSeg"></div>
+                    <input type="text" id="msgSearch" placeholder="Search by name…" class="family-search-input" style="flex:1;min-width:160px" autocomplete="off">
+                    <button type="button" id="msgOpenComposeBtn" class="btn-secondary">✎ Message a family</button>
+                    <button type="button" id="msgOpenAnnounceBtn" class="btn-primary">📣 New announcement</button>
+                </div>
+
+                <div id="msgComposeWrap" class="msg-compose-panel hidden">
+                    <div class="msg-compose-head">
+                        <h3>Message a family</h3>
+                        <button type="button" id="msgComposeCloseBtn" class="btn-ghost" aria-label="Close">✕</button>
+                    </div>
+                    <select id="msgComposeFamily" class="an-input"></select>
+                    <textarea id="msgComposeBody" rows="3" placeholder="Write your message…" class="an-input"></textarea>
+                    <button type="button" id="msgComposeSendBtn" class="btn-primary">Send</button>
+                </div>
+
+                <div id="msgAnnounceWrap" class="msg-compose-panel msg-compose-announce hidden">
+                    <div class="msg-compose-head">
+                        <h3>New announcement</h3>
+                        <button type="button" id="msgAnnounceCloseBtn" class="btn-ghost" aria-label="Close">✕</button>
+                    </div>
+                    <!-- Embeds the existing composer as-is (admin-announcements.js
+                         renders into #announcementsBody unchanged) — only the
+                         container moved. -->
+                    <div id="announcementsBody"></div>
+                </div>
+
+                <div id="msgFeed" class="msg-feed"></div>
+            </section>
         </div><!-- /#tab-messages -->
 
         <!-- ── Tab: Waitlist ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-waitlist">
 
-            <!-- Waitlist & Capacity Planner — one shared allocation drives all
-                 three views (Waitlist Queue / Capacity Planner → Grid / Board).
-                 See renderWaitlistPlanner() in js/admin/admin-waitlist.js. -->
+            <!-- Waitlist & Capacity Planner — one shared allocation drives every
+                 view (Waitlist Queue / Capacity Planner → Grid or Board / Moving),
+                 plus the demand-by-month and age-out rollups inline in the Grid.
+                 See renderWaitlistPlanner() in js/admin/admin-waitlist.js.
+
+                 No static h2/p here on purpose — a concurrent session (same
+                 day, same live bug, same screenshot) removed the shell's own
+                 name+blurb tile entirely (see apRenderDetail()'s comment in
+                 admin-portal.js), which means every OTHER section now relies
+                 on its own <h2>/<p> as the one real header. This section is
+                 the exception: renderWaitlistPlanner() already renders a real
+                 header of its own (icon, name, subtitle, tab pills) into
+                 #wlpRoot below, so a static h2/p here would still duplicate
+                 against THAT even with the shell tile gone — left out rather
+                 than added back. -->
             <section class="admin-section" id="waitlistPlannerSection">
-                <h2>🗂️ Waitlist &amp; Capacity Planner</h2>
-                <p class="section-desc">One shared allocation drives all three views — Waitlist Queue, Capacity Planner grid, and Board. The queue is first-come, first-served by inquiry date.</p>
                 <div id="wlpRoot" style="margin-bottom:20px;"><p class="empty-hint">Loading…</p></div>
             </section>
 
-            <!-- Waitlist inquiry link + notify email -->
-            <section class="admin-section collapsible-section" id="wlNotifySection">
+            <!-- Waitlist inquiry link + notify email. Not collapsible-section:
+                 this is an AP_TOOLS Detail page (one tool, one page, nothing
+                 stacked below it to declutter), and the shell already forces
+                 collapsible-body open anyway (css/admin-portal.css ".ap-on
+                 .admin-section.is-collapsed .collapsible-body" — collapsing
+                 does nothing here). Keeping the class only added a
+                 collapse-toggle button into the <h2>, which made apShowSection()
+                 treat the heading as "has a real control" and skip hiding it —
+                 so the section's own h2 stayed visible under the shell's
+                 identical name+blurb header. See roomCapacityOverviewSection
+                 below for the screenshot-confirmed case. -->
+            <section class="admin-section" id="wlNotifySection">
                 <h2>📨 Waitlist Inquiries</h2>
                 <div class="wl-notify-panel">
                     <div class="wl-notify-row">
@@ -407,7 +638,7 @@
                         </div>
                         <div class="wl-notify-field">
                             <label>Notify This Email on New Inquiries</label>
-                            <input type="email" id="wlNotifyEmail" placeholder="director@timothystl.org">
+                            <input type="email" id="wlNotifyEmail" placeholder="director@timothystl.org" autocomplete="off">
                         </div>
                     </div>
                     <div class="wl-notify-field">
@@ -474,8 +705,9 @@
                 </div>
             </div>
 
-            <!-- Waitlist Import -->
-            <section class="admin-section collapsible-section" id="wlImportSection">
+            <!-- Waitlist Import. Not collapsible-section — see wlNotifySection's
+                 comment above for why. -->
+            <section class="admin-section" id="wlImportSection">
                 <h2>📥 Import Waitlist from File</h2>
                 <p class="section-desc">Upload a CSV or Excel file to bulk-import waitlist applications. Required columns: <strong>Parent Name</strong>, <strong>Email</strong>, <strong>Child Name</strong>, <strong>Desired Start Date</strong>. Optional: Phone, Child DOB, Days Requested, Day Type, Notes.</p>
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
@@ -485,87 +717,54 @@
                 <div id="wlImportPreview"></div>
             </section>
 
-            <!-- Demand Report (moved from Reports tab) -->
-            <section class="admin-section collapsible-section" id="waitlistDemandSection">
-                <h2>📊 Waitlist Demand by Month</h2>
-                <p class="section-desc">Active applications by room and desired start month — shows real unmet demand to guide capacity decisions.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateWaitlistBtn" class="btn-secondary">Generate Report</button>
-                </div>
-                <div id="waitlistContent">
-                    <p class="empty-hint">Click Generate Report to view waitlist demand.</p>
+            <!-- Room Capacity Overview — restored 2026-08-28. The Classroom
+                 Tab Redesign (2026-08-27) had retired this section in favor
+                 of the same content living only as the FTE/Seat-Day sub-view
+                 of Classrooms → Planning → Enrollment & Capacity, reasoning
+                 the two were redundant. design_handoff_planning_market's own
+                 sidebar mock (screenshots 01/07-state.png) shows it as its
+                 own tool under Planning → Enrollment Outlook, so it is back
+                 here too — same renderCapacityOverviewTool() (admin-reports.js),
+                 second mount point, own container/drawer ids
+                 (id="roomCapacityOverviewContent", idPrefix "pcapov") so it
+                 can't collide with the Classrooms mount's ids. See
+                 apOnToolOpened()'s 'capacityOverview' case in admin-portal.js.
+
+                 ⚠️ Also not collapsible-section, unlike the first cut of this
+                 restore. Screenshotted live 2026-08-28: the heading and
+                 description rendered TWICE — the shell's own name+blurb
+                 header, then this section's own <h2>+.section-desc directly
+                 below it, unhidden. Root cause: apShowSection() (admin-portal.js)
+                 only hides a section's own <h2> when it "carries no real
+                 control" — deliberately, so Care Calendar's inline
+                 "New Registration" button stays reachable — but
+                 setupCollapsibles() (admin-settings.js) injects a
+                 collapse-toggle <button> into every .collapsible-section's
+                 <h2>, which trips that same check and keeps the duplicate
+                 visible. That toggle was never doing anything here anyway:
+                 css/admin-portal.css's ".ap-on .admin-section.is-collapsed
+                 .collapsible-body { display: block !important; }" forces the
+                 body open inside this shell regardless. Dropping the class
+                 removed a dead control, but the underlying duplication (the
+                 shell's own name+blurb tile sitting on top of every section's
+                 own heading) was still there for sections whose <h2> DID hide
+                 correctly — the section's .section-desc paragraph right below
+                 it was never covered by that hiding logic at all. Fixed for
+                 good 2026-08-28 by removing the shell's tile entirely
+                 (apRenderDetail() no longer renders anything into
+                 #apDetailHead) rather than continuing to patch which parts of
+                 a section's own heading get hidden underneath it. -->
+            <section class="admin-section" id="roomCapacityOverviewSection">
+                <h2>📆 Room Capacity Overview</h2>
+                <p class="section-desc">Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as the three screens it replaces. Click a room to see the same month broken out by weekday.</p>
+                <div id="roomCapacityOverviewContent">
+                    <p class="empty-hint">Loading…</p>
                 </div>
             </section>
 
-            <!-- Enrollment Trends -->
-            <section class="admin-section collapsible-section" id="enrollmentTrendsSection">
-                <h2>📈 Enrollment Trends</h2>
-                <p class="section-desc">Month-by-month enrollment count per room — useful for spotting growth patterns and planning ahead.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateTrendsBtn" class="btn-secondary">Generate Trends</button>
-                    <button id="exportTrendsBtn" class="btn-primary">&#8595; Export Excel</button>
-                </div>
-                <div id="trendsContent">
-                    <p class="empty-hint">Click Generate Trends to view enrollment history.</p>
-                </div>
-            </section>
-
-            <!-- Total Enrollment & FTE -->
-            <section class="admin-section collapsible-section" id="enrollmentFteSection">
-                <h2>📊 Total Enrollment &amp; FTE</h2>
-                <p class="section-desc">Monthly headcount and full-time-equivalent enrollment per room. FTE = full-day children &times; 1.0 + half-day children &times; 0.5.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generateFteBtn" class="btn-secondary">Generate Report</button>
-                </div>
-                <div id="enrollmentFteContent">
-                    <p class="empty-hint">Click Generate Report to view enrollment totals.</p>
-                </div>
-            </section>
-
-            <!-- Seat-Day Capacity Model -->
-            <section class="admin-section collapsible-section" id="seatDayCapacitySection">
-                <h2>🪑 Seat-Day Capacity Model</h2>
-                <p class="section-desc">Plans around occupied seats per day, not enrolled headcount — with flexible schedules, one seat can serve more than one child across a week. Active children ≈ average occupied seats/day &times; 5 &divide; average booked days/child.</p>
-                <div class="roster-btns" style="margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-                    <label style="font-weight:600">Room:
-                        <select id="seatDayRoomSel" style="margin-left:6px;padding:4px 8px">
-                            <option value="all">Full Center</option>
-                        </select>
-                    </label>
-                    <button id="generateSeatDayBtn" class="btn-secondary">Generate Report</button>
-                </div>
-                <div id="seatDayCapacityContent">
-                    <p class="empty-hint">Click Generate Report to view the seat-day capacity model.</p>
-                </div>
-            </section>
-
-            <!-- Demand Forecast -->
-            <section class="admin-section collapsible-section" id="forecastSection">
-                <h2>&#128200; Demand Forecast</h2>
-                <p class="section-desc">Projects children per room per day for the weeks ahead, from the same-weekday average and a four-week moving average. Shows what is already booked alongside it, so the booking still to come is visible. Converts bookings into expected attendance once attendance is being marked.</p>
-                <div class="roster-btns" style="margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-                    <label style="font-weight:600">Room:
-                        <select id="forecastRoomSel" style="margin-left:6px;padding:4px 8px">
-                            <option value="all">All rooms</option>
-                        </select>
-                    </label>
-                    <label style="font-weight:600" for="forecastWeeks">Horizon:
-                        <select id="forecastWeeks" style="margin-left:6px;padding:4px 8px">
-                            <option value="2">2 weeks</option>
-                            <option value="4" selected>4 weeks</option>
-                            <option value="8">8 weeks</option>
-                        </select>
-                    </label>
-                    <button id="generateForecastBtn" class="btn-secondary">Generate Forecast</button>
-                    <button id="exportForecastBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
-                </div>
-                <div id="forecastContent">
-                    <p class="empty-hint">Click Generate Forecast to project the weeks ahead.</p>
-                </div>
-            </section>
-
-            <!-- Ratio-Step / Next-Child Calculator -->
-            <section class="admin-section collapsible-section" id="ratioStepSection">
+            <!-- Ratio-Step / Next-Child Calculator. Not collapsible-section —
+                 see wlNotifySection's comment above for why. -->
+            <section class="admin-section" id="ratioStepSection">
                 <h2>&#9878;&#65039; Ratio Step &amp; Next Child</h2>
                 <p class="section-desc">Staffing moves in steps, not inches: a room needs one teacher per ratio block, so the child who crosses a boundary carries the whole cost of another teacher that day. Shows how much headroom each room has left, and what the next booking is really worth.</p>
                 <div class="roster-btns" style="margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
@@ -585,38 +784,6 @@
                 </div>
             </section>
 
-            <!-- Upcoming Room Promotions -->
-            <section class="admin-section collapsible-section" id="promotionsSection">
-                <h2>🎂 Upcoming Room Promotions</h2>
-                <p class="section-desc">Children aging out of their current room in the next 2 years, based on their birthday. Shows which days open up in the current room when they move up.</p>
-                <div class="roster-btns" style="margin-bottom:12px">
-                    <button id="generatePromotionsBtn" class="btn-secondary">Generate Report</button>
-                    <button id="exportPromotionsBtn" class="btn-primary" style="display:none;">&#8595; Export Excel</button>
-                    <button id="printPromotionsBtn" class="btn-secondary" style="display:none;">&#128438; Print</button>
-                </div>
-                <div id="promotionsContent">
-                    <p class="empty-hint">Click Generate Report to view upcoming promotions.</p>
-                </div>
-            </section>
-
-            <!-- Enrollment Planner -->
-            <section class="admin-section collapsible-section" id="enrollmentPlannerSection">
-                <h2>📅 Enrollment Planner</h2>
-                <p class="section-desc">Cross-reference open capacity with waitlist demand. Prioritize full-day and full-week placements to maximize space and revenue.</p>
-                <div class="roster-btns" style="margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-                    <label style="font-weight:600">Room:
-                        <select id="plannerRoomSel" style="margin-left:6px;padding:4px 8px"></select>
-                    </label>
-                    <label style="font-weight:600">Month:
-                        <select id="plannerMonthSel" style="margin-left:6px;padding:4px 8px"></select>
-                    </label>
-                    <button id="generatePlannerBtn" class="btn-secondary" onclick="generateEnrollmentPlanner()">Generate Planner</button>
-                </div>
-                <div id="plannerContent">
-                    <p class="empty-hint">Select a room and month, then click Generate Planner.</p>
-                </div>
-            </section>
-
             <!-- Manual Entry Modal -->
             <div id="adminWlOverlay" class="admin-wl-overlay hidden">
                 <div class="admin-wl-dialog">
@@ -627,11 +794,11 @@
                         <div class="admin-wl-section-label">Parent / Guardian</div>
                         <div class="admin-wl-row">
                             <label>Name <span class="req">*</span></label>
-                            <input type="text" id="adminWlParentName" required placeholder="Full name">
+                            <input type="text" id="adminWlParentName" required placeholder="Full name" autocomplete="off">
                         </div>
                         <div class="admin-wl-row">
                             <label>Email <span class="req">*</span></label>
-                            <input type="email" id="adminWlParentEmail" required placeholder="email@example.com">
+                            <input type="email" id="adminWlParentEmail" required placeholder="email@example.com" autocomplete="off">
                         </div>
                         <div class="admin-wl-row">
                             <label>Phone <span class="req">*</span></label>
@@ -641,7 +808,7 @@
                         <div class="admin-wl-section-label" style="margin-top:14px">Child</div>
                         <div class="admin-wl-row">
                             <label>Child's Name <span class="req">*</span></label>
-                            <input type="text" id="adminWlChildName" required placeholder="Child's full name">
+                            <input type="text" id="adminWlChildName" required placeholder="Child's full name" autocomplete="off">
                         </div>
                         <div class="admin-wl-row">
                             <label></label>
@@ -709,7 +876,7 @@
                         <div id="adminWlSibRow" class="hidden">
                             <div class="admin-wl-row">
                                 <label>Sibling's Name</label>
-                                <input type="text" id="adminWlSibName" placeholder="Sibling's name">
+                                <input type="text" id="adminWlSibName" placeholder="Sibling's name" autocomplete="off">
                             </div>
                             <div class="admin-wl-row">
                                 <label>Sibling's Room</label>
@@ -829,53 +996,70 @@
         <!-- ── Tab: Market Analysis ───────────────────────────── -->
         <div class="tab-pane hidden" id="tab-market">
 
-            <section class="admin-section collapsible-section" id="marketOverviewSection">
-                <h2>📈 Market Position</h2>
-                <p class="section-desc">Where every provider actually sits — flexibility vs. age range served. Positioning scores are an illustrative index, not a provider-reported metric.</p>
-                <div class="families-dir-controls">
-                    <button id="marketEditContextBtn" class="btn-ghost">Edit Stats &amp; Figures</button>
-                    <button id="marketRefreshBtn" class="btn-secondary">&#8635; Refresh</button>
+            <!-- Director Report (consolidation pass, design_handoff_planning_market,
+                 2026-08-27) — replaces the Market Position / Pricing Landscape / Cost
+                 & Wage Context tools with one segmented view. Every chart below is the
+                 exact same canvas/render function those three tools used (same ids),
+                 just re-homed under one section and switched by the .ap-seg control
+                 instead of three separate nav entries — see _switchDirectorReportSeg()
+                 in js/admin/admin-market.js. -->
+            <section class="admin-section" id="directorReportSection">
+                <div class="dr-head">
+                    <div>
+                        <h2>📈 Director Report <span class="dr-live-pill">&#9679; LIVE</span></h2>
+                        <p class="section-desc">Market position, pricing, and cost &amp; wage — auto-pulled from Comparable Providers, no re-typing into static tables.</p>
+                    </div>
+                    <div class="dr-head-actions">
+                        <button id="marketEditContextBtn" class="btn-ghost">Edit Stats &amp; Figures</button>
+                        <button id="marketRefreshBtn" class="btn-secondary">&#8635; Refresh</button>
+                        <button id="drExportPacketBtn" class="btn-primary">&#128424;&#65039; Export Packet</button>
+                    </div>
                 </div>
-                <div id="marketHeroStats" class="market-hero-stats"></div>
-                <div id="marketTypeLegend" class="market-type-legend"></div>
-                <div class="chart-box" style="height:420px;position:relative;margin-top:16px">
-                    <canvas id="marketPositionChart"></canvas>
-                </div>
-                <p id="marketPositioningNote" class="chart-note"></p>
-            </section>
 
-            <section class="admin-section collapsible-section" id="marketPricingSection">
-                <h2>💲 Pricing Landscape</h2>
-                <p class="section-desc">Weekly-equivalent rates and registration fees across comparable providers — drawn live from the table below.</p>
-                <div class="two-col">
-                    <div>
-                        <div class="chart-box" style="height:420px;position:relative">
-                            <canvas id="marketRateChart"></canvas>
-                        </div>
+                <div class="ap-seg" id="drSeg">
+                    <button type="button" class="ap-seg-btn is-on" data-dr-seg="position">Market Position</button>
+                    <button type="button" class="ap-seg-btn" data-dr-seg="pricing">Pricing Landscape</button>
+                    <button type="button" class="ap-seg-btn" data-dr-seg="cost">Cost Context</button>
+                </div>
+
+                <div id="drPanePosition" class="dr-pane">
+                    <div id="marketHeroStats" class="market-hero-stats"></div>
+                    <div id="marketTypeLegend" class="market-type-legend"></div>
+                    <div class="chart-box" style="height:420px;position:relative;margin-top:16px">
+                        <canvas id="marketPositionChart"></canvas>
                     </div>
-                    <div>
-                        <div class="chart-box" style="height:420px;position:relative">
-                            <canvas id="marketRegFeeChart"></canvas>
+                    <p id="marketPositioningNote" class="chart-note"></p>
+                </div>
+
+                <div id="drPanePricing" class="dr-pane" style="display:none">
+                    <div class="two-col">
+                        <div>
+                            <div class="chart-box" style="height:420px;position:relative">
+                                <canvas id="marketRateChart"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="chart-box" style="height:420px;position:relative">
+                                <canvas id="marketRegFeeChart"></canvas>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <section class="admin-section collapsible-section" id="marketCostSection">
-                <h2>💵 Cost &amp; Wage Context</h2>
-                <p class="section-desc">Why infant care and staff pay are priced the way they are.</p>
-                <div class="two-col">
-                    <div>
-                        <div class="chart-box" style="height:260px;position:relative">
-                            <canvas id="marketInfantCostChart"></canvas>
+                <div id="drPaneCost" class="dr-pane" style="display:none">
+                    <div class="two-col">
+                        <div>
+                            <div class="chart-box" style="height:260px;position:relative">
+                                <canvas id="marketInfantCostChart"></canvas>
+                            </div>
+                            <p id="marketInfantCostSource" class="chart-note"></p>
                         </div>
-                        <p id="marketInfantCostSource" class="chart-note"></p>
-                    </div>
-                    <div>
-                        <div class="chart-box" style="height:260px;position:relative">
-                            <canvas id="marketWageChart"></canvas>
+                        <div>
+                            <div class="chart-box" style="height:260px;position:relative">
+                                <canvas id="marketWageChart"></canvas>
+                            </div>
+                            <p id="marketWageSource" class="chart-note"></p>
                         </div>
-                        <p id="marketWageSource" class="chart-note"></p>
                     </div>
                 </div>
             </section>
@@ -894,69 +1078,232 @@
 
         <!-- ── Tab: Settings ──────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-settings">
+            <!-- One continuous page, ordered by how often it's touched — no
+                 dashboard/tool split, no accordion (design handoff
+                 design_handoff_messages_settings/Settings.dc.html). Registered
+                 in AP_TOOLS as the tab's only tool. "My Notifications" moved to
+                 the Messages tab header — see #apPushToggleWrap there. -->
+            <section class="admin-section" id="settingsUnifiedSection">
+                <!-- No section-desc paragraph here — it used to restate the
+                     shell's own blurb for this tab almost word for word
+                     directly underneath it (see the same fix on Finance and
+                     Messages). Search the log at the bottom for full history. -->
+                <h2>⚙️ Settings</h2>
 
-            <!-- Push Notifications -->
-            <section class="admin-section collapsible-section" id="adminPushSection">
-                <h2>🔔 My Notifications</h2>
-                <p class="section-desc">Get a push notification on this device when a parent sends a message in the app.</p>
-                <div id="apPushToggleWrap" style="display:flex;align-items:center;gap:12px;margin-top:8px;">
-                    <label style="display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer;">
-                        <input type="checkbox" id="apPushToggle" style="width:18px;height:18px;cursor:pointer;">
-                        Notify me of new parent messages on this device
-                    </label>
-                    <span id="apPushStatus" class="rates-status"></span>
-                </div>
-            </section>
+                <div class="set-top-row">
 
-            <!-- Registration Window Override -->
-            <section class="admin-section collapsible-section" id="regWindowSection">
-                <h2>🔓 Registration Window Override</h2>
-                <p class="section-desc">Manually open or close the registration window regardless of the normal date rules (auto: open 9 AM–11:59 PM Central, days 1–15).</p>
-                <div class="override-row">
-                    <select id="windowOverrideSelect" class="override-select">
-                        <option value="auto">Auto — open 9 AM Central on the 1st through 11:59 PM on the 15th</option>
-                        <option value="open">Force Open — allow registration right now</option>
-                        <option value="closed">Force Closed — block registration right now</option>
-                    </select>
-                    <button id="saveOverrideBtn" class="btn-primary">Save</button>
-                </div>
-                <p id="overrideStatus" class="override-status"></p>
-            </section>
+                    <!-- Registration — window, closed days, Summer Camp -->
+                    <div class="ap-panel" id="setCardRegistration">
+                        <div class="ap-panel-head"><h3>Registration</h3></div>
+                        <div class="set-card-body">
 
-            <!-- Closed Days -->
-            <section class="admin-section collapsible-section" id="closedDaysSection">
-                <h2>🚫 Closed Days</h2>
-                <p class="section-desc">Blocked dates appear as unavailable on the parent registration calendar.</p>
-                <div class="closure-add-row">
-                    <div class="roster-field">
-                        <label for="closureDate">Date to block</label>
-                        <input type="date" id="closureDate">
+                            <!-- Registration Window Override -->
+                            <div class="set-field">
+                                <label class="set-field-label" for="windowOverrideSelect">Registration window</label>
+                                <div class="override-row">
+                                    <select id="windowOverrideSelect" class="override-select">
+                                        <option value="auto">Auto — open 9 AM Central on the 1st through 11:59 PM on the 15th</option>
+                                        <option value="open">Force Open — allow registration right now</option>
+                                        <option value="closed">Force Closed — block registration right now</option>
+                                    </select>
+                                    <button id="saveOverrideBtn" class="btn-primary">Save</button>
+                                </div>
+                                <p id="overrideStatus" class="override-status"></p>
+                                <p class="set-caption" id="regWindowCaption"></p>
+                            </div>
+
+                            <!-- Closed Days -->
+                            <div class="set-field" id="setClosedDaysBlock">
+                                <label class="set-field-label">Closed days</label>
+                                <p class="section-desc" style="margin-top:0">Blocked dates appear as unavailable on the parent registration calendar.</p>
+                                <div class="closure-add-row">
+                                    <div class="roster-field">
+                                        <label for="closureDate">Date to block</label>
+                                        <input type="date" id="closureDate">
+                                    </div>
+                                    <div class="roster-field closure-reason-field">
+                                        <label for="closureReason">Reason (optional)</label>
+                                        <input type="text" id="closureReason" placeholder="e.g. Thanksgiving, Snow day">
+                                    </div>
+                                    <div class="roster-btns">
+                                        <button id="addClosureBtn" class="btn-primary">Block Date</button>
+                                        <button id="notifyClosureBtn" class="btn-secondary" title="Send push notification to all subscribed parents about this closure">🔔 Notify Parents</button>
+                                    </div>
+                                </div>
+                                <div id="closureList">
+                                    <p class="empty-hint">No closures set.</p>
+                                </div>
+                            </div>
+
+                            <!-- Summer Camp Visibility -->
+                            <div class="set-field" id="setSummerCampBlock">
+                                <label style="display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer;">
+                                    <input type="checkbox" id="hideSummerCampToggle" style="width:16px;height:16px;cursor:pointer;">
+                                    Hide Summer Camp from parent registration portal
+                                </label>
+                                <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+                                    <button id="saveSummerCampBtn" class="btn-primary">💾 Save</button>
+                                    <span id="summerCampStatus" class="rates-status"></span>
+                                </div>
+                                <p class="set-caption" id="summerCampCaption"></p>
+                            </div>
+
+                        </div>
                     </div>
-                    <div class="roster-field closure-reason-field">
-                        <label for="closureReason">Reason (optional)</label>
-                        <input type="text" id="closureReason" placeholder="e.g. Thanksgiving, Snow day">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="addClosureBtn" class="btn-primary">Block Date</button>
-                        <button id="notifyClosureBtn" class="btn-secondary" title="Send push notification to all subscribed parents about this closure">🔔 Notify Parents</button>
-                    </div>
-                </div>
-                <div id="closureList">
-                    <p class="empty-hint">No closures set.</p>
-                </div>
-            </section>
 
-            <!-- Summer Camp Visibility -->
-            <section class="admin-section collapsible-section" id="summerCampSection">
-                <h2>☀️ Summer Camp</h2>
-                <p class="section-desc">Control whether Summer Camp appears as an option in the parent registration portal. Hiding it prevents new summer registrations without affecting existing records.</p>
-                <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
-                    <label style="display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer;">
-                        <input type="checkbox" id="hideSummerCampToggle" style="width:18px;height:18px;cursor:pointer;">
-                        Hide Summer Camp from parent registration portal
-                    </label>
-                    <button id="saveSummerCampBtn" class="btn-primary">💾 Save</button>
-                    <span id="summerCampStatus" class="rates-status"></span>
+                    <!-- Rooms & rates — ONE table replacing rates + ratios + capacity -->
+                    <div class="ap-panel" id="setRoomsCard">
+                        <div class="ap-panel-head"><h3>Rooms &amp; rates</h3></div>
+                        <div class="set-card-body">
+                            <div id="roomsTableWrap">
+                                <p class="empty-hint">Loading…</p>
+                            </div>
+                            <p class="set-caption" id="roomsCaption"></p>
+
+                            <div class="set-fee-fields">
+                                <label>
+                                    New Family Fee ($, one-time)
+                                    <input type="number" id="newFamilyFeeInput" min="0" step="0.01" placeholder="0.00">
+                                </label>
+                                <label>
+                                    Annual Supply Fee per Child ($)
+                                    <input type="number" id="regFeeInput" min="0" step="0.01" placeholder="0.00">
+                                </label>
+                                <label>
+                                    Supply Fee Family Max ($, optional)
+                                    <input type="number" id="supplyFeeFamilyMaxInput" min="0" step="0.01" placeholder="No cap">
+                                </label>
+                                <label>
+                                    Annual Renewal Date
+                                    <input type="date" id="regFeeRenewalDate">
+                                </label>
+                            </div>
+                            <p class="section-desc">New family fee is charged once, ever, on a family's first billing report. Supply fee is charged per child, once a year on the renewal date (month/day only), capped at the family max if set. Both appear as line items in Family Billing Summary automatically.</p>
+
+                            <div class="rates-actions">
+                                <button id="saveRoomsBtn" class="btn-primary">💾 Save changes</button>
+                                <span id="roomsStatus" class="rates-status"></span>
+                                <button id="saveRegFeeBtn" class="btn-secondary">💾 Save Fees</button>
+                                <span id="regFeeStatus" class="rates-status"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Policies & enrollment forms — re-enabled 2026-08-28 (was
+                     "hidden 2026-07, may bring back later" as its own
+                     collapsible tab-level section; now a card inside the
+                     unified Settings page instead, matching how ChMS Finance
+                     API was folded in below). Feeds two places from the same
+                     `enrollment_forms` setting: the public /enroll page and
+                     the parent portal's Account → Documents → "Policies and
+                     forms" card (js/portal/portal-documents.js
+                     pdFormsSection()) — that card has said "The office
+                     hasn't posted any forms here yet" since forms were
+                     retired, because nothing let the office post one.
+                     setupEnrollmentForms()/loadEnrollmentForms()/
+                     saveEnrollmentForms()/uploadEnrollmentFormFile()
+                     (admin-settings.js / js/supabase.js) were never removed —
+                     only this markup was — so no JS changes were needed. -->
+                <div class="ap-panel" id="enrollmentFormsCard">
+                    <div class="ap-panel-head"><h3>📋 Policies &amp; enrollment forms</h3></div>
+                    <div class="set-card-body">
+                        <p class="section-desc" style="margin-top:0">Upload the forms and policies families need. They appear as download cards on the public <a href="/enroll" target="_blank">/enroll page</a> and in every family's portal under Account → Documents → "Policies and forms." PDF or Word (.doc/.docx), 10&nbsp;MB max per file.</p>
+                        <div id="enrollmentFormsList" style="margin-top:12px;">
+                            <p class="empty-hint">Loading…</p>
+                        </div>
+                        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                            <p style="font-weight:600;font-size:.9em;margin-bottom:10px;">Add a form</p>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                                <input type="text" id="newEnrollFormName" placeholder="Form name (e.g. Child Enrollment Form)" class="form-input">
+                                <input type="text" id="newEnrollFormDesc" placeholder="Short description (optional)" class="form-input">
+                            </div>
+                            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                                <input type="file" id="newEnrollFormFile" accept=".pdf,.doc,.docx" style="font-size:.9em;">
+                                <button id="uploadEnrollFormBtn" class="btn-primary" style="padding:6px 16px;">⬆️ Upload</button>
+                                <span id="uploadEnrollFormStatus" class="rates-status"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Access & oversight — full width, lesser-used -->
+                <div class="ap-panel" id="setAccessCard">
+                    <div class="ap-panel-head"><h3>Access &amp; oversight</h3></div>
+                    <div class="set-access-grid">
+                        <div>
+                            <p class="set-field-label">Admin users</p>
+                            <div id="adminRolesTableWrap">
+                                <p class="empty-hint">Loading…</p>
+                            </div>
+                            <p class="section-desc" style="margin-top:16px;font-weight:600;color:#444">Add Admin User</p>
+                            <form id="addAdminRoleForm" autocomplete="off">
+                            <div class="add-role-row">
+                                <input type="email" id="newRoleEmail" placeholder="email@example.com" class="family-search-input" style="flex:1;min-width:160px" autocomplete="username">
+                                <input type="password" id="newRolePassword" placeholder="Password (min 6 chars)" class="family-search-input" style="width:190px" autocomplete="new-password">
+                                <select id="newRoleLevel" class="family-search-input">
+                                    <option value="full">Full Access</option>
+                                    <option value="restricted">Restricted — Schedule Planner only</option>
+                                    <option value="staff">Staff — Classroom Roster (read-only)</option>
+                                </select>
+                                <button id="addAdminRoleBtn" type="button" class="btn-primary">Add User</button>
+                            </div>
+                            </form>
+                            <span id="adminRolesStatus" class="rates-status" style="display:block;margin-top:6px"></span>
+                        </div>
+
+                        <div id="auditLogSection">
+                            <p class="set-field-label">Audit log — every change, unerasable</p>
+                            <p class="section-desc" style="margin-top:0">
+                                Every significant admin action is recorded automatically with who did it and when.
+                                Entries cannot be edited or deleted by any admin account. Showing the most recent 500.
+                                Recording started 2026-08-03 — nothing before that date exists to show.
+                            </p>
+                            <div class="rates-controls" style="margin-bottom:14px;">
+                                <input type="text" id="auditLogSearch" class="family-search-input"
+                                       placeholder="Filter by admin, action, or entity…" style="max-width:320px">
+                                <button id="auditLogRefreshBtn" type="button" class="btn-secondary">🔄 Refresh</button>
+                            </div>
+                            <div id="auditLogTableWrap" style="overflow-x:auto;max-height:320px;overflow-y:auto;">
+                                <table class="admin-table">
+                                    <thead>
+                                        <tr>
+                                            <th>When</th>
+                                            <th>Admin</th>
+                                            <th>Action</th>
+                                            <th>Entity</th>
+                                            <th>Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="auditLogTbody">
+                                        <tr><td colspan="5" class="loading-cell">Loading…</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ChMS Finance API — moved from its own Finance/Bookkeeper
+                     sidebar entry, 2026-08-28. Full-only, same as Access &
+                     oversight above (_hide('financeApiCard') in
+                     applyRoleRestrictions(), admin-settings.js) — it isn't a
+                     secret leak by itself (the key is pasted fresh each test,
+                     never saved), but the response it prints is the church's
+                     own revenue/payroll summary, which restricted admins
+                     don't otherwise see. Markup/ids and setupFinanceApiTester()/
+                     testFinanceApiConnection() are unchanged from the retired
+                     #financeApiTesterSection — only the location and gate. -->
+                <div class="ap-panel" id="financeApiCard">
+                    <div class="ap-panel-head"><h3>🔌 ChMS Finance API</h3></div>
+                    <p class="section-desc">Test the <code>finance-summary</code> endpoint the church ChMS integration calls. Paste the same value you saved as the <code>FINANCE_API_KEY</code> secret in Supabase — this box only uses it for this one test, it isn't saved anywhere.</p>
+                    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
+                        <input id="financeApiTestKey" type="password" class="form-control" placeholder="FINANCE_API_KEY value" style="max-width:320px" autocomplete="off">
+                        <button id="financeApiTestBtn" class="btn-primary">Test Connection</button>
+                        <span id="financeApiTestStatus" style="font-size:.85em;color:#6b7280"></span>
+                    </div>
+                    <pre id="financeApiTestOutput" class="hidden" style="background:#0f172a;color:#e2e8f0;padding:.85rem 1rem;border-radius:8px;font-size:.8rem;overflow-x:auto;max-height:320px;white-space:pre-wrap;word-break:break-word"></pre>
                 </div>
             </section>
 
@@ -974,92 +1321,6 @@
                 </div>
             </section>
             -->
-
-            <!-- Enrollment Forms — hidden 2026-07, may bring back later
-            <section class="admin-section collapsible-section" id="enrollmentFormsSection">
-                <h2>📋 Enrollment Forms</h2>
-                <p class="section-desc">Upload the forms new families need to complete. They appear as download cards on the public <a href="/enroll" target="_blank">/enroll page</a>. PDF, Word (.doc/.docx), 10 MB max per file.</p>
-                <div id="enrollmentFormsList" style="margin-top:12px;"></div>
-                <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
-                    <p style="font-weight:600;font-size:.9em;margin-bottom:10px;">Add a form</p>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-                        <input type="text" id="newEnrollFormName" placeholder="Form name (e.g. Child Enrollment Form)" class="form-input">
-                        <input type="text" id="newEnrollFormDesc" placeholder="Short description (optional)" class="form-input">
-                    </div>
-                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-                        <input type="file" id="newEnrollFormFile" accept=".pdf,.doc,.docx" style="font-size:.9em;">
-                        <button id="uploadEnrollFormBtn" class="btn-primary" style="padding:6px 16px;">⬆️ Upload</button>
-                        <span id="uploadEnrollFormStatus" class="rates-status"></span>
-                    </div>
-                </div>
-            </section>
-            -->
-
-            <!-- Room Rates & Settings -->
-            <section class="admin-section collapsible-section" id="ratesSection">
-                <h2>⚙️ Room Rates &amp; Settings</h2>
-                <p class="section-desc">Set daily and weekly rates per room. You can also adjust the age range (in months) for each room — this controls which room children are auto-assigned to based on their date of birth. Changes take effect immediately for new registrations.</p>
-                <div id="ratesTableWrap">
-                    <p class="empty-hint">Loading rates…</p>
-                </div>
-                <div class="rates-actions">
-                    <button id="saveRatesBtn" class="btn-primary">💾 Save Rates</button>
-                    <span id="ratesStatus" class="rates-status"></span>
-                </div>
-                <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #e5e7eb;">
-                    <label style="display:flex;align-items:center;gap:.75rem;font-weight:600;color:#1e3a5f;">
-                        New Family Fee ($, one-time)
-                        <input type="number" id="newFamilyFeeInput" min="0" step="0.01" placeholder="0.00"
-                            style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
-                    </label>
-                    <p style="margin:.4rem 0 .75rem 0;font-size:.85rem;color:#555;">Charged once, ever, the first time a family's very first billing report is generated. Existing families already in the system are never charged this retroactively.</p>
-
-                    <label style="display:flex;align-items:center;gap:.75rem;font-weight:600;color:#1e3a5f;margin-top:.6rem;">
-                        Annual Supply Fee per Child ($)
-                        <input type="number" id="regFeeInput" min="0" step="0.01" placeholder="0.00"
-                            style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
-                    </label>
-                    <label style="display:flex;align-items:center;gap:.75rem;font-weight:600;color:#1e3a5f;margin-top:.6rem;">
-                        Supply Fee Family Max ($, optional)
-                        <input type="number" id="supplyFeeFamilyMaxInput" min="0" step="0.01" placeholder="No cap"
-                            style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
-                    </label>
-                    <label style="display:flex;align-items:center;gap:.75rem;font-weight:600;color:#1e3a5f;margin-top:.6rem;">
-                        Annual Renewal Date
-                        <input type="date" id="regFeeRenewalDate"
-                            style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;">
-                    </label>
-                    <p style="margin:.4rem 0 .75rem 0;font-size:.85rem;color:#555;">Applied automatically — a new child is charged the supply fee the first time their billing report is generated, and every returning child is charged again once a year on the renewal date above (year doesn't matter, only month/day). If a family's total supply fee for the cycle would exceed the family max, they're charged the max instead and none of their children owe anything further until the next cycle. Leave the family max blank for no cap. Appears as line items in Family Billing Summary with no manual step required.</p>
-                    <button id="saveRegFeeBtn" class="btn-primary">💾 Save Fees</button>
-                    <span id="regFeeStatus" style="margin-left:.75rem;font-size:.85rem;"></span>
-                </div>
-            </section>
-
-            <!-- Staff-to-Child Ratios -->
-            <section class="admin-section collapsible-section" id="ratiosSection">
-                <h2>👷 Staff-to-Child Ratios</h2>
-                <p class="section-desc">Maximum children per staff member for each room. Used by the Staffing tab to calculate minimum staff required each day.</p>
-                <div id="ratiosTableWrap">
-                    <p class="empty-hint">Loading ratios…</p>
-                </div>
-                <div class="rates-actions">
-                    <button id="saveRatiosBtn" class="btn-primary">💾 Save Ratios</button>
-                    <span id="ratiosStatus" class="rates-status"></span>
-                </div>
-            </section>
-
-            <!-- Classroom Capacity -->
-            <section class="admin-section collapsible-section" id="capacitySection">
-                <h2>🏫 Classroom Capacity</h2>
-                <p class="section-desc">Maximum enrolled children per room per day. Used across the portal to compute open spots, waitlist matching, and the Classrooms/Calendar capacity displays.</p>
-                <div id="capacityTableWrap">
-                    <p class="empty-hint">Loading capacity…</p>
-                </div>
-                <div class="rates-actions">
-                    <button id="saveCapacityBtn" class="btn-primary">💾 Save Capacity</button>
-                    <span id="capacityStatus" class="rates-status"></span>
-                </div>
-            </section>
 
             <!-- Offer Email Links — hidden 2026-07, may bring back later
             <section class="admin-section collapsible-section" id="offerLinksSection">
@@ -1079,66 +1340,6 @@
                 </div>
             </section>
             -->
-
-            <!-- Admin Access -->
-            <section class="admin-section collapsible-section" id="adminRolesSection">
-                <h2>🔐 Admin Access</h2>
-                <p class="section-desc">Manage admin login accounts and their access levels. Access role changes take effect on the next login.</p>
-                <div id="adminRolesTableWrap">
-                    <p class="empty-hint">Loading…</p>
-                </div>
-                <p class="section-desc" style="margin-top:16px;font-weight:600;color:#444">Add Admin User</p>
-                <form id="addAdminRoleForm" autocomplete="off">
-                <div class="add-role-row">
-                    <input type="email" id="newRoleEmail" placeholder="email@example.com" class="family-search-input" style="flex:1;min-width:160px" autocomplete="off">
-                    <input type="password" id="newRolePassword" placeholder="Password (min 6 chars)" class="family-search-input" style="width:190px" autocomplete="new-password">
-                    <select id="newRoleLevel" class="family-search-input">
-                        <option value="full">Full Access</option>
-                        <option value="restricted">Restricted — Schedule Planner only</option>
-                        <option value="staff">Staff — Classroom Roster (read-only)</option>
-                    </select>
-                    <button id="addAdminRoleBtn" type="button" class="btn-primary">Add User</button>
-                </div>
-                </form>
-                <span id="adminRolesStatus" class="rates-status" style="display:block;margin-top:6px"></span>
-            </section>
-
-            <!-- Admin Audit Log — lives here rather than its own tab: it's an
-                 oversight tool for the same "who can do what" concern as Admin
-                 Access above, not a daily-use working tab like Billing/Finance. -->
-            <section class="admin-section collapsible-section" id="auditLogSection">
-                <h2>🧾 Admin Audit Log</h2>
-                <p class="section-desc">
-                    Every significant admin action — creating or deleting a registration, changing a rate,
-                    locking a family, setting a PIN — is recorded here automatically with who did it and when.
-                    Entries cannot be edited or deleted by any admin account, including Full Access. Showing the
-                    most recent 500 entries.
-                </p>
-                <p class="section-desc" style="margin-top:-8px;color:var(--text-muted);font-size:.85em;">
-                    Recording started 2026-08-03 — nothing before that date exists to show.
-                </p>
-                <div class="rates-controls" style="margin-bottom:14px;">
-                    <input type="text" id="auditLogSearch" class="family-search-input"
-                           placeholder="Filter by admin, action, or entity…" style="max-width:320px">
-                    <button id="auditLogRefreshBtn" type="button" class="btn-secondary">🔄 Refresh</button>
-                </div>
-                <div id="auditLogTableWrap" style="overflow-x:auto;">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>When</th>
-                                <th>Admin</th>
-                                <th>Action</th>
-                                <th>Entity</th>
-                                <th>Details</th>
-                            </tr>
-                        </thead>
-                        <tbody id="auditLogTbody">
-                            <tr><td colspan="5" class="loading-cell">Loading…</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
 
         </div><!-- /#tab-settings -->
 
@@ -1170,86 +1371,236 @@
         <!-- ── Tab: Staffing ─────────────────────────────────── -->
         <div class="tab-pane hidden" id="tab-staffing">
 
-            <!-- Daily Staffing Requirement — built entirely from booked
-                 registrations + the saved ratios. Rendered by apRenderStaffReq()
-                 in js/admin/admin-portal.js; it never reads clock-in room data. -->
-            <section class="admin-section" id="staffReqSection">
-                <h2>👥 Daily Staffing Requirement</h2>
-                <p class="section-desc">How many staff each room needs each day of the week, calculated from registered children and your saved ratios — plus staff-hours and estimated labor cost for the week.</p>
-                <div class="ap-callout">Built entirely from <strong>registrations</strong> — the days families booked. It never reads clock-in room assignments, so spotty room selection at the time clock can't distort it.</div>
-                <div class="ap-inputs">
-                    <div class="ap-input-field">
-                        <label for="staffReqWeekOf">Week of</label>
-                        <input type="date" id="staffReqWeekOf">
-                    </div>
-                    <div class="ap-input-field">
-                        <label for="staffReq_hours">Hours open per day</label>
-                        <input type="number" step="0.5" min="0" id="staffReq_hours" value="10.5">
-                    </div>
-                    <div class="ap-input-field">
-                        <label for="staffReq_floaters">Floaters / break relief</label>
-                        <input type="number" step="1" min="0" id="staffReq_floaters" value="1">
-                    </div>
-                    <div class="ap-input-field">
-                        <label for="staffReq_wage">Avg wage ($/hr)</label>
-                        <input type="number" step="0.25" min="0" id="staffReq_wage" value="15.5">
-                    </div>
-                    <div class="ap-input-field">
-                        <label for="staffReq_burden">Payroll burden (%)</label>
-                        <input type="number" step="0.5" min="0" id="staffReq_burden" value="12">
-                    </div>
-                </div>
-                <div id="staffReqBody"><p class="empty-hint">Loading…</p></div>
-            </section>
-
+            <!-- Build Staff Schedule + Daily Staffing Requirement, consolidated
+                 into one tool (design_handoff_staff, 2026-08-28): the
+                 Requirement is now a tab reading the same apStaffing() call
+                 Build Staff Schedule already checks assignments against,
+                 instead of a separate nav entry that could compute "enough
+                 staff" a different way. They share one "Week of" date field
+                 (#staffWeekOf) — apRenderStaffReq() in admin-portal.js reads
+                 it directly, so the two tabs can never disagree about which
+                 week they're looking at. -->
             <section class="admin-section collapsible-section" id="staffScheduleSection">
                 <h2>🗓️ Build Staff Schedule</h2>
-                <p class="section-desc">Lay out who works which room and shift each day. The requirement row comes from registered children and your saved ratios, so you can see at a glance whether the week is covered before you post it to staff. Closed days are excluded automatically.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="staffWeekOf">Week of (Monday)</label>
-                        <input type="date" id="staffWeekOf">
-                    </div>
-                    <div class="roster-btns">
-                        <button id="saveScheduleBtn"   class="btn-primary">💾 Save Schedule</button>
-                        <button id="exportStaffBtn"    class="btn-secondary">&#8595; Export Excel</button>
-                        <button id="emailStaffScheduleBtn" class="btn-secondary">✉️ Email Schedules</button>
-                    </div>
-                    <div class="ap-stats" id="apSchedStats" style="margin-left:auto"></div>
+                <p class="section-desc">Assign staff to rooms and shifts for the week, against what the ratios require. Closed days are excluded automatically.</p>
+                <!-- ⚠️ h2/p must stay DIRECT children of .admin-section: apShowSection()
+                     (admin-portal.js) only recognizes a section's own heading via
+                     `:scope > h2`, and only hides it (avoiding a duplicate under the
+                     shell's own header) when it carries no real control. Nesting h2
+                     inside a flex wrapper — tried first, to put Print top-right next
+                     to the title like the mockup — silently broke that selector and
+                     brought back the exact double-heading bug this app already spent
+                     a session fixing (see "Every redesigned Classroom-tab tool showed
+                     its own heading twice" below). Kept the button row as its own
+                     sibling instead. -->
+                <div class="roster-btns" style="margin-bottom:16px">
+                    <button id="saveScheduleBtn"   class="btn-primary">💾 Save Schedule</button>
+                    <button id="exportStaffBtn"    class="btn-ghost">&#8595; Export Excel</button>
+                    <button id="emailStaffScheduleBtn" class="btn-ghost">✉️ Email Schedules</button>
+                    <button id="printStaffScheduleBtn" class="btn-ghost">&#128424; Print schedule</button>
                 </div>
-                <!-- Time-off approval queue — the director half of the kiosk's
-                     "Ask for a day off" flow. Rendered by apRenderScheduleTimeOff(). -->
-                <div class="ap-sched-split">
-                    <div class="ap-sched-main">
-                        <div id="staffContent">
-                            <p class="empty-hint">Select a week above and click Generate Schedule.</p>
+                <!-- Week of / Children this week / Est. labor cost, one row of
+                     three cards — apSchedHeaderStats() (admin-portal.js) only
+                     owns the last two (display:contents so its own two
+                     .bk-stat divs land as siblings of the static "Week of"
+                     card in the same grid, not nested inside a third cell).
+                     The date input itself stays static, wired once by
+                     setupStaffScheduling() — regenerating it on every render
+                     the way a dynamic mount would have dropped its listener
+                     and any in-progress typing. Both Requirement inputs read
+                     it directly, so the two tabs can't disagree about which
+                     week they're looking at. -->
+                <div class="bk-stats" style="margin-bottom:16px">
+                    <div class="bk-stat">
+                        <div class="bk-stat-label">Week of</div>
+                        <input type="date" id="staffWeekOf" class="bk-stat-date-input">
+                    </div>
+                    <div id="apSchedHeaderStats" style="display:contents"></div>
+                </div>
+
+                <div class="bk-nav" id="apSchedTabs">
+                    <button class="bk-pill is-on" data-ap-sched-tab="week">This week's schedule</button>
+                    <button class="bk-pill" data-ap-sched-tab="req">Daily Staffing Requirement</button>
+                </div>
+
+                <div id="apSchedTabWeek">
+                    <div class="ap-seg" id="apSchedViewToggle" style="margin-bottom:10px">
+                        <button class="ap-seg-btn is-on" data-ap-sched-view="room">By room &amp; shift</button>
+                        <button class="ap-seg-btn" data-ap-sched-view="worker">By worker</button>
+                    </div>
+                    <p class="section-desc" style="margin:0 0 10px">Click any slot to assign or change who's working it.</p>
+                    <!-- Time-off approval queue — the director half of the kiosk's
+                         "Ask for a day off" flow. Rendered by apRenderScheduleTimeOff(). -->
+                    <div class="ap-sched-split">
+                        <div class="ap-sched-main">
+                            <div id="staffContent">
+                                <p class="empty-hint">Select a week above and click Generate Schedule.</p>
+                            </div>
+                            <!-- "By worker" — read-only pivot of the same assignments,
+                                 renderScheduleByWorker() in admin-reports.js. Toggled
+                                 with #staffContent by apSwitchSchedView(). -->
+                            <div id="staffContentByWorker" class="ap-hidden-tool">
+                                <p class="empty-hint">Select a week above and click Generate Schedule.</p>
+                            </div>
+                            <!-- Ratio Step & Next Child, mounted a second time here (consolidation
+                                 pass, design_handoff_planning_market, 2026-08-27) — same render
+                                 function as the Planning tab's own Ratio Step tool, just pointed
+                                 at this week's date instead of a second date picker. See
+                                 apMountStaffRatioStep() in js/admin/admin-portal.js. -->
+                            <section class="ap-sched-ratiostep" id="staffRatioStepSection">
+                                <div class="wlp-section-label" style="margin:18px 0 6px">&#9878;&#65039; Ratio Step &amp; Next Child</div>
+                                <div id="staffRatioStepContent">
+                                    <p class="empty-hint">Select a week above to see the next staffing step.</p>
+                                </div>
+                            </section>
+                        </div>
+                        <aside class="ap-sched-side" id="apSchedTimeOff"></aside>
+                    </div>
+                </div>
+
+                <!-- Daily Staffing Requirement tab — apRenderStaffReq() in
+                     admin-portal.js. Built entirely from booked registrations +
+                     the saved ratios; it never reads clock-in room data. -->
+                <div id="apSchedTabReq" class="ap-hidden-tool">
+                    <div class="ap-callout">Built entirely from <strong>registrations</strong> — the days families booked. It never reads clock-in room assignments, so spotty room selection at the time clock can't distort it.</div>
+                    <div class="ap-inputs">
+                        <div class="ap-input-field">
+                            <label for="staffReq_hours">Hours open per day</label>
+                            <input type="number" step="0.5" min="0" id="staffReq_hours" value="10.5">
+                        </div>
+                        <div class="ap-input-field">
+                            <label for="staffReq_floaters">Floaters / break relief</label>
+                            <input type="number" step="1" min="0" id="staffReq_floaters" value="1">
+                        </div>
+                        <div class="ap-input-field">
+                            <label for="staffReq_wage">Avg wage ($/hr)</label>
+                            <input type="number" step="0.25" min="0" id="staffReq_wage" value="15.5">
+                        </div>
+                        <div class="ap-input-field">
+                            <label for="staffReq_burden">Payroll burden (%)</label>
+                            <input type="number" step="0.5" min="0" id="staffReq_burden" value="12">
                         </div>
                     </div>
-                    <aside class="ap-sched-side" id="apSchedTimeOff"></aside>
+                    <div id="staffReqBody"><p class="empty-hint">Loading…</p></div>
                 </div>
             </section>
 
             <!-- Payroll -->
+            <!-- Payroll + PTO Settings + Geofence & Clock Reminders + Clock-In
+                 Integrity, consolidated into one tool (design_handoff_staff,
+                 2026-08-28): the PTO rate only ever matters in the context of
+                 the balance it produces, and Time Clock's settings/integrity
+                 are one system (tune the rules / see whether they're actually
+                 working) for the person tuning them. Full-role gated as a
+                 whole via AP_FULL_ONLY_KEYS — Time Clock inherits that for
+                 free, which is the stricter of its two former gates. -->
             <section class="admin-section collapsible-section" id="payrollSection">
                 <h2>💵 Payroll</h2>
-                <p class="section-desc">Review and edit hours, PTO, and pay for a bi-weekly period. Expand any staff row to see daily clock events and enter or correct hours — changes save automatically.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="payrollPeriod">Pay Period</label>
-                        <select id="payrollPeriod" class="family-search-input" style="min-width:230px">
-                            <!-- populated by setupPayrollReport() -->
-                        </select>
+                <p class="section-desc">Hours, PTO, and pay for a bi-weekly period.</p>
+
+                <div class="bk-nav" id="apPayrollTabs">
+                    <button class="bk-pill is-on" data-ap-payroll-tab="period">Pay period</button>
+                    <button class="bk-pill" data-ap-payroll-tab="pto">PTO policy</button>
+                    <button class="bk-pill" data-ap-payroll-tab="clock">Time Clock</button>
+                </div>
+
+                <div id="apPayrollTabPeriod">
+                    <div class="roster-controls">
+                        <div class="roster-field">
+                            <label for="payrollPeriod">Pay Period</label>
+                            <select id="payrollPeriod" class="family-search-input" style="min-width:230px">
+                                <!-- populated by setupPayrollReport() -->
+                            </select>
+                        </div>
+                        <div class="roster-btns">
+                            <button id="generatePayrollBtn" class="btn-secondary">Load Period</button>
+                            <button id="exportPayrollBtn" class="btn-primary">&#8595; Export Excel</button>
+                            <button id="printPayrollBtn" class="btn-secondary">&#128424; Print for Approval</button>
+                            <button id="approveMdoPayrollBtn" class="btn-secondary" style="display:none">Approve MDO Payroll</button>
+                        </div>
                     </div>
-                    <div class="roster-btns">
-                        <button id="generatePayrollBtn" class="btn-secondary">Load Period</button>
-                        <button id="exportPayrollBtn" class="btn-primary">&#8595; Export Excel</button>
-                        <button id="printPayrollBtn" class="btn-secondary">&#128424; Print for Approval</button>
-                        <button id="approveMdoPayrollBtn" class="btn-secondary" style="display:none">Approve MDO Payroll</button>
+                    <p class="section-desc" style="margin-top:-.4rem">Expand any staff row to see daily clock events and enter or correct hours — changes save automatically.</p>
+                    <div id="mdoPayrollApprovalStatus" style="display:none;margin:6px 0 0;font-size:.9em;color:var(--text-secondary,#6a6858)"></div>
+                    <div id="payrollContent">
+                        <p class="empty-hint">Select a pay period and click Load Period.</p>
                     </div>
                 </div>
-                <div id="mdoPayrollApprovalStatus" style="display:none;margin:6px 0 0;font-size:.9em;color:var(--text-secondary,#6a6858)"></div>
-                <div id="payrollContent">
-                    <p class="empty-hint">Select a pay period and click Load Period.</p>
+
+                <!-- PTO policy tab — moved from the old standalone ptoSection.
+                     Same ids, same setupPtoSettings()/loadPtoRateSetting(). -->
+                <div id="apPayrollTabPto" class="ap-hidden-tool">
+                    <p class="section-desc">The rate at which hourly staff accrue paid time off (hours earned per hour worked — e.g. 0.04 ≈ 1 hour of PTO earned per 25 hours worked). Applied automatically in the Payroll report above. Salaried staff don't accrue PTO here.</p>
+                    <p class="section-desc" style="margin-top:-.5rem">Scheduling a new rate never changes the past — hours already worked keep accruing at whatever rate was in effect when they were worked. Past rates are locked and can't be edited; you can only remove a rate that hasn't taken effect yet.</p>
+                    <div id="ptoRateHistoryWrap" style="margin-bottom:1rem"></div>
+                    <div style="display:flex;align-items:flex-end;gap:.75rem;flex-wrap:wrap">
+                        <label style="font-weight:600;color:#1e3a5f;font-size:.9rem">
+                            Rate<br>
+                            <input type="number" id="newPtoRateInput" min="0" step="0.001" placeholder="0.00"
+                                style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;margin-top:4px">
+                        </label>
+                        <label style="font-weight:600;color:#1e3a5f;font-size:.9rem">
+                            Effective Date<br>
+                            <input type="date" id="newPtoRateDate"
+                                style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;margin-top:4px">
+                        </label>
+                        <button id="addPtoRateBtn" class="btn-primary">➕ Add Rate</button>
+                        <span id="ptoRateStatus" style="font-size:.85rem;"></span>
+                    </div>
+                </div>
+
+                <!-- Time Clock tab — Settings (moved from geofenceSection) /
+                     Integrity (moved from clockIntegritySection, which used
+                     to live in #tab-families with pane:'staffing' — a real
+                     mismatch that left it permanently blank; see the
+                     AP_TOOLS comment in admin-portal.js). -->
+                <div id="apPayrollTabClock" class="ap-hidden-tool">
+                    <div class="ap-seg" id="apTimeClockTabs" style="margin-bottom:14px">
+                        <button class="ap-seg-btn is-on" data-ap-tc-tab="settings">Settings</button>
+                        <button class="ap-seg-btn" data-ap-tc-tab="integrity">Integrity</button>
+                    </div>
+
+                    <div id="apTimeClockTabSettings">
+                        <p class="section-desc">Warn staff and notify the director when a clock-in or clock-out happens outside the school perimeter. Also sends reminders if scheduled staff haven't clocked in or out within the grace period.</p>
+                        <div class="geofence-fields">
+                            <label class="geofence-toggle-row">
+                                <input type="checkbox" id="geofenceEnabled">
+                                <span>Enable geofence warnings</span>
+                            </label>
+                            <div class="geofence-grid">
+                                <label>School Latitude
+                                    <div class="geofence-loc-row">
+                                        <input type="text" id="geofenceLat" placeholder="e.g. 30.2672" inputmode="decimal">
+                                        <button type="button" id="geofenceUseMyLocation" class="btn-secondary" style="white-space:nowrap">📍 Use My Location</button>
+                                    </div>
+                                </label>
+                                <label>School Longitude
+                                    <input type="text" id="geofenceLng" placeholder="e.g. -97.7431" inputmode="decimal">
+                                </label>
+                                <label>Radius (feet)
+                                    <input type="text" id="geofenceRadius" placeholder="e.g. 300" inputmode="numeric">
+                                </label>
+                                <label>Grace Period (minutes)
+                                    <input type="text" id="geofenceGrace" placeholder="e.g. 15" inputmode="numeric">
+                                    <small style="color:var(--text-muted,#888);font-size:.82em;">How long after shift start/end before a missed-clock alert fires.</small>
+                                </label>
+                                <label>Director Notify Email
+                                    <input type="email" id="geofenceNotifyEmail" placeholder="director@example.com" autocomplete="off">
+                                    <small style="color:var(--text-muted,#888);font-size:.82em;">Receives geofence alerts and missed-clock summaries.</small>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="rates-actions">
+                            <button id="saveGeofenceBtn" class="btn-primary">💾 Save</button>
+                            <span id="geofenceStatus" class="rates-status"></span>
+                        </div>
+                    </div>
+
+                    <!-- Measures buddy punching rather than blocking it. Nothing
+                         here refuses a clock-in. Lazy-rendered on first open —
+                         see apSwitchTimeClockTab() in admin-portal.js. -->
+                    <div id="apTimeClockTabIntegrity" class="ap-hidden-tool">
+                        <div id="clockIntegrityBody"></div>
+                    </div>
                 </div>
             </section>
 
@@ -1264,9 +1615,20 @@
             -->
 
             <!-- Staff Roster -->
+            <!-- Staff Roster + Staff Directory, consolidated into one tool
+                 (design_handoff_staff, 2026-08-28): one `staff` table, one
+                 nav entry — Directory is a read tab of the roster now,
+                 not a parallel screen reading the same table a second time. -->
             <section class="admin-section collapsible-section" id="staffRosterSection">
                 <h2>👥 Staff Roster</h2>
-                <p class="section-desc">Manage active staff members. Name, role, pay rate, and room assignment are used for the payroll report. Assign a 4-digit PIN so staff can clock in/out from the mobile clock-in page.</p>
+                <p class="section-desc">Staff records, pay type, rooms, and availability — the one place these get edited.</p>
+
+                <div class="bk-nav" id="apRosterTabs">
+                    <button class="bk-pill is-on" data-ap-roster-tab="roster">Roster</button>
+                    <button class="bk-pill" data-ap-roster-tab="directory">Directory (print)</button>
+                </div>
+
+                <div id="apRosterTabRoster">
                 <div class="families-dir-controls">
                     <button id="addStaffBtn" class="btn-primary">+ Add Staff Member</button>
                     <button id="toggleInactiveStaffBtn" class="btn-ghost">Show Inactive</button>
@@ -1342,7 +1704,7 @@
                         <div class="fm-field">
                             <label>Clock-In PIN (4 digits)</label>
                             <input type="text" id="sfPin" maxlength="4" placeholder="e.g. 1234"
-                                class="rate-input" style="width:90px" inputmode="numeric" pattern="\d{4}">
+                                class="rate-input" style="width:90px" inputmode="numeric" pattern="\d{4}" autocomplete="off">
                         </div>
                         <div class="fm-field">
                             <label>PTO Starting Balance (hrs)</label>
@@ -1413,79 +1775,56 @@
                 <div id="staffRosterContent">
                     <p class="empty-hint">Click Refresh to load staff.</p>
                 </div>
-            </section>
+                </div><!-- /#apRosterTabRoster -->
 
-            <!-- PTO Settings -->
-            <section class="admin-section collapsible-section" id="ptoSection">
-                <h2>🏖️ PTO Settings</h2>
-                <p class="section-desc">The rate at which hourly staff accrue paid time off (hours earned per hour worked — e.g. 0.04 ≈ 1 hour of PTO earned per 25 hours worked). Applied automatically in the Payroll report. Salaried staff don't accrue PTO here.</p>
-                <p class="section-desc" style="margin-top:-.5rem">Scheduling a new rate never changes the past — hours already worked keep accruing at whatever rate was in effect when they were worked. Past rates are locked and can't be edited; you can only remove a rate that hasn't taken effect yet.</p>
-                <div id="ptoRateHistoryWrap" style="margin-bottom:1rem"></div>
-                <div style="display:flex;align-items:flex-end;gap:.75rem;flex-wrap:wrap">
-                    <label style="font-weight:600;color:#1e3a5f;font-size:.9rem">
-                        Rate<br>
-                        <input type="number" id="newPtoRateInput" min="0" step="0.001" placeholder="0.00"
-                            style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;margin-top:4px">
-                    </label>
-                    <label style="font-weight:600;color:#1e3a5f;font-size:.9rem">
-                        Effective Date<br>
-                        <input type="date" id="newPtoRateDate"
-                            style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:.95rem;margin-top:4px">
-                    </label>
-                    <button id="addPtoRateBtn" class="btn-primary">➕ Add Rate</button>
-                    <span id="ptoRateStatus" style="font-size:.85rem;"></span>
-                </div>
-            </section>
-
-            <!-- Staff Directory -->
-            <section class="admin-section collapsible-section" id="staffDirectorySection">
-                <h2>🧑‍🏫 Staff Directory</h2>
-                <p class="section-desc">Manage the photos, names, and room assignments shown in the "Our Staff" section on the public page. Rooms with no assigned Lead Teacher show a "Coming Soon" placeholder there automatically.</p>
-                <div id="staffDirectoryWrap">
-                    <p class="empty-hint">Loading staff…</p>
-                </div>
-                <div class="rates-actions">
-                    <button id="addStaffDirectoryBtn" class="btn-secondary" type="button">➕ Add Staff Member</button>
-                    <button id="saveStaffDirectoryBtn" class="btn-primary">💾 Save Staff Directory</button>
-                    <span id="staffDirectoryStatus" class="rates-status"></span>
-                </div>
-            </section>
-
-            <!-- Geofence & Clock Reminders -->
-            <section class="admin-section collapsible-section" id="geofenceSection">
-                <h2>📍 Geofence &amp; Clock Reminders</h2>
-                <p class="section-desc">Warn staff and notify the director when a clock-in or clock-out happens outside the school perimeter. Also sends reminders if scheduled staff haven't clocked in or out within the grace period.</p>
-                <div class="geofence-fields">
-                    <label class="geofence-toggle-row">
-                        <input type="checkbox" id="geofenceEnabled">
-                        <span>Enable geofence warnings</span>
-                    </label>
-                    <div class="geofence-grid">
-                        <label>School Latitude
-                            <div class="geofence-loc-row">
-                                <input type="text" id="geofenceLat" placeholder="e.g. 30.2672" inputmode="decimal">
-                                <button type="button" id="geofenceUseMyLocation" class="btn-secondary" style="white-space:nowrap">📍 Use My Location</button>
-                            </div>
-                        </label>
-                        <label>School Longitude
-                            <input type="text" id="geofenceLng" placeholder="e.g. -97.7431" inputmode="decimal">
-                        </label>
-                        <label>Radius (feet)
-                            <input type="text" id="geofenceRadius" placeholder="e.g. 300" inputmode="numeric">
-                        </label>
-                        <label>Grace Period (minutes)
-                            <input type="text" id="geofenceGrace" placeholder="e.g. 15" inputmode="numeric">
-                            <small style="color:var(--text-muted,#888);font-size:.82em;">How long after shift start/end before a missed-clock alert fires.</small>
-                        </label>
-                        <label>Director Notify Email
-                            <input type="email" id="geofenceNotifyEmail" placeholder="director@example.com">
-                            <small style="color:var(--text-muted,#888);font-size:.82em;">Receives geofence alerts and missed-clock summaries.</small>
-                        </label>
+                <!-- Directory (print) tab — moved from the old standalone
+                     staffDirectorySection. Same renderStaffDirectory(),
+                     same #staffDirectoryWrap id. -->
+                <div id="apRosterTabDirectory" class="ap-hidden-tool">
+                    <p class="section-desc">Manage the photos, names, and room assignments shown in the "Our Staff" section on the public page. Rooms with no assigned Lead Teacher show a "Coming Soon" placeholder there automatically.</p>
+                    <div id="staffDirectoryWrap">
+                        <p class="empty-hint">Loading staff…</p>
+                    </div>
+                    <div class="rates-actions">
+                        <button id="addStaffDirectoryBtn" class="btn-secondary" type="button">➕ Add Staff Member</button>
+                        <button id="saveStaffDirectoryBtn" class="btn-primary">💾 Save Staff Directory</button>
+                        <span id="staffDirectoryStatus" class="rates-status"></span>
                     </div>
                 </div>
-                <div class="rates-actions">
-                    <button id="saveGeofenceBtn" class="btn-primary">💾 Save</button>
-                    <span id="geofenceStatus" class="rates-status"></span>
+            </section>
+
+            <!-- HR & Handbook — new (design_handoff_staff, 2026-08-28):
+                 reference policy docs, a write-up log, and Staff Injury
+                 Reports (moved here from its own nav entry — same table,
+                 same full-role reasoning). The Injury Reports tab is hidden
+                 for anyone but a `full` admin by applyRoleRestrictions() in
+                 admin-safety.js; Policies and Write-ups stay open to
+                 `restricted`, which is why this whole tool is NOT in
+                 AP_FULL_ONLY_KEYS the way `staffInjury` used to be. -->
+            <section class="admin-section collapsible-section" id="hrHandbookSection">
+                <h2>📖 HR &amp; Handbook</h2>
+                <p class="section-desc">Policies every staff member has agreed to, and the written record when one wasn't followed.</p>
+
+                <div class="bk-nav" id="apHrTabs">
+                    <button class="bk-pill is-on" data-ap-hr-tab="policies">Policies</button>
+                    <button class="bk-pill" data-ap-hr-tab="writeups">Write-ups</button>
+                    <button class="bk-pill" data-ap-hr-tab="injury" id="apHrPillInjury">Injury Reports</button>
+                </div>
+
+                <div id="apHrTabPolicies">
+                    <div id="hrPoliciesBody"><p class="empty-hint">Loading…</p></div>
+                </div>
+
+                <div id="apHrTabWriteUps" class="ap-hidden-tool">
+                    <div id="hrWriteUpsBody"><p class="empty-hint">Loading…</p></div>
+                </div>
+
+                <!-- Moved from the old standalone staffInjuriesSection, which
+                     lived in #tab-families with pane:'staffing' — a real
+                     mismatch that left it permanently blank. Same
+                     #staffInjuriesBody id, same renderStaffInjuriesTool(). -->
+                <div id="apHrTabInjury" class="ap-hidden-tool">
+                    <div id="staffInjuriesBody"></div>
                 </div>
             </section>
 
@@ -1553,17 +1892,11 @@
                 </div>
             </section>
 
-            <!-- ChMS Finance API Tester -->
-            <section class="admin-section collapsible-section" id="financeApiTesterSection">
-                <h2>🔌 ChMS Finance API</h2>
-                <p class="section-desc">Test the <code>finance-summary</code> endpoint the church ChMS integration calls. Paste the same value you saved as the <code>FINANCE_API_KEY</code> secret in Supabase — this box only uses it for this one test, it isn't saved anywhere.</p>
-                <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
-                    <input id="financeApiTestKey" type="password" class="form-control" placeholder="FINANCE_API_KEY value" style="max-width:320px" autocomplete="off">
-                    <button id="financeApiTestBtn" class="btn-primary">Test Connection</button>
-                    <span id="financeApiTestStatus" style="font-size:.85em;color:#6b7280"></span>
-                </div>
-                <pre id="financeApiTestOutput" class="hidden" style="background:#0f172a;color:#e2e8f0;padding:.85rem 1rem;border-radius:8px;font-size:.8rem;overflow-x:auto;max-height:320px;white-space:pre-wrap;word-break:break-word"></pre>
-            </section>
+            <!-- ChMS Finance API tester moved to Settings → Access & oversight,
+                 2026-08-28 (was its own Finance/Bookkeeper sidebar entry) —
+                 see settingsUnifiedSection's #financeApiCard below, which
+                 reuses these exact ids/markup verbatim; only its location
+                 and role gate changed. -->
 
             <!-- Financial Dashboard -->
             <section class="admin-section collapsible-section" id="financeDashSection">
@@ -1596,18 +1929,15 @@
                 </div>
             </section>
 
-            <!-- Year-over-Year Comparison -->
-            <section class="admin-section collapsible-section" id="financeYoySection">
-                <h2>📈 Year-over-Year Comparison</h2>
-                <p class="section-desc">Compare revenue and labor month-by-month against the prior year.</p>
-                <div class="report-controls" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
-                    <span style="font-size:.9em;color:#6b7280">Uses the year selected above — compares it against the prior year.</span>
-                    <button id="generateYoyBtn" class="btn-secondary">Generate Comparison</button>
-                </div>
-                <div id="financeYoyContent">
-                    <p class="empty-hint">Click Generate Comparison.</p>
-                </div>
-            </section>
+            <!-- Year-over-Year Comparison moved into the Bookkeeper tab's
+                 Overview sub-view, 2026-08-28, under the Annual Budget card
+                 (was its own Finance/Bookkeeper sidebar entry). Deleted
+                 rather than merely unreferenced: generateYoyComparison()
+                 (admin-finance.js) writes into a #financeYoyContent it
+                 expects to be the ONLY one on the page — see
+                 admin-finance-bookkeeper.js's own #financeYoyContent, which
+                 would silently lose to this one on getElementById() if both
+                 existed at once. -->
 
             <!-- Expense Lines -->
             <section class="admin-section collapsible-section" id="financeExpenseSection">
@@ -1770,106 +2100,120 @@
                 </div>
             </section>
 
-            <!-- Accounts Receivable -->
-            <!-- Invoices — the step between computing a bill and chasing it.
-                 Renders via renderInvoicesTool() in js/admin/admin-billing.js,
-                 over the same _buildFamilyBillingData() the Family Billing
-                 Summary uses. No second calculation. -->
-            <!-- Bill the month (design handoff 1c — exceptions-only). The
-                 approval front door: drafts every family from registrations,
-                 surfaces only the ones that changed since last month, and
-                 releases the rest in one tap. Draft/send reuse the exact same
-                 calls the Invoices tool below uses — see admin-bill-month.js. -->
-            <section class="admin-section" id="billThisMonthSection">
-                <h2>🧾 Bill This Month</h2>
-                <p class="section-desc">Drafts build from registrations automatically. Review the families that changed since last month; release the rest in one tap.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="bmMonth">Month</label>
-                        <input type="month" id="bmMonth">
-                    </div>
-                </div>
-                <div id="bmBody"><p class="empty-hint">Loading…</p></div>
-            </section>
+            <!-- Finance Hub — consolidates Bill This Month, Who Owes, Invoices,
+                 and Family Billing Summary into one ledger (design handoff:
+                 Finance Hub, 2026-08-26). "One computed dataset, no second
+                 calculation": every stat, filter count, and row here reads
+                 computeBillMonthExceptions() / _buildArRows() /
+                 reconcileBillingInvoice() — the exact functions those four
+                 retired screens already called — via
+                 js/admin/admin-finance-hub.js. Nothing here computes a dollar
+                 amount itself.
+                 Billing Report (design handoff 2a) is nested below as this
+                 screen's second tab — same section id, same render function
+                 (renderBillingReportTool() in admin-billing-report.js), only
+                 the surrounding chrome moved. It deliberately does NOT carry
+                 .admin-section — apShowSection() in admin-portal.js toggles
+                 every .admin-section inside the open tab-pane, and a nested
+                 one would fight the Ledger/Report tab switch for visibility. -->
+            <section class="admin-section" id="financeHubSection">
+                <!-- Finance is its tab's one real tool (AP_TABS.finance's own
+                     defaultTool — see admin-portal.js), so this header IS the
+                     page header; the design handoff shows it on one row with
+                     the month switcher and search, not stacked as a separate
+                     shell heading above a second toolbar row underneath. The
+                     generic shell (apRenderDetail()) no longer renders a
+                     header for any tool, so there is exactly one header here,
+                     same as everywhere else.
 
-            <!-- Who owes (design handoff 1e — one list, worst first). Reuses
-                 the exact same billed/collected/outstanding computation as
-                 Accounts Receivable (_buildArRows in admin-billing.js) so the
-                 two screens cannot disagree about a number. -->
-            <section class="admin-section" id="whoOwesSection">
-                <h2>📋 Who Owes</h2>
-                <p class="section-desc">Unpaid families, worst first. Paid-in-full collapses below with how and when each one paid.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="woMonth">Month</label>
-                        <input type="month" id="woMonth">
+                     #fhBody stays hidden behind #fhSkeleton until the first
+                     _fhLoad() resolves (see renderFinanceHubTool()), so the
+                     header — now data-adjacent in the same row as the month
+                     label and search — never renders a beat ahead of the
+                     content it's grouped with. Once loaded, #fhSkeleton never
+                     reappears: subsequent month/tab switches update #fhRoot
+                     etc. in place, same as before. -->
+                <div id="fhSkeleton" class="empty-hint" style="padding:60px 0;text-align:center">Loading&hellip;</div>
+                <div id="fhBody" style="display:none">
+                    <div class="ap-head fh-head">
+                        <!-- Title/blurb removed per director request (2026-08-28) — the
+                             sidebar already names the open tool and highlights it, and
+                             the tab strip right below (Ledger/Billing Report/Bookkeeper)
+                             makes it obvious what screen this is. Kept as an empty div,
+                             not deleted outright, so .fh-toolbar (month switcher +
+                             search) stays right-aligned via .ap-head's own
+                             justify-content: space-between. -->
+                        <div></div>
+                        <div class="fh-toolbar">
+                            <div class="fh-month-switch">
+                                <button type="button" id="fhMonthPrev" class="fh-month-arrow" aria-label="Previous month">&#9664;</button>
+                                <span id="fhMonthLabel" class="fh-month-label">&mdash;</span>
+                                <button type="button" id="fhMonthNext" class="fh-month-arrow" aria-label="Next month">&#9654;</button>
+                            </div>
+                            <input type="text" id="fhSearch" class="fh-search" placeholder="Find a family&hellip;">
+                        </div>
                     </div>
-                    <div class="roster-btns">
-                        <button id="woRecordCheckBtn" class="btn-secondary">💳 Record a check</button>
-                        <button id="woNudgeAllBtn" class="btn-primary">Nudge the unpaid</button>
-                    </div>
-                </div>
-                <div id="woBody"><p class="empty-hint">Loading…</p></div>
-            </section>
 
-            <!-- The billing report (design handoff 2a) — the screen behind
-                 "Bill This Month". Preserved as a first-class, printable
-                 screen per the client's own constraint, not replaced by
-                 summary cards. -->
-            <section class="admin-section collapsible-section" id="billingReportSection">
-                <h2>📊 Billing Report</h2>
-                <p class="section-desc">Every registration for the month, its rate, what changed it, and a total that ties to the invoices. Prints two pages, grouped by room.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="brMonth">Month</label>
-                        <input type="month" id="brMonth">
+                    <div class="fh-tabs" id="fhTabs" role="tablist">
+                        <button type="button" class="fh-tab is-on" data-fh-tab="ledger" role="tab" aria-selected="true">Ledger</button>
+                        <button type="button" class="fh-tab" data-fh-tab="report" role="tab" aria-selected="false">Billing Report</button>
+                        <!-- Bookkeeper (design handoff Finance Hub §6) — the third
+                             tab that retired seven separate Finance sidebar tools.
+                             Same director, no separate role; see
+                             js/admin/admin-finance-bookkeeper.js. -->
+                        <button type="button" class="fh-tab" data-fh-tab="bookkeeper" role="tab" aria-selected="false">Bookkeeper</button>
                     </div>
-                    <div class="ap-seg" id="brGroupToggle" role="group" aria-label="Group by">
-                        <button type="button" class="ap-seg-btn is-on" data-group="room">By room</button>
-                        <button type="button" class="ap-seg-btn" data-group="name">By name</button>
-                    </div>
-                    <div class="roster-btns">
-                        <button id="brPrintBtn" class="btn-secondary">🖨️ Print</button>
-                        <button id="brCsvBtn" class="btn-secondary">&#8595; Export CSV</button>
-                    </div>
-                </div>
-                <div id="brBody"><p class="empty-hint">Loading…</p></div>
-            </section>
 
-            <section class="admin-section" id="invoicesSection">
-                <h2>🧾 Invoices</h2>
-                <p class="section-desc">Draft, adjust, and issue this month's family invoices. Amounts come from the same calculation as Family Billing Summary — days actually booked, discounts, sibling credit and change fees.</p>
-                <div class="roster-controls">
-                    <div class="roster-field">
-                        <label for="invMonth">Month</label>
-                        <input type="month" id="invMonth">
+                    <div id="fhLedgerPane">
+                        <div id="fhRoot"><p class="empty-hint">Loading&hellip;</p></div>
                     </div>
-                    <div class="roster-btns">
-                        <button id="invDraftBtn" class="btn-primary">💾 Save drafts</button>
-                        <button id="invTestBtn"  class="btn-secondary">✉️ Send me a test</button>
-                        <button id="invEmailBtn" class="btn-primary">✉️ Email invoices</button>
-                        <button id="invSendBtn"  class="btn-secondary">🧾 Mark sent (no email)</button>
-                        <button id="invCsvBtn"   class="btn-secondary">&#8595; Export CSV</button>
+
+                    <div class="fh-report-pane" id="billingReportSection" style="display:none">
+                        <h3>📊 Billing Report</h3>
+                        <p class="section-desc">Every registration for the month, its rate, what changed it, and a total that ties to the invoices. Prints two pages, grouped by room.</p>
+                        <div class="roster-controls">
+                            <div class="roster-field">
+                                <label for="brMonth">Month</label>
+                                <input type="month" id="brMonth">
+                            </div>
+                            <div class="ap-seg" id="brGroupToggle" role="group" aria-label="Group by">
+                                <button type="button" class="ap-seg-btn is-on" data-group="room">By room</button>
+                                <button type="button" class="ap-seg-btn" data-group="name">By name</button>
+                            </div>
+                            <div class="roster-btns">
+                                <button id="brPrintBtn" class="btn-secondary">🖨️ Print</button>
+                                <button id="brCsvBtn" class="btn-secondary">&#8595; Export CSV</button>
+                            </div>
+                        </div>
+                        <div id="brBody"><p class="empty-hint">Loading…</p></div>
+                    </div>
+
+                    <div class="fh-bk-pane" id="fhBookkeeperPane" style="display:none">
+                        <div id="bkRoot"><p class="empty-hint">Loading&hellip;</p></div>
+                    </div>
+
+                    <div class="fh-note-editor">
+                        <label for="invNoteText">Note on every invoice email <span class="fh-note-hint">(how to pay, when it's due — optional)</span></label>
+                        <textarea id="invNoteText" rows="2"></textarea>
+                        <div class="fh-note-row">
+                            <button id="invNoteSaveBtn" class="btn-secondary">💾 Save note</button>
+                            <button id="invTestBtn" class="btn-secondary">✉️ Send me a test</button>
+                            <span id="invNoteStatus" class="fh-note-status"></span>
+                        </div>
                     </div>
                 </div>
-                <div class="ap-stats" id="invSummary" style="margin-bottom:16px"></div>
-                <p id="invNote" class="ap-note" style="min-height:1.2em;color:var(--green-text);font-weight:700"></p>
-                <!-- Adjustments drafted when days changed after an invoice was
-                     sent. Reviewed and issued by the director; never automatic. -->
-                <div id="invAdjustments" style="display:none"></div>
-                <div id="invBody"><p class="empty-hint">Loading…</p></div>
-                <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);max-width:76ch">
-                    <label for="invNoteText" style="display:block;font-weight:600;font-size:.9em;margin-bottom:6px">Note on every invoice email <span style="font-weight:400;color:var(--text-muted)">(how to pay, when it's due — optional)</span></label>
-                    <textarea id="invNoteText" rows="2" placeholder="e.g. Payment is due by the 10th. Cheques to Timothy Lutheran MDO, or pay in the office."
-                              style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:var(--font-body);font-size:.92em;background:#fff"></textarea>
-                    <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
-                        <button id="invNoteSaveBtn" class="btn-secondary">💾 Save note</button>
-                        <span id="invNoteStatus" style="font-size:.85em;color:var(--green-text);font-weight:700"></span>
+
+                <!-- Print statement overlay (design handoff #5) — an in-page
+                     overlay rather than window.open(), which sandboxed/embedded
+                     contexts silently block. @media print hides everything else
+                     on the page and prints only this. -->
+                <div class="fh-print-scrim" id="fhPrintScrim" style="display:none">
+                    <div class="fh-print-sheet" id="fhPrintSheet"></div>
+                    <div class="fh-print-btns no-print">
+                        <button type="button" class="fh-print-btn" id="fhPrintNowBtn">&#128424; Print</button>
+                        <button type="button" class="fh-print-close" id="fhPrintCloseBtn">Close</button>
                     </div>
                 </div>
-                <p class="ap-note" style="margin-top:14px;max-width:76ch">
-                    <strong>Email invoices</strong> sends each family their statement and stamps the invoice as sent. <strong>Mark sent (no email)</strong> records the issue date only, for bills you handed over or sent another way. Either way, Accounts Receivable ages “overdue” from that date rather than from the start of the month, and the action is written to the audit log.
-                </p>
             </section>
 
             <section class="admin-section collapsible-section" id="billingArSection">
@@ -1996,7 +2340,8 @@
                         <div class="fm-field fm-field-pin">
                             <label>PIN</label>
                             <div class="fm-pin-row">
-                                <input type="text" id="fmPin" class="fm-pin-input" maxlength="4" placeholder="4-digit">
+                                <input type="text" id="fmPin" class="fm-pin-input" maxlength="8" placeholder="4-8 digits"
+                                       inputmode="numeric" pattern="\d{4,8}" autocomplete="off">
                                 <button type="button" id="fmNewPinBtn" class="btn-ghost fm-pin-btn" title="Generate new PIN">&#8635;</button>
                             </div>
                         </div>
@@ -2024,7 +2369,8 @@
                         <div class="fm-field fm-field-pin">
                             <label>PIN</label>
                             <div class="fm-pin-row">
-                                <input type="text" id="fmParent2Pin" class="fm-pin-input" maxlength="4" placeholder="4-digit">
+                                <input type="text" id="fmParent2Pin" class="fm-pin-input" maxlength="8" placeholder="4-8 digits"
+                                       inputmode="numeric" pattern="\d{4,8}" autocomplete="off">
                                 <button type="button" id="fmNewPin2Btn" class="btn-ghost fm-pin-btn" title="Generate new PIN">&#8635;</button>
                             </div>
                         </div>
@@ -2039,6 +2385,22 @@
                             <input type="tel" id="fmParent2Phone" placeholder="555-123-4567" autocomplete="off">
                         </div>
                     </div>
+                </div>
+
+                <!-- Approved for pickup — the family's own list, read-only here.
+                     Added 2026-08-28: parents record this in their own portal
+                     (portal-account.js "Approved for pickup") via
+                     add_pickup_contact/remove_pickup_contact, writing into
+                     pickup_contacts (family_id, name, relationship, note).
+                     Nothing in the admin app read that table before this —
+                     the office had no way to see who a parent has approved
+                     to pick up their child without asking the parent
+                     directly. Read-only: the family still owns adding and
+                     removing entries from their own portal. -->
+                <div class="fm-section" id="fmPickupSection">
+                    <div class="fm-section-label">Approved for pickup</div>
+                    <p class="section-desc" style="margin-top:0">Added by the family in their own portal — read-only here.</p>
+                    <div id="fmPickupList"></div>
                 </div>
 
                 <!-- Group -->

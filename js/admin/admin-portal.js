@@ -47,7 +47,12 @@ const AP_TABS = {
     },
     messages: {
         icon: '💬', label: 'Messages',
-        blurb: 'Everything a family has sent through the portal — the Contact Us form and waitlist questions — in one inbox.',
+        blurb: "Every conversation with families and prospects, in one place — who's waiting on you, and what still needs an email.",
+        // One working inbox (design handoff design_handoff_messages_settings/
+        // Messages.dc.html, 2026-08-26) replaced the tab's old two-tool split
+        // (Family Conversations / Contact Us Messages). Same reasoning as
+        // Finance's defaultTool: one real tool, no dashboard to land on first.
+        defaultTool: 'messages',
     },
     classrooms: {
         icon: '📋', label: 'Classrooms',
@@ -59,7 +64,15 @@ const AP_TABS = {
     },
     finance: {
         icon: '💰', label: 'Finance',
-        blurb: "Everything financial, grouped by what you're trying to do. Pick a tool to open it — you'll land on just that tool, not the whole page.",
+        blurb: 'Billing, invoices, and who owes — one ledger, one number for each.',
+        // Finance Hub (design handoff, 2026-08-26) replaced the four screens
+        // this tab used to fan out to (Bill This Month / Who Owes / Invoices /
+        // Family Billing Summary) with one ledger. A landing dashboard that
+        // still linked out to those tools would put the director right back
+        // where the redesign started — pick a screen before you can do
+        // anything. Finance opens straight into its one real tool instead of
+        // the generic Dashboard/Detail split every other tab uses.
+        defaultTool: 'financeHub',
     },
     planning: {
         icon: '🗓️', label: 'Planning',
@@ -71,7 +84,12 @@ const AP_TABS = {
     },
     settings: {
         icon: '⚙️', label: 'Settings',
-        blurb: 'The rules the portal runs on. Change these rarely — most take effect immediately for parents.',
+        blurb: 'The rules the portal runs on. Every control shows who last changed it.',
+        // One continuous page (design handoff design_handoff_messages_settings/
+        // Settings.dc.html, 2026-08-26) replaced the flat 9-panel tab. Same
+        // reasoning as Finance's defaultTool: one real tool, no dashboard to
+        // land on first.
+        defaultTool: 'settingsHub',
     },
 };
 
@@ -80,18 +98,68 @@ const AP_TABS = {
 // `pane` is the legacy tab-pane that section lives inside (the shell has
 // to un-hide the pane before it can show the section).
 const AP_TOOLS = [
-    // ── Classrooms · Today ──
-    // First in the group on purpose: it is the office mirror of the teachers'
-    // head count, and it is where a missing-child alert lights up for the
-    // director at the same instant it hits every staff phone.
-    { key: 'attBoard',    pane: 'daily',         section: 'attendanceBoardSection',  tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '🚸', name: 'Attendance Board',
-      blurb: 'Live — every room, who is in, who is expected, staff present, ratio.' },
-    { key: 'roster',      pane: 'daily',         section: 'dailyRosterSection',      tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📋', name: 'Classroom Roster',
-      blurb: 'Who is in each room today, this week, or this month.' },
-    { key: 'capOverview', pane: 'daily',         section: 'capacityOverviewSection', tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📆', name: 'Capacity Overview',
-      blurb: 'Every room, every day of a month, against capacity.' },
-    { key: 'roomSched',   pane: 'daily',         section: 'roomSchedSection',        tab: 'classrooms', group: 'Today', tint: AP_TINT.green, icon: '📅', name: 'Room Schedule Planner',
-      blurb: 'Move children between rooms day by day.' },
+    // ── Classrooms · Daily (design handoff: Classroom Tab Redesign, 2026-08-27) ──
+    // 13 Classroom-tab screens → 7. Attendance Board absorbed Classroom
+    // Roster's day-view In/Out marking (the one thing Roster had that the
+    // board didn't) plus a Move-a-child shortcut; `roster` itself was
+    // retired here at the time, then restored 2026-08-28 — see its entry
+    // below, it was the only source of Print/PDF rosters and nothing else
+    // replaced that. Incident Reports and Fire Drills each gained a
+    // director-authored path
+    // ("+ Write a report" / "+ Log a Drill") alongside reviewing what staff
+    // filed — see admin-attendance.js/admin-incidents.js/admin-safety.js.
+    //
+    // Print Attendance — added 2026-08-28, first in the group: a blank paper
+    // sign-in/sign-out sheet per room, for a parent or staff member to
+    // hand-sign at drop-off/pickup. Distinct from both `roster` below (a
+    // reference list, no signature lines) and `attBoard` (digital, live
+    // In/Out marking) — this is the paper backup licensing still expects at
+    // the door. Its section lives in #tab-daily, so pane:'daily' is correct
+    // here (unlike the three below it).
+    { key: 'printAttendance', pane: 'daily', section: 'printAttendanceSection', tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '🖨️', name: 'Print Attendance',
+      blurb: 'A blank sign-in/sign-out sheet per room — Time In/Out and a parent signature line for each child.' },
+    // ⚠️ `pane` must be 'families', not 'daily': all three sections
+    // (attendanceBoardSection/incidentsSection/fireDrillsSection) live inside
+    // admin.html's #tab-families, not #tab-daily. They previously carried
+    // pane:'daily', which made apShowSection() hide #tab-families (and the
+    // section along with it) the moment any of these three was opened —
+    // confirmed by reading apShowSection(), not assumed. The 'staff'-role
+    // visibility check in apToolAvailable() no longer keys off `pane` for
+    // exactly this reason (see that function's comment).
+    { key: 'attBoard',    pane: 'families', section: 'attendanceBoardSection',  tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '🚸', name: 'Attendance Board',
+      blurb: 'Live — every room, who is in, who is expected, staff present, ratio. Mark In/Out/Absent and move a child, all from here.' },
+    { key: 'incidents',   pane: 'families', section: 'incidentsSection',        tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '🩹', name: 'Incident Reports',
+      blurb: 'Review what staff filed, then release it to the family — or write one yourself.' },
+    { key: 'drills',      pane: 'families', section: 'fireDrillsSection',       tab: 'classrooms', group: 'Daily', tint: AP_TINT.tang, icon: '🔥', name: 'Fire Drills',
+      blurb: 'Every drill run, who was in the building, and how long it took — or log one yourself.' },
+    // Restored 2026-08-28: the Classroom Tab Redesign retired this tool,
+    // reasoning that Attendance Board absorbed the one thing it did that
+    // nothing else did (day-view In/Out marking) and that its week/month
+    // browsing "had no taker in the redesign." That dropped its print
+    // function too — Day/Week/Month PDF export and "Print All Rooms" — which
+    // nothing else in the app replaces; the Attendance Board has no print
+    // path at all. `dailyRosterSection`'s markup and `setupRoster()` were
+    // never removed, so this is a re-registration, not a rebuild. `group:
+    // 'Daily'` is deliberate, not cosmetic: the admin-role picker's own label
+    // for the 'staff' role — "Staff — Classroom Roster (read-only)"
+    // (admin-settings.js) — has named this exact tool the whole time via
+    // apToolAvailable()'s group==='Daily' gate; without an entry here that
+    // label was describing a tool 'staff' accounts could no longer reach.
+    { key: 'roster',      pane: 'daily',    section: 'dailyRosterSection',      tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '📋', name: 'Classroom Roster',
+      blurb: 'Who is in each room today, this week, or this month — Day/Week/Month PDF export and Print All Rooms.' },
+
+    // ── Classrooms · Planning ──
+    // Replaces three screens that read the same registrations at different
+    // grains (Capacity Overview's month grid, Room Schedule Planner's weekly
+    // AM/PM view, and Planning's own FTE/seat-day Room Capacity Overview) with
+    // one Day/Week/Month/FTE view switcher — see admin-enrollment-capacity.js.
+    // `capOverview`, `roomSched` and Planning's `capacityOverview` are retired
+    // below; their old section wrappers are removed from admin.html since
+    // this tool relocated their actual content rather than leaving it behind
+    // unreferenced (contrast with CACFP below, and `roster` at the time this
+    // was written — `roster` was restored 2026-08-28, see the Daily group).
+    { key: 'enrollCap',   pane: 'daily',    section: 'enrollmentCapacitySection', tab: 'classrooms', group: 'Planning', tint: AP_TINT.green, icon: '📆', name: 'Enrollment & Capacity',
+      blurb: 'Day, week, month, or FTE view of how full each room is — one screen, replacing three.' },
 
     // ── Classrooms · Records ──
     { key: 'careCal',     pane: 'registrations', section: 'allRegistrationsSection', tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '🗒️', name: 'Care Calendar',
@@ -100,64 +168,62 @@ const AP_TOOLS = [
       blurb: 'Active children with no registration for a month.' },
     { key: 'families',    pane: 'families',      section: 'familiesSection',         tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '👨‍👩‍👧', name: 'Family Directory',
       blurb: 'Family and child records, PINs, discounts, imports.' },
-    // Incidents sit under Classrooms because that is where they happen and who
-    // reports them. Approval is what notifies the family, so a report waiting
-    // here is a parent who has not been told yet.
-    { key: 'incidents',   pane: 'daily',         section: 'incidentsSection',        tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '🩹', name: 'Incident Reports',
-      blurb: 'Review what staff filed, then release it to the family.' },
-    // Drills sit under Classrooms with the incidents: same shelf, same
-    // inspector, and the count they record is a count of children.
-    { key: 'drills',      pane: 'daily',         section: 'fireDrillsSection',       tab: 'classrooms', group: 'Records', tint: AP_TINT.tang, icon: '🔥', name: 'Fire Drills',
-      blurb: 'Every drill run, who was in the building, and how long it took.' },
-    { key: 'announce',    pane: 'daily',         section: 'announcementsSection',    tab: 'classrooms', group: 'Records', tint: AP_TINT.tang, icon: '📣', name: 'Announcements',
-      blurb: 'Write once — closures, news, events — and see who gets it.' },
-    // ── Finance · Money In (design handoff: Finance.dc.html) ──
-    // Bill This Month is the approval front door — she opens this, not
-    // Invoices, when the month needs billing. Invoices stays as the register
-    // of what has actually been issued (edit, adjust, resend one).
-    { key: 'billMonth',   pane: 'finance', section: 'billThisMonthSection',   tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🧾', name: 'Bill This Month',
-      blurb: 'Drafts build themselves; review what changed, release the rest.' },
-    { key: 'invoices',    pane: 'finance', section: 'invoicesSection',       tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📨', name: 'Invoices',
-      blurb: "Every invoice this month — edit, adjust, resend one." },
-    { key: 'whoOwes',     pane: 'finance', section: 'whoOwesSection',        tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📋', name: 'Who Owes',
-      blurb: 'Unpaid families, worst first — nudge, plan, or write off.' },
-    { key: 'billingReport', pane: 'finance', section: 'billingReportSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📊', name: 'Billing Report',
-      blurb: 'Every registration and its rate — printable, ties to the invoices.' },
-    { key: 'ar',          pane: 'finance', section: 'billingArSection',      tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📋', name: 'Accounts Receivable',
-      blurb: 'Payment status per family for a month — overdue, partial, paid.' },
+
+    // ── Finance · Money In (design handoff: Finance Hub, 2026-08-26) ──
+    // Bill This Month, Invoices, Who Owes, and Family Billing Summary are
+    // consolidated into one ledger screen — the director's own complaint was
+    // too many screens with numbers that didn't visibly agree ("111 to bill"
+    // vs. "96 drafted" vs. "84 owe", no explanation of the gap). Billing
+    // Report survives as this tool's own second tab (Ledger / Billing
+    // Report), not a separate nav entry — see admin-finance-hub.js and the
+    // nested #billingReportSection markup in admin.html.
+    // Finance is the tab's one real tool (AP_TABS.finance's own defaultTool),
+    // and the design handoff puts its title/subtitle on the SAME row as the
+    // month switcher and search — those live inside financeHubSection
+    // (admin.html's own .fh-head). apRenderDetail() no longer renders a shell
+    // header for any tool (see that function), so this needs no special
+    // handling anymore — it just always worked out that way.
+    // No `blurb` — apRenderDetail() hasn't rendered a shell header for any
+    // tool since 2026-08-28 (see that function's own comment), and this
+    // entry's own on-screen title was removed from #fhBody the same day, so
+    // the field had nothing left reading it.
+    { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
-    { key: 'famBilling',  pane: 'reports', section: 'familyBillingSection',  tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '👨‍👩‍👧', name: 'Family Billing Summary',
-      blurb: 'Per-family totals for a month, ready to invoice.' },
 
-    // ── Finance · Bookkeeper ──
-    // "The director does not do the monthly close-out and does not need room
-    // profitability" (client constraint, Finance.dc.html README). These tools
-    // are not deleted — reconciliation, room P&L and YoY are real and stay
-    // reachable — they are simply no longer on HER shelf. Nothing on the
-    // Finance dashboard (1a) links here; she opens this group on purpose.
-    { key: 'procare',     pane: 'finance', section: 'billingPaymentsSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📂', name: 'Reconcile Payments',
-      blurb: 'Import a bank/ProCare export and match it against what was billed.' },
-    { key: 'scenario',    pane: 'finance', section: 'rateScenarioSection',   tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🧮', name: 'Rate Increase Scenarios',
-      blurb: 'What-if a rate, registration, or supply fee change — annual net, before you commit.' },
-    { key: 'revdash',     pane: 'finance', section: 'billingDashSection',    tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📊', name: 'Revenue Dashboard',
-      blurb: 'Collection rate, YTD trends, and scholarship summary.' },
-    { key: 'dash',        pane: 'finance', section: 'financeDashSection',    tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '💰', name: 'Financial Dashboard',
-      blurb: 'Year-to-date revenue, labor, and margin with monthly charts.' },
-    { key: 'yoy',         pane: 'finance', section: 'financeYoySection',     tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📈', name: 'Year-over-Year',
-      blurb: 'Revenue and labor month-by-month against the prior year.' },
-    { key: 'pnl',         pane: 'finance', section: 'roomPnlSection',        tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🏫', name: 'Room Profitability (P&L)',
-      blurb: 'Monthly revenue vs. labor cost per classroom — confirmed headcount and revenue only, no expense allocation.' },
-    { key: 'arrev',       pane: 'finance', section: 'attendanceRevenueSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📊', name: 'Attendance & Revenue',
-      blurb: 'Monthly attendance and net revenue across all rooms.' },
-    { key: 'budget',      pane: 'finance', section: 'financeBudgetSection',  tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🎯', name: 'Annual Budget & Actuals',
-      blurb: "Set yearly targets and record what you've actually spent." },
-    { key: 'expense',     pane: 'finance', section: 'financeExpenseSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '📋', name: 'Expense Lines',
-      blurb: 'Fixed monthly costs and annual one-time expenses.' },
-    { key: 'model',       pane: 'finance', section: 'financeModelSection',   tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.tang, icon: '🔧', name: 'Rate & Wage Modeling',
-      blurb: 'Project the impact of tuition and wage changes before you make them.' },
-    { key: 'api',         pane: 'finance', section: 'financeApiTesterSection', tab: 'finance', group: 'Bookkeeper', tint: AP_TINT.sand, icon: '🔌', name: 'ChMS Finance API',
-      blurb: 'Test the connection the church accounting system uses.' },
+    // ── Finance · Bookkeeper group — now EMPTY, and that's the point ──
+    // Ten tools used to live in this sidebar group across two sessions and
+    // no longer do: Accounts Receivable, Reconcile Payments, Revenue
+    // Dashboard, Financial Dashboard, Room Profitability, Attendance &
+    // Revenue, Annual Budget & Actuals, Year-over-Year, Expense Lines, and
+    // ChMS Finance API. They are now:
+    //   - the six sub-views of the Finance Hub's **Bookkeeper tab**
+    //     (js/admin/admin-finance-bookkeeper.js) — Overview · Accounts
+    //     Receivable · Room P&L · Month-End Close · Reconciliation ·
+    //     GL Export;
+    //   - Year-over-Year and the Expense Lines editor, folded directly into
+    //     Bookkeeper → Overview, under its Annual Budget card
+    //     (2026-08-28 — see admin-finance-bookkeeper.js's
+    //     `_bkOverviewHtml()`, the "Budget lines" editor and the embedded
+    //     `#financeYoyContent`);
+    //   - ChMS Finance API, moved to Settings → Access & oversight
+    //     (`#financeApiCard`, admin.html) — it needed a tab, not a
+    //     Bookkeeper sub-view, and Settings already hosts the other
+    //     admin-account-oversight tools.
+    //
+    // This is the whole point of the overhaul: the numbers on those ten
+    // screens were computed several different ways and did not visibly
+    // agree. Leaving the originals reachable next to their replacement would
+    // have kept every one of those disagreements on the shelf and made the
+    // shelf longer. Their sections stay in admin.html (unreferenced by
+    // AP_TOOLS = unreachable, per the shell's own rule) so nothing that
+    // reads their DOM breaks — except #financeYoySection and
+    // #financeApiTesterSection, deleted outright because their ids/markup
+    // were reused at the new location (see admin.html's own comments there).
+    //
+    // Attendance & Revenue is gone as a screen, not just as a nav entry:
+    // child-days is a stat on each Room P&L card now, from the same dataset
+    // that card's revenue comes from, so the two can no longer disagree.
 
     // Historical Payroll Records is commented out in admin.html ("hidden
     // 2026-07, may bring back later") — same for New Family Enrollment,
@@ -175,121 +241,143 @@ const AP_TOOLS = [
     // sidebar's dashed note (apNavHtml) points to Staff → Pay & Policy
     // instead of inventing two undesigned screens.
 
-    // ── Classrooms · Food Program ──
-    // Moved out of Finance entirely per the handoff: "a program to run, not
-    // money to manage." Its claim total still posts into Money In — nothing
-    // about what the claim computes changed, only which tab opens it.
-    { key: 'cacfpMeal',   pane: 'cacfp', section: 'cacfpMealSection',   tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '🍽️', name: 'Daily Meal Counts',
-      blurb: 'Record meals served for the CACFP claim.' },
-    { key: 'cacfpMenu',   pane: 'cacfp', section: 'cacfpMenuSection',   tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '📋', name: 'Menu Planner',
-      blurb: 'Plan compliant menus week by week.' },
-    { key: 'cacfpIncome', pane: 'cacfp', section: 'cacfpIncomeSection', tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '💵', name: 'Income Eligibility',
-      blurb: 'Household eligibility forms and tiering.' },
-    { key: 'cacfpClaims', pane: 'cacfp', section: 'cacfpClaimsSection', tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '🧾', name: 'Monthly Claim',
-      blurb: 'Assemble and export the monthly reimbursement claim.' },
+    // ── Classrooms · Food Program — retired 2026-08-28 ──
+    // The four CACFP tools (Daily Meal Counts, Menu Planner, Income
+    // Eligibility, Monthly Claim) are removed from the sidebar at the
+    // director's request. Same convention as every other retirement in this
+    // file: unreferenced by AP_TOOLS = unreachable, per the shell's own rule.
+    // `cacfpMealSection`/`cacfpMenuSection`/`cacfpIncomeSection`/
+    // `cacfpClaimsSection` stay in admin.html and `js/admin/admin-cacfp.js`
+    // stays in the tree, unreferenced, in case the program is ever revived.
 
     // ── Planning · Waitlist ──
+    // Consolidation pass (design_handoff_planning_market, 2026-08-27): 15
+    // Planning + Market Analysis tools → 6. Retired entries below: `planner`
+    // (Enrollment Planner) was a duplicate of `wlPlanner`; `wlDemand`
+    // (Waitlist Demand by Month), `forecast` (Demand Forecast) and
+    // `promotions` (Upcoming Room Promotions) moved inline into wlPlanner's
+    // own Grid render (see wlpRenderDemandStrip/wlpRenderAgeOutStrip in
+    // admin-waitlist.js) rather than staying separate tools; `trends`, `fte`
+    // and `seatDay` are replaced by the single `capacityOverview` entry below,
+    // which zips their same underlying queries into one table instead of
+    // three. The underlying report functions (generateDemandForecast,
+    // generatePromotionsReport, generateEnrollmentTrends, etc.) are NOT
+    // deleted — only their standalone AP_TOOLS entries/sections are, per the
+    // handoff's explicit instruction. `ratioStep` is unchanged (no visual
+    // redesign) but its render function is now also mounted a second time
+    // inside Staff → Build Staff Schedule — see apOnToolOpened().
     { key: 'wlPlanner',   pane: 'waitlist', section: 'waitlistPlannerSection', tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '🗂️', name: 'Waitlist & Capacity Planner',
-      blurb: 'The queue, the grid, and the board — one shared allocation.' },
+      blurb: 'The queue, the grid, and the board — one shared allocation, now with demand-by-month and age-out rollups inline.' },
     { key: 'wlNotify',    pane: 'waitlist', section: 'wlNotifySection',       tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '📨', name: 'Waitlist Inquiries',
       blurb: 'Shareable inquiry link, notification email, and weekly reminders.' },
     { key: 'wlImport',    pane: 'waitlist', section: 'wlImportSection',       tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '📥', name: 'Import Waitlist from File',
       blurb: 'Bulk-import waitlist applications from CSV or Excel.' },
-    { key: 'wlDemand',    pane: 'waitlist', section: 'waitlistDemandSection', tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '📊', name: 'Waitlist Demand by Month',
-      blurb: 'Active applications by room and desired start month.' },
 
     // ── Planning · Enrollment Outlook ──
-    { key: 'trends',      pane: 'waitlist', section: 'enrollmentTrendsSection', tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📈', name: 'Enrollment Trends',
-      blurb: 'Month-by-month enrollment count per room.' },
-    { key: 'fte',         pane: 'waitlist', section: 'enrollmentFteSection',   tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📊', name: 'Total Enrollment & FTE',
-      blurb: 'Monthly headcount and full-time-equivalent enrollment per room.' },
-    { key: 'seatDay',     pane: 'waitlist', section: 'seatDayCapacitySection', tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '🪑', name: 'Seat-Day Capacity Model',
-      blurb: 'Plans around occupied seats per day, not enrolled headcount.' },
-    { key: 'forecast',    pane: 'waitlist', section: 'forecastSection',        tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📉', name: 'Demand Forecast',
-      blurb: 'Projected demand per room from history and the waitlist.' },
+    // `capacityOverview` was retired from here in the Classroom Tab Redesign
+    // (its content folded into the FTE/Seat-Day sub-view of Classrooms →
+    // Planning → Enrollment & Capacity, `enrollCap`, above) but restored
+    // 2026-08-28: design_handoff_planning_market's own sidebar mock shows it
+    // as its own tool under Planning, and that handoff is what this
+    // consolidation pass is implementing. Same renderCapacityOverviewTool()
+    // as enrollCap's sub-view, second mount point with its own container/
+    // drawer ids — see the comment on that function in admin-reports.js.
+    { key: 'capacityOverview', pane: 'waitlist', section: 'roomCapacityOverviewSection', tab: 'planning',
+      group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📆', name: 'Room Capacity Overview',
+      blurb: 'Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as before.' },
     { key: 'ratioStep',   pane: 'waitlist', section: 'ratioStepSection',       tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '⚖️', name: 'Ratio Step & Next Child',
       blurb: 'Where the next child tips a room into another staff member.' },
-    { key: 'promotions',  pane: 'waitlist', section: 'promotionsSection',      tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '🎂', name: 'Upcoming Room Promotions',
-      blurb: 'Children aging out of their room in the next 2 years.' },
-    { key: 'planner',     pane: 'waitlist', section: 'enrollmentPlannerSection', tab: 'planning', group: 'Enrollment Outlook', tint: AP_TINT.green, icon: '📅', name: 'Enrollment Planner',
-      blurb: 'Cross-reference open capacity with waitlist demand.' },
+
+    // ── Planning · What-If ──
+    // Moved out of Finance by the Finance Hub handoff, which draws the line
+    // explicitly: "Scenario planning and enrollment modeling have moved out of
+    // Finance — they'll live in a separate Planning area. [Finance] stays
+    // close-focused: what happened, what reconciles, what exports." A model of
+    // a rate you have not set is not a thing that happened, so it does not
+    // belong on a close screen. Their sections still live in the `finance`
+    // pane (the shell un-hides the pane, so a cross-pane tool is fine) and
+    // both are in AP_FULL_ONLY_KEYS below — they show wages and rates, and the
+    // Planning tab, unlike Finance, is open to `restricted`.
+    { key: 'scenario',    pane: 'finance', section: 'rateScenarioSection',   tab: 'planning', group: 'What-If', tint: AP_TINT.tang, icon: '🧮', name: 'Rate Increase Scenarios',
+      blurb: 'What-if a rate, registration, or supply fee change — annual net, before you commit.' },
+    { key: 'model',       pane: 'finance', section: 'financeModelSection',   tab: 'planning', group: 'What-If', tint: AP_TINT.tang, icon: '🔧', name: 'Rate & Wage Modeling',
+      blurb: 'Project the impact of tuition and wage changes before you make them.' },
+
+    // ── Staff tab consolidation (design_handoff_staff, 2026-08-28) ──
+    // Audit finding: 9 tools, 3 groups → 4 tools, 3 groups. Every retired
+    // key's real logic is untouched — this only changes which tools are
+    // separate nav entries versus tabs inside one screen. Three
+    // single-source-of-truth pairs: the `staff` table (Roster, with
+    // Directory now a read tab of it, not a parallel table), `apStaffing()`
+    // (Schedule, with the Requirement now a tab reading the same call
+    // instead of a separate entry that could compute it differently), and
+    // Payroll (PTO rate + Time Clock settings/integrity now tabs of the
+    // screen whose numbers they actually feed).
+    //
+    // ⚠️ Fixed in the same pass: staffInjuriesSection/clockIntegritySection
+    // carried `pane:'staffing'` here but their markup lived in `#tab-families`
+    // — apShowSection() hides every pane whose id isn't `tab-<pane>`, so
+    // opening either tool from the sidebar hid `#tab-families` and showed the
+    // empty `#tab-staffing`, leaving both tools permanently blank. Never
+    // caught because nothing else in `#tab-families` depends on them. Their
+    // markup is now physically inside `#tab-staffing`, so `pane` finally
+    // matches where the DOM actually is.
 
     // ── Staff · Scheduling ──
     { key: 'schedule',    pane: 'staffing', section: 'staffScheduleSection',  tab: 'staff', group: 'Scheduling', tint: AP_TINT.sand, icon: '🗓️', name: 'Build Staff Schedule',
       blurb: 'Assign staff to rooms and shifts for the week, against what the ratios require.' },
-    { key: 'staffreq',    pane: 'staffing', section: 'staffReqSection',       tab: 'staff', group: 'Scheduling', tint: AP_TINT.tang, icon: '👥', name: 'Daily Staffing Requirement',
-      blurb: 'Exactly how many staff each day needs, from the kids actually registered.' },
 
     // ── Staff · Your Team ──
     { key: 'staffRoster', pane: 'staffing', section: 'staffRosterSection',    tab: 'staff', group: 'Your Team', tint: AP_TINT.sand, icon: '🧑‍🏫', name: 'Staff Roster',
-      blurb: 'Staff records, pay type, rooms, and availability.' },
-    { key: 'staffDir',    pane: 'staffing', section: 'staffDirectorySection', tab: 'staff', group: 'Your Team', tint: AP_TINT.sand, icon: '📇', name: 'Staff Directory',
-      blurb: 'Printable contact list for the team.' },
+      blurb: 'Staff records, pay type, rooms, and availability — the one place these get edited.' },
 
     // ── Staff · Pay & Policy ──
     // Payroll is money but it is about people, and everything it needs
-    // (hours, PTO balances, pay type) lives in the Staff tools. It keeps
-    // its full-role gate via AP_FULL_ONLY_KEYS even though the tab is open
-    // to `restricted`.
+    // (hours, PTO balances, pay type, the time clock that produces the
+    // punches) lives in the Staff tools. It keeps its full-role gate via
+    // AP_FULL_ONLY_KEYS even though the tab is open to `restricted` — and
+    // since Time Clock is now a tab inside it, Time Clock inherits the same
+    // gate for free (the stricter of its two former gates, Clock-In
+    // Integrity's, is the one that wins).
     { key: 'payroll',     pane: 'staffing', section: 'payrollSection',        tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.sand, icon: '💵', name: 'Payroll',
       blurb: 'Hours, PTO, and pay for a bi-weekly period.' },
-    { key: 'pto',         pane: 'staffing', section: 'ptoSection',            tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.sand, icon: '🏖️', name: 'PTO Settings',
-      blurb: 'Accrual rules and starting balances.' },
-    { key: 'geofence',    pane: 'staffing', section: 'geofenceSection',       tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.sand, icon: '📍', name: 'Geofence & Clock Reminders',
-      blurb: 'Where the time clock will accept a punch, and when to nudge.' },
-    // ⚠️ Under Staff, not Classrooms, and gated to `full` below. An injury
-    // report names an employee, their body and their medical treatment — it
-    // belongs with pay data, not with the child incident queue.
-    { key: 'staffInjury', pane: 'staffing', section: 'staffInjuriesSection',  tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.tang, icon: '🚑', name: 'Staff Injury Reports',
-      blurb: "Work injuries staff filed, and the 30-day clock on the carrier's First Report." },
-    // Full-role only as well: it names who clocked in from whose phone, which
-    // is an HR conversation before it is anything else.
-    { key: 'clockIntegrity', pane: 'staffing', section: 'clockIntegritySection', tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.tang, icon: '📱', name: 'Clock-In Integrity',
-      blurb: 'Whether the geofence is recording anything, and whether two staff share a phone.' },
+    // HR & Handbook is new — reference policy docs, a write-up log for
+    // documenting lateness/rule breaks, and Staff Injury Reports (moved here
+    // from its own nav entry, same table, same full-role reasoning: an
+    // injury report names an employee, their body and their medical
+    // treatment). The tool itself is open to `restricted` for Policies and
+    // Write-ups; the Injury Reports tab specifically is hidden client-side
+    // for anyone but `full` — see applyRoleRestrictions() in admin-safety.js.
+    { key: 'hrHandbook',  pane: 'staffing', section: 'hrHandbookSection',     tab: 'staff', group: 'Pay & Policy', tint: AP_TINT.tang, icon: '📖', name: 'HR & Handbook',
+      blurb: "Policies every staff member has agreed to, and the written record when one wasn't followed." },
 
     // ── Messages ──
-    // Its own top-level tab, not a group buried under Planning: parents reach
-    // the office two different ways (an ongoing thread from an enrolled
-    // family, or a one-off Contact Us submission from anyone), and both used
-    // to be named "Parent Messages" in two different tabs — a director
-    // reported a message "not showing up" that was sitting in the other one
-    // the whole time. Keeping both tools under one tab with distinct names
-    // is the fix; they stay separate tools (different tables, different
-    // lifecycles) rather than one merged inbox.
-    { key: 'threads',     pane: 'messages', section: 'threadsSection',  tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '💬', name: 'Family Conversations',
-      blurb: 'Two-way conversations with enrolled families — reply as the office.' },
-    { key: 'msgHistory',  pane: 'messages', section: 'messagesSection', tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '📮', name: 'Contact Us Messages',
-      blurb: 'One-off messages sent via the Contact Us button on the registration portal.' },
+    // One working inbox (design handoff design_handoff_messages_settings/
+    // Messages.dc.html, 2026-08-26) — merges Family Conversations, Contact Us
+    // Messages, and Announcements into a single feed. Retired the three-tool
+    // split (`threads`, `msgHistory`, `announce`) and `adminPush`: there is no
+    // dashboard/tool split on this tab anymore — this IS the landing page.
+    { key: 'messages',    pane: 'messages', section: 'messagesUnifiedSection', tab: 'messages', group: 'Inbox', tint: AP_TINT.gold, icon: '💬', name: 'Messages',
+      blurb: "Every conversation with families and prospects, in one place — who's waiting on you, and what still needs an email." },
 
     // ── Market Analysis ──
-    { key: 'mktPos',      pane: 'market', section: 'marketOverviewSection',  tab: 'market', group: 'Where We Stand', tint: AP_TINT.green, icon: '📈', name: 'Market Position',
-      blurb: 'Flexibility vs. age range served, provider by provider.' },
-    { key: 'mktPricing',  pane: 'market', section: 'marketPricingSection',   tab: 'market', group: 'Where We Stand', tint: AP_TINT.green, icon: '💲', name: 'Pricing Landscape',
-      blurb: 'Weekly-equivalent rates and registration fees across providers.' },
-    { key: 'mktCost',     pane: 'market', section: 'marketCostSection',      tab: 'market', group: 'Where We Stand', tint: AP_TINT.green, icon: '💵', name: 'Cost & Wage Context',
-      blurb: 'Why infant care and staff pay are priced the way they are.' },
+    // mktPos/mktPricing/mktCost retired in favor of one directorReport entry
+    // (its three panes read the exact same fetchMarketProviders() call these
+    // three tools used — see renderDirectorReportTool() in admin-market.js).
+    { key: 'directorReport', pane: 'market', section: 'directorReportSection', tab: 'market', group: 'Where We Stand', tint: AP_TINT.green, icon: '📈', name: 'Director Report',
+      blurb: 'Market position, pricing, and cost & wage — auto-pulled from Comparable Providers.' },
     { key: 'mktProviders', pane: 'market', section: 'marketProvidersSection', tab: 'market', group: 'The Field', tint: AP_TINT.sand, icon: '🏫', name: 'Comparable Providers',
       blurb: 'The full comparable set — edit a row or add a provider.' },
 
     // ── Settings ──
-    { key: 'adminPush',   pane: 'settings', section: 'adminPushSection',     tab: 'settings', group: 'Access & Oversight', tint: AP_TINT.tang, icon: '🔔', name: 'My Notifications',
-      blurb: 'Turn on push notifications for new parent messages.' },
-    { key: 'regWindow',   pane: 'settings', section: 'regWindowSection',     tab: 'settings', group: 'Registration', tint: AP_TINT.gold, icon: '🔓', name: 'Registration Window',
-      blurb: 'Force the registration window open or closed.' },
-    { key: 'closedDays',  pane: 'settings', section: 'closedDaysSection',    tab: 'settings', group: 'Registration', tint: AP_TINT.gold, icon: '🚫', name: 'Closed Days',
-      blurb: 'Block dates so they show as unavailable to parents.' },
-    { key: 'summerCamp',  pane: 'settings', section: 'summerCampSection',    tab: 'settings', group: 'Registration', tint: AP_TINT.gold, icon: '☀️', name: 'Summer Camp',
-      blurb: 'Show or hide Summer Camp in the parent portal.' },
-    { key: 'rates',       pane: 'settings', section: 'ratesSection',         tab: 'settings', group: 'Rooms & Rates', tint: AP_TINT.green, icon: '⚙️', name: 'Room Rates & Fees',
-      blurb: 'Daily and weekly rates, age ranges, and one-time fees.' },
-    { key: 'ratios',      pane: 'settings', section: 'ratiosSection',        tab: 'settings', group: 'Rooms & Rates', tint: AP_TINT.green, icon: '👷', name: 'Staff-to-Child Ratios',
-      blurb: 'Maximum children per staff member for each room.' },
-    { key: 'capacity',    pane: 'settings', section: 'capacitySection',      tab: 'settings', group: 'Rooms & Rates', tint: AP_TINT.green, icon: '🏫', name: 'Classroom Capacity',
-      blurb: 'Maximum enrolled children per room per day.' },
-    { key: 'adminRoles',  pane: 'settings', section: 'adminRolesSection',    tab: 'settings', group: 'Access & Oversight', tint: AP_TINT.tang, icon: '🔐', name: 'Admin Access',
-      blurb: 'Admin login accounts and their access levels.' },
-    { key: 'auditLog',    pane: 'settings', section: 'auditLogSection',      tab: 'settings', group: 'Access & Oversight', tint: AP_TINT.tang, icon: '🧾', name: 'Admin Audit Log',
-      blurb: 'Who changed what, recorded automatically and unerasable.' },
+    // One continuous page (design handoff design_handoff_messages_settings/
+    // Settings.dc.html, 2026-08-26) — no dashboard/tool split, no accordion.
+    // Retired the eight separate tools (regWindow, closedDays, summerCamp,
+    // rates, ratios, capacity, adminRoles, auditLog); rates+ratios+capacity
+    // collapsed into one Rooms & rates table. "My Notifications" (adminPush)
+    // moved to the Messages tab header.
+    { key: 'settingsHub', pane: 'settings', section: 'settingsUnifiedSection', tab: 'settings', group: 'Settings', tint: AP_TINT.gold, icon: '⚙️', name: 'Settings',
+      blurb: 'The rules the portal runs on. Every control shows who last changed it.' },
 ];
 
 // Director owns no tools. It is a dashboard: every link on it deep-links
@@ -362,6 +450,20 @@ function apFmtDayShort(dateStr) {
  * Built ONLY from booked registrations and the saved ratios. Clock-in room
  * data is deliberately never read: room selection at the time clock is
  * spotty and would distort the requirement.
+ *
+ * Each cell carries an AM and a PM figure, not one blended number — a room
+ * full of morning-only half-day children needs its full AM staff count and
+ * a genuinely smaller PM count once they leave, and showing only one number
+ * hid that split. AM = every child booked that day; PM = full-day children
+ * only, since a half-day booking here is a morning slot that drops for the
+ * afternoon. This mirrors the "AM = all enrolled · PM = full-day only" rule
+ * `_buildShiftCounts()` (admin-reports.js) already uses for Build Staff
+ * Schedule's own AM/PM columns — same rule, same source data, so the two
+ * tools can't disagree about which shift needs more coverage.
+ * `staff`/`kids` stay the AM figures (unchanged field names, since AM is
+ * always the day's peak — a half-day booking only ever removes a PM child,
+ * never adds one) so every existing "needed" comparison elsewhere in this
+ * file keeps reading the conservative, whole-day figure without change.
  */
 function apStaffing(weekDates) {
     const rooms = getSortedRooms().filter(r => !r.hidden);
@@ -369,29 +471,35 @@ function apStaffing(weekDates) {
         const ratio = room.staffRatio || 10;
         const cells = weekDates.map(date => {
             const closed = allClosureDates.has(date);
-            let kids = 0;
+            let kids = 0, kidsPm = 0;
             if (!closed) {
                 (allRegistrations || []).forEach(reg => {
                     if (reg.room_id !== room.id) return;
                     (reg.registration_dates || []).forEach(d => {
-                        if (!d.waitlisted && d.care_date === date) kids++;
+                        if (!d.waitlisted && d.care_date === date) {
+                            kids++;
+                            if (d.day_type !== 'half') kidsPm++;
+                        }
                     });
                 });
             }
-            const staff = kids > 0 ? Math.ceil(kids / ratio) : 0;
+            const staff   = kids   > 0 ? Math.ceil(kids   / ratio) : 0;
+            const staffPm = kidsPm > 0 ? Math.ceil(kidsPm / ratio) : 0;
             return {
-                kids, staff, closed,
-                // "at ratio" — one more child adds another staff member
-                atEdge: kids > 0 && kids % ratio === 0,
+                kids, kidsPm, staff, staffPm, closed,
+                // "at ratio" — one more child adds another staff member, AM or PM
+                atEdge:   kids   > 0 && kids   % ratio === 0,
+                atEdgePm: kidsPm > 0 && kidsPm % ratio === 0,
             };
         });
         return { room, label: room.label, ratio, ratioLabel: `1 : ${ratio}`, cells };
     }).filter(r => r.cells.some(c => c.kids > 0));
 
-    const classroom = weekDates.map((_, i) => rows.reduce((a, r) => a + r.cells[i].staff, 0));
+    const classroom   = weekDates.map((_, i) => rows.reduce((a, r) => a + r.cells[i].staff,   0));
+    const classroomPm = weekDates.map((_, i) => rows.reduce((a, r) => a + r.cells[i].staffPm, 0));
     const kids      = weekDates.map((_, i) => rows.reduce((a, r) => a + r.cells[i].kids, 0));
     const closed    = weekDates.map(d => allClosureDates.has(d));
-    return { rows, classroom, kids, closed, weekDates };
+    return { rows, classroom, classroomPm, kids, closed, weekDates };
 }
 
 // ── Persistence ──────────────────────────────────────────────
@@ -426,14 +534,19 @@ function apSavePrefs() {
 const AP_FULL_ONLY_TABS = ['finance', 'market'];
 // Financial tools that live outside the Finance tab, so the tab rule
 // above cannot catch them. Payroll sits under Staff because it is about
-// people, but it is still pay data.
-// staffInjury for the same reason as payroll but more so: the report names an
-// employee, the part of their body, and where they were treated. A `restricted`
-// admin who plans schedules has no business reading it.
-// adminPush: a 'restricted'/'staff' login never sees the office-wide Parent
-// Messages inbox (admin-threads.js is unscoped to full admins), so offering
-// them a toggle for it would alert someone with nowhere to act on it.
-const AP_FULL_ONLY_KEYS = ['payroll', 'staffInjury', 'clockIntegrity', 'adminPush'];
+// people, but it is still pay data. Time Clock (settings + integrity) and
+// PTO policy are now tabs inside Payroll, so gating `payroll` alone covers
+// them — no separate keys needed for what used to be `geofence` and
+// `clockIntegrity`.
+// `scenario` and `model` moved to the Planning tab (see above). Planning is
+// open to `restricted`; Finance was not, so without these two keys the move
+// would have quietly widened who can see wage and rate modeling.
+// HR & Handbook (`hrHandbook`) is deliberately NOT in this list — Policies
+// and Write-ups are fine for `restricted`. Only its Injury Reports tab needs
+// the stricter gate (the report names an employee, the part of their body,
+// and where they were treated), so that tab is hidden client-side inside the
+// tool itself rather than the whole tool being pulled from `restricted`.
+const AP_FULL_ONLY_KEYS = ['payroll', 'scenario', 'model'];
 
 function apToolAvailable(tool) {
     const el = document.getElementById(tool.section);
@@ -443,7 +556,13 @@ function apToolAvailable(tool) {
     if (pane && pane.style.display === 'none') return false;
 
     const role = typeof currentAdminRole !== 'undefined' ? currentAdminRole : 'full';
-    if (role === 'staff') return tool.tab === 'classrooms' && tool.pane === 'daily';
+    // ⚠️ Was `tool.pane === 'daily'` — that happened to work only because
+    // attBoard/incidents/drills carried (wrong) pane:'daily' themselves. Fixing
+    // their pane to match where the sections actually live (#tab-families)
+    // would have silently dropped 'staff'-role access to all three. `group`
+    // is what the design handoff actually means by "Classrooms tab only,
+    // read-only roster view": the Daily group, not a DOM-location field.
+    if (role === 'staff') return tool.tab === 'classrooms' && tool.group === 'Daily';
     if (role !== 'full' && AP_FULL_ONLY_TABS.includes(tool.tab)) return false;
     if (role !== 'full' && AP_FULL_ONLY_KEYS.includes(tool.key)) return false;
     return true;
@@ -508,8 +627,21 @@ function apRender() {
         }
         apState.tab = next;
     }
-    const tool = apState.view ? AP_TOOL_BY_KEY[apState.view] : null;
-    if (apState.view && (!tool || !apToolAvailable(tool))) apState.view = null;
+    let tool = apState.view ? AP_TOOL_BY_KEY[apState.view] : null;
+    if (apState.view && (!tool || !apToolAvailable(tool))) { apState.view = null; tool = null; }
+
+    // A tab can name its own landing tool (see AP_TABS.finance) instead of
+    // falling through to the generic Dashboard/Detail split — covers a fresh
+    // tab click (apGoTab sets view to null), a restored session, and initial
+    // load alike, since all three funnel through this one render. Messages
+    // and Settings use this for the same reason finance does: each has
+    // exactly one tool, so there is no dashboard/tool split to fall into
+    // (design handoff design_handoff_messages_settings, 2026-08-26).
+    if (!apState.view) {
+        const defaultKey = AP_TABS[apState.tab]?.defaultTool;
+        const defaultTool = defaultKey ? AP_TOOL_BY_KEY[defaultKey] : null;
+        if (defaultTool && apToolAvailable(defaultTool)) { apState.view = defaultKey; tool = defaultTool; }
+    }
 
     const meta      = AP_TABS[apState.tab];
     const chipIcon  = document.getElementById('currentTabIcon');
@@ -557,9 +689,14 @@ function apNavHtml() {
         </button>`).join('');
 
     const groups = apGroupsForTab(apState.tab);
+    // A single group carries no differentiating information — only print the
+    // heading when a tab has more than one, or "SETTINGS"/"INBOX" sit above
+    // their tab's only tool group forever. apNavHtml() rebuilds this on every
+    // render, so a hand-edit to admin.html/CSS instead of here gets silently
+    // overwritten the next time it runs.
     const body = groups.length
         ? groups.map(g => `
-            <div class="ap-nav-group">${escHtml(g.label)}</div>
+            ${groups.length > 1 ? `<div class="ap-nav-group">${escHtml(g.label)}</div>` : ''}
             ${g.tools.map(t => `
             <button class="ap-nav-item${t.key === apState.view ? ' active is-active' : ''}" data-ap-go="${t.key}">
                 <span>${t.icon}</span><span>${escHtml(t.name)}</span>
@@ -614,31 +751,37 @@ function apShowSection(tool) {
         const open = !!tool && s.id === tool.section;
         s.classList.toggle('ap-hidden-tool', !open);
 
-        // The shell now renders the tool's name above the card, so the
-        // section's own <h2> is a duplicate — but only hide it when it is
-        // inert text. Several carry controls inside the heading (Care
-        // Calendar's "New Registration" button, the collapse chevron),
-        // and those must stay reachable.
-        const h2 = s.querySelector(':scope > h2');
-        if (h2) h2.classList.toggle('ap-dup-head',
-            open && !h2.querySelector('button, input, select, a'));
+        // Never hide a section's own heading. This used to strip it whenever
+        // the shell printed the tool's name+blurb above it — but that shell
+        // tile (icon + name + blurb, from apRenderDetail below) was itself
+        // the unwanted repetition: the sidebar already names the open tool,
+        // and the section's own heading already carries a more specific
+        // description. The shell tile is gone now (see apRenderDetail), so
+        // there is nothing left for a section's own <h2> to duplicate.
+        //
+        // waitlistPlannerSection is the one exception: it carries no static
+        // <h2>/<p> at all (deleted, not just hidden) because its inner
+        // renderWaitlistPlanner() already renders a real header of its own
+        // (icon, name, subtitle, tab pills) into #wlpRoot — keeping a static
+        // pair there would still have duplicated against THAT header even
+        // with the shell tile gone. Every other section keeps its own
+        // heading as its one and only header.
     });
 }
 
 function apRenderDetail(tool) {
     // No back link: the sidebar keeps its place and highlights where you
-    // are, which is the way back. A heading instead, so a tool page starts
-    // at the same left edge as a dashboard heading and nothing shifts.
+    // are, which is the way back. No shell heading either — every section
+    // already carries its own <h2> + description, and printing the tool's
+    // name and blurb again above it just retyped the same header a second
+    // time on every tab (found live 2026-08-28, screenshotted on Waitlist &
+    // Capacity Planner: the shell's "Waitlist & Capacity Planner" tile sat
+    // directly on top of the section's own near-identical subtitle). Finance
+    // (`customHeader: true`) already skipped this shell tile for the same
+    // reason; every tool now gets that same treatment instead of carrying a
+    // one-off flag.
     const head = document.getElementById('apDetailHead');
-    if (head) {
-        head.innerHTML = `
-            <div class="ap-head">
-                <div>
-                    <h2>${tool.icon} ${escHtml(tool.name)}</h2>
-                    <p>${escHtml(tool.blurb)}</p>
-                </div>
-            </div>`;
-    }
+    if (head) head.innerHTML = '';
 
     apShowSection(tool);
 
@@ -672,17 +815,9 @@ function apOnToolOpened(tool) {
             case 'schedule':
             case 'payroll':
             case 'histPayroll':
-            case 'staffDir':
                 if (typeof allStaffData !== 'undefined' && !allStaffData.length) loadStaffList();
                 break;
-            case 'msgHistory':
-                if (typeof loadMessages === 'function') loadMessages();
-                break;
-            case 'auditLog':
-                if (typeof loadAuditLogTab === 'function') loadAuditLogTab();
-                break;
             case 'wlPlanner':
-            case 'wlDemand':
                 if (typeof loadWaitlistApplications === 'function' &&
                     typeof _allWaitlistApps !== 'undefined' && !_allWaitlistApps.length) loadWaitlistApplications();
                 break;
@@ -693,23 +828,36 @@ function apOnToolOpened(tool) {
         if (tool.pane === 'market' && typeof initMarketTab === 'function' && !window._apMarketInit) {
             window._apMarketInit = true; initMarketTab();
         }
-        if (tool.key === 'ar' && typeof setupBillingDashYear === 'function' && !window._apArInit) {
-            window._apArInit = true; setupBillingDashYear();
-        }
-        if (tool.key === 'invoices' && typeof renderInvoicesTool === 'function') renderInvoicesTool();
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
-        if (tool.key === 'announce' && typeof renderAnnouncementsTool === 'function') renderAnnouncementsTool();
-        if (tool.key === 'billMonth' && typeof renderBillMonthTool === 'function') renderBillMonthTool();
-        if (tool.key === 'whoOwes' && typeof renderWhoOwesTool === 'function') renderWhoOwesTool();
-        if (tool.key === 'billingReport' && typeof renderBillingReportTool === 'function') renderBillingReportTool();
+        if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
+        if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
-        if (tool.key === 'staffInjury' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();
-        if (tool.key === 'clockIntegrity' && typeof renderClockIntegrityTool === 'function') renderClockIntegrityTool();
-        if (tool.key === 'threads' && typeof renderThreadsTool === 'function') renderThreadsTool();
+        if (tool.key === 'messages' && typeof renderMessagesUnifiedTool === 'function') renderMessagesUnifiedTool();
+        if (tool.key === 'settingsHub' && typeof renderSettingsUnifiedTool === 'function') renderSettingsUnifiedTool();
         if (tool.key === 'schedule')  apRenderScheduleTimeOff();
-        if (tool.key === 'staffreq')  apRenderStaffReq();
+        if (tool.key === 'schedule' && typeof apMountStaffRatioStep === 'function') apMountStaffRatioStep();
+        // Daily Staffing Requirement is now the schedule's second tab, not a
+        // separate tool key — render it whenever Build Staff Schedule opens
+        // so switching tabs never shows a stale/empty pane.
+        if (tool.key === 'schedule')  apRenderStaffReq();
+        // Staff Directory, PTO policy, and Time Clock → Settings (geofence)
+        // are all already loaded unconditionally at portal boot
+        // (setupStaffDirectory()/setupPtoSettings()/setupGeofence() in
+        // admin-init.js) regardless of which tab is visible, same as before
+        // this consolidation — only their markup moved. Only Staff Injury
+        // Reports and Time Clock → Integrity were previously lazy, gated on
+        // their own AP_TOOLS key being opened; Injury Reports keeps that
+        // here, Integrity is lazy-rendered from the Time Clock sub-tab
+        // switch instead (apSwitchTimeClockTab()).
+        if (tool.key === 'hrHandbook' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();
+        if (tool.key === 'hrHandbook' && typeof renderStaffWriteUpsTool === 'function') renderStaffWriteUpsTool();
+        if (tool.key === 'hrHandbook' && typeof renderHrPoliciesTool === 'function') renderHrPoliciesTool();
         if (tool.key === 'scenario')  apRenderScenario();
+        if (tool.key === 'enrollCap' && typeof renderEnrollCapTool === 'function') renderEnrollCapTool();
+        if (tool.key === 'capacityOverview' && typeof renderCapacityOverviewTool === 'function') {
+            renderCapacityOverviewTool(undefined, { containerId: 'roomCapacityOverviewContent', idPrefix: 'pcapov' });
+        }
     } catch (err) {
         console.error('apOnToolOpened:', tool.key, err);
     }
@@ -876,11 +1024,12 @@ async function apLoadLive() {
 function apRenderDashboard(page) {
     const live = apState.live;
     if (!live) {
-        page.innerHTML = `
-            <div class="ap-head"><div>
-                <h2>${escHtml(AP_TABS[apState.tab].label)}</h2>
-                <p>Loading today's figures…</p>
-            </div></div>`;
+        // No tab-name heading here: the sidebar already highlights the open
+        // tab, and the header chip (#currentTabLabel) already names it — a
+        // third "Planning"/"Market Analysis" as a page <h2> was pure repeat,
+        // the same class of retyping fixed in apRenderDetail() above (found
+        // live 2026-08-28, on the dashboard rather than a tool this time).
+        page.innerHTML = `<p class="ap-dash-stamp">Loading today's figures…</p>`;
         apLoadLive().then(() => { if (!apState.view) apRender(); })
                     .catch(err => {
                         console.error('apLoadLive:', err);
@@ -889,7 +1038,6 @@ function apRenderDashboard(page) {
         return;
     }
 
-    const meta = AP_TABS[apState.tab];
     const builder = {
         director:   apDashDirector,
         classrooms: apDashClassrooms,
@@ -897,17 +1045,14 @@ function apRenderDashboard(page) {
         finance:    apDashFinanceHome,
         planning:   apDashPlanning,
         market:     apDashMarket,
-        settings:   apDashSettings,
     }[apState.tab] || apDashSimple;
     const dash = builder(live);
 
+    // No tab-name heading here either — see the loading-state comment above.
+    // dash.stamp is real per-load context (a week, a count, a data source),
+    // not a repeat of the tab's own name, so it stays as a plain caption.
     page.innerHTML = `
-        <div class="ap-head">
-            <div>
-                <h2>${escHtml(meta.label)}</h2>
-                <p>${escHtml(dash.stamp)}</p>
-            </div>
-        </div>
+        <p class="ap-dash-stamp">${escHtml(dash.stamp)}</p>
         ${dash.needsYou && dash.needsYou.length ? apNeedsYouHtml(dash.needsYou) : ''}
         ${dash.kpis.length ? `<div class="ap-metrics">${dash.kpis.map(apKpiHtml).join('')}</div>` : ''}
         <div class="ap-body">
@@ -1052,12 +1197,18 @@ function apStaffGridHtml(sf) {
                 <div class="ap-grid-ratio">${escHtml(r.ratioLabel)}</div>
             </div>
             ${r.cells.map(c => `
-            <div class="ap-grid-cell${c.atEdge ? ' is-edge' : ''}">
-                <div class="ap-grid-staff">${c.closed ? '—' : c.staff}</div>
-                <div class="ap-grid-kids">${c.closed ? 'closed' : c.kids + ' kids'}</div>
+            <div class="ap-grid-cell${(c.atEdge || c.atEdgePm) ? ' is-edge' : ''}">
+                ${c.closed ? `
+                <div class="ap-grid-staff">—</div>
+                <div class="ap-grid-kids">closed</div>` : c.staffPm !== c.staff ? `
+                <div class="ap-grid-staff">${c.staff}<span class="ap-grid-shift">AM</span></div>
+                <div class="ap-grid-staff ap-grid-staff-pm">${c.staffPm}<span class="ap-grid-shift">PM</span></div>
+                <div class="ap-grid-kids">${c.kids}→${c.kidsPm} kids</div>` : `
+                <div class="ap-grid-staff">${c.staff}</div>
+                <div class="ap-grid-kids">${c.kids} kids</div>`}
             </div>`).join('')}
         </div>`).join('')}
-        <p class="ap-grid-foot">A shaded cell is a room exactly at ratio that day — one more child adds another staff member. Built from booked registrations; clock-in room data is never used.</p>
+        <p class="ap-grid-foot">AM = every child booked that day · PM = full-day children only, since a half-day booking drops for the afternoon — shown split whenever the two differ. A shaded cell is at ratio for either shift, meaning one more child adds another staff member. Built from booked registrations; clock-in room data is never used.</p>
     </div></div>`;
 }
 
@@ -1150,7 +1301,7 @@ function apDashDirector(live) {
         {
             label: 'Unread messages', tone: 'gold', value: live.unread,
             sub: live.unread ? 'from families through the portal' : 'nothing new',
-            ...(live.unread ? { link: 'msgHistory', linkLabel: 'Open messages', linkIcon: '💬' } : {}),
+            ...(live.unread ? { link: 'messages', linkLabel: 'Open messages', linkIcon: '💬' } : {}),
         },
         {
             label: 'Seats open this week', tone: 'ok', value: seatsOpen,
@@ -1160,7 +1311,7 @@ function apDashDirector(live) {
             label: 'Billed this month', tone: sentThisMonth ? 'ok' : 'warn', value: apMoney(live.billed),
             sub: invSub,
             check: 'Billing completed',
-            link: 'invoices', linkIcon: '🧾', linkLabel: 'Review and send',
+            link: 'financeHub', linkIcon: '🧾', linkLabel: 'Review and send',
         },
     ];
 
@@ -1234,7 +1385,7 @@ function apDashDirector(live) {
         title: `${inv.unsent} invoice${inv.unsent === 1 ? '' : 's'} drafted, not sent`,
         pill: 'THIS MONTH',
         context: `${apMoney(inv.total)} sitting in draft — accounts receivable ages from the day you send.`,
-        actions: [{ key: 'invoices', label: 'Review and send', primary: true }],
+        actions: [{ key: 'financeHub', label: 'Review and send', primary: true }],
     });
 
     if (live.unread) needsYou.push({
@@ -1242,7 +1393,7 @@ function apDashDirector(live) {
         title: `${live.unread} unread message${live.unread > 1 ? 's' : ''}`,
         pill: 'FROM FAMILIES',
         context: 'sent through the parent portal',
-        actions: [{ key: 'msgHistory', label: 'Open', primary: true }],
+        actions: [{ key: 'messages', label: 'Open', primary: true }],
     });
 
     const infantsWaiting = (byRoom.bear || 0) + (byRoom.bee || 0);
@@ -1261,27 +1412,27 @@ function apDashDirector(live) {
             title: `${rooms.map(r => r.label).join(', ')} at ratio on ${peakDay}`,
             pill: 'RATIO',
             context: 'one more child that day adds a staff member',
-            actions: [{ key: 'staffreq', label: 'Daily staffing', primary: false }],
+            actions: [{ key: 'schedule', label: 'Daily staffing', primary: false }],
         });
     }
 
     const attention = [];
-    if (peak > 0) attention.push({ icon: '👥', key: 'staffreq',
+    if (peak > 0) attention.push({ icon: '👥', key: 'schedule',
         text: `${peakDay} needs ${peak} staff on the floor — the heaviest day of the week.`, cta: 'Open Daily Staffing' });
     if (live.pending.length) attention.push({ icon: '🚫', key: 'schedule', urgent: true,
         text: `${live.pending.length} time-off request${live.pending.length > 1 ? 's are' : ' is'} waiting on your approval.`, cta: 'Review requests' });
     const edgeRooms = edgeRoomsForQueue(sf, peakIx);
-    if (edgeRooms.length) attention.push({ icon: '⚖️', key: 'ratios',
+    if (edgeRooms.length) attention.push({ icon: '⚖️', key: 'settingsHub',
         text: `${edgeRooms.map(r => r.label).join(', ')} sit${edgeRooms.length > 1 ? '' : 's'} exactly at ratio on ${peakDay} — one more child adds a staff member.`, cta: 'Open Ratios' });
-    if (inv.unsent) attention.push({ icon: '🧾', key: 'invoices', urgent: true,
+    if (inv.unsent) attention.push({ icon: '🧾', key: 'financeHub', urgent: true,
         text: `${inv.unsent} invoice${inv.unsent === 1 ? ' is' : 's are'} drafted for this month but not marked sent.`, cta: 'Review and send invoices' });
-    else if (!inv.drafted && live.billed > 0) attention.push({ icon: '🧾', key: 'invoices',
+    else if (!inv.drafted && live.billed > 0) attention.push({ icon: '🧾', key: 'financeHub',
         text: `${apMoney(live.billed)} is billable this month but no invoices have been drafted.`, cta: 'Open invoices' });
-    if (live.unread) attention.push({ icon: '✉️', key: 'msgHistory',
-        text: `${live.unread} Contact Us message${live.unread > 1 ? 's have' : ' has'} not been read.`, cta: 'Open Contact Us Messages' });
-    if (live.nextClosure) attention.push({ icon: '🚫', key: 'closedDays',
+    if (live.unread) attention.push({ icon: '✉️', key: 'messages',
+        text: `${live.unread} Contact Us message${live.unread > 1 ? 's have' : ' has'} not been read.`, cta: 'Open Messages' });
+    if (live.nextClosure) attention.push({ icon: '🚫', key: 'settingsHub',
         text: `Next closure is ${friendlyShort(live.nextClosure)} — ${live.closuresAhead} on the calendar ahead.`, cta: 'Open Closed Days' });
-    else attention.push({ icon: '🚫', key: 'closedDays',
+    else attention.push({ icon: '🚫', key: 'settingsHub',
         text: 'No closures are on the calendar ahead — check the holidays are blocked.', cta: 'Open Closed Days' });
     const infants = (byRoom.bear || 0) + (byRoom.bee || 0);
     if (infants) attention.push({ icon: '🍼', key: 'wlPlanner',
@@ -1294,10 +1445,10 @@ function apDashDirector(live) {
         left: [
             apPanel({ title: 'Staff needed this week',
                 sub: 'Each room, each day — from registered children and your saved ratios. Clock-in room data is never used.',
-                body: apStaffGridHtml(sf), tools: ['staffreq', 'ratios'] }),
+                body: apStaffGridHtml(sf), tools: ['schedule', 'settingsHub'] }),
             apPanel({ title: 'How full each room is',
                 sub: 'Average booked children per day against capacity.',
-                body: apBarsHtml(apFillBars(sf)), tools: ['capacity', 'fte', 'seatDay'] }),
+                body: apBarsHtml(apFillBars(sf)), tools: ['settingsHub', 'capacityOverview'] }),
         ],
         right: queueRows.length ? [
             apPanel({ title: 'Next up on the waitlist', tone: 'gold',
@@ -1347,53 +1498,30 @@ function apDashPlanning(live) {
             { label: 'Days off approved',   tone: 'ok',   value: live.timeOff.length, sub: 'in effect for scheduling' },
         ],
         left: [
-            apPanel({ title: 'Staff needed this week',
-                sub: 'From registered children and saved ratios — no clock-in data involved.',
-                body: apStaffGridHtml(sf), tools: ['staffreq', 'schedule'] }),
             apPanel({ title: 'Waitlist pressure by room',
                 sub: 'Active applications against the seats actually open this week.',
-                body: apRowsHtml(pressure), tools: ['wlPlanner', 'wlDemand', 'planner', 'promotions'] }),
+                body: apRowsHtml(pressure), tools: ['wlPlanner', 'wlImport'] }),
         ],
-        right: [],
+        // Enrollment Outlook's own pill — otherwise ratioStep had no path in
+        // from a phone at all. Demand-by-month, the demand forecast, and
+        // upcoming promotions are inline inside wlPlanner's own Grid render
+        // now, so their pill is wlPlanner itself, above. The FTE/seat-day
+        // table that used to live at `capacityOverview` is now a sub-view of
+        // Classrooms → Planning → Enrollment & Capacity (`enrollCap`).
+        right: [
+            apPanel({ title: 'Enrollment outlook', sub: 'Room capacity trends and the next ratio step.',
+                body: '', tools: ['enrollCap', 'ratioStep'] }),
+        ],
         attention: [
-            { icon: '👥', key: 'staffreq',   text: `The heaviest day this week needs ${peak} staff on the floor.`, cta: 'Open Daily Staffing' },
-            { icon: '🎂', key: 'promotions', text: 'Check who ages up out of their room next — those days reopen.', cta: 'See Room Promotions' },
-            { icon: '📊', key: 'wlDemand',   text: 'Waitlist demand by month shows where the real unmet demand sits.', cta: 'Open Waitlist Demand' },
+            { icon: '👥', key: 'schedule',   text: `The heaviest day this week needs ${peak} staff on the floor.`, cta: 'Open Daily Staffing' },
+            { icon: '🎂', key: 'wlPlanner', text: 'The Capacity Planner grid shows who ages up out of their room next, and where unmet demand sits by month.', cta: 'Open the Capacity Planner' },
         ],
     };
 }
 
-function apDashSettings(live) {
-    const roles = window._adminRoles || {};
-    const roleCount = Object.keys(roles).length;
-    const restricted = Object.values(roles).filter(r => r !== 'full').length;
-    return {
-        stamp: 'Live configuration · changes apply immediately',
-        kpis: [
-            { label: 'Closed days ahead', tone: 'navy', value: live.closuresAhead || 0,
-              sub: live.nextClosure ? `next: ${friendlyShort(live.nextClosure)}` : 'none scheduled' },
-            { label: 'Admin accounts', tone: 'navy', value: roleCount || '—',
-              sub: roleCount ? `${restricted} not full access` : 'open Admin Access to load' },
-            { label: 'Rooms configured', tone: 'ok', value: getSortedRooms().filter(r => !r.hidden).length, sub: 'with rates and ratios' },
-        ],
-        left: [
-            apPanel({ title: 'Room configuration',
-                sub: 'Capacity against the ratios everything else is calculated from.',
-                body: apRowsHtml(getSortedRooms().filter(r => !r.hidden).map(r => ({
-                    label: r.label,
-                    note:  `cap ${r.capacity || '—'} · ratio 1:${r.staffRatio || '—'}`,
-                    value: apMoney(r.fullDayRate || 0) + '/day',
-                }))),
-                tools: ['capacity', 'ratios', 'rates'] }),
-        ],
-        right: [],
-        attention: [
-            { icon: '🔐', key: 'adminRoles', text: 'Review who holds full access to the portal.', cta: 'Open Admin Access' },
-            { icon: '🧾', key: 'auditLog',   text: 'The audit log records every significant admin action.', cta: 'Open Audit Log' },
-            { icon: '🚫', key: 'closedDays', text: 'Blocked dates show as unavailable on the parent calendar.', cta: 'Open Closed Days' },
-        ],
-    };
-}
+// Settings has no dashboard of its own — the tab has exactly one tool
+// (`settingsHub`), so apRender()'s single-tool auto-open lands directly on
+// the unified page. See design_handoff_messages_settings/Settings.dc.html.
 
 // ── Classrooms ───────────────────────────────────────────────
 function apDashClassrooms(live) {
@@ -1454,7 +1582,7 @@ function apDashClassrooms(live) {
     const attention = [];
     if (missing) attention.push({ icon: '📋', key: 'missingCal', urgent: true,
         text: `${missing} child${missing === 1 ? ' has' : 'ren have'} no booked day this month.`, cta: 'Open missing calendars' });
-    if (atRatio.length) attention.push({ icon: '🏫', key: 'roomSched',
+    if (atRatio.length) attention.push({ icon: '🏫', key: 'enrollCap',
         text: `${atRatio.map(r => r.label).join(', ')} ${atRatio.length === 1 ? 'is' : 'are'} exactly at ratio — the next child adds a staff member.`, cta: 'Open room planner' });
     attention.push({ icon: '🗒️', key: 'careCal',
         text: 'Add a day, edit a calendar, or register a child from the care calendar.', cta: 'Open care calendar' });
@@ -1465,8 +1593,10 @@ function apDashClassrooms(live) {
         left: [
             apPanel({ title: isToday ? "Today's roster by room" : "Monday's roster by room",
                 sub: 'Headcount against capacity. A room at ratio needs another staff member before the next child.',
-                body: apBarsHtml(bars), tools: ['roster', 'roomSched', 'capOverview'] }),
+                body: apBarsHtml(bars), tools: ['attBoard', 'enrollCap'] }),
         ],
+        // Food Program panel removed 2026-08-28 along with its AP_TOOLS
+        // entries — see the retirement comment above `enrollCap`'s block.
         right: [],
         attention,
     };
@@ -1534,16 +1664,19 @@ function apDashStaff(live) {
         text: `${shortDays.map(x => AP_DAYS[x.i]).join(', ')} ${shortDays.length === 1 ? 'is' : 'are'} short of what the ratios ask for.`, cta: 'Build staff schedule' });
     if (live.pending.length) attention.push({ icon: '✅', key: 'schedule', urgent: true,
         text: `${live.pending.length} day-off request${live.pending.length === 1 ? '' : 's'} from the time clock ${live.pending.length === 1 ? 'is' : 'are'} waiting on you.`, cta: 'Review requests' });
-    attention.push({ icon: '📍', key: 'geofence',
-        text: 'Check where the time clock accepts a punch and when staff get nudged.', cta: 'Open clock reminders' });
+    attention.push({ icon: '📍', key: 'payroll',
+        text: 'Check where the time clock accepts a punch and when staff get nudged.', cta: 'Open Time Clock (Payroll)' });
 
     return {
         stamp: `Week of ${friendlyShort(live.weekOf)} · ${roster.length || 'no'} staff on the roster`,
         kpis,
         left: [
+            apPanel({ title: 'Staff needed this week',
+                sub: 'From registered children and saved ratios — no clock-in data involved.',
+                body: apStaffGridHtml(sf), tools: ['schedule'] }),
             apPanel({ title: 'Coverage against requirement',
                 sub: 'What the saved schedule puts on the floor, against what the ratios ask for that day.',
-                body: apBarsHtml(bars), tools: ['schedule', 'staffreq', 'staffRoster'] }),
+                body: apBarsHtml(bars), tools: ['schedule', 'staffRoster', 'payroll'] }),
         ],
         right: offRows.length ? [
             apPanel({ title: 'Time off this week', tone: 'gold',
@@ -1563,7 +1696,7 @@ function apDashMarket(live) {
             kpis: [],
             left: [apPanel({ title: 'Nothing to compare against yet',
                 sub: 'Add the providers you compete with and this dashboard fills in — weekly rates, registration fees, and where we sit in the set.',
-                body: '', tools: ['mktProviders', 'mktPricing'] })],
+                body: '', tools: ['mktProviders', 'directorReport'] })],
             right: [],
             attention: [{ icon: '🏫', key: 'mktProviders',
                 text: 'The comparable provider set is empty.', cta: 'Add providers' }],
@@ -1618,14 +1751,14 @@ function apDashMarket(live) {
         left: [
             apPanel({ title: 'Pricing landscape',
                 sub: 'Weekly-equivalent full-time rate, us against the comparable set. Ranges are shown at their midpoint.',
-                body: apBarsHtml(bars), tools: ['mktPricing', 'mktPos', 'mktProviders'] }),
+                body: apBarsHtml(bars), tools: ['directorReport', 'mktProviders'] }),
         ],
         right: [],
         attention: [
             ...(us && gap < -3 ? [{ icon: '💲', key: 'scenario',
                 text: `We are ${Math.abs(gap)}% under the market median with no rate change modeled.`, cta: 'Open rate scenarios' }] : []),
             { icon: '🏫', key: 'mktProviders', text: 'Keep the comparable set current — rates move.', cta: 'Review providers' },
-            { icon: '💵', key: 'mktCost', text: 'Cost and wage context explains why infant care prices the way it does.', cta: 'Open cost context' },
+            { icon: '💵', key: 'directorReport', text: 'Cost and wage context explains why infant care prices the way it does.', cta: 'Open the Director Report' },
         ],
     };
 }
@@ -1647,12 +1780,16 @@ function apDashSimple() {
 // ============================================================
 const apReqInputs = { hours: 10.5, floaters: 1, wage: 15.5, burden: 12 };
 
+// Build Staff Schedule and Daily Staffing Requirement are tabs of one tool
+// now (design_handoff_staff, 2026-08-28) and share a single "Week of" date
+// field (#staffWeekOf) instead of two independent pickers that could drift
+// apart. apSchedHeaderStats() reads the exact same apStaffing()+apReqInputs
+// figures this function computes — one calculation, so the header cards and
+// the Requirement tab's own totals can never disagree.
 function apRenderStaffReq() {
     const host = document.getElementById('staffReqBody');
     if (!host) return;
-    const weekEl = document.getElementById('staffReqWeekOf');
-    if (weekEl && !weekEl.value) weekEl.value = apWeekStart();
-    const weekOf    = weekEl?.value || apWeekStart();
+    const weekOf    = document.getElementById('staffWeekOf')?.value || apWeekStart();
     const weekDates = apWeekDates(weekOf);
     const sf        = apStaffing(weekDates);
 
@@ -1662,6 +1799,8 @@ function apRenderStaffReq() {
     const cost     = hrs.map(h => h * (Number(apReqInputs.wage) || 0) * (1 + (Number(apReqInputs.burden) || 0) / 100));
     const peak     = Math.max(0, ...total);
     const peakDay  = AP_DAYS[total.indexOf(peak)] || AP_DAYS[0];
+
+    apSchedHeaderStats(sf, cost);
 
     if (!sf.rows.length) {
         host.innerHTML = '<p class="empty-hint">No children are registered for this week yet — pick another week above.</p>';
@@ -1708,14 +1847,21 @@ function apRenderStaffReq() {
                         <td class="ap-td-ratio">${escHtml(r.ratioLabel)}</td>
                         ${r.cells.map(c => `
                         <td>
-                            <div class="ap-req-staff${c.atEdge ? ' is-edge' : ''}">${c.closed ? '—' : c.staff}</div>
-                            <div class="ap-req-kids">${c.closed ? 'closed' : c.kids + ' kids'}</div>
+                            ${c.closed ? `
+                            <div class="ap-req-staff">—</div>
+                            <div class="ap-req-kids">closed</div>` : c.staffPm !== c.staff ? `
+                            <div class="ap-req-staff${c.atEdge ? ' is-edge' : ''}">${c.staff}<span class="ap-req-shift">AM</span></div>
+                            <div class="ap-req-staff${c.atEdgePm ? ' is-edge' : ''}">${c.staffPm}<span class="ap-req-shift">PM</span></div>
+                            <div class="ap-req-kids">${c.kids}→${c.kidsPm} kids</div>` : `
+                            <div class="ap-req-staff${c.atEdge ? ' is-edge' : ''}">${c.staff}</div>
+                            <div class="ap-req-kids">${c.kids} kids</div>`}
                         </td>`).join('')}
                     </tr>`).join('')}
                 </tbody>
                 <tfoot>
                     ${footRow('Children registered',      sf.kids,                          'is-soft')}
-                    ${footRow('Classroom staff required', sf.classroom,                     'is-strong')}
+                    ${footRow('AM staff required',        sf.classroom,                     'is-strong')}
+                    ${footRow('PM staff required',        sf.classroomPm,                   'is-soft')}
                     ${footRow('Floaters / break relief',  total.map((_, i) => sf.closed[i] ? 0 : floaters), 'is-soft')}
                     ${footRow('Total on the floor',       total,                            'is-total')}
                     ${footRow('Staff-hours',              hrs.map(h => Math.round(h)),      'is-soft')}
@@ -1724,8 +1870,140 @@ function apRenderStaffReq() {
             </table>
         </div>
         <p style="color:var(--text-muted);font-size:.86em;margin-top:14px;max-width:76ch;text-wrap:pretty">
-            Ratios come from Settings → Staff-to-Child Ratios. An orange count means the room is exactly at ratio that day — one more child adds another staff member.
+            Ratios come from Settings → Staff-to-Child Ratios. AM counts every child booked that day; PM counts full-day children only, since a half-day booking drops for the afternoon — a room shows one number when AM and PM match, and both when they don't. An orange count means that shift is exactly at ratio — one more child adds another staff member. "Total on the floor" and the cost estimate are built from the AM figure, since it is always the day's peak.
         </p>`;
+}
+
+// Shared header cards (Children this week / Est. labor cost) above the tab
+// strip — same figures apRenderStaffReq() computes for its own footer, so
+// the two can never disagree. Deliberately the wage-model estimate (avg
+// wage × hours × burden), not a sum of individually assigned staff's real
+// rates — Build Staff Schedule's own assignments are frequently incomplete
+// mid-week, and a cost built from "who's actually filled in so far" would
+// swing every time a slot is assigned, reading as broken rather than live.
+function apSchedHeaderStats(sf, cost) {
+    const host = document.getElementById('apSchedHeaderStats');
+    if (!host) return;
+    const kids  = sf.kids.reduce((a, b) => a + b, 0);
+    const labor = cost.reduce((a, b) => a + b, 0);
+    host.innerHTML = `
+        <div class="bk-stat">
+            <div class="bk-stat-label">Children this week</div>
+            <div class="bk-stat-num">${kids}</div>
+        </div>
+        <div class="bk-stat">
+            <div class="bk-stat-label">Est. labor cost</div>
+            <div class="bk-stat-num">${escHtml(apMoney(labor))}</div>
+        </div>`;
+}
+
+// Build Staff Schedule: "This week's schedule" / "Daily Staffing
+// Requirement" tabs, and — inside the schedule tab — "By room & shift"
+// (editable, the director's own working format, default) / "By worker"
+// (read-only pivot of the same assignments, for a quick per-person glance).
+let _apSchedTab  = 'week';
+let _apSchedView = 'room';
+
+function apSwitchSchedTab(key) {
+    _apSchedTab = key;
+    document.querySelectorAll('#apSchedTabs [data-ap-sched-tab]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apSchedTab === key));
+    document.getElementById('apSchedTabWeek')?.classList.toggle('ap-hidden-tool', key !== 'week');
+    document.getElementById('apSchedTabReq')?.classList.toggle('ap-hidden-tool', key !== 'req');
+}
+
+function apSwitchSchedView(key) {
+    _apSchedView = key;
+    document.querySelectorAll('#apSchedViewToggle [data-ap-sched-view]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apSchedView === key));
+    document.getElementById('staffContent')?.classList.toggle('ap-hidden-tool', key !== 'room');
+    const byWorker = document.getElementById('staffContentByWorker');
+    if (byWorker) {
+        byWorker.classList.toggle('ap-hidden-tool', key !== 'worker');
+        if (key === 'worker' && typeof renderScheduleByWorker === 'function') renderScheduleByWorker();
+    }
+}
+
+// Staff Roster: "Roster" (editable, the staff table) / "Directory (print)"
+// (renderStaffDirectory(), the public-site list, read here as a tab of the
+// same table rather than a parallel screen).
+function apSwitchRosterTab(key) {
+    document.querySelectorAll('#apRosterTabs [data-ap-roster-tab]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apRosterTab === key));
+    document.getElementById('apRosterTabRoster')?.classList.toggle('ap-hidden-tool', key !== 'roster');
+    document.getElementById('apRosterTabDirectory')?.classList.toggle('ap-hidden-tool', key !== 'directory');
+}
+
+// Payroll: "Pay period" / "PTO policy" / "Time Clock" tabs. Time Clock
+// itself has "Settings" (geofence config) / "Integrity" (the diagnostic
+// report on whether that config is actually working) sub-tabs — one merged
+// tool for tuning the time clock's rules and seeing whether they hold, per
+// design_handoff_staff. Integrity is lazy-rendered on first open of its
+// sub-tab, matching how it was lazy before this consolidation (Pay period
+// and PTO policy are both already loaded unconditionally at portal boot).
+let _apClockIntegrityLoaded = false;
+
+function apSwitchPayrollTab(key) {
+    document.querySelectorAll('#apPayrollTabs [data-ap-payroll-tab]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apPayrollTab === key));
+    document.getElementById('apPayrollTabPeriod')?.classList.toggle('ap-hidden-tool', key !== 'period');
+    document.getElementById('apPayrollTabPto')?.classList.toggle('ap-hidden-tool', key !== 'pto');
+    document.getElementById('apPayrollTabClock')?.classList.toggle('ap-hidden-tool', key !== 'clock');
+}
+
+function apSwitchTimeClockTab(key) {
+    document.querySelectorAll('#apTimeClockTabs [data-ap-tc-tab]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apTcTab === key));
+    document.getElementById('apTimeClockTabSettings')?.classList.toggle('ap-hidden-tool', key !== 'settings');
+    document.getElementById('apTimeClockTabIntegrity')?.classList.toggle('ap-hidden-tool', key !== 'integrity');
+    if (key === 'integrity' && !_apClockIntegrityLoaded && typeof renderClockIntegrityTool === 'function') {
+        _apClockIntegrityLoaded = true;
+        renderClockIntegrityTool();
+    }
+}
+
+// HR & Handbook: "Policies" / "Write-ups" / "Injury Reports" tabs. Injury
+// Reports is hidden client-side for anyone but a `full` admin — see
+// applyRoleRestrictions() in admin-safety.js — same reasoning `staffInjury`
+// carried as its own AP_FULL_ONLY_KEYS entry before this consolidation.
+function apSwitchHrTab(key) {
+    document.querySelectorAll('#apHrTabs [data-ap-hr-tab]').forEach(b =>
+        b.classList.toggle('is-on', b.dataset.apHrTab === key));
+    document.getElementById('apHrTabPolicies')?.classList.toggle('ap-hidden-tool', key !== 'policies');
+    document.getElementById('apHrTabWriteUps')?.classList.toggle('ap-hidden-tool', key !== 'writeups');
+    document.getElementById('apHrTabInjury')?.classList.toggle('ap-hidden-tool', key !== 'injury');
+}
+
+// ── Ratio Step & Next Child, embedded in Build Staff Schedule ──────────
+// Second mount point for generateRatioStepReport() (admin-reports.js) —
+// design_handoff_planning_market, 2026-08-27: "Ratio Step must be a single
+// render function taking a mount element, called from two places, not
+// duplicated markup." The Planning tab's own Ratio Step tool is untouched
+// (default ids); this one reuses the schedule's own week-of picker instead
+// of a second date input, has no export button, and never alert()s on a
+// missing week — it renders nothing until one is chosen.
+let _apStaffRatioStepWired = false;
+
+function apMountStaffRatioStep() {
+    const mount = document.getElementById('staffRatioStepSection');
+    if (!mount || typeof generateRatioStepReport !== 'function') return;
+
+    if (!_apStaffRatioStepWired) {
+        _apStaffRatioStepWired = true;
+        document.getElementById('staffWeekOf')?.addEventListener('change', apRenderStaffRatioStep);
+    }
+    apRenderStaffRatioStep();
+}
+
+function apRenderStaffRatioStep() {
+    const mount = document.getElementById('staffRatioStepSection');
+    if (!mount) return;
+    const weekOf = document.getElementById('staffWeekOf')?.value || apWeekStart();
+    generateRatioStepReport({
+        containerId: 'staffRatioStepContent',
+        weekOf, roomSel: 'all',
+        showExport: false, silent: true,
+    });
 }
 
 // ============================================================
@@ -1966,24 +2244,6 @@ function apDrawScheduleTimeOff() {
             ${_apTimeOff.addOpen ? '' : '<button class="ap-add-off" data-ap-off-toggle>+ Enter a day off someone told you</button>'}
             <p class="ap-note">Requests staff send from the time clock land above under <strong>Needs your OK</strong>. Nothing changes the schedule until you approve it. Days you enter here apply immediately — you have already vetted them.</p>
         </div>`;
-
-    const stats = document.getElementById('apSchedStats');
-    if (stats) {
-        const offCount = Object.keys(apApprovedOffForWeek(weekDates)).length;
-        stats.innerHTML = `
-            <div class="ap-stat">
-                <div class="ap-stat-label">Needs your OK</div>
-                <div class="ap-stat-value ${pending.length ? 'is-alert' : 'is-ok'}">${pending.length}</div>
-            </div>
-            <div class="ap-stat">
-                <div class="ap-stat-label">Off this week</div>
-                <div class="ap-stat-value">${offCount} staff</div>
-            </div>
-            <div class="ap-stat">
-                <div class="ap-stat-label">Staff on roster</div>
-                <div class="ap-stat-value">${staffList.length}</div>
-            </div>`;
-    }
 }
 
 // Ids stay opaque strings end to end: the request id is a bigserial and
@@ -2085,6 +2345,22 @@ function setupAdminPortal() {
             return;
         }
         if (e.target.closest('#apOffSave')) { apSaveDirectorOff(); return; }
+        const schedTab = e.target.closest('[data-ap-sched-tab]');
+        if (schedTab) { apSwitchSchedTab(schedTab.dataset.apSchedTab); return; }
+        const schedView = e.target.closest('[data-ap-sched-view]');
+        if (schedView) { apSwitchSchedView(schedView.dataset.apSchedView); return; }
+        if (e.target.closest('#printStaffScheduleBtn')) {
+            document.getElementById('printStaffAssignBtn')?.click();
+            return;
+        }
+        const rosterTab = e.target.closest('[data-ap-roster-tab]');
+        if (rosterTab) { apSwitchRosterTab(rosterTab.dataset.apRosterTab); return; }
+        const payrollTab = e.target.closest('[data-ap-payroll-tab]');
+        if (payrollTab) { apSwitchPayrollTab(payrollTab.dataset.apPayrollTab); return; }
+        const tcTab = e.target.closest('[data-ap-tc-tab]');
+        if (tcTab) { apSwitchTimeClockTab(tcTab.dataset.apTcTab); return; }
+        const hrTab = e.target.closest('[data-ap-hr-tab]');
+        if (hrTab) { apSwitchHrTab(hrTab.dataset.apHrTab); return; }
         if (e.target.closest('[data-ap-scen-reset]')) {
             apScenario.inc = {}; apScenario.regFee = 0; apScenario.supFee = 0; apScenario.wageAdd = 0;
             apRenderScenario();
@@ -2109,10 +2385,10 @@ function setupAdminPortal() {
             apRenderScenario();
             return;
         }
-        if (e.target.id === 'staffReqWeekOf') { apRenderStaffReq(); return; }
         if (e.target.id === 'staffWeekOf' && apState.view === 'schedule') {
             _apTimeOff.loaded = false;
             apRenderScheduleTimeOff();
+            apRenderStaffReq();
         }
     });
 

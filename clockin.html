@@ -563,12 +563,65 @@
             z-index: 9999;
             background: #FDFAF0;
             display: flex;
-            align-items: center;
-            justify-content: center;
+            flex-direction: column;
             transition: opacity .35s ease;
+            overflow: hidden;
         }
-        .mdo-splash img { width: 100%; height: 100%; object-fit: cover; }
         .mdo-splash.mdo-splash-hidden { opacity: 0; pointer-events: none; }
+        .mdo-splash-top {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 14vh 24px 0;
+        }
+        .mdo-splash-wordmark { width: min(72vw, 320px); height: auto; }
+        .mdo-splash-tagline {
+            margin-top: 16px;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 600;
+            font-size: 14px;
+            color: #5BAD8B;
+            text-align: center;
+        }
+        .mdo-splash-tagline .t-div { color: #C9C4B8; padding: 0 6px; }
+        .mdo-splash-tagline .t-blue { color: #3E7BD1; font-weight: 800; }
+        .mdo-splash-tagline .t-gold { color: #F5B731; }
+        .mdo-splash-silhouette {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 4vh;
+        }
+        .mdo-splash-silhouette img { width: 62%; max-width: 280px; height: auto; }
+        .mdo-splash-footer {
+            background: #01294A;
+            border-radius: 50% 50% 0 0 / 40px 40px 0 0;
+            padding: 34px 24px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+        }
+        .mdo-splash-spinner {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: 3px solid #173A5E;
+            border-top-color: #F5B731;
+            border-right-color: #F5B731;
+            animation: mdoSpinnerSpin .9s linear infinite;
+        }
+        @keyframes mdoSpinnerSpin {
+            to { transform: rotate(360deg); }
+        }
+        .mdo-splash-footer p {
+            font-family: 'Nunito', sans-serif;
+            font-size: 15px;
+            color: #fff;
+            margin: 0;
+        }
     </style>
 </head>
 <body>
@@ -576,15 +629,44 @@
      Hidden on window 'load' with a fallback timeout so it never sticks
      around if something else stalls. -->
 <div id="mdoSplash" class="mdo-splash" aria-hidden="true">
-    <img src="/images/logo/splash/splash-clockin.svg" alt="" width="1290" height="2796">
+    <div class="mdo-splash-top">
+        <img class="mdo-splash-wordmark" src="/images/logo/myMDO_clockin_wordmark_light.png" alt="">
+        <p class="mdo-splash-tagline">Welcome.<span class="t-div">|</span><span class="t-blue">Receive.</span><span class="t-div">|</span>Grow.<span class="t-div">|</span><span class="t-gold">Go.</span></p>
+    </div>
+    <div class="mdo-splash-silhouette" aria-hidden="true">
+        <img src="/images/logo/splash-church-pale.png" alt="">
+    </div>
+    <div class="mdo-splash-footer">
+        <div class="mdo-splash-spinner" id="mdoSplashSpinner"></div>
+        <svg id="mdoSplashCheck" width="34" height="34" viewBox="0 0 34 34" hidden>
+            <circle cx="17" cy="17" r="17" fill="#F5B731"/>
+            <path d="M9.5 17.5l5 5 10-11" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <p id="mdoSplashText">Loading <strong>myMDO</strong> Clock In&hellip;</p>
+    </div>
 </div>
 <script>
   (function () {
     var el = document.getElementById('mdoSplash');
     if (!el) return;
+    var textEl = document.getElementById('mdoSplashText');
+    var spinnerEl = document.getElementById('mdoSplashSpinner');
+    var checkEl = document.getElementById('mdoSplashCheck');
+    var almostTimer = setTimeout(function () {
+      textEl.innerHTML = 'Almost there&hellip;';
+    }, 1400);
+    var hidden = false;
     function hide() {
-      el.classList.add('mdo-splash-hidden');
-      setTimeout(function () { el.remove(); }, 400);
+      if (hidden) return;
+      hidden = true;
+      clearTimeout(almostTimer);
+      spinnerEl.hidden = true;
+      checkEl.hidden = false;
+      textEl.textContent = 'Welcome!';
+      setTimeout(function () {
+        el.classList.add('mdo-splash-hidden');
+        setTimeout(function () { el.remove(); }, 400);
+      }, 450);
     }
     if (document.readyState === 'complete') hide();
     else window.addEventListener('load', hide);

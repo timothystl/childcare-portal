@@ -180,8 +180,16 @@ const ENTRIES = [
                 'js/admin/admin-init.js',
                 'js/admin/admin-calendar.js',
                 'js/admin/admin-classrooms.js',
+                // Reads getRosterForDate()/getSortedRooms() from admin-classrooms.js
+                // above and centerHeadcountAdmin() from admin-attendance.js below —
+                // load order doesn't gate calls in one concatenated script, but
+                // keeping it after both is the honest place to read it.
+                'js/admin/admin-print-attendance.js',
+                // After admin-calendar.js: reuses showDayRosterDetail(),
+                // renderCapacityOverview() and renderRoomSchedule() as the
+                // Enrollment & Capacity tool's Day/Month/Week sub-views.
+                'js/admin/admin-enrollment-capacity.js',
                 'js/admin/admin-families.js',
-                'js/admin/admin-messages.js',
                 'js/admin/admin-reports.js',
                 'js/admin/admin-finance.js',
                 'js/admin/admin-billing.js',
@@ -194,15 +202,18 @@ const ENTRIES = [
                 'js/admin/admin-billing-report.js',
                 'js/admin/admin-who-owes.js',
                 'js/admin/admin-finance-home.js',
+                'js/admin/admin-finance-hub.js',
+                'js/admin/admin-finance-bookkeeper.js',
                 'js/admin/admin-staffing.js',
                 'js/admin/admin-settings.js',
+                'js/admin/admin-settings-unified.js',
                 'js/admin/admin-waitlist.js',
                 'js/admin/admin-attendance.js',
                 'js/admin/admin-announcements.js',
                 'js/admin/admin-incidents.js',
                 'js/admin/admin-safety.js',
-                'js/admin/admin-threads.js',
                 'js/admin/admin-push.js',
+                'js/admin/admin-messages-unified.js',
                 'js/admin/admin-cacfp.js',
                 'js/admin/admin-market.js',
                 // Last: the portal shell indexes the sections the modules above

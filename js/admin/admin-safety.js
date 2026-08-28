@@ -252,6 +252,8 @@ function staffInjuryPrint(id) {
 // not a table: a drill log you have to remember to look at does not remind
 // anyone to hold a drill.
 
+let _fdComposeOpen = false;   // "+ Log a Drill" panel
+
 async function renderFireDrillsTool() {
     const wrap = _sfEl('fireDrillsBody');
     if (!wrap) return;
@@ -291,9 +293,13 @@ function _fdRender() {
         </div>`;
     }
 
-    if (!_fdData.length) { wrap.innerHTML = banner; return; }
+    const bannerRow = `<div class="fd-banner-row">${banner}
+        <button type="button" class="btn-primary fd-compose-open" id="fdComposeOpenBtn">&#43; Log a Drill</button>
+    </div>${_fdComposeOpen ? _fdComposeHtml() : ''}`;
 
-    wrap.innerHTML = banner + `<div class="fd-list">` + _fdData.map(d => {
+    if (!_fdData.length) { wrap.innerHTML = bannerRow; _fdBind(); return; }
+
+    wrap.innerHTML = bannerRow + `<div class="fd-list">` + _fdData.map(d => {
         const kidsShort  = d.children_present - d.children_accounted;
         const staffShort = d.staff_present - d.staff_accounted;
         const short = kidsShort + staffShort;
@@ -339,6 +345,95 @@ function _fdRender() {
             </details>
         </div>`;
     }).join('') + '</div>';
+    _fdBind();
+}
+
+function _fdBind() {
+    _sfEl('fdComposeOpenBtn')?.addEventListener('click', () => { _fdComposeOpen = true; _fdRender(); });
+    _sfEl('fdComposeCancel')?.addEventListener('click', () => { _fdComposeOpen = false; _fdRender(); });
+    _sfEl('fdComposeSave')?.addEventListener('click', _fdComposeSave);
+}
+
+function _fdComposeHtml() {
+    return `<div class="fd-compose">
+        <h3 class="fd-compose-title">Log a drill</h3>
+        <div class="fd-compose-grid">
+            <div class="fd-compose-field">
+                <label for="fdComposeType">Type</label>
+                <select id="fdComposeType">
+                    <option value="fire">Fire</option>
+                    <option value="tornado">Tornado</option>
+                    <option value="lockdown">Lockdown</option>
+                    <option value="earthquake">Earthquake</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div class="fd-compose-field">
+                <label for="fdComposeSecs">Time to clear (seconds)</label>
+                <input type="number" id="fdComposeSecs" min="0" step="1" placeholder="e.g. 90">
+            </div>
+            <div class="fd-compose-field">
+                <label for="fdComposeKidsPresent">Children present</label>
+                <input type="number" id="fdComposeKidsPresent" min="0" step="1" value="0">
+            </div>
+            <div class="fd-compose-field">
+                <label for="fdComposeKidsAccounted">Children accounted for</label>
+                <input type="number" id="fdComposeKidsAccounted" min="0" step="1" value="0">
+            </div>
+            <div class="fd-compose-field">
+                <label for="fdComposeStaffPresent">Staff present</label>
+                <input type="number" id="fdComposeStaffPresent" min="0" step="1" value="0">
+            </div>
+            <div class="fd-compose-field">
+                <label for="fdComposeStaffAccounted">Staff accounted for</label>
+                <input type="number" id="fdComposeStaffAccounted" min="0" step="1" value="0">
+            </div>
+        </div>
+        <div class="fd-compose-field">
+            <label for="fdComposeNotes">Notes (optional)</label>
+            <textarea id="fdComposeNotes" rows="2"></textarea>
+        </div>
+        <div class="fd-compose-btns">
+            <button type="button" class="btn-primary" id="fdComposeSave">Save</button>
+            <button type="button" class="btn-ghost" id="fdComposeCancel">Cancel</button>
+        </div>
+    </div>`;
+}
+
+async function _fdComposeSave() {
+    const type   = _sfEl('fdComposeType')?.value || 'fire';
+    const secs   = _sfEl('fdComposeSecs')?.value;
+    const kidsPresent    = Number(_sfEl('fdComposeKidsPresent')?.value || 0);
+    const kidsAccounted  = Number(_sfEl('fdComposeKidsAccounted')?.value || 0);
+    const staffPresent   = Number(_sfEl('fdComposeStaffPresent')?.value || 0);
+    const staffAccounted = Number(_sfEl('fdComposeStaffAccounted')?.value || 0);
+    const notes  = _sfEl('fdComposeNotes')?.value?.trim() || '';
+
+    const btn = _sfEl('fdComposeSave');
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = 'Saving…';
+    try {
+        const id = await adminLogFireDrill({
+            drill_type: type,
+            evacuation_seconds: secs === '' || secs == null ? null : Number(secs),
+            children_present: kidsPresent, children_accounted: kidsAccounted,
+            staff_present: staffPresent, staff_accounted: staffAccounted,
+            notes,
+        });
+        if (id == null) {
+            showToast("Couldn't save — check your admin role.", 'error');
+            return;
+        }
+        showToast('Drill logged.');
+        _fdComposeOpen = false;
+        await renderFireDrillsTool();
+    } catch (e) {
+        showToast('Error: ' + (e.message || e), 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+    }
 }
 
 function _fdRosterList(title, list) {
@@ -545,4 +640,248 @@ function _ciBind() {
     document.querySelectorAll('[data-cidays]').forEach(b => {
         b.onclick = () => { _ciDays = Number(b.dataset.cidays); renderClockIntegrityTool(); };
     });
+}
+
+// ============================================================
+// HR & Handbook — Policies, Write-ups
+// ============================================================
+// New for the Staff tab consolidation (design_handoff_staff, 2026-08-28).
+// Both are genuinely new — everything else in this file is a relocated,
+// unchanged tool. See add_staff_write_ups_and_hr_policies.sql for the table,
+// RPCs, and the hr-policies storage bucket.
+
+let _hrPolicies    = [];
+let _hrPolicyOpen  = false;
+let _wuData        = [];
+let _wuComposeOpen = false;
+
+// ── Policies ─────────────────────────────────────────────────
+async function renderHrPoliciesTool() {
+    const wrap = _sfEl('hrPoliciesBody');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="muted">Loading…</p>';
+    try {
+        _hrPolicies = await loadHrPolicies();
+    } catch (e) {
+        wrap.innerHTML = `<p class="muted">Could not load policies: ${escHtml(e.message || e)}</p>`;
+        return;
+    }
+    _hrRenderPolicies();
+}
+
+function _hrRenderPolicies() {
+    const wrap = _sfEl('hrPoliciesBody');
+    if (!wrap) return;
+
+    const rows = _hrPolicies.length ? _hrPolicies.map(p => `
+        <div class="hr-policy-row" data-hrpid="${escHtml(p.id)}">
+            <div class="hr-policy-icon">${escHtml(p.icon || '📄')}</div>
+            <div class="hr-policy-main">
+                <div class="hr-policy-title">${escHtml(p.title)}</div>
+                <div class="hr-policy-updated">${p.updatedLabel ? 'Updated ' + escHtml(p.updatedLabel) : ''}</div>
+            </div>
+            <div class="hr-policy-actions">
+                <button class="btn-ghost hr-policy-view">View PDF</button>
+                <button class="btn-ghost hr-policy-remove" title="Remove">🗑️</button>
+            </div>
+        </div>`).join('') : '<p class="empty-hint">No policy documents yet — add one below.</p>';
+
+    const addForm = _hrPolicyOpen ? `
+        <div class="hr-policy-add">
+            <div class="fm-field"><label>Title</label>
+                <input type="text" id="hrPolTitle" placeholder="e.g. Employee Handbook"></div>
+            <div class="fm-field"><label>Icon (optional)</label>
+                <input type="text" id="hrPolIcon" placeholder="📘" maxlength="4" style="width:60px"></div>
+            <div class="fm-field"><label>"Updated" label</label>
+                <input type="text" id="hrPolUpdated" placeholder="e.g. Jan 2026"></div>
+            <div class="fm-field"><label>PDF or Word file</label>
+                <input type="file" id="hrPolFile" accept="application/pdf,.doc,.docx"></div>
+            <div class="rates-actions">
+                <button class="btn-primary" id="hrPolSave">Save</button>
+                <button class="btn-ghost" id="hrPolCancel">Cancel</button>
+                <span id="hrPolStatus" class="rates-status"></span>
+            </div>
+        </div>` : '';
+
+    wrap.innerHTML = `
+        <div class="hr-policy-list">${rows}</div>
+        ${addForm}
+        ${_hrPolicyOpen ? '' : '<button class="btn-secondary" id="hrPolAddBtn" style="margin-top:12px">+ Add a policy document</button>'}`;
+
+    wrap.querySelectorAll('.hr-policy-row').forEach(row => {
+        const id = row.dataset.hrpid;
+        const p  = _hrPolicies.find(x => String(x.id) === id);
+        if (!p) return;
+        row.querySelector('.hr-policy-view')?.addEventListener('click', () => _hrViewPolicy(p));
+        row.querySelector('.hr-policy-remove')?.addEventListener('click', () => _hrRemovePolicy(p));
+    });
+    _sfEl('hrPolAddBtn')?.addEventListener('click', () => { _hrPolicyOpen = true; _hrRenderPolicies(); });
+    _sfEl('hrPolCancel')?.addEventListener('click', () => { _hrPolicyOpen = false; _hrRenderPolicies(); });
+    _sfEl('hrPolSave')?.addEventListener('click', _hrSavePolicy);
+}
+
+async function _hrViewPolicy(p) {
+    try {
+        const url = await fetchHrPolicyUrl(p.path);
+        if (url) window.open(url, '_blank');
+        else showToast("Couldn't open that document.", 'error');
+    } catch (e) {
+        showToast('Error: ' + (e.message || e), 'error');
+    }
+}
+
+async function _hrRemovePolicy(p) {
+    if (!confirm(`Remove "${p.title}"? This can't be undone.`)) return;
+    try {
+        const updated = _hrPolicies.filter(x => x.id !== p.id);
+        await saveHrPolicies(updated);
+        _hrPolicies = updated;
+        _hrRenderPolicies();
+        await deleteHrPolicyFile(p.path);
+    } catch (e) {
+        showToast('Error removing that document: ' + (e.message || e), 'error');
+    }
+}
+
+async function _hrSavePolicy() {
+    const title   = _sfEl('hrPolTitle')?.value.trim();
+    const icon    = _sfEl('hrPolIcon')?.value.trim();
+    const updated = _sfEl('hrPolUpdated')?.value.trim();
+    const file    = _sfEl('hrPolFile')?.files[0];
+    const statusEl = _sfEl('hrPolStatus');
+    if (!title) { showToast('Give the document a title.', 'error'); return; }
+    if (!file)  { showToast('Choose a file to upload.', 'error'); return; }
+
+    const btn = _sfEl('hrPolSave');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    if (statusEl) statusEl.textContent = '';
+    try {
+        const path = await uploadHrPolicyFile(file);
+        const updatedList = _hrPolicies.concat([{
+            id: crypto.randomUUID(), title, icon: icon || '📄', updatedLabel: updated, path,
+        }]);
+        await saveHrPolicies(updatedList);
+        _hrPolicies   = updatedList;
+        _hrPolicyOpen = false;
+        _hrRenderPolicies();
+        showToast('Policy document added.');
+    } catch (e) {
+        if (statusEl) statusEl.textContent = '⚠️ ' + (e.message || e);
+        if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+    }
+}
+
+// ── Write-ups ────────────────────────────────────────────────
+const WU_KINDS = ['Lateness', 'Policy violation', 'Attendance', 'Performance', 'Other'];
+
+async function renderStaffWriteUpsTool() {
+    const wrap = _sfEl('hrWriteUpsBody');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="muted">Loading…</p>';
+    try {
+        _wuData = await fetchStaffWriteUps();
+    } catch (e) {
+        wrap.innerHTML = `<p class="muted">Could not load write-ups: ${escHtml(e.message || e)}</p>`;
+        return;
+    }
+    _wuRender();
+}
+
+function _wuRender() {
+    const wrap = _sfEl('hrWriteUpsBody');
+    if (!wrap) return;
+
+    const staffOpts = (typeof allStaffData !== 'undefined' ? allStaffData : [])
+        .filter(s => s.active)
+        .map(s => `<option value="${escHtml(s.id)}">${escHtml(s.name)}</option>`).join('');
+
+    const composeForm = _wuComposeOpen ? `
+        <div class="wu-compose">
+            <div class="fm-field"><label>Staff member</label>
+                <select id="wuStaff" class="family-search-input">${staffOpts}</select></div>
+            <div class="fm-field"><label>Type</label>
+                <select id="wuKind" class="family-search-input">
+                    ${WU_KINDS.map(k => `<option value="${escHtml(k)}">${escHtml(k)}</option>`).join('')}
+                </select></div>
+            <div class="fm-field"><label>Date</label>
+                <input type="date" id="wuDate" value="${new Date().toLocaleDateString('en-CA')}"></div>
+            <div class="fm-field fm-field-grow"><label>Note</label>
+                <textarea id="wuNote" rows="3" placeholder="What happened"></textarea></div>
+            <div class="rates-actions">
+                <button class="btn-primary" id="wuSave">Save write-up</button>
+                <button class="btn-ghost" id="wuCancel">Cancel</button>
+                <span id="wuStatus" class="rates-status"></span>
+            </div>
+        </div>` : '';
+
+    const cards = _wuData.length ? _wuData.map(w => {
+        const name   = w.staff?.name || 'Former staff member';
+        const signed = w.status === 'signed';
+        return `
+        <div class="wu-card">
+            <div class="wu-card-head">
+                <span class="wu-name">${escHtml(name)}</span>
+                <span class="wu-kind-chip">${escHtml(w.kind)}</span>
+                <span class="wu-date">${escHtml(friendlyShort(w.occurred_at))}</span>
+            </div>
+            <div class="wu-note">${escHtml(w.note)}</div>
+            <div class="wu-foot">
+                <span class="wu-issuer">Issued by ${escHtml(w.issued_by_name)}</span>
+                ${signed
+                    ? `<span class="wu-status wu-status-signed">Signed ${escHtml(new Date(w.signed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))}</span>`
+                    : `<button class="wu-status wu-status-pending" data-wuid="${w.id}">Awaiting signature — mark signed</button>`}
+            </div>
+        </div>`;
+    }).join('') : '<p class="empty-hint">No write-ups on file.</p>';
+
+    wrap.innerHTML = `
+        <div class="rates-actions" style="margin-bottom:14px">
+            ${_wuComposeOpen ? '' : '<button class="btn-primary" id="wuAddBtn">+ New write-up</button>'}
+        </div>
+        ${composeForm}
+        <div class="wu-list">${cards}</div>`;
+
+    _sfEl('wuAddBtn')?.addEventListener('click', () => { _wuComposeOpen = true; _wuRender(); });
+    _sfEl('wuCancel')?.addEventListener('click', () => { _wuComposeOpen = false; _wuRender(); });
+    _sfEl('wuSave')?.addEventListener('click', _wuSave);
+    wrap.querySelectorAll('.wu-status-pending').forEach(b => {
+        b.addEventListener('click', () => _wuMarkSigned(Number(b.dataset.wuid)));
+    });
+}
+
+async function _wuSave() {
+    const staffId = _sfEl('wuStaff')?.value;
+    const kind    = _sfEl('wuKind')?.value;
+    const date    = _sfEl('wuDate')?.value;
+    const note    = _sfEl('wuNote')?.value.trim();
+    const statusEl = _sfEl('wuStatus');
+    if (!staffId) { showToast('Pick a staff member.', 'error'); return; }
+    if (!note)    { showToast('Add a note describing what happened.', 'error'); return; }
+
+    const btn = _sfEl('wuSave');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    if (statusEl) statusEl.textContent = '';
+    try {
+        const id = await submitStaffWriteUp({ staffId, kind, note, occurredAt: date || null });
+        if (!id) { showToast("Couldn't save — check your admin role.", 'error'); return; }
+        _wuComposeOpen = false;
+        await renderStaffWriteUpsTool();
+        showToast('Write-up saved.');
+    } catch (e) {
+        if (statusEl) statusEl.textContent = '⚠️ ' + (e.message || e);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Save write-up'; }
+    }
+}
+
+async function _wuMarkSigned(id) {
+    if (!confirm('Mark this write-up as acknowledged/signed?')) return;
+    try {
+        const ok = await markStaffWriteUpSigned(id);
+        if (!ok) { showToast('That did not go through.', 'error'); return; }
+        showToast('Marked signed.');
+        await renderStaffWriteUpsTool();
+    } catch (e) {
+        showToast('Error: ' + (e.message || e), 'error');
+    }
 }

@@ -286,6 +286,14 @@ async function _anSave(publish) {
             : 'Saved as a draft.');
         _anDraft = _anFreshDraft();
         await renderAnnouncementsTool();
+        // The composer is embedded inside the Messages screen's merged feed
+        // now (see admin-messages-unified.js) — a published announcement
+        // should show up there immediately, not just in this panel's own
+        // history list.
+        if (publish && typeof _msgRenderFeed === 'function' && typeof fetchAllAnnouncements === 'function') {
+            try { _msgAnnounce = await fetchAllAnnouncements(); _msgRenderFeed(); }
+            catch (e2) { console.warn('refresh messages feed after announce:', e2); }
+        }
     } catch (e) {
         showToast('Error: ' + (e.message || e), 'error');
     } finally {

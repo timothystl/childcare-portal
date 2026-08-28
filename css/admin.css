@@ -257,8 +257,8 @@
     transition: width .4s ease;
 }
 .bar-green  { background: var(--green); }
-.bar-orange { background: var(--tang); }
-.bar-red    { background: var(--tang); }
+.bar-orange { background: var(--sun); }
+.bar-red    { background: var(--ap-deep-tang); }
 .cap-pct    { font-size: .8em; color: var(--text-muted); }
 
 /* Table */
@@ -433,6 +433,47 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     gap: 10px;
     align-items: flex-end;
 }
+
+/* ============================================================
+   Print Attendance — blank paper sign-in/sign-out sheet
+   ============================================================ */
+.pa-controls {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 18px;
+}
+.pa-field { display: flex; flex-direction: column; gap: 5px; }
+.pa-field label { font-size: .85em; font-weight: 600; color: var(--text-muted); }
+.pa-field select {
+    padding: 9px 13px; border: 2px solid var(--border); border-radius: 7px;
+    font-size: .95em;
+}
+/* On-page preview — same content/classes the print popup builds from, styled
+   for the app's own layout rather than a printed page. */
+.pa-sheet {
+    background: #fff; border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px 22px; margin-bottom: 20px;
+}
+.pa-sheet-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    border-bottom: 2px solid var(--navy); padding-bottom: 10px; margin-bottom: 14px;
+    gap: 16px; flex-wrap: wrap;
+}
+.pa-org { font-family: var(--font-head); font-size: 1.3em; font-weight: 700; color: var(--navy); }
+.pa-room-title { font-size: 1.05em; font-weight: 600; color: var(--text); margin-top: 2px; }
+.pa-meta { text-align: right; font-size: .85em; color: var(--text-muted); line-height: 1.6; }
+.pa-table { width: 100%; border-collapse: collapse; }
+.pa-table th, .pa-table td {
+    border: 1px solid var(--border); padding: 9px 12px; text-align: left; font-size: .9em;
+}
+.pa-table th { background: var(--linen); font-weight: 700; color: var(--text); }
+.pa-blank-cell { height: 34px; }
+.pa-empty { text-align: center; color: var(--text-muted); font-style: italic; padding: 18px; }
+.pa-sheet-foot {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 18px; font-size: .92em; flex-wrap: wrap; gap: 10px;
+}
+.pa-blank-line { display: inline-block; width: 220px; border-bottom: 1px solid var(--text-muted); }
+.pa-blank-short { display: inline-block; width: 40px; border-bottom: 1px solid var(--text-muted); }
 .roster-group { margin-bottom: 28px; }
 .roster-room-title {
     font-size: 1.05em;
@@ -1997,6 +2038,64 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 
 /* ============================================================
+   Family Directory redesign (2026-08-27) — "..." menu + Documents
+   ============================================================ */
+.fm-kebab { position: relative; }
+.fm-kebab-btn {
+    width: 30px; height: 30px; padding: 0; line-height: 1;
+    background: var(--white); color: var(--text-muted);
+    border: 1.5px solid var(--border); border-radius: 6px;
+    font-size: 1em; font-weight: 800; cursor: pointer;
+}
+.fm-kebab-btn:hover { background: var(--linen); color: var(--navy); }
+.fm-kebab-menu {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 20;
+    display: flex; flex-direction: column; min-width: 190px;
+    background: var(--white); border: 1.5px solid var(--border);
+    border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+    padding: 6px;
+}
+.fm-kebab-menu button {
+    text-align: left; background: none; border: none; border-radius: 6px;
+    padding: 8px 10px; font-size: .84em; font-weight: 600; color: var(--text);
+    cursor: pointer; white-space: nowrap;
+}
+.fm-kebab-menu button:hover { background: var(--linen); }
+.fm-kebab-menu .fm-kebab-danger { color: var(--tang-dark); }
+.fm-kebab-menu .fm-kebab-danger:hover { background: var(--tang-pale); }
+
+.fm-child-documents { margin-top: 10px; }
+.fm-doc-label {
+    font-size: .82em; color: #555; font-weight: 600;
+    display: block; margin-bottom: 4px;
+}
+.fm-doc-hint, .fm-doc-empty, .fm-doc-loading {
+    font-size: .82em; color: var(--text-muted); font-style: italic; margin: 2px 0 6px;
+}
+.fmc-doc-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.fmc-doc-item {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--white); border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 8px; font-size: .82em;
+}
+.fmc-doc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.fmc-doc-meta { flex: none; color: var(--text-muted); font-size: .92em; }
+.fmc-doc-view, .fmc-doc-remove {
+    flex: none; background: none; border: 1px solid var(--border); border-radius: 5px;
+    padding: 2px 8px; font-size: .92em; cursor: pointer; color: var(--text-muted);
+}
+.fmc-doc-view:hover { color: var(--navy); border-color: var(--navy); }
+.fmc-doc-remove:hover { color: var(--tang-dark); border-color: var(--tang); }
+.fmc-doc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.fmc-doc-pick { display: inline-flex; align-items: center; cursor: pointer; }
+
+.fm-pickup-row {
+    background: var(--white); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: .88em; margin-bottom: 6px;
+}
+.fm-pickup-note { color: var(--text-muted); font-size: .9em; margin-top: 2px; }
+
+/* ============================================================
    RESPONSIVE ADMIN
    ============================================================ */
 @media (max-width: 700px) {
@@ -2080,26 +2179,24 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 /* ============================================================
    DAY ROSTER DETAIL PANEL (inside room-cal modal)
    ============================================================ */
+/* An inline panel that expands directly below whichever grid opened it
+   (Day view's rows, Month view's day-grid) — not a modal. showDayRosterDetail()
+   repositions this node as a sibling right after its caller's container on
+   every open, so "below" always means below the thing that was clicked. */
 .day-detail-panel {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 3000;
+    margin-top: 14px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+    overflow: hidden;
 }
 .day-detail-panel.hidden { display: none; }
 
 .day-detail-inner {
-    background: var(--white);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,.2);
-    width: min(360px, 90%);
-    max-height: 70vh;
-    overflow: hidden;
     display: flex;
     flex-direction: column;
+    max-height: 60vh;
 }
 
 .day-detail-header {
@@ -3498,23 +3595,30 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-header {
     background: var(--navy);
     color: var(--white);
-    padding: 16px 24px;
+    padding: 20px 24px 22px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
     gap: 12px;
 }
+.wlp-header-main { min-width: 0; }
 .wlp-header-title { font-family: var(--font-head); font-weight: 700; font-size: 21.5px; }
 .wlp-header-sub { font-size: 14px; color: rgba(255,255,255,.65); margin-top: 2px; }
 .wlp-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-.wlp-pill-group { display: flex; background: rgba(255,255,255,.12); border-radius: 8px; padding: 3px; }
+/* Separate pills with the header navy showing between them — NOT one shared
+   translucent track. The design mockup gives every pill its own fill and a
+   real gap; a segmented-control track reads as a different component. */
+.wlp-pill-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .wlp-pill-btn {
-    background: transparent; color: rgba(255,255,255,.75); border: none;
-    padding: 8px 16px; border-radius: 6px; font-weight: 800; font-size: 15px; cursor: pointer;
+    background: rgba(255,255,255,.12); color: var(--white); border: none;
+    padding: 9px 18px; border-radius: 8px; font-family: var(--font-body);
+    font-weight: 800; font-size: 15px; cursor: pointer;
 }
-.wlp-pill-btn.active { background: var(--sun); color: var(--navy); }
+.wlp-pill-btn:hover { background: rgba(255,255,255,.2); }
+.wlp-pill-btn.active,
+.wlp-pill-btn.active:hover { background: var(--sun); color: var(--navy); }
 
 .wlp-toolbar {
     background: var(--navy-table);
@@ -3525,17 +3629,10 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     flex-wrap: wrap;
     gap: 10px;
 }
-.wlp-toolbar .wlp-pill-group { background: rgba(255,255,255,.14); }
-.wlp-toolbar .wlp-pill-btn { color: #fff; padding: 6px 14px; font-size: 14px; }
-.wlp-toolbar .wlp-pill-btn.active { background: var(--white); color: var(--navy); }
-
-.wlp-month-nav { display: flex; align-items: center; gap: 10px; color: var(--white); }
-.wlp-month-nav-btn {
-    background: rgba(255,255,255,.16); border: none; color: var(--white);
-    width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 16px;
-}
-.wlp-month-nav-btn:disabled { opacity: .4; cursor: default; }
-.wlp-month-nav-label { font-weight: 800; min-width: 96px; text-align: center; font-size: 15px; }
+.wlp-toolbar .wlp-pill-group { margin-top: 0; }
+.wlp-toolbar .wlp-pill-btn { padding: 8px 16px; font-size: 14px; }
+.wlp-toolbar .wlp-pill-btn.active,
+.wlp-toolbar .wlp-pill-btn.active:hover { background: var(--white); color: var(--navy); }
 
 /* ── Filter bar (search + room) ───────────────────────────── */
 .wlp-filter-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 12px 24px 0; }
@@ -3571,8 +3668,8 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     font-weight: 700; padding: 3px 5px; border-radius: 4px;
 }
 .wlp-chip-open { background: var(--green-pale); color: var(--green-dark); }
-.wlp-chip-full { background: var(--wlp-red-bg); color: var(--wlp-red-fg); }
-.wlp-chip-off  { background: var(--warm-gray); color: #c4bda8; }
+.wlp-chip-full { background: var(--tang-pale); color: var(--wlp-red-fg); }
+.wlp-chip-off  { background: var(--warm-gray); color: #B0A88F; }
 .wlp-chip-grad  { background: var(--wlp-grad-bg);  color: var(--wlp-grad-fg); }
 .wlp-chip-start { background: var(--wlp-start-bg); color: var(--wlp-start-fg); }
 .wlp-chip-promised { background: var(--wlp-promised-bg); color: var(--wlp-promised-fg); }
@@ -3632,7 +3729,6 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-toast { background: var(--green-pale); color: var(--green-dark); padding: 10px 24px; font-size: 15px; font-weight: 700; }
 
 /* ── Capacity Planner — Grid view ─────────────────────────── */
-.wlp-movement-panel { border-bottom: 1px solid var(--border); background: var(--white); padding: 16px 24px; }
 .wlp-collapse-toggle {
     display: flex; align-items: center; gap: 8px; background: none; border: none; padding: 0;
     cursor: pointer; width: 100%; text-align: left;
@@ -3645,28 +3741,6 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     letter-spacing: .04em; margin-bottom: 2px;
 }
 .wlp-section-hint { font-size: 13.5px; color: var(--text-muted); margin-bottom: 12px; }
-.wlp-movement-grid { display: grid; gap: 10px; margin-top: 10px; }
-.wlp-movement-col { min-width: 0; }
-.wlp-movement-col-title { font-weight: 700; font-size: 15px; color: var(--text); margin-bottom: 8px; }
-.wlp-movement-events { display: flex; flex-direction: column; gap: 6px; }
-.wlp-event-card {
-    display: flex; align-items: flex-start; gap: 7px; background: var(--linen);
-    border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px;
-    min-width: 0;
-}
-.wlp-event-icon {
-    width: 24px; height: 24px; border-radius: 50%; color: var(--white);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13.5px; font-weight: 800; flex-shrink: 0; margin-top: 1px;
-}
-.wlp-event-icon-grad  { background: var(--wlp-grad-fg); }
-.wlp-event-icon-start { background: var(--wlp-start-fg); }
-.wlp-event-icon-promised { background: var(--wlp-promised-fg); }
-.wlp-event-body { flex: 1; min-width: 0; }
-.wlp-event-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.wlp-event-name { font-weight: 700; font-size: 14px; color: var(--text); overflow-wrap: anywhere; }
-.wlp-event-month { font-size: 12.5px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
-.wlp-event-action { font-size: 13px; color: var(--text-muted); margin: 2px 0 5px; }
 
 .wlp-cap-table { border-collapse: collapse; width: max-content; min-width: 100%; }
 .wlp-cap-table th.wlp-room-head {
@@ -3675,25 +3749,39 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 }
 .wlp-cap-table th.wlp-month-head {
     background: var(--navy-table); color: var(--white); padding: 10px 8px;
-    font-size: 14.5px; text-align: center; min-width: 126px; font-weight: 700;
+    font-size: 14.5px; text-align: center; font-weight: 700;
+    border-left: 1px solid rgba(255,255,255,.22);
 }
+/* The weekday labels print once, in their own header row under the month
+   they belong to — not inside every cell of every row. */
+.wlp-cap-table th.wlp-day-head {
+    background: var(--white); color: var(--tang-dark); padding: 6px 4px;
+    font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+    text-align: center; min-width: 34px; border-bottom: 1px solid var(--border);
+}
+.wlp-cap-table th.wlp-day-head.is-month-start { border-left: 1px solid var(--warm-gray); }
 .wlp-cap-table td.wlp-room-cell {
     position: sticky; left: 0; background: var(--white); padding: 10px 14px;
     font-weight: 700; font-size: 15.5px; white-space: nowrap; box-shadow: 2px 0 4px rgba(0,0,0,.04);
 }
 .wlp-room-cell-cap { font-weight: 400; font-size: 13.5px; color: var(--text-muted); }
-.wlp-cap-table td.wlp-month-cell {
-    text-align: center; padding: 8px 6px; cursor: pointer; border-left: 1px solid var(--warm-gray);
-    vertical-align: top;
+.wlp-cap-table td.wlp-day-cell {
+    text-align: center; padding: 7px 4px; cursor: pointer; vertical-align: middle;
+    min-width: 34px; border-bottom: 1px solid var(--white);
 }
-.wlp-cap-table td.wlp-month-cell.selected { background: var(--sun-pale); box-shadow: inset 0 0 0 2px var(--sun); }
-.wlp-cap-chip-row { display: flex; gap: 3px; justify-content: center; }
-.wlp-cap-chip { border-radius: 4px; padding: 3px 2px; min-width: 28px; }
-.wlp-cap-chip-day { font-size: 12px; font-weight: 700; }
-.wlp-cap-chip-open { font-size: 14.5px; font-weight: 800; }
+.wlp-cap-table td.wlp-day-cell.is-month-start { border-left: 1px solid var(--warm-gray); }
+.wlp-day-cell-open { font-size: 14.5px; font-weight: 800; line-height: 1.2; }
+/* The selection outline boxes the whole month group for that room — the five
+   day cells are one selectable unit, as they were when a month was one cell. */
+.wlp-cap-table td.wlp-day-cell.is-sel { box-shadow: inset 0 2px 0 var(--sun), inset 0 -2px 0 var(--sun); }
+.wlp-cap-table td.wlp-day-cell.is-sel.is-sel-first { box-shadow: inset 0 2px 0 var(--sun), inset 0 -2px 0 var(--sun), inset 2px 0 0 var(--sun); }
+.wlp-cap-table td.wlp-day-cell.is-sel.is-sel-last { box-shadow: inset 0 2px 0 var(--sun), inset 0 -2px 0 var(--sun), inset -2px 0 0 var(--sun); }
 /* "+N waiting" demand badge — its own amber pill so it stays legible on both
    the light-red (full) and dark-red (over) cell backgrounds. */
 .wlp-cap-chip-wait { font-size: 8.5px; font-weight: 800; color: #7c2d12; background: var(--sun); border-radius: 6px; padding: 0 3px; margin-top: 1px; display: inline-block; line-height: 1.35; }
+/* Reserves the pill's own line in every cell so a row of numbers stays on one
+   baseline whether or not that particular day has anyone waiting. */
+.wlp-cap-chip-wait.is-blank { background: none; visibility: hidden; }
 .wlp-avail-green { background: var(--wlp-green-bg); color: var(--wlp-green-fg); }
 .wlp-avail-amber { background: var(--wlp-amber-bg); color: var(--wlp-amber-fg); }
 .wlp-avail-red   { background: var(--wlp-red-bg);   color: var(--wlp-red-fg); }
@@ -3701,34 +3789,119 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 
 .wlp-empty-note { color: var(--text-muted); font-size: 15px; font-style: italic; }
 
-/* ── Capacity Planner — Grid: sidebar wrap (sidebar itself is .wlp-sidebar,
-   shared with Board view — see below) ───────────────────────── */
-.wlp-grid-wrap { display: flex; }
+/* ── Capacity Planner — Grid layout wrap ────────────────────── */
+.wlp-grid-wrap { display: block; }
 .wlp-grid-main { flex: 1; min-width: 0; }
 
-/* ── Capacity Planner — Board view ────────────────────────── */
-.wlp-board-wrap { display: flex; }
-.wlp-board-rooms { flex: 1; padding: 18px 24px; }
-.wlp-board-room { margin-bottom: 16px; }
-.wlp-board-room-title { font-weight: 700; font-size: 16px; color: var(--navy); margin-bottom: 6px; }
-.wlp-board-room-cap { font-weight: 400; color: var(--text-muted); font-size: 14px; }
-.wlp-board-slots { display: flex; gap: 8px; }
+/* ── Capacity Planner — Board view (candidate-first match & assign,
+   design_handoff_planning_market, 2026-08-27) ────────────────────────── */
+/* ── Grid's detail drawer (cell / demand tile / age-out tile all open it) ──
+   Same fixed-overlay mechanics as .inc-drawer, but with the design source's
+   navy head; kept separate rather than restyling .inc-drawer, which the
+   incident and finance-family drawers share. */
+.wlp-scrim { position: fixed; inset: 0; background: rgba(1, 41, 74, .28); z-index: 150; }
+.wlp-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 470px; max-width: 94vw;
+    background: var(--white); border-left: 1px solid var(--border);
+    box-shadow: -18px 0 40px rgba(1, 41, 74, .10);
+    z-index: 151; overflow-y: auto;
+}
+.wlp-drawer-head {
+    background: var(--navy); color: var(--white);
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+    padding: 18px 22px 20px;
+}
+.wlp-drawer-title { font-family: var(--font-head); font-weight: 700; font-size: 19px; }
+.wlp-drawer-sub { font-size: 13px; color: rgba(255,255,255,.65); margin-top: 3px; }
+.wlp-drawer-close {
+    flex-shrink: 0; background: rgba(255,255,255,.14); color: var(--white); border: none;
+    width: 30px; height: 30px; border-radius: 7px; font-size: 14px; cursor: pointer; line-height: 1;
+}
+.wlp-drawer-close:hover { background: rgba(255,255,255,.26); }
+.wlp-drawer-body { padding: 20px 22px 28px; }
+.wlp-drawer-h {
+    font-family: var(--font-head); font-weight: 700; font-size: 17.5px;
+    color: var(--navy); margin-bottom: 10px;
+}
+/* The demand drawer's per-family list. These classes existed in the markup
+   but had no rules at all — the rows rendered as an unstyled text stack. */
+.wlp-moving-drawer-grid { display: flex; flex-direction: column; gap: 8px; }
+.wlp-moving-drawer-card {
+    background: var(--white); border: 1px solid var(--border); border-radius: 9px;
+    padding: 11px 13px; font-size: 13px; color: var(--text);
+}
+.wlp-seatmath-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.wlp-seatmath-box { background: var(--white); border: 1px solid var(--border); border-radius: 9px; padding: 11px 13px; }
+.wlp-seatmath-label {
+    font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--text-muted); line-height: 1.35;
+}
+.wlp-seatmath-val { font-family: var(--font-head); font-size: 1.5em; font-weight: 700; color: var(--navy); margin-top: 2px; }
+@media (max-width: 560px) { .wlp-drawer { width: 100%; max-width: none; } }
+
+.wlp-board-panel { padding: 18px 24px 22px; }
+.wlp-board-month-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+/* Fixed-width weekday tiles, left-aligned — the mockup's demand strip does not
+   stretch to the card's full width the way the Grid's own rollup strips do. */
+.wlp-board-day-strip {
+    display: grid; grid-template-columns: repeat(5, 106px); gap: 10px;
+    justify-content: start; margin-bottom: 22px;
+}
+@media (max-width: 700px) { .wlp-board-day-strip { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.wlp-board-day-tile { cursor: default; border-radius: 10px; padding: 11px 4px; }
+.wlp-board-day-tile .wlp-moving-tile-label { text-transform: uppercase; letter-spacing: .06em; }
+.wlp-board-day-tile .wlp-moving-tile-count { font-size: 22px; line-height: 1.25; }
+.wlp-board-month-pill {
+    border: none; border-radius: 999px; padding: 8px 15px; font-family: var(--font-body);
+    font-weight: 800; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+    background: var(--linen); color: var(--navy);
+}
+.wlp-board-month-pill.active { background: var(--navy); color: #fff; }
+.wlp-board-columns { display: grid; grid-template-columns: minmax(240px, .85fr) 1fr; gap: 24px; align-items: start; }
+@media (max-width: 780px) { .wlp-board-columns { grid-template-columns: 1fr; } }
+.wlp-board-candidate-list { display: flex; flex-direction: column; gap: 10px; max-height: 560px; overflow-y: auto; }
+.wlp-board-candidate {
+    text-align: left; border: 1px solid var(--border); background: #fff; border-radius: 9px;
+    padding: 12px 14px; cursor: pointer; font-family: inherit; width: 100%;
+}
+.wlp-board-candidate.selected { border-color: var(--sun); background: #FFFBEF; }
+.wlp-board-candidate-name { font-weight: 800; color: var(--navy); font-size: 14.5px; }
+.wlp-board-candidate-meta { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
+.wlp-board-assign-panel { border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.wlp-board-assign-title { font-weight: 800; color: var(--navy); font-size: 15px; margin-bottom: 2px; }
+.wlp-board-assign-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+.wlp-board-assign-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.wlp-board-assign-empty {
+    border: 1px dashed var(--border); border-radius: 12px; padding: 36px;
+    text-align: center; color: var(--text-muted);
+}
 .wlp-slot {
-    flex: 1; text-align: center; padding: 10px 4px; border-radius: 8px; cursor: pointer;
-    border: 2px solid transparent;
+    flex: 1; width: 100%; text-align: center; padding: 10px 4px; border-radius: 8px; cursor: pointer;
+    border: 2px solid transparent; font-family: inherit; background: none;
 }
 .wlp-slot.wlp-avail-green,
 .wlp-slot.wlp-avail-amber,
 .wlp-slot.wlp-avail-red { border-color: transparent; }
+/* .wlp-slot's own background:none is (0,1,0) and would otherwise lose the
+   cascade to whichever of these three same-specificity rules is declared
+   later in the file — pin each as a combined .wlp-slot.wlp-avail-* selector
+   (0,2,0) so the slot's background always wins regardless of source order. */
+.wlp-slot.wlp-avail-green { background: var(--wlp-green-bg); color: var(--wlp-green-fg); }
+.wlp-slot.wlp-avail-amber { background: var(--wlp-amber-bg); color: var(--wlp-amber-fg); }
+.wlp-slot.wlp-avail-red   { background: var(--wlp-red-bg);   color: var(--wlp-red-fg); }
 .wlp-slot.selected { background: var(--navy) !important; color: var(--sun) !important; border-color: var(--navy); }
 .wlp-slot.highlight { box-shadow: inset 0 0 0 2px var(--sun); }
+.wlp-slot:disabled { background: var(--linen); color: #B0A88F; cursor: not-allowed; }
 .wlp-slot-day { font-size: 13px; font-weight: 700; }
 .wlp-slot-open { font-size: 18.5px; font-weight: 800; margin-top: 2px; }
 /* "+N waiting" demand badge — amber pill, legible on any slot background
    (including the selected navy state). */
 .wlp-slot-wait { font-size: 10px; font-weight: 800; color: #7c2d12; background: var(--sun); border-radius: 8px; padding: 1px 6px; margin-top: 4px; display: inline-block; line-height: 1.4; }
 
-.wlp-sidebar { width: 360px; border-left: 1px solid var(--border); background: var(--linen); padding: 18px 20px; flex-shrink: 0; }
+/* .wlp-sidebar (the old inline right column) is gone — the Grid's detail
+   panels are the .wlp-drawer slide-over now. Its -head/-title/-close/-hint
+   parts stay: the inline "Who's enrolled" roster block below the table still
+   uses them. */
 .wlp-sidebar-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
 .wlp-sidebar-title { font-weight: 800; color: var(--navy); font-size: 16px; }
 .wlp-sidebar-close { background: none; border: none; color: var(--text-muted); font-size: 14.5px; cursor: pointer; }
@@ -3742,12 +3915,14 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-suggestion-name { font-weight: 700; font-size: 15.5px; }
 .wlp-suggestion-waiting { font-size: 13px; color: var(--text-muted); }
 .wlp-suggestion-priority { font-size: 13.5px; color: var(--text-muted); margin: 3px 0 6px; }
+/* White with a gold border when actionable — matches blockCandidateCard()'s
+   buttonStyle exactly, not a solid-fill button. */
 .wlp-suggestion-offer {
-    width: 100%; border: none; padding: 7px; border-radius: 6px; font-weight: 800;
-    font-size: 14px; cursor: pointer;
+    width: 100%; padding: 10px; border-radius: 8px; font-weight: 800;
+    font-size: 13px; cursor: pointer;
 }
-.wlp-suggestion-offer-full { background: var(--sun); color: var(--navy); }
-.wlp-suggestion-offer-partial { background: var(--white); color: var(--navy); border: 1.5px solid var(--sun); }
+.wlp-suggestion-offer-full { background: var(--white); color: var(--navy); border: 2px solid var(--sun); }
+.wlp-suggestion-offer:disabled { background: var(--linen); color: var(--text-muted); border: 2px solid var(--border); cursor: default; }
 
 .wlp-moving-card {
     display: flex; align-items: flex-start; gap: 8px; background: var(--white);
@@ -3770,32 +3945,81 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-default-group { min-width: 200px; }
 
 /* ── Moving (top-level tab) ───────────────────────────────── */
-.wlp-moving-panel { padding: 16px 24px 0; }
-.wlp-moving-timeline { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; margin-top: 8px; }
+.wlp-moving-panel { padding: 16px 24px 20px; }
 .wlp-moving-tile {
     background: var(--linen); border: 1.5px solid var(--border); border-radius: 7px;
     padding: 8px 4px; text-align: center; cursor: pointer;
 }
-.wlp-moving-tile.selected { background: var(--sun); border: 2px solid var(--navy); }
+.wlp-moving-tile.selected { background: var(--sun-pale); border: 2px solid var(--sun); }
 .wlp-moving-tile-label { font-size: 11.5px; font-weight: 700; color: var(--text-muted); }
 .wlp-moving-tile.selected .wlp-moving-tile-label { color: var(--navy); }
 .wlp-moving-tile-count { font-size: 16px; font-weight: 800; color: var(--navy); }
 .wlp-moving-drawer { margin-top: 12px; border-top: 2px solid var(--sun); background: var(--linen); border-radius: 8px; padding: 12px 16px 18px; }
 .wlp-moving-drawer-head { font-weight: 800; color: var(--navy); font-size: 13.5px; margin-bottom: 8px; }
-.wlp-moving-drawer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.wlp-moving-drawer-card { background: var(--white); border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; font-size: 12px; }
 .wlp-moving-drawer-empty { color: var(--text-muted); font-size: 12.5px; font-style: italic; }
-.wlp-moving-allpanel { padding: 16px 24px 20px; border-top: 1px solid var(--border); }
+
+/* Month-pill nav + flat confirm-move card list — matches
+   design_handoff_planning_market's mockup exactly (a pill row with the
+   count inline, e.g. "Sep (1)", not a boxed tile-per-month grid). Shared
+   by nothing else — the Grid's own rollup strips keep the box-tile chrome
+   above, since that mockup screen used tiles, not pills. */
+.wlp-moving-pillrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 18px; }
+.wlp-moving-pill {
+    background: var(--linen); border: 1.5px solid var(--border); border-radius: 20px;
+    padding: 8px 16px; font-size: 13.5px; font-weight: 700; color: var(--navy); cursor: pointer;
+}
+.wlp-moving-pill.selected { background: var(--navy); border-color: var(--navy); color: var(--white); }
+.wlp-ageout-list { display: flex; flex-direction: column; gap: 10px; }
+.wlp-ageout-card {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 13px 16px;
+}
+.wlp-ageout-card.done { opacity: .6; }
+.wlp-ageout-card-main { min-width: 0; }
+.wlp-ageout-card-name { font-weight: 800; color: var(--navy); font-size: 14px; }
+.wlp-ageout-card-rooms { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+/* #B3452B is the mockup's own literal hex for this text — closer to a
+   saturated rust than this app's --tang-dark (#7a2a18), so used directly
+   rather than force-fit an existing token that doesn't match it. */
+.wlp-ageout-card-reason { color: #B3452B; font-weight: 700; }
+/* One line on the Moving tab, where there's room for it; its own line in the
+   narrow drawer, which is also how the design source's drawer card reads. */
+.wlp-drawer .wlp-ageout-card-sep { display: none; }
+.wlp-drawer .wlp-ageout-card-reason { display: block; margin-top: 2px; }
+.wlp-confirm-move-btn {
+    flex-shrink: 0; background: var(--green-text); color: var(--white); border: none;
+    padding: 9px 18px; border-radius: 7px; cursor: pointer;
+    font-family: var(--font-body); font-size: .9em; font-weight: 700;
+}
+.wlp-confirm-move-btn:hover { background: var(--green-dark); }
+.wlp-confirm-move-btn:disabled { background: var(--border); color: var(--text-muted); cursor: default; }
+
+/* ── Grid — inline demand-by-month / age-out rollup strips (consolidation
+   pass, design_handoff_planning_market, 2026-08-27). Same tile chrome as
+   the Moving timeline (.wlp-moving-tile/-label/-count), just a 6-column
+   parent instead of 12 — and a .wlp-moving-drawer opens below whichever
+   strip's box was clicked. */
+/* The two inline rollup strips sit OUTSIDE .wlp-grid-wrap, so without this
+   they rendered flush against the card's own edge while the grid table above
+   them was inset 24px. */
+.wlp-rollup-panel { padding: 0 24px 20px; }
+.wlp-rollup-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin: 10px 0 4px; }
+.wlp-rollup-tile-sub { font-size: 10px; color: var(--text-muted); line-height: 1.3; margin-top: 2px; }
+@media (max-width: 720px) { .wlp-rollup-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* ============================================================
    ROOM SCHEDULE PLANNER
    ============================================================ */
-.sched-cell        { text-align: center; font-size: .9rem; padding: 6px 10px; }
-.sched-near        { background: var(--sun-pale); color: var(--mustard-dark); font-weight: 600; }
-.sched-full        { background: var(--tang-pale); color: var(--tang-dark); font-weight: 700; }
+/* Same three-tier tone as the Enrollment & Capacity day/week/month grids
+   (green-pale/gold-pale/tangerine-pale on navy/navy/deep-tang) — matches
+   the design source's capGridCells style exactly rather than this table's
+   own older mustard/tang-dark pairing. */
+.sched-cell        { text-align: center; font-size: .9rem; padding: 6px 10px; background: var(--green-pale); color: var(--navy); }
+.sched-near        { background: var(--sun-pale); color: var(--navy); font-weight: 700; }
+.sched-full        { background: var(--tang-pale); color: var(--ap-deep-tang); font-weight: 700; }
 .sched-legend      { font-size: .78em; color: var(--text-muted); margin-top: 8px; }
-.sched-near-swatch { display: inline-block; width: 10px; height: 10px; background: var(--sun-pale); border: 1px solid var(--mustard-dark); border-radius: 2px; vertical-align: middle; }
-.sched-full-swatch { display: inline-block; width: 10px; height: 10px; background: var(--tang-pale); border: 1px solid var(--tang); border-radius: 2px; vertical-align: middle; }
+.sched-near-swatch { display: inline-block; width: 10px; height: 10px; background: var(--sun-pale); border: 1px solid var(--sun); border-radius: 2px; vertical-align: middle; }
+.sched-full-swatch { display: inline-block; width: 10px; height: 10px; background: var(--tang-pale); border: 1px solid var(--ap-deep-tang); border-radius: 2px; vertical-align: middle; }
 
 /* YTD discount column */
 .ytd-discount-cell  { color: var(--mustard-dark); }
@@ -4377,9 +4601,7 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     .wlp-row:nth-child(2n) { padding-left: 0; border-left: none; }
     .wlp-grid-wrap { flex-direction: column; }
     .wlp-board-wrap { flex-direction: column; }
-    .wlp-sidebar { width: auto; border-left: none; border-top: 1px solid var(--border); }
-    .wlp-moving-timeline { grid-template-columns: repeat(4, 1fr); }
-    .wlp-moving-drawer-grid { grid-template-columns: 1fr; }
+    .wlp-ageout-card { flex-direction: column; align-items: flex-start; }
 
     /* Queue row: the 230px fixed name width and three nowrap trailing
        controls (status pill / Edit / chevron) don't fit a phone-width row
@@ -4406,7 +4628,6 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     /* Larger tap targets — 28px/13.5px controls are under the ~44px
        recommended touch target size. */
     .wlp-edit-btn { padding: 8px 12px; font-size: 14px; }
-    .wlp-month-nav-btn { width: 36px; height: 36px; }
 
     /* Header/toolbar/filter bar carried 24px of padding per side, meant for
        a desktop-width card — that's real width lost on a ~375px viewport. */
@@ -4606,6 +4827,69 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 }
 
 /* ============================================================
+   By room & shift — compact grid (design_handoff_staff, 2026-08-28).
+   One row per room+shift, day columns; replaces the old per-room
+   block-of-rows table above (.room-schedule-block etc., now unreferenced
+   — same "unreachable markup/CSS stays" convention as every prior
+   consolidation in this app; nothing reads it, nothing breaks).
+   ============================================================ */
+.sched-grid-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(1, 41, 74, .06); padding: 16px 18px;
+}
+.sched-grid-table { border-collapse: collapse; width: 100%; min-width: 720px; }
+.sched-grid-room-head, .sched-grid-shift-head, .sched-grid-day-head {
+    text-align: center; padding: 8px 10px; font-size: .78em; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--text-muted); border-bottom: 1px solid var(--border);
+    font-weight: 800; white-space: nowrap;
+}
+.sched-day-print-btn {
+    background: none; border: none; cursor: pointer; font-size: .85em; opacity: .55;
+    vertical-align: middle; padding: 0 0 0 2px;
+}
+.sched-day-print-btn:hover { opacity: 1; }
+.sched-grid-row td { border-bottom: 1px solid var(--ap-border-lt, #F0EADA); padding: 9px 10px; vertical-align: top; }
+.sched-grid-row-pm td { border-bottom: 1px solid var(--border); }
+.sched-grid-room {
+    text-align: left; font-weight: 700; font-size: .92em; color: var(--navy);
+    white-space: nowrap; vertical-align: middle !important;
+}
+.sched-grid-ratio { font-weight: 400; font-size: .82em; color: var(--text-muted); margin-top: 2px; }
+.sched-grid-shift { text-align: center; white-space: nowrap; }
+.sched-grid-time { font-size: .68em; color: var(--text-muted); margin-top: 3px; }
+.sched-shift-pill {
+    display: inline-block; font-size: .68em; font-weight: 800; letter-spacing: .04em;
+    border-radius: 6px; padding: 2px 7px;
+}
+.sched-shift-pill.is-am { background: var(--ap-tint-blue, #E4EEF6); color: var(--navy); }
+.sched-shift-pill.is-pm { background: var(--sun-pale, #FFF8E1); color: #7a5a00; }
+.sched-grid-cell { min-width: 108px; text-align: center; }
+.sched-grid-need { font-size: .68em; color: var(--text-muted); margin-bottom: 4px; white-space: nowrap; }
+.sched-grid-need.is-edge { color: var(--ap-deep-tang, #B3452B); font-weight: 700; }
+.sched-grid-selects { display: flex; flex-direction: column; gap: 3px; }
+
+/* By worker — one row per person per room+shift they hold this week. */
+.sched-worker-list { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.sched-worker-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 14px 16px; border-bottom: 1px solid var(--ap-border-lt, #F0EADA);
+}
+.sched-worker-who { display: flex; align-items: center; gap: 10px; }
+.sched-worker-name { font-weight: 800; color: var(--navy); font-size: .95em; }
+.sched-worker-meta { font-size: .8em; color: var(--text-muted); margin-top: 2px; }
+.sched-worker-right { display: flex; align-items: center; gap: 14px; }
+.sched-worker-cost { font-size: .85em; font-weight: 700; color: var(--navy); }
+.sched-worker-total {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 13px 16px; background: var(--cream, #FDFAF0);
+}
+.sched-worker-total > span:first-child {
+    font-size: .82em; font-weight: 800; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .05em;
+}
+.sched-worker-total-num { font-family: var(--font-head); font-size: 1.2em; font-weight: 700; color: var(--navy); }
+
+/* ============================================================
    GEOFENCE SETTINGS SECTION
    ============================================================ */
 .geofence-fields { display: flex; flex-direction: column; gap: 14px; }
@@ -4715,6 +4999,22 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 
 .market-type-legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 0; font-size: .82em; color: var(--text-muted); }
 .market-type-legend .swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; margin-right: 6px; vertical-align: middle; }
+
+/* ── Director Report (consolidation pass, design_handoff_planning_market,
+   2026-08-27) — header row + LIVE pill + segmented-control panes. The
+   .dr-pane children hold the exact same market-* / chart-box content the
+   three retired tools used; only this wrapper and the .ap-seg switch are new. */
+.dr-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.dr-head h2 { display: flex; align-items: center; gap: 10px; }
+.dr-head-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.dr-live-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--green-pale); color: var(--green-dark);
+    font-size: .55em; font-weight: 800; letter-spacing: .05em;
+    border-radius: 999px; padding: 4px 11px; vertical-align: middle;
+}
+#drSeg { margin-bottom: 18px; }
+.dr-pane { padding-top: 2px; }
 
 .tag { display: inline-block; font-size: .78em; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
 .tag.church { background: var(--green-pale); color: var(--green-dark); border: 1px solid var(--green-lt); }
@@ -5085,16 +5385,22 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .inc-stage.ok    { background: var(--green-pale); color: var(--green-dark);  border: 1px solid var(--green-lt); }
 .inc-stage.no    { background: var(--warm-gray);  color: var(--text-muted);  border: 1px solid var(--border); }
 
+/* ⚠️ Must clear .admin-header's own z-index: 100 (it's `position: sticky`,
+   not merely in-flow, so it still stacks against a `position: fixed`
+   drawer). At 60/61 the header's green bar rendered on top of the drawer's
+   own head, cutting off the family name every time the drawer opened —
+   found on the Finance drawer (#fhDrawer) but the bug is in this shared
+   component, so it hit every .inc-drawer user. */
 .inc-scrim {
     position: fixed; inset: 0; background: rgba(1, 41, 74, .28);
-    z-index: 60;
+    z-index: 150;
 }
 
 .inc-drawer {
     position: fixed; top: 0; right: 0; bottom: 0; width: 520px; max-width: 94vw;
     background: #fff; border-left: 1px solid var(--border);
     box-shadow: -18px 0 40px rgba(1, 41, 74, .10);
-    z-index: 61; overflow-y: auto;
+    z-index: 151; overflow-y: auto;
     transform: translateX(100%); transition: transform .18s ease-out;
 }
 .inc-drawer.is-open { transform: none; }
@@ -5167,6 +5473,16 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     color: #B8AC97; font-size: .78em; font-weight: 700;
 }
 
+.inc-add-item {
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.inc-add-item:last-of-type { border-bottom: none; }
+.inc-add-item p { margin: 3px 0 0; font-size: .9em; line-height: 1.5; color: var(--text); }
+.inc-add-meta { font-size: .78em; font-weight: 700; color: var(--text-muted); }
+.inc-add-empty { font-size: .88em; margin: 0 0 4px; }
+.inc-add-form { margin-top: 10px; }
+.inc-add-form .inc-dr-note { margin-bottom: 8px; }
+
 .inc-dr-actions {
     padding: 18px 26px; background: var(--linen); border-top: 1px solid var(--border);
 }
@@ -5205,6 +5521,22 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 }
 .ab-live { margin: 0; font-size: .88em; color: var(--text-muted); }
 
+/* Print bar: a date (defaults to today, editable) plus Day/Week/Month — this
+   board is always "today", so printing a different day's roster needs its
+   own picker rather than reusing _abData.care_date. */
+.ab-print-bar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 14px; padding: 10px 12px;
+    background: var(--linen); border: 1px solid var(--border); border-radius: 8px;
+}
+.ab-print-label { font-size: .82em; font-weight: 700; color: var(--text-muted); }
+.ab-print-bar input[type="date"] {
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: .85em; background: #fff;
+}
+.ab-print-bar input[type="date"]:focus { outline: none; border-color: var(--navy); }
+.ab-print-btn { padding: 5px 14px; font-size: .85em; }
+
 /* Says out loud that the counts are bookings, not bodies. The loudest thing on
    the page when it applies, because a calm number that is not a head count is
    how a child gets left in a building. */
@@ -5236,8 +5568,16 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 }
 .ab-tile-sub { font-size: .8em; color: var(--text-muted); line-height: 1.4; }
 
+/* Two columns so a typical admin-width screen shows two rooms side by side
+   instead of one full-width card at a time; collapses to a single column
+   once a column would get too narrow for the action-button row to read
+   comfortably (matches the drawer breakpoint the rest of the shell uses). */
 .ab-rooms {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
+    align-items: start;
+}
+@media (max-width: 900px) {
+    .ab-rooms { grid-template-columns: 1fr; }
 }
 .ab-room {
     background: #fff; border: 1px solid var(--border); border-radius: 12px;
@@ -5255,18 +5595,21 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     gap: 10px; margin-top: 8px; font-size: .88em; font-weight: 800; color: var(--navy);
 }
 .ab-pill {
-    border-radius: 999px; padding: 3px 10px;
+    border-radius: 999px; padding: 3px 9px;
     font-size: .72em; font-weight: 800; letter-spacing: .04em;
-    background: var(--warm-gray); color: var(--text-muted); border: 1px solid var(--border);
+    background: var(--warm-gray); color: var(--text-muted);
 }
-.ab-pill.ok   { background: var(--green-pale); color: var(--green-dark); border-color: var(--green-lt); }
-.ab-pill.warn { background: var(--sun-pale);   color: var(--mustard-dark); border-color: var(--sun); }
-.ab-pill.bad  { background: var(--tang-pale);  color: var(--tang-dark); border-color: var(--tang); }
+/* Matches the design source's pillStyleFor() bg/color pairs exactly:
+   at-limit is navy-on-gold, not mustard — a deliberate departure from the
+   warn styling used elsewhere in the admin so ratio status reads distinctly. */
+.ab-pill.ok   { background: var(--green-pale); color: var(--green-text); }
+.ab-pill.warn { background: var(--sun-pale);   color: var(--navy); }
+.ab-pill.bad  { background: var(--tang-pale);  color: var(--ap-deep-tang); }
 
 .ab-kids { padding: 4px 15px 10px; }
 .ab-kid {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 0; border-bottom: 1px solid var(--linen); font-size: .9em;
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid var(--linen); font-size: .9em;
 }
 .ab-kid:last-child { border-bottom: none; }
 .ab-av {
@@ -5274,17 +5617,37 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     background: var(--warm-gray); color: var(--text-muted);
     font-size: .66em; font-weight: 800;
     display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
 }
 .ab-kid.is-in    .ab-av { background: var(--green-pale); color: var(--green-dark); }
 .ab-kid.is-out   .ab-av { background: var(--warm-gray); }
-.ab-kid.is-absent .ab-av { background: var(--tang-pale); color: var(--tang-dark); }
-.ab-kid-name { flex: 1; min-width: 0; font-weight: 700; color: var(--navy); }
-.ab-kid-mark { flex: none; font-size: .84em; color: var(--text-muted); font-weight: 700; }
+.ab-kid.is-absent .ab-av { background: var(--tang-pale); color: var(--ap-deep-tang); }
+/* Name + badges stack in their own column so the badge row can wrap
+   independently of the action grid beside it. Name itself truncates rather
+   than wraps — the full name is still available via the title attribute —
+   since a wrapped name in a flex-start row reads as colliding with the
+   badge line right below it. */
+.ab-kid-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 2px; }
+.ab-kid-name {
+    font-weight: 700; color: var(--navy);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ab-kid-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ab-kid-badges:empty { display: none; }
+.ab-daytype-pill {
+    background: var(--sun-pale); color: var(--navy);
+    border-radius: 999px; padding: 1px 8px; font-size: .68em; font-weight: 800; letter-spacing: .03em;
+}
+.ab-allergy-icon { font-size: .85em; cursor: help; line-height: 1; }
+.ab-absent-label { color: var(--ap-deep-tang); font-weight: 800; font-size: .74em; letter-spacing: .03em; }
+/* Read-only (no canAct) fallback only — the action grid below shows its own
+   in/out/absent state once a role can act, so this text is never doubled up. */
+.ab-kid-mark { flex: none; font-size: .84em; color: var(--text-muted); font-weight: 700; margin-top: 2px; }
 .ab-kid.is-in    .ab-kid-mark { color: var(--green-text); }
-.ab-kid.is-absent .ab-kid-mark { color: var(--tang-dark); }
+.ab-kid.is-absent .ab-kid-mark { color: var(--ap-deep-tang); }
 .ab-kid.is-waiting { opacity: .72; }
 .ab-dropin {
-    margin-left: 7px; background: var(--sun-pale); color: var(--mustard-dark);
+    background: var(--sun-pale); color: var(--mustard-dark);
     border-radius: 999px; padding: 1px 8px; font-size: .72em; font-weight: 800;
 }
 .ab-empty { margin: 10px 0; font-size: .88em; color: var(--text-muted); }
@@ -5323,4 +5686,259 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     line-height: 1.4;
     color: var(--text-muted);
     font-style: italic;
+}
+
+/* ============================================================
+   Classroom Tab Redesign (2026-08-27) — Attendance Board actions,
+   Enrollment & Capacity view switcher, and the Incident/Fire Drill
+   "write it yourself" compose panels.
+   ============================================================ */
+
+/* Attendance Board — In / Out stacked beside Move / Absent, a 2x2 grid per
+   child row rather than four controls in a single line, matching the
+   director's own screenshot (2026-08-28). */
+.ab-kid { flex-wrap: wrap; row-gap: 6px; }
+.ab-actions {
+    display: flex; align-items: flex-start; gap: 6px;
+    flex: none; margin-left: auto;
+}
+.ab-actions-col { display: flex; flex-direction: column; gap: 5px; }
+/* Each action keeps its own color permanently (not just on hover/active) —
+   matching the design handoff's inStyle/outStyle/absentStyle exactly: green
+   for In, tangerine for Out, deep tangerine for Absent, filled when that's
+   the current mark. */
+.ab-act-btn {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    min-width: 82px; padding: 4px 10px; font-size: .78em; font-weight: 800;
+    line-height: 1; border-radius: 6px; cursor: pointer; background: #fff;
+    transition: background .12s, color .12s;
+}
+.ab-act-btn:disabled { opacity: .5; cursor: progress; }
+.ab-act-time { font-weight: 700; opacity: .85; font-variant-numeric: tabular-nums; }
+.ab-act-btn[data-act="in"] { border: 1px solid var(--green-text); color: var(--green-text); }
+.ab-act-btn[data-act="in"]:hover:not(:disabled) { background: var(--green-pale); }
+.ab-act-btn[data-act="in"].is-on { background: var(--green-text); color: #fff; }
+.ab-act-btn[data-act="out"] { border: 1px solid var(--tang); color: var(--tang); }
+.ab-act-btn[data-act="out"]:hover:not(:disabled) { background: var(--tang-pale); }
+.ab-act-btn[data-act="out"].is-on { background: var(--tang); color: #fff; }
+.ab-act-btn[data-act="absent"] { border: 1px solid var(--ap-deep-tang); color: var(--ap-deep-tang); justify-content: center; }
+.ab-act-btn[data-act="absent"]:hover:not(:disabled) { background: var(--tang-pale); }
+.ab-act-btn[data-act="absent"].is-on { background: var(--ap-deep-tang); color: #fff; }
+/* Fixed width matching the In/Out buttons beside it, with ellipsis safety:
+   a picked room label can be long (e.g. "🐢 Turtle Room"), and an unbounded
+   select could still push past the column's own width even though it no
+   longer sits inline next to the name/mark text the way the old single-row
+   layout did. The placeholder stays "Move ⌄" — the dropdown's own options
+   still show full room names. */
+.ab-move-select {
+    width: 82px; font-size: .72em; font-weight: 800; color: var(--green-text);
+    border: 1px solid var(--green-lt); border-radius: 6px;
+    padding: 4px 6px; background: var(--green-pale); cursor: pointer;
+    text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+@media (max-width: 700px) {
+    .ab-kid { flex-wrap: wrap; }
+    .ab-actions { flex: 1 1 100%; margin-left: 0; justify-content: flex-end; }
+}
+
+/* Enrollment & Capacity — Day / Week / Month / FTE view switcher. Matches
+   the design source's capViewsList exactly: a single warm-gray pill track
+   with a solid-navy active segment, not individually bordered pills. */
+.ec-view-switch {
+    display: inline-flex; background: var(--warm-gray); border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px; gap: 2px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.ec-pill {
+    border: none; background: transparent; border-radius: 999px;
+    padding: 7px 16px; font-family: inherit; font-weight: 800; font-size: .83em;
+    color: var(--navy); cursor: pointer; transition: background .15s, color .15s;
+}
+.ec-pill:hover:not(.is-active) { background: rgba(1,41,74,.08); }
+.ec-pill.is-active { background: var(--navy); color: #fff; }
+.ec-day-nav { align-items: center; }
+.ec-day-nav input[type="date"] { padding: 8px 12px; border: 2px solid var(--border); border-radius: 7px; }
+
+.ec-day-rows { display: flex; flex-direction: column; gap: 10px; }
+.ec-day-row {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    background: #fff; border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px;
+}
+.ec-day-room-name { flex: 1 1 140px; min-width: 120px; font-weight: 800; color: var(--navy); }
+.ec-day-ratio { display: block; font-weight: 400; font-size: .78em; color: var(--text-muted); margin-top: 1px; }
+.ec-day-stat { text-align: center; min-width: 80px; }
+.ec-day-stat strong { display: block; font-family: var(--font-head); font-weight: 700; font-size: 1.3em; color: var(--navy); }
+.ec-day-stat span { font-size: .72em; color: var(--text-muted); }
+/* AT CAPACITY / AT RATIO STEP — silent (hidden, not removed, so the row
+   height and the Move button's position never shift depending on which
+   rooms happen to have something to flag) unless one applies. */
+.ec-day-flag {
+    flex: none; font-size: .7em; font-weight: 800; padding: 4px 9px;
+    border-radius: 999px; letter-spacing: .02em;
+}
+.ec-day-flag.is-hidden { visibility: hidden; }
+.ec-day-flag.is-edge { background: var(--sun-pale); color: var(--navy); }
+.ec-day-flag.is-over { background: var(--tang-pale); color: var(--ap-deep-tang); }
+.ec-move-btn {
+    flex: none; font-size: .78em; font-weight: 800; padding: 7px 14px;
+    border-radius: 7px; cursor: pointer; font-family: inherit;
+    background: var(--green-pale); border: 1px solid var(--green-lt); color: var(--green-text);
+}
+.ec-move-btn:hover { background: var(--green-lt); }
+
+/* Month view — a room-tab switcher over a Mon–Fri day grid, one room's whole
+   month at a time. Same three-tier tone as the Day view's flag and the Week
+   view's cells: green-pale default, gold-pale near (≥85%), tangerine-pale
+   full, matching the design source's monthCells bg/color pairs exactly. */
+.ec-room-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.ec-room-tab {
+    border: none; border-radius: 999px; padding: 7px 14px;
+    font-family: inherit; font-weight: 800; font-size: .82em; cursor: pointer;
+    background: var(--warm-gray); color: var(--navy);
+}
+.ec-room-tab:hover:not(.is-active) { background: var(--green-pale); }
+.ec-room-tab.is-active { background: var(--navy); color: #fff; }
+.ec-month-dow {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 4px;
+}
+.ec-month-dow-cell {
+    text-align: center; font-size: .74em; font-weight: 800; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--text-muted);
+}
+.ec-month-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.ec-month-cell {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    width: 100%; border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 4px; cursor: pointer; font-family: inherit;
+    background: var(--green-pale); color: var(--navy);
+}
+/* The plain tan border reads fine for an unflagged day, but a pale fill
+   alone was too close to the page's own cream background to read as a
+   flag at a glance — a colored border carries the distinction even where
+   the fill doesn't stand out. */
+.ec-month-cell.is-near { background: var(--sun-pale); border-color: var(--sun); }
+.ec-month-cell.is-full { background: var(--tang-pale); color: var(--ap-deep-tang); border-color: var(--ap-deep-tang); }
+.ec-month-cell.is-closed { background: var(--warm-gray); color: var(--text-muted); cursor: default; }
+.ec-month-cell-empty { background: transparent; border: none; cursor: default; }
+.ec-month-date  { font-size: .68em; color: var(--text-muted); }
+.ec-month-cell.is-near .ec-month-date,
+.ec-month-cell.is-full .ec-month-date { color: inherit; opacity: .75; }
+.ec-month-count  { font-weight: 800; font-size: .95em; }
+.ec-month-closed { font-size: .78em; font-weight: 700; }
+
+/* Incident Reports — "+ Write a report" */
+.inc-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.inc-tabs-row .inc-tabs { margin-bottom: 0; }
+.inc-compose {
+    background: #fff; border: 1.5px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 16px;
+}
+.inc-compose-title { font-family: var(--font-head); font-size: 1.05em; color: var(--navy); margin: 0 0 12px; }
+.inc-compose-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.inc-compose-field label { font-size: .85em; font-weight: 600; color: var(--text-muted); }
+.inc-compose-field input,
+.inc-compose-field select,
+.inc-compose-field textarea {
+    padding: 9px 12px; border: 2px solid var(--border); border-radius: 7px;
+    font-size: .95em; font-family: inherit;
+}
+.inc-compose-btns { display: flex; gap: 10px; }
+.inc-compose-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.inc-compose-grid2 .inc-compose-field { margin-bottom: 0; }
+
+.inc-chip-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.inc-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--border);
+    background: #fff; font-size: .85em; font-weight: 600; color: var(--text);
+    cursor: pointer;
+}
+.inc-chip:hover  { border-color: var(--navy); }
+.inc-chip.is-on  { background: var(--green-lt); border-color: var(--green); color: var(--green-dark); }
+.inc-chip-x {
+    border: none; background: none; padding: 0; margin-left: 2px;
+    font-size: .85em; line-height: 1; color: inherit; cursor: pointer;
+}
+.inc-witness-empty { font-size: .85em; }
+
+.inc-compose-checks { display: flex; flex-direction: column; gap: 8px; }
+.inc-compose-check {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: .88em; color: var(--text); cursor: pointer;
+}
+.inc-compose-check input { margin-top: 3px; }
+
+.inc-witness-add { display: flex; gap: 8px; margin-top: 8px; }
+.inc-witness-add input {
+    flex: 1; padding: 8px 11px; border: 2px solid var(--border); border-radius: 7px;
+    font-size: .9em; font-family: inherit;
+}
+.inc-witness-add .btn-ghost { flex: none; font-size: .85em; padding: 7px 12px; }
+
+@media (max-width: 640px) {
+    .inc-compose-grid2 { grid-template-columns: 1fr; }
+}
+
+/* Fire Drills — "+ Log a Drill" */
+.fd-banner-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.fd-banner-row .fd-nag { flex: 1 1 320px; margin-bottom: 0; }
+.fd-compose-open { flex: none; }
+.fd-compose {
+    background: #fff; border: 1.5px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; margin: 14px 0;
+}
+.fd-compose-title { font-family: var(--font-head); font-size: 1.05em; color: var(--navy); margin: 0 0 12px; }
+.fd-compose-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.fd-compose-field { display: flex; flex-direction: column; gap: 5px; }
+.fd-compose-field label { font-size: .82em; font-weight: 600; color: var(--text-muted); }
+.fd-compose-field input,
+.fd-compose-field select,
+.fd-compose-field textarea {
+    padding: 9px 12px; border: 2px solid var(--border); border-radius: 7px;
+    font-size: .95em; font-family: inherit;
+}
+.fd-compose-btns { display: flex; gap: 10px; margin-top: 4px; }
+
+/* ============================================================
+   Care Calendar redesign (2026-08-27) — weekday-pattern column
+   instead of a pill per date, consolidated columns, icon actions.
+   Edit Days / Edit Bill stay the existing modals; only the trigger
+   button and the surrounding table changed.
+   ============================================================ */
+.rc-parent-name { font-weight: 700; color: var(--text); }
+.rc-parent-sub  { font-size: .82em; color: var(--text-muted); margin-top: 2px; }
+
+.rc-child-name { font-weight: 700; color: var(--text); }
+.rc-child-room { font-size: .82em; color: var(--text-muted); margin-top: 2px; }
+
+.rc-pattern { display: flex; flex-direction: column; gap: 5px; }
+.rc-pat-chips { display: flex; gap: 3px; }
+.rc-pat-chip {
+    width: 20px; height: 20px; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .68em; font-weight: 800; color: var(--text-muted);
+    background: var(--warm-gray); border: 1px solid var(--border);
+}
+.rc-pat-chip.is-on { background: var(--green-lt); border-color: var(--green); color: var(--green-dark); }
+.rc-pat-summary { font-size: .8em; color: var(--text-muted); white-space: nowrap; }
+
+.rc-bill-amt  { font-weight: 700; color: var(--text); }
+.rc-bill-disc {
+    display: inline-block; margin-top: 4px; padding: 1px 8px;
+    background: var(--sun-pale); color: var(--mustard-dark);
+    border-radius: 999px; font-size: .74em; font-weight: 700;
+}
+
+.rc-actions-cell { display: flex; gap: 6px; white-space: nowrap; }
+.rc-icon-btn {
+    width: 32px; height: 32px; padding: 0; display: inline-flex;
+    align-items: center; justify-content: center;
+    background: #fff; border: 1.5px solid var(--border); border-radius: 8px;
+    font-size: 1em; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.rc-icon-btn:hover { border-color: var(--navy); background: var(--linen); }
+.rc-icon-btn-danger:hover { border-color: var(--tang); background: var(--tang-pale); }
+
+@media (max-width: 700px) {
+    .rc-actions-cell { flex-wrap: wrap; }
 }

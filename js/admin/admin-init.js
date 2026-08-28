@@ -13,6 +13,7 @@ async function initDashboard() {
     if (versionBadge) versionBadge.textContent = window.__BUILD_VERSION__ || 'dev';
     populateRoomFilter();
     populateRosterRoomFilter();
+    if (typeof populatePrintAttendanceRoomFilter === 'function') populatePrintAttendanceRoomFilter();
     try {
         await Promise.all([
             loadRegistrations(),
@@ -32,6 +33,7 @@ async function initDashboard() {
     renderCapacityOverview();
     setupFilters();
     setupRoster();
+    if (typeof setupPrintAttendance === 'function') setupPrintAttendance();
     setupClosures();
     if (typeof apPushInit === 'function') apPushInit();
     setupAttendanceRevenue();
@@ -39,13 +41,13 @@ async function initDashboard() {
     setupMissingCalendarReport();
     setupWindowOverride();
     setupFamilies();
-    setupMessages();
     setupRoomCalendar();
-    setupRates();
+    // Enrollment & Capacity's view switcher, Day view, and FTE view's own
+    // month picker. Its Week/Month sub-views reuse the wiring just above
+    // (setupRoomCalendar/initCapacityMonthNav), unchanged.
+    if (typeof setupEnrollCapTool === 'function') setupEnrollCapTool();
     setupRegFee();
     setupPtoSettings();
-    setupRatios();
-    setupCapacity();
     setupStaffDirectory();
     setupSummerCamp();
     setupEnrollmentCapacity();

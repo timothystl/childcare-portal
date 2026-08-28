@@ -25,6 +25,7 @@ let _marketEditWageRows  = [];
 async function initMarketTab() {
     _wireMarketProviders();
     _wireMarketContext();
+    _wireDirectorReportSeg();
     document.getElementById('marketRefreshBtn')?.addEventListener('click', _reloadMarketData);
     await _reloadMarketData();
 }
@@ -527,4 +528,130 @@ async function _saveMarketContext() {
     } finally {
         btn.disabled = false; btn.textContent = 'Save';
     }
+}
+
+// ============================================================
+// DIRECTOR REPORT  (consolidation pass, design_handoff_planning_market,
+// 2026-08-27) — replaces the three separate Market Position / Pricing
+// Landscape / Cost & Wage Context tools with one segmented view. Each
+// segment reuses the EXACT existing chart-render functions above, just
+// re-homed under one section with new mount ids so they aren't fighting the
+// removed sections for the same canvas id. _reloadMarketData() still renders
+// every chart on load/refresh regardless of which segment is showing (same
+// as the three-tool layout always did) — switching segments here re-invokes
+// only that segment's render functions, because Chart.js sizes a canvas off
+// its layout box at creation time, and a canvas inside a `display:none` pane
+// draws at zero size. A plain CSS toggle without a re-render would leave the
+// Pricing/Cost charts blank the first time a director actually clicks over
+// to them.
+// ============================================================
+
+const DR_SEGMENTS = ['position', 'pricing', 'cost'];
+const DR_SEG_RENDER = {
+    position: () => { _renderMarketHeroStats(); _renderMarketTypeLegend(); _renderMarketPositionChart(); },
+    pricing:  () => { _renderMarketRateChart(); _renderMarketRegFeeChart(); },
+    cost:     () => { _renderMarketInfantCostChart(); _renderMarketWageChart(); },
+};
+const DR_SEG_PANE_ID = { position: 'drPanePosition', pricing: 'drPanePricing', cost: 'drPaneCost' };
+
+function _wireDirectorReportSeg() {
+    document.querySelectorAll('#drSeg [data-dr-seg]').forEach(btn => {
+        btn.addEventListener('click', () => _switchDirectorReportSeg(btn.dataset.drSeg));
+    });
+    document.getElementById('drExportPacketBtn')?.addEventListener('click', _openDirectorReportPacket);
+}
+
+function _switchDirectorReportSeg(seg) {
+    if (!DR_SEG_RENDER[seg]) return;
+    document.querySelectorAll('#drSeg [data-dr-seg]').forEach(btn => {
+        btn.classList.toggle('is-on', btn.dataset.drSeg === seg);
+    });
+    DR_SEGMENTS.forEach(s => {
+        const pane = document.getElementById(DR_SEG_PANE_ID[s]);
+        if (pane) pane.style.display = s === seg ? '' : 'none';
+    });
+    DR_SEG_RENDER[seg]();
+}
+
+function _drRateLabel(low, high) {
+    if (low == null) return '—';
+    return '$' + low + (high != null && high !== low ? '–$' + high : '') + '/wk';
+}
+function _drFeeLabel(low, high) {
+    if (low == null) return '—';
+    return '$' + low + (high != null && high !== low ? '–$' + high : '');
+}
+
+// In-DOM print overlay — reuses the exact .fh-print-scrim/.fh-print-sheet
+// pattern already built for Finance Hub's statement print (css/admin-portal.css)
+// rather than a second print component, per the handoff's explicit
+// "reuse the @media print pattern already in admin-portal.css" instruction.
+function _openDirectorReportPacket() {
+    document.getElementById('drPrintScrim')?.remove();
+    const generated = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const ic = _marketContext.infantCost || {};
+    const wageRows = (_marketContext.wageLadder || []).filter(w => w.role).map(w => `
+        <tr><td>${escHtml(w.role)}</td><td>$${w.low}–$${w.high}/hr</td></tr>`).join('');
+
+    const wrap = document.createElement('div');
+    wrap.id = 'drPrintScrim';
+    wrap.className = 'fh-print-scrim';
+    wrap.innerHTML = `
+        <div class="fh-print-sheet">
+            <h1>Board Packet — Market Analysis</h1>
+            <p style="color:#6b7280;font-size:13px;margin:-10px 0 18px">
+                Generated ${escHtml(generated)} from Comparable Providers — Market Position, Pricing Landscape, and Cost Context, one printable page.
+            </p>
+
+            <h2>Market Position</h2>
+            <table>
+                <thead><tr><th>Provider</th><th>Age range</th><th>Schedule</th></tr></thead>
+                <tbody>
+                    ${_marketProviders.map(p => `
+                    <tr>
+                        <td${p.is_own_program ? ' style="font-weight:700"' : ''}>${escHtml(p.name)}</td>
+                        <td>${escHtml(p.ages_text || '—')}</td>
+                        <td>${escHtml(p.flexible_text || '—')}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+
+            <h2>Pricing Landscape</h2>
+            <table>
+                <thead><tr><th>Provider</th><th>Weekly rate</th><th>Reg. fee</th></tr></thead>
+                <tbody>
+                    ${_marketProviders.map(p => `
+                    <tr>
+                        <td${p.is_own_program ? ' style="font-weight:700"' : ''}>${escHtml(p.name)}</td>
+                        <td>${_drRateLabel(p.rate_low, p.rate_high)}</td>
+                        <td>${_drFeeLabel(p.reg_fee_low, p.reg_fee_high)}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+
+            <h2>Cost Context</h2>
+            <table>
+                <thead><tr><th></th><th>Annual cost</th></tr></thead>
+                <tbody>
+                    <tr><td>Infant care</td><td>${apMoney(ic.infantAnnual || 0)}</td></tr>
+                    <tr><td>Preschool care</td><td>${apMoney(ic.preschoolAnnual || 0)}</td></tr>
+                </tbody>
+            </table>
+            ${ic.source ? `<p style="font-size:12px;color:#6b7280;margin-top:6px">${escHtml(ic.source)}</p>` : ''}
+            ${wageRows ? `
+            <h2 style="margin-top:22px">Wage Ladder${_marketContext.minWage ? ` — min. wage $${escHtml(String(_marketContext.minWage))}/hr` : ''}</h2>
+            <table>
+                <thead><tr><th>Role</th><th>Range</th></tr></thead>
+                <tbody>${wageRows}</tbody>
+            </table>
+            ${_marketContext.wageSource ? `<p style="font-size:12px;color:#6b7280;margin-top:6px">${escHtml(_marketContext.wageSource)}</p>` : ''}` : ''}
+
+            <div class="fh-print-btns no-print">
+                <button type="button" class="fh-print-btn" id="drPrintBtn">🖨️ Print / Save as PDF</button>
+                <button type="button" class="fh-print-close" id="drPrintCloseBtn">Close</button>
+            </div>
+        </div>`;
+    document.body.appendChild(wrap);
+    document.getElementById('drPrintBtn')?.addEventListener('click', () => window.print());
+    document.getElementById('drPrintCloseBtn')?.addEventListener('click', () => wrap.remove());
 }

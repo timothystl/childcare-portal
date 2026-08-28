@@ -39,16 +39,26 @@ function submittedByLabel(reg) {
 // ============================================================
 async function loadRegistrations() {
     document.getElementById('regTableBody').innerHTML =
-        '<tr><td colspan="12" class="loading-cell">Loading…</td></tr>';
+        '<tr><td colspan="5" class="loading-cell">Loading…</td></tr>';
     try {
         allRegistrations = await fetchAllRegistrations();
+        // Discounts (the Discount column + bill estimate) read from
+        // allFamiliesData via getDiscountMap(), which is otherwise lazy-loaded
+        // only by the Families/Billing tools. Without this, opening
+        // Registrations first shows every discounted child at full price with
+        // no discount label — same guard admin-portal.js uses for the
+        // dashboard's "Billed this month" card.
+        if (!allFamiliesData || !allFamiliesData.length) {
+            allFamiliesData = await fetchAllFamilies({ includeArchived: false });
+            _discountMap = null;
+        }
         populateCareMonthFilter();
         applyFilters();
         renderCapacityOverview();
     } catch (err) {
         console.error(err);
         document.getElementById('regTableBody').innerHTML =
-            '<tr><td colspan="10" class="loading-cell error">Failed to load — check Supabase config.</td></tr>';
+            '<tr><td colspan="5" class="loading-cell error">Failed to load — check Supabase config.</td></tr>';
     }
 }
 
@@ -92,6 +102,74 @@ function populateCareMonthFilter() {
 // ============================================================
 // TABLE RENDER
 // ============================================================
+// The Monday of the week containing a care date — the grouping key for
+// "does this weekday recur every week" below.
+function _regWeekMonday(dateStr) {
+    const d = new Date(dateStr + 'T12:00:00');
+    const day = d.getDay();
+    d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+    return d.toISOString().split('T')[0];
+}
+
+const _REG_PATTERN_LETTERS = ['M', 'T', 'W', 'T', 'F'];
+
+// Care Calendar redesign (2026-08-27): a weekday-pattern summary instead of a
+// pill per date. `activeWeekdays` is a 5-item boolean array, Mon..Fri — which
+// weekdays this registration has at least one confirmed (non-waitlisted) day
+// on. "Fixed" means a weekday that's active appears in nearly every week this
+// registration spans (tolerating one missed week, e.g. a closure) — otherwise
+// the schedule is irregular and the summary says so rather than implying a
+// pattern that isn't really there.
+function _regPatternInfo(reg) {
+    const dates = (reg.registration_dates || []).filter(d => !d.waitlisted && d.care_date);
+    if (!dates.length) {
+        return { activeWeekdays: [false, false, false, false, false], summary: 'No days scheduled' };
+    }
+
+    const byWeekday = [[], [], [], [], []]; // Mon..Fri
+    const weeksSeen = new Set();
+    dates.forEach(d => {
+        weeksSeen.add(_regWeekMonday(d.care_date));
+        const dow = new Date(d.care_date + 'T12:00:00').getDay(); // 0=Sun..6=Sat
+        const idx = dow - 1; // Mon=0..Fri=4
+        if (idx >= 0 && idx <= 4) byWeekday[idx].push(d.day_type || 'full');
+    });
+
+    const weekCount = weeksSeen.size;
+    const activeWeekdays = byWeekday.map(arr => arr.length > 0);
+    const activeCount = activeWeekdays.filter(Boolean).length;
+    const isFixed = activeWeekdays.every((active, i) =>
+        !active || byWeekday[i].length >= weekCount - 1);
+
+    const dayTypes = new Set(dates.map(d => d.day_type || 'full'));
+    const dayTypeLabel = dayTypes.size > 1 ? 'Mixed' : (dayTypes.has('half') ? 'Half' : 'Full');
+
+    let freqLabel;
+    if (!isFixed) {
+        freqLabel = 'No fixed pattern';
+    } else if (activeCount === 5) {
+        freqLabel = 'Every day';
+    } else {
+        const letters = _REG_PATTERN_LETTERS.filter((_, i) => activeWeekdays[i]).join('/');
+        freqLabel = `${activeCount}x/wk (${letters})`;
+    }
+
+    return {
+        activeWeekdays,
+        summary: `${dayTypeLabel} · ${freqLabel} · ${dates.length} day${dates.length !== 1 ? 's' : ''} this month`,
+    };
+}
+
+function _regPatternHtml(reg) {
+    const info = _regPatternInfo(reg);
+    const chips = _REG_PATTERN_LETTERS.map((letter, i) =>
+        `<span class="rc-pat-chip${info.activeWeekdays[i] ? ' is-on' : ''}">${letter}</span>`).join('');
+    return `<div class="rc-pattern">
+        <div class="rc-pat-chips">${chips}</div>
+        <div class="rc-pat-summary">${escHtml(info.summary)}</div>
+    </div>`;
+}
+
 function renderTable(data) {
     // Update sort indicators on column headers
     document.querySelectorAll('#regTable thead th[data-col]').forEach(th => {
@@ -105,36 +183,12 @@ function renderTable(data) {
 
     const tbody = document.getElementById('regTableBody');
     if (!data.length) {
-        tbody.innerHTML = '<tr><td colspan="12" class="loading-cell">No registrations found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No registrations found.</td></tr>';
         return;
     }
 
     tbody.innerHTML = data.map(reg => {
-        const room  = ROOMS.find(r => r.id === reg.room_id) || { label: reg.room_id };
-        const dates = (reg.registration_dates || [])
-            .sort((a, b) => a.care_date.localeCompare(b.care_date));
-
-        const enteredByLabel = submittedByLabel(reg);
-
-        // Date chips — show ½ day or Full
-        const datesHtml = dates.map(d => {
-            const cls       = d.waitlisted ? 'badge-waitlist' : 'badge-confirmed';
-            const typeLabel = d.day_type === 'half' ? '½ day' : 'Full';
-            return `<span class="date-chip ${cls}" title="${d.day_type === 'half' ? 'Half Day' : 'Full Day'}">${friendlyShort(d.care_date)} <em>${typeLabel}</em></span>`;
-        }).join('');
-
-        // Full / Half tally
-        const confirmed = dates.filter(d => !d.waitlisted);
-        const fullCount = confirmed.filter(d => d.day_type !== 'half').length;
-        const halfCount = confirmed.filter(d => d.day_type === 'half').length;
-        const tallyParts = [];
-        if (fullCount) tallyParts.push(`<span class="tally-full">${fullCount} Full</span>`);
-        if (halfCount) tallyParts.push(`<span class="tally-half">${halfCount} Half</span>`);
-        const tallyHtml = tallyParts.join('<br>') || '—';
-
-        const submitted = new Date(reg.created_at).toLocaleDateString('en-US',
-            { month: 'short', day: 'numeric', year: 'numeric' });
-
+        const room = ROOMS.find(r => r.id === reg.room_id) || { label: reg.room_id };
         const bill = calcRegistrationBill(reg);
 
         // Discount info — try reg email first, fall back to searching all family emails
@@ -142,25 +196,27 @@ function renderTable(data) {
         const disc    = getDiscountMap().get(discKey);
         const discLabel = disc
             ? (disc.type === 'staff' ? 'Staff (free)' : `${disc.value}% off`)
-            : '—';
+            : '';
 
         return `
             <tr data-id="${reg.id}" data-room="${reg.room_id}">
-                <td>${submitted}</td>
-                <td class="submitted-by-cell">${escHtml(enteredByLabel)}</td>
-                <td>${escHtml(reg.parent_name)}</td>
-                <td><a href="mailto:${escHtml(reg.parent_email)}">${escHtml(reg.parent_email)}</a></td>
-                <td>${escHtml(reg.parent_phone)}</td>
-                <td>${escHtml(reg.child_name)}</td>
-                <td>${room.label}</td>
-                <td class="dates-cell">${datesHtml}</td>
-                <td class="tally-cell">${tallyHtml}</td>
-                <td class="bill-cell">$${bill.toFixed(2)}</td>
-                <td class="discount-cell">${discLabel}</td>
-                <td class="actions-cell">
-                    <button class="btn-secondary btn-edit-days" data-id="${reg.id}">Edit Days</button>
-                    <button class="btn-secondary btn-edit-bill" data-id="${reg.id}" title="Edit Bill">&#128178; Bill</button>
-                    <button class="btn-delete" data-id="${reg.id}">Delete</button>
+                <td class="rc-parent-cell">
+                    <div class="rc-parent-name">${escHtml(reg.parent_name)}</div>
+                    <div class="rc-parent-sub">${escHtml(reg.parent_phone || reg.parent_email || '')}</div>
+                </td>
+                <td class="rc-child-cell">
+                    <div class="rc-child-name">${escHtml(reg.child_name)}</div>
+                    <div class="rc-child-room">${escHtml(room.label)}</div>
+                </td>
+                <td>${_regPatternHtml(reg)}</td>
+                <td class="rc-bill-cell">
+                    <div class="rc-bill-amt">$${bill.toFixed(2)}</div>
+                    ${discLabel ? `<div class="rc-bill-disc">${escHtml(discLabel)}</div>` : ''}
+                </td>
+                <td class="rc-actions-cell">
+                    <button class="rc-icon-btn btn-view-days" data-id="${reg.id}" title="View days">&#128197;</button>
+                    <button class="rc-icon-btn btn-edit-bill" data-id="${reg.id}" title="Edit bill">&#128178;</button>
+                    <button class="rc-icon-btn rc-icon-btn-danger btn-delete" data-id="${reg.id}" title="Delete">&#128465;&#65039;</button>
                 </td>
             </tr>`;
     }).join('');
@@ -180,7 +236,7 @@ function renderTable(data) {
         });
     });
 
-    tbody.querySelectorAll('.btn-edit-days').forEach(btn => {
+    tbody.querySelectorAll('.btn-view-days').forEach(btn => {
         btn.addEventListener('click', e => {
             const id  = e.currentTarget.getAttribute('data-id');
             const reg = allRegistrations.find(r => String(r.id) === id);
@@ -594,7 +650,8 @@ document.getElementById('editBillRemoveBtn')?.addEventListener('click', async ()
 // ============================================================
 // CAPACITY OVERVIEW
 // ============================================================
-let capOverviewDate = null; // JS Date set to 1st of currently displayed month
+let capOverviewDate   = null; // JS Date set to 1st of currently displayed month
+let capOverviewRoomId = null; // room id currently selected in the Month view's room tabs
 
 function initCapacityMonthNav() {
     const today = new Date();
@@ -699,56 +756,90 @@ async function _recomputeAndShow(parentEmail, monthKey) {
     el.textContent = `${label} total for this family: $${Number(invoice.final_amount).toFixed(2)}`;
 }
 
+// Room-tabs + a Mon–Fri day grid for whichever room is selected — matches the
+// design source's Month view exactly (one room's whole month, click a day to
+// move a child) rather than the aggregate progress-bar cards this replaced.
+// The aggregate monthly utilization % those cards showed didn't disappear —
+// it's the FTE / Seat-Day sub-view's Capacity/Seat-Day Occupancy columns,
+// which read the same registrations at the whole-month grain this view no
+// longer needs to also carry.
 function renderCapacityOverview() {
     const grid = document.getElementById('capacityGrid');
+    if (!grid) return;
     if (!capOverviewDate) capOverviewDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
-    const y = capOverviewDate.getFullYear();
-    const m = capOverviewDate.getMonth();
+    const rooms = getSortedRooms().filter(r => r.status !== 'coming_soon');
+    if (!rooms.length) { grid.innerHTML = '<p class="empty-hint">No active rooms found.</p>'; return; }
+    if (!capOverviewRoomId || !rooms.some(r => r.id === capOverviewRoomId)) capOverviewRoomId = rooms[0].id;
+    const room = rooms.find(r => r.id === capOverviewRoomId);
+
+    const y   = capOverviewDate.getFullYear();
+    const m   = capOverviewDate.getMonth();
     const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+    const cap = room.capacity || 0;
 
-    // Count Mon–Fri working days in the month
-    const daysInMonth = new Date(y, m + 1, 0).getDate();
-    let workingDays = 0;
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dow = new Date(y, m, day).getDay();
-        if (dow !== 0 && dow !== 6) workingDays++;
-    }
-
-    // Count confirmed bookings per room for this month
-    const counts = {};
-    ROOMS.forEach(r => { counts[r.id] = 0; });
+    // dayMap: 'YYYY-MM-DD' → [{ childName, dayType, dateId }]. Filtered by the
+    // date's own room_id (not the registration's) so a per-day move is reflected
+    // — same rule drawRoomCalendar() uses for the pre-existing per-room modal.
+    const dayMap = {};
     allRegistrations.forEach(reg => {
         (reg.registration_dates || []).forEach(d => {
-            if (d.waitlisted || !d.care_date) return;
-            if (d.care_date.startsWith(key)) {
-                const roomKey = d.room_id || reg.room_id;
-                counts[roomKey] = (counts[roomKey] || 0) + 1;
-            }
+            if (d.room_id !== room.id) return;
+            if (d.waitlisted || !d.care_date || !d.care_date.startsWith(key)) return;
+            (dayMap[d.care_date] = dayMap[d.care_date] || []).push({ childName: reg.child_name, dayType: d.day_type, dateId: d.id });
         });
     });
 
-    const cards = getSortedRooms().map(room => {
-        const used    = counts[room.id] || 0;
-        const hasCap  = room.capacity != null && room.capacity > 0;
-        const cap     = hasCap ? room.capacity * workingDays : 0;
-        const pct     = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
-        const color   = pct >= 90 ? 'bar-red' : pct >= 70 ? 'bar-orange' : 'bar-green';
-        const metaTxt = hasCap
-            ? `Max ${room.capacity}/day &middot; ${used} booking${used !== 1 ? 's' : ''}`
-            : `Capacity TBD &middot; ${used} booking${used !== 1 ? 's' : ''}`;
-        const pctTxt  = hasCap ? `${pct}% utilization` : 'Utilization pending capacity';
-        return `
-            <div class="cap-card" data-room-id="${room.id}" data-month-key="${key}" role="button" tabindex="0" title="View ${room.label} calendar">
-                <h3>${room.label}</h3>
-                <p class="cap-meta">${metaTxt}</p>
-                <div class="progress-bar"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
-                <p class="cap-pct">${pctTxt}</p>
-                <p class="cap-card-hint">Click to view calendar →</p>
-            </div>`;
+    // Lead in enough empty cells that the 1st actually lands under its real
+    // weekday column — a month starting on, say, a Wednesday shouldn't render
+    // the 1st under Monday.
+    const firstDow    = new Date(y, m, 1).getDay(); // 0=Sun … 6=Sat
+    const monBased    = firstDow === 0 ? 6 : firstDow - 1; // 0=Mon … 4=Fri, 5=Sat, 6=Sun
+    const leadEmpties = monBased < 5 ? monBased : 0;
+
+    const monAbbr = MONTH_NAMES[m].slice(0, 3);
+
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < leadEmpties; i++) cells.push(null);
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dow = new Date(y, m, day).getDay();
+        if (dow === 0 || dow === 6) continue;
+        const dateStr  = `${key}-${String(day).padStart(2, '0')}`;
+        const enrolled = (dayMap[dateStr] || []).slice().sort((a, b) => a.childName.localeCompare(b.childName));
+        const isClosed = typeof allClosureDates !== 'undefined' && allClosureDates.has(dateStr);
+        cells.push({ day, dateStr, enrolled, isClosed });
+    }
+
+    const tabsHtml = rooms.map(r => `
+        <button type="button" class="ec-room-tab${r.id === capOverviewRoomId ? ' is-active' : ''}" data-room="${r.id}">${escHtml(r.label)}</button>`).join('');
+
+    const cellsHtml = cells.map(c => {
+        if (!c) return `<div class="ec-month-cell ec-month-cell-empty"></div>`;
+        if (c.isClosed) return `<div class="ec-month-cell is-closed"><span class="ec-month-date">${monAbbr} ${c.day}</span><span class="ec-month-closed">Closed</span></div>`;
+        const count = c.enrolled.length;
+        const full  = !!cap && count >= cap;
+        const near  = !full && !!cap && count >= cap * 0.85;
+        return `<button type="button" class="ec-month-cell${full ? ' is-full' : near ? ' is-near' : ''}" data-date="${c.dateStr}">
+            <span class="ec-month-date">${monAbbr} ${c.day}</span>
+            <span class="ec-month-count">${count}${cap ? '/' + cap : ''}</span>
+        </button>`;
     }).join('');
 
-    grid.innerHTML = `<div class="capacity-grid">${cards}</div>`;
+    grid.innerHTML = `
+        <div class="ec-room-tabs">${tabsHtml}</div>
+        <div class="ec-month-dow">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(d => `<div class="ec-month-dow-cell">${d}</div>`).join('')}</div>
+        <div class="ec-month-grid">${cellsHtml}</div>`;
+
+    grid.querySelectorAll('.ec-room-tab').forEach(btn => {
+        btn.addEventListener('click', () => { capOverviewRoomId = btn.dataset.room; renderCapacityOverview(); });
+    });
+    grid.querySelectorAll('.ec-month-cell[data-date]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const cell = cells.find(c => c && c.dateStr === btn.dataset.date);
+            if (cell) showDayRosterDetail(cell.dateStr, room.id, cell.enrolled, cap, grid);
+        });
+    });
 }
 
 // ============================================================
@@ -873,14 +964,22 @@ async function renderRoomSchedule() {
     }
 }
 
-// ---- Day Roster Detail popup (inside room calendar) ----
-function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
+// ---- Day Roster Detail — an inline "move a child" panel ----
+// Expands directly below whichever grid was clicked, not a popup. `parentEl`
+// is the container to append the panel INTO as its last child (Day view's
+// content div, Month view's grid, or the per-room modal's scrollable body) —
+// so it always ends up below that container's own content and inside its
+// scroll area. There's one reused DOM node, not one per view: whichever
+// view's `innerHTML =` wipe happens to catch it while it's nested there
+// destroys it along with everything else, and the next open just lazily
+// recreates it — cheap, and the views are never open at once anyway.
+function showDayRosterDetail(dateStr, roomId, enrolled, cap, parentEl) {
     // Lazy-create the detail panel
     let panel = document.getElementById('dayDetailPanel');
     if (!panel) {
         panel = document.createElement('div');
         panel.id        = 'dayDetailPanel';
-        panel.className = 'day-detail-panel';
+        panel.className = 'day-detail-panel hidden';
         panel.innerHTML = `
             <div class="day-detail-inner">
                 <div class="day-detail-header">
@@ -889,10 +988,12 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
                 </div>
                 <div id="dayDetailBody" class="day-detail-body"></div>
             </div>`;
-        document.getElementById('roomCalModal')?.querySelector('.rcal-dialog')?.appendChild(panel)
-            || document.body.appendChild(panel);
-        document.getElementById('dayDetailClose').addEventListener('click', closeDayRosterDetail);
+        // Scoped to panel, not document.getElementById: the append below is
+        // what actually attaches this node to the document, so a lookup by
+        // id wouldn't find its own not-yet-attached descendant here.
+        panel.querySelector('.day-detail-close').addEventListener('click', closeDayRosterDetail);
     }
+    (parentEl || document.body).appendChild(panel);
 
     const room = ROOMS.find(r => r.id === roomId);
     document.getElementById('dayDetailTitle').textContent =
@@ -975,6 +1076,12 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
                     closeDayRosterDetail();
                     drawRoomCalendar();
                     renderCapacityOverview();
+                    // Day view isn't wired into the room-calendar-modal era's
+                    // refresh list above; it re-renders itself if it's the
+                    // one currently open (harmless no-op otherwise).
+                    if (typeof _ecRenderDay === 'function' && typeof _ecView !== 'undefined' && _ecView === 'day') {
+                        _ecRenderDay();
+                    }
                 } catch (err) {
                     alert('Move failed: ' + err.message);
                     sel.disabled = false;
@@ -993,12 +1100,11 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap) {
     bodyEl.appendChild(addBtn);
 
     panel.classList.remove('hidden');
-    panel.classList.add('visible');
 }
 
 function closeDayRosterDetail() {
     const panel = document.getElementById('dayDetailPanel');
-    if (panel) { panel.classList.remove('visible'); panel.classList.add('hidden'); }
+    if (panel) panel.classList.add('hidden');
 }
 
 // ── Admin Add Day Modal ─────────────────────────────────────
@@ -1294,7 +1400,7 @@ function drawRoomCalendar() {
         const el = document.querySelector(`#rcalBody [data-date="${cell.dateStr}"]`);
         if (el) {
             el.addEventListener('click', () =>
-                showDayRosterDetail(cell.dateStr, rcalRoomId, cell.enrolled, cell.cap));
+                showDayRosterDetail(cell.dateStr, rcalRoomId, cell.enrolled, cell.cap, document.getElementById('rcalBody')));
         }
     });
 }
@@ -1319,6 +1425,7 @@ async function setupWindowOverride() {
         btn.textContent = 'Saving…';
         try {
             await upsertSetting('reg_window_override', val);
+            await logAdminAction('update', 'registration_window', null, { value: val });
             showOverrideStatus(val, true);
         } catch (err) {
             alert('Error saving override: ' + err.message);
@@ -2024,19 +2131,9 @@ function sortRegistrations(data) {
             case 'parent':
                 va = (a.parent_name || '').toLowerCase(); vb = (b.parent_name || '').toLowerCase();
                 return mult * va.localeCompare(vb);
-            case 'email':
-                va = (a.parent_email || '').toLowerCase(); vb = (b.parent_email || '').toLowerCase();
-                return mult * va.localeCompare(vb);
             case 'child':
                 va = (a.child_name || '').toLowerCase(); vb = (b.child_name || '').toLowerCase();
                 return mult * va.localeCompare(vb);
-            case 'room':
-                va = a.room_id || ''; vb = b.room_id || '';
-                return mult * va.localeCompare(vb);
-            case 'tally': {
-                const tally = reg => (reg.registration_dates || []).filter(d => !d.waitlisted).length;
-                return mult * (tally(a) - tally(b));
-            }
             case 'bill':
                 return mult * (calcRegistrationBill(a) - calcRegistrationBill(b));
             default:

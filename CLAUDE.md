@@ -171,6 +171,1318 @@ an `AP_TOOLS` entry, or it is unreachable.**
 
 ---
 
+## Finance tab overhaul — the Bookkeeper tab (2026-08-27)
+
+Built from `Billing_UI_inconsistency_issues.zip` → `design_handoff_finance_hub/`
+(README §6 + `IMPLEMENTATION_SPEC.md` §8–§9). The Ledger and Billing Report
+halves of that handoff already shipped (`js/admin/admin-finance-hub.js`); this
+session built the **third tab**, `Bookkeeper`, in `js/admin/admin-finance-bookkeeper.js`.
+
+Six sub-views behind one pill nav: **Overview · Accounts Receivable · Room P&L
+· Month-End Close · Reconciliation · GL Export**.
+
+### ⚠️ Seven sidebar tools were retired, and that is the point
+
+Finance's sidebar lost `ar`, `procare`, `revdash`, `dash`, `pnl`, `arrev` and
+`budget` from `AP_TOOLS`. The director's original complaint was a shelf of
+screens whose numbers were computed several ways and did not visibly agree;
+adding a Bookkeeper tab while leaving all seven reachable next to it would have
+kept every one of those disagreements and made the shelf longer.
+
+- **Their `<section>`s stay in `admin.html`.** Unreferenced by `AP_TOOLS` means
+  unreachable (the shell's own rule), so nothing that reads their DOM breaks.
+  Delete the markup only once nothing does.
+- **Attendance & Revenue is gone as a screen, not just as a nav entry.**
+  Child-days is now a stat on each Room P&L card, read from the same dataset
+  that card's revenue comes from — the two can no longer disagree, which is
+  exactly what a separate Attendance screen could not promise.
+- `yoy`, `expense` and `api` stay in the sidebar's Bookkeeper group; `discount`
+  stays under Money In.
+- **`scenario` and `model` moved to Planning → What-If**, per the handoff's own
+  scope sentence ("Scenario planning and enrollment modeling have moved out of
+  Finance"). ⚠️ Both were added to `AP_FULL_ONLY_KEYS`: Finance is in
+  `AP_FULL_ONLY_TABS`, Planning is not, so the move would otherwise have
+  quietly widened who can see wage and rate modeling.
+
+### One dataset, still
+
+Nothing in this tab derives a dollar figure of its own.
+
+| Number | Source |
+|---|---|
+| Revenue, child-days, tuition/fees split | `_buildFamilyBillingData()` — what the Ledger and Billing Report bill from |
+| Labor, per room and center-wide | `_buildRoomPnlData()` — what the retired dashboards read |
+| AR rows, days late, aging bands | `_fhRows` itself, filtered to `owed > 0`. The banner promises "same figures as the Ledger"; reading the Ledger's own array is what makes that true rather than aspirational |
+| Budget | `fetchAnnualBudget` / `saveAnnualBudget` — the same `annual_budget_{year}` setting the ChMS finance API reads |
+
+⚠️ **The budget form merges, never replaces.** It shows four fields; the record
+also carries the `actual*` fields `finance-summary` reads. A plain overwrite
+would silently zero the church's actuals.
+
+⚠️ **`_fhLoad()` calls `bookkeeperInvalidate()`.** Every Ledger write ends
+there, and the bookkeeper figures are the same figures — without it a send or a
+payment left the close screen showing pre-write numbers behind a tab switch.
+
+### Reconciliation never touches a balance
+
+It links existing `billing_payments` rows to a deposit record and nothing more.
+Deposits, the payment→deposit assignment, and hand-entered items live in the
+`finance_reconciliation` **settings** key — deliberately not a new table, and
+deliberately not written into `billing_payments`: a payment the feed missed
+must not become a row the Ledger then bills against. "+ Add item" rows are
+tagged *added by hand* in the list for the same reason.
+
+- **Confirm match is disabled unless the running total equals the deposit
+  exactly.** No partial, no over-match — "close enough" hides a missing
+  payment, a double entry, or an unaccounted processor fee.
+- Only one deposit is in matching mode at a time, so a payment can never be
+  provisionally checked against two.
+
+### Two places the spec did not match the live schema
+
+- **`billing_write_offs` has no `reviewed_at`** (and no DELETE grant). "Write-offs
+  pending for this close" therefore means *recorded during the month being
+  closed*, not *not yet ticked*.
+- **A write-off is netted out of AR, not used to hide the family.** Scoped to
+  the same trailing months the Ledger's `owed` figure spans — a write-off
+  against a long-settled invoice must not quietly reduce today's balance.
+- `billing_payments`' column is **`payment_method`**, not `method`.
+
+### Still UI-only, and say so rather than implying otherwise
+
+"Lock the month" records that the director considers the month closed; it does
+**not** block Ledger edits to that month. A real lock is separate work. The
+screen says this in a note rather than letting the checkbox imply enforcement.
+
+### ⚠️ "Lock the month" freezes a number into `billing_summary` (2026-08-27)
+
+Prompted by a real question: 2026 started partway through this app's life, so
+some early months are hand-imported and the director wants this year's final
+numbers frozen once complete, so 2027's Bookkeeper can compare against a
+number that cannot drift out from under it later.
+
+Checking "Lock the month" now writes the month's **currently live** total
+into `billing_summary` per room (`data_source: 'month_lock_snapshot'`, via the
+same `upsertBillingSummary()` the old Attendance & Revenue tool used) — the
+exact table the historical fallback above already reads. Unchecking removes
+the checklist flag but never deletes the snapshot row; re-locking overwrites
+it with whatever is live at that moment.
+
+⚠️ **A locked month must be read from exactly one place, never both.** The
+first version of this session's fix only added the historical fallback for
+months with *no* live data — it did nothing to change which source wins for a
+month that has *both* a snapshot and live registrations, which is the normal
+case right after closing a month. Caught by the user before it shipped:
+without a lock-aware read, freezing a snapshot would have been a no-op —
+`useLive = (tuition + fees) > 0` doesn't know or care whether the month is
+locked, so any live registration still sitting in `registration_dates` would
+keep outvoting the frozen number on every load, and the checkbox would
+silently do nothing.
+
+Fixed: `_bkLoad()` checks `_bkClose[mo]?.lock` **before** deciding a source —
+`useLive = !locked && (tuition + fees) > 0`. Locked ⇒ always the frozen
+snapshot, live data notwithstanding. Unlocked ⇒ the existing live-else-
+historical rule, unchanged. Every sub-view that reads `byMonth` (Overview,
+Room P&L, GL Export) shows a 🔒 badge on a locked month so a frozen number is
+never visually indistinguishable from a live one.
+
+Two things this is deliberately not:
+- **Not enforcement.** The Ledger stays fully editable for a locked month —
+  locking only changes what Bookkeeper *reads*, not what the database
+  *accepts*. Editing an invoice after locking makes the Ledger and the frozen
+  snapshot disagree until someone re-locks; the checklist detail line says so.
+- **Not a labor lock.** Only revenue and child-days go into the snapshot —
+  `billing_summary` never stored labor, and Room P&L's labor figure keeps
+  coming from `_buildRoomPnlData()` (staff schedules/clock events) whether or
+  not the month is locked.
+
+### Fixed in passing
+
+`renderFinanceHubTool()` reset `_fhTab` to `'ledger'` in state but never
+re-synced pane visibility, so leaving on Billing Report and navigating back
+showed the report under a highlighted Ledger tab. It now calls
+`_fhSwitchTab('ledger')`.
+
+### ⚠️ It shipped half-live for a day, and `dist/` is why
+
+The merge landed correctly — source, `admin.html`, `scripts/build.js` and
+`css/admin-portal.css` all had the tab. But `dist/admin.min.js` on `main` did
+**not** contain a single byte of it, so on the live site the Bookkeeper tab
+button existed with no code behind it. The old bundled `_fhSwitchTab()` has no
+`bookkeeper` case, so clicking it hid the Ledger pane, hid the Report pane, and
+showed nothing — the whole card went blank, which reads exactly like "this was
+never built."
+
+Cause: a concurrent `claude/**` branch (payment-security-fixes) branched before
+this merge, ran its own `npm run bump` + rebuild, and the auto-merge's
+`--theirs` resolution for `dist/*.min.js` (T9) took **its** bundle. That
+resolution is right for a genuine build-artifact conflict and wrong here: the
+newer bundle was built from the older tree.
+
+⚠️ **`git log -- dist/admin.min.js` is not the check. Grep the bundle for a
+string only your change introduces.** The dist-freshness CI job compares
+`dist/` to the branch it runs on, so a bundle that is stale only relative to
+*another* branch's merge passes it. After any `claude/**` merge that touches
+`js/`, confirm on `main`:
+
+```
+git show origin/main:dist/admin.min.js | grep -c '<a symbol only your change adds>'
+```
+
+A `0` there means the feature is merged and not deployed, and nothing will say
+so — the page just does nothing.
+
+### ⚠️ Overview/Room P&L read $0 for a month billed before this table existed
+
+Found live: January–March showed real revenue in the YoY report and the old
+Financial Dashboard, but $0 in the new Bookkeeper Overview bar chart. Cause:
+`_bkLoad()` computed every month's revenue from `_buildFamilyBillingData()`
+alone, which reads `registration_dates` — for a month billed before
+registrations were tracked in this app (or entered by hand for any other
+reason), that table has nothing, so the live calculation is genuinely $0. The
+real number lives in `billing_summary`, and `generateFinanceDashboard()` /
+the YoY report already knew this: **prefer live revenue when it's nonzero for
+the month, otherwise fall back to `billing_summary`'s `net_billed`.**
+Bookkeeper had no fallback at all — a straight port of `_buildFamilyBillingData`
+without the surrounding dashboard's historical branch.
+
+Fixed by mirroring that exact fallback in `_bkLoad()`, per month and per room.
+⚠️ **`billing_summary` has no tuition/fees split** — only a `net_billed`
+total — so a historical month reports its whole total as tuition and $0 fees.
+That's the same simplification `generateFinanceDashboard()` already makes;
+it is not a new inaccuracy this tab introduced.
+
+### Bookkeeper Overview absorbs Year-over-Year and Expense Lines (2026-08-28)
+
+Prompted directly by the director after the tab first shipped: the bar chart
+needed a white card behind it (it was sitting on the page's own cream
+background, same color family, and read as unstyled), Expense Lines needed
+its own screen removed with its editing folded into "Edit budget" instead of
+just deleted, Year-over-Year needed to live inside Bookkeeper → Overview
+under the budget card rather than its own sidebar entry, and ChMS Finance API
+needed to move to Settings.
+
+- **The bars now sit in a `.bk-card`.** Same white/border/radius as every
+  other card on the tab — it was the one chart-shaped element on the page not
+  wrapped in one.
+- **"Budget lines" replaces the standalone Expense Lines tool**, added
+  directly under the Annual Budget card's "Edit budget" form. Same data
+  (`expense_config` setting, same `fetchExpenseConfig()`/`saveExpenseConfig()`
+  the retired tool used, same four line types it supported — monthly $,
+  annual $ + month, % of payroll, % of revenue) — verified against the live
+  setting before building this, which held one of each of three of those four
+  types. **GL Export's Rent/Supplies regex-match is unaffected**: it reads the
+  same `expense_config` items either way, only where you add/remove a line
+  changed.
+- **Year-over-Year is now a card in Bookkeeper → Overview**, under the budget
+  card. It calls the same `generateYoyComparison()` (admin-finance.js,
+  untouched) into a `#financeYoyContent` container — deleted from its own
+  retired `#financeYoySection` rather than merely left unreferenced, because
+  `generateYoyComparison()` expects to be the only element with that id on the
+  page; leaving the old one in place would have shadowed the new one via
+  `getElementById()`'s first-match behavior. ⚠️ It still reads its year from
+  `_financeYear()`, which reads a `#financeYear` selector that lived in the
+  Financial Dashboard tool (`dash`, retired in an earlier session) — absent,
+  it falls back to the real current year, same as it always has. It does
+  **not** follow Bookkeeper's own `_bkData.year` if a director navigates the
+  Ledger's month switcher into a different year; matches its pre-existing
+  behavior exactly, not a regression from this move.
+- ⚠️ **Lazy and cached, on purpose.** `generateYoyComparison()` runs two full
+  `_buildRoomPnlData()` scans (current year, prior year) on top of everything
+  `_bkLoad()` already computes — expensive, and the director had *just*
+  flagged the tab's load as slow. It fires once per Bookkeeper session
+  (`_bkYoyLoaded`, cleared by `bookkeeperInvalidate()`), not on every Overview
+  re-render — saving a budget line calls `_bkRender()`, which would otherwise
+  re-trigger both scans for no reason.
+- **ChMS Finance API moved into Settings → Access & oversight**
+  (`#financeApiCard`), not a new AP_TOOLS sidebar entry — Settings is a single
+  continuous page by design (see the admin portal shell section above), and a
+  second sidebar item under it would have reintroduced the "pick a screen
+  first" pattern that redesign explicitly removed. `setupFinanceApiTester()`/
+  `testFinanceApiConnection()` are unchanged; only the section moved.
+  ⚠️ **Settings is not a full-only tab, but this tool needs to stay
+  full-only** — it printed the church's own revenue/payroll summary and was
+  gated by living under the `finance` tab (`AP_FULL_ONLY_TABS`). Moved
+  `_hide('financeApiCard')` into `applyRoleRestrictions()`'s existing
+  full-only block, right next to `setAccessCard`'s identical treatment.
+- **The Bookkeeper sidebar group under Finance is now empty.** Ten tools have
+  passed through it across two sessions (`ar`, `procare`, `revdash`, `dash`,
+  `pnl`, `arrev`, `budget`, `yoy`, `expense`, `api`) and none remain — every
+  one is now either a Bookkeeper tab sub-view or embedded in one. Their old
+  `<section>`s stay in `admin.html`, unreferenced by `AP_TOOLS` (unreachable,
+  per the shell's own rule) — **except** `#financeYoySection` and
+  `#financeApiTesterSection`, deleted outright because this move reused their
+  ids/markup at the new location, and a leftover duplicate would have
+  shadowed the new one.
+- **The tab's slow load is still open, and this session did not fix it** —
+  it made it marginally worse by adding a second, lazy-loaded heavy call
+  (YoY) alongside the load `_bkLoad()` already does across up to 12 months
+  of `_buildFamilyBillingData()` + `_buildRoomPnlData()`. That per-month
+  loop — not this session's additions — is almost certainly the real cost;
+  a proper fix (caching across months, or computing the whole year in one
+  pass instead of one call per month) is a bigger change than a same-session
+  follow-up and hasn't been attempted here.
+
+---
+
+## Staff tab consolidation (2026-08-28)
+
+Built from `design_handoff_staff/` (README + `Staff Tab Redesign.dc.html`),
+same lens as the Classroom/Finance/Planning consolidations below. **Audit
+finding: 9 tools, 3 groups → 4 tools, 3 groups.** Every retired key's real
+logic is untouched — this only changes which tools are separate nav entries
+versus tabs inside one screen.
+
+| Kept as | Was | Tabs |
+|---|---|---|
+| **Build Staff Schedule** | Build Staff Schedule + Daily Staffing Requirement | This week's schedule (with a By room & shift / By worker view toggle) · Daily Staffing Requirement |
+| **Staff Roster** | Staff Roster + Staff Directory | Roster · Directory (print) |
+| **Payroll** | Payroll + PTO Settings + Geofence & Clock Reminders + Clock-In Integrity | Pay period · PTO policy · Time Clock (Settings / Integrity sub-tabs) |
+| **HR & Handbook** (new) | — | Policies · Write-ups · Staff Injury Reports (moved here) |
+
+Three single-source-of-truth pairs, same reasoning as every prior
+consolidation: the `staff` table (Roster owns it, Directory reads it),
+`apStaffing()` (Schedule owns it, the Requirement tab reads the same call
+instead of a separate entry that could compute "enough staff" differently),
+and Payroll (the PTO rate and the Time Clock config only ever matter in the
+context of the numbers they feed).
+
+### ⚠️ A real bug found and fixed on the way in: staffInjury/clockIntegrity were permanently blank
+
+`staffInjuriesSection` and `clockIntegritySection` carried `pane: 'staffing'`
+in `AP_TOOLS`, but their actual markup lived in `#tab-families` (next to Fire
+Drills). `apShowSection()` hides every `.tab-pane` whose id isn't
+`'tab-' + tool.pane` — so opening either tool from the sidebar hid
+`#tab-families` (and the section along with it) while showing the empty
+`#tab-staffing`. Same bug class as the Classroom tab's `attBoard`/
+`incidents`/`drills` pane mismatch from the day before, in the opposite
+direction (there the DOM was in the tab the tool's `pane` pointed away from;
+here the DOM was in a *different* tab than `pane` claimed). Found by reading
+`apShowSection()` against the two tools' real DOM location, not assumed from
+a symptom report — nobody had filed one. Fixed by physically moving both
+sections' bodies into `#tab-staffing` as part of the consolidation (Injury
+Reports → HR & Handbook's third tab, Clock-In Integrity → Payroll → Time
+Clock's Integrity sub-tab), so `pane` finally matches where the DOM is.
+
+### Build Staff Schedule and Daily Staffing Requirement share one date field
+
+They used to carry two independent "week of" pickers (`staffWeekOf` for the
+schedule, `staffReqWeekOf` for the requirement) that could show two different
+weeks at once. Now one field (`staffWeekOf`) drives both tabs —
+`apRenderStaffReq()` reads it directly. The header cards above the tab strip
+("Children this week" / "Est. labor cost") are the exact figures
+`apRenderStaffReq()` already computes for its own footer (`apSchedHeaderStats()`
+takes the same `sf`/`cost` values as a parameter rather than recomputing them),
+so the shared header and the Requirement tab's own totals can never disagree.
+
+⚠️ **The labor-cost estimate is deliberately the wage-model number (avg wage
+× hours × payroll burden), not a sum of each assigned staff member's real
+rate.** Build Staff Schedule's own room/shift grid is frequently incomplete
+mid-week, and a cost built from "whoever's been assigned so far" would swing
+on every single slot filled in, reading as broken rather than live.
+
+### "By worker" is a read-only pivot, not a second editable grid
+
+`renderScheduleByWorker()` (admin-reports.js) reads the room/shift grid's
+*live DOM state* through `_readAssignmentsFromDOM()` — the exact same helper
+`saveStaffSchedule()` and the XLSX export already use — and pivots it to
+staff × day. It can never show an assignment that disagrees with what Save
+would persist, and no new editing surface had to be built: "By room & shift"
+stays the only place an assignment changes, matching the handoff's own
+framing ("the room/shift spreadsheet is the default because that's the
+format she actually works from; the per-person list is the alternate view").
+
+### Time Clock's role gate falls out for free
+
+The handoff's own open question — confirm `full`-only for the merged
+Settings/Integrity tool — resolved itself: Time Clock is now a tab *inside*
+Payroll, which was already gated to `full` via `AP_FULL_ONLY_KEYS`. No new
+gating code needed, and it's automatically the stricter of the two former
+gates (Clock-In Integrity's), exactly what the handoff asked for.
+
+### HR & Handbook is open to `restricted`, except one tab
+
+Policies and Write-ups don't carry the wage/PII sensitivity that gated
+`staffInjury` on its own — so unlike Payroll, this whole tool is **not** in
+`AP_FULL_ONLY_KEYS`. Only the Injury Reports tab needs the old gate (an
+injury report names an employee, the part of their body, and where they were
+treated). `applyRoleRestrictions()` (admin-settings.js) hides `apHrTabInjury`
+and its pill button (`apHrPillInjury`) with inline `display:none` for any
+role but `full` — the same "hide a specific control, not the whole tool"
+pattern used for `financeApiCard` elsewhere in that function.
+
+### Write-ups and Policies are genuinely new — everything else is a relocation
+
+`add_staff_write_ups_and_hr_policies.sql` (**written this session, needs to
+be applied manually per this file's standing migration process**) adds:
+
+- **`staff_write_ups`** — one row per write-up (kind/note/occurred_at/
+  issued_by_name/status). Two `SECURITY DEFINER` RPCs,
+  `admin_submit_staff_write_up` and `admin_mark_write_up_signed`, both gated
+  on `admin_role() IN ('full', 'restricted')` — same tier as filing an
+  incident report. `authenticated` gets `SELECT` only; every write goes
+  through the RPCs, closing the same dead-grant trap (`SX1`/`NEW-1`
+  elsewhere in this file) a fresh `CREATE TABLE` would otherwise reopen.
+  ⚠️ **There is no staff-facing e-signature flow in this pass** — the
+  handoff's own screenshots show only the admin list view, so "Mark signed"
+  records that the office has the acknowledgment on file (in person, on
+  paper, verbally), the same way a real write-up binder would. A future pass
+  could add a PIN-gated staff-side signature RPC without changing the
+  table's shape.
+- **`hr-policies`** storage bucket — private, `is_admin()`-gated, same shape
+  as `child-documents` (not `enrollment-forms`, which is public — these are
+  internal staff documents, not something meant for a public link). "View
+  PDF" mints a short-lived signed URL per click (`fetchHrPolicyUrl()`) rather
+  than embedding a long-lived public URL. Metadata (title/icon/"Updated"
+  label/storage path) lives in a `settings` key, `hr_handbook_policies` —
+  same "metadata in settings, file in storage" split `enrollment_forms`
+  already uses.
+
+### Verification run this session
+
+`npm test` — 182/182, all drift guards green (nothing in the test suite's
+hand-maintained copies touches code this session changed). `npm run build` —
+`dist/admin.min.js` and `dist/supabase.min.js` rebuilt and grepped for new
+symbols (`hrHandbookSection`, `renderStaffWriteUpsTool`, `admin_submit_staff_write_up`,
+etc.) before committing — the exact check this file's own "it shipped
+half-live for a day" incidents (Bookkeeper tab, Classroom tab) say to run.
+**Not yet verified live**: the migration has not been applied to production
+as of this commit — apply it in the Supabase SQL Editor before the Write-ups
+or Policies tabs will do anything beyond render an empty list.
+
+### ⚠️ The first pass only fixed the nav — the schedule grid still didn't match the mockup
+
+Shipped, then flagged live: the director's screenshots of the actual mockup
+(`design_handoff_staff/Staff Tab Redesign.dc.html`) showed a genuinely
+different **Build Staff Schedule** grid than what went out — one compact
+table (Room | Shift | day columns, one row per room+shift) versus the app's
+pre-existing per-room block table (a tall stack of "AM Staff 1/2/3", "+
+optional" rows, repeated per room). The first fix only reclassed two buttons
+from `.btn-secondary` to `.btn-ghost`; the real gap was structural, and
+`renderScheduleTables()`/`renderScheduleByWorker()` were never actually
+compared against the mockup's own source before this session called the
+work done. Read the `.dc.html` template directly (its `roomShiftGrid`/
+`scheduleRows` data-shaping functions in `support.js`) rather than
+re-guessing from a screenshot a second time.
+
+Rebuilt both to match:
+
+- **By room & shift** — one `<table>`, not one block per room. Every
+  `<select class="sched-staff-select" data-date data-room data-shift
+  data-slot>` kept its exact classes/attributes; only how they're grouped
+  into rows/cells changed (a small stack of selects inside one day-cell
+  instead of one table row per slot). This is what made the rebuild safe:
+  `_syncGroup()`, `_readAssignmentsFromDOM()` (which `saveStaffSchedule()`,
+  the XLSX export, and `renderScheduleByWorker()` all read through), and the
+  day-print click wiring all key off those selectors, not DOM shape — none
+  of them needed to change, verified by re-reading each one before touching
+  `renderScheduleTables()`, not assumed. Kids-count/staff-needed figures
+  (real, valuable, and not in the mockup's plain data-only cells) were kept
+  as a small caption inside each cell rather than dropped — same "match the
+  visual language while keeping the data" call this app made for
+  Enrollment & Capacity's FTE table.
+- **By worker** — rebuilt from a day-by-day pivot table (this session's
+  first draft) into the mockup's actual shape: one row per person per
+  (room, shift) they hold this week, with a real per-person cost (their own
+  `hourly_rate` × assigned hours, not the header's wage-model estimate —
+  salaried staff show `—` since a per-shift dollar figure isn't meaningful
+  for them) and a coverage pill (`Full week` vs `N of 5 days`). Still
+  read-only, still built from `_readAssignmentsFromDOM()`.
+- **Week of / Children this week / Est. labor cost** — one row of three
+  cards, matching the mockup, instead of the date field sitting separately
+  above two stat cards. ⚠️ The date `<input>` itself had to stay a *static*
+  DOM element (`apSchedHeaderStats()`'s mount uses `display:contents` so its
+  two dynamic `.bk-stat` divs land as grid siblings of it) — folding the
+  input into the JS-rendered mount would have destroyed and recreated it on
+  every render, dropping its one-time `change` listener and any in-progress
+  typing.
+- **A real near-miss, caught before shipping**: the first attempt at this
+  also wrapped the section's `<h2>` in a flex container to put the Print
+  button top-right next to the title, matching the mockup exactly.
+  `apShowSection()` only recognizes a section's own heading via `:scope >
+  h2` — nesting it inside a wrapper div silently broke that selector and
+  would have reintroduced the exact double-heading bug this app already
+  spent a session fixing (see "Every redesigned Classroom-tab tool showed
+  its own heading twice" below). Reverted to keeping `h2`/`p` as direct
+  children of `.admin-section` and the button row as their sibling — Print
+  sits in the button row, not next to the title, which is a real (small,
+  deliberate) deviation from the mockup in favor of not reopening a closed
+  bug class.
+
+`npm test` — 183/183 (grew by one from another PR merged in between).
+`npm run build` — rebuilt and grepped for the new grid/worker CSS classes
+and `apSchedHeaderStats` before committing, same discipline as above.
+
+---
+
+## Classroom tab consolidation — Daily / Planning (2026-08-27)
+
+Built from `design_handoff_classroom_tab/` (README + prototype `Classroom Tab
+Redesign.dc.html`). Audited every screen in the Classroom tab and consolidated
+per the director's sign-off in that handoff. **Records** (Care Calendar,
+Family Directory, Missing Care Calendar) is explicitly out of scope — left
+alone, to be redesigned in a separate session.
+
+13 Classroom-tab screens → 7. **Daily**: Attendance Board, Incident Reports,
+Fire Drills. **Planning**: Enrollment & Capacity. **Records**: unchanged, 3
+screens. CACFP (already retired) stays retired.
+
+| Kept as | Was | Reason |
+|---|---|---|
+| **Attendance Board** | Attendance Board + Classroom Roster | Roster's day-view manual In/Out marking was the only thing Roster had that the live board didn't. In/Out/Absent/Move now live directly in each room card. |
+| **Incident Reports** | Incident Reports | Unchanged, plus **"+ Write a report"** — the director can file one herself. |
+| **Fire Drills** | Fire Drills | Unchanged, plus **"+ Log a Drill"** — the director can enter a drill directly. |
+| **Enrollment & Capacity** | Capacity Overview (month grid) + Room Schedule Planner (weekly AM/PM) + Planning's Room Capacity Overview (FTE/seat-day) | All three read the same registrations at different grains. Merged into one screen with a Day/Week/Month/FTE view switcher rather than picking a winner. |
+| Retired from nav | Classroom Roster | Its day-view marking moved to the Attendance Board; its week/month browsing had no taker in the redesign. `dailyRosterSection`'s markup stays in `admin.html`, unreferenced — same convention as CACFP. |
+
+### ⚠️ A real bug was found and fixed on the way in: the pane mismatch
+
+`attBoard`, `incidents` and `drills` all carried `pane: 'daily'` in `AP_TOOLS`,
+but their DOM sections (`attendanceBoardSection`/`incidentsSection`/
+`fireDrillsSection`) live inside `admin.html`'s `#tab-families`, not
+`#tab-daily`. `apShowSection()` hides every `.tab-pane` whose id isn't
+`'tab-' + tool.pane` — so opening any of these three tools hid `#tab-families`
+(and the section along with it) while showing the empty `#tab-daily`. Found by
+reading `apShowSection()` directly, not assumed from the symptom. Fixed by
+correcting `pane` to `'families'` on all three.
+
+**That fix had a second-order trap.** `apToolAvailable()`'s 'staff'-role gate
+was `tool.tab === 'classrooms' && tool.pane === 'daily'` — it had been using
+`pane` as a stand-in for "is this a Daily-group, staff-visible tool," which
+only worked because those three tools happened to carry the wrong `pane`
+already. Fixing `pane` to its correct DOM-location value would have silently
+dropped 'staff'-role admin logins from Attendance Board, Incident Reports and
+Fire Drills. Fixed by keying that check on `tool.group === 'Daily'` instead —
+a field that actually means what the check is testing for, decoupled from
+where the section physically sits in the DOM.
+
+### Attendance Board write path — resolved, not left open
+
+The design handoff's own open question: does the office's In/Out mark write
+to the same record the teacher app's check-in produces, or stay a separate
+office-only record? **Decided: the same table.** New RPC
+`admin_log_child_event` (migration `add_classroom_admin_authoring.sql`,
+**applied and verified in production 2026-08-27**) writes into
+`child_day_events` — the exact table `log_child_event` (the staff-app path)
+writes into — so the parent app's daily record and the office's manual mark
+can never disagree. It mirrors `log_child_event`'s own downstream effect: a
+check-in also upserts `attendance_records.status = 'present'`, which is what
+`center_headcount_rows()` already reads as the board's "marked" fact.
+
+**Absent stays exactly what it already was** — a write to `attendance_records`
+via the existing `saveAttendanceRecord`/`clearAttendanceRecord` (unchanged;
+`authenticated`/admin already holds direct grants there), which
+`center_headcount_rows()` was already reading as `marked = 'absent'`, distinct
+from `attendance_status`. No new plumbing needed for that half — the
+"Absent is its own explicit mark, distinct from not-yet-marked" requirement
+was already true of the live schema.
+
+**Move** reuses the existing single-day room move
+(`updateRegistrationDateRoom`) — the same write the Capacity Overview
+day-drill-down already made. The board doesn't get `registration_dates.id`
+from `center_headcount_rows()` (that RPC returns `student_id`/`child_name`/
+`room_id`, not a registration id), so it's resolved client-side from
+`allRegistrations` by child name + today's date — the same array every other
+admin day-view tool already lazy-loads.
+
+⚠️ **`center_headcount_rows()`'s SQL source was never committed to this
+repo** — `center_headcount_admin.sql`'s own comment says "Full body as
+applied... see git history for the text." That's why this work did **not**
+extend that shared function to carry `registration_date_id` directly, even
+though it would have been the more obvious fix: reconstructing a function
+whose true deployed source isn't in the tree risks silently dropping a field
+(`marked`, `allergies`) that the live board depends on. Resolving the id
+client-side avoided touching it at all.
+
+### ⚠️ The board was never actually rendering — `allergies` is an array, not a string (found 2026-08-28)
+
+Reported live: the Attendance Board sat on "Loading…" forever for every
+room, on every day, for every admin. Root cause, found by calling
+`center_headcount_admin()` directly against production and reading its real
+shape: `allergies` comes back as an **array of `{label, severity}` chips** —
+the same structure `admin-families.js`'s allergy editor writes — not a
+string. `_abRender()` (written when the Attendance Board first shipped,
+2026-08-16, before this session touched the file) did `(c.allergies ||
+'').trim()` in three places. An array is always truthy, even `[]`, so that
+line called `.trim()` on an array and threw a `TypeError` on the very first
+child processed — **synchronously, inside `_abRender()`, which
+`renderAttendanceBoard()` calls outside its own try/catch.** The exception
+had nowhere to go but the browser console; the DOM was left exactly as the
+loading placeholder had set it, forever.
+
+⚠️ **This predates the Classroom Tab Redesign and was not introduced by
+it** — confirmed by diffing: none of the three broken lines were touched by
+this session's earlier work, which only added new code around them. It is
+unknown how long the board was actually broken; nothing in the earlier
+session's notes tested it against a room that had a child with any
+allergies value at all (even an empty array), which is what it took to
+hit this.
+
+Fixed with one helper, `_abAllergySummary(allergies)`, used everywhere the
+file reads a child's allergies: array → `.map(a => a.label).join(', ')`;
+anything else → the old string-trim behavior, kept as a fallback rather
+than assumed impossible. Verified the exact shape against a live,
+rolled-back call to `center_headcount_admin()` before writing the fix, not
+guessed from the column name.
+
+**The lesson to keep:** a function called outside its own try/catch that
+builds its output as one big template literal fails silently by construction
+— any thrown error inside it leaves the DOM at whatever it was before the
+call, which reads to a user as "stuck loading" with no error surfaced
+anywhere they can see. Worth an eventual pass to wrap `_abRender()`'s own
+body, not just the network call, so a future bug here fails loud instead of
+quiet — not done in this fix, which was scoped to the one confirmed cause.
+
+### ⚠️ Every redesigned Classroom-tab tool showed its own heading twice (found 2026-08-28)
+
+Reported live, with screenshots: Attendance Board, Fire Drills, and by
+extension every other tool this redesign touched showed the shell's header
+("🚸 Attendance Board" + blurb) immediately followed by the section's own
+identical `<h2>`, stacked right above the real content.
+
+Root cause was in `apShowSection()` (admin-portal.js), not in any of this
+session's own new markup. It hides a section's own duplicate `<h2>` only
+when that heading "carries no real control" — deliberately, so e.g. Care
+Calendar's inline "New Registration" button stays reachable — checked via
+`h2.querySelector('button, input, select, a')`. But `setupCollapsibles()`
+(admin-settings.js) injects a `.collapse-toggle` **button** into the `<h2>`
+of *every* `.collapsible-section`, and every section this redesign
+delivered (`attendanceBoardSection`, `incidentsSection`,
+`fireDrillsSection`, `enrollmentCapacitySection`, `familiesSection`,
+`allRegistrationsSection`, `missingCalendarSection`) still carried that
+class from before the portal-shell redesign. The check found that button,
+concluded the heading "carries a real control," and kept the duplicate
+visible — on every one of them, every time.
+
+⚠️ **The collapse toggle has been a dead control inside this shell for a
+while, not just for these seven.** `css/admin-portal.css`'s
+`.ap-on .admin-section.is-collapsed .collapsible-body { display: block
+!important; }` forces every section's body open regardless of the
+toggle's state — added when the shell itself shipped. A concurrent
+session (`claude/planning-tab-design-v7aymy`, same week) had already found
+and fixed this exact pattern for two Planning-tab sections
+(`roomCapacityOverviewSection`, `ratioStepSection`) by dropping their
+`collapsible-section` class — see that fix's own comment, still in
+`admin.html` above `roomCapacityOverviewSection`. That was the right fix
+for those two sections specifically, but it could never be a complete fix
+on its own: **every other `.collapsible-section` in the app, present and
+future, has the identical bug**, because the root cause is the shared
+`apShowSection()` check, not any one section's markup.
+
+Fixed both ways, on purpose:
+- `apShowSection()`'s control check now excludes `.collapse-toggle`
+  specifically (`button:not(.collapse-toggle), input, select, a`) — this
+  is the fix that actually closes the bug class, for every section that
+  has this pattern, including ones neither this session nor the concurrent
+  one has touched.
+- The seven sections above also had `collapsible-section` dropped from
+  their markup, same as the concurrent session's fix — not required
+  anymore given the check above, but it removes a genuinely dead button
+  from the DOM rather than leaving it present-but-harmless, which is
+  better hygiene and matches the established precedent.
+
+**Not chased further in this pass:** a repo-wide sweep to drop
+`collapsible-section` from every other section that doesn't need it. The
+`apShowSection()` fix already makes that a cosmetic cleanup rather than a
+correctness fix, so it's a fine follow-up, not an urgent one.
+
+### ⚠️ Attendance Board's action colors and room-card layout drifted from the design source (fixed 2026-08-28)
+
+Reported live with two side-by-side screenshots (the mockup vs. v2.11.2):
+the In/Out/Absent buttons and the "Move →" select all rendered in a single
+muted gray, and the room cards sat in a responsive multi-column grid.
+Neither matches `Classroom Tab Redesign.dc.html`, and the fix was to go
+back to that file's exact computed-style strings rather than eyeball the
+screenshots again — `inStyle`/`outStyle`/`absentStyle`/`pillStyleFor()` all
+carry literal hex values.
+
+- **Each action now keeps its own color permanently**, not just on
+  hover/focus: `.ab-act-btn[data-act="in"]` is green
+  (`--green-text`/`--green-pale`), `[data-act="out"]` is tangerine
+  (`--tang`/`--tang-pale`), `[data-act="absent"]` is deep tangerine
+  (`--ap-deep-tang`/`--tang-pale`), filled solid when `.is-on`. No JS
+  changes were needed — `_abActionsHtml()` (admin-attendance.js) already
+  stamped `data-act="in|out|absent"` on each button; only the CSS was
+  wrong. `.ab-move-select` is now the same green-pale/green-lt/green-text
+  "pill" the design uses, not a plain gray border.
+- **`.ab-pill` (the ratio badge) now matches `pillStyleFor()`'s bg/color
+  pairs exactly**, not the `ok`/`warn`/`bad` tone convention used
+  elsewhere in the admin: over-ratio is tangerine-pale on
+  `--ap-deep-tang` (was `--tang-dark` — close but not the design's hex),
+  at-limit is gold-pale on **navy** (was `--mustard-dark` — the design
+  deliberately does not use the mustard warning color here), and ok is
+  green-pale on `--green-text` (was `--green-dark`). Also dropped the
+  pill's border — the design has none.
+- **`.ab-rooms` changed from `grid-template-columns: repeat(auto-fit,
+  minmax(300px, 1fr))` to a single-column flex stack.** The design source
+  never wraps room sections into columns — `sectionStyle` is one div per
+  room with `margin-bottom:16px`, rendered in sequence — so a wide admin
+  screen showing three rooms side by side was a real layout deviation, not
+  a viewport artifact of the mockup's narrower preview pane.
+- `css/admin.css?v=20` in `admin.html` — the cache-busting query param this
+  repo uses in place of content-hashed filenames (see R9 in the sixth
+  sweep) — was bumped again for this change, same as every prior CSS edit
+  this session.
+
+### ⚠️ …and the single-column stack above was overridden by the director the same day
+
+Asked directly, minutes after the single-column fix above shipped: put two
+rooms side by side again, and make sure In/Out stamp a time that's visibly
+labeled and stays. `.ab-rooms` is a two-column grid again
+(`repeat(2, minmax(0, 1fr))`, collapsing to one column under 900px, same
+breakpoint the shell's own drawer uses) — this is not a revert of the fix
+above, it's the design mockup's own layout choice being overruled by the
+person who actually runs the room. **If `Classroom Tab Redesign.dc.html` is
+ever re-synced from, its single-column `sectionStyle` should not be
+re-applied here without checking this note first.**
+
+The check-in/check-out persistence half of the same ask turned out to
+already work — verified directly against the live catalog, not assumed:
+`admin_log_child_event()` writes an unconditional `child_day_events` row for
+both `check_in` and `check_out`, and `center_headcount_rows()` computes
+`attendance_status`/`last_event_at` fresh from the **latest** such row on
+every call — there is no client-side state to lose on a refresh. Confirmed
+against real rows already in production (a same-session round of manual
+testing had left a real check-in/check-out pair on a real student). The one
+actual gap: the "present" row showed a bare time (`8:45a`) with no label,
+while "left" already said `out 7:57p` — asymmetric and easy to misread as
+"nothing was stamped." Fixed by prefixing the present-state mark with `in `
+too, in `_abRoom()` (admin-attendance.js). No RPC or schema change needed.
+
+### Enrollment & Capacity's Week/Month/FTE sub-views were also still the pre-merge tools' own look (fixed 2026-08-28)
+
+Reported live with four screenshots — one per sub-view — of the design
+source's actual Day/Week/Month/FTE screens. Day was close (fixed alongside
+the Attendance Board colors above), but Week, Month and FTE were still
+rendering **the three original tools' pre-merge markup and styling**
+unchanged, exactly as "Enrollment & Capacity — relocated, not rebuilt"
+above says was done deliberately when this tool was first merged. Asked
+the director directly rather than guessing: rebuild to match the
+screenshots even where that would drop live functionality (the Week
+view's AM/PM staffing split, the FTE view's 6-month trend and per-room
+drawer), or match the visual language while keeping that data. **She chose
+the latter** — so nothing enumerated in "One dataset, still" above or the
+FTE report table's trend/drawer was removed.
+
+- **Day**: rewrote `_ecRenderDay()`'s row markup and `.ec-day-*` CSS to the
+  design's exact row shape — ratio printed under the room name instead of
+  a separate flag pill, the enrolled count in the head serif at 1.3em, and
+  the AT CAPACITY / AT RATIO STEP flag now genuinely silent (not just a
+  muted "Open" pill) unless the room is actually over capacity or has just
+  crossed a ratio boundary. `.ec-view-switch`/`.ec-pill` (shared by all
+  four sub-views) changed from individually bordered gray pills to the
+  design's single warm-gray track with a solid-navy active segment — the
+  same "muted gray instead of the design's real color" pattern the
+  Attendance Board buttons had.
+- **Week**: `renderRoomSchedule()`'s AM/PM staffing table (admin-calendar.js)
+  is **unchanged in structure** — same rooms-as-columns, dates-as-rows,
+  AM/PM sub-columns. Only `.sched-cell`/`.sched-near`/`.sched-full` were
+  recolored to the same green-pale/gold-pale/tangerine-pale-on-navy/
+  deep-tang scheme the Day view and Month grid use, replacing the older
+  mustard/tang-dark pairing — the exact color mismatch this file's earlier
+  fixes describe, just on a table this session hadn't touched yet. The
+  navy `<thead>` fill (`.staff-room-header`/`.staff-sub-head`) was left
+  alone on purpose: those classes are shared with the real staff schedule
+  tables in Staff → Build Staff Schedule, and recoloring them to match a
+  single sub-view here would have restyled tools this redesign was never
+  scoped to touch.
+- **Month**: this was the one genuine layout gap, not just color.
+  `renderCapacityOverview()` was showing the old **aggregate monthly
+  utilization cards** (`.cap-card`, a progress bar per room for the whole
+  month) — the design's Month view is a **day-by-day grid for one room**,
+  switched by room-tab pills. Rewrote `renderCapacityOverview()` to render
+  exactly that: room tabs + a Mon–Fri day grid, reusing the same
+  `dayMap`-from-`registration_dates` construction `drawRoomCalendar()` (the
+  pre-existing per-room calendar modal) already used, so the two can't
+  disagree about what's booked. Clicking a day still opens
+  `showDayRosterDetail()` — the same move panel Day view's "Move a child"
+  button already opens, so nothing new had to be built for the move flow
+  itself. ⚠️ **No data was dropped** — the aggregate monthly utilization %
+  the old cards showed lives on in the FTE / Seat-Day sub-view's
+  Capacity/Seat-Day Occupancy columns, which already computed the same
+  number at the same whole-month grain; Month regaining a genuine
+  day-by-day grid is what its own name (and the original "Capacity
+  Overview (month grid)" description earlier in this file) always implied.
+  The old `.cap-card` aggregate markup, `openRoomCalendar()`,
+  `drawRoomCalendar()` and the `#roomCalModal` dialog were **left in place,
+  unreferenced** — same "unreachable, not deleted" convention as the retired
+  Classroom Roster and CACFP tools elsewhere in this file, kept rather than
+  removed in case the per-room modal view was ever wanted back. ⚠️ **It was
+  — see "Overview" below, added the next day.**
+- **FTE**: kept its richer report-table shape (Enrolled/FTE/seat-days
+  occ.-avail./% full progress bar/6-mo trend, click a room for the
+  per-weekday drawer) rather than rebuilding it down to the design's
+  plainer 5-column table — the director's own choice. Only recolored two
+  spots that had drifted from this session's palette:
+  `_renderCapacityOverviewTable()`'s over-95%-full bar and negative-trend
+  text both moved from a hardcoded `var(--tang)` / literal `#7a2a18` to
+  `var(--ap-deep-tang)`, matching the same deep-tangerine "something needs
+  attention" tone used everywhere else this session touched.
+- `css/admin.css?v=21`.
+
+### Three real bugs found in the live review of the Week/Month/FTE fix above (fixed 2026-08-28)
+
+Reported live with three more screenshots minutes after the fix above shipped.
+Not a color/layout mismatch this time — two of the three were functional bugs,
+one of them long-standing and unrelated to this session's redesign work.
+
+- ⚠️ **Clicking a day cell did nothing — `showDayRosterDetail()`'s panel was
+  rendering inside a `display:none` ancestor.** Its lazy-create path nested
+  the panel inside `#roomCalModal .rcal-dialog` when that element exists —
+  which it always does, since `#roomCalModal` is the pre-existing per-room
+  calendar modal and is only ever unhidden by `openRoomCalendar()`, which
+  neither Day view's "Move a child" button nor the new Month grid's day cells
+  call. `.rcal-overlay.hidden { display: none; }` on the parent hides the
+  whole subtree regardless of the panel's own `position:fixed`, which is a
+  hard CSS rule with no exception — the panel's fixed positioning never
+  mattered once its ancestor stopped being rendered at all. **This is not new
+  to Month view** — Day view's Move button has called the same function since
+  Enrollment & Capacity first shipped, so it was very likely broken the whole
+  time, just never clicked through in a real browser. Fixed by always
+  appending the panel to `document.body`: nothing about `.rcal-overlay`
+  (no `transform`/`filter`) traps `position:fixed` z-index into a sub-context,
+  so the panel still stacks above the per-room modal on the rare path where
+  that modal happens to be open too — the conditional nesting was never
+  buying anything, only risking exactly this.
+- ⚠️ **The FTE table's "% full" was comparing a whole-month number to a
+  single day's capacity.** `_buildCapacityOverviewRows()` computed
+  `pct = enrolled / room.capacity` — but `enrolled` is `curEntries.length`,
+  the count of **distinct children** registered in that room for the whole
+  month, not a same-day headcount. Eleven different children cycling through
+  a 9-seat room across a month (some Mon/Wed/Fri, others Tue/Thu) is normal,
+  not "122% full" — and the Day/Week/Month grids next to it already showed
+  every real day under capacity, which is what made the number read as
+  obviously wrong rather than just high. Fixed by deriving `pct` from the
+  seat-days figures already computed two lines above
+  (`seatDaysOcc / seatDaysAvail`) instead of the distinct-enrollment count —
+  the same daily-average math the day-grids use, so the two can't disagree
+  the way this bug let them. This bug predates this session — verified by
+  diff, this session only touched two color lines in that table before now.
+- **Month's cell colors needed a stronger border, not a different fill.**
+  The pale green/gold/tangerine fills matched the design source's literal
+  hex values, but read as too close to the page's own cream background to
+  register as a flag at a glance. `.ec-month-cell.is-near`/`.is-full` now
+  also set `border-color` to the saturated tone (`--sun`/`--ap-deep-tang`)
+  instead of the neutral tan border every cell started with — the fill
+  stays the same pale tint, the ring around a flagged day is what carries
+  the contrast now.
+- `css/admin.css?v=23`.
+
+### Attendance Board row layout reworked to a 2x2 action grid (2026-08-28)
+
+Reported live with a screenshot of the intended layout, sent mid-turn while
+the EC bugfixes above were still in flight. The five summary tiles (Here
+now / Not in yet / Marked absent / Ratio watch / Allergies present) already
+matched almost exactly — `_abTile()` already built them — except the Ratio
+Watch tile's clear-state value read `'Clear'` where the screenshot wants
+`'OK'`. Fixed as a one-word string change.
+
+The child rows were the real rework: In/Out/Absent/Move used to sit in one
+inline row of four controls; the screenshot shows In and Out stacked in
+one column with their check time printed next to the button, Move and
+Absent stacked in a second column beside it, and the name line carrying a
+day-type pill, an allergy flag, an ABSENT label, and a drop-in badge as
+independent, simultaneously-visible facts rather than one mutually
+exclusive status string.
+
+- **`_abActionsHtml()` rebuilt as two `.ab-actions-col` flex columns**
+  (`[In, Out]` beside `[Move, Absent]`) instead of one inline row. No event
+  wiring changed — `_abBindActions()`'s delegated listeners key off
+  `data-act`/`.ab-move-select`, both still present, so the click/change
+  handlers needed no changes at all.
+- ⚠️ **There is no separate check-in-time vs. check-out-time field to draw
+  on.** `center_headcount_rows()` exposes a single `last_event_at` (the
+  *latest* event, whichever direction), not a pair. So In's time only ever
+  populates while `attendance_status === 'present'`, Out's only while
+  `'left'` — the other side reads `—` rather than a guessed or stale time.
+  A child who was checked in and back out today will show a real time on
+  Out and `—` on In, not both filled in.
+- **The day-type (FULL/HALF) pill needed a new field the head-count RPC
+  doesn't return.** Rather than extend `center_headcount_rows()` — its SQL
+  source isn't committed to this repo, and this file already warns against
+  reconstructing it blind — `_abResolveReg()` (already used for the Absent
+  mark and the Move dropdown) now also returns `dayType` from the matching
+  `registration_dates` row in `allRegistrations`, the same client-side
+  resolution pattern every other admin day-view tool in this file already
+  uses. Verified live via `center_headcount_rows()`'s actual jsonb shape
+  (`dropin, marked, room_id, allergies, child_name, student_id,
+  last_event_at, attendance_status`) before assuming the field was missing,
+  not inferred from the JS alone.
+- **Name-line badges are independent facts, not one exclusive `mark`
+  string.** A child can be FULL-day *and* allergic *and* absent *and* a
+  drop-in all at once; the old `mark` variable could only ever say one of
+  those. `mark` is kept only as the read-only (`!canAct`, staff role)
+  fallback text, where there's no action grid to carry the same
+  information.
+- `css/admin.css?v=24`.
+
+### Absent didn't clear the In/Out display (fixed 2026-08-28)
+
+Reported live: marking a child absent left their In/Out buttons showing
+whatever they were before — a child checked in at 8:59a and marked absent
+minutes later still showed "In · 8:59a" filled green next to "ABSENT" in
+bold deep-tangerine, reading as a contradiction.
+
+`_abActionsHtml()` computed each button's `is-on`/time purely from
+`c.attendance_status`, with no awareness of `c.marked`. Fixed by making
+Absent exclusive with In/Out **on the display**: `isIn`/`isOut` are now
+`false` whenever `marked === 'absent'`, so both buttons read `—` and
+unfilled the moment Absent is on, regardless of what `attendance_status`
+says underneath.
+
+⚠️ **This clears the display only, not the underlying event.** The real
+`child_day_events` check-in row is untouched — `admin_log_child_event()`
+has no delete/void path, and this file has stood against reconstructing
+`center_headcount_rows()`'s query blind for exactly this class of risk.
+Un-marking absent (clicking Absent again) doesn't lose anything: the row
+falls back to `attendance_status` and the real check-in time reappears.
+
+### Enrollment & Capacity: the Move panel was a popup, and the old % cards came back as "Overview" (2026-08-28)
+
+Sent as four screenshots of the design source's own mockup (the same ones
+already read earlier — placeholder room names "Infants/Toddlers/Preschool/
+School Age" confirm it's the mockup, not the live app) plus a direct ask:
+"no popup windows, its to go below." Every one of the four shows a
+"— move a child" panel sitting **in the page flow directly under the
+grid**, pushing content down, not floating over it.
+
+**`showDayRosterDetail()` was a fixed-position, full-screen overlay** —
+`position:fixed;inset:0;background:rgba(0,0,0,.55)` — a real modal, exactly
+what the screenshots say it shouldn't be. Converted to an inline panel:
+
+- CSS dropped the overlay entirely — `.day-detail-panel` is now a plain
+  bordered card (`margin-top`, border, radius, no `position`/`inset`/
+  backdrop) that simply sits wherever it's placed in the DOM.
+- JS: `showDayRosterDetail()` gained a `parentEl` argument — the container to
+  **append the panel into as its own last child** — so "below the grid"
+  literally means "last child of the grid's own container," not a separate
+  floating layer. Day view passes `ecDayContent`, Month view passes
+  `capacityGrid`, and the revived per-room modal below passes `rcalBody`.
+- ⚠️ **One reused DOM node, not one per view — and that's fine.** Whichever
+  view's own `innerHTML =` wipe happens to run while the panel is nested
+  inside it destroys the node along with everything else; the next open
+  just lazily recreates it. Cheap, and none of these views are ever open at
+  the same time, so there's never a case where destroying it drops a panel
+  someone still needs.
+- The close-button listener moved from `document.getElementById('dayDetailClose')`
+  to `panel.querySelector('.day-detail-close')` — the old code looked it up
+  by id *before* the panel was attached to the document, which happened to
+  work only because the panel was unconditionally appended to `body` right
+  there. Once attachment became conditional on `parentEl`, that ordering
+  would have silently failed to bind the listener on a freshly created panel.
+  Caught before shipping, not found live.
+- The success-move handler already refreshed the old room-calendar modal and
+  `renderCapacityOverview()` (Month) unconditionally; it now also re-renders
+  Day view if that's the one currently open — a real gap from before this
+  pass, where a move made from Day view's own Move button wouldn't visually
+  refresh Day view afterward.
+
+**Separately, asked directly: "we also had... cards that gave a percentage
+capacity overview and if you clicked on a card it opened a calendar."**
+That's the exact aggregate `.cap-card` view this session's Month rebuild
+retired — deliberately left unreferenced-but-in-place rather than deleted,
+per the note above. Asked where it should live now; **added back as a 5th
+pill, "Overview"** (own independent month picker, matching FTE's own
+already-established pattern) rather than replacing Month's room-tabs or
+folding it into an existing view — Month answers "what does one room's
+month look like," Overview answers "which rooms need attention this month,"
+and the director uses both.
+
+- `_ecRenderOverview()` is the exact pre-rebuild body of `renderCapacityOverview()`
+  moved verbatim into `admin-enrollment-capacity.js`, targeting a new
+  `#ecOverviewContent` container — same working-days-in-month math, same
+  `bar-green`/`bar-orange`/`bar-red` thresholds (already fixed to a real
+  3-tier distinction earlier this session).
+- **Zero new click-wiring was needed for card → calendar.** `setupRoomCalendar()`
+  (admin-init.js) has called its delegated `.cap-card[data-room-id]` click
+  listener unconditionally since before this session touched any of this —
+  rendering `.cap-card` markup again into a new container was the only
+  thing missing. This is exactly what "left in place, unreferenced" bought:
+  restoring the feature took zero changes to `openRoomCalendar()`,
+  `drawRoomCalendar()`, or `#roomCalModal`.
+- The per-room modal's own day-cell click already called `showDayRosterDetail()`
+  — it now passes `rcalBody` as the panel's `parentEl`, so a move made from
+  *inside* the calendar modal expands below the calendar grid, inside the
+  modal's own scrollable area, rather than reintroducing a fixed overlay
+  inside a fixed overlay.
+
+### Director-authored records — she is signature 1, not a fourth role
+
+For Incident Reports, the open question was how signature 1 works when there
+is no teacher filing the report. **Decided: she signs as signature 1 too** —
+same rule `submit_incident_report` already applies to a teacher ("filing IS
+signing"), just from the office. New RPC `admin_submit_incident_report`
+inserts the report and its `role = 'teacher'` signature from her own name in
+one call; the existing three-signature order-guard trigger
+(`incident_three_signatures.sql`) is **completely unchanged** and enforces
+everything after it exactly as it does for a staff-filed report — the parent
+still has to sign at pickup on a teacher's phone before the director can close
+it. No schema change, no new signature role.
+
+⚠️ **The "+ Write a report" form only captured five of the eleven fields the
+staff app's own incident form does, until 2026-08-28.** `admin_submit_incident_report`
+took `p_body_area`/`p_location`/`p_occurred_at` as parameters from day one, but
+the compose UI in `admin-incidents.js` never rendered controls for them, and
+the RPC had no parameters at all for `body_view`/`body_part`/`witnesses`/
+`first_aid`/`after_notes`/`ratio_note` — six columns `submit_incident_report`
+(the staff/PIN-gated path) has carried since `incident_three_signatures.sql`
+and `incident_kind_and_after_notes.sql`. A report the director filed herself
+printed a visibly thinner record than one a teacher filed, for no reason tied
+to who typed it — the same "when it happened," "where," "what mark," "what
+was done," "how the child was afterward," "who else saw it" and "the ratio at
+the time" a teacher's form always asked for.
+
+Fixed by `admin_incident_report_full_fields.sql` (**applied and verified in
+production 2026-08-28**, same DROP-then-CREATE discipline as the two staff-side
+incident migrations — a named-argument call from supabase-js would otherwise
+match both the old 9-arg signature and a wider one, and PostgREST refuses to
+pick between them). `admin_submit_incident_report` now takes the same six
+extra parameters `submit_incident_report` does and writes all eleven columns.
+The compose panel gained: a date+time picker with the same "Just now / 15 min
+ago / An hour ago / Before lunch" quick chips, a location field, front/back +
+quick-pick body chips (shown only when the kind maps to `injury`, hidden for
+Illness/Other), first-aid chips, an "Since then" checklist, a witnesses
+add/remove list, and a ratio-at-the-time field **prefilled from
+`centerHeadcountAdmin()`** — the same present-children count the staff app
+derives automatically rather than asks for, best-effort so a failed read just
+leaves the field blank instead of blocking the form. Chip/checkbox/witness
+state lives in `_incComposeState`, mutated by direct DOM toggles the same way
+`staff-incident.js`'s `slIncState` is — never by re-rendering the whole tool,
+which would have discarded whatever was already typed into the description or
+action boxes on every click.
+
+### Addenda — how to add to a filed report, since it can't be edited
+
+Raised directly, immediately after the field-parity fix above shipped: once
+"+ Write a report" is saved, the drawer offers **no way to add anything to
+it** — no edit, no append, nothing. That is deliberate at the *signature*
+level (`incident_signatures` rows are append-only by trigger, and
+`incident_three_signatures.sql`'s own comment says "correcting a report means
+the director returns it and the teacher files again"), but `incident_reports`
+itself was never given any path to add information either — not a rewrite,
+just an addition. "Return to the teacher" doesn't help: it flips `status` to
+`returned` and nothing in the staff app has ever read or re-filed a
+`returned` report, so that button was already a dead end before this session.
+
+**Decided: an addendum, not an edit.** `incident_report_addenda.sql`
+(**applied and verified in production 2026-08-28**) adds a new
+`incident_report_addenda` table — one row per note, `incident_id` +
+`note` + `added_by_name` + `created_at`, append-only by the same
+`BEFORE UPDATE` trigger pattern as `incident_signatures`. `admin_submit_incident_report`
+and `submit_incident_report` gain **no** new UPDATE path; the original
+filing's fields never change once written. This mirrors how a real
+incident/licensing record gets corrected — a dated note added to the file,
+never a rewrite of what's already there — and it means a signed record's
+content can never drift from what was actually signed, which is the whole
+point of the append-only signature trigger in the first place.
+
+- **Works at any stage** — before any other signature, after the parent has
+  signed, even after the director has closed the record — because it writes
+  to a different table entirely and never touches the signature order-guard.
+  There's nothing about "the record is closed" that should stop the office
+  from adding a clarifying note to it later.
+- **Gated the same as filing**: `admin_add_incident_addendum` requires
+  `admin_role() IN ('full','restricted')`, not `is_admin()` alone — same
+  reasoning as every other write in this feature (the `staff` admin-portal
+  role is documented read-only).
+- ⚠️ **`incident_print_record()` was extended to return the addenda too**,
+  not just the admin drawer. An addendum the director added has to show up on
+  the document that actually leaves the building — otherwise the office UI
+  and the printed/licensing copy could disagree about what's known. Same
+  function signature, so this was a plain `CREATE OR REPLACE`, not a
+  drop-and-recreate. `incident-print.html`/`incident-print.js` render an
+  "Added since filing" section, shown only when at least one addendum exists
+  — a report with none looks exactly as it did before this change.
+- Parent visibility mirrors the report's own: an addendum is readable by the
+  family only once the underlying report is `approved`, same condition as
+  `incident_reports`' own "parent read own approved" policy — an addendum on
+  a report the family can't read yet stays invisible until the report itself
+  publishes.
+- Verified live: a direct `UPDATE` on an inserted addendum raised the
+  append-only exception (`23514`); `incident_print_record()` on a fully
+  signed test report returned the addendum inside its `addenda` array
+  alongside the report and signatures; all test rows deleted immediately
+  after.
+
+### A staff-filed incident never pushed the director — fixed 2026-08-28
+
+Raised directly: the director should know about a report the moment staff
+files it, not only once the parent has signed at pickup. Tracing the actual
+code turned up two things, not one.
+
+**The real gap:** nothing ever pushed her at all. `apDashDirector`'s "Needs
+you" dashboard widget deliberately filters incident rows to `parentSigned`
+only (she's signature 3, and a row she can't act on teaches her to scroll
+past the queue) — so a freshly-filed report was invisible there by design.
+That's correct for the *dashboard nag*, but the Incident Reports tool's own
+"Awaiting sign-off" tab always showed it immediately, labeled "Waiting on
+parent" — she just had to think to open that tab. There was no push telling
+her a report existed until she did.
+
+Fixed with a new worker route, `/notify-admin-incident`, fired from
+`slSubmitIncident()` in `staff-incident.js` right alongside
+`slNotifyParentOfIncident()` — same send-invoice posture as every other
+sender in `worker.js`: the client sends an incident id and nothing else,
+the worker re-reads the report with the service role and composes the
+notification itself. ⚠️ **Caller auth is a staff PIN check, not a Supabase
+Auth bearer token** (same shape as `/send-staff-broadcast`), because the
+device filing the report is a teacher's phone on the public anon key with no
+admin session to check a role against.
+
+**Deliberately reuses `admin_push_subscriptions` and the existing "Notify
+me" toggle** rather than a second subscription list — a director who
+already turned notifications on for new parent messages (`admin-push.js`,
+`/notify-admin-message`) should not have to find and flip a second switch to
+hear about incidents too. The toggle label and its "you'll be notified"
+copy were updated to say so. Still gated to `full` admins only at
+`/admin-push-subscribe` — that gate was Messages-specific reasoning
+("`restricted` never sees the inbox") that is now only half true (a
+`restricted` admin *can* act on an incident), but it was left alone rather
+than widened without being asked; one subscription list is now serving two
+features on the narrower of the two gates.
+
+⚠️ **A second thing was found while tracing this, and is still open — the
+early PARENT notification this file has long documented may never have
+actually pushed anyone either.** `notify_parent_of_incident()`
+(`incident_three_signatures.sql`) only does `UPDATE incident_reports SET
+parent_notified_at = ...` — no `net.http_post`, no call to `/send-push`
+anywhere in `staff-incident.js`. Every description of this feature elsewhere
+in this file ("stamps `parent_notified_at` early and the push carries no
+detail") describes the *intended* design, not something re-verified against
+the code before now. **Not fixed in this session** — flagged here so it
+isn't lost, and because fixing it needs a design decision this session
+wasn't asked to make: the missing-child alert's no-detail-on-a-lock-screen
+reasoning applies here too, so the push text needs the same care
+`/send-staff-broadcast`'s "opposite requirement" comment gives that one.
+
+`admin_log_fire_drill` is the same shape for Fire Drills: an admin-gated twin
+of `log_fire_drill`, same explicit column allow-list, `drill_date` and the
+conductor still server-side.
+
+**All three new RPCs are gated on `admin_role() IN ('full', 'restricted')`,
+not `is_admin()` alone.** This file documents the 'staff' admin-portal role as
+"Classrooms tab only (read-only roster view)" — `is_admin()` alone would have
+let that role mark attendance, file incidents and log drills, which is a real
+write, not a read-only roster. Verified live in a rolled-back transaction: a
+probe `staff`-role email got `NULL` from `admin_log_child_event`; a probe
+`restricted`-role email succeeded on all three. Client-side, the Attendance
+Board's action buttons are hidden entirely for `currentAdminRole === 'staff'`,
+so the UI doesn't offer a control that would fail.
+
+### Enrollment & Capacity — relocated, not rebuilt
+
+Week and Month sub-views are the original tools' own container markup
+(`#roomSchedContent` / `#capacityGrid` and their controls) physically moved
+into the new `#enrollmentCapacitySection`, with `renderRoomSchedule()` /
+`renderCapacityOverview()` / `initCapacityMonthNav()` / `setupRoomCalendar()`
+**completely unchanged** — same element ids, new home. The old section
+wrappers (`capacityOverviewSection`, `roomSchedSection` in `#tab-daily`,
+`roomCapacityOverviewSection` in `#tab-waitlist`) are **removed from
+`admin.html`** rather than left behind — unlike Roster/CACFP, their content
+relocated rather than being wholesale retired, so an empty shell would have
+served no purpose.
+
+The FTE/Seat-Day sub-view is `renderCapacityOverviewTool()` (unchanged logic)
+given a new optional `targetMonth` parameter, because the design calls for its
+own month picker, independent of Month view's — `_buildCapacityOverviewRows()`
+now computes `curMo`/the 6-months-back trend comparison against whatever month
+is passed in, not always "today."
+
+Day is genuinely new (no prior screen existed at this grain): one row per
+active room for a single date — enrolled/cap, staff needed (`Math.ceil(enrolled
+/ ratio)`, booked registrations only — same "clock-in data is never read" rule
+as Daily Staffing Requirement), a capacity flag, and "Move a child →" which
+opens the exact same `showDayRosterDetail()` panel the Month view's day-cell
+click already does.
+
+`enrollCap` lives under Classrooms → Planning in `AP_TOOLS` (not the top-level
+Planning tab, where its FTE predecessor used to sit) — moving a tool between
+tabs has precedent (`scenario`/`model` moved Finance → Planning earlier).
+
+### Everything applied and verified live, 2026-08-27
+
+`add_classroom_admin_authoring.sql` — `admin_log_child_event`,
+`admin_submit_incident_report`, `admin_log_fire_drill`. Verified post-apply:
+`has_function_privilege` anon=false/authenticated=true on all three; a
+rolled-back functional probe with seeded `restricted`/`staff` admin_roles
+entries confirmed `staff` gets `NULL` and `restricted` succeeds on all three
+(new incident/fire-drill/child-event rows all rolled back, nothing persisted).
+
+`npm test` — 168/168. `npm run build` — `dist/` rebuilt and confirmed to
+contain the new symbols (`admin_log_child_event` etc. in
+`dist/supabase.min.js`; `renderEnrollCapTool`/`enrollmentCapacitySection` etc.
+in `dist/admin.min.js`) before committing — the exact check this file's own
+"it shipped half-live for a day" incident (Bookkeeper tab, above) says to run.
+
+### ⚠️ It happened again the very next day, to this exact tab
+
+`dist/admin.min.js` on `main` shipped with **zero** of this session's symbols
+in it, hours after the PR above merged clean. Not a repeat of the same root
+cause — a *different* concurrent `claude/**` branch's `--theirs` dist
+resolution won and was built from a tree older than this merge. Confirmed
+directly: `git show origin/main:dist/admin.min.js | grep -c enrollCap...` = 0,
+and the bundle's own `__BUILD_VERSION__` banner (`v2.8.12`) didn't match
+`package.json` (`v2.9.0`) — the same mismatch tell as the first incident.
+`admin.html` already had the new markup, so the live site had brand-new
+containers with no JavaScript behind them: every page this session touched
+rendered its header and then nothing.
+
+**The fix is always the same and always this cheap: `git checkout -B
+<branch> origin/main`, `npm run build`, grep the bundle for a symbol only
+your change introduces, push.** No source was wrong; only `dist/` was stale.
+Fixed in a follow-up PR, re-verified against `origin/main` after merge.
+
+⚠️ **This is now the second time in as many days.** With this many `claude/**`
+branches landing on the same afternoon, `--theirs` on `dist/*.min.js` is a
+coin flip that increasingly loses. Anyone shipping a `js/` change this week
+should re-verify `origin/main`'s bundle for their own symbols **after** their
+PR merges, not just before — a clean merge is not proof the bundle is live.
+
+### A concurrent session restored `capacityOverview` to Planning — and that's correct
+
+While this work was in flight, `claude/planning-tab-design-v7aymy` (working
+from a *different* handoff, `design_handoff_planning_market`) put "Room
+Capacity Overview" back as its own Planning-tab sidebar tool — the exact
+entry this session's Enrollment & Capacity merge had retired. Its own
+handoff's screenshots showed it as a standalone Planning tool, so from that
+session's vantage point the retirement was a regression against what it was
+building. **Not reverted here.** It restored the entry as a second mount of
+the same `renderCapacityOverviewTool()` this session's FTE/Seat-Day sub-view
+already uses (not a duplicate implementation), with `containerId`/`idPrefix`
+parameters so the two mounts' drawer/row ids can't collide. Both now coexist:
+the same table lives at Classrooms → Planning → Enrollment & Capacity → FTE/
+Seat-Day *and* at Planning → Enrollment Outlook → Room Capacity Overview,
+reading the same function, never able to disagree. Worth remembering: two
+handoffs for the same tab landing the same week will not always agree with
+each other, and the fix is to make both true rather than pick a winner
+silently.
+
+### Care Calendar redesign (2026-08-27, from `design_handoff_classroom_tab_full`)
+
+A second, larger handoff superseded the first — it added **Records** (Care
+Calendar, Family Directory, Missing Care Calendar) to the same Daily/Planning
+consolidation, previously explicitly out of scope. Building all three at once
+was declined in favor of one screen at a time, starting with Care Calendar —
+lowest risk, since it has no PII-editing surface (that's Family Directory,
+still to come).
+
+**What changed:** `allRegistrationsSection`'s 12-column table (Submitted,
+Entered By, Parent, Email, Phone, Child, Room, Dates, Full/Half, Bill,
+Discount, Actions) → 5 columns (Parent, Child/Room, Pattern, Bill, Actions).
+Parent's phone (or email, if no phone) now sits under the name instead of its
+own column; discount sits under the bill amount instead of its own column;
+the per-date pill list is replaced by a computed weekday-pattern summary.
+
+**Pattern is a real computation, not a copy of the prototype's placeholder
+text.** `_regPatternInfo()` (admin-calendar.js) buckets a registration's
+confirmed (non-waitlisted) dates by weekday, groups them into ISO weeks by
+each date's Monday, and calls a weekday "fixed" only if it's active in
+nearly every week the registration spans (one missed week tolerated, e.g. a
+closure) — otherwise the summary says "No fixed pattern" rather than
+implying a regularity that isn't really there. Day type (Full/Half/Mixed)
+and the month's day count are read off the same date set, so the summary can
+never disagree with what "Edit bill" is charging for.
+
+**Edit Days and Edit Bill stayed the existing modals, not the design's inline
+row-expansion.** The 📅 action still opens `openEditDaysModal()` unchanged —
+same calendar grid, same add/remove-day handlers, same billing recompute
+(`_recomputeAndShow`), same parent push notification, same admin audit log.
+That logic is billing-critical and already correct; relocating its rendering
+into an inline per-row panel would have meant either duplicating
+`editDaysCalGrid`/`editDaysBody` (real id-collision risk the moment two rows
+are open) or rewiring the whole flow to a dynamic container, for a
+presentational difference only. The trade was made once, explicitly, rather
+than silently: full fidelity to the prototype's specific interaction was
+given up in favor of zero risk to a tested, correctness-critical flow.
+Revisit if that trade turns out to be the wrong one.
+
+`npm test` — 182/182 (grew since the Daily/Planning session — other work
+landed tests of its own in between). `npm run build` — `dist/` rebuilt and
+re-verified against `origin/main` after merge, per the incident above.
+
+### Family Directory redesign (2026-08-27/28, from `design_handoff_classroom_tab_full`)
+
+Second of the three Records screens, after Care Calendar. Most of the
+prototype's per-child field list — photo, name, `type="date"` DOB, room,
+allergies, photo release, notes — turned out to already exist in
+`renderModalChildRows()` almost exactly as specified; the real deltas were
+the list view's button count, one confirmed live bug found while touching
+this code, and a genuinely new feature (Documents).
+
+**List → card actions: 5+ buttons → Edit, Calendar, and a "⋯" menu.**
+`renderFamiliesList()`'s per-row Archive/Restore, Lock/Unlock Reg,
+Login-unlock and Delete buttons moved into a `.fm-kebab-menu` dropdown;
+Edit and Calendar stay visible (the handoff's "one Edit action instead of
+5 buttons"). ⚠️ **Every existing button class and its delegated handler in
+`setupFamilies()` is untouched** — only the markup that wraps them moved.
+That was deliberate: the archive/lock/delete logic is already correct and
+already logs to `admin_audit_log`, so the redesign only needed to relocate
+buttons, not re-implement what they do. The kebab toggle/close-on-outside-
+click/Escape wiring is new, added ahead of the existing per-button checks
+in the same delegated `document` click handler rather than a second one.
+
+**FS21 fixed while in this file — allergies dropped only on the CREATE
+path.** CLAUDE.md has carried this as open since the fourth sweep:
+`saveFamilyModal()`'s CREATE branch passed `addStudent()` only
+name/dob/room/discount/photo, while the UPDATE branch a few lines below
+also passed `recurringDays`/`allergies`/`careNotes`/`photoRelease`. A child
+added while creating a brand-new family started with no allergy record and
+no `allergies_reviewed_at` stamp — a safety field silently dropped, not a
+convenience one. Fixed by mirroring the UPDATE branch's four fields into
+the CREATE branch's `addStudent()` call. The severity note this file
+already carried (0/150 live students were ever created through this path,
+so latent rather than active) is now moot — the path is fixed, not just
+documented as risky.
+
+**Documents — built as real per-child file storage, not a placeholder.**
+New private bucket `child-documents` (`add_child_documents_bucket.sql`,
+**applied and verified live 2026-08-27/28**: `pg_policy` inspection
+confirmed the single policy is scoped to `authenticated` + `is_admin()`,
+`FOR ALL`, no anon or parent access at all). ⚠️ **Deliberately no metadata
+table.** One folder per child, named by `students.id` — `listChildDocuments()`
+reads `storage.list(studentId)` directly, so there is nothing to keep in
+sync if a file is removed from the Supabase dashboard instead of the app,
+unlike a join-table design that could silently orphan a row. This mirrors
+`child-profile-photos`' existing parent-facing upload path
+(`uploadChildProfilePhotoAsParent`), which already scopes by
+`<studentId>/...` for exactly the same folder-based-RLS reason — Documents
+just doesn't need the parent half of that policy, since this bucket has none.
+- **Admin-only, unlike the photo bucket, on purpose.** The handoff's
+  Documents section is office paperwork (immunization records, signed
+  forms), not something the redesign asked to expose in the parent app.
+  Adding a parent-read policy later is a strictly additive change if it's
+  ever wanted — nothing here forecloses it.
+- **"📷 Scan document" is a camera-capture file input** (`capture="environment"`,
+  `accept="image/*"`), and "⬆ Upload file" is a plain file input
+  (`image/jpeg|png|webp`, `application/pdf`). There is no OCR or actual
+  scanning pipeline — "scan" means "take a photo with the device camera,"
+  which is what capture-attribute file inputs actually do on a phone
+  browser, and is the honest, buildable interpretation of the handoff's
+  copy rather than a bigger feature nobody asked for.
+- **Upload/remove write immediately, not deferred to Save.** Unlike the
+  profile photo (which stages deletes in `_fmPhotosToDelete` until the
+  family record itself saves successfully, so a cancelled edit can't orphan
+  a still-referenced path), a document has no DB row pointing at it to keep
+  in sync — there's nothing for an unsaved edit to leave inconsistent, so
+  it writes straight through.
+- **Gated on the child already being saved** (`child.id` must exist) — a
+  child row added in the modal but not yet saved has no id to fold into a
+  storage path, so its Documents block shows "Save this child first, then
+  reopen Edit to attach documents" instead of controls that would fail.
+
+**Also fixed in passing:** the PIN fields' `maxlength="4"` didn't match the
+`/^\d{4,8}$/` validation already enforced in `saveFamilyModal()` — an admin
+literally could not type a 5–8 digit PIN the app would otherwise accept.
+Bumped to `maxlength="8"` in both fields, with the placeholder text updated
+to say "4-8 digits" instead of "4-digit" throughout.
+
+`npm test` — 182/182. `npm run build` — `dist/` rebuilt and re-verified
+against `origin/main` after merge, same discipline as Care Calendar above
+(this is now the standing practice for every `claude/**` merge on this repo,
+not just the two sessions that got burned by it).
+
+---
+
 ## Design handoff build — staff, parent, director (2026-08-16)
 
 Built from `Parent_communication_expansion.zip` (staff app, parent app, director
@@ -1450,6 +2762,21 @@ note is now **disproven** — they are live.
 - **Don't run two `claude/**` branches editing shared files at once** — that caused a
   silent revert of a `supabase.js` line and the version-conflict merge failures. Sync
   with `main` before pushing.
+- **⚠️ The MCP `execute_sql` tool does not share session/transaction state across
+  `;`-separated statements in one call, at least not reliably** — `set_config(...,
+  true)` (or even `false`) in one statement was invisible to `admin_role()` in the
+  next statement of the *same* call, including inside an explicit `BEGIN … ROLLBACK`
+  block. A test built that way silently inserted a real row (the RPC's own guard
+  returned early on what looked like a failed impersonation, but the surrounding
+  `BEGIN`/insert/`ROLLBACK` shape masked that nothing had actually rolled back what
+  a *different*, earlier statement in the chain had committed) and it sat live in
+  `incident_reports` for the rest of the session before being found and deleted.
+  **Do the whole impersonate-and-call sequence in ONE `SELECT`** (a `WITH cfg AS
+  (SELECT set_config(...))` CTE feeding the RPC call in the same statement, as this
+  file's own applied-migration verification blocks now do) — never split
+  `set_config` from the call it's meant to gate across separate statements, and
+  never trust "the result looked like null/failure" as proof nothing was written.
+  Re-query the table afterward to be sure, every time.
 
 ---
 
@@ -1690,6 +3017,1157 @@ Set as Cloudflare Pages environment variables and Supabase Edge Function secrets
   `scripts/generate-vapid-keys.js`; the public key is also pasted into
   `js/push-notifications.js` and `js/staff/staff-push.js`.
 - `FINANCE_API_KEY` — shared secret for the `finance-summary` edge function (see below); same value must be set as `DAYCARE_API_KEY` on the ChMS side
+- `STAX_API_KEY` / `STAX_ENVIRONMENT` — Stax (fattmerchant) Core API bearer key, server-side only, never sent to the browser — see below
+- `STAX_WEB_PAYMENTS_TOKEN` — the SEPARATE client-safe token Stax.js/Bolt needs in the browser (Stax dashboard → Settings → Web Payments); NOT the same value as `STAX_API_KEY`, see below
+- `STAX_WEBHOOK_SECRET` — a value **we choose**, embedded as a `?secret=` query param on the webhook URL registered with Stax. Stax has no signing scheme of its own; see below.
+
+---
+
+## Stax payment processor — embedded checkout built, awaiting a real browser test (2026-08-26)
+
+The center is evaluating Stax alongside the already-live Authorize.net integration
+(`create-payment-session` / `authorizenet-webhook` / `admin-refund-payment` /
+`reconcile-anet-payments`) — **both stay in place; this is not a replacement.**
+Nothing about the Anet flow changed in this session.
+
+**Was blocked on Stax's side, now cleared.** Earlier the same day, `GET /merchant/{id}`
+for the sandbox merchant (`15904290-f3c8-4c6d-8d4d-fd2a953ce869`) returned
+`gateways: []`, `gateway_type: null`, `vendor_keys: null`, `activated_at: null` and
+`POST /payment-method` failed every time with `{"errors":{"vaultLookup":["Failed to
+determine vault vendor for merchant account"]}}`. Support was emailed; their
+activations team attached a test gateway the same day. Re-checked live:
+`gateway_type` is now `"TEST"` and `gateways` is non-empty.
+
+**Full server-side flow verified against the real sandbox, end to end:**
+`POST /customer` → `POST /payment-method` (vaulted the documented test Visa
+`4111 1111 1111 1111` against that customer, no more `vaultLookup` error) →
+`POST /charge` (`{payment_method_id, customer_id, total, pre_auth, meta}`) → got back
+`{"success": true, "id": "...", "status": "SUCCESS", ...}`. That is exactly the request
+shape `charge-stax-payment` sends and the response fields it reads — **no code changes
+were needed**, the scaffolding written blind against the API reference turned out
+correct.
+
+**Scaffolding is in place** (`create-stax-charge`, `charge-stax-payment`,
+`stax-webhook` in `supabase/functions/`, plus `add_stax_payment_tracking.sql` adding
+`families.stax_customer_id`). It mirrors the Authorize.net posture exactly — request
+body carries only an invoice id, the amount charged is always recomputed server-side
+from `billing_invoices`/`billing_payments`, ownership is checked via
+`parent_family_ids()`, and raw card data is meant to never reach this server (Stax.js/
+Bolt tokenizes client-side into a `payment_method` id, same PCI-SAQ-A goal as Accept
+Hosted). `billing_payments.processor`/`processor_transaction_id` are already
+processor-agnostic (added for Anet), so Stax payments just use `processor = 'stax'` —
+no new payment-table columns needed.
+
+### Embedded checkout — built this session, not yet run in a real browser
+
+`portal-billing.js` now has a second payment flow (`pbStartStaxPayment` onward) that
+embeds Stax.js/Bolt directly, instead of a hosted-page redirect: the card-number and
+CVV fields are Stax's own tiny iframes, mounted into `#pbStaxCardNumber` /
+`#pbStaxCardCvv` — divs **this app owns**, inside a modal (`#pbStaxModal` in
+`portal.html`) styled with the portal's own design tokens. Everything except those two
+fields — the layout, the amount shown, the Pay button, the receipt email that follows —
+is this app's own, not Stax's. That is the actual point of comparing the two: not just
+"does Stax work" but "do we get more control over how it looks and what the receipt
+says" — Authorize.net's Accept Hosted page is Anet's own document inside an iframe we
+don't control the inside of; Stax.js is the opposite shape.
+
+- **Hidden from every real family by default.** `pbStaxTestEnabled()` only turns the
+  second "Pay … with Stax (test)" button on when `?staxtest=1` was on the URL this tab
+  loaded with (then sticks in `sessionStorage` for the tab). No admin role, no settings
+  row — a normal parent visiting `portal.html` never sees it. This is deliberate: the
+  auto-merge workflow (`.github/workflows/auto-merge-claude.yml`) puts every push to a
+  `claude/**` branch straight into production, so a payment-flow comparison built for
+  internal evaluation must not be reachable by a real family who has no reason to be
+  asked "which processor?" A person running the evaluation adds `?staxtest=1` once on
+  their own account/invoice.
+- **A real bug was caught and fixed while building this.** The `create-stax-charge`
+  scaffolding from earlier returned `staxPublicKey: apiKey` — literally the server-side
+  `STAX_API_KEY` bearer key — to the browser. Stax's own docs confirm the browser needs
+  a *separate* client-safe token ("Website Payments Token", from the Stax dashboard,
+  Settings → Web Payments) for Stax.js, distinct from the Core API bearer key. Fixed:
+  the function now reads a new secret, `STAX_WEB_PAYMENTS_TOKEN`, and returns that
+  instead. Never reintroduce the old shape.
+- **Receipts now match Anet's, on purpose.** `charge-stax-payment` sends the identical
+  branded HTML receipt `authorizenet-webhook` sends (same Resend secrets, same
+  template) — a family paying by Stax should see the same-looking receipt as one paying
+  by Authorize.net, not a Stax-branded one. Fires only on a genuinely new charge record
+  (never the idempotent-duplicate retry path), same rule as the Anet one.
+- **Card-field mount config, expiration handling, and the `.tokenize()` call are all
+  written from Stax's own documented code samples**
+  (`docs.staxpayments.com/docs/accepting-credit-card-payments-on-your-website`,
+  `/docs/tokenizing-a-credit-card`) — number/CVV are mounted iframes, expiration
+  month/year travel as plain (non-tokenized) fields in the `.tokenize()` call, per
+  Stax's own sample. **None of this has run in an actual browser.** This session has no
+  way to obtain a real `STAX_WEB_PAYMENTS_TOKEN` (dashboard-only) to test against —
+  only the server-side Core API calls (customer/payment-method/charge, done via curl)
+  were verified live. Before this is anything but an internal comparison tool: set
+  `STAX_WEB_PAYMENTS_TOKEN`, open `portal.html?staxtest=1` on a real test family
+  account, and click through an actual card entry.
+- ~~`stax-webhook`'s signature/auth scheme is still an unconfirmed placeholder~~ —
+  **resolved and verified live 2026-08-27, see the section below.** It only matters
+  for refunds/disputes; the charge path above doesn't depend on it.
+
+**Historical test result, not a security approval:** real sandbox calls established
+the request/response shape, but did not prove concurrency safety, atomic recording,
+webhook authenticity, or launch readiness. The 2026-08-27 hardening migration and
+function rewrites supersede the earlier "verified sound" wording. Treat the flow as
+internal-only until those changes are deployed in order and tested.
+
+**Production gate (2026-08-27):** both parent Stax endpoints require
+`STAX_PAYMENTS_ENABLED=true` **and** `STAX_ENVIRONMENT=production`. This is
+intentional: the previously documented credentials belong to a sandbox/test
+merchant, and a sandbox approval must never be recorded as a real tuition payment.
+
+### Deployed and live-tested (2026-08-26)
+
+`create-stax-charge` and `charge-stax-payment` were deployed to Supabase (they only
+existed as committed source before), `add_stax_payment_tracking.sql` was applied
+(`families.stax_customer_id` now exists live), and both secrets
+(`STAX_API_KEY`/`STAX_WEB_PAYMENTS_TOKEN`) were set. First real click-through against
+`portal.html?staxtest=1` (a throwaway test family, `$5.00` test invoice) got both
+payment buttons rendering correctly, but clicking "Pay with Stax (test)" failed
+immediately with **"Could not load the Stax payment library."**
+
+⚠️ **The cause was this repo's own CSP, not Stax.** `_headers`' `script-src` only
+allowed `cdn.jsdelivr.net` / `static.cloudflareinsights.com` — `staxjs.staxpayments.com`
+was never on the allowlist, so the browser silently blocked the `<script>` tag
+`pbLoadStaxJs()` injects. Same story as R25 (Google Fonts) and the home-page Maps
+embed: a `frame-src`/`script-src` miss looks identical to a real bug from the JS side,
+and only the CSP tells them apart. Fixed in **both** `_headers` and `worker.js`
+(verified byte-identical after editing, per this file's standing rule) by adding:
+- `script-src`: `https://staxjs.staxpayments.com` (loads the library itself)
+- `connect-src`: `https://apiprod.fattlabs.com`, `https://fattqueryprod.fattlabs.com`,
+  `https://transactions.fattlabs.com` — read directly out of `staxjs-captcha.js`'s own
+  bundled source (`grep`'d for `fattlabs.com`/`fattmerchant.com` references) rather than
+  guessed from docs, so this list is exactly what the library itself calls.
+- `frame-src`: `https://staxjs.staxpayments.com`, `https://omni.fattmerchant.com` — the
+  two candidate hosts for the mounted card-number/CVV iframes; `omni.fattmerchant.com`
+  is confirmed live (it's the `merchant_location_descriptor` in the `/charge` response
+  verified earlier this session), `staxjs.staxpayments.com` added defensively since the
+  library is loaded from there.
+
+**Re-tested — the script-load fix worked, and surfaced a second, separate CSP miss.**
+The modal now renders with the app's own styling (badge, title, amount, layout) instead
+of erroring immediately, confirming `staxjs.staxpayments.com` was the only problem with
+the *outer* library. But the card-number/CVV fields themselves rendered as a
+refused-iframe placeholder — a blank gray box with a broken-page icon, Chrome's tell for
+"this iframe embed was blocked," not a missing-image icon.
+
+⚠️ **The actual vaulting host is `core.spreedly.com`, not a Stax-branded domain at
+all.** Stax.js loads Spreedly's own hosted-fields library
+(`core.spreedly.com/iframe/iframe-v1.min.js`) to collect the card number and CVV —
+found by grepping `staxjs-captcha.js`'s bundled source for `spreedly`, since nothing in
+Stax's own docs names this. Added to `script-src`, `connect-src`, and `frame-src` in
+both `_headers` and `worker.js` (re-verified byte-identical after editing). This is the
+lesson to keep: a third-party embedded-payments library can itself depend on a further
+third party for the actual sensitive-field vaulting, and that dependency has to be
+found by reading the library's own bundle, not by trusting its documentation.
+
+**Re-tested — Spreedly wasn't even the real problem.** The card fields still failed the
+same way ("flash of what might be real fields, then reverts to a blocked placeholder"),
+but this time the browser console was captured directly, and it told the actual story
+`core.spreedly.com` never could:
+
+```
+Vendor lookup complete: using BlockChyp
+Failed to execute 'postMessage' on 'DOMWindow': The target origin provided
+('https://test.blockchyp.com') does not match the recipient window's origin ('null').
+```
+
+⚠️ **Stax.js bundles support for several possible vault backends (BlockChyp, Spreedly,
+NMI, Spreedly-adjacent others), and which one a given merchant's gateway actually uses
+is a runtime fact, not something readable from the library's source or from Stax's
+docs.** `core.spreedly.com` was a reasonable-looking find from grepping the bundle, and
+it was even real — it's genuinely one of the vendors Stax.js supports — it just is not
+the one *this* merchant's TEST gateway happens to route through. The iframe's real
+target was `https://test.blockchyp.com`; blocked by `frame-src`, it never navigated
+there and stayed at origin `'null'`, which is exactly why `postMessage` to it failed
+and why the field visually "flashed" (Chrome briefly shows the frame shell) before
+reverting to the blocked-content placeholder.
+
+A secondary finding from the same console capture: Stax.js also unconditionally loads
+Google's reCAPTCHA (`www.google.com/recaptcha/api.js`) for fraud prevention, also
+blocked by `script-src` (handled gracefully by the library so far, but still a real CSP
+violation worth fixing).
+
+Added `https://test.blockchyp.com` + `https://api.blockchyp.com` to `frame-src` and
+`connect-src`, and `https://www.google.com` to `script-src`, in both `_headers` and
+`worker.js` (re-verified byte-identical). Left the Spreedly entries in place — harmless
+if unused, and this vendor selection could plausibly differ for another environment
+this project runs in.
+
+**The real lesson: for a vendored library whose actual runtime behavior depends on
+server-side merchant configuration, static analysis of its bundle can only ever
+propose candidates — the definitive host list has to come from watching a live
+browser session actually attempt the flow.** Two fixes based on reading the bundle
+both missed; the one based on the browser console got it in one. Still not re-tested
+after this third fix.
+
+### Billing rollup, itemization, saved cards, and a verified refund webhook (2026-08-27)
+
+- **Prior-balance rollup.** `create-payment-session` (Authorize.net) and
+  `create-stax-charge`/`charge-stax-payment` (Stax) now charge the anchor invoice's own
+  balance **plus** any still-unpaid earlier month, not just the one invoice a parent
+  opened. `computeFamilyDueSet()` builds the oldest-first list of unpaid, *issued*
+  (`sent_at` set) invoices through the anchor month; `allocateAcrossDueSet()` /
+  `allocateAcrossPaymentRows` (webhook side) spreads one settled payment across all of
+  them, capping each at that invoice's own remaining balance. Each function duplicates
+  this pair rather than sharing a module — this repo's edge functions have no shared
+  import path between them.
+- **Itemized invoices, both processors.** `compute_family_month_charges_itemized()`
+  (new SQL function, `add_family_month_charges_itemized.sql`) is the *exact same* CTE
+  chain as `compute_family_month_charges()`, stopped one step earlier to return one row
+  per child instead of a single total — so itemization can never drift from the real
+  bill. Verified against real production families: the itemized sum matches the
+  aggregate total exactly, including a family with an active discount. Authorize.net
+  gets real `lineItem` entries on the Hosted Payment Page; Stax gets a `lineItems`
+  array for the app's own modal to render (not yet wired into the visible portal UI).
+- **PCI-compliant saved cards (Stax only so far).** `add_stax_saved_card.sql` adds
+  `families.stax_default_payment_method_id` / `_card_last_four` / `_card_brand` — only
+  Stax's own opaque vault reference plus the two PCI-permitted display fields, never
+  card data. `charge-stax-payment` accepts `useSavedCard` (charge the card on file) and
+  `saveCard` (remember a fresh one).
+
+⚠️ **The rollup introduced a real bug, found and fixed the same session.** Splitting
+one charge across several invoices suffixes each `billing_payments` row's
+`processor_transaction_id` with `-inv<id>`, so a refund/void webhook naming the *bare*
+original transaction id matched zero rows — a refund of a rolled-up charge would
+silently fail to record. Both webhooks now use `findOriginalPaymentRows()` (matches the
+bare id OR any `<id>-inv*` suffix) and reverse every row a charge was split into,
+oldest-invoice-first.
+
+### ✅ `stax-webhook` is real now — verified against a live registered webhook, not docs
+
+Three iterations, each corrected by an actual delivery rather than more reading:
+
+1. First draft (this file, pre-2026-08-27): a placeholder `X-Stax-Webhook-Secret`
+   header and a guess at a `refund`/`void` event name with a nested
+   `child_transactions[]` shape. **Never deployed against a real webhook.**
+2. Read Stax's actual API reference (`docs.staxpayments.com/reference/*`): the webhook
+   resource has no `secret` field at all — `{id, user_id, merchant_id, reference_id,
+   url, event, created_at, updated_at, deleted_at}` — and creation takes only
+   `target_url` + `event`. Stax's own doc: "you can generate a secret key in your URL
+   ... to add additional security" — **the secret is a query param WE embed in the
+   registered URL, not anything Stax computes or signs.** Rewrote to check
+   `?secret=` on the incoming request instead of a header. Registered for
+   `update_transaction` per the refund/void endpoint docs describing a "child
+   transaction added to the parent." **This event never fired, for a charge, a
+   refund, or a second refund — tested live, zero deliveries.**
+3. Registered for `create_transaction` instead: fired within ~1 second for a real
+   charge, and fired again for a refund of that same charge. **A refund/void delivers
+   as its own `create_transaction` event** — Stax treats a reversal as a new
+   transaction being created, not the parent being updated — and the POSTed body is
+   that reversal transaction directly (top-level `type: "refund"`/`"void"`,
+   `reference_id` = the original charge's id, `total` = the amount), not nested under
+   a parent's `child_transactions[]` the way the refund *endpoint response* shape
+   (used only by the earlier drafts) had suggested.
+
+**The delivery shape was verified live**, not just inferred: charged a real test invoice via
+the Core API, inserted the matching `billing_payments` row, issued a real sandbox
+refund, and confirmed `stax-webhook` recorded the correct negative row
+(`refund_of_payment_id` set, amount matching) and left the invoice status correct.
+Test rows removed afterward — the live production catalog carries no trace of this
+test. That test did not prove authenticity or atomic multi-row recording: the old
+implementation trusted the webhook payload after only a URL-secret check and wrote
+split reversals sequentially. The hardened webhook now re-fetches the transaction
+from Stax's authenticated API and calls one transactional database function.
+
+🚨 **Launch blocker: `stax-webhook-admin-tmp` remains deployed** to
+register the webhook and drive these tests via Stax's Core API (gated by a hardcoded
+token, not a project secret, precisely because it was meant to be short-lived). **It
+must be deleted from the Supabase dashboard.** The repository includes an inert 410
+replacement as an emergency containment step, but the live function must be disabled
+or deleted and its hardcoded token treated as compromised before launch.
+⚠️ Still true as of the fixes below — confirmed still `ACTIVE` in `list_edge_functions`,
+still needs a human to delete it from the dashboard (no MCP delete-function tool exists).
+
+### External payments security review — fixes applied 2026-08-28
+
+A second AI agent's independent security review of the Stax work above was checked
+claim-by-claim against the live catalog rather than taken on faith (several of its
+"live evidence" claims were verified with direct queries before acting on them).
+Two of its findings were real and fixable without a production/Stax go-live decision;
+those were fixed this session. The two findings that require an actual production
+Stax merchant (pinning/verifying the merchant id behind `STAX_API_KEY`, and running a
+real `create_transaction` webhook test against production) were correctly identified
+by the review as pre-launch gates, not live incidents — `charge-stax-payment` already
+refuses to run unless `STAX_ENVIRONMENT === "production"`, which it is not yet, so
+there was nothing to fix today. Revisit those two before any real Stax launch.
+
+- **`add_day_to_invoice_by_email` was executable by every `authenticated` session,
+  including a parent.** `fs5_phase1_revoke_add_day_anon.sql` (2026-08-11) revoked
+  `anon`/`PUBLIC` and clamped the delta non-negative, but left `authenticated` with
+  EXECUTE. That was fine while every `authenticated` caller was an admin; it stopped
+  being fine the same day this repo shipped `parent_portal_option_b_accounts_APPLIED.sql`
+  — parents now hold real Supabase Auth JWTs too. The function still takes an arbitrary
+  `p_email` (not the caller's own family), has no admin-role check, and no status guard
+  (writes to a `finalized`/`paid` invoice same as a `draft`). A signed-in parent could
+  have called it directly against PostgREST to inflate any other family's issued
+  invoice. **Not Stax-specific and needed no launch decision** — fixed immediately by
+  `20260828030000_revoke_add_day_invoice_authenticated.sql`, which revokes
+  `authenticated` too (service_role only now). Safe because `js/`/`supabase/` have zero
+  remaining `.rpc('add_day_to_invoice_by_email')` call sites (superseded by the
+  recompute-only billing rewrite the same day as the original fix) and
+  `pg_stat_statements` still shows the same 30 historical `authenticated` calls
+  `fs5_phase1` recorded in 2026-08-11 — zero calls since. Verified post-apply:
+  `has_function_privilege` authenticated=false, anon=false, service_role=true.
+- **Leftover sandbox test data was live in production**, exactly as the review's "live
+  evidence" claimed and contrary to this file's own "no live trace" note (which
+  describes a *different*, later webhook test, not this one): a synthetic family
+  (`stax-eval-test@timothystl.org`, zero students), its `stax_customer_id`, a `$5.00`
+  `billing_invoices` row, and the matching `billing_payments` row from the 2026-08-26
+  first click-through — with no `payment_charge_locks` row, confirming it predated the
+  hardening. All four deleted; verified zero remaining rows referencing that family or
+  that Stax customer/payment.
+- **A Stax `PENDING` charge (HTTP 202) was silently shown to the parent as a plain
+  failure.** 202 is a 2xx status, so `supabase-js`'s `functions.invoke()` resolves it as
+  `data`, not `error` — `chargeStaxPayment()` in `js/supabase.js` just returned the body,
+  and `portal-billing.js`'s `chargeResult.success !== true` check discarded the server's
+  real `{error: "...still processing...", ambiguous: true}` message in favor of a
+  hardcoded `'Payment was not confirmed. Please try again.'`. The charge-lock already
+  prevented a double charge; the parent was just told the wrong thing and had no reason
+  not to retry immediately. Fixed by making `chargeStaxPayment()` recognize this shape
+  and throw the server's own message (both portal-billing.js call sites already surface
+  `e.message`, so no UI-layer change was needed). Guarded by a new test:
+  `'client never reads a Stax PENDING (HTTP 202) response as a confirmed charge'`.
+- **Migration history had drifted from what was actually applied** — the review found
+  the live catalog recorded `harden_stax_payments` as
+  `20260827225514_harden_stax_payments`, while the repo had it committed as
+  `20260827193636_harden_stax_payments.sql`. Content was diffed against the live
+  function bodies first and matched exactly (`stax_prepare_charge` etc.) — this was pure
+  filename/history drift, not a functional gap. Renamed to match the applied version,
+  per this file's own standing rule that a migration's filename should match what
+  actually ran.
+- **Not fixed, and don't try to fix from the code alone:** pinning/verifying the Stax
+  merchant id, and a production `create_transaction` webhook test. Both need a live
+  production Stax merchant, which does not exist yet — see the launch-blocker note
+  above and the "Production gate" note earlier in this section.
+
+`npm test` — 183/183 (added the one new guard above). `npm run build` — `dist/`
+rebuilt; `dist/supabase.min.js` grepped for `Your payment could not be confirmed` to
+confirm the fix actually shipped in the bundle portal.html loads, per this file's own
+"it shipped half-live for a day" lesson.
+
+### Second-round follow-up review — reconciliation job added, two items scoped out (2026-08-28)
+
+A follow-up pass from the same external reviewer re-checked the fixes above and raised
+four more items. One was newly built; two are documented, correctly-identified gaps
+this session did not attempt; one is a migration-history footnote.
+
+- **High — production webhook still unverified.** Same as the merchant-id pinning gap
+  above: needs an actual production Stax merchant, which does not exist yet. Nothing to
+  fix in code. Revisit together with that item before any real Stax launch.
+- **Medium — no scheduled Stax reconciliation job — FIXED.** New function
+  `reconcile-stax-payments` (deployed) + `schedule_stax_reconciliation.sql` (applied,
+  runs every 30 minutes via the same pg_cron + pg_net pattern as
+  `schedule_anet_reconciliation.sql`). It finds `payment_charge_locks` rows stuck
+  `pending`/`ambiguous` for more than 15 minutes with no webhook confirmation — the
+  exact gap the review named: `payment_charge_locks_active_family_idx` blocks that
+  family from paying online again until something resolves the lock.
+  - ⚠️ **Written defensively because it is itself unverified against a live merchant.**
+    Stax's documented `GET /transaction` list/filter endpoint is used ONLY to find
+    candidate transaction ids for a family's customer id in a time window — nothing
+    from that response is ever trusted for a decision. Every candidate is re-fetched
+    through `GET /transaction/{id}`, the exact same single-transaction call
+    `stax-webhook` already verifies real production data through, and only that
+    response's own `success`/`meta` fields decide anything. If the list endpoint's
+    filters don't behave as documented, the worst case is zero candidates found and
+    the existing gap simply persists one more cycle — nothing is corrupted, because
+    `stax_set_charge_state()` itself already refuses to downgrade a lock once recorded
+    `processor_succeeded`. Smoke-tested once against production (zero stale locks
+    existed, so it returned `{candidates:0,repaired:0,released:0}` and logged one
+    `admin_audit_log` row) — that confirms it deploys and runs cleanly, **not** that
+    the list endpoint's filters actually work; watch the first real recovery closely.
+  - A lock still unmatched after 2 hours (`RELEASE_HOURS`) is marked `failed` — not in
+    the blocking set — so a family whose charge attempt genuinely never reached Stax
+    (a network failure before Stax received it) is not locked out indefinitely by this
+    job's own caution.
+  - Reuses `stax_set_charge_state`/`stax_finalize_charge` — the exact same RPCs
+    `charge-stax-payment` and `stax-webhook` already call. No new billing logic.
+- **Medium — CSP still allows `unsafe-inline`/`unsafe-eval` — scoped out, not a
+  same-session fix.** Confirmed still true, and confirmed why it isn't a quick
+  tightening: this app has 431+ inline `style="..."` attributes across the HTML alone
+  (many more are generated by JS template-literal rendering, e.g. every admin table
+  row), 17 inline `<script>` blocks across `admin.html`/`index.html`/`portal.html`/
+  `staff.html`/`clockin.html` used for build-time config injection, and at least one
+  CDN library (`xlsx`, per R10) that may depend on `unsafe-eval`. Removing either
+  safely needs either converting all of that markup away from inline styles/scripts,
+  or a per-request nonce — which this static, no-build-step deploy
+  (`assets.directory "."`, see the Development workflow section) cannot generate,
+  since a nonce has to be unique per response and nothing here renders HTML per
+  request except the narrow `run_worker_first` SSR path for `/`. Tightening this is a
+  real, multi-page refactor that needs its own scoped session with a reviewer, the
+  same call this file already made for R13's `alert()`/`confirm()` cleanup — not
+  something to fold into a security-fix pass blind.
+  ⚠️ **Half of this turned out wrong on closer inventory — see "CSP tightening" below
+  (2026-08-28).** `script-src`'s `unsafe-inline`/`unsafe-eval` were removed the same
+  day: only 23 inline event-handler attributes existed repo-wide (not "every admin
+  table row" — that estimate was actually describing `style-src`'s inline `style="..."`
+  attributes, a different directive), and neither CDN library nor this app's own code
+  uses `eval`/`new Function`. `style-src`'s `unsafe-inline` genuinely does stay, for
+  the reason given here — the multi-page refactor call was right for that half.
+- **Low — `stax-webhook-admin-tmp` and `debug-list-webhooks` remain deployed as inert
+  stubs.** Re-confirmed both are still the safe 410 stubs (not the original dangerous
+  code) via `get_edge_function` — no live exposure — but both are still `ACTIVE` and
+  still need a human to delete them from the Supabase dashboard; there is no
+  delete-function tool available in this session, same limitation noted when SX3 was
+  closed by hand earlier in this file.
+- **Low — the new revoke migration drifted too.** Same class as `harden_stax_payments`:
+  `apply_migration` assigns its own timestamp at apply time regardless of what the
+  local filename says, so `20260828030000_revoke_add_day_invoice_authenticated.sql`
+  never matched the live `20260828135150`. Renamed to match. **Lesson for next time:**
+  re-check `list_migrations` immediately after every `apply_migration` call and name
+  the local file from that result, not from a timestamp picked while drafting it —
+  this is now the second time in one day this exact drift happened.
+
+`npm test` — 188/188 (5 new guards for the reconciliation job). `npm run build` —
+`dist/` rebuilt.
+
+### CSP tightening — script-src locked to a hash allowlist (2026-08-28)
+
+The second review round scoped this out as "a real, multi-page refactor, not a
+safe blind fix" — and that was the right call for `style-src` (see below), but
+`script-src`'s `unsafe-inline`/`unsafe-eval` turned out to be far more
+tractable once actually inventoried instead of estimated. Removed both.
+
+**Inline event-handler attributes: 23 total, not "every admin table row."**
+`onclick=`/`onchange=`/`oninput=`/`onblur=`/`onkeydown=` across the whole
+repo — `js/admin/admin-billing.js` (11, all in the Accounts Receivable table:
+lock/unlock, edit-billed, Details, Payment, and the payment-history Refund
+button), one each in `admin-reports.js` (a per-room collapse toggle),
+`admin-finance-hub.js` and `admin-billing-report.js` (both a bare
+`event.stopPropagation()` — dead code, verified no ancestor click listener
+existed for either to guard against, so removed outright rather than
+converted), plus 9 in `payroll.html` (a church-ChMS mockup — "nothing here
+calls it," per this file's Stax section — but still served statically at
+`/payroll.html` under the same global `_headers` CSP, so still had to be
+fixed) and one in `docs/manual.html` (a print button — found only by the new
+drift-guard test below; a root-only file scan had missed it, see that test's
+own comment). All converted to `data-*` attributes plus a **delegated**
+listener on the nearest container that survives every re-render — the
+existing pattern this codebase already used in a few spots (e.g.
+`admin-billing.js`'s own `.inv-adj-issue`/`.inv-adj-discard` buttons), just
+not yet applied to the AR table.
+
+⚠️ **A duplicate-handler bug was caught and fixed before shipping.** The
+first pass added a delegated `.pay-hist-refund-btn` listener on
+`#arTableWrap` in `setupBilling()` *and* left the direct
+`el.querySelectorAll('.pay-hist-refund-btn').forEach(...)` binding already
+sitting in `renderPaymentHistory()` — since that container always renders
+inside `#arTableWrap` (a detail row opened from the AR table), a refund
+click would have fired `refundOnlinePayment()` twice. Removed the direct
+binding; the delegated one covers it.
+
+⚠️ **`blur` doesn't bubble.** The "type a new billed amount" input's old
+`onblur="saveBilledAmount(...)"` needed a bubbling equivalent to delegate
+correctly — used `focusout` (fires in the same cases `blur` does, but
+bubbles), not a capture-phase `blur` listener.
+
+**Inline `<script>` blocks: 22 unique, locked to `'sha256-...'` hashes
+instead of `'unsafe-inline'`.** Verified none are build-time templated —
+`scripts/build.js`'s `patchHtml()` only replaces `<script src="js/...">` dev
+tags with `dist/*.min.js` references; it never touches inline `<script>`
+content, confirmed by reading the function, not assumed. So a hash computed
+from the committed source is exactly what a browser hashes at request time,
+stable across every future `npm run build`.
+
+⚠️ **The first hash-generation pass only scanned root-level `.html` files —
+missed 5 real pages.** `wrangler.jsonc` serves `assets.directory: "."`, and
+`.assetsignore`'s own header comment says it plainly: "everything NOT listed
+here is public on the live site." `docs/manual.html`, `marketing/email.html`,
+`marketing/poster.html`, `marketing/website/index.html`, and the two
+`docs/design_handoff/*.dc.html` mockups are all real, publicly-servable
+files under the same global CSP — a root-only `fs.readdirSync('.')` scan
+silently missed all of them, which is exactly how `docs/manual.html`'s own
+`onclick="printPartB()"` almost shipped unconverted (caught only because the
+new drift-guard test below walks the whole tree and failed on it). Both the
+hash generation and the test that verifies it now walk the full repo,
+respecting the same ignore list as `.assetsignore`.
+
+**`unsafe-eval`: removed, based on evidence, not assumption.** Grepped this
+app's own `js/` for `eval(`/`new Function(` — zero matches (the two
+sub-strings in `js/tests/business-logic.test.js` are the Node test runner's
+own `eval` calls, never shipped to a browser). Downloaded and grepped the
+actual CDN bundles: `xlsx@0.18.5` and `chart.js@4.4.4` — zero
+eval/`new Function` calls in either. `staxjs-captcha.js`, Spreedly's
+`iframe-v1.min.js`, and Google's `recaptcha__en.js` (all loaded by the
+gated, not-yet-production `?staxtest=1` flow) each contain a `new Function`
+or `eval` call, but every one checked is the same well-known
+`globalThis`-detection bundler-polyfill fallback (`n=n||new
+Function("return this")()`, guarded by a `typeof globalThis`/`typeof
+self`/try-catch chain ahead of it) or a legacy `JSON.parse`-unavailable
+shim — dead code in any modern browser, which is why reCAPTCHA is
+extensively deployed on sites with strict `script-src` and no
+`unsafe-eval`. ⚠️ Not proven by executing the code, only by reading it — if
+Stax's flow is ever exercised for real (the existing `?staxtest=1`
+browser-verification TODO elsewhere in this file), watch the console
+specifically for "Refused to evaluate a string as JavaScript" as the
+tell-tale sign this reasoning was wrong for this specific bundle version.
+
+**`style-src`'s `unsafe-inline` was measured, not just estimated, and stays
+for now.** 758 `style="..."` occurrences in `js/*.js` alone (49 confirmed
+dynamic — built with a template-literal `${...}` directly in the attribute
+value), on top of 431+ static ones in the `.html` files themselves
+(CLAUDE.md's earlier count). `'unsafe-hashes'` only allowlists an *exact*
+attribute string, so it cannot cover a value that's different on every
+render (a computed percentage, a data-driven color) — the only real fix for
+those is converting every such call site to `el.style.propertyName = value`
+(individual CSSOM property assignment, which CSP's `style-src` has never
+restricted, unlike `.style.cssText =` or `setAttribute('style', ...)` —
+confirmed only 2 of those exist in `js/`, both easy, but they don't unlock
+anything on their own while everything else still needs `'unsafe-inline'`).
+Converting hundreds of render functions across most of the admin surface is
+a genuinely different scale of change from the 23 event handlers above, and
+this session did not attempt it.
+
+**New drift guards** (`js/tests/business-logic.test.js`, describe block "CSP
+tightening"): script-src carries neither unsafe keyword; every inline
+`<script>` block across the whole repo tree has a matching hash (fails loud
+if someone edits a script's content without recomputing it — the "shipped
+half-live" failure shape this file warns about elsewhere, except here the
+browser's own refusal-to-execute would be the symptom instead of a stale
+bundle); and a repo-wide grep confirms zero inline event-handler attributes
+remain anywhere in `js/` or any `.html` file.
+
+**Verified two ways, not just by reading the diff.** A local Node server
+served the actual repo with the actual `_headers` CSP value enforced,
+Chromium (the browser already available in this environment) loaded all 12
+real app pages plus a hand-written sanity page with a deliberately unhashed
+inline script — the sanity page's script was correctly refused (proving the
+test harness itself can detect a real violation, not just report "clean"
+against a broken check), and all 12 real pages loaded with **zero** CSP
+violations. Two unrelated `pageerror`s did appear on `clockin.html`/
+`payroll.html` (`Cannot read properties of undefined (reading
+'createClient')`) — traced to `net::ERR_CONNECTION_RESET` fetching
+`cdn.jsdelivr.net` from the sandboxed test environment's browser process,
+not a CSP refusal (a real CSP block reads as "Refused to load the script
+... because it violates the following Content Security Policy directive,"
+which never appeared) — a sandbox networking limitation, not a regression.
+
+`npm test` — 191/191 (3 new CSP guards). `npm run build` — `dist/` rebuilt
+and grepped for the new class names (`ar-lock-btn`, `ar-payment-btn`,
+`trends-room-toggle`, etc.) to confirm the delegated-listener conversion
+actually shipped in the bundle, not just the source.
+
+### ⚠️ That PR broke the deploy — `_headers` has a 2,000-character-per-line limit (2026-08-28)
+
+Cloudflare's `Workers Builds` check failed on the CSP-tightening PR within
+minutes of opening it. Not a code bug — the CSP line in `_headers` had grown
+to **2,151 characters** (22 sha256 hashes plus the existing directives), and
+Cloudflare's own `_headers` docs are explicit: *"Each line in the `_headers`
+file has a 2,000 character limit. The entire line, including spacing, header
+name, and value, counts toward this limit."* This repo already has one prior
+incident from exactly this file (the blank-`Pragma:` deploy failure
+documented above) — worth remembering that `_headers` has hard, silent-ish
+limits a normal code review won't catch.
+
+Fixed two ways, one of them a real correctness fix rather than just a
+line-length trim:
+
+- **Extracted the 3 least-critical inline `<script>` blocks to external
+  `.js` files** (`docs/manual.js`, `marketing/poster.js`,
+  `marketing/website/site.js`) instead of hashing them. `script-src 'self'`
+  already covers same-origin external scripts with no hash needed, so this
+  drops 3 hashes (~150 characters) with zero behavior change, and as a
+  side benefit these three pages' JS no longer needs a CSP-hash update
+  every time someone edits their script content.
+- ⚠️ **A real bug in the hash generation, not just a size optimization**:
+  `<script type="text/x-dc" ...>` (the two `docs/design_handoff/*.dc.html`
+  mockups' data blocks) and `<script type="application/ld+json">`
+  (`index.html`'s SEO structured data) were being hashed and counted toward
+  the line **even though browsers never execute either as JavaScript**.
+  Verified empirically before relying on it: a `type="text/x-dc"` block
+  with content matching nothing in the CSP produced **zero** CSP violation
+  in a real browser — script-src simply doesn't gate a `<script>` tag the
+  parser was never going to execute as script in the first place. Excluding
+  non-JS `type` values dropped 3 more hashes and is the *correct* fix, not
+  a shortcut — those hashes were dead weight that would have made every
+  future JSON-LD or `.dc.html` edit falsely look like it needed a CSP
+  update too.
+- Final line: **1,827 characters** (was 2,151), with margin restored
+  specifically so the next inline script or CDN host addition doesn't
+  immediately reopen this exact failure.
+
+**New guards**, both structural (would have caught this before it ever
+reached Cloudflare):
+- A dedicated test asserts the raw `_headers` CSP line stays under 1,950
+  characters — checked against the actual line as written, including the
+  `Content-Security-Policy:` label and leading whitespace, not just the
+  directive value, since that's what Cloudflare actually counts.
+- The script-hash drift guard now excludes non-executable `type=` script
+  tags using the same allowlist a real browser does (absent/empty/
+  `text/javascript`/`application/javascript`/`text/ecmascript`/
+  `application/ecmascript`/`module`), so it stops falsely demanding hashes
+  for content that was never going to run.
+
+**Verified against the actual constraint, not just the test suite**:
+recomputed the real full line (`Content-Security-Policy: ` prefix +
+directives) at 1,827 characters, re-ran the same real-browser CSP check
+from the section above against all four touched pages
+(`payroll.html`/`docs/manual.html`/`marketing/poster.html`/
+`marketing/website/index.html`) — zero script-src violations on any of
+them, confirming the externalized scripts load correctly under `'self'`.
+
+`npm test` — 192/192. `npm run build` — `dist/` rebuilt.
+
+### Sandbox click-through testing reintroduced — `?staxtest=1` is back, differently (2026-08-28)
+
+Asked directly to test the real Stax.js embedded-checkout flow. Turned out
+the two-button `?staxtest=1` design this file describes earlier in the Stax
+section (a second "Pay … with Stax (test)" button, visible only behind the
+flag) had at some point been replaced with the current single-button design
+(`pbStartStaxPayment()` always tries Stax first, silently falling back to
+Authorize.net on `"Online payments are not configured for production yet."`)
+— and nothing in this file had caught that the `?staxtest=1` mechanism was
+gone entirely along with it. **A parent asking to test the flow got routed
+straight to Authorize.net with no way to reach Stax at all**, because
+`STAX_ENVIRONMENT` is still sandbox and the single button's fallback is
+unconditional once that gate refuses.
+
+⚠️ **Flipping `STAX_ENVIRONMENT` to `production` to unblock this would have
+been exactly the mistake the last security review's hard blocker warned
+against** — `STAX_API_KEY` is still a sandbox key, and telling the app it's
+in production would record sandbox test money as if it were real tuition.
+There is no real Stax merchant account yet, so that path was never on the
+table.
+
+Fixed by reintroducing a narrow, explicitly-opt-in bypass — a **two-signal
+gate**, not a reopened hole:
+
+- `pbStaxTestEnabled()` is back in `portal-billing.js`, same shape as the
+  original: reads `?staxtest=1` off the URL once, then sticks in
+  `sessionStorage` for the tab. The button itself is unchanged (same class,
+  same "Pay $X online" label, no visible "(test)" marker) — this only
+  changes what `sandboxTest` value rides along in the request body of
+  `createStaxChargeSession()` and `chargeStaxPayment()`.
+- `create-stax-charge` and `charge-stax-payment` both gate on
+  `isProduction || (STAX_SANDBOX_TEST_ENABLED === "true" && body.sandboxTest === true)`.
+  **Both signals are required.** The server secret alone does nothing to a
+  real parent's normal click, since that request never sets `sandboxTest`.
+  The URL flag alone does nothing unless the operator has also deliberately
+  turned on `STAX_SANDBOX_TEST_ENABLED` — meant to be flipped on only for
+  the duration of an active test session and back off immediately after,
+  the same "belt and suspenders" reasoning the rest of this app's security
+  fixes use (e.g. SX1's revoke-from-both-anon-and-PUBLIC).
+- A charge that goes through this path is **real test money against Stax's
+  real sandbox merchant** — not a faked success. It gets recorded in
+  `billing_payments` exactly like any other Stax charge, which is the whole
+  point: verifying the actual invoice/payment allocation, not just that a
+  button doesn't error.
+- `create-stax-charge`'s response `environment` field now honestly reflects
+  `"sandbox"` when this path is taken, instead of being hardcoded to
+  `"production"` regardless of which gate let the request through.
+
+⚠️ **Setting `STAX_SANDBOX_TEST_ENABLED` is a manual dashboard step** — no
+tool available in this session can set a Supabase Function secret. Turn it
+on only while testing, and turn it back off when done; there's no code-side
+reminder that it's still on.
+
+`npm test` — 192/192 (2 of the older Stax tests were rewritten in place —
+their assumption that `pbStaxTestEnabled` should never exist was itself the
+thing this session found to be stale).
+
+### A real sandbox click-through surfaced a real bug: a fake test phone number, rejected by Stax's own validator
+
+With `?staxtest=1` working, an actual embedded-checkout charge was run
+against a disposable test family in production (`stax-test-20260828@…`,
+invoice `3992`) — the first time this flow had been driven through a real
+browser rather than curl. The modal loaded and the card fields rendered
+correctly, but `pbStaxInstance.tokenize()` failed every time with a bare
+"Payment failed. Please check the card details and try again." — no detail,
+because the thrown error in `pbStaxTokenizeAndCharge()`'s catch block had no
+`.message`, meaning the failure never reached our own server at all.
+
+Traced via the browser's own Network tab, not guesswork: BlockChyp's iframe
+tokenized the test Visa fine, Stax.js then generated a reCAPTCHA token, and
+the actual `POST … /token` request to Stax's API — the one that creates the
+payment method — came back **422** with `{"phone":["The phone format is
+invalid."]}`. `create-stax-charge` passes `family.parent_phone` straight
+through as `extraDetails.phone` in the `tokenize()` call (no local
+formatting or validation of its own — Stax's own validator is authoritative
+here, correctly), and the disposable test family's `parent_phone` had been
+set to `"555-0100"` — 7 digits, no area code. Not a code bug: fixed by
+correcting the test fixture's phone to a properly formatted number
+(`314-555-0100`). Stax's customer record (already created with the bad
+phone on the first attempt) didn't need to be recreated — `tokenize()` sends
+`phone` fresh on every call, so the very next attempt with the corrected
+family row succeeded end to end (BlockChyp tokenize → Stax charge → this
+app's own `charge-stax-payment` recording the `billing_payments` row).
+**Worth remembering for the next sandbox test**: give the disposable test
+family a real-shaped phone number, not an obviously-fake placeholder — Stax
+validates it server-side and will reject a malformed one before ever
+reaching this app's own code.
+
+### Refunding a Stax payment had no admin path at all — built and deployed same session
+
+Testing continued into "can the office refund a Stax charge" — and the
+answer was no, not even partially. `renderPaymentHistory()`'s `canRefund`
+check (`js/admin/admin-billing.js`) was `p.processor === 'authorizenet'`
+only, so a Stax-processed row in the AR payment history got **no Refund
+button at all** — not a broken button, an invisible one. The only edge
+function that submits a reversal to a processor, `admin-refund-payment`,
+explicitly rejects anything but `processor === "authorizenet"`
+(`"Only an online card payment can be reversed this way."`). Confirmed by
+reading both files, not assumed from the symptom: there was no dead code
+to fix, the capability had simply never been built for the second
+processor this app now takes real money through.
+
+Fixed with a direct Stax counterpart, **`admin-refund-stax-payment`**
+(deployed), mirroring `admin-refund-payment`'s exact security posture:
+
+- Same gate — a valid Supabase Auth session **and** `admin_role() = 'full'`
+  (read from the `admin_roles` setting, the same code path
+  `admin-refund-payment` uses).
+- Request body carries **only a `billing_payments` row id** — never an
+  amount. The reversal amount is always that row's own `amount`.
+- **Void vs. refund is decided from Stax's own `is_voidable` flag**, read
+  fresh via `GET /transaction/{id}` before acting — never guessed locally
+  from a locally-stored settlement guess, mirroring how
+  `admin-refund-payment` reads Authorize.net's own `transactionStatus`
+  rather than assuming. Voidable → `POST /transaction/{id}/void`; otherwise
+  → `POST /transaction/{id}/refund` with `{total: <payment's own amount>}`.
+  Both endpoint shapes confirmed against Stax's own API reference
+  (`docs.staxpayments.com/reference/refund-transaction`,
+  `.../void-transaction`) before writing the call — **not** the
+  `/terminal/void-or-refund` endpoint, which is for card-present terminal
+  transactions and requires a `register` id this app has no such thing as.
+- ⚠️ **`billing_payments.processor_transaction_id` can carry this app's own
+  `-inv<id>` or `-credit` suffix** (see `stax_finalize_charge` in
+  `harden_stax_payments.sql` — a charge rolled up across several unpaid
+  invoices is recorded as one row per invoice, all sharing the same real
+  Stax transaction id with a different suffix). `baseTransactionId()` strips
+  that suffix before ever calling Stax's API — sending the suffixed id would
+  have 404'd on a real refund attempt for any rolled-up charge.
+- Already-reversed payments, and payments Stax itself already shows as
+  `is_refunded`/`is_voided`, are both rejected up front — belt and
+  suspenders against a double-click submitting two reversals.
+- **Does not touch `billing_payments` or invoice status** — same "request
+  here, record on confirmation" split as the Authorize.net path and as the
+  charge path itself. The actual reversal is recorded by the already-live
+  `stax-webhook` (`stax_record_reversal`, applied and verified in production
+  earlier this session) once Stax's own `create_transaction` event for the
+  refund/void arrives and is independently re-verified — this function
+  never writes billing state itself, only asks Stax to act.
+- `js/admin/admin-billing.js`'s `canRefund` now checks
+  `REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax'])`; the button
+  carries `data-processor` so the click handler
+  (`refundOnlinePayment(paymentId, processor)`) and `adminRefundPayment()`
+  (`js/supabase.js`) route to the right edge function — the Authorize.net
+  path is completely unchanged, just no longer the only one.
+- Not independently curl-tested end-to-end by this session (doing so would
+  need a real admin login, which this session doesn't have) — verified by
+  reading the deployed source and by the existing security-guard tests
+  below; the live click-through is the director's own test, same as the
+  charge flow above.
+
+`npm test` — 200/200 (8 new guards: full-admin gate, processor/status
+checks, the `is_voidable`-driven branch, the amount always coming from the
+stored row, the suffix-stripping, no direct `billing_payments`/
+`billing_invoices` write, and both the button and the JS routing).
+`npm run build` — `dist/` rebuilt and grepped for
+`admin-refund-stax-payment` (in `dist/supabase.min.js`) and
+`Set(["authorizenet","stax"])` (in `dist/admin.min.js`) to confirm the
+feature actually shipped in the bundles the live site loads, not just the
+source — the standing check this file has asked for since the Bookkeeper
+and Enrollment & Capacity tabs each shipped half-live.
+
+### ⚠️ …and the button above was wired into a genuinely dead section — found within the hour, by the person testing it
+
+Asked directly, minutes after the PR above merged: "where is refunds?" — on
+the live **Finance → Bookkeeper → Accounts Receivable** screen, which shows
+only an aging summary (banner + 0–14/15–29/30+ day bands), no per-payment
+list, no button of any kind. The Refund button this session had just built
+was real, tested, and shipped in the bundle — and **unreachable**, because
+it was added to `admin-billing.js`'s `renderPaymentHistory()`, which only
+ever renders inside `billingArSection`'s `#arTableWrap` — and
+`billingArSection` is one of the ten tools this file's own Finance-tab
+overhaul section already documents as retired from `AP_TOOLS` in the
+2026-08-27 Bookkeeper redesign ("Accounts Receivable, Reconcile Payments,
+Revenue Dashboard…"), unreferenced and therefore unreachable per the
+shell's own rule (`apShowSection()` never shows a section no `AP_TOOLS`
+entry points at). Confirmed by grepping `admin-portal.js` for
+`billingArSection` — zero matches.
+
+⚠️ **This means the pre-existing Authorize.net refund button — not just the
+Stax one this session added — has been unreachable since that same redesign
+merged**, a full day before this session started. Nobody had needed to
+refund an online payment in the meantime, so nothing surfaced it. This
+wasn't caused by this session's change; this session's change just happened
+to add a second, equally-invisible button right next to the first one,
+which is what made it worth checking where "the AR table" that
+`admin-billing.js`'s comments still describe actually renders today.
+
+**The fix wasn't re-registering `billingArSection`.** The whole point of
+retiring it was fewer screens computing the same numbers differently, and
+reopening it as a nav entry would have undone that. Instead, the Refund
+control was added to the place a family's payments are actually visible
+today: the **Ledger drawer** (`_fhLoadDrawerBody()` in
+`admin-finance-hub.js`, opened from Finance → Ledger by clicking any family
+row) — which already had its own "Payments" list and a "+ Record payment"
+button, but no way to reverse one. New `_fhCanRefund()` (same gate as the
+old `renderPaymentHistory()`: processor is `authorizenet` or `stax`,
+positive amount, not itself a reversal, not already reversed) and
+`_fhRefundPayment()` (confirm → `adminRefundPayment(paymentId, processor)`
+→ `_fhLoad()`, the same reload `_fhSubmitPayment()` already does after
+recording a payment, so Bookkeeper's cache invalidates and the drawer
+re-renders with current data). `admin-billing.js`'s original wiring was
+left in place rather than deleted — same "unreferenced, not deleted"
+convention this file uses for every other retired tool, in case
+`billingArSection` is ever revived — but it is dead weight, not a second
+live implementation to keep in sync.
+
+**New drift guard**, specifically to stop this exact class of mistake from
+recurring: a test asserts `billingArSection` stays absent from
+`admin-portal.js` (documenting that it actually is dead, not assuming it)
+*and* that `admin-finance-hub.js` carries the real, reachable refund wiring
+— so a future refund-related change made only to the old file would fail
+this test rather than ship silently unreachable again.
+
+**The lesson to take from this, generalized:** `npm run build` + grepping
+the bundle for a new symbol (this file's standing check since the
+Bookkeeper/Enrollment & Capacity "shipped half-live" incidents) proves a
+change is *in* the bundle. It does not prove the bundle's own code path
+that contains it is one `apShowSection()` will ever call. For any change to
+a section's markup or its rendering function, check `AP_TOOLS` for that
+section id too — a symbol present in the bundle and a feature reachable in
+the shell are two different claims, and this file's existing checklist
+only ever verified the first one.
+
+`npm test` — 203/203 (3 more guards: the dead-code confirmation, the live
+drawer wiring, and the double-refund guard). `npm run build` — `dist/`
+rebuilt and grepped for `_fhRefundPayment`/`_fhCanRefund` to confirm the
+*actually reachable* version shipped, not just the first one.
+
+### ⚠️ It shipped half-live a THIRD time in the same evening — and this time the root cause was in the auto-merge workflow itself, not in this feature
+
+The director tested the fix above from a fresh admin login (version badge
+correctly reading the new build) and the Refund link still wasn't there —
+twice. Both times, `git show origin/main:dist/admin.min.js | grep -c
+_fhRefundPayment` came back `0` while the *source* on `main` had it the
+whole time. Not a browser cache issue either time (ruled out directly: the
+version banner embedded inside `dist/admin.min.js` itself, not just the
+HTML, matched the deployed `package.json` version — so the exact bundle
+running in the browser really was the one just deployed, and it genuinely
+lacked the fix). Two more `claude/**` branches had each merged into `main`
+within the same half hour, each hitting the identical dist conflict this
+file already documents twice above (Bookkeeper, Enrollment & Capacity) —
+except by the third occurrence in one evening it was clear the fix each
+time ("rebuild and re-push") was treating a symptom, not the disease.
+
+**Root cause, found by finally reading `.github/workflows/auto-merge-claude.yml`
+line by line instead of re-patching around it a fourth time:** the
+conflict-resolution step's own comment said "take the branch's dist
+bundles (they were built on top of main's JS)" and unconditionally ran
+`git checkout --theirs` for every conflicting `dist/*.min.js` — with
+**no check on which side was actually newer**. That assumption holds for
+exactly one merge in isolation. It silently breaks the moment a *second*
+`claude/**` branch is queued behind a first: branch B was forked from (and
+last built its own `dist/` against) a `main` that predates branch A's
+merge. By the time B's own turn to merge arrives, "theirs" is B's
+own bundle — stale relative to the `main` this merge is about to produce —
+and the workflow took it anyway, every time, because nothing about the
+rule was version-aware. The `sort -V | tail -1` logic just above it in the
+same step only ever decided the **version number string** written into
+`package.json`/`build-version.js`; it never gated which side's `dist/*.min.js`
+bytes got used. Two completely different questions were being resolved by
+one comparison that only answered the first.
+
+**Fixed by not picking a side at all.** On any conflict that reaches this
+step, `dist/` is now unconditionally **rebuilt from the just-merged source**
+(`npm run build`, then a follow-up commit if it produced a diff) instead of
+`git checkout --theirs` on the bundle files. A bundle generated from the
+tree this exact merge just produced cannot be stale relative to that tree —
+there's no side to pick wrong. This also fixes a subtler case the old rule
+never touched at all: two branches whose `dist/*.min.js` happened to merge
+with **no textual conflict** (neither touched the same bytes) still ended
+up carrying the *old* `__BUILD_VERSION__` banner from whichever side's
+un-conflicting copy git kept, mismatched against the version number the
+`package.json` conflict resolution had just forced to something higher.
+Rebuilding fixes that silently-wrong case too, which a "pick the right
+side" rule could never have covered because there was no wrong side to
+avoid — both were stale relative to the version just written.
+
+⚠️ **This needed Node available earlier in the job.** `actions/setup-node`
++ `npm ci` were previously only run right before the deploy step, after the
+merge had already been pushed. Both moved up to before the merge step, so
+`npm run build` has a working toolchain available mid-conflict-resolution.
+
+**Not chased further:** the `verify` job (which runs per-branch, before
+this) still cannot catch this class of bug on its own — it rebuilds and
+diffs `dist/` against that one branch's own `js/`, which was correct
+*for that branch in isolation* at push time. The staleness only exists
+relative to whatever `main` looks like at the moment its merge is actually
+processed, which `verify` has no way to know in advance. The fix has to
+live in `merge-to-main`, where the real merged tree exists — which is
+exactly where it now does.
+
+---
+
+## Ledger's "Total to bill" was a net figure with nothing showing its parts — broken into a 4-box strip (2026-08-28)
+
+Asked directly: the Ledger tab's headline stat read as one opaque number, with
+no visibility into how much of it was tuition versus discounts versus fees.
+`_fhRenderLedger()` (`js/admin/admin-finance-hub.js`) now shows a chained
+sequence — **Tuition (before discounts) → Discounts → Fees → Amount to
+collect** — instead of the single `fh-stat-month` box. Nothing new is
+computed: `computeBillMonthExceptions()` (`js/admin/admin-bill-month.js`)
+already produces `base` (net of both the individual and sibling discount),
+`discount` (the sum of both), and the fee fields per family; `_fhLoad()` was
+only keeping `total` and `causes` off that object and discarding the rest.
+It now carries `base`/`discount`/`changeFees`/`regFee`/`familyNewFee`/
+`creditTotal` through into `_fhRows` too.
+
+- **`grossTuition = Σ(base + discount)`** — the pre-discount sticker price,
+  reconstructed by adding the discount back onto the already-net `base`.
+- **`discountsTotal = Σ(discount)`**, shown as `_fhMoney(-discountsTotal)` so
+  the existing negative-number formatting in `_fhMoney()` supplies the minus
+  sign rather than a hand-built one.
+- **`feesTotal = Σ(changeFees + regFee + familyNewFee − creditTotal)`** — the
+  same fee fields the per-family exception card in `admin-bill-month.js`
+  already itemizes, net of any account credit applied that month.
+- `grossTuition − discountsTotal + feesTotal === monthTotal` (the existing
+  "Amount to collect" figure), by construction — nothing about the final
+  number's *own* computation changed, only what got exposed alongside it.
+
+⚠️ **A real bug surfaced while wiring this up, not introduced by it.**
+`computeBillMonthExceptions()`'s `total` was `base + regFee + familyNewFee −
+creditTotal` — no `changeFees`. The sibling `prevFamilyTotal` calculation nine
+lines above it *does* include `c.changeFees`, so the current month's total and
+the prior month's total (used for the same-screen "vs. last time" comparison)
+were computed on different bases. Any family with a schedule-change fee this
+month was undercounted in the Ledger's month total, the "Bill the Month"
+screen's own total, and the per-family "Approve $X" button — though never in
+what actually got billed, since `reconcileBillingInvoice()` recomputes the
+real invoice amount server-side and never reads this client total. Fixed by
+adding `+ changeFees` to the formula; flagged with an inline comment at the
+fix site so it isn't lost the way this file warns about elsewhere.
+
+`npm test` — 200/200 (no new guards needed; existing Stax/CSP/billing-integrity
+suites all held). `npm run build` — `dist/` rebuilt and grepped for `Amount to
+collect` / `before discounts` in `dist/admin.min.js` to confirm the new strip
+actually shipped in the bundle, not just the source.
+
+### ⚠️ The Fees box was toggling between ~$300 and ~$15,300 — a real registration-fee-year race, not a rendering bug (2026-08-28)
+
+Reported directly: "sometimes the fees box will show 15,300 dollars and
+sometimes 0, i think it should be 0 i havent charged fees this month like
+that." Checked live against production (`dahdstopsumxnqvdclmy`) rather than
+guessed at — the center's real registration-fee settings are `$150`/child
+capped at `$200`/family, renewal date **09-01**. Today (08-28) is four days
+before that renewal, so the correct fiscal cycle year is **2025**, and under
+that year only **2 children** in August's roster still owe the fee (~$300).
+`reg_fee_paid_year` is `2025` for 135 students, `NULL` for 17 — confirms most
+of the roster already paid for the cycle that's still open.
+
+**Root cause: `currentFeeCycleYear(window._regFeeRenewalDate)` had no fallback
+fetch.** `computeBillMonthExceptions()` (`admin-bill-month.js`) and
+`generateFamilyBillingReport()` (`admin-reports.js`) both already guard the
+three dollar-amount fee settings with `window._X ?? (await
+fetchSetting(...))` — but the renewal-date line was reading
+`window._regFeeRenewalDate` directly, with no such guard. `setupRegFee()`
+(`admin-settings.js`, called from `admin-init.js`) is what actually populates
+that global, and it's async — if either screen was opened before it
+resolved, `currentFeeCycleYear()` silently fell back to its own internal
+default, `'01-01'`. Since `'01-01'` has already passed this calendar year,
+that default computes `currentYear = 2026` (this year) instead of the true
+`2025` (last year's cycle, still open until 09-01) — and because none of the
+135 already-paid students carry `reg_fee_paid_year = 2026` yet, **every one
+of them looks unpaid** under the wrong year. Verified the exact swing live:
+117 of August's booked children would be flagged "owed" under the buggy 2026
+read versus 2 under the correct 2025 read — $15,550 vs $300 in raw
+registration-fee terms, which lines up with the $15,300 the Fees box (which
+also nets in change fees / new-family fee / credits) actually showed.
+
+⚠️ **`generateFamilyBillingReport()`'s copy of this bug was the more serious
+one.** Unlike the Ledger/Bill-the-Month preview, that report *stamps*
+`reg_fee_paid_year` onto every student it charges the fee to the moment it's
+generated — so hitting this race there wouldn't just misdisplay a number, it
+would have charged and permanently marked roughly 117 children as paid for
+the wrong cycle. Checked live before writing this up: zero students currently
+carry `reg_fee_paid_year = 2026`, so this hadn't fired yet — the landmine was
+live, not sprung.
+
+Fixed in both places with the same `window._regFeeRenewalDate ?? (await
+fetchSetting('registration_fee_renewal_date'))` guard the other three fee
+settings already use, matching each file's own existing style
+(`??`-chained in `admin-bill-month.js`, try/catch in `admin-reports.js`,
+where the three settings just above it already use that idiom).
+
+Also fixed in passing: the Finance family drawer's own header (`.inc-drawer`
+/ `.inc-scrim`, shared with the incident drawer) was `z-index: 60/61` while
+`.admin-header` is `position: sticky; z-index: 100` — the sticky green top
+bar rendered on top of the drawer's own head, cutting off the family name at
+the top of the panel every time it opened. Raised to `150`/`151`, clearing
+every other `z-index` in the app under `500` (the mobile tab bar and
+above) while staying below the toast/modal tier (`1000`+). This is a shared
+component, so the fix isn't Finance-specific — it clears the same bug for
+the incident drawer too, wherever else `.inc-drawer` is used.
+
+`npm test` — 200/200. `npm run build` — `dist/` rebuilt and grepped for
+`registration_fee_renewal_date` in `dist/admin.min.js` to confirm both fixes
+shipped in the bundle.
+
+### ⚠️ The Ledger's "owed" banner counted every drafted-but-unsent invoice as a real receivable (2026-08-28)
+
+Follow-up question from the director, prompted by the Fees-box investigation
+above: why does the "owed" banner (83 families, $54,014.56) show fewer
+families than "Ready to send" (97), and shouldn't accounts from before
+August already be cleared since real invoicing/billing here is brand new?
+
+Checked live before assuming either half of that was right. **There is no
+pre-August backlog to clear** — `billing_cycles`/`billing_invoices` for
+2026-06 and 2026-07 have **zero rows**. Every dollar of the $54,014.56 is
+from **August itself**: 95 `billing_invoices` rows exist for August, and
+**94 of them had never been sent** (`sent_at IS NULL`) — only one real send
+had ever gone out (a $5.00 Stax sandbox test charge from earlier this
+session, `invoice 3992`, $4 already paid on it). Those 94 unsent drafts'
+combined `final_amount` was **$54,013.56** — matching the owed banner almost
+to the dollar.
+
+**Root cause:** `reconcileBillingInvoice()` drafts a `billing_invoices` row
+for every clean family the moment Bill the Month computes them — well
+before Release/Send is ever clicked (see "Billing writes are now
+recompute-only" above). `_buildArRows()` (`admin-billing.js`) read
+`billed = inv?.final_amount` with no check on `inv.sent_at`, so a drafted
+invoice nobody has emailed yet counted as a real receivable — inflating
+"owed," inviting "Nudge all 83" to nudge families for bills they had never
+actually been shown, and (before this fix) would have misread as
+`status: 'overdue'` rather than simply not-yet-billed.
+
+This is the exact same principle FS29 already established for **aging**
+("an invoice nobody has sent is not overdue") — applied one step earlier:
+**an invoice nobody has sent isn't owed yet either.**
+
+⚠️ **`billed` itself was deliberately left alone** — only `outstanding`/
+`status` are now gated on `sent_at` (`billedIfSent`, a separate local). The
+raw `billed` figure is still what the Finance drawer's "Base tuition" line
+and the Ledger's month-history fallback read (`r.ar?.billed || r.total`) —
+both want "what does the draft say," sent or not, and zeroing `billed`
+outright would have shown $0.00 tuition in the drawer for anyone whose
+invoice hadn't been sent. Two call sites in `admin-finance-hub.js`'s "Paid
+in full" chip count were checking `r.ar?.billed > 0` as a proxy for "this
+family has been sent something" — that stopped being true once `billed`
+could be nonzero while unsent, so both were switched to check `r.ar?.sentAt`
+directly, the thing they actually meant.
+
+Guarded with a real behavioral test (not just a source grep, given the
+dollar stakes): `_buildArRows` copied into
+`js/tests/business-logic.test.js` with its own drift guard, plus four
+cases — an unsent draft is billed-but-not-owed, the same amount becomes
+owed once sent, a fully-paid sent invoice reads `paid`, and a payment
+against an unsent draft can't push `outstanding` negative.
+
+`npm test` — 205/205 (4 new behavioral cases + 1 drift guard). `npm run
+build` — `dist/` rebuilt; `_buildArRows` confirmed present in
+`dist/admin.min.js` (the specific local-variable rename that carries the
+fix doesn't survive minification as a greppable symbol — this is one of the
+rare fixes where the standing "grep the bundle for a symbol only your
+change introduces" check doesn't apply, since nothing new was added at
+module scope).
+
+---
+
+## Parent payment flow redesign — receipt email shipped, portal UI in progress (2026-08-28)
+
+Built from a director-supplied design mockup of the parent app's payment
+flow (Billing home → All invoices → Invoice detail → payment modal →
+Payment received) plus the branded HTML receipt email. **Phase 1 — the
+receipt email and its supporting data — is built, deployed, and live.** The
+portal UI itself (Home/All Invoices/Invoice Detail screens, Stax modal
+polish, an in-app Payment Received screen) is a separate, larger phase not
+yet started; see the punch list at the end of this section.
+
+### `my_schedule()` now returns `last_payment_date` per invoice
+
+`20260828211214_parent_schedule_invoice_last_payment_date.sql`, **applied
+and verified in production.** Purely additive — same signature, same
+`STABLE SECURITY DEFINER`, same `search_path`, one more computed field
+(`max(billing_payments.payment_date)` for that invoice) in the jsonb
+payload. Needed so the eventual Invoice Detail screen can show "Payment
+date" without a second round trip or exposing individual `billing_payments`
+rows (payment_method, notes) the parent app has no reason to see.
+
+### The receipt email — redesigned and deployed for both processors
+
+`sendReceiptEmail()` in `charge-stax-payment/index.ts` and
+`authorizenet-webhook/index.ts` (deployed versions 15 and 18) both rebuilt
+from the mockup: navy header with the real `myMDO_primary_logo_light.png`
+logo (the same asset `send-schedule-confirmation` already uses — no
+placeholder "Logo" box, since there's nothing to embed that isn't already a
+real, hosted asset), a green checkmark, "Payment received" / "Thank you,
+{family}." / the amount, a bordered Invoice/Paid on/Payment method/
+Confirmation# box, a Current month charges / Prior balance / Total paid
+breakdown, a "View billing account" button linking to `portal.html`, and a
+contact footer (the real office phone/email, already used elsewhere in this
+app — see `incident-print.html`).
+
+- **No-reply is deliberate, not an oversight.** The old template said "just
+  reply to this email" — this app has a real staffed billing inbox
+  (`RESEND_REPLY_TO`), so that wasn't wrong, but the mockup's own explicit
+  contact line (phone + billing email) is a clearer, more discoverable
+  replacement for a receipt specifically, which is a confirmation, not a
+  support channel. Genuinely dropped the `reply_to` header on this template.
+- **The current-month/prior-balance split is read from the database, not
+  computed.** Both processors can roll one payment across several unpaid
+  invoices (`stax_finalize_charge()` / `allocateAcrossPaymentRows()`, both
+  tagging each resulting `billing_payments` row's
+  `processor_transaction_id` with `-inv<id>`). The receipt re-reads those
+  exact rows, splits by whether each row's invoice month matches the
+  anchor invoice's own month, and shows the breakdown only when both sides
+  are nonzero — so it can never disagree with what the Ledger already shows,
+  and a single-invoice payment (the common case) just shows one "Total
+  paid" line with no breakdown clutter.
+- **Card brand/last-four appears only for Stax.** `charge-stax-payment`
+  already extracts this from the charge response (previously only when
+  `saveCard` was checked; now read unconditionally so the receipt can show
+  it either way) or, on a saved-card charge, from the family's own stored
+  `stax_default_card_brand`/`_last_four`. `authorizenet-webhook` has no
+  verified field name for this in Authorize.net's transaction-details
+  response — nothing in that file has ever extracted card metadata from it
+  — and this repo does not guess at an unverified field on a live payment
+  API. `buildReceiptHtml()` (identical copy in both files, no shared import
+  path between edge functions in this repo) simply omits the row when
+  `paymentMethodLine` is `null`.
+- **`monthLabel()` was dropped from both files** — the old "Payment
+  Receipt" / month-title header and the "Days of care" line it fed are gone
+  in the redesign, and it had no other caller left.
+- **`verify_jwt` was preserved explicitly on redeploy.**
+  `authorizenet-webhook` must stay `verify_jwt: false` — it's called
+  server-to-server by Authorize.net with no user JWT, authenticated by its
+  own HMAC signature check instead. The `deploy_edge_function` tool defaults
+  `verify_jwt` to `true` when omitted; passing `false` explicitly here was
+  the difference between a working webhook and every real online payment's
+  confirmation silently 401'ing.
+
+### Still to build — the portal UI itself
+
+The mockup's actual screens are unbuilt: `portal-billing.js`'s Billing tab
+is still the single flat list of invoice cards it already was (see that
+file's own header comment), not the mockup's Home → All Invoices → Invoice
+Detail flow with a "Show breakdown" toggle, a prior-balance warning banner,
+and a per-child day-of-care calendar. Also unbuilt: an in-app "Payment
+received" confirmation screen (today a payment just re-renders the same
+list with a banner) and matching polish on the Stax payment modal (an
+always-visible "Balance due" box, the invoice number in the subtitle,
+processor-neutral footer copy instead of naming Stax by name).
+
+⚠️ **Deliberately scoped out of the Invoice Detail screen when it is
+built: a per-day dollar amount.** `my_schedule()` already returns real
+per-day `care_date`/`day_type` data (used for the calendar), but no per-day
+price — the itemized `lineItems` this app already computes
+(`compute_family_month_charges_itemized()`) are aggregated per child
+(full/half day counts + one amount), not per individual date, and they're
+only returned by `create-stax-charge`, which reserves a real payment
+attempt — not something to call just to render a read-only view. Showing a
+day-cell dollar figure would mean inventing a second, client-side billing
+calculation that could drift from the real one; the day cells should show
+`day_type` only, with the child's real dollar figure coming from the
+already-correct child subtotal, not a per-day multiply.
+
+`npm test` — 205/205 (unaffected — this phase touched only edge functions
+and one migration, no `js/`). No `dist/` symbol check applies to this phase
+for the same reason; the next phase (the actual UI) will need the standard
+`npm run build` + bundle-grep discipline this file asks for everywhere else.
 
 ---
 

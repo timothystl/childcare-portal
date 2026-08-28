@@ -116,6 +116,14 @@
     <div class="ip-sig-lines" id="ipSigLines"></div>
   </div>
 
+  <!-- Only shown when addenda exist. An addendum adds to the record without
+       rewriting anything above it, which is signed and unaltered — see
+       incident_report_addenda.sql. -->
+  <div class="ip-addenda hidden" id="ipAddendaBlock">
+    <div class="ip-label">Added since filing</div>
+    <div id="ipAddendaList"></div>
+  </div>
+
   <footer class="ip-foot">
     <div id="ipFootNote"></div>
     <div class="ip-foot-right" id="ipFootRight"></div>

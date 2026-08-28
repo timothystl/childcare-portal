@@ -27,6 +27,13 @@
 let _abData    = null;
 let _abAlerts  = [];
 let _abTimer   = null;
+let _abActionsBound = false;
+// The print bar's own date, independent of _abData.care_date (the board is
+// always "today"; printing a different day shouldn't require leaving the
+// board). Carried across _abRender()'s full innerHTML replacement — every
+// 30s auto-refresh or In/Out click would otherwise silently reset a
+// half-typed pick back to today.
+let _abPrintDate = null;
 
 function _abEl(id) { return document.getElementById(id); }
 
@@ -66,6 +73,13 @@ async function renderAttendanceBoard() {
         ]);
         _abData   = board;
         _abAlerts = alerts || [];
+        // In/Out/Absent/Move need each child's registration for today (id for
+        // the room move, registration_id for the attendance_records mark) —
+        // the head-count RPC doesn't carry either. Same lazy-load guard used
+        // throughout the admin app; a no-op after the first load.
+        if (typeof allRegistrations !== 'undefined' && !allRegistrations.length) {
+            allRegistrations = await fetchAllRegistrations().catch(() => []);
+        }
     } catch (e) {
         wrap.innerHTML = `<p class="muted">Could not load the board: ${escHtml(e.message || e)}</p>`;
         return;
@@ -75,7 +89,146 @@ async function renderAttendanceBoard() {
         return;
     }
     _abRender();
+    _abBindActions();
     _abStartRefresh();
+}
+
+// 'staff'-role admin logins get a read-only board — CLAUDE.md documents that
+// role as "Classrooms tab only (read-only roster view)", and the server-side
+// gate on admin_log_child_event/saveAttendanceRecord's underlying RPCs
+// already refuses that role; hiding the controls keeps the UI honest about it
+// instead of showing buttons that fail.
+function _abCanAct() {
+    return !(typeof currentAdminRole !== 'undefined' && currentAdminRole === 'staff');
+}
+
+// Resolve the registration behind one child's TODAY, for the Absent mark
+// (needs registration_id), the Move dropdown (needs registration_dates.id),
+// and the day-type pill (needs day_type — the head-count RPC doesn't return
+// it; center_headcount_rows()'s own SQL source isn't committed to this repo,
+// so extending its SELECT isn't done blind, per this file's standing rule).
+// The head-count RPC returns student_id/child_name/room_id, not any of
+// those, so this reads them from the same allRegistrations array every other
+// admin day-view tool already uses.
+function _abResolveReg(childName) {
+    if (typeof allRegistrations === 'undefined' || !_abData?.care_date) return null;
+    const dateStr = _abData.care_date;
+    const lower   = String(childName || '').toLowerCase();
+    for (const reg of allRegistrations) {
+        if (String(reg.child_name || '').toLowerCase() !== lower) continue;
+        const d = (reg.registration_dates || []).find(x => x.care_date === dateStr && !x.waitlisted);
+        if (d) return { registrationId: reg.id, dateId: d.id, roomId: d.room_id || reg.room_id, dayType: d.day_type };
+    }
+    return null;
+}
+
+function _abBindActions() {
+    if (_abActionsBound) return;
+    _abActionsBound = true;
+    const wrap = _abEl('attendanceBoardBody');
+    if (!wrap) return;
+
+    wrap.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.ab-act-btn');
+        if (!btn) return;
+        const actions   = btn.closest('.ab-actions');
+        const studentId = actions?.dataset.student;
+        const childName = actions?.dataset.name;
+        const act       = btn.dataset.act;
+        if (!studentId || !act) return;
+
+        btn.disabled = true;
+        try {
+            if (act === 'in' || act === 'out') {
+                const id = await adminLogChildEvent(studentId, act === 'in' ? 'check_in' : 'check_out');
+                if (id == null) throw new Error("couldn't record — check your admin role or today's booking");
+            } else if (act === 'absent') {
+                const wasAbsent = btn.classList.contains('is-on');
+                const reg = _abResolveReg(childName);
+                if (wasAbsent) {
+                    if (reg) await clearAttendanceRecord(reg.registrationId, _abData.care_date);
+                } else {
+                    if (!reg) throw new Error('no booking found for today');
+                    await saveAttendanceRecord({
+                        registrationId: reg.registrationId, careDate: _abData.care_date,
+                        roomId: reg.roomId, childName, status: 'absent',
+                    });
+                }
+            }
+            await renderAttendanceBoard();
+        } catch (err) {
+            alert(`Couldn't update attendance: ${err.message}`);
+            btn.disabled = false;
+        }
+    });
+
+    wrap.addEventListener('change', async (e) => {
+        const sel = e.target.closest('.ab-move-select');
+        if (!sel || !sel.value) return;
+        const actions   = sel.closest('.ab-actions');
+        const childName = actions?.dataset.name;
+        const fromRoomId = actions?.dataset.room;
+        const toRoomId   = sel.value;
+        const reg = _abResolveReg(childName);
+        if (!reg) { alert('No booking found for today.'); sel.value = ''; return; }
+
+        const fromLabel = _abRoomLabel(fromRoomId);
+        const toLabel   = _abRoomLabel(toRoomId);
+        if (!confirm(`Move ${childName} from ${fromLabel} to ${toLabel} for today only?`)) {
+            sel.value = '';
+            return;
+        }
+        sel.disabled = true;
+        try {
+            await updateRegistrationDateRoom(reg.dateId, toRoomId);
+            await renderAttendanceBoard();
+        } catch (err) {
+            alert('Move failed: ' + err.message);
+            sel.disabled = false;
+            sel.value = '';
+        }
+    });
+}
+
+// Two stacked columns — [In, Out] beside [Move, Absent] — not one inline
+// row of four controls, matching the design screenshot. In/Out show the
+// actual check time next to the button once marked; there is no separate
+// check-in-time vs. check-out-time field to draw on (the RPC exposes only
+// the single latest `last_event_at`), so only the side matching the child's
+// *current* status ever has a real time — the other side reads '—', which
+// is the honest state rather than a guessed or carried-over time.
+// ⚠️ Absent is exclusive with In/Out on the display, even though a real
+// check-in event may still exist underneath: showing "in 8:59p" next to
+// "ABSENT" reads as a contradiction (checked in AND absent), and the office
+// marking someone absent is a correction, not a fact that should coexist
+// with a stale check-in stamp. This clears the *display* only — the real
+// child_day_events row is untouched, so un-marking absent restores it.
+function _abActionsHtml(c, roomId) {
+    const otherRooms = (typeof ROOMS !== 'undefined' ? ROOMS : [])
+        .filter(r => r.id !== roomId && r.status !== 'coming_soon');
+    const moveOptions = otherRooms.map(r => `<option value="${r.id}">${escHtml(r.label)}</option>`).join('');
+    const isAbsent = c.marked === 'absent';
+    const isIn  = !isAbsent && c.attendance_status === 'present';
+    const isOut = !isAbsent && c.attendance_status === 'left';
+    const inTime  = isIn  ? _abTime(c.last_event_at) : '';
+    const outTime = isOut ? _abTime(c.last_event_at) : '';
+    return `<span class="ab-actions" data-student="${escHtml(c.student_id)}"
+                  data-name="${escHtml(c.child_name)}" data-room="${escHtml(roomId)}">
+        <span class="ab-actions-col">
+            <button type="button" class="ab-act-btn${isIn ? ' is-on' : ''}"
+                    data-act="in" title="Mark ${escHtml(c.child_name)} checked in">In <span class="ab-act-time">${inTime ? escHtml(inTime) : '—'}</span></button>
+            <button type="button" class="ab-act-btn${isOut ? ' is-on' : ''}"
+                    data-act="out" title="Mark ${escHtml(c.child_name)} checked out">Out <span class="ab-act-time">${outTime ? escHtml(outTime) : '—'}</span></button>
+        </span>
+        <span class="ab-actions-col">
+            <select class="ab-move-select" title="Move ${escHtml(c.child_name)} to another room today">
+                <option value="">Move &#9662;</option>
+                ${moveOptions}
+            </select>
+            <button type="button" class="ab-act-btn ab-act-absent${c.marked === 'absent' ? ' is-on' : ''}"
+                    data-act="absent" title="Mark ${escHtml(c.child_name)} absent">Absent</button>
+        </span>
+    </span>`;
 }
 
 // A board titled "Live" that is five minutes stale is worse than one that says
@@ -94,6 +247,11 @@ function _abStopRefresh() {
 
 function _abRender() {
     const wrap = _abEl('attendanceBoardBody');
+    // Capture whatever date is currently picked before innerHTML wipes it.
+    const liveDateInput = _abEl('abPrintDate');
+    if (liveDateInput && liveDateInput.value) _abPrintDate = liveDateInput.value;
+    const printDate = _abPrintDate || _abData.care_date;
+
     const kids  = _abData.children || [];
     const staff = _abData.staff || [];
 
@@ -103,7 +261,7 @@ function _abRender() {
     const absent     = kids.filter(c => c.marked === 'absent');
     const expected   = kids.filter(c => c.marked !== 'absent');
     const hasCheckins = kids.some(c => c.attendance_status !== 'not_arrived');
-    const allergyKids = kids.filter(c => (c.allergies || '').trim());
+    const allergyKids = kids.filter(c => _abAllergySummary(c.allergies));
 
     // Rooms in ROOMS order, plus anything unexpected the data threw up.
     const roomIds = [...new Set([
@@ -129,6 +287,17 @@ function _abRender() {
             <button class="btn-ghost ab-refresh" id="abRefresh">Refresh</button>
         </div>
 
+        <div class="ab-print-bar">
+            <label for="abPrintDate" class="ab-print-label">Print rosters for</label>
+            <input type="date" id="abPrintDate" value="${escHtml(printDate)}">
+            <button type="button" class="btn-secondary ab-print-btn" id="abPrintDay"
+                    title="Print that one day, every room">Day</button>
+            <button type="button" class="btn-secondary ab-print-btn" id="abPrintWeek"
+                    title="One page per weekday, that week">Week</button>
+            <button type="button" class="btn-secondary ab-print-btn" id="abPrintMonth"
+                    title="One page per weekday, that month">Month</button>
+        </div>
+
         <div class="ab-tiles">
             ${_abTile('Here now', hasCheckins ? present.length : '—',
                       hasCheckins ? `of ${expected.length} expected` : `${expected.length} booked today`,
@@ -139,7 +308,7 @@ function _abRender() {
             ${_abTile('Marked absent', absent.length,
                       absent.length ? 'recorded by the office' : 'none recorded', '')}
             ${_abTile('Ratio watch', over.length ? `${over.length} room${over.length > 1 ? 's' : ''}`
-                                    : atLimit.length ? `${atLimit.length} room${atLimit.length > 1 ? 's' : ''}` : 'Clear',
+                                    : atLimit.length ? `${atLimit.length} room${atLimit.length > 1 ? 's' : ''}` : 'OK',
                       over.length ? 'over ratio' : atLimit.length ? 'at the limit' : 'every room inside ratio',
                       over.length ? 'bad' : atLimit.length ? 'warn' : 'ok')}
             ${_abTile('Allergies present', allergyKids.length,
@@ -153,6 +322,34 @@ function _abRender() {
         </div>`;
 
     _abEl('abRefresh')?.addEventListener('click', renderAttendanceBoard);
+
+    // Reuses Classroom Roster's own print grid (admin-classrooms.js) rather
+    // than building a second one — Day is _printDayRoster (same as that
+    // tool's "Print All Rooms"), Week is _printWeekRoster (one page per
+    // weekday that week), Month is the new _printMonthDailyRoster (the same
+    // per-day page, one per weekday all month — distinct from the Roster
+    // tool's own Month button, which prints a single compact calendar grid
+    // instead). All three read the board's own date picker, not the Roster
+    // tool's — this board is always "today", so printing a different day
+    // needs its own date, independent of what _abData.care_date holds.
+    _abEl('abPrintDate')?.addEventListener('change', (e) => { _abPrintDate = e.target.value; });
+    _abEl('abPrintDay')?.addEventListener('click', () => {
+        const d = _abEl('abPrintDate')?.value;
+        if (!d) { alert('Please choose a date first.'); return; }
+        if (typeof _printDayRoster === 'function') _printDayRoster(d, null);
+    });
+    _abEl('abPrintWeek')?.addEventListener('click', () => {
+        const d = _abEl('abPrintDate')?.value;
+        if (!d) { alert('Please choose a date first.'); return; }
+        if (typeof _printWeekRoster === 'function' && typeof _mondayOfWeek === 'function') {
+            _printWeekRoster(_mondayOfWeek(d), null);
+        }
+    });
+    _abEl('abPrintMonth')?.addEventListener('click', () => {
+        const d = _abEl('abPrintDate')?.value;
+        if (!d) { alert('Please choose a date first.'); return; }
+        if (typeof _printMonthDailyRoster === 'function') _printMonthDailyRoster(d.slice(0, 7), null);
+    });
 }
 
 function _abTile(label, value, sub, tone) {
@@ -163,12 +360,23 @@ function _abTile(label, value, sub, tone) {
     </div>`;
 }
 
+// center_headcount_rows() returns allergies as an array of {label, severity}
+// chips (the same shape admin-families.js's allergy editor writes), not a
+// string — this flattens it to one displayable line. Defensive against a
+// bare string too, in case a caller somewhere still has the older shape.
+function _abAllergySummary(allergies) {
+    if (Array.isArray(allergies)) {
+        return allergies.map(a => (a && a.label) || '').filter(Boolean).join(', ');
+    }
+    return String(allergies || '').trim();
+}
+
 // The three or four distinct allergens, not a list of children — the tile
 // answers "what is in the building today", which is what a kitchen needs.
 function _abAllergyWords(kids) {
     const words = new Set();
     for (const k of kids) {
-        for (const part of String(k.allergies).split(/[,;\n]/)) {
+        for (const part of _abAllergySummary(k.allergies).split(/[,;\n]/)) {
             const w = part.trim().split(/\s+/)[0];
             if (w) words.add(w.replace(/[^a-zA-Z-]/g, '').toLowerCase());
         }
@@ -206,19 +414,34 @@ function _abRoom(roomId, kids, staff, hasCheckins) {
         unknown: r.ratio ? `<span class="ab-pill">1:${r.ratio} required</span>` : '',
     }[r.state];
 
+    const canAct = _abCanAct();
     const rows = roomKids.map(c => {
-        const allergy = (c.allergies || '').trim();
+        const allergy  = _abAllergySummary(c.allergies);
+        const isAbsent = c.marked === 'absent';
+        const dayType  = _abResolveReg(c.child_name)?.dayType;
         let mark, cls;
-        if (c.marked === 'absent')                  { mark = 'ABSENT'; cls = 'is-absent'; }
-        else if (c.attendance_status === 'present') { mark = _abTime(c.last_event_at); cls = 'is-in'; }
+        if (isAbsent)                                { mark = 'ABSENT'; cls = 'is-absent'; }
+        else if (c.attendance_status === 'present') { mark = `in ${_abTime(c.last_event_at)}`; cls = 'is-in'; }
         else if (c.attendance_status === 'left')    { mark = `out ${_abTime(c.last_event_at)}`; cls = 'is-out'; }
         else                                        { mark = hasCheckins ? 'not in' : 'booked'; cls = 'is-waiting'; }
 
+        // Name-line badges: day type, an allergy flag, ABSENT (redundant with
+        // the filled Absent button below, but visible without scanning all the
+        // way to the action grid), and drop-in — all independent facts that
+        // can coexist, unlike `mark` above (which is one mutually exclusive
+        // status used only for the read-only/no-action fallback).
+        const badges = `${dayType ? `<span class="ab-daytype-pill">${escHtml(dayType.toUpperCase())}</span>` : ''}${
+            allergy ? `<span class="ab-allergy-icon" title="${escHtml(allergy)}">⚠️</span>` : ''}${
+            isAbsent ? '<span class="ab-absent-label">ABSENT</span>' : ''}${
+            c.dropin ? '<span class="ab-dropin">drop-in</span>' : ''}`;
+
         return `<div class="ab-kid ${cls}">
             <span class="ab-av">${escHtml(_abInitials(c.child_name))}</span>
-            <span class="ab-kid-name">${escHtml(c.child_name)}${
-                c.dropin ? '<span class="ab-dropin">drop-in</span>' : ''}</span>
-            <span class="ab-kid-mark">${allergy ? `<span title="${escHtml(allergy)}">⚠️</span> ` : ''}${escHtml(mark)}</span>
+            <span class="ab-kid-info">
+                <span class="ab-kid-name" title="${escHtml(c.child_name)}">${escHtml(c.child_name)}</span>
+                <span class="ab-kid-badges">${badges}</span>
+            </span>
+            ${canAct ? _abActionsHtml(c, roomId) : `<span class="ab-kid-mark">${escHtml(mark)}</span>`}
         </div>`;
     }).join('');
 

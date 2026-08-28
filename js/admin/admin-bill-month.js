@@ -66,11 +66,10 @@ async function computeBillMonthExceptions(month) {
         parseFloat(r.override_amount),
     ]));
 
-    const [thisMonth, lastMonth, students, closures, credits] = await Promise.all([
+    const [thisMonth, lastMonth, students, credits] = await Promise.all([
         Promise.resolve(_buildFamilyBillingData(month, overridesMap)),
         Promise.resolve(_buildFamilyBillingData(prevMonth)),
         fetchStudents().catch(() => []),
-        fetchClosures().catch(() => []),
         fetchBillingCredits({ unappliedOnly: true }).catch(() => []),
     ]);
 
@@ -78,7 +77,23 @@ async function computeBillMonthExceptions(month) {
     const regFeeAmount    = window._regFeeAmount ?? (await fetchSetting('registration_fee').catch(() => 0)) ?? 0;
     const newFamilyFee    = window._newFamilyFee ?? (await fetchSetting('new_family_fee').catch(() => 0)) ?? 0;
     const supplyFeeMax    = window._supplyFeeFamilyMax ?? (await fetchSetting('supply_fee_family_max').catch(() => 0)) ?? 0;
-    const currentYear     = currentFeeCycleYear(window._regFeeRenewalDate);
+    // ⚠️ This one was missing the same window._X ?? fetchSetting(...) guard
+    // the three lines above it already use, so it silently fell back to
+    // currentFeeCycleYear()'s OWN internal default ('01-01') whenever this
+    // screen was opened before setupRegFee() (admin-init.js) had finished
+    // loading the real renewal date into window._regFeeRenewalDate — a
+    // real, live race, not a hypothetical one: the center's actual renewal
+    // date is 09-01, so on any day between Jan 1 and Sep 1 the '01-01'
+    // fallback computes the WRONG fiscal cycle year (this calendar year
+    // instead of last), which flips "who still owes the registration fee"
+    // from a small real list to nearly the entire roster — verified live
+    // 2026-08-28: 2 children actually owed it that day, but the '01-01'
+    // fallback made 117 look like they did, an ~$15,300 swing in the
+    // Ledger's Fees box depending purely on load order, not on anything
+    // that actually changed.
+    const regFeeRenewalMD = window._regFeeRenewalDate
+        ?? (await fetchSetting('registration_fee_renewal_date').catch(() => null));
+    const currentYear     = currentFeeCycleYear(regFeeRenewalMD);
 
     const studentByName = new Map();
     students.forEach(s => {
@@ -99,12 +114,12 @@ async function computeBillMonthExceptions(month) {
         creditsByFamily.set(c.family_id, arr);
     });
 
-    // A closure date inside THIS month is what lets "days changed" carry the
-    // more specific "closure credit" cause instead of a bare day-count diff —
-    // it does not attempt to prove which day moved, only that one plausibly did.
-    const monthHasClosure = closures.some(c => String(c.close_date || '').startsWith(month));
-
-    // Prior month, by child name, for the day-count diff.
+    // Prior month, by child name — used only to tell "new this month" apart
+    // from an existing child. A plain day-count difference from last month is
+    // NOT surfaced as a cause: every family's schedule varies month to month
+    // by design (that's the whole point of flexible day booking), so flagging
+    // it read as "this kid has 4 days this month, 5 last month" on every
+    // single row — noise dressed up as a review flag, not a real exception.
     const prevChildDays = new Map();   // childName(lower) -> {full, half, total}
     lastMonth.forEach(fam => fam.children.forEach(c => {
         prevChildDays.set((c.childName || '').toLowerCase().trim(), {
@@ -152,15 +167,7 @@ async function computeBillMonthExceptions(month) {
 
             const key  = (c.childName || '').toLowerCase().trim();
             const prev = prevChildDays.get(key);
-            const days = c.fullDays + c.halfDays;
-            if (prev && prev.total !== days) {
-                causes.push({
-                    kind: 'days', child: c.childName,
-                    text: monthHasClosure && days < prev.total
-                        ? `${c.childName}: ${prev.total}→${days} days (a closure this month may explain some of it)`
-                        : `${c.childName}: days changed ${prev.total}→${days}`,
-                });
-            } else if (!prev) {
+            if (!prev) {
                 causes.push({ kind: 'new', child: c.childName, text: `${c.childName}: new this month` });
             }
 
@@ -189,7 +196,16 @@ async function computeBillMonthExceptions(month) {
             causes.push({ kind: 'sibling', text: 'New sibling added since last month' });
         }
 
-        const total = Math.max(0, base + regFee + familyNewFee - creditTotal);
+        // ⚠️ changeFees belongs here — prevFamilyTotal above (line 115) already
+        // folds it in, and leaving it out of THIS total made a family's
+        // schedule-change fee vanish from every number this engine feeds
+        // (Bill the Month's own total, and the Ledger's month-total strip),
+        // even though the same fee is listed as its own line in the
+        // exception card just below. Found while building the Ledger's
+        // gross/discounts/fees/total breakdown (2026-08-28) — a display-only
+        // fix, not a billing write: reconcileBillingInvoice() recomputes the
+        // real invoice amount server-side regardless of what this preview shows.
+        const total = Math.max(0, base + changeFees + regFee + familyNewFee - creditTotal);
 
         return {
             familyId: match?.id || null,

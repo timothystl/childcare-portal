@@ -23,19 +23,134 @@
          window 'load' with a fallback timeout so it never sticks around if
          something else stalls. -->
     <div id="mdoSplash" class="mdo-splash" aria-hidden="true">
-        <img src="/images/logo/splash/splash-parent.svg" alt="" width="1290" height="2796">
+        <div class="mdo-splash-top">
+            <img class="mdo-splash-wordmark" src="/images/logo/myMDO_parent_wordmark_light.png" alt="">
+            <p class="mdo-splash-tagline">Welcome.<span class="t-div">|</span><span class="t-blue">Receive.</span><span class="t-div">|</span>Grow.<span class="t-div">|</span><span class="t-gold">Go.</span></p>
+        </div>
+        <div class="mdo-splash-silhouette" aria-hidden="true">
+            <img src="/images/logo/splash-church-pale.png" alt="">
+        </div>
+        <div class="mdo-splash-footer">
+            <div class="mdo-splash-spinner" id="mdoSplashSpinner"></div>
+            <svg id="mdoSplashCheck" width="34" height="34" viewBox="0 0 34 34" hidden>
+                <circle cx="17" cy="17" r="17" fill="#F5B731"/>
+                <path d="M9.5 17.5l5 5 10-11" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+            <p id="mdoSplashText">Loading <strong>myMDO</strong>&hellip;</p>
+        </div>
     </div>
     <script>
       (function () {
         var el = document.getElementById('mdoSplash');
         if (!el) return;
+        var textEl = document.getElementById('mdoSplashText');
+        var spinnerEl = document.getElementById('mdoSplashSpinner');
+        var checkEl = document.getElementById('mdoSplashCheck');
+        var almostTimer = setTimeout(function () {
+          textEl.innerHTML = 'Almost there&hellip;';
+        }, 1400);
+        var hidden = false;
         function hide() {
-          el.classList.add('mdo-splash-hidden');
-          setTimeout(function () { el.remove(); }, 400);
+          if (hidden) return;
+          hidden = true;
+          clearTimeout(almostTimer);
+          spinnerEl.hidden = true;
+          checkEl.hidden = false;
+          textEl.textContent = 'Welcome!';
+          setTimeout(function () {
+            el.classList.add('mdo-splash-hidden');
+            setTimeout(function () { el.remove(); }, 400);
+          }, 450);
         }
         if (document.readyState === 'complete') hide();
         else window.addEventListener('load', hide);
         setTimeout(hide, 4000);
+      })();
+    </script>
+
+    <!-- Onboarding carousel: shown once per browser, before the sign-in card.
+         Sits directly under the splash (z-index 9998 vs 9999) so it's already
+         in place the moment the splash fades — see css/styles.css for why
+         onboarding-scene.png has no baked-in headline. -->
+    <div id="mdoOnboard" class="mdo-onboard mdo-onboard-hidden" aria-hidden="true">
+        <div class="mdo-onboard-slides">
+            <div class="mdo-onboard-slide is-active">
+                <img class="mdo-onboard-scene" src="/images/logo/onboarding-scene.png" alt="">
+                <h2>All in one place</h2>
+                <p>Tools for our team. Updates for you. A better day for your child.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--clockin"><img src="/images/logo/icon-clockin-icon.png" alt=""></div>
+                <h2>Clock In with Ease</h2>
+                <p>Quick and simple time tracking for staff on the go.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--staff"><img src="/images/logo/icon-staff-icon.png" alt=""></div>
+                <h2>Support Your Team</h2>
+                <p>Everything staff need to manage their day and care for kids.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--admin"><img src="/images/logo/icon-admin-icon.png" alt=""></div>
+                <h2>Secure &amp; Reliable</h2>
+                <p>Secure access for administrators to manage and oversee.</p>
+            </div>
+            <div class="mdo-onboard-slide">
+                <div class="mdo-onboard-icon mdo-onboard-icon--parent"><img src="/images/logo/icon-parent-icon.png" alt=""></div>
+                <h2>Stay Connected</h2>
+                <p>Stay connected with your child's day, updates, and important info.</p>
+            </div>
+        </div>
+        <div class="mdo-onboard-bottom">
+            <div class="mdo-onboard-dots" id="mdoOnboardDots"></div>
+            <div class="mdo-onboard-actions">
+                <button type="button" class="mdo-onboard-skip" id="mdoOnboardSkip">Skip</button>
+                <button type="button" class="mdo-onboard-next" id="mdoOnboardNext">Next</button>
+            </div>
+        </div>
+    </div>
+    <script>
+      (function () {
+        var KEY = 'mdoOnboardSeen_parent';
+        var el = document.getElementById('mdoOnboard');
+        if (!el) return;
+        var seen = false;
+        try { seen = !!localStorage.getItem(KEY); } catch (e) {}
+        if (seen) { el.remove(); return; }
+        var slides = Array.prototype.slice.call(el.querySelectorAll('.mdo-onboard-slide'));
+        var dotsWrap = document.getElementById('mdoOnboardDots');
+        var nextBtn = document.getElementById('mdoOnboardNext');
+        var skipBtn = document.getElementById('mdoOnboardSkip');
+        var idx = 0;
+        slides.forEach(function (_, i) {
+          var d = document.createElement('span');
+          if (i === 0) d.className = 'is-active';
+          dotsWrap.appendChild(d);
+        });
+        var dots = Array.prototype.slice.call(dotsWrap.children);
+        function render() {
+          slides.forEach(function (s, i) { s.classList.toggle('is-active', i === idx); });
+          dots.forEach(function (d, i) { d.classList.toggle('is-active', i === idx); });
+          nextBtn.textContent = idx === slides.length - 1 ? "Let's get started" : 'Next';
+        }
+        function finish() {
+          try { localStorage.setItem(KEY, '1'); } catch (e) {}
+          el.classList.add('mdo-onboard-hidden');
+          setTimeout(function () { el.remove(); }, 350);
+        }
+        nextBtn.addEventListener('click', function () {
+          if (idx === slides.length - 1) { finish(); return; }
+          idx++; render();
+        });
+        skipBtn.addEventListener('click', finish);
+        render();
+        function reveal() { el.classList.remove('mdo-onboard-hidden'); }
+        var splash = document.getElementById('mdoSplash');
+        if (splash) {
+          var t = setTimeout(reveal, 900);
+          splash.addEventListener('transitionend', function () { clearTimeout(t); reveal(); }, { once: true });
+        } else {
+          reveal();
+        }
       })();
     </script>
 
@@ -44,8 +159,12 @@
         <div class="portal-logo">
             <img src="/images/logo/myMDO_parent_wordmark_light.png" alt="myMDO">
         </div>
-        <h1>Parent Portal</h1>
-        <p class="portal-sub">Sign in with the same email and PIN you use for registration.</p>
+        <h1 class="sr-only">Parent Portal</h1>
+        <div class="mdo-signin-badge mdo-signin-badge--parent">
+            <img src="/images/logo/icon-parent-icon.png" alt="">
+            <p class="mdo-signin-app">Parent</p>
+            <p class="mdo-signin-sub">Sign in to your account</p>
+        </div>
 
         <div class="form-group">
             <label for="portalEmail">Email Address</label>
@@ -55,10 +174,11 @@
         <div class="form-group">
             <label for="portalPin">PIN</label>
             <input type="text" id="portalPin" placeholder="4-digit PIN" maxlength="8"
-                   inputmode="numeric" pattern="[0-9]*" autocomplete="current-password">
+                   inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+                   data-lpignore="true" data-1p-ignore data-bwignore>
         </div>
 
-        <button id="portalSignInBtn" class="btn-primary portal-btn">Sign In</button>
+        <button id="portalSignInBtn" class="btn-primary portal-btn mdo-signin-btn--parent">Sign In</button>
         <p id="portalError" class="portal-error hidden"></p>
 
         <p class="portal-hint">
@@ -70,6 +190,8 @@
             <a href="calendar.html">Register for care days</a>
             <a href="lookup.html">View my schedule</a>
         </div>
+
+        <p class="mdo-signin-footer">Timothy Lutheran Church</p>
     </div>
 
     <!-- Signed in — five-tab app shell (docs/design_handoff/README.md §Navigation).
@@ -128,9 +250,12 @@
             </div>
         </div>
 
-        <div id="ptNoChildren" class="portal-soon hidden">
-            <strong>No children on file yet.</strong> Once your registration is
-            processed, your child's day will appear here.
+        <div id="ptNoChildren" class="mdo-empty hidden">
+            <img src="/images/logo/empty-backpack.png" alt="">
+            <div class="mdo-empty-text">
+                <strong>Nothing here yet!</strong>
+                <span>Once your registration is processed, your child's day will appear here.</span>
+            </div>
         </div>
         </section>
 
@@ -158,9 +283,12 @@
             </div>
             <div id="prPhotos" class="pt-photos pt-card hidden"></div>
         </div>
-        <div id="prNoChildren" class="portal-soon hidden">
-            <strong>No children on file yet.</strong> Once your registration is
-            processed, your child's daily record will appear here.
+        <div id="prNoChildren" class="mdo-empty hidden">
+            <img src="/images/logo/empty-backpack.png" alt="">
+            <div class="mdo-empty-text">
+                <strong>Nothing here yet!</strong>
+                <span>Once your registration is processed, your child's daily record will appear here.</span>
+            </div>
         </div>
         </section>
 
@@ -257,6 +385,97 @@
         </div>
         <nav id="ptTabs" class="tabbar" role="tablist" aria-label="Parent portal"></nav>
       </aside>
+    </div>
+
+    <!-- Online payment (Authorize.net Accept Hosted), embedded via iframe so
+         paying tuition never leaves the portal — see portal-billing.js and
+         iframe-communicator.html. Lives outside #portalSignedIn so a tab
+         switch never wipes it, and it's the only iframe in the parent app;
+         everything else here is native markup. -->
+    <div id="pbPayModal" class="pb-pay-modal hidden" role="dialog" aria-modal="true" aria-label="Pay online">
+        <div class="pb-pay-modal-inner">
+            <button type="button" id="pbPayModalClose" class="pb-pay-modal-close" aria-label="Cancel payment">&times;</button>
+            <p id="pbPayModalStatus" class="pb-pay-modal-status">Loading secure payment form…</p>
+            <p id="pbPayPriorBalanceNote" class="pb-prior-balance-note" hidden></p>
+            <iframe id="pbPayFrame" name="pbPayFrame" class="pb-pay-frame" title="Secure payment"></iframe>
+        </div>
+    </div>
+
+    <!-- Stax payment modal. Card-number/CVV fields are Stax.js iframes;
+         the surrounding amount, installment, saved-card and receipt UI is
+         controlled by this portal. -->
+    <div id="pbStaxModal" class="pb-pay-modal hidden" role="dialog" aria-modal="true" aria-label="Pay online">
+        <div class="pb-pay-modal-inner pb-stax-modal-inner">
+            <button type="button" id="pbStaxModalClose" class="pb-pay-modal-close" aria-label="Cancel payment">&times;</button>
+            <div class="pb-stax-modal-body">
+                <p class="pb-stax-badge">Secure online payment</p>
+                <h3 class="pb-stax-title">Pay <span id="pbStaxAmount">$0.00</span></h3>
+                <p class="pb-stax-name" id="pbStaxName"></p>
+                <p id="pbStaxModalStatus" class="pb-pay-modal-status" hidden></p>
+
+                <div id="pbStaxLineItems" class="pb-stax-line-items"></div>
+
+                <div id="pbStaxPaymentAmountWrap" class="pb-stax-payment-amount" hidden>
+                    <p class="pb-stax-balance">Balance due: <strong id="pbStaxBalanceDue">$0.00</strong></p>
+                    <button type="button" id="pbStaxPartialToggle" class="pb-stax-link-btn"
+                            aria-expanded="false" aria-controls="pbStaxPartialFields">Pay a different amount</button>
+                    <div id="pbStaxPartialFields" hidden>
+                        <label class="pb-stax-label" for="pbStaxPaymentAmount">Payment amount</label>
+                        <div class="pb-stax-money-input">
+                            <span aria-hidden="true">$</span>
+                            <input type="number" id="pbStaxPaymentAmount" min="0.01" step="0.01"
+                                   inputmode="decimal" aria-describedby="pbStaxPartialHelp" autocomplete="off">
+                        </div>
+                        <p id="pbStaxPartialHelp" class="pb-stax-fine">
+                            Payments are applied to the oldest outstanding balance first. Any remainder stays due.
+                        </p>
+                    </div>
+                </div>
+
+                <div id="pbStaxSavedCard" class="pb-stax-saved-card hidden">
+                    <p class="pb-stax-saved-card-label">
+                        <span id="pbStaxSavedCardLabel"></span>
+                    </p>
+                    <button type="button" id="pbStaxUseSavedCardBtn" class="pb-pay-btn">Pay with this card</button>
+                    <button type="button" id="pbStaxUseNewCardBtn" class="pb-stax-link-btn">Use a different card</button>
+                </div>
+
+                <div id="pbStaxCardEntry">
+                    <label class="pb-stax-label" for="pbStaxCardNumber">Card number</label>
+                    <div id="pbStaxCardNumber" class="pb-stax-field pb-stax-field-number"></div>
+
+                    <div class="pb-stax-row">
+                        <div>
+                            <label class="pb-stax-label" for="pbStaxExpMonth">Expiration</label>
+                            <div class="pb-stax-exp-row">
+                                <select id="pbStaxExpMonth" class="pb-stax-select" aria-label="Expiration month" autocomplete="off">
+                                    <option value="">MM</option>
+                                    <option value="01">01</option><option value="02">02</option>
+                                    <option value="03">03</option><option value="04">04</option>
+                                    <option value="05">05</option><option value="06">06</option>
+                                    <option value="07">07</option><option value="08">08</option>
+                                    <option value="09">09</option><option value="10">10</option>
+                                    <option value="11">11</option><option value="12">12</option>
+                                </select>
+                                <select id="pbStaxExpYear" class="pb-stax-select" aria-label="Expiration year" autocomplete="off"></select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="pb-stax-label" for="pbStaxCardCvv">CVV</label>
+                            <div id="pbStaxCardCvv" class="pb-stax-field pb-stax-field-cvv"></div>
+                        </div>
+                    </div>
+
+                    <label class="pb-stax-save-card-label">
+                        <input type="checkbox" id="pbStaxSaveCard"> Save this card for next time
+                    </label>
+
+                    <button type="button" id="pbStaxPayBtn" class="pb-pay-btn" disabled>Pay</button>
+                    <p class="pb-stax-fine">Card details are entered directly into Stax's own secure
+                       fields above — this app never sees or stores your card number.</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
