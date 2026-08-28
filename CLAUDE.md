@@ -3215,6 +3215,75 @@ token, not a project secret, precisely because it was meant to be short-lived). 
 must be deleted from the Supabase dashboard.** The repository includes an inert 410
 replacement as an emergency containment step, but the live function must be disabled
 or deleted and its hardcoded token treated as compromised before launch.
+⚠️ Still true as of the fixes below — confirmed still `ACTIVE` in `list_edge_functions`,
+still needs a human to delete it from the dashboard (no MCP delete-function tool exists).
+
+### External payments security review — fixes applied 2026-08-28
+
+A second AI agent's independent security review of the Stax work above was checked
+claim-by-claim against the live catalog rather than taken on faith (several of its
+"live evidence" claims were verified with direct queries before acting on them).
+Two of its findings were real and fixable without a production/Stax go-live decision;
+those were fixed this session. The two findings that require an actual production
+Stax merchant (pinning/verifying the merchant id behind `STAX_API_KEY`, and running a
+real `create_transaction` webhook test against production) were correctly identified
+by the review as pre-launch gates, not live incidents — `charge-stax-payment` already
+refuses to run unless `STAX_ENVIRONMENT === "production"`, which it is not yet, so
+there was nothing to fix today. Revisit those two before any real Stax launch.
+
+- **`add_day_to_invoice_by_email` was executable by every `authenticated` session,
+  including a parent.** `fs5_phase1_revoke_add_day_anon.sql` (2026-08-11) revoked
+  `anon`/`PUBLIC` and clamped the delta non-negative, but left `authenticated` with
+  EXECUTE. That was fine while every `authenticated` caller was an admin; it stopped
+  being fine the same day this repo shipped `parent_portal_option_b_accounts_APPLIED.sql`
+  — parents now hold real Supabase Auth JWTs too. The function still takes an arbitrary
+  `p_email` (not the caller's own family), has no admin-role check, and no status guard
+  (writes to a `finalized`/`paid` invoice same as a `draft`). A signed-in parent could
+  have called it directly against PostgREST to inflate any other family's issued
+  invoice. **Not Stax-specific and needed no launch decision** — fixed immediately by
+  `20260828030000_revoke_add_day_invoice_authenticated.sql`, which revokes
+  `authenticated` too (service_role only now). Safe because `js/`/`supabase/` have zero
+  remaining `.rpc('add_day_to_invoice_by_email')` call sites (superseded by the
+  recompute-only billing rewrite the same day as the original fix) and
+  `pg_stat_statements` still shows the same 30 historical `authenticated` calls
+  `fs5_phase1` recorded in 2026-08-11 — zero calls since. Verified post-apply:
+  `has_function_privilege` authenticated=false, anon=false, service_role=true.
+- **Leftover sandbox test data was live in production**, exactly as the review's "live
+  evidence" claimed and contrary to this file's own "no live trace" note (which
+  describes a *different*, later webhook test, not this one): a synthetic family
+  (`stax-eval-test@timothystl.org`, zero students), its `stax_customer_id`, a `$5.00`
+  `billing_invoices` row, and the matching `billing_payments` row from the 2026-08-26
+  first click-through — with no `payment_charge_locks` row, confirming it predated the
+  hardening. All four deleted; verified zero remaining rows referencing that family or
+  that Stax customer/payment.
+- **A Stax `PENDING` charge (HTTP 202) was silently shown to the parent as a plain
+  failure.** 202 is a 2xx status, so `supabase-js`'s `functions.invoke()` resolves it as
+  `data`, not `error` — `chargeStaxPayment()` in `js/supabase.js` just returned the body,
+  and `portal-billing.js`'s `chargeResult.success !== true` check discarded the server's
+  real `{error: "...still processing...", ambiguous: true}` message in favor of a
+  hardcoded `'Payment was not confirmed. Please try again.'`. The charge-lock already
+  prevented a double charge; the parent was just told the wrong thing and had no reason
+  not to retry immediately. Fixed by making `chargeStaxPayment()` recognize this shape
+  and throw the server's own message (both portal-billing.js call sites already surface
+  `e.message`, so no UI-layer change was needed). Guarded by a new test:
+  `'client never reads a Stax PENDING (HTTP 202) response as a confirmed charge'`.
+- **Migration history had drifted from what was actually applied** — the review found
+  the live catalog recorded `harden_stax_payments` as
+  `20260827225514_harden_stax_payments`, while the repo had it committed as
+  `20260827193636_harden_stax_payments.sql`. Content was diffed against the live
+  function bodies first and matched exactly (`stax_prepare_charge` etc.) — this was pure
+  filename/history drift, not a functional gap. Renamed to match the applied version,
+  per this file's own standing rule that a migration's filename should match what
+  actually ran.
+- **Not fixed, and don't try to fix from the code alone:** pinning/verifying the Stax
+  merchant id, and a production `create_transaction` webhook test. Both need a live
+  production Stax merchant, which does not exist yet — see the launch-blocker note
+  above and the "Production gate" note earlier in this section.
+
+`npm test` — 183/183 (added the one new guard above). `npm run build` — `dist/`
+rebuilt; `dist/supabase.min.js` grepped for `Your payment could not be confirmed` to
+confirm the fix actually shipped in the bundle portal.html loads, per this file's own
+"it shipped half-live for a day" lesson.
 
 ---
 
