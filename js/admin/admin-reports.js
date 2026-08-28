@@ -892,8 +892,8 @@ function renderScheduleTables(weekDates, counts, assignments) {
 
     container.innerHTML = `
         <div class="sched-actions-bar">
-            <button id="printStaffAssignBtn" class="btn-secondary">🖨 Print</button>
-            <button id="exportStaffAssignBtn" class="btn-secondary">⬇ Export XLSX</button>
+            <button id="printStaffAssignBtn" class="btn-ghost">🖨 Print</button>
+            <button id="exportStaffAssignBtn" class="btn-ghost">⬇ Export XLSX</button>
         </div>
         <div id="scheduleTablesWrap">${roomBlocks}</div>`;
 
