@@ -39,7 +39,7 @@ function submittedByLabel(reg) {
 // ============================================================
 async function loadRegistrations() {
     document.getElementById('regTableBody').innerHTML =
-        '<tr><td colspan="12" class="loading-cell">Loading…</td></tr>';
+        '<tr><td colspan="5" class="loading-cell">Loading…</td></tr>';
     try {
         allRegistrations = await fetchAllRegistrations();
         // Discounts (the Discount column + bill estimate) read from
@@ -58,7 +58,7 @@ async function loadRegistrations() {
     } catch (err) {
         console.error(err);
         document.getElementById('regTableBody').innerHTML =
-            '<tr><td colspan="10" class="loading-cell error">Failed to load — check Supabase config.</td></tr>';
+            '<tr><td colspan="5" class="loading-cell error">Failed to load — check Supabase config.</td></tr>';
     }
 }
 
@@ -102,6 +102,74 @@ function populateCareMonthFilter() {
 // ============================================================
 // TABLE RENDER
 // ============================================================
+// The Monday of the week containing a care date — the grouping key for
+// "does this weekday recur every week" below.
+function _regWeekMonday(dateStr) {
+    const d = new Date(dateStr + 'T12:00:00');
+    const day = d.getDay();
+    d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+    return d.toISOString().split('T')[0];
+}
+
+const _REG_PATTERN_LETTERS = ['M', 'T', 'W', 'T', 'F'];
+
+// Care Calendar redesign (2026-08-27): a weekday-pattern summary instead of a
+// pill per date. `activeWeekdays` is a 5-item boolean array, Mon..Fri — which
+// weekdays this registration has at least one confirmed (non-waitlisted) day
+// on. "Fixed" means a weekday that's active appears in nearly every week this
+// registration spans (tolerating one missed week, e.g. a closure) — otherwise
+// the schedule is irregular and the summary says so rather than implying a
+// pattern that isn't really there.
+function _regPatternInfo(reg) {
+    const dates = (reg.registration_dates || []).filter(d => !d.waitlisted && d.care_date);
+    if (!dates.length) {
+        return { activeWeekdays: [false, false, false, false, false], summary: 'No days scheduled' };
+    }
+
+    const byWeekday = [[], [], [], [], []]; // Mon..Fri
+    const weeksSeen = new Set();
+    dates.forEach(d => {
+        weeksSeen.add(_regWeekMonday(d.care_date));
+        const dow = new Date(d.care_date + 'T12:00:00').getDay(); // 0=Sun..6=Sat
+        const idx = dow - 1; // Mon=0..Fri=4
+        if (idx >= 0 && idx <= 4) byWeekday[idx].push(d.day_type || 'full');
+    });
+
+    const weekCount = weeksSeen.size;
+    const activeWeekdays = byWeekday.map(arr => arr.length > 0);
+    const activeCount = activeWeekdays.filter(Boolean).length;
+    const isFixed = activeWeekdays.every((active, i) =>
+        !active || byWeekday[i].length >= weekCount - 1);
+
+    const dayTypes = new Set(dates.map(d => d.day_type || 'full'));
+    const dayTypeLabel = dayTypes.size > 1 ? 'Mixed' : (dayTypes.has('half') ? 'Half' : 'Full');
+
+    let freqLabel;
+    if (!isFixed) {
+        freqLabel = 'No fixed pattern';
+    } else if (activeCount === 5) {
+        freqLabel = 'Every day';
+    } else {
+        const letters = _REG_PATTERN_LETTERS.filter((_, i) => activeWeekdays[i]).join('/');
+        freqLabel = `${activeCount}x/wk (${letters})`;
+    }
+
+    return {
+        activeWeekdays,
+        summary: `${dayTypeLabel} · ${freqLabel} · ${dates.length} day${dates.length !== 1 ? 's' : ''} this month`,
+    };
+}
+
+function _regPatternHtml(reg) {
+    const info = _regPatternInfo(reg);
+    const chips = _REG_PATTERN_LETTERS.map((letter, i) =>
+        `<span class="rc-pat-chip${info.activeWeekdays[i] ? ' is-on' : ''}">${letter}</span>`).join('');
+    return `<div class="rc-pattern">
+        <div class="rc-pat-chips">${chips}</div>
+        <div class="rc-pat-summary">${escHtml(info.summary)}</div>
+    </div>`;
+}
+
 function renderTable(data) {
     // Update sort indicators on column headers
     document.querySelectorAll('#regTable thead th[data-col]').forEach(th => {
@@ -115,36 +183,12 @@ function renderTable(data) {
 
     const tbody = document.getElementById('regTableBody');
     if (!data.length) {
-        tbody.innerHTML = '<tr><td colspan="12" class="loading-cell">No registrations found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No registrations found.</td></tr>';
         return;
     }
 
     tbody.innerHTML = data.map(reg => {
-        const room  = ROOMS.find(r => r.id === reg.room_id) || { label: reg.room_id };
-        const dates = (reg.registration_dates || [])
-            .sort((a, b) => a.care_date.localeCompare(b.care_date));
-
-        const enteredByLabel = submittedByLabel(reg);
-
-        // Date chips — show ½ day or Full
-        const datesHtml = dates.map(d => {
-            const cls       = d.waitlisted ? 'badge-waitlist' : 'badge-confirmed';
-            const typeLabel = d.day_type === 'half' ? '½ day' : 'Full';
-            return `<span class="date-chip ${cls}" title="${d.day_type === 'half' ? 'Half Day' : 'Full Day'}">${friendlyShort(d.care_date)} <em>${typeLabel}</em></span>`;
-        }).join('');
-
-        // Full / Half tally
-        const confirmed = dates.filter(d => !d.waitlisted);
-        const fullCount = confirmed.filter(d => d.day_type !== 'half').length;
-        const halfCount = confirmed.filter(d => d.day_type === 'half').length;
-        const tallyParts = [];
-        if (fullCount) tallyParts.push(`<span class="tally-full">${fullCount} Full</span>`);
-        if (halfCount) tallyParts.push(`<span class="tally-half">${halfCount} Half</span>`);
-        const tallyHtml = tallyParts.join('<br>') || '—';
-
-        const submitted = new Date(reg.created_at).toLocaleDateString('en-US',
-            { month: 'short', day: 'numeric', year: 'numeric' });
-
+        const room = ROOMS.find(r => r.id === reg.room_id) || { label: reg.room_id };
         const bill = calcRegistrationBill(reg);
 
         // Discount info — try reg email first, fall back to searching all family emails
@@ -152,25 +196,27 @@ function renderTable(data) {
         const disc    = getDiscountMap().get(discKey);
         const discLabel = disc
             ? (disc.type === 'staff' ? 'Staff (free)' : `${disc.value}% off`)
-            : '—';
+            : '';
 
         return `
             <tr data-id="${reg.id}" data-room="${reg.room_id}">
-                <td>${submitted}</td>
-                <td class="submitted-by-cell">${escHtml(enteredByLabel)}</td>
-                <td>${escHtml(reg.parent_name)}</td>
-                <td><a href="mailto:${escHtml(reg.parent_email)}">${escHtml(reg.parent_email)}</a></td>
-                <td>${escHtml(reg.parent_phone)}</td>
-                <td>${escHtml(reg.child_name)}</td>
-                <td>${room.label}</td>
-                <td class="dates-cell">${datesHtml}</td>
-                <td class="tally-cell">${tallyHtml}</td>
-                <td class="bill-cell">$${bill.toFixed(2)}</td>
-                <td class="discount-cell">${discLabel}</td>
-                <td class="actions-cell">
-                    <button class="btn-secondary btn-edit-days" data-id="${reg.id}">Edit Days</button>
-                    <button class="btn-secondary btn-edit-bill" data-id="${reg.id}" title="Edit Bill">&#128178; Bill</button>
-                    <button class="btn-delete" data-id="${reg.id}">Delete</button>
+                <td class="rc-parent-cell">
+                    <div class="rc-parent-name">${escHtml(reg.parent_name)}</div>
+                    <div class="rc-parent-sub">${escHtml(reg.parent_phone || reg.parent_email || '')}</div>
+                </td>
+                <td class="rc-child-cell">
+                    <div class="rc-child-name">${escHtml(reg.child_name)}</div>
+                    <div class="rc-child-room">${escHtml(room.label)}</div>
+                </td>
+                <td>${_regPatternHtml(reg)}</td>
+                <td class="rc-bill-cell">
+                    <div class="rc-bill-amt">$${bill.toFixed(2)}</div>
+                    ${discLabel ? `<div class="rc-bill-disc">${escHtml(discLabel)}</div>` : ''}
+                </td>
+                <td class="rc-actions-cell">
+                    <button class="rc-icon-btn btn-view-days" data-id="${reg.id}" title="View days">&#128197;</button>
+                    <button class="rc-icon-btn btn-edit-bill" data-id="${reg.id}" title="Edit bill">&#128178;</button>
+                    <button class="rc-icon-btn rc-icon-btn-danger btn-delete" data-id="${reg.id}" title="Delete">&#128465;&#65039;</button>
                 </td>
             </tr>`;
     }).join('');
@@ -190,7 +236,7 @@ function renderTable(data) {
         });
     });
 
-    tbody.querySelectorAll('.btn-edit-days').forEach(btn => {
+    tbody.querySelectorAll('.btn-view-days').forEach(btn => {
         btn.addEventListener('click', e => {
             const id  = e.currentTarget.getAttribute('data-id');
             const reg = allRegistrations.find(r => String(r.id) === id);
@@ -2035,19 +2081,9 @@ function sortRegistrations(data) {
             case 'parent':
                 va = (a.parent_name || '').toLowerCase(); vb = (b.parent_name || '').toLowerCase();
                 return mult * va.localeCompare(vb);
-            case 'email':
-                va = (a.parent_email || '').toLowerCase(); vb = (b.parent_email || '').toLowerCase();
-                return mult * va.localeCompare(vb);
             case 'child':
                 va = (a.child_name || '').toLowerCase(); vb = (b.child_name || '').toLowerCase();
                 return mult * va.localeCompare(vb);
-            case 'room':
-                va = a.room_id || ''; vb = b.room_id || '';
-                return mult * va.localeCompare(vb);
-            case 'tally': {
-                const tally = reg => (reg.registration_dates || []).filter(d => !d.waitlisted).length;
-                return mult * (tally(a) - tally(b));
-            }
             case 'bill':
                 return mult * (calcRegistrationBill(a) - calcRegistrationBill(b));
             default:

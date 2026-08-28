@@ -576,6 +576,92 @@ contain the new symbols (`admin_log_child_event` etc. in
 in `dist/admin.min.js`) before committing — the exact check this file's own
 "it shipped half-live for a day" incident (Bookkeeper tab, above) says to run.
 
+### ⚠️ It happened again the very next day, to this exact tab
+
+`dist/admin.min.js` on `main` shipped with **zero** of this session's symbols
+in it, hours after the PR above merged clean. Not a repeat of the same root
+cause — a *different* concurrent `claude/**` branch's `--theirs` dist
+resolution won and was built from a tree older than this merge. Confirmed
+directly: `git show origin/main:dist/admin.min.js | grep -c enrollCap...` = 0,
+and the bundle's own `__BUILD_VERSION__` banner (`v2.8.12`) didn't match
+`package.json` (`v2.9.0`) — the same mismatch tell as the first incident.
+`admin.html` already had the new markup, so the live site had brand-new
+containers with no JavaScript behind them: every page this session touched
+rendered its header and then nothing.
+
+**The fix is always the same and always this cheap: `git checkout -B
+<branch> origin/main`, `npm run build`, grep the bundle for a symbol only
+your change introduces, push.** No source was wrong; only `dist/` was stale.
+Fixed in a follow-up PR, re-verified against `origin/main` after merge.
+
+⚠️ **This is now the second time in as many days.** With this many `claude/**`
+branches landing on the same afternoon, `--theirs` on `dist/*.min.js` is a
+coin flip that increasingly loses. Anyone shipping a `js/` change this week
+should re-verify `origin/main`'s bundle for their own symbols **after** their
+PR merges, not just before — a clean merge is not proof the bundle is live.
+
+### A concurrent session restored `capacityOverview` to Planning — and that's correct
+
+While this work was in flight, `claude/planning-tab-design-v7aymy` (working
+from a *different* handoff, `design_handoff_planning_market`) put "Room
+Capacity Overview" back as its own Planning-tab sidebar tool — the exact
+entry this session's Enrollment & Capacity merge had retired. Its own
+handoff's screenshots showed it as a standalone Planning tool, so from that
+session's vantage point the retirement was a regression against what it was
+building. **Not reverted here.** It restored the entry as a second mount of
+the same `renderCapacityOverviewTool()` this session's FTE/Seat-Day sub-view
+already uses (not a duplicate implementation), with `containerId`/`idPrefix`
+parameters so the two mounts' drawer/row ids can't collide. Both now coexist:
+the same table lives at Classrooms → Planning → Enrollment & Capacity → FTE/
+Seat-Day *and* at Planning → Enrollment Outlook → Room Capacity Overview,
+reading the same function, never able to disagree. Worth remembering: two
+handoffs for the same tab landing the same week will not always agree with
+each other, and the fix is to make both true rather than pick a winner
+silently.
+
+### Care Calendar redesign (2026-08-27, from `design_handoff_classroom_tab_full`)
+
+A second, larger handoff superseded the first — it added **Records** (Care
+Calendar, Family Directory, Missing Care Calendar) to the same Daily/Planning
+consolidation, previously explicitly out of scope. Building all three at once
+was declined in favor of one screen at a time, starting with Care Calendar —
+lowest risk, since it has no PII-editing surface (that's Family Directory,
+still to come).
+
+**What changed:** `allRegistrationsSection`'s 12-column table (Submitted,
+Entered By, Parent, Email, Phone, Child, Room, Dates, Full/Half, Bill,
+Discount, Actions) → 5 columns (Parent, Child/Room, Pattern, Bill, Actions).
+Parent's phone (or email, if no phone) now sits under the name instead of its
+own column; discount sits under the bill amount instead of its own column;
+the per-date pill list is replaced by a computed weekday-pattern summary.
+
+**Pattern is a real computation, not a copy of the prototype's placeholder
+text.** `_regPatternInfo()` (admin-calendar.js) buckets a registration's
+confirmed (non-waitlisted) dates by weekday, groups them into ISO weeks by
+each date's Monday, and calls a weekday "fixed" only if it's active in
+nearly every week the registration spans (one missed week tolerated, e.g. a
+closure) — otherwise the summary says "No fixed pattern" rather than
+implying a regularity that isn't really there. Day type (Full/Half/Mixed)
+and the month's day count are read off the same date set, so the summary can
+never disagree with what "Edit bill" is charging for.
+
+**Edit Days and Edit Bill stayed the existing modals, not the design's inline
+row-expansion.** The 📅 action still opens `openEditDaysModal()` unchanged —
+same calendar grid, same add/remove-day handlers, same billing recompute
+(`_recomputeAndShow`), same parent push notification, same admin audit log.
+That logic is billing-critical and already correct; relocating its rendering
+into an inline per-row panel would have meant either duplicating
+`editDaysCalGrid`/`editDaysBody` (real id-collision risk the moment two rows
+are open) or rewiring the whole flow to a dynamic container, for a
+presentational difference only. The trade was made once, explicitly, rather
+than silently: full fidelity to the prototype's specific interaction was
+given up in favor of zero risk to a tested, correctness-critical flow.
+Revisit if that trade turns out to be the wrong one.
+
+`npm test` — 182/182 (grew since the Daily/Planning session — other work
+landed tests of its own in between). `npm run build` — `dist/` rebuilt and
+re-verified against `origin/main` after merge, per the incident above.
+
 ---
 
 ## Design handoff build — staff, parent, director (2026-08-16)

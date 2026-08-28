@@ -5469,3 +5469,47 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     font-size: .95em; font-family: inherit;
 }
 .fd-compose-btns { display: flex; gap: 10px; margin-top: 4px; }
+
+/* ============================================================
+   Care Calendar redesign (2026-08-27) — weekday-pattern column
+   instead of a pill per date, consolidated columns, icon actions.
+   Edit Days / Edit Bill stay the existing modals; only the trigger
+   button and the surrounding table changed.
+   ============================================================ */
+.rc-parent-name { font-weight: 700; color: var(--text); }
+.rc-parent-sub  { font-size: .82em; color: var(--text-muted); margin-top: 2px; }
+
+.rc-child-name { font-weight: 700; color: var(--text); }
+.rc-child-room { font-size: .82em; color: var(--text-muted); margin-top: 2px; }
+
+.rc-pattern { display: flex; flex-direction: column; gap: 5px; }
+.rc-pat-chips { display: flex; gap: 3px; }
+.rc-pat-chip {
+    width: 20px; height: 20px; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .68em; font-weight: 800; color: var(--text-muted);
+    background: var(--warm-gray); border: 1px solid var(--border);
+}
+.rc-pat-chip.is-on { background: var(--green-lt); border-color: var(--green); color: var(--green-dark); }
+.rc-pat-summary { font-size: .8em; color: var(--text-muted); white-space: nowrap; }
+
+.rc-bill-amt  { font-weight: 700; color: var(--text); }
+.rc-bill-disc {
+    display: inline-block; margin-top: 4px; padding: 1px 8px;
+    background: var(--sun-pale); color: var(--mustard-dark);
+    border-radius: 999px; font-size: .74em; font-weight: 700;
+}
+
+.rc-actions-cell { display: flex; gap: 6px; white-space: nowrap; }
+.rc-icon-btn {
+    width: 32px; height: 32px; padding: 0; display: inline-flex;
+    align-items: center; justify-content: center;
+    background: #fff; border: 1.5px solid var(--border); border-radius: 8px;
+    font-size: 1em; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.rc-icon-btn:hover { border-color: var(--navy); background: var(--linen); }
+.rc-icon-btn-danger:hover { border-color: var(--tang); background: var(--tang-pale); }
+
+@media (max-width: 700px) {
+    .rc-actions-cell { flex-wrap: wrap; }
+}
