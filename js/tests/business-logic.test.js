@@ -1537,8 +1537,14 @@ describe('CSP tightening — script-src hash allowlist, no inline handlers', () 
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
     const crypto = require('crypto');
-    const cspLine = read('_headers').match(/^\s*Content-Security-Policy:\s*(.+)$/m)[1];
-    const scriptSrc = cspLine.match(/script-src ([^;]+);/)[1];
+    // The RAW line as it appears in _headers — including the leading
+    // whitespace and "Content-Security-Policy:" label — is what counts
+    // against Cloudflare's 2,000-character-per-line limit (see the dedicated
+    // test below). cspValue is just the directive value, used everywhere
+    // else in this block.
+    const rawCspLine = read('_headers').split('\n').find(l => l.includes('Content-Security-Policy:'));
+    const cspValue = rawCspLine.match(/Content-Security-Policy:\s*(.+)$/)[1];
+    const scriptSrc = cspValue.match(/script-src ([^;]+);/)[1];
 
     test('script-src carries no unsafe-inline or unsafe-eval', () => {
         expect(scriptSrc.includes('unsafe-inline')).toBe(false);
@@ -1567,19 +1573,46 @@ describe('CSP tightening — script-src hash allowlist, no inline handlers', () 
                 else if (entry.name.endsWith('.html')) htmlFiles.push(full);
             }
         })(repoRoot);
+        // Browsers only execute a <script> as JS if its `type` is absent,
+        // empty, or one of these — a data block like type="text/x-dc" (the
+        // design_handoff mockups) or type="application/ld+json" (index.html's
+        // SEO structured data) is inert and never gated by script-src at all.
+        // Verified empirically, not assumed: a type="text/x-dc" block with
+        // content matching nothing in the CSP produced zero CSP violation in
+        // a real browser. Confirming this class of exclusion is what took
+        // the CSP line from 1989 characters (11 short of the 2,000-char-per-
+        // line limit Cloudflare's _headers enforces — see the section below)
+        // down to a safer 1827.
+        const JS_TYPES = new Set(['', 'text/javascript', 'application/javascript', 'text/ecmascript', 'application/ecmascript', 'module']);
+        const isExecutableScriptTag = tagOpen => {
+            if (/\bsrc=/.test(tagOpen)) return false;
+            const typeMatch = tagOpen.match(/\btype=["']([^"']*)["']/i);
+            if (!typeMatch) return true;
+            return JS_TYPES.has(typeMatch[1].toLowerCase().trim());
+        };
         const missing = [];
         for (const file of htmlFiles) {
             const html = fs.readFileSync(file, 'utf8');
-            const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+            const re = /<script([^>]*)>([\s\S]*?)<\/script>/g;
             let m;
             while ((m = re.exec(html))) {
-                const content = m[1];
+                if (!isExecutableScriptTag(`<script${m[1]}>`)) continue;
+                const content = m[2];
                 if (!content.trim()) continue;
                 const hash = crypto.createHash('sha256').update(content, 'utf8').digest('base64');
                 if (!scriptSrc.includes(`'sha256-${hash}'`)) missing.push(`${path.relative(repoRoot, file)}: sha256-${hash}`);
             }
         }
         expect(missing.join(', ')).toBe('');
+    });
+
+    test('the CSP line stays under Cloudflare\'s 2,000-character-per-line _headers limit', () => {
+        // Found live: the first version of this line was 2,151 characters and
+        // Cloudflare's Workers Build silently failed on it. Regression guard
+        // with real margin, not the line at the wire — a future inline
+        // script or CDN host addition should fail this test long before it
+        // fails a production deploy.
+        expect(rawCspLine.length < 1950).toBe(true);
     });
 
     test('no inline event-handler attributes remain in js/ or any HTML page (all would need unsafe-inline)', () => {
