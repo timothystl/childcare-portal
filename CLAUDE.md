@@ -171,6 +171,22 @@ an `AP_TOOLS` entry, or it is unreachable.**
 
 ---
 
+## Food Program (CACFP) sidebar removed (2026-08-28)
+
+At the director's request, the four Classrooms → Food Program tools (Daily
+Meal Counts, Menu Planner, Income Eligibility, Monthly Claim — `cacfpMeal`,
+`cacfpMenu`, `cacfpIncome`, `cacfpClaims` in `js/admin/admin-portal.js`'s
+`AP_TOOLS`) are removed from the sidebar and the Classrooms dashboard's
+"Food Program" panel. Same convention as every other retirement in this
+file: the entries are simply not registered in `AP_TOOLS`, which the shell
+already treats as unreachable — `cacfpMealSection`/`cacfpMenuSection`/
+`cacfpIncomeSection`/`cacfpClaimsSection` stay in `admin.html` and
+`js/admin/admin-cacfp.js` stays in the tree, both unreferenced, in case the
+program is revived later. Nothing about CACFP's data or the underlying
+`cacfp_*` tables/RPCs changed.
+
+---
+
 ## Finance tab overhaul — the Bookkeeper tab (2026-08-27)
 
 Built from `Billing_UI_inconsistency_issues.zip` → `design_handoff_finance_hub/`
