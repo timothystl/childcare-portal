@@ -5865,8 +5865,10 @@ async function exportEnrollmentTrends() {
 // deleted, per the handoff's instruction to remove only the registry entries.
 // ============================================================
 
-let _capacityOverviewRows = [];
-let _capacityOverviewOpenRoom = null;
+// Keyed by idPrefix so the two mount points (see renderCapacityOverviewTool)
+// don't clobber each other's rows/open-drawer state.
+let _capacityOverviewRows = {};
+let _capacityOverviewOpenRoom = {};
 
 function _capacityOverviewByMonth(registrations) {
     const byMonth = {}; // 'YYYY-MM' → [{ room_id, type: 'full'|'half', childDays }]
@@ -5928,21 +5930,34 @@ async function _buildCapacityOverviewRows(targetMonth) {
     });
 }
 
-async function renderCapacityOverviewTool(targetMonth) {
-    const container = document.getElementById('capacityOverviewContent');
+// `opts.containerId`/`opts.idPrefix` let this mount twice on the same page —
+// Classrooms → Planning → Enrollment & Capacity's FTE/Seat-Day sub-view (the
+// original mount) and Planning → Room Capacity Overview (added back
+// 2026-08-28 to match design_handoff_planning_market's own sidebar, which
+// this tool had been retired from in favor of the Classrooms mount alone).
+// Both sections exist in the DOM at once (the shell only hides the inactive
+// one), so the row/drawer ids below are namespaced by idPrefix — sharing
+// `capovDrawer_${roomId}` between two mounted tables would let opening a
+// drawer in one silently toggle the other's matching-id row instead.
+async function renderCapacityOverviewTool(targetMonth, opts) {
+    opts = opts || {};
+    const containerId = opts.containerId || 'capacityOverviewContent';
+    const idPrefix = opts.idPrefix || 'capov';
+    const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '<p class="empty-hint">Loading…</p>';
     try {
-        _capacityOverviewRows = await _buildCapacityOverviewRows(targetMonth);
-        _capacityOverviewOpenRoom = null;
-        container.innerHTML = _renderCapacityOverviewTable(_capacityOverviewRows);
-        _wireCapacityOverviewRows();
+        const rows = await _buildCapacityOverviewRows(targetMonth);
+        _capacityOverviewRows[idPrefix] = rows;
+        _capacityOverviewOpenRoom[idPrefix] = null;
+        container.innerHTML = _renderCapacityOverviewTable(rows, idPrefix);
+        _wireCapacityOverviewRows(container, idPrefix);
     } catch (err) {
         container.innerHTML = `<p class="import-error">Error loading capacity overview: ${escHtml(err.message)}</p>`;
     }
 }
 
-function _renderCapacityOverviewTable(rows) {
+function _renderCapacityOverviewTable(rows, idPrefix) {
     if (!rows.length) return '<p class="empty-hint">No active rooms found.</p>';
     return `
     <div style="overflow-x:auto">
@@ -5974,7 +5989,7 @@ function _renderCapacityOverviewTable(rows) {
                 </td>
                 <td class="report-num" style="font-weight:800;color:${trendColor}">${trendLabel}</td>
             </tr>
-            <tr class="capov-drawer-row" id="capovDrawer_${r.room.id}" style="display:none"><td colspan="6"></td></tr>`;
+            <tr class="capov-drawer-row" id="${idPrefix}Drawer_${r.room.id}" style="display:none"><td colspan="6"></td></tr>`;
         }).join('')}
         </tbody>
     </table>
@@ -5988,31 +6003,31 @@ function _renderCapacityOverviewTable(rows) {
     </p>`;
 }
 
-function _wireCapacityOverviewRows() {
-    document.querySelectorAll('[data-capov-room]').forEach(row => {
-        row.addEventListener('click', () => _toggleCapacityOverviewDrawer(row.dataset.capovRoom));
+function _wireCapacityOverviewRows(container, idPrefix) {
+    container.querySelectorAll('[data-capov-room]').forEach(row => {
+        row.addEventListener('click', () => _toggleCapacityOverviewDrawer(row.dataset.capovRoom, idPrefix));
     });
 }
 
-async function _toggleCapacityOverviewDrawer(roomId) {
-    const drawerRow = document.getElementById(`capovDrawer_${roomId}`);
+async function _toggleCapacityOverviewDrawer(roomId, idPrefix) {
+    const drawerRow = document.getElementById(`${idPrefix}Drawer_${roomId}`);
     if (!drawerRow) return;
-    if (_capacityOverviewOpenRoom === roomId) {
+    if (_capacityOverviewOpenRoom[idPrefix] === roomId) {
         drawerRow.style.display = 'none';
-        _capacityOverviewOpenRoom = null;
+        _capacityOverviewOpenRoom[idPrefix] = null;
         return;
     }
-    if (_capacityOverviewOpenRoom) {
-        const prev = document.getElementById(`capovDrawer_${_capacityOverviewOpenRoom}`);
+    if (_capacityOverviewOpenRoom[idPrefix]) {
+        const prev = document.getElementById(`${idPrefix}Drawer_${_capacityOverviewOpenRoom[idPrefix]}`);
         if (prev) prev.style.display = 'none';
     }
-    _capacityOverviewOpenRoom = roomId;
+    _capacityOverviewOpenRoom[idPrefix] = roomId;
     const td = drawerRow.querySelector('td');
     td.innerHTML = '<p class="empty-hint">Loading…</p>';
     drawerRow.style.display = '';
     try {
         const trendMap = await _buildTrendMap();
-        const row = _capacityOverviewRows.find(r => r.room.id === roomId);
+        const row = _capacityOverviewRows[idPrefix].find(r => r.room.id === roomId);
         const pattern = _trendMonthOwnPattern(trendMap, roomId, row.curMo);
         td.innerHTML = _renderCapacityOverviewDrawer(row, pattern);
     } catch (err) {

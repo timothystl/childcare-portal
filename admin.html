@@ -672,13 +672,25 @@
                 <div id="wlImportPreview"></div>
             </section>
 
-            <!-- Room Capacity Overview relocated (Classroom Tab Redesign,
-                 2026-08-27): its content — id="capacityOverviewContent" and
-                 renderCapacityOverviewTool() — now lives as the FTE/Seat-Day
-                 sub-view of Classrooms → Planning → Enrollment & Capacity
-                 (#tab-daily, enrollmentCapacitySection). Removed from here
-                 rather than left as an empty shell, since AP_TOOLS no longer
-                 points at a `roomCapacityOverviewSection` id. -->
+            <!-- Room Capacity Overview — restored 2026-08-28. The Classroom
+                 Tab Redesign (2026-08-27) had retired this section in favor
+                 of the same content living only as the FTE/Seat-Day sub-view
+                 of Classrooms → Planning → Enrollment & Capacity, reasoning
+                 the two were redundant. design_handoff_planning_market's own
+                 sidebar mock (screenshots 01/07-state.png) shows it as its
+                 own tool under Planning → Enrollment Outlook, so it is back
+                 here too — same renderCapacityOverviewTool() (admin-reports.js),
+                 second mount point, own container/drawer ids
+                 (id="roomCapacityOverviewContent", idPrefix "pcapov") so it
+                 can't collide with the Classrooms mount's ids. See
+                 apOnToolOpened()'s 'capacityOverview' case in admin-portal.js. -->
+            <section class="admin-section collapsible-section" id="roomCapacityOverviewSection">
+                <h2>📆 Room Capacity Overview</h2>
+                <p class="section-desc">Enrollment, FTE, and seat-day occupancy — one table, the same underlying data as the three screens it replaces. Click a room to see the same month broken out by weekday.</p>
+                <div id="roomCapacityOverviewContent">
+                    <p class="empty-hint">Loading…</p>
+                </div>
+            </section>
 
             <!-- Ratio-Step / Next-Child Calculator -->
             <section class="admin-section collapsible-section" id="ratioStepSection">
