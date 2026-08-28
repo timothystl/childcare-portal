@@ -592,7 +592,7 @@ function _fhRowHtml(row) {
         <td><span class="fh-pill ${meta.cls}">${escHtml(pillLabel)}</span></td>
         <td class="fh-note">${_fhNoteFor(row)}</td>
         <td class="fh-money-col ${balCls}">${_fhMoney(row.owed)}</td>
-        <td class="fh-row-actions" onclick="event.stopPropagation()">${actions}</td>
+        <td class="fh-row-actions">${actions}</td>
     </tr>`;
 }
 

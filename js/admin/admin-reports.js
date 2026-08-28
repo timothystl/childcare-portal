@@ -4752,6 +4752,17 @@ function exportDemandForecast() {
 function setupExtraReports() {
     document.getElementById('generateTrendsBtn')?.addEventListener('click', generateEnrollmentTrends);
     document.getElementById('exportTrendsBtn')?.addEventListener('click', exportEnrollmentTrends);
+    // Per-room collapse/expand toggle, delegated since generateEnrollmentTrends()
+    // replaces #trendsContent's innerHTML on every run.
+    document.getElementById('trendsContent')?.addEventListener('click', e => {
+        const btn = e.target.closest('.trends-room-toggle');
+        if (!btn) return;
+        const w = document.getElementById(btn.dataset.roomTarget);
+        if (!w) return;
+        const collapsed = w.style.display === 'none';
+        w.style.display = collapsed ? '' : 'none';
+        btn.textContent = collapsed ? '▲ Collapse' : '▼ Expand';
+    });
     document.getElementById('generateRoomPnlBtn')?.addEventListener('click', generateRoomPnl);
     document.getElementById('exportRoomPnlBtn')?.addEventListener('click', exportRoomPnl);
     document.getElementById('generatePromotionsBtn')?.addEventListener('click', generatePromotionsReport);
@@ -5715,7 +5726,7 @@ function _renderTrendsTable(trendMap) {
         return `
             <h4 style="margin:18px 0 6px;font-size:1em;display:flex;align-items:center;gap:10px">
                 ${escHtml(room.label)}
-                <button onclick="(function(btn){var w=document.getElementById('trendsRoom_${room.id}');var collapsed=w.style.display==='none';w.style.display=collapsed?'':'none';btn.textContent=collapsed?'▲ Collapse':'▼ Expand';})(this)" style="font-size:.75em;padding:2px 8px;cursor:pointer;background:#f0f4ff;border:1px solid #c0c8e0;border-radius:4px">▲ Collapse</button>
+                <button class="trends-room-toggle" data-room-target="trendsRoom_${room.id}" style="font-size:.75em;padding:2px 8px;cursor:pointer;background:#f0f4ff;border:1px solid #c0c8e0;border-radius:4px">▲ Collapse</button>
             </h4>
             <div id="trendsRoom_${room.id}" class="table-wrapper report-table-wrap">
                 <table class="report-table" style="font-size:.85rem">

@@ -1533,6 +1533,75 @@ describe('Stax payment reconciliation job', () => {
     });
 });
 
+describe('CSP tightening — script-src hash allowlist, no inline handlers', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const crypto = require('crypto');
+    const cspLine = read('_headers').match(/^\s*Content-Security-Policy:\s*(.+)$/m)[1];
+    const scriptSrc = cspLine.match(/script-src ([^;]+);/)[1];
+
+    test('script-src carries no unsafe-inline or unsafe-eval', () => {
+        expect(scriptSrc.includes('unsafe-inline')).toBe(false);
+        expect(scriptSrc.includes('unsafe-eval')).toBe(false);
+    });
+
+    test('every inline <script> block in every HTML page has a matching CSP hash', () => {
+        // Drift guard: if anyone edits an inline script's content without
+        // recomputing its hash, the browser will silently refuse to run it —
+        // the exact "shipped half-live" failure shape this file warns about
+        // elsewhere. Recompute from the real HTML and compare, the same way
+        // the source-drift guard above catches a stale copied function.
+        //
+        // Walks the WHOLE repo, not just the root — wrangler.jsonc serves
+        // `assets.directory: "."` (everything not listed in .assetsignore is
+        // public), so docs/manual.html and marketing/*.html are just as live
+        // under this CSP as admin.html. A root-only scan is exactly how this
+        // test's first draft missed docs/manual.html's own inline handler.
+        const IGNORE_DIRS = new Set(['.git', 'node_modules', '.wrangler', '.github', '.claude', 'dist']);
+        const htmlFiles = [];
+        (function walk(dir) {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (IGNORE_DIRS.has(entry.name)) continue;
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (entry.name.endsWith('.html')) htmlFiles.push(full);
+            }
+        })(repoRoot);
+        const missing = [];
+        for (const file of htmlFiles) {
+            const html = fs.readFileSync(file, 'utf8');
+            const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+            let m;
+            while ((m = re.exec(html))) {
+                const content = m[1];
+                if (!content.trim()) continue;
+                const hash = crypto.createHash('sha256').update(content, 'utf8').digest('base64');
+                if (!scriptSrc.includes(`'sha256-${hash}'`)) missing.push(`${path.relative(repoRoot, file)}: sha256-${hash}`);
+            }
+        }
+        expect(missing.join(', ')).toBe('');
+    });
+
+    test('no inline event-handler attributes remain in js/ or any HTML page (all would need unsafe-inline)', () => {
+        const repoFiles = [];
+        (function walk(dir) {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name.startsWith('.')) continue;
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (/\.(js|html)$/.test(entry.name)) repoFiles.push(full);
+            }
+        })(repoRoot);
+
+        const pattern = /\son(click|change|submit|input|keyup|keydown|focus|blur|dblclick)=["']/;
+        const offenders = repoFiles
+            .filter(f => !f.endsWith('business-logic.test.js')) // this file's own pattern string is not a violation
+            .filter(f => pattern.test(fs.readFileSync(f, 'utf8')))
+            .map(f => path.relative(repoRoot, f));
+        expect(offenders.join(', ')).toBe('');
+    });
+});
+
 // ---- Summary ----
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;

@@ -672,7 +672,7 @@
   <!-- Payroll Report -->
   <div class="card" id="reportCard">
     <div class="print-bar">
-      <button class="btn-print" id="printBtn" onclick="window.print()">🖨 Print Report</button>
+      <button class="btn-print" id="printBtn">🖨 Print Report</button>
     </div>
     <div id="reportSection">
       <p style="color:var(--text-muted);font-size:0.9rem;">Select a pay period above to generate the report.</p>
@@ -954,9 +954,9 @@ function renderStaffTable() {
             <td>${s.housing_allowance_biweekly > 0 ? '$' + fmtMoney(s.housing_allowance_biweekly) : '—'}</td>
             <td>${s.mileage_biweekly > 0 ? '$' + fmtMoney(s.mileage_biweekly) : '—'}</td>
             <td style="text-align:right;white-space:nowrap;">
-                <button class="btn-secondary btn-sm" onclick="openEditStaff('${s.id}')">Edit</button>
+                <button class="btn-secondary btn-sm staff-edit-btn" data-staff-id="${s.id}">Edit</button>
                 &nbsp;
-                <button class="btn-danger" onclick="deactivateStaff('${s.id}', '${esc(s.name)}')">Remove</button>
+                <button class="btn-danger staff-remove-btn" data-staff-id="${s.id}" data-staff-name="${esc(s.name)}">Remove</button>
             </td>
         </tr>`;
     }).join('');
@@ -972,6 +972,16 @@ document.getElementById('staffToggleBtn').addEventListener('click', () => {
 });
 
 document.getElementById('addStaffBtn').addEventListener('click', openAddStaff);
+document.getElementById('printBtn')?.addEventListener('click', () => window.print());
+
+// Delegated on #staffTableBody, which survives every re-render — only its
+// innerHTML is replaced by renderStaffTable() above.
+document.getElementById('staffTableBody').addEventListener('click', e => {
+    const editBtn = e.target.closest('.staff-edit-btn');
+    if (editBtn) { openEditStaff(editBtn.dataset.staffId); return; }
+    const removeBtn = e.target.closest('.staff-remove-btn');
+    if (removeBtn) { deactivateStaff(removeBtn.dataset.staffId, removeBtn.dataset.staffName); return; }
+});
 
 function openAddStaff() {
     editingStaffId = null;
@@ -1215,20 +1225,25 @@ function renderHoursSection(periodStart) {
                 <div class="staff-role">${esc(s.role || '')}</div>
             </div>
             <input type="number" min="0" step="0.25" value="${hw}" placeholder="0"
-                data-staff="${s.id}" data-field="hours_worked"
-                onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
-                oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
+                class="hours-input" data-staff="${s.id}" data-field="hours_worked" data-period-start="${periodStart}">
             <input type="number" min="0" step="0.25" value="${pu}" placeholder="0"
-                data-staff="${s.id}" data-field="pto_hours_used"
-                onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
-                oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
+                class="hours-input" data-staff="${s.id}" data-field="pto_hours_used" data-period-start="${periodStart}">
             <input type="number" min="0" step="0.25" value="${pe}" placeholder="0"
-                data-staff="${s.id}" data-field="pto_hours_earned"
-                onchange="scheduleHoursSave('${s.id}', '${periodStart}')"
-                oninput="scheduleHoursSave('${s.id}', '${periodStart}')">
+                class="hours-input" data-staff="${s.id}" data-field="pto_hours_earned" data-period-start="${periodStart}">
         </div>`;
     }).join('');
 }
+
+// Delegated on #hoursGrid, which survives every re-render — only its
+// innerHTML is replaced by renderHoursSection() above.
+document.getElementById('hoursGrid').addEventListener('change', e => {
+    const input = e.target.closest('.hours-input');
+    if (input) scheduleHoursSave(input.dataset.staff, input.dataset.periodStart);
+});
+document.getElementById('hoursGrid').addEventListener('input', e => {
+    const input = e.target.closest('.hours-input');
+    if (input) scheduleHoursSave(input.dataset.staff, input.dataset.periodStart);
+});
 
 function scheduleHoursSave(staffId, periodStart) {
     clearTimeout(savePending[staffId]);
