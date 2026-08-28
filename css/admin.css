@@ -5521,6 +5521,41 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     font-size: .95em; font-family: inherit;
 }
 .inc-compose-btns { display: flex; gap: 10px; }
+.inc-compose-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.inc-compose-grid2 .inc-compose-field { margin-bottom: 0; }
+
+.inc-chip-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.inc-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--border);
+    background: #fff; font-size: .85em; font-weight: 600; color: var(--text);
+    cursor: pointer;
+}
+.inc-chip:hover  { border-color: var(--navy); }
+.inc-chip.is-on  { background: var(--green-lt); border-color: var(--green); color: var(--green-dark); }
+.inc-chip-x {
+    border: none; background: none; padding: 0; margin-left: 2px;
+    font-size: .85em; line-height: 1; color: inherit; cursor: pointer;
+}
+.inc-witness-empty { font-size: .85em; }
+
+.inc-compose-checks { display: flex; flex-direction: column; gap: 8px; }
+.inc-compose-check {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: .88em; color: var(--text); cursor: pointer;
+}
+.inc-compose-check input { margin-top: 3px; }
+
+.inc-witness-add { display: flex; gap: 8px; margin-top: 8px; }
+.inc-witness-add input {
+    flex: 1; padding: 8px 11px; border: 2px solid var(--border); border-radius: 7px;
+    font-size: .9em; font-family: inherit;
+}
+.inc-witness-add .btn-ghost { flex: none; font-size: .85em; padding: 7px 12px; }
+
+@media (max-width: 640px) {
+    .inc-compose-grid2 { grid-template-columns: 1fr; }
+}
 
 /* Fire Drills — "+ Log a Drill" */
 .fd-banner-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
