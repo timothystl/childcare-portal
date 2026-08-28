@@ -108,12 +108,13 @@
     background: var(--warm-gray);
 }
 
-/* The tool's own heading, so a tool page starts at the same left edge as
-   a dashboard heading and nothing shifts when you move between them. The
-   section's own <h2> then duplicates it — hidden by apShowSection(), but
-   only where the heading is inert text (see the comment there). */
-.ap-detail-head .ap-head { margin-bottom: 18px; }
-.ap-dup-head { display: none !important; }
+/* apRenderDetail() (admin-portal.js) no longer renders a shell tile into
+   #apDetailHead for any tool — it used to print the tool's own name+blurb
+   here, which duplicated the section's own heading directly below it (found
+   live 2026-08-28, e.g. Waitlist & Capacity Planner). Each section's own
+   <h2> is now the only heading a tool shows. .ap-detail-head itself is kept
+   as an empty mount point rather than removed from admin.html, in case a
+   future tool needs a header row the section can't own itself. */
 
 
 /* ── Page heading ────────────────────────────────────────── */
