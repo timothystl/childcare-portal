@@ -3840,6 +3840,52 @@ rebuilt and grepped for `_fhRefundPayment`/`_fhCanRefund` to confirm the
 
 ---
 
+## Ledger's "Total to bill" was a net figure with nothing showing its parts — broken into a 4-box strip (2026-08-28)
+
+Asked directly: the Ledger tab's headline stat read as one opaque number, with
+no visibility into how much of it was tuition versus discounts versus fees.
+`_fhRenderLedger()` (`js/admin/admin-finance-hub.js`) now shows a chained
+sequence — **Tuition (before discounts) → Discounts → Fees → Amount to
+collect** — instead of the single `fh-stat-month` box. Nothing new is
+computed: `computeBillMonthExceptions()` (`js/admin/admin-bill-month.js`)
+already produces `base` (net of both the individual and sibling discount),
+`discount` (the sum of both), and the fee fields per family; `_fhLoad()` was
+only keeping `total` and `causes` off that object and discarding the rest.
+It now carries `base`/`discount`/`changeFees`/`regFee`/`familyNewFee`/
+`creditTotal` through into `_fhRows` too.
+
+- **`grossTuition = Σ(base + discount)`** — the pre-discount sticker price,
+  reconstructed by adding the discount back onto the already-net `base`.
+- **`discountsTotal = Σ(discount)`**, shown as `_fhMoney(-discountsTotal)` so
+  the existing negative-number formatting in `_fhMoney()` supplies the minus
+  sign rather than a hand-built one.
+- **`feesTotal = Σ(changeFees + regFee + familyNewFee − creditTotal)`** — the
+  same fee fields the per-family exception card in `admin-bill-month.js`
+  already itemizes, net of any account credit applied that month.
+- `grossTuition − discountsTotal + feesTotal === monthTotal` (the existing
+  "Amount to collect" figure), by construction — nothing about the final
+  number's *own* computation changed, only what got exposed alongside it.
+
+⚠️ **A real bug surfaced while wiring this up, not introduced by it.**
+`computeBillMonthExceptions()`'s `total` was `base + regFee + familyNewFee −
+creditTotal` — no `changeFees`. The sibling `prevFamilyTotal` calculation nine
+lines above it *does* include `c.changeFees`, so the current month's total and
+the prior month's total (used for the same-screen "vs. last time" comparison)
+were computed on different bases. Any family with a schedule-change fee this
+month was undercounted in the Ledger's month total, the "Bill the Month"
+screen's own total, and the per-family "Approve $X" button — though never in
+what actually got billed, since `reconcileBillingInvoice()` recomputes the
+real invoice amount server-side and never reads this client total. Fixed by
+adding `+ changeFees` to the formula; flagged with an inline comment at the
+fix site so it isn't lost the way this file warns about elsewhere.
+
+`npm test` — 200/200 (no new guards needed; existing Stax/CSP/billing-integrity
+suites all held). `npm run build` — `dist/` rebuilt and grepped for `Amount to
+collect` / `before discounts` in `dist/admin.min.js` to confirm the new strip
+actually shipped in the bundle, not just the source.
+
+---
+
 ## Finance summary API (for the church ChMS finance integration)
 
 `supabase/functions/finance-summary/index.ts` — `GET`, header `X-Api-Key: <FINANCE_API_KEY>`, returns 401 if missing/wrong. Returns `{ updated_at, accounts: [], budget: [...] }` for the current month + 12 prior (13 months, oldest first). Deploy like any other edge function (paste into the Supabase dashboard editor or `supabase functions deploy finance-summary`) and set the `FINANCE_API_KEY` secret — neither is automatic.
