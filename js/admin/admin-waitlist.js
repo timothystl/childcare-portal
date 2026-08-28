@@ -547,7 +547,7 @@ function wlpAgeOutMoveCardHtml(ev) {
         <div class="wlp-ageout-card${done ? ' done' : ''}" data-wlp-move-event="${wlpMoveKey(ev)}">
             <div class="wlp-ageout-card-main">
                 <div class="wlp-ageout-card-name">${escHtml(ev.name)}</div>
-                <div class="wlp-ageout-card-rooms">${roomsLine} <span class="wlp-ageout-card-reason">· ${escHtml(reason)}</span></div>
+                <div class="wlp-ageout-card-rooms">${roomsLine}<span class="wlp-ageout-card-sep"> · </span><span class="wlp-ageout-card-reason">${escHtml(reason)}</span></div>
             </div>
             <button type="button" class="wlp-confirm-move-btn" data-wlp-confirm-move="${wlpMoveKey(ev)}" ${done ? 'disabled' : ''}>${done ? '✓ Moved' : 'Confirm move'}</button>
         </div>`;
@@ -765,13 +765,67 @@ function renderWaitlistPlanner() {
             ${isGrid ? wlpRenderGrid(alloc) : ''}
             ${isBoard ? wlpRenderBoard(alloc) : ''}
             ${isMoving ? wlpRenderMoving(alloc) : ''}
-        </div>`;
+        </div>
+        ${isGrid ? wlpRenderDrawer(alloc) : ''}`;
 
     wlpAttachHeaderListeners();
     if (isQueue) wlpAttachQueueListeners();
     if (isGrid) wlpAttachGridListeners();
     if (isBoard) wlpAttachBoardListeners();
     if (isMoving) wlpAttachMovingListeners();
+}
+
+// ── Grid's detail drawer ─────────────────────────────────────
+// One right-side slide-over serving all three of the Grid's detail views —
+// a cell's room/month panel, and the two rollup strips' month panels — over
+// a scrim, per the design source. It is rendered as a sibling of .wlp-card
+// rather than inside it: nothing on the card creates a containing block for
+// a fixed-position child today, but a card that later gains a transform or a
+// filter would silently trap the drawer inside it.
+function wlpDrawerContent(alloc) {
+    if (_wlp.selCellA) return wlpRenderGridSidebar(_wlp.selCellA, alloc);
+    const roll = _wlp.rollupDrawer;
+    if (roll?.type === 'demand') return wlpRenderDemandDrawer(roll.monthIdx, alloc);
+    if (roll?.type === 'ageout') return wlpRenderAgeOutDrawer(roll.monthIdx, alloc);
+    return null;
+}
+
+function wlpRenderDrawer(alloc) {
+    const content = wlpDrawerContent(alloc);
+    if (!content) return '';
+    return `
+        <div class="wlp-scrim" data-wlp-drawer-close></div>
+        <aside class="wlp-drawer" role="dialog" aria-modal="true" aria-label="${escHtml(content.title)}">
+            <div class="wlp-drawer-head">
+                <div>
+                    <div class="wlp-drawer-title">${escHtml(content.title)}</div>
+                    <div class="wlp-drawer-sub">${escHtml(content.sub)}</div>
+                </div>
+                <button type="button" class="wlp-drawer-close" data-wlp-drawer-close aria-label="Close">✕</button>
+            </div>
+            <div class="wlp-drawer-body">${content.body}</div>
+        </aside>`;
+}
+
+function wlpCloseDrawer() {
+    _wlp.selCellA = null;
+    _wlp.rollupDrawer = null;
+    renderWaitlistPlanner();
+}
+
+function wlpAttachDrawerListeners() {
+    document.querySelectorAll('[data-wlp-drawer-close]').forEach(el => {
+        el.addEventListener('click', wlpCloseDrawer);
+    });
+    if (document.querySelector('.wlp-drawer')) {
+        document.addEventListener('keydown', wlpDrawerEscHandler);
+    }
+}
+
+function wlpDrawerEscHandler(e) {
+    if (e.key !== 'Escape') return;
+    document.removeEventListener('keydown', wlpDrawerEscHandler);
+    if (document.querySelector('.wlp-drawer')) wlpCloseDrawer();
 }
 
 function wlpRenderHeader() {
@@ -1287,18 +1341,15 @@ function wlpRenderGridSidebar(sel, alloc) {
     const roomMoving = wlpMovementEvents(roomId, alloc).filter(ev => ev.monthLabel === alloc.months[monthIdx].label);
     const movingHtml = roomMoving.length ? roomMoving.map(wlpMovingCardHtml).join('') : '<div class="wlp-empty-note" style="margin-bottom:18px">No graduations or waitlist starts land here this month.</div>';
 
-    return `
-        <div class="wlp-sidebar">
-            <div class="wlp-sidebar-head">
-                <div class="wlp-sidebar-title">${escHtml(room.label)} · ${escHtml(alloc.months[monthIdx].label)}</div>
-                <button type="button" class="wlp-sidebar-close" id="wlpGridSidebarClose">✕</button>
-            </div>
-            <div class="wlp-section-label" style="margin-bottom:8px">Fill open seats</div>
-            <div class="wlp-sidebar-hint">Suggested, best fit first — who's asking for this room:</div>
-            <div style="margin-bottom:18px">${suggestionsHtml || '<div class="wlp-empty-note">No one on the waitlist is asking for this room.</div>'}</div>
-            <div class="wlp-section-label" style="margin-bottom:8px">Moving this month — ${escHtml(roomLabel)}</div>
-            ${movingHtml}
-        </div>`;
+    return {
+        title: room.label,
+        sub: `Assign for the week · ${alloc.months[monthIdx].label}`,
+        body: `
+            <div class="wlp-section-label" style="margin-bottom:10px">Waitlisted for ${escHtml(roomLabel)} (${ranked.length})</div>
+            <div style="margin-bottom:22px">${suggestionsHtml || '<div class="wlp-empty-note">No one on the waitlist is asking for this room.</div>'}</div>
+            <div class="wlp-drawer-h">Moving this month — ${escHtml(roomLabel)}</div>
+            ${movingHtml}`,
+    };
 }
 
 // How many pending (not-yet-accepted) waitlist families want (roomId, day) but
@@ -1318,24 +1369,40 @@ function wlpWaitingCount(alloc, roomId, mi, day) {
     ).length;
 }
 
+// One column per weekday per month, with a two-row header (the month name
+// spanning its five days, then the weekday labels once). The weekday label
+// used to be repeated inside every single cell of every row — five per room
+// per month, thirty per row — which is what made the table so wide that only
+// two and a bit months were ever visible. The design source prints them once.
+function wlpOpenLabel(open) {
+    return open > 0 ? `+${open}` : String(open);
+}
+
 function wlpRenderGrid(alloc) {
     const gridMonths = alloc.months.slice(0, 6);
-    const monthHeads = gridMonths.map(m => `<th class="wlp-month-head">${escHtml(m.label)}</th>`).join('');
+    const monthHeads = gridMonths.map(m => `<th class="wlp-month-head" colspan="5">${escHtml(m.label)}</th>`).join('');
+    const dayHeads = gridMonths.map(m => TREND_DAYS.map((d, i) =>
+        `<th class="wlp-day-head${i === 0 ? ' is-month-start' : ''}">${escHtml(d)}</th>`).join('')).join('');
     const roomRows = alloc.rooms.map(room => {
         const cells = gridMonths.map(mo => {
             const dayMap = alloc.finalGrid[room.id][mo.idx];
             const sel = _wlp.selCellA;
             const isSel = sel && sel.roomId === room.id && sel.monthIdx === mo.idx;
-            const chips = TREND_DAYS.map(d => {
+            return TREND_DAYS.map((d, i) => {
                 const open = dayMap[d];
-                const waiting = open <= 0 ? wlpWaitingCount(alloc, room.id, mo.idx, d) : 0;
+                // Shown whenever anyone is waiting for that weekday, not only
+                // when the day is full — which is what the hint above the
+                // table has always claimed this pill means. A day with an open
+                // seat can still have someone waiting on it (they need a day
+                // that is full, and this tool never makes partial-week offers).
+                const waiting = wlpWaitingCount(alloc, room.id, mo.idx, d);
                 const desc = (open < 0
                     ? `${-open} OVER capacity — ${escHtml(d)}, ${escHtml(mo.label)}`
                     : `${open} open seat${open === 1 ? '' : 's'} — ${escHtml(d)}, ${escHtml(mo.label)}`)
                     + (waiting > 0 ? ` · +${waiting} waitlist ${waiting === 1 ? 'family waiting' : 'families waiting'}` : '');
-                return `<div class="wlp-cap-chip ${wlpAvailClass(open, room.capacity)}" title="${desc}"><div class="wlp-cap-chip-day">${d}</div><div class="wlp-cap-chip-open">${open}</div>${waiting > 0 ? `<div class="wlp-cap-chip-wait">+${waiting}</div>` : ''}</div>`;
+                const selCls = isSel ? ` is-sel${i === 0 ? ' is-sel-first' : ''}${i === TREND_DAYS.length - 1 ? ' is-sel-last' : ''}` : '';
+                return `<td class="wlp-day-cell ${wlpAvailClass(open, room.capacity)}${i === 0 ? ' is-month-start' : ''}${selCls}" data-wlp-cell="${room.id}:${mo.idx}" title="${desc}"><div class="wlp-day-cell-open">${wlpOpenLabel(open)}</div>${waiting > 0 ? `<div class="wlp-cap-chip-wait">+${waiting}</div>` : '<div class="wlp-cap-chip-wait is-blank"></div>'}</td>`;
             }).join('');
-            return `<td class="wlp-month-cell ${isSel ? 'selected' : ''}" data-wlp-cell="${room.id}:${mo.idx}"><div class="wlp-cap-chip-row">${chips}</div></td>`;
         }).join('');
         return `<tr><td class="wlp-room-cell">${escHtml(room.label)}<br><span class="wlp-room-cell-cap">Cap ${room.capacity ?? '—'}/day</span></td>${cells}</tr>`;
     }).join('');
@@ -1349,14 +1416,16 @@ function wlpRenderGrid(alloc) {
                     <div class="wlp-section-hint">Number shown = unfilled seats that day, after known graduations and already-matched waitlist admits (not enrolled headcount, not waitlist demand). A negative number (dark red) means already-enrolled kids overbook that room before any waitlist offers. Small pill = families waiting for that exact weekday. Click a cell to see who fits.</div>
                     <div style="overflow-x:auto;">
                         <table class="wlp-cap-table">
-                            <thead><tr><th class="wlp-room-head">Room</th>${monthHeads}</tr></thead>
+                            <thead>
+                                <tr><th class="wlp-room-head" rowspan="2">Room</th>${monthHeads}</tr>
+                                <tr>${dayHeads}</tr>
+                            </thead>
                             <tbody>${roomRows}</tbody>
                         </table>
                     </div>
                 </div>
                 ${sel ? wlpGridRosterBlockHtml(sel, alloc) : ''}
             </div>
-            ${sel ? wlpRenderGridSidebar(sel, alloc) : ''}
         </div>
         <div class="wlp-rollup-panel">
             ${wlpRenderDemandStrip(alloc)}
@@ -1369,11 +1438,12 @@ function wlpAttachGridListeners() {
     document.querySelectorAll('[data-wlp-cell]').forEach(el => {
         el.addEventListener('click', () => {
             const [roomId, monthIdx] = el.dataset.wlpCell.split(':');
+            // Only one drawer is ever open — the three triggers share one panel.
+            _wlp.rollupDrawer = null;
             _wlp.selCellA = { roomId, monthIdx: Number(monthIdx) };
             renderWaitlistPlanner();
         });
     });
-    document.getElementById('wlpGridSidebarClose')?.addEventListener('click', () => { _wlp.selCellA = null; renderWaitlistPlanner(); });
     document.getElementById('wlpGridRosterClose')?.addEventListener('click', () => { _wlp.selCellA = null; renderWaitlistPlanner(); });
     document.querySelectorAll('[data-wlp-match-offer]').forEach(el => {
         el.addEventListener('click', e => {
@@ -1385,6 +1455,7 @@ function wlpAttachGridListeners() {
     document.querySelectorAll('[data-wlp-demand-month]').forEach(el => {
         el.addEventListener('click', () => {
             const idx = Number(el.dataset.wlpDemandMonth);
+            _wlp.selCellA = null;
             _wlp.rollupDrawer = (_wlp.rollupDrawer?.type === 'demand' && _wlp.rollupDrawer.monthIdx === idx)
                 ? null : { type: 'demand', monthIdx: idx };
             renderWaitlistPlanner();
@@ -1393,6 +1464,7 @@ function wlpAttachGridListeners() {
     document.querySelectorAll('[data-wlp-ageout-month]').forEach(el => {
         el.addEventListener('click', () => {
             const idx = Number(el.dataset.wlpAgeoutMonth);
+            _wlp.selCellA = null;
             _wlp.rollupDrawer = (_wlp.rollupDrawer?.type === 'ageout' && _wlp.rollupDrawer.monthIdx === idx)
                 ? null : { type: 'ageout', monthIdx: idx };
             renderWaitlistPlanner();
@@ -1401,6 +1473,7 @@ function wlpAttachGridListeners() {
     if (_wlp.rollupDrawer?.type === 'ageout' && _wlpAlloc) {
         wlpAttachMoveConfirmListeners(_wlpAlloc, _wlp.rollupDrawer.monthIdx);
     }
+    wlpAttachDrawerListeners();
 }
 
 // ── Grid — inline demand-by-month / age-out rollups (consolidation pass,
@@ -1462,7 +1535,7 @@ function wlpRenderDemandStrip(alloc) {
                     <div class="wlp-rollup-tile-sub">waiting</div>
                 </button>`).join('')}
         </div>
-        ${sel?.type === 'demand' ? wlpRenderDemandDrawer(sel.monthIdx, alloc) : ''}`;
+`;
 }
 
 function wlpRenderAgeOutStrip(alloc) {
@@ -1478,19 +1551,19 @@ function wlpRenderAgeOutStrip(alloc) {
                     <div class="wlp-rollup-tile-sub">${escHtml(m.subLabel)}</div>
                 </button>`).join('')}
         </div>
-        ${sel?.type === 'ageout' ? wlpRenderAgeOutDrawer(sel.monthIdx, alloc) : ''}`;
+`;
 }
 
 function wlpRenderAgeOutDrawer(monthIdx, alloc) {
     const events = wlpAgeOutEventsForMonth(monthIdx, alloc);
     const label = alloc.months[monthIdx].label;
-    return `
-        <div class="wlp-moving-drawer">
-            <div class="wlp-moving-drawer-head">Moving up · ${escHtml(label.split(' ')[0])} — ${events.length} child${events.length === 1 ? '' : 'ren'} promoted</div>
-            ${events.length
-                ? `<div class="wlp-ageout-list">${events.map(wlpAgeOutMoveCardHtml).join('')}</div>`
-                : '<div class="wlp-moving-drawer-empty">No promotions scheduled this month.</div>'}
-        </div>`;
+    return {
+        title: `Moving up · ${label.split(' ')[0]}`,
+        sub: `${events.length} child${events.length === 1 ? '' : 'ren'} promoted`,
+        body: events.length
+            ? `<div class="wlp-ageout-list">${events.map(wlpAgeOutMoveCardHtml).join('')}</div>`
+            : '<div class="wlp-moving-drawer-empty">No promotions scheduled this month.</div>',
+    };
 }
 
 function wlpRenderDemandDrawer(monthIdx, alloc) {
@@ -1507,9 +1580,9 @@ function wlpRenderDemandDrawer(monthIdx, alloc) {
     const roomsAffected = new Set(inMonth.map(a => wlDeriveRoom(a)).filter(Boolean)).size;
 
     const statBox = (label, val) => `
-        <div style="background:var(--linen);border:1px solid var(--border);border-radius:9px;padding:8px 10px">
-            <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)">${label}</div>
-            <div style="font-family:var(--font-head);font-size:1.25em;font-weight:700;color:var(--navy)">${val}</div>
+        <div class="wlp-seatmath-box">
+            <div class="wlp-seatmath-label">${label}</div>
+            <div class="wlp-seatmath-val">${val}</div>
         </div>`;
 
     const cards = inMonth.map(a => {
@@ -1528,17 +1601,24 @@ function wlpRenderDemandDrawer(monthIdx, alloc) {
             </div>`;
     }).join('');
 
-    return `
-        <div class="wlp-moving-drawer">
-            <div class="wlp-moving-drawer-head">Waitlist demand · ${escHtml(mo.label)}</div>
-            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px">
+    const shortMo = mo.label.split(' ')[0];
+    // "an Aug start", not "a Aug start" — the design source's own copy has the
+    // wrong article here, and Apr/Aug/Oct all hit it.
+    const article = /^[AEIOU]/i.test(shortMo) ? 'an' : 'a';
+    return {
+        title: `Waitlist demand · ${shortMo}`,
+        sub: `${inMonth.length} famil${inMonth.length === 1 ? 'y' : 'ies'} requesting ${article} ${shortMo} start`,
+        body: `
+            <div class="wlp-section-label" style="margin-bottom:10px">Seat math</div>
+            <div class="wlp-seatmath-grid">
                 ${statBox('Total waiting', inMonth.length)}
-                ${statBox('Matched', matchedIds.size)}
-                ${statBox('Unmatched', unmatched)}
-                ${statBox('Rooms affected', roomsAffected)}
+                ${statBox('With a desired-start match', matchedIds.size)}
+                ${statBox('Still unmatched', unmatched)}
+                ${statBox('Rooms affected', roomsAffected || '—')}
             </div>
-            ${cards ? `<div class="wlp-moving-drawer-grid">${cards}</div>` : '<div class="wlp-moving-drawer-empty">No one on the waitlist requests this exact month yet.</div>'}
-        </div>`;
+            <div class="wlp-section-label" style="margin:22px 0 10px">Requesting ${escHtml(shortMo)} (${inMonth.length})</div>
+            ${cards ? `<div class="wlp-moving-drawer-grid">${cards}</div>` : '<div class="wlp-moving-drawer-empty">No one on the waitlist requests this exact month yet.</div>'}`,
+    };
 }
 
 // ── Capacity Planner — Board view (candidate-first match & assign,

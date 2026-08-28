@@ -1731,6 +1731,44 @@ describe('Stax payment reconciliation job', () => {
     });
 });
 
+describe('Waitlist Planner — Grid drawer is reachable, weekday headers print once', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const wl = read('js/admin/admin-waitlist.js');
+
+    test('the Grid renders weekday labels in a header row, not inside every cell', () => {
+        // The old markup stamped a .wlp-cap-chip-day label into all five chips
+        // of every room/month cell — thirty per row — which is what made the
+        // table too wide to show more than two months. The header row prints
+        // them once instead.
+        expect(wl.includes('wlp-cap-chip-day')).toBe(false);
+        expect(wl.includes('class="wlp-day-head')).toBe(true);
+        expect(wl.includes('colspan="5"')).toBe(true);
+    });
+
+    test('all three Grid detail panels route through the one drawer', () => {
+        // wlpRenderGridSidebar / wlpRenderDemandDrawer / wlpRenderAgeOutDrawer
+        // return {title, sub, body} for the shared shell now. If one is ever
+        // interpolated straight into markup again it renders "[object Object]"
+        // on the page — which is exactly what happened while building this.
+        const dispatch = wl.match(/function wlpDrawerContent[\s\S]*?\n}/)[0];
+        ['wlpRenderGridSidebar', 'wlpRenderDemandDrawer', 'wlpRenderAgeOutDrawer']
+            .forEach(fn => expect(dispatch.includes(fn)).toBe(true));
+        // No caller may interpolate a drawer builder into a template literal.
+        expect(/\$\{[^}]*wlpRender(Demand|AgeOut)Drawer\(/.test(wl)).toBe(false);
+        expect(/\$\{[^}]*wlpRenderGridSidebar\(/.test(wl)).toBe(false);
+    });
+
+    test('the drawer is actually rendered and wired, not just defined', () => {
+        // The lesson from the refund button that shipped into a dead section:
+        // a symbol present in the bundle is not the same claim as a feature
+        // the shell will ever reach.
+        expect(/\$\{isGrid \? wlpRenderDrawer\(alloc\) : ''\}/.test(wl)).toBe(true);
+        expect(wl.includes('wlpAttachDrawerListeners();')).toBe(true);
+        expect(wl.includes('data-wlp-drawer-close')).toBe(true);
+    });
+});
+
 describe('CSP tightening — script-src hash allowlist, no inline handlers', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
