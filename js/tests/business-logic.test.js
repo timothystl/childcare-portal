@@ -1488,6 +1488,51 @@ describe('Stax payment security guards', () => {
     });
 });
 
+describe('Stax payment reconciliation job', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const reconcileFn = read('supabase/functions/reconcile-stax-payments/index.ts');
+
+    test('the list endpoint is used only for discovery, never trusted for a decision', () => {
+        // Every decision (recover vs. release) must be made from a
+        // verifyTransaction() result, not from listCandidateTransactionIds().
+        const decisionBlock = reconcileFn.slice(
+            reconcileFn.indexOf('let matched: any = null;'),
+            reconcileFn.indexOf('await admin.from("admin_audit_log")'),
+        );
+        expect(decisionBlock.includes('verifyTransaction(')).toBe(true);
+        expect(/matched\.(success|status|id)/.test(decisionBlock)).toBe(true);
+        // listCandidateTransactionIds' own return value (candidateIds) is only
+        // ever iterated to call verifyTransaction — never read for success/status.
+        expect(/candidateIds\.(success|status)/.test(decisionBlock)).toBe(false);
+    });
+
+    test('recovery reuses the same atomic RPCs the webhook already uses, no new billing logic', () => {
+        expect(reconcileFn.includes('admin.rpc("stax_set_charge_state"')).toBe(true);
+        expect(reconcileFn.includes('admin.rpc("stax_finalize_charge"')).toBe(true);
+    });
+
+    test('a stale lock with no matching Stax transaction is eventually released, not locked out forever', () => {
+        expect(reconcileFn.includes("p_status: \"failed\"")).toBe(true);
+        expect(reconcileFn.includes('RELEASE_HOURS')).toBe(true);
+        expect(reconcileFn.includes('releaseBeforeMs')).toBe(true);
+    });
+
+    test('the release-window comparison uses numeric timestamps, not raw string comparison', () => {
+        // A DB-returned timestamp string and a JS toISOString() string can
+        // format offsets differently ("+00:00" vs "Z"), which breaks a plain
+        // string `<` comparison at the boundary. Must compare as epoch ms.
+        expect(reconcileFn.includes('new Date(lock.updated_at).getTime() < releaseBeforeMs')).toBe(true);
+    });
+
+    test('scheduled via cron, service role key never committed to the migration', () => {
+        const schedule = read('supabase/migrations/schedule_stax_reconciliation.sql');
+        expect(schedule.includes("cron.schedule(\n  'reconcile-stax-payments'")).toBe(true);
+        expect(schedule.includes('{SERVICE_ROLE_KEY}')).toBe(true);
+        expect(/sb_secret_|sb_[a-z]+_[A-Za-z0-9_-]{20,}/.test(schedule)).toBe(false);
+    });
+});
+
 // ---- Summary ----
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;

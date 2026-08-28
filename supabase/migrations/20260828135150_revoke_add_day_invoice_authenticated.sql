@@ -1,6 +1,18 @@
 -- ============================================================
 -- Revoke `authenticated` EXECUTE on add_day_to_invoice_by_email
 -- ============================================================
+-- NOTE (2026-08-28): this file was originally committed as
+-- 20260828030000_revoke_add_day_invoice_authenticated.sql — a timestamp I
+-- picked when writing the migration locally, before applying it. The apply
+-- tool assigns its own version at apply time (20260828135150) rather than
+-- using the filename's timestamp, so the two never matched to begin with.
+-- Renamed to the applied version, per this repo's own rule that a
+-- migration's filename should match what was actually deployed. Same class
+-- of drift as the harden_stax_payments rename earlier this file — the
+-- lesson to keep is to re-check `list_migrations` immediately after every
+-- `apply_migration` call and name the local file from that result, not from
+-- whatever timestamp was picked while drafting it.
+--
 -- Found in an external security review of the Stax payment work
 -- (2026-08-28), verified against the live catalog before fixing.
 --
