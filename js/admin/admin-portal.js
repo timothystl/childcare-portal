@@ -101,8 +101,11 @@ const AP_TOOLS = [
     // ── Classrooms · Daily (design handoff: Classroom Tab Redesign, 2026-08-27) ──
     // 13 Classroom-tab screens → 7. Attendance Board absorbed Classroom
     // Roster's day-view In/Out marking (the one thing Roster had that the
-    // board didn't) plus a Move-a-child shortcut; `roster` is retired below.
-    // Incident Reports and Fire Drills each gained a director-authored path
+    // board didn't) plus a Move-a-child shortcut; `roster` itself was
+    // retired here at the time, then restored 2026-08-28 — see its entry
+    // below, it was the only source of Print/PDF rosters and nothing else
+    // replaced that. Incident Reports and Fire Drills each gained a
+    // director-authored path
     // ("+ Write a report" / "+ Log a Drill") alongside reviewing what staff
     // filed — see admin-attendance.js/admin-incidents.js/admin-safety.js.
     //
@@ -120,6 +123,21 @@ const AP_TOOLS = [
       blurb: 'Review what staff filed, then release it to the family — or write one yourself.' },
     { key: 'drills',      pane: 'families', section: 'fireDrillsSection',       tab: 'classrooms', group: 'Daily', tint: AP_TINT.tang, icon: '🔥', name: 'Fire Drills',
       blurb: 'Every drill run, who was in the building, and how long it took — or log one yourself.' },
+    // Restored 2026-08-28: the Classroom Tab Redesign retired this tool,
+    // reasoning that Attendance Board absorbed the one thing it did that
+    // nothing else did (day-view In/Out marking) and that its week/month
+    // browsing "had no taker in the redesign." That dropped its print
+    // function too — Day/Week/Month PDF export and "Print All Rooms" — which
+    // nothing else in the app replaces; the Attendance Board has no print
+    // path at all. `dailyRosterSection`'s markup and `setupRoster()` were
+    // never removed, so this is a re-registration, not a rebuild. `group:
+    // 'Daily'` is deliberate, not cosmetic: the admin-role picker's own label
+    // for the 'staff' role — "Staff — Classroom Roster (read-only)"
+    // (admin-settings.js) — has named this exact tool the whole time via
+    // apToolAvailable()'s group==='Daily' gate; without an entry here that
+    // label was describing a tool 'staff' accounts could no longer reach.
+    { key: 'roster',      pane: 'daily',    section: 'dailyRosterSection',      tab: 'classrooms', group: 'Daily', tint: AP_TINT.green, icon: '📋', name: 'Classroom Roster',
+      blurb: 'Who is in each room today, this week, or this month — Day/Week/Month PDF export and Print All Rooms.' },
 
     // ── Classrooms · Planning ──
     // Replaces three screens that read the same registrations at different
@@ -129,7 +147,8 @@ const AP_TOOLS = [
     // `capOverview`, `roomSched` and Planning's `capacityOverview` are retired
     // below; their old section wrappers are removed from admin.html since
     // this tool relocated their actual content rather than leaving it behind
-    // unreferenced (contrast with `roster`/CACFP, which are true retirements).
+    // unreferenced (contrast with CACFP below, and `roster` at the time this
+    // was written — `roster` was restored 2026-08-28, see the Daily group).
     { key: 'enrollCap',   pane: 'daily',    section: 'enrollmentCapacitySection', tab: 'classrooms', group: 'Planning', tint: AP_TINT.green, icon: '📆', name: 'Enrollment & Capacity',
       blurb: 'Day, week, month, or FTE view of how full each room is — one screen, replacing three.' },
 
@@ -140,10 +159,7 @@ const AP_TOOLS = [
       blurb: 'Active children with no registration for a month.' },
     { key: 'families',    pane: 'families',      section: 'familiesSection',         tab: 'classrooms', group: 'Records', tint: AP_TINT.green, icon: '👨‍👩‍👧', name: 'Family Directory',
       blurb: 'Family and child records, PINs, discounts, imports.' },
-    // `roster` (Classroom Roster) is retired: its day-view In/Out marking now
-    // lives on the Attendance Board above; its week/month browsing had no
-    // taker in the redesign. dailyRosterSection's markup stays in admin.html,
-    // unreferenced — same convention as the retired CACFP tools below.
+
     // ── Finance · Money In (design handoff: Finance Hub, 2026-08-26) ──
     // Bill This Month, Invoices, Who Owes, and Family Billing Summary are
     // consolidated into one ledger screen — the director's own complaint was
