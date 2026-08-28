@@ -825,6 +825,27 @@ exclusive status string.
   information.
 - `css/admin.css?v=24`.
 
+### Absent didn't clear the In/Out display (fixed 2026-08-28)
+
+Reported live: marking a child absent left their In/Out buttons showing
+whatever they were before — a child checked in at 8:59a and marked absent
+minutes later still showed "In · 8:59a" filled green next to "ABSENT" in
+bold deep-tangerine, reading as a contradiction.
+
+`_abActionsHtml()` computed each button's `is-on`/time purely from
+`c.attendance_status`, with no awareness of `c.marked`. Fixed by making
+Absent exclusive with In/Out **on the display**: `isIn`/`isOut` are now
+`false` whenever `marked === 'absent'`, so both buttons read `—` and
+unfilled the moment Absent is on, regardless of what `attendance_status`
+says underneath.
+
+⚠️ **This clears the display only, not the underlying event.** The real
+`child_day_events` check-in row is untouched — `admin_log_child_event()`
+has no delete/void path, and this file has stood against reconstructing
+`center_headcount_rows()`'s query blind for exactly this class of risk.
+Un-marking absent (clicking Absent again) doesn't lose anything: the row
+falls back to `attendance_status` and the real check-in time reappears.
+
 ### Director-authored records — she is signature 1, not a fourth role
 
 For Incident Reports, the open question was how signature 1 works when there
