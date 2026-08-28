@@ -3937,6 +3937,110 @@ module scope).
 
 ---
 
+## Parent payment flow redesign — receipt email shipped, portal UI in progress (2026-08-28)
+
+Built from a director-supplied design mockup of the parent app's payment
+flow (Billing home → All invoices → Invoice detail → payment modal →
+Payment received) plus the branded HTML receipt email. **Phase 1 — the
+receipt email and its supporting data — is built, deployed, and live.** The
+portal UI itself (Home/All Invoices/Invoice Detail screens, Stax modal
+polish, an in-app Payment Received screen) is a separate, larger phase not
+yet started; see the punch list at the end of this section.
+
+### `my_schedule()` now returns `last_payment_date` per invoice
+
+`20260828211214_parent_schedule_invoice_last_payment_date.sql`, **applied
+and verified in production.** Purely additive — same signature, same
+`STABLE SECURITY DEFINER`, same `search_path`, one more computed field
+(`max(billing_payments.payment_date)` for that invoice) in the jsonb
+payload. Needed so the eventual Invoice Detail screen can show "Payment
+date" without a second round trip or exposing individual `billing_payments`
+rows (payment_method, notes) the parent app has no reason to see.
+
+### The receipt email — redesigned and deployed for both processors
+
+`sendReceiptEmail()` in `charge-stax-payment/index.ts` and
+`authorizenet-webhook/index.ts` (deployed versions 15 and 18) both rebuilt
+from the mockup: navy header with the real `myMDO_primary_logo_light.png`
+logo (the same asset `send-schedule-confirmation` already uses — no
+placeholder "Logo" box, since there's nothing to embed that isn't already a
+real, hosted asset), a green checkmark, "Payment received" / "Thank you,
+{family}." / the amount, a bordered Invoice/Paid on/Payment method/
+Confirmation# box, a Current month charges / Prior balance / Total paid
+breakdown, a "View billing account" button linking to `portal.html`, and a
+contact footer (the real office phone/email, already used elsewhere in this
+app — see `incident-print.html`).
+
+- **No-reply is deliberate, not an oversight.** The old template said "just
+  reply to this email" — this app has a real staffed billing inbox
+  (`RESEND_REPLY_TO`), so that wasn't wrong, but the mockup's own explicit
+  contact line (phone + billing email) is a clearer, more discoverable
+  replacement for a receipt specifically, which is a confirmation, not a
+  support channel. Genuinely dropped the `reply_to` header on this template.
+- **The current-month/prior-balance split is read from the database, not
+  computed.** Both processors can roll one payment across several unpaid
+  invoices (`stax_finalize_charge()` / `allocateAcrossPaymentRows()`, both
+  tagging each resulting `billing_payments` row's
+  `processor_transaction_id` with `-inv<id>`). The receipt re-reads those
+  exact rows, splits by whether each row's invoice month matches the
+  anchor invoice's own month, and shows the breakdown only when both sides
+  are nonzero — so it can never disagree with what the Ledger already shows,
+  and a single-invoice payment (the common case) just shows one "Total
+  paid" line with no breakdown clutter.
+- **Card brand/last-four appears only for Stax.** `charge-stax-payment`
+  already extracts this from the charge response (previously only when
+  `saveCard` was checked; now read unconditionally so the receipt can show
+  it either way) or, on a saved-card charge, from the family's own stored
+  `stax_default_card_brand`/`_last_four`. `authorizenet-webhook` has no
+  verified field name for this in Authorize.net's transaction-details
+  response — nothing in that file has ever extracted card metadata from it
+  — and this repo does not guess at an unverified field on a live payment
+  API. `buildReceiptHtml()` (identical copy in both files, no shared import
+  path between edge functions in this repo) simply omits the row when
+  `paymentMethodLine` is `null`.
+- **`monthLabel()` was dropped from both files** — the old "Payment
+  Receipt" / month-title header and the "Days of care" line it fed are gone
+  in the redesign, and it had no other caller left.
+- **`verify_jwt` was preserved explicitly on redeploy.**
+  `authorizenet-webhook` must stay `verify_jwt: false` — it's called
+  server-to-server by Authorize.net with no user JWT, authenticated by its
+  own HMAC signature check instead. The `deploy_edge_function` tool defaults
+  `verify_jwt` to `true` when omitted; passing `false` explicitly here was
+  the difference between a working webhook and every real online payment's
+  confirmation silently 401'ing.
+
+### Still to build — the portal UI itself
+
+The mockup's actual screens are unbuilt: `portal-billing.js`'s Billing tab
+is still the single flat list of invoice cards it already was (see that
+file's own header comment), not the mockup's Home → All Invoices → Invoice
+Detail flow with a "Show breakdown" toggle, a prior-balance warning banner,
+and a per-child day-of-care calendar. Also unbuilt: an in-app "Payment
+received" confirmation screen (today a payment just re-renders the same
+list with a banner) and matching polish on the Stax payment modal (an
+always-visible "Balance due" box, the invoice number in the subtitle,
+processor-neutral footer copy instead of naming Stax by name).
+
+⚠️ **Deliberately scoped out of the Invoice Detail screen when it is
+built: a per-day dollar amount.** `my_schedule()` already returns real
+per-day `care_date`/`day_type` data (used for the calendar), but no per-day
+price — the itemized `lineItems` this app already computes
+(`compute_family_month_charges_itemized()`) are aggregated per child
+(full/half day counts + one amount), not per individual date, and they're
+only returned by `create-stax-charge`, which reserves a real payment
+attempt — not something to call just to render a read-only view. Showing a
+day-cell dollar figure would mean inventing a second, client-side billing
+calculation that could drift from the real one; the day cells should show
+`day_type` only, with the child's real dollar figure coming from the
+already-correct child subtotal, not a per-day multiply.
+
+`npm test` — 205/205 (unaffected — this phase touched only edge functions
+and one migration, no `js/`). No `dist/` symbol check applies to this phase
+for the same reason; the next phase (the actual UI) will need the standard
+`npm run build` + bundle-grep discipline this file asks for everywhere else.
+
+---
+
 ## Finance summary API (for the church ChMS finance integration)
 
 `supabase/functions/finance-summary/index.ts` — `GET`, header `X-Api-Key: <FINANCE_API_KEY>`, returns 401 if missing/wrong. Returns `{ updated_at, accounts: [], budget: [...] }` for the current month + 12 prior (13 months, oldest first). Deploy like any other edge function (paste into the Supabase dashboard editor or `supabase functions deploy finance-summary`) and set the `FINANCE_API_KEY` secret — neither is automatic.
