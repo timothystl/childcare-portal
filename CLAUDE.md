@@ -3771,6 +3771,73 @@ feature actually shipped in the bundles the live site loads, not just the
 source — the standing check this file has asked for since the Bookkeeper
 and Enrollment & Capacity tabs each shipped half-live.
 
+### ⚠️ …and the button above was wired into a genuinely dead section — found within the hour, by the person testing it
+
+Asked directly, minutes after the PR above merged: "where is refunds?" — on
+the live **Finance → Bookkeeper → Accounts Receivable** screen, which shows
+only an aging summary (banner + 0–14/15–29/30+ day bands), no per-payment
+list, no button of any kind. The Refund button this session had just built
+was real, tested, and shipped in the bundle — and **unreachable**, because
+it was added to `admin-billing.js`'s `renderPaymentHistory()`, which only
+ever renders inside `billingArSection`'s `#arTableWrap` — and
+`billingArSection` is one of the ten tools this file's own Finance-tab
+overhaul section already documents as retired from `AP_TOOLS` in the
+2026-08-27 Bookkeeper redesign ("Accounts Receivable, Reconcile Payments,
+Revenue Dashboard…"), unreferenced and therefore unreachable per the
+shell's own rule (`apShowSection()` never shows a section no `AP_TOOLS`
+entry points at). Confirmed by grepping `admin-portal.js` for
+`billingArSection` — zero matches.
+
+⚠️ **This means the pre-existing Authorize.net refund button — not just the
+Stax one this session added — has been unreachable since that same redesign
+merged**, a full day before this session started. Nobody had needed to
+refund an online payment in the meantime, so nothing surfaced it. This
+wasn't caused by this session's change; this session's change just happened
+to add a second, equally-invisible button right next to the first one,
+which is what made it worth checking where "the AR table" that
+`admin-billing.js`'s comments still describe actually renders today.
+
+**The fix wasn't re-registering `billingArSection`.** The whole point of
+retiring it was fewer screens computing the same numbers differently, and
+reopening it as a nav entry would have undone that. Instead, the Refund
+control was added to the place a family's payments are actually visible
+today: the **Ledger drawer** (`_fhLoadDrawerBody()` in
+`admin-finance-hub.js`, opened from Finance → Ledger by clicking any family
+row) — which already had its own "Payments" list and a "+ Record payment"
+button, but no way to reverse one. New `_fhCanRefund()` (same gate as the
+old `renderPaymentHistory()`: processor is `authorizenet` or `stax`,
+positive amount, not itself a reversal, not already reversed) and
+`_fhRefundPayment()` (confirm → `adminRefundPayment(paymentId, processor)`
+→ `_fhLoad()`, the same reload `_fhSubmitPayment()` already does after
+recording a payment, so Bookkeeper's cache invalidates and the drawer
+re-renders with current data). `admin-billing.js`'s original wiring was
+left in place rather than deleted — same "unreferenced, not deleted"
+convention this file uses for every other retired tool, in case
+`billingArSection` is ever revived — but it is dead weight, not a second
+live implementation to keep in sync.
+
+**New drift guard**, specifically to stop this exact class of mistake from
+recurring: a test asserts `billingArSection` stays absent from
+`admin-portal.js` (documenting that it actually is dead, not assuming it)
+*and* that `admin-finance-hub.js` carries the real, reachable refund wiring
+— so a future refund-related change made only to the old file would fail
+this test rather than ship silently unreachable again.
+
+**The lesson to take from this, generalized:** `npm run build` + grepping
+the bundle for a new symbol (this file's standing check since the
+Bookkeeper/Enrollment & Capacity "shipped half-live" incidents) proves a
+change is *in* the bundle. It does not prove the bundle's own code path
+that contains it is one `apShowSection()` will ever call. For any change to
+a section's markup or its rendering function, check `AP_TOOLS` for that
+section id too — a symbol present in the bundle and a feature reachable in
+the shell are two different claims, and this file's existing checklist
+only ever verified the first one.
+
+`npm test` — 203/203 (3 more guards: the dead-code confirmation, the live
+drawer wiring, and the double-refund guard). `npm run build` — `dist/`
+rebuilt and grepped for `_fhRefundPayment`/`_fhCanRefund` to confirm the
+*actually reachable* version shipped, not just the first one.
+
 ---
 
 ## Finance summary API (for the church ChMS finance integration)
