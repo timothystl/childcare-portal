@@ -3817,6 +3817,66 @@ suites all held). `npm run build` — `dist/` rebuilt and grepped for `Amount to
 collect` / `before discounts` in `dist/admin.min.js` to confirm the new strip
 actually shipped in the bundle, not just the source.
 
+### ⚠️ The Fees box was toggling between ~$300 and ~$15,300 — a real registration-fee-year race, not a rendering bug (2026-08-28)
+
+Reported directly: "sometimes the fees box will show 15,300 dollars and
+sometimes 0, i think it should be 0 i havent charged fees this month like
+that." Checked live against production (`dahdstopsumxnqvdclmy`) rather than
+guessed at — the center's real registration-fee settings are `$150`/child
+capped at `$200`/family, renewal date **09-01**. Today (08-28) is four days
+before that renewal, so the correct fiscal cycle year is **2025**, and under
+that year only **2 children** in August's roster still owe the fee (~$300).
+`reg_fee_paid_year` is `2025` for 135 students, `NULL` for 17 — confirms most
+of the roster already paid for the cycle that's still open.
+
+**Root cause: `currentFeeCycleYear(window._regFeeRenewalDate)` had no fallback
+fetch.** `computeBillMonthExceptions()` (`admin-bill-month.js`) and
+`generateFamilyBillingReport()` (`admin-reports.js`) both already guard the
+three dollar-amount fee settings with `window._X ?? (await
+fetchSetting(...))` — but the renewal-date line was reading
+`window._regFeeRenewalDate` directly, with no such guard. `setupRegFee()`
+(`admin-settings.js`, called from `admin-init.js`) is what actually populates
+that global, and it's async — if either screen was opened before it
+resolved, `currentFeeCycleYear()` silently fell back to its own internal
+default, `'01-01'`. Since `'01-01'` has already passed this calendar year,
+that default computes `currentYear = 2026` (this year) instead of the true
+`2025` (last year's cycle, still open until 09-01) — and because none of the
+135 already-paid students carry `reg_fee_paid_year = 2026` yet, **every one
+of them looks unpaid** under the wrong year. Verified the exact swing live:
+117 of August's booked children would be flagged "owed" under the buggy 2026
+read versus 2 under the correct 2025 read — $15,550 vs $300 in raw
+registration-fee terms, which lines up with the $15,300 the Fees box (which
+also nets in change fees / new-family fee / credits) actually showed.
+
+⚠️ **`generateFamilyBillingReport()`'s copy of this bug was the more serious
+one.** Unlike the Ledger/Bill-the-Month preview, that report *stamps*
+`reg_fee_paid_year` onto every student it charges the fee to the moment it's
+generated — so hitting this race there wouldn't just misdisplay a number, it
+would have charged and permanently marked roughly 117 children as paid for
+the wrong cycle. Checked live before writing this up: zero students currently
+carry `reg_fee_paid_year = 2026`, so this hadn't fired yet — the landmine was
+live, not sprung.
+
+Fixed in both places with the same `window._regFeeRenewalDate ?? (await
+fetchSetting('registration_fee_renewal_date'))` guard the other three fee
+settings already use, matching each file's own existing style
+(`??`-chained in `admin-bill-month.js`, try/catch in `admin-reports.js`,
+where the three settings just above it already use that idiom).
+
+Also fixed in passing: the Finance family drawer's own header (`.inc-drawer`
+/ `.inc-scrim`, shared with the incident drawer) was `z-index: 60/61` while
+`.admin-header` is `position: sticky; z-index: 100` — the sticky green top
+bar rendered on top of the drawer's own head, cutting off the family name at
+the top of the panel every time it opened. Raised to `150`/`151`, clearing
+every other `z-index` in the app under `500` (the mobile tab bar and
+above) while staying below the toast/modal tier (`1000`+). This is a shared
+component, so the fix isn't Finance-specific — it clears the same bug for
+the incident drawer too, wherever else `.inc-drawer` is used.
+
+`npm test` — 200/200. `npm run build` — `dist/` rebuilt and grepped for
+`registration_fee_renewal_date` in `dist/admin.min.js` to confirm both fixes
+shipped in the bundle.
+
 ---
 
 ## Finance summary API (for the church ChMS finance integration)

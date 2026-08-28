@@ -77,7 +77,23 @@ async function computeBillMonthExceptions(month) {
     const regFeeAmount    = window._regFeeAmount ?? (await fetchSetting('registration_fee').catch(() => 0)) ?? 0;
     const newFamilyFee    = window._newFamilyFee ?? (await fetchSetting('new_family_fee').catch(() => 0)) ?? 0;
     const supplyFeeMax    = window._supplyFeeFamilyMax ?? (await fetchSetting('supply_fee_family_max').catch(() => 0)) ?? 0;
-    const currentYear     = currentFeeCycleYear(window._regFeeRenewalDate);
+    // ⚠️ This one was missing the same window._X ?? fetchSetting(...) guard
+    // the three lines above it already use, so it silently fell back to
+    // currentFeeCycleYear()'s OWN internal default ('01-01') whenever this
+    // screen was opened before setupRegFee() (admin-init.js) had finished
+    // loading the real renewal date into window._regFeeRenewalDate — a
+    // real, live race, not a hypothetical one: the center's actual renewal
+    // date is 09-01, so on any day between Jan 1 and Sep 1 the '01-01'
+    // fallback computes the WRONG fiscal cycle year (this calendar year
+    // instead of last), which flips "who still owes the registration fee"
+    // from a small real list to nearly the entire roster — verified live
+    // 2026-08-28: 2 children actually owed it that day, but the '01-01'
+    // fallback made 117 look like they did, an ~$15,300 swing in the
+    // Ledger's Fees box depending purely on load order, not on anything
+    // that actually changed.
+    const regFeeRenewalMD = window._regFeeRenewalDate
+        ?? (await fetchSetting('registration_fee_renewal_date').catch(() => null));
+    const currentYear     = currentFeeCycleYear(regFeeRenewalMD);
 
     const studentByName = new Map();
     students.forEach(s => {

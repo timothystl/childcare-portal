@@ -397,7 +397,28 @@ async function generateFamilyBillingReport() {
     // passed) or because they're a brand-new student who's never been
     // charged. Whoever owes it gets charged and stamped for this cycle the
     // moment their billing report is generated — no manual paid/unpaid step.
-    const currentYear = currentFeeCycleYear(window._regFeeRenewalDate);
+    //
+    // ⚠️ window._regFeeRenewalDate needs the same window._X ?? fetch guard
+    // the three fee amounts above it already get — without it,
+    // currentFeeCycleYear() silently falls back to its own '01-01' default
+    // whenever this report is generated before setupRegFee() (admin-init.js)
+    // has finished loading the real renewal date. Verified live 2026-08-28
+    // against the center's real 09-01 renewal date: the '01-01' fallback
+    // computes THIS calendar year instead of the correct prior fiscal cycle
+    // for every day between Jan 1 and Sep 1, which — because this function
+    // actually STAMPS reg_fee_paid_year when it charges the fee, unlike the
+    // Ledger's read-only preview — would have charged and permanently
+    // marked ~117 children as paid for the wrong cycle. No such rows exist
+    // yet (checked reg_fee_paid_year = 2026 in production: zero), so nothing
+    // has been over-charged by this so far, but the landmine was live.
+    let regFeeRenewalDate = window._regFeeRenewalDate;
+    if (!regFeeRenewalDate) {
+        try {
+            const val = await fetchSetting('registration_fee_renewal_date');
+            regFeeRenewalDate = /^\d{2}-\d{2}$/.test(val) ? val : '01-01';
+        } catch (e) { /* ignore — currentFeeCycleYear() itself falls back to '01-01' */ }
+    }
+    const currentYear = currentFeeCycleYear(regFeeRenewalDate);
     const regFeeOwedByChild = new Map(); // childName key → { owed, studentId }
     const feeChargeStudentIds = [];
     families.forEach(fam => fam.children.forEach(c => {
