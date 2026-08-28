@@ -205,6 +205,54 @@ function escHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
+function _buildArRows(month, families, invoices, monthPayments) {
+    const invoiceByFamily = new Map(invoices.map(inv => [String(inv.family_id), inv]));
+
+    const paymentsByFamily = {};
+    monthPayments.forEach(p => {
+        const fid = String(p.family_id);
+        if (!paymentsByFamily[fid]) paymentsByFamily[fid] = [];
+        paymentsByFamily[fid].push(p);
+    });
+
+    return families.map(family => {
+        const inv      = invoiceByFamily.get(String(family.id));
+        const payments = paymentsByFamily[String(family.id)] || [];
+
+        const billed      = parseFloat(inv?.final_amount || 0);
+        const collected   = payments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+
+        const billedIfSent = inv?.sent_at ? billed : 0;
+        const outstanding  = Math.max(0, billedIfSent - collected);
+
+        let status;
+        if (billedIfSent === 0 && collected === 0) status = 'no_invoice';
+        else if (outstanding <= 0 && billedIfSent > 0) status = 'paid';
+        else if (collected > 0)                        status = 'partial';
+        else                                            status = 'overdue';
+
+        const daysSince = inv?.sent_at
+            ? Math.max(0, Math.floor((Date.now() - new Date(inv.sent_at).getTime()) / 86400000))
+            : null;
+
+        return {
+            familyId:    family.id,
+            familyName:  family.parent_name || '(unnamed)',
+            familyEmail: family.parent_email || '',
+            invoiceId:   inv?.id || null,
+            sentAt:      inv?.sent_at || null,
+            daysSince,
+            billed,
+            collected,
+            outstanding,
+            status,
+            payments,
+            isLocked:    !!family.registration_locked,
+            lockReason:  family.registration_lock_reason || '',
+        };
+    });
+}
+
 // ============================================================
 // TESTS
 // ============================================================
@@ -442,6 +490,46 @@ describe('calcTotalForTest — billing totals', () => {
     test('no children → 0', () => {
         const dates = new Map([['2026-03-23', { dayType: 'full' }]]);
         expect(calcTotalForTest(dates, [])).toBe(0);
+    });
+});
+
+describe('_buildArRows — an unsent draft is not money a family owes', () => {
+    // reconcileBillingInvoice() drafts a billing_invoices row for every clean
+    // family the moment Bill the Month computes them, well before Release/Send
+    // is clicked — found live 2026-08-28: 94 of August's 95 drafted invoices
+    // had never been sent, and their combined final_amount was the entire
+    // Ledger "owed" banner and "Nudge all" count.
+    const family = { id: 'fam-1', parent_name: 'Test Family', parent_email: 't@example.com' };
+
+    test('a drafted-but-unsent invoice is not outstanding, owed, or overdue', () => {
+        const invoices = [{ family_id: 'fam-1', final_amount: 360, sent_at: null }];
+        const [row] = _buildArRows('2026-08', [family], invoices, []);
+        expect(row.billed).toBe(360);        // the draft amount is still visible for display purposes
+        expect(row.outstanding).toBe(0);     // but nothing is actually owed yet
+        expect(row.status).toBe('no_invoice');
+    });
+
+    test('once sent, the same amount becomes real outstanding balance', () => {
+        const invoices = [{ family_id: 'fam-1', final_amount: 360, sent_at: '2026-08-28T12:00:00Z' }];
+        const [row] = _buildArRows('2026-08', [family], invoices, []);
+        expect(row.billed).toBe(360);
+        expect(row.outstanding).toBe(360);
+        expect(row.status).toBe('overdue');
+    });
+
+    test('a sent invoice fully paid reads as paid, not owed', () => {
+        const invoices = [{ family_id: 'fam-1', final_amount: 360, sent_at: '2026-08-28T12:00:00Z' }];
+        const payments = [{ family_id: 'fam-1', amount: 360 }];
+        const [row] = _buildArRows('2026-08', [family], invoices, payments);
+        expect(row.outstanding).toBe(0);
+        expect(row.status).toBe('paid');
+    });
+
+    test('a payment against an unsent draft cannot go negative', () => {
+        const invoices = [{ family_id: 'fam-1', final_amount: 360, sent_at: null }];
+        const payments = [{ family_id: 'fam-1', amount: 50 }];
+        const [row] = _buildArRows('2026-08', [family], invoices, payments);
+        expect(row.outstanding).toBe(0);
     });
 });
 
@@ -1199,6 +1287,7 @@ describe('source-drift guard — copies must match js/ source', () => {
         ['_forecastShowRate',   'js/admin/admin-reports.js'],
         ['_forecastConfidence', 'js/admin/admin-reports.js'],
         ['_buildForecastRows',  'js/admin/admin-reports.js'],
+        ['_buildArRows',        'js/admin/admin-billing.js'],
     ];
 
     for (const [fnName, relPath] of GUARDED) {

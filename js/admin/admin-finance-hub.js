@@ -405,7 +405,12 @@ function _fhFilterCounts() {
         // and "withdrawn" here only ever means "no days booked this month."
         // Deduplicated per _fhOwingRowsDeduped — see its own comment.
         owing:         _fhOwingRowsDeduped().length,
-        paid:          active.filter(r => r.owed <= 0 && (r.ar?.billed > 0 || r.status === 'sent')).length,
+        // r.ar?.billed alone no longer implies "sent" — _buildArRows() keeps
+        // it as the raw drafted-or-sent amount now that `owed` is correctly
+        // gated on sent_at (see that function's own comment). Check sentAt
+        // directly so an unsent draft with owed<=0 (nothing sent, so nothing
+        // owed) doesn't misread as "paid."
+        paid:          active.filter(r => r.owed <= 0 && r.ar?.sentAt).length,
         withdrawn:     _fhRows.filter(r => r.status === 'withdrawn').length,
     };
 }
@@ -422,7 +427,7 @@ function _fhVisibleRows() {
             case 'sent':          return r.status === 'sent';
             case 'card_declined': return false;
             case 'owing':         return owingRows.includes(r); // deduplicated — see _fhOwingRowsDeduped
-            case 'paid':          return r.status !== 'withdrawn' && r.owed <= 0 && (r.ar?.billed > 0 || r.status === 'sent');
+            case 'paid':          return r.status !== 'withdrawn' && r.owed <= 0 && r.ar?.sentAt;
             case 'withdrawn':     return r.status === 'withdrawn';
             default:              return true;
         }
