@@ -28,6 +28,12 @@ let _abData    = null;
 let _abAlerts  = [];
 let _abTimer   = null;
 let _abActionsBound = false;
+// The print bar's own date, independent of _abData.care_date (the board is
+// always "today"; printing a different day shouldn't require leaving the
+// board). Carried across _abRender()'s full innerHTML replacement — every
+// 30s auto-refresh or In/Out click would otherwise silently reset a
+// half-typed pick back to today.
+let _abPrintDate = null;
 
 function _abEl(id) { return document.getElementById(id); }
 
@@ -216,6 +222,11 @@ function _abStopRefresh() {
 
 function _abRender() {
     const wrap = _abEl('attendanceBoardBody');
+    // Capture whatever date is currently picked before innerHTML wipes it.
+    const liveDateInput = _abEl('abPrintDate');
+    if (liveDateInput && liveDateInput.value) _abPrintDate = liveDateInput.value;
+    const printDate = _abPrintDate || _abData.care_date;
+
     const kids  = _abData.children || [];
     const staff = _abData.staff || [];
 
@@ -248,10 +259,18 @@ function _abRender() {
         <div class="ab-head">
             <p class="ab-live">Live · ${escHtml(_abTime(_abData.as_of))} ·
                updates as teachers check children in on the floor</p>
-            <span class="ab-head-btns">
-                <button class="btn-secondary ab-print" id="abPrint">&#128438; Print</button>
-                <button class="btn-ghost ab-refresh" id="abRefresh">Refresh</button>
-            </span>
+            <button class="btn-ghost ab-refresh" id="abRefresh">Refresh</button>
+        </div>
+
+        <div class="ab-print-bar">
+            <label for="abPrintDate" class="ab-print-label">Print rosters for</label>
+            <input type="date" id="abPrintDate" value="${escHtml(printDate)}">
+            <button type="button" class="btn-secondary ab-print-btn" id="abPrintDay"
+                    title="Print that one day, every room">Day</button>
+            <button type="button" class="btn-secondary ab-print-btn" id="abPrintWeek"
+                    title="One page per weekday, that week">Week</button>
+            <button type="button" class="btn-secondary ab-print-btn" id="abPrintMonth"
+                    title="One page per weekday, that month">Month</button>
         </div>
 
         <div class="ab-tiles">
@@ -278,12 +297,33 @@ function _abRender() {
         </div>`;
 
     _abEl('abRefresh')?.addEventListener('click', renderAttendanceBoard);
-    // Reuses Classroom Roster's own print/PDF grid (_printDayRoster,
-    // admin-classrooms.js) — same "one page, every room" layout as that
-    // tool's Print All Rooms, against this board's own live care_date
-    // rather than the Roster tool's (possibly never-opened) date input.
-    _abEl('abPrint')?.addEventListener('click', () => {
-        if (typeof _printDayRoster === 'function') _printDayRoster(_abData.care_date, null);
+
+    // Reuses Classroom Roster's own print grid (admin-classrooms.js) rather
+    // than building a second one — Day is _printDayRoster (same as that
+    // tool's "Print All Rooms"), Week is _printWeekRoster (one page per
+    // weekday that week), Month is the new _printMonthDailyRoster (the same
+    // per-day page, one per weekday all month — distinct from the Roster
+    // tool's own Month button, which prints a single compact calendar grid
+    // instead). All three read the board's own date picker, not the Roster
+    // tool's — this board is always "today", so printing a different day
+    // needs its own date, independent of what _abData.care_date holds.
+    _abEl('abPrintDate')?.addEventListener('change', (e) => { _abPrintDate = e.target.value; });
+    _abEl('abPrintDay')?.addEventListener('click', () => {
+        const d = _abEl('abPrintDate')?.value;
+        if (!d) { alert('Please choose a date first.'); return; }
+        if (typeof _printDayRoster === 'function') _printDayRoster(d, null);
+    });
+    _abEl('abPrintWeek')?.addEventListener('click', () => {
+        const d = _abEl('abPrintDate')?.value;
+        if (!d) { alert('Please choose a date first.'); return; }
+        if (typeof _printWeekRoster === 'function' && typeof _mondayOfWeek === 'function') {
+            _printWeekRoster(_mondayOfWeek(d), null);
+        }
+    });
+    _abEl('abPrintMonth')?.addEventListener('click', () => {
+        const d = _abEl('abPrintDate')?.value;
+        if (!d) { alert('Please choose a date first.'); return; }
+        if (typeof _printMonthDailyRoster === 'function') _printMonthDailyRoster(d.slice(0, 7), null);
     });
 }
 

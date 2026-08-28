@@ -5314,7 +5314,22 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     gap: 14px; flex-wrap: wrap; margin-bottom: 14px;
 }
 .ab-live { margin: 0; font-size: .88em; color: var(--text-muted); }
-.ab-head-btns { display: flex; align-items: center; gap: 8px; }
+
+/* Print bar: a date (defaults to today, editable) plus Day/Week/Month — this
+   board is always "today", so printing a different day's roster needs its
+   own picker rather than reusing _abData.care_date. */
+.ab-print-bar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 14px; padding: 10px 12px;
+    background: var(--linen); border: 1px solid var(--border); border-radius: 8px;
+}
+.ab-print-label { font-size: .82em; font-weight: 700; color: var(--text-muted); }
+.ab-print-bar input[type="date"] {
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: .85em; background: #fff;
+}
+.ab-print-bar input[type="date"]:focus { outline: none; border-color: var(--navy); }
+.ab-print-btn { padding: 5px 14px; font-size: .85em; }
 
 /* Says out loud that the counts are bookings, not bodies. The loudest thing on
    the page when it applies, because a calm number that is not a head count is
