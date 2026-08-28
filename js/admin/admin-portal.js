@@ -238,18 +238,14 @@ const AP_TOOLS = [
     // sidebar's dashed note (apNavHtml) points to Staff → Pay & Policy
     // instead of inventing two undesigned screens.
 
-    // ── Classrooms · Food Program ──
-    // Moved out of Finance entirely per the handoff: "a program to run, not
-    // money to manage." Its claim total still posts into Money In — nothing
-    // about what the claim computes changed, only which tab opens it.
-    { key: 'cacfpMeal',   pane: 'cacfp', section: 'cacfpMealSection',   tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '🍽️', name: 'Daily Meal Counts',
-      blurb: 'Record meals served for the CACFP claim.' },
-    { key: 'cacfpMenu',   pane: 'cacfp', section: 'cacfpMenuSection',   tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '📋', name: 'Menu Planner',
-      blurb: 'Plan compliant menus week by week.' },
-    { key: 'cacfpIncome', pane: 'cacfp', section: 'cacfpIncomeSection', tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '💵', name: 'Income Eligibility',
-      blurb: 'Household eligibility forms and tiering.' },
-    { key: 'cacfpClaims', pane: 'cacfp', section: 'cacfpClaimsSection', tab: 'classrooms', group: 'Food Program', tint: AP_TINT.gold, icon: '🧾', name: 'Monthly Claim',
-      blurb: 'Assemble and export the monthly reimbursement claim.' },
+    // ── Classrooms · Food Program — retired 2026-08-28 ──
+    // The four CACFP tools (Daily Meal Counts, Menu Planner, Income
+    // Eligibility, Monthly Claim) are removed from the sidebar at the
+    // director's request. Same convention as every other retirement in this
+    // file: unreferenced by AP_TOOLS = unreachable, per the shell's own rule.
+    // `cacfpMealSection`/`cacfpMenuSection`/`cacfpIncomeSection`/
+    // `cacfpClaimsSection` stay in admin.html and `js/admin/admin-cacfp.js`
+    // stays in the tree, unreferenced, in case the program is ever revived.
 
     // ── Planning · Waitlist ──
     // Consolidation pass (design_handoff_planning_market, 2026-08-27): 15
@@ -1588,12 +1584,9 @@ function apDashClassrooms(live) {
                 sub: 'Headcount against capacity. A room at ratio needs another staff member before the next child.',
                 body: apBarsHtml(bars), tools: ['attBoard', 'enrollCap'] }),
         ],
-        // Below 900px this is the only path in to the whole Food Program
-        // group — nothing else on this dashboard mentioned CACFP at all.
-        right: [
-            apPanel({ title: 'Food Program', sub: 'CACFP meal counts, menus, income, and claims.',
-                body: '', tools: ['cacfpMeal', 'cacfpMenu', 'cacfpIncome', 'cacfpClaims'] }),
-        ],
+        // Food Program panel removed 2026-08-28 along with its AP_TOOLS
+        // entries — see the retirement comment above `enrollCap`'s block.
+        right: [],
         attention,
     };
 }
