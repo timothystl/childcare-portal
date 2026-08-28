@@ -1997,6 +1997,58 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 
 /* ============================================================
+   Family Directory redesign (2026-08-27) — "..." menu + Documents
+   ============================================================ */
+.fm-kebab { position: relative; }
+.fm-kebab-btn {
+    width: 30px; height: 30px; padding: 0; line-height: 1;
+    background: var(--white); color: var(--text-muted);
+    border: 1.5px solid var(--border); border-radius: 6px;
+    font-size: 1em; font-weight: 800; cursor: pointer;
+}
+.fm-kebab-btn:hover { background: var(--linen); color: var(--navy); }
+.fm-kebab-menu {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 20;
+    display: flex; flex-direction: column; min-width: 190px;
+    background: var(--white); border: 1.5px solid var(--border);
+    border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+    padding: 6px;
+}
+.fm-kebab-menu button {
+    text-align: left; background: none; border: none; border-radius: 6px;
+    padding: 8px 10px; font-size: .84em; font-weight: 600; color: var(--text);
+    cursor: pointer; white-space: nowrap;
+}
+.fm-kebab-menu button:hover { background: var(--linen); }
+.fm-kebab-menu .fm-kebab-danger { color: var(--tang-dark); }
+.fm-kebab-menu .fm-kebab-danger:hover { background: var(--tang-pale); }
+
+.fm-child-documents { margin-top: 10px; }
+.fm-doc-label {
+    font-size: .82em; color: #555; font-weight: 600;
+    display: block; margin-bottom: 4px;
+}
+.fm-doc-hint, .fm-doc-empty, .fm-doc-loading {
+    font-size: .82em; color: var(--text-muted); font-style: italic; margin: 2px 0 6px;
+}
+.fmc-doc-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.fmc-doc-item {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--white); border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 8px; font-size: .82em;
+}
+.fmc-doc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.fmc-doc-meta { flex: none; color: var(--text-muted); font-size: .92em; }
+.fmc-doc-view, .fmc-doc-remove {
+    flex: none; background: none; border: 1px solid var(--border); border-radius: 5px;
+    padding: 2px 8px; font-size: .92em; cursor: pointer; color: var(--text-muted);
+}
+.fmc-doc-view:hover { color: var(--navy); border-color: var(--navy); }
+.fmc-doc-remove:hover { color: var(--tang-dark); border-color: var(--tang); }
+.fmc-doc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.fmc-doc-pick { display: inline-flex; align-items: center; cursor: pointer; }
+
+/* ============================================================
    RESPONSIVE ADMIN
    ============================================================ */
 @media (max-width: 700px) {

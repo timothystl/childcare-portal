@@ -1784,6 +1784,60 @@ async function fetchChildProfilePhotoUrls(paths, ttlSeconds = 3600) {
     return urlByPath;
 }
 
+// ── Child documents (Family Directory modal — admin-only paperwork) ──────
+// Arbitrary per-child files (immunization records, signed forms, a scanned
+// photo ID), NOT the profile photo. One folder per child, named by
+// students.id — this is what lets listChildDocuments()/deleteChildDocument()
+// work directly off storage.objects with no metadata table to keep in sync.
+// Admin-only bucket: no parent policy exists on child-documents.
+
+async function uploadChildDocument(studentId, file) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const ext  = (file.name.split('.').pop() || 'bin').replace(/[^a-zA-Z0-9]/g, '') || 'bin';
+    const base = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'document';
+    const path = `${studentId}/${Date.now()}-${base}.${ext}`;
+    const { error } = await sbClient.storage.from('child-documents').upload(path, file, {
+        contentType: file.type || 'application/octet-stream',
+    });
+    if (error) throw error;
+    return path;
+}
+
+// Every file in a child's folder, newest first. Returns {path, name, size,
+// createdAt} — `name` is the original filename with the timestamp prefix
+// stripped back off, for display.
+async function listChildDocuments(studentId) {
+    if (!sbClient || !studentId) return [];
+    const { data, error } = await sbClient.storage.from('child-documents')
+        .list(String(studentId), { sortBy: { column: 'created_at', order: 'desc' } });
+    if (error) throw friendlyError(error);
+    return (data || [])
+        .filter(f => f.id) // storage.list() can return a placeholder row for an empty "folder"
+        .map(f => ({
+            path:      `${studentId}/${f.name}`,
+            name:      f.name.replace(/^\d+-/, ''),
+            size:      f.metadata?.size ?? null,
+            createdAt: f.created_at,
+        }));
+}
+
+async function deleteChildDocument(path) {
+    if (!sbClient || !path) return;
+    const { error } = await sbClient.storage.from('child-documents').remove([path]);
+    if (error) throw error;
+}
+
+// Signed URL for viewing/downloading one document. Short-lived — documents
+// aren't previewed inline the way a profile photo is, so there's no need to
+// batch-sign a whole child's folder up front.
+async function fetchChildDocumentUrl(path, ttlSeconds = 300) {
+    if (!sbClient || !path) return null;
+    const { data, error } = await sbClient.storage.from('child-documents')
+        .createSignedUrl(path, ttlSeconds);
+    if (error) throw friendlyError(error);
+    return data?.signedUrl || null;
+}
+
 // ── Parent-editable child profile photo (portal.html Account tab) ─────────
 // A parent may replace or remove their own child's picture, but the
 // students table has no parent-facing UPDATE policy — only
