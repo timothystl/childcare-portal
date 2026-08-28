@@ -3877,6 +3877,64 @@ the incident drawer too, wherever else `.inc-drawer` is used.
 `registration_fee_renewal_date` in `dist/admin.min.js` to confirm both fixes
 shipped in the bundle.
 
+### ⚠️ The Ledger's "owed" banner counted every drafted-but-unsent invoice as a real receivable (2026-08-28)
+
+Follow-up question from the director, prompted by the Fees-box investigation
+above: why does the "owed" banner (83 families, $54,014.56) show fewer
+families than "Ready to send" (97), and shouldn't accounts from before
+August already be cleared since real invoicing/billing here is brand new?
+
+Checked live before assuming either half of that was right. **There is no
+pre-August backlog to clear** — `billing_cycles`/`billing_invoices` for
+2026-06 and 2026-07 have **zero rows**. Every dollar of the $54,014.56 is
+from **August itself**: 95 `billing_invoices` rows exist for August, and
+**94 of them had never been sent** (`sent_at IS NULL`) — only one real send
+had ever gone out (a $5.00 Stax sandbox test charge from earlier this
+session, `invoice 3992`, $4 already paid on it). Those 94 unsent drafts'
+combined `final_amount` was **$54,013.56** — matching the owed banner almost
+to the dollar.
+
+**Root cause:** `reconcileBillingInvoice()` drafts a `billing_invoices` row
+for every clean family the moment Bill the Month computes them — well
+before Release/Send is ever clicked (see "Billing writes are now
+recompute-only" above). `_buildArRows()` (`admin-billing.js`) read
+`billed = inv?.final_amount` with no check on `inv.sent_at`, so a drafted
+invoice nobody has emailed yet counted as a real receivable — inflating
+"owed," inviting "Nudge all 83" to nudge families for bills they had never
+actually been shown, and (before this fix) would have misread as
+`status: 'overdue'` rather than simply not-yet-billed.
+
+This is the exact same principle FS29 already established for **aging**
+("an invoice nobody has sent is not overdue") — applied one step earlier:
+**an invoice nobody has sent isn't owed yet either.**
+
+⚠️ **`billed` itself was deliberately left alone** — only `outstanding`/
+`status` are now gated on `sent_at` (`billedIfSent`, a separate local). The
+raw `billed` figure is still what the Finance drawer's "Base tuition" line
+and the Ledger's month-history fallback read (`r.ar?.billed || r.total`) —
+both want "what does the draft say," sent or not, and zeroing `billed`
+outright would have shown $0.00 tuition in the drawer for anyone whose
+invoice hadn't been sent. Two call sites in `admin-finance-hub.js`'s "Paid
+in full" chip count were checking `r.ar?.billed > 0` as a proxy for "this
+family has been sent something" — that stopped being true once `billed`
+could be nonzero while unsent, so both were switched to check `r.ar?.sentAt`
+directly, the thing they actually meant.
+
+Guarded with a real behavioral test (not just a source grep, given the
+dollar stakes): `_buildArRows` copied into
+`js/tests/business-logic.test.js` with its own drift guard, plus four
+cases — an unsent draft is billed-but-not-owed, the same amount becomes
+owed once sent, a fully-paid sent invoice reads `paid`, and a payment
+against an unsent draft can't push `outstanding` negative.
+
+`npm test` — 205/205 (4 new behavioral cases + 1 drift guard). `npm run
+build` — `dist/` rebuilt; `_buildArRows` confirmed present in
+`dist/admin.min.js` (the specific local-variable rename that carries the
+fix doesn't survive minification as a greppable symbol — this is one of the
+rare fixes where the standing "grep the bundle for a symbol only your
+change introduces" check doesn't apply, since nothing new was added at
+module scope).
+
 ---
 
 ## Finance summary API (for the church ChMS finance integration)

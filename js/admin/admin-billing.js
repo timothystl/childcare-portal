@@ -1566,13 +1566,29 @@ function _buildArRows(month, families, invoices, monthPayments) {
 
         const billed      = parseFloat(inv?.final_amount || 0);
         const collected   = payments.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
-        const outstanding = Math.max(0, billed - collected);
+
+        // ⚠️ `outstanding`/`status` are gated on sent_at — `billed` itself is
+        // NOT (kept as the raw drafted-or-sent amount, since other callers,
+        // e.g. the Finance drawer's own "Base tuition" line, read `billed` to
+        // show what a draft says regardless of whether it's gone out yet).
+        // reconcileBillingInvoice() drafts a billing_invoices row for every
+        // clean family the moment Bill the Month computes them — well before
+        // Release/Send is ever clicked — so treating that draft amount as
+        // already "owed" is wrong: a family can't be nudged for a bill they
+        // were never shown. This mirrors FS29's own aging rule ("an invoice
+        // nobody has sent is not overdue") one step earlier — an invoice
+        // nobody has sent isn't owed yet either. Found live 2026-08-28: 94 of
+        // August's 95 drafted invoices had never been sent, and their
+        // $54,013.56 combined final_amount was the entire Ledger "owed"
+        // banner and "Nudge all" count.
+        const billedIfSent = inv?.sent_at ? billed : 0;
+        const outstanding  = Math.max(0, billedIfSent - collected);
 
         let status;
-        if (billed === 0 && collected === 0) status = 'no_invoice';
-        else if (outstanding <= 0 && billed > 0) status = 'paid';
-        else if (collected > 0)                  status = 'partial';
-        else                                     status = 'overdue';
+        if (billedIfSent === 0 && collected === 0) status = 'no_invoice';
+        else if (outstanding <= 0 && billedIfSent > 0) status = 'paid';
+        else if (collected > 0)                        status = 'partial';
+        else                                            status = 'overdue';
 
         // FS29: the AR CSV has carried a "Days Since Invoice" column since the
         // export shipped and it has been blank every single time, because
