@@ -513,6 +513,9 @@ async function ptLoadToday() {
     }
 
     ptEl('ptPrintBtn')?.addEventListener('click', () => window.print());
+    // Only now is there a day to print — see the note on the button in
+    // portal.html. Every path that returns before this leaves it hidden.
+    ptEl('ptPrintBtn')?.classList.remove('hidden');
 
     ptEl('ptNoChildren')?.classList.add('hidden');
     ptEl('ptFeed')?.classList.remove('hidden');

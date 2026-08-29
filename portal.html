@@ -221,8 +221,14 @@
             </div>
             <!-- Print produces the full-day report. On a phone it sits under the
                  day (see .pt-print-btn); the wide layout has room for it up here,
-                 which is where the design puts it. One button, moved by CSS. -->
-            <button type="button" id="ptPrintBtn" class="pt-print-btn">🖨️ Print this day</button>
+                 which is where the design puts it. One button, moved by CSS.
+                 ⚠️ Starts HIDDEN and is unhidden only once a day has actually
+                 rendered. It used to live inside #ptFeed, which is hidden until
+                 then; moving it into the page head for the redesign meant it
+                 also showed on the no-children and not-a-parent states, offering
+                 to print a day that is not on the screen — and its click handler
+                 is wired after that early return, so it did nothing either. -->
+            <button type="button" id="ptPrintBtn" class="pt-print-btn hidden">🖨️ Print this day</button>
         </div>
 
         <!-- Today feed -->
