@@ -3901,6 +3901,57 @@ processed, which `verify` has no way to know in advance. The fix has to
 live in `merge-to-main`, where the real merged tree exists — which is
 exactly where it now does.
 
+### With the button finally reachable, the first real click-through found a genuine Stax API gap: a stale `is_voidable` flag
+
+Once the workflow fix above landed and the director could actually reach
+the Refund link, her first real click on the Stax sandbox test payment
+failed with a bare "Payment processor declined the request." — the
+function's own generic fallback string. Function logs (queried directly
+against the deployed function, not guessed at) showed the real shape:
+`GET /transaction/{id}` reported `is_voidable: true`, so
+`admin-refund-stax-payment` correctly attempted a void — but the void call
+came back HTTP 400 with `child_transactions: [{type: "void", success:
+false, error_description: "gateway response: Batch Closed"}]`. The
+original charge was ~6 hours old; Stax's own daily settlement batch had
+closed in the meantime, and the gateway (BlockChyp sandbox) rejected the
+void even though the transaction object's own `is_voidable` field still
+said `true`.
+
+Two real bugs, both fixed the same session:
+
+- **The error-parsing only checked a bare `{error}`/`{errors}` shape.** A
+  rejected void/refund actually comes back as the **full transaction
+  object** (200-shaped, not a simple error body), with the real reason
+  nested in the most recent `child_transactions[]` entry's
+  `error_description`/`message`. `staxErrorMessage()` now checks that
+  nested shape too, found by reading the actual logged response rather
+  than guessing at Stax's docs a second time.
+- **`is_voidable` can be stale relative to the gateway's real batch-cutoff
+  state**, confirmed live. Rather than trust the flag as the only signal,
+  a void failure now retries once as a refund before giving up — refund is
+  always the correct action once a transaction has actually settled, so
+  this fallback covers exactly the race the flag can lose. The admin never
+  needs to know or care which path Stax actually took; the response's
+  `kind` field is informational only.
+
+⚠️ **No fixed refund window.** Refunding stays available indefinitely —
+only *which* mechanism Stax uses internally (void before the daily batch
+closes, real refund after) has a cutoff, and the fallback above means the
+admin-facing button doesn't need to expose that distinction at all.
+
+Temporary diagnostic `console.log` calls added earlier in this same
+session (to capture the real failure shape before it was known) are still
+in the deployed function as of this fix — left in deliberately rather than
+stripped immediately, since they cost nothing at rest and the next real
+Stax refund attempt (this one, or a genuine future one) will confirm the
+fix from the same log stream that diagnosed the original bug.
+
+`npm test` — 211/211 (existing refund guards all still pass against the
+retry-as-refund fallback; no new guard added since the fallback logic
+isn't something a static source-string check can meaningfully verify —
+this fix is behavioral and was validated against real Stax API responses,
+documented above, not by pattern-matching the diff).
+
 ---
 
 ## Ledger's "Total to bill" was a net figure with nothing showing its parts — broken into a 4-box strip (2026-08-28)
@@ -4359,17 +4410,101 @@ matters.
   by side and hides the switcher entirely. Both screens are satisfied by one
   render rather than one of them being a special case in the JS.
 
-### ⚠️ `Parent Portal Desktop.dc.html` was NOT read
+### The real design source arrived, and it changed things (2026-08-29)
 
-The director pointed at the Claude Design project
-(`05e91ea7-93c5-43f5-9875-8f9b7d69ad93`) mid-session. `DesignSync` needs a
-`/design-login` this remote session cannot run, and the file is not in
-`docs/design_handoff/`, so **this was built from the screenshots**. This file's
-own Staff-tab entry says exactly why that is not good enough ("Read the
-`.dc.html` template directly rather than re-guessing from a screenshot a second
-time") — the source carries the literal hex values and the data-shaping the
-screens only imply. Seed that file into the repo and re-check this work against
-it before calling the redesign matched.
+`design_handoff_parent_portal/` (README + `Parent Portal Desktop.dc.html` +
+`Parent Portal Mobile.dc.html`) was supplied after the first pass shipped. The
+screens had been right about layout; the source carried the literal numbers,
+two whole screens the screenshots never showed, and one requirement that needs
+a schema decision.
+
+**Corrected against the source's own values** (the first pass guessed these):
+rail 236px with 24px padding, brand mark 132px; content column 1120px inside
+48px gutters; Today's grid is `1fr 320px`, not `1.55fr 1fr`; Billing is
+`360px 1fr`; Schedule and Account are plain `1fr 1fr` at 920/960px; nav items
+11px/14px with a 10px radius; recap pills 64px wide with a `1.5px solid #eef1f4`
+border; day chips 52px minimum and a **wrapped flex row, not a grid** — a short
+month ends early instead of padding its last row out.
+
+**Sign in is a screen this app never had.** Split at 900px (navy brand half,
+card half), one navy column below it, with the tagline "Welcome. Receive. Grow.
+Go." and the org line at the foot. The card's own contents were already right;
+the wordmark moved out of it into the brand panel.
+
+- ⚠️ **It uses `myMDO_primary_wordmark_dark.png`, not the `_light` file the
+  design references.** Checked byte-for-byte: the handoff ships the identical
+  `_light` asset this repo already has, and it is drawn for a light page — its
+  "MDO" is a white outline that all but vanishes on the navy panel. The
+  prototype had the same problem; it is a bug in the mockup, not a variant.
+- ⚠️ **`.portal-body`'s 24px padding had to go.** It existed to inset a
+  centered sign-in card; against a full-bleed split screen it drew a cream
+  border around the navy half.
+- On a phone `.portal-signin-brand` is `display: contents`, so the mark, the
+  tagline and the org line become direct children of the shell column. That is
+  what lets the org line sit at the foot of the screen — it comes *before* the
+  card in the document, so it needs `order: 1` as well as `margin-top: auto`.
+  Both revert at 900px, where the brand is a real panel again.
+- The Sign In button stays the parent app's green (`mdo-signin-btn--parent`)
+  rather than the design's navy. That per-app accent postdates the design and
+  is deliberate elsewhere in this repo; flagged rather than silently reverted.
+
+**The illustrated icon set replaced the emoji**, in both layouts. `PT_TABS`
+now holds image paths (`images/icons/{today,recap,schedule,billing,messages,
+account}.png`, added to the repo from the handoff) and `ptRenderTabs()` emits
+an `<img class="tabbar-icon">`. Inactive is `opacity: .42`, not a different
+glyph. ⚠️ **The sizing rules are scoped to `.portal-app`** — `.tabbar-icon` in
+`styles.css` is still an emoji `<span>` in the **staff** app, and a
+width/height there would do nothing good. The desktop rail in the design file
+still showed emoji; its own README says to "swap for the same illustrated icon
+set once available", which this does.
+
+**Sign out is now also at the foot of the rail** (`#portalSignOutRail`), a
+second button rather than one moved by CSS: the phone's belongs to the Account
+screen's own scroll, the rail's is pinned to the rail. Both call
+`portalSignOut`.
+
+### ⚠️ Messages "now scoped per child" is a schema change, and was NOT built
+
+The handoff's README is explicit — "**Now scoped per child** ... Each child has
+their own conversation history ... `messagesByChild = { emma: [...], owen: [...] }`".
+This app cannot do that today: `message_threads` holds **one row per family**,
+and every read and write on both sides (`myMessageThread()`,
+`fetchThreadMessages()`, `sendParentMessage()`, and the admin inbox) resolves
+that single thread. Splitting it needs a `student_id` on the thread, a
+migration, a backfill decision for existing messages, and matching work in the
+admin app so the office knows which child a reply belongs to.
+
+Rendering the pills without that would show the same conversation twice under
+two names, which is worse than not showing them. **Left as the one open
+decision from this handoff.**
+
+### Also deliberately not built from the source
+
+- **Billing's per-line dollar amounts.** The design's month card is a real
+  itemized table (`Emma Carter - Preschool (16 days)` ... `$920.00`). The invoice
+  carries ONE server-computed total; the per-child split exists in the database
+  as `compute_family_month_charges_itemized()` but is only returned by
+  `create-stax-charge`, which reserves a payment attempt and must not be called
+  to render a read-only screen. Exposing it needs a read-only RPC (or a field
+  on `my_schedule()`) — a migration, not a CSS change. Until then the amount
+  column shows **days booked**, which is a fact this payload already holds.
+- **The disabled "Pay online (coming soon)" button.** The design shows it; the
+  live app has a working Stax flow. The design predates it. The working button
+  stays, and no `.pb-pay-btn` rule was added that would restyle it as a
+  placeholder.
+- **Documents was not restructured.** The design's flat card grid is close to
+  what `.pd-row` already renders (title, subtitle, navy button); its four
+  sections carry empty-state copy worth keeping. It grids two-up on desktop.
+
+### ⚠️ The first pass built from screenshots, and it showed
+
+`DesignSync` could not reach the Claude Design project from this remote session
+(it needs a `/design-login` that cannot run here), so the first pass was built
+from screenshots — exactly what this file's Staff-tab entry warns against. The
+source arrived as a zip afterward and the section above lists what it changed:
+a dozen measurements, two screens that were never in the screenshots at all
+(Sign in, the illustrated icon set), and the per-child Messages requirement.
+**The lesson holds: ask for the `.dc.html` before building, not after.**
 
 ### Verification
 

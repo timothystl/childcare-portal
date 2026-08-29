@@ -113,7 +113,7 @@ async function portalSignOut() {
     await parentPortalLogout();
     portalContext = null;
     pEl('portalSignedIn')?.classList.add('hidden');
-    pEl('portalSignIn')?.classList.remove('hidden');
+    pEl('portalSignInShell')?.classList.remove('hidden');
     document.body.classList.remove('portal-app-open');
     const pin = pEl('portalPin');
     if (pin) pin.value = '';
@@ -135,7 +135,7 @@ async function portalLoadContext() {
 async function portalShowSignedIn() {
     portalContext = await portalLoadContext();
 
-    pEl('portalSignIn')?.classList.add('hidden');
+    pEl('portalSignInShell')?.classList.add('hidden');
     pEl('portalSignedIn')?.classList.remove('hidden');
     // The body stops being the sign-in page's centering wrapper — see
     // .portal-app-open in portal.css. Without this the shell sits inside 24px
@@ -290,6 +290,8 @@ async function portalRunChecks() {
 document.addEventListener('DOMContentLoaded', async () => {
     pEl('portalSignInBtn')?.addEventListener('click', portalSignIn);
     pEl('portalSignOutBtn')?.addEventListener('click', portalSignOut);
+    // The rail's own Sign out (desktop) — same handler, not a second path.
+    pEl('portalSignOutRail')?.addEventListener('click', portalSignOut);
     pEl('portalPin')?.addEventListener('keydown', e => { if (e.key === 'Enter') portalSignIn(); });
     pEl('portalEmail')?.addEventListener('keydown', e => { if (e.key === 'Enter') pEl('portalPin')?.focus(); });
 

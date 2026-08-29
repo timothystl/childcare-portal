@@ -1791,6 +1791,48 @@ describe('Waitlist Planner — Grid drawer is reachable, weekday headers print o
     });
 });
 
+describe('Director Report — panes are tables, and they agree with the packet', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const mk = read('js/admin/admin-market.js');
+    const html = read('admin.html');
+
+    test('no chart code or canvas is left behind on this tab', () => {
+        // The panes are lists/tables now. Chart.js plumbing that no longer has
+        // a caller would just imply a chart still renders somewhere here.
+        ['_marketCharts', 'MARKET_COLORS', '_destroyMarketChart', 'new Chart('].forEach(sym =>
+            expect(mk.includes(sym)).toBe(false));
+        ['marketPositionChart', 'marketRateChart', 'marketRegFeeChart',
+         'marketInfantCostChart', 'marketWageChart'].forEach(id =>
+            expect(html.includes(id)).toBe(false));
+    });
+
+    test('the screen and the printed packet read the same rate cell', () => {
+        // Both go through _marketRateCell, so a figure can never differ
+        // between what the director reads and what she hands the board.
+        const packet = mk.match(/function _openDirectorReportPacket[\s\S]*?\n}/)[0];
+        expect(packet.includes('_marketRateCell(p)')).toBe(true);
+        expect(/_drRateLabel\(p\.rate_low/.test(packet)).toBe(false);
+    });
+
+    test('our own weekly rate is computed from active rooms, and a typed rate wins', () => {
+        const cell = mk.match(/function _marketRateCell[\s\S]*?\n}/)[0];
+        // A rate on file short-circuits before the computed fallback.
+        expect(cell.indexOf('p.rate_low != null')).toBeLessThan(cell.indexOf('_marketOwnWeeklyRate'));
+        const own = mk.match(/function _marketOwnWeeklyRate[\s\S]*?\n}/)[0];
+        expect(own.includes("r.status === 'active'")).toBe(true);
+        expect(own.includes('!r.hidden')).toBe(true);
+    });
+
+    test('Flexible/Partial/Set comes from flexible_text, not a score threshold', () => {
+        // flexibility_score orders the list; the text the director actually
+        // types is what says whether a schedule is flexible.
+        const kind = mk.match(/function _marketScheduleKind[\s\S]*?\n}/)[0];
+        expect(kind.includes('flexible_text')).toBe(true);
+        expect(kind.includes('flexibility_score')).toBe(false);
+    });
+});
+
 describe('Planning tab nav — the two sidebar entries the director asked for', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');

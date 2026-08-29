@@ -15,12 +15,17 @@
 //      event for the refund/void arrives and is independently re-verified
 //      against Stax's authenticated API — same "request here, record on
 //      confirmation" split as the Authorize.net path.
-//   4. Void vs refund is chosen from the transaction's OWN is_voidable flag,
+//   4. Void vs refund starts from the transaction's OWN is_voidable flag,
 //      read fresh from Stax (never guessed locally): voidable → void (no
 //      money ever left the family's account); otherwise → refund (money
-//      already batched/settled and has to be sent back). Only a full
-//      reversal is supported — no partial refunds, matching
-//      admin-refund-payment's "this payment shouldn't have happened" scope.
+//      already batched/settled and has to be sent back). ⚠️ That flag can
+//      be stale relative to the gateway's actual daily batch cutoff — seen
+//      live 2026-08-29, a transaction still reported is_voidable:true after
+//      its batch had actually closed, and the void call was rejected
+//      ("gateway response: Batch Closed"). A void failure therefore retries
+//      once as a refund before giving up. Only a full reversal is
+//      supported — no partial refunds, matching admin-refund-payment's
+//      "this payment shouldn't have happened" scope.
 //   5. Already-reversed payments are rejected up front (checked against
 //      billing_payments.refund_of_payment_id), so double-clicking Refund
 //      cannot submit two reversals for the same charge.
@@ -144,43 +149,62 @@ serve(async (req) => {
             return json({ error: "The payment processor already shows this payment as reversed." }, 400, ch);
         }
 
-        const isVoidable = tx.is_voidable === true;
-        // TEMPORARY diagnostic logging (2026-08-29) — a real refund attempt
-        // came back "Payment processor declined the request." (the generic
-        // fallback), meaning Stax's error body didn't match any of the
-        // shapes this function knows how to parse. Logging the raw
-        // status/body here to find the actual shape rather than guessing
-        // again. Remove once the real cause is found and handled.
-        console.log("admin-refund-stax-payment: tx lookup", JSON.stringify({
-            transactionId, is_voidable: tx.is_voidable, is_refundable: tx.is_refundable,
-            type: tx.type, status: tx.status, total: tx.total,
-        }));
-        let kind: "void" | "refund";
-        let reverseRes: Response;
-        if (isVoidable) {
-            kind = "void";
-            reverseRes = await fetch(`${STAX_API_URL}/transaction/${encodeURIComponent(transactionId)}/void`, {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${apiKey}`, "Accept": "application/json" },
-            });
-        } else {
-            kind = "refund";
-            reverseRes = await fetch(`${STAX_API_URL}/transaction/${encodeURIComponent(transactionId)}/refund`, {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${apiKey}`,
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ total: Number(payment.amount).toFixed(2) }),
-            });
+        // Extracts a human-readable error from any of the shapes Stax's API
+        // actually returns. A void/refund failure often comes back as the
+        // FULL transaction object (200-shaped, not a bare {error}) with the
+        // real reason nested in the most recent child_transactions[] entry
+        // — e.g. a rejected void reads {..., child_transactions: [{type:
+        // "void", success: false, error_description: "gateway response:
+        // Batch Closed"}]}. Verified live 2026-08-29 against a real
+        // sandbox decline; a bare {error}/{errors} check alone missed it
+        // and fell through to a useless generic message.
+        function staxErrorMessage(body: any): string | null {
+            if (!body || typeof body !== "object") return null;
+            if (typeof body.error === "string" && body.error) return body.error;
+            if (Array.isArray(body.errors)) return body.errors.join(", ");
+            if (body.errors && typeof body.errors === "object") {
+                return Object.values(body.errors).flat().join(", ");
+            }
+            const lastChild = Array.isArray(body.child_transactions)
+                ? body.child_transactions[body.child_transactions.length - 1] : null;
+            return lastChild?.error_description || lastChild?.message
+                || body.error_description || body.message || null;
         }
 
-        const reverseBody = await reverseRes.json().catch(() => ({}));
-        // TEMPORARY diagnostic logging (2026-08-29) — see note above.
-        console.log("admin-refund-stax-payment: reverse call", JSON.stringify({
-            kind, status: reverseRes.status, ok: reverseRes.ok, body: reverseBody,
-        }));
+        async function postVoidOrRefund(kind: "void" | "refund"): Promise<{ res: Response; body: any }> {
+            const res = kind === "void"
+                ? await fetch(`${STAX_API_URL}/transaction/${encodeURIComponent(transactionId)}/void`, {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${apiKey}`, "Accept": "application/json" },
+                })
+                : await fetch(`${STAX_API_URL}/transaction/${encodeURIComponent(transactionId)}/refund`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${apiKey}`,
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ total: Number(payment.amount).toFixed(2) }),
+                });
+            const resBody = await res.json().catch(() => ({}));
+            return { res, body: resBody };
+        }
+
+        let kind: "void" | "refund" = tx.is_voidable === true ? "void" : "refund";
+        let { res: reverseRes, body: reverseBody } = await postVoidOrRefund(kind);
+
+        // Stax's own `is_voidable` flag can be stale relative to the
+        // gateway's actual daily batch-cutoff state — seen live: the GET
+        // reported is_voidable:true, but by the time this ran, BlockChyp
+        // had already closed the transaction's batch and rejected the void
+        // with "gateway response: Batch Closed". Rather than surface a raw
+        // gateway decline for something the flag told us should have
+        // worked, retry once as a refund — the correct action once a
+        // transaction has actually settled — before giving up.
+        if (kind === "void" && !reverseRes.ok) {
+            kind = "refund";
+            ({ res: reverseRes, body: reverseBody } = await postVoidOrRefund(kind));
+        }
 
         await admin.from("admin_audit_log").insert({
             admin_email: callerEmail,
@@ -190,11 +214,7 @@ serve(async (req) => {
         }).then(() => {}, (e: unknown) => console.error("admin-refund-stax-payment: audit write failed", e));
 
         if (!reverseRes.ok) {
-            const msg = reverseBody?.error
-                || (Array.isArray(reverseBody?.errors) ? reverseBody.errors.join(", ") : null)
-                || (reverseBody?.errors && typeof reverseBody.errors === "object"
-                    ? Object.values(reverseBody.errors).flat().join(", ") : null)
-                || "Payment processor declined the request.";
+            const msg = staxErrorMessage(reverseBody) || "Payment processor declined the request.";
             return json({ error: msg }, 502, ch);
         }
 

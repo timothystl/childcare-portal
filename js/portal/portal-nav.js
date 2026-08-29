@@ -35,13 +35,20 @@
 // (js/portal/portal-recap.js) is the same three sections, for a date the
 // parent picks, and reuses Today's rendering vocabulary rather than keeping a
 // second copy of "how an event reads."
+//
+// ⚠️ The icons are the handoff's illustrated set (design_handoff_parent_portal,
+// images/icons/*.png), not emoji. They are real images, so BOTH layouts render
+// the same <img> — the bottom bar at 26px and the sidebar rail at 22px — and
+// the inactive state is opacity, not a different glyph. The desktop sidebar in
+// the design file still showed emoji as placeholders; its own README says to
+// "swap for the same illustrated icon set once available", which this does.
 const PT_TABS = [
-    { key: 'today',     icon: '🏠', label: 'Today' },
-    { key: 'daily',     icon: '📔', label: 'Recap' },
-    { key: 'schedule',  icon: '🗓', label: 'Schedule' },
-    { key: 'billing',   icon: '💳', label: 'Billing' },
-    { key: 'messages',  icon: '💬', label: 'Messages' },
-    { key: 'account',   icon: '👤', label: 'Account' },
+    { key: 'today',     icon: 'images/icons/today.png',    label: 'Today' },
+    { key: 'daily',     icon: 'images/icons/recap.png',    label: 'Recap' },
+    { key: 'schedule',  icon: 'images/icons/schedule.png', label: 'Schedule' },
+    { key: 'billing',   icon: 'images/icons/billing.png',  label: 'Billing' },
+    { key: 'messages',  icon: 'images/icons/messages.png', label: 'Messages' },
+    { key: 'account',   icon: 'images/icons/account.png',  label: 'Account' },
 ];
 
 let ptRoute   = 'today';
@@ -58,7 +65,7 @@ function ptRenderTabs() {
         const n = ptBadges[t.key] || 0;
         return `<button type="button" class="tabbar-item ${t.key === ptRoute ? 'is-active' : ''}"
                     data-tab="${t.key}" role="tab" aria-selected="${t.key === ptRoute}">
-            <span class="tabbar-icon" aria-hidden="true">${t.icon}</span>
+            <img class="tabbar-icon" src="${t.icon}" alt="" aria-hidden="true">
             <span class="tabbar-label">${t.label}</span>
             ${n ? `<span class="tabbar-badge" aria-label="${n} unread">${n > 9 ? '9+' : n}</span>` : ''}
         </button>`;
