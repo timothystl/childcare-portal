@@ -22,7 +22,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=31">
+    <link rel="stylesheet" href="css/admin.css?v=32">
     <link rel="stylesheet" href="css/admin-portal.css?v=7">
 </head>
 <body class="admin-body">
@@ -1007,12 +1007,12 @@
                 <div class="dr-head">
                     <div>
                         <h2>📈 Director Report <span class="dr-live-pill">&#9679; LIVE</span></h2>
-                        <p class="section-desc">Market position, pricing, and cost &amp; wage — auto-pulled from Comparable Providers, no re-typing into static tables.</p>
+                        <p class="section-desc">Auto-pulled from Comparable Providers — no re-typing into static tables.<span id="drSyncedNote"></span></p>
                     </div>
                     <div class="dr-head-actions">
                         <button id="marketEditContextBtn" class="btn-ghost">Edit Stats &amp; Figures</button>
-                        <button id="marketRefreshBtn" class="btn-secondary">&#8635; Refresh</button>
-                        <button id="drExportPacketBtn" class="btn-primary">&#128424;&#65039; Export Packet</button>
+                        <button id="marketRefreshBtn" class="btn-ghost">&#8635; Refresh</button>
+                        <button id="drExportPacketBtn" class="btn-secondary">&#128424;&#65039; Export Packet</button>
                     </div>
                 </div>
 
@@ -1024,51 +1024,24 @@
 
                 <div id="drPanePosition" class="dr-pane">
                     <div id="marketHeroStats" class="market-hero-stats"></div>
-                    <div id="marketTypeLegend" class="market-type-legend"></div>
-                    <div class="chart-box" style="height:420px;position:relative;margin-top:16px">
-                        <canvas id="marketPositionChart"></canvas>
-                    </div>
+                    <div id="marketPositionList" class="mk-list"></div>
                     <p id="marketPositioningNote" class="chart-note"></p>
                 </div>
 
                 <div id="drPanePricing" class="dr-pane" style="display:none">
-                    <div class="two-col">
-                        <div>
-                            <div class="chart-box" style="height:420px;position:relative">
-                                <canvas id="marketRateChart"></canvas>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="chart-box" style="height:420px;position:relative">
-                                <canvas id="marketRegFeeChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
+                    <div id="marketPricingTable" style="overflow-x:auto"></div>
                 </div>
 
                 <div id="drPaneCost" class="dr-pane" style="display:none">
-                    <div class="two-col">
-                        <div>
-                            <div class="chart-box" style="height:260px;position:relative">
-                                <canvas id="marketInfantCostChart"></canvas>
-                            </div>
-                            <p id="marketInfantCostSource" class="chart-note"></p>
-                        </div>
-                        <div>
-                            <div class="chart-box" style="height:260px;position:relative">
-                                <canvas id="marketWageChart"></canvas>
-                            </div>
-                            <p id="marketWageSource" class="chart-note"></p>
-                        </div>
-                    </div>
+                    <div id="marketCostContent"></div>
                 </div>
             </section>
 
             <section class="admin-section collapsible-section" id="marketProvidersSection">
                 <h2>🏫 Comparable Providers</h2>
-                <p class="section-desc">The full comparable set. Edit any row, or add a new provider as you learn about one.</p>
+                <p class="section-desc">The data behind the Director Report. Edit a row or add a provider — the report updates automatically, nothing to retype.</p>
                 <div class="families-dir-controls">
-                    <button id="marketAddProviderBtn" class="btn-primary">+ Add Provider</button>
+                    <button id="marketAddProviderBtn" class="btn-ghost">+ Add provider</button>
                     <button id="marketToggleInactiveBtn" class="btn-ghost">Show Archived</button>
                 </div>
                 <div id="marketProvidersTableWrap" style="overflow-x:auto;margin-top:12px"></div>

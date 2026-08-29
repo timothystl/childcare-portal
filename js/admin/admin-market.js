@@ -7,18 +7,6 @@ let _marketProviders = [];
 let _marketContext = {};
 let _marketShowInactive = false;
 let _marketEditingProviderId = null;
-let _marketCharts = {}; // canvas key -> Chart instance, destroyed before each re-render
-
-// Fixed categorical colors, one per provider_type — pulled from this app's own
-// design tokens (css/styles.css), never cycled/reassigned.
-const MARKET_COLORS = {
-    tlc:    '#01294A', // --navy    (this program — always emphasized)
-    church: '#5BAD8B', // --green
-    profit: '#F5B731', // --sun
-    public: '#7A6E5A', // --text-muted
-};
-const MARKET_ACCENT = '#E97D55'; // --tang — reference lines/callouts only, never a series
-
 let _marketEditHeroStats = [];
 let _marketEditWageRows  = [];
 
@@ -34,37 +22,15 @@ function _marketCloseModal(id) {
     document.getElementById(id)?.classList.add('hidden');
 }
 
-function _marketProviderColor(p) {
-    return MARKET_COLORS[p.provider_type] || MARKET_COLORS.public;
-}
-
-/** Light -> dark, interpolated between this app's --green-lt and --green-dark tokens. */
-function _marketGreenRamp(n) {
-    const light = [201, 230, 220]; // #C9E6DC
-    const dark  = [26, 92, 62];    // #1a5c3e
-    const steps = [];
-    for (let i = 0; i < n; i++) {
-        const t = n === 1 ? 0 : i / (n - 1);
-        const rgb = light.map((c, idx) => Math.round(c + (dark[idx] - c) * t));
-        steps.push(`rgb(${rgb.join(',')})`);
-    }
-    return steps;
-}
-
-function _destroyMarketChart(key) {
-    if (_marketCharts[key]) { _marketCharts[key].destroy(); delete _marketCharts[key]; }
-}
-
 async function _reloadMarketData() {
     _marketProviders = await fetchMarketProviders(_marketShowInactive);
     _marketContext   = await fetchMarketContext();
+    const synced = document.getElementById('drSyncedNote');
+    if (synced) synced.textContent = ` Synced ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`;
     _renderMarketHeroStats();
-    _renderMarketTypeLegend();
-    _renderMarketPositionChart();
-    _renderMarketRateChart();
-    _renderMarketRegFeeChart();
-    _renderMarketInfantCostChart();
-    _renderMarketWageChart();
+    _renderMarketPositionList();
+    _renderMarketPricingTable();
+    _renderMarketCostContext();
     _renderMarketProvidersTable();
 }
 
@@ -80,226 +46,163 @@ function _renderMarketHeroStats() {
             <div class="market-hero-num">${escHtml(s.num)}<span>${escHtml(s.suffix || '')}</span></div>
             <div class="market-hero-label">${escHtml(s.label)}</div>
         </div>`).join('');
-    document.getElementById('marketPositioningNote').textContent = _marketContext.positioningNote || '';
 }
 
-function _renderMarketTypeLegend() {
-    const el = document.getElementById('marketTypeLegend');
+// ============================================================
+// DIRECTOR REPORT PANES  (design_handoff_planning_market)
+// ============================================================
+// The three panes are plain lists/tables, not charts. The columns are
+// deliberately the SAME ones _openDirectorReportPacket() already prints —
+// Provider/Age range/Schedule, Provider/Weekly rate/Reg. fee, and the cost +
+// wage figures — so what a director reads on screen and what she hands the
+// board cannot say different things. The old scatter/bar charts are gone; see
+// the log entry in CLAUDE.md for what that dropped and what replaced it.
+
+// Flexible / Partial / Set, read from the flexible_text the director already
+// types ("Yes — unique", "Partial (choose days)", "No (full-day only)") rather
+// than a threshold invented over flexibility_score — the score orders the
+// list, the text says what the schedule actually is.
+function _marketScheduleKind(p) {
+    const t = (p.flexible_text || '').trim();
+    if (/^no\b/i.test(t) || t === '') return { key: 'set', label: 'Set' };
+    if (/^partial/i.test(t)) return { key: 'partial', label: 'Partial' };
+    return { key: 'flexible', label: 'Flexible' };
+}
+
+// The detail beside a schedule badge, with the word the badge already shows
+// stripped off: "Partial (choose days)" → "choose days", "No" → nothing.
+function _marketScheduleDetail(p) {
+    const t = (p.flexible_text || '').trim();
+    const rest = t.replace(/^(yes|no|partial)\b/i, '').replace(/^[\s—–-]+/, '').trim();
+    return rest.replace(/^\((.*)\)$/, '$1');
+}
+
+// Our own weekly rate, computed from Settings → Rates rather than typed a
+// second time into our own provider row. This program bills by the day, so the
+// weekly equivalent is a full day x 5, across the active rooms (Summer Camp is
+// seasonal and priced differently, so it is left out of the comparison).
+// Returns null if no rate is configured, and a rate typed into the provider
+// row always wins over this — see _marketRateCell().
+function _marketOwnWeeklyRate() {
+    if (typeof ROOMS === 'undefined') return null;
+    const rates = ROOMS
+        .filter(r => r.status === 'active' && !r.hidden && Number(r.fullDayRate) > 0)
+        .map(r => Number(r.fullDayRate) * 5);
+    if (!rates.length) return null;
+    return { low: Math.min(...rates), high: Math.max(...rates) };
+}
+
+// The rate cell for one provider row. Everyone else shows what is on file;
+// our own row falls back to the computed figure above when nothing is, so the
+// one screen built to compare our price against the market is never missing
+// the only price the app already knows.
+function _marketRateCell(p) {
+    if (p.rate_low != null || !p.is_own_program) return { label: _drRateLabel(p.rate_low, p.rate_high), computed: false };
+    const own = _marketOwnWeeklyRate();
+    if (!own) return { label: '—', computed: false };
+    return { label: _drRateLabel(own.low, own.high), computed: true };
+}
+
+function _marketTypeLabel(p) {
+    return MARKET_PROVIDER_TYPES.find(t => t.id === p.provider_type)?.label || p.provider_type;
+}
+
+// Most flexible first — that is the axis this program competes on, so the
+// providers most like us sort to the top. flexibility_score keeps earning its
+// place here now that the scatter chart it was built for is gone.
+function _marketByFlexibility() {
+    return _marketProviders.slice().sort((a, b) =>
+        (Number(b.flexibility_score) || 0) - (Number(a.flexibility_score) || 0));
+}
+
+function _marketRateCellHtml(p) {
+    const cell = _marketRateCell(p);
+    return cell.computed
+        ? `${escHtml(cell.label)}<span class="mk-num-note" title="A full day x 5, from Settings → Rates. Type a rate into this provider row to override it.">from your rates</span>`
+        : escHtml(cell.label);
+}
+
+function _renderMarketPositionList() {
+    const el = document.getElementById('marketPositionList');
     if (!el) return;
-    el.innerHTML = MARKET_PROVIDER_TYPES.map(t => `
-        <span><span class="swatch" style="background:${MARKET_COLORS[t.id]}"></span>${escHtml(t.label)}</span>
-    `).join('');
+    el.innerHTML = _marketByFlexibility().map(p => {
+        const kind = _marketScheduleKind(p);
+        return `
+        <div class="mk-row${p.is_own_program ? ' is-us' : ''}">
+            <div class="mk-row-main">
+                <div class="mk-row-name">${p.is_own_program ? 'Us — ' : ''}${escHtml(p.name)}</div>
+                <div class="mk-row-sub">${escHtml(p.ages_text || '—')}${p.is_own_program ? '' : ' · ' + escHtml(_marketTypeLabel(p))}</div>
+            </div>
+            <span class="mk-sched mk-sched-${kind.key}">${kind.label}</span>
+        </div>`;
+    }).join('');
+    const note = document.getElementById('marketPositioningNote');
+    if (note) note.textContent = _marketContext.positioningNote || '';
 }
 
-// ============================================================
-// CHARTS
-// ============================================================
-function _renderMarketPositionChart() {
-    const canvas = document.getElementById('marketPositionChart');
-    if (!canvas || typeof Chart === 'undefined') return;
-    _destroyMarketChart('position');
-
-    const datasets = _marketProviders.map(p => ({
-        label: p.name,
-        data: [{ x: Number(p.flexibility_score) || 0, y: Number(p.age_range_score) || 0 }],
-        backgroundColor: _marketProviderColor(p),
-        borderColor: p.is_own_program ? MARKET_COLORS.tlc : _marketProviderColor(p),
-        borderWidth: p.is_own_program ? 2 : 0,
-        pointRadius: p.is_own_program ? 11 : 7,
-        pointHoverRadius: p.is_own_program ? 13 : 9,
-    }));
-
-    _marketCharts.position = new Chart(canvas, {
-        type: 'scatter',
-        data: { datasets },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            scales: {
-                x: { min: 0, max: 11, title: { display: true, text: 'Scheduling flexibility  →  fixed full-week  to  day-by-day' } },
-                y: { min: 0, max: 11, title: { display: true, text: 'Age range  →  preschool-only  to  birth-through-pre-K' } },
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: ctx => ctx.dataset.label } },
-            },
-        },
-        plugins: [{
-            id: 'marketLabels',
-            afterDatasetsDraw(chart) {
-                const { ctx } = chart;
-                chart.data.datasets.forEach((ds, i) => {
-                    const meta = chart.getDatasetMeta(i);
-                    const pt = meta.data[0];
-                    if (!pt) return;
-                    ctx.save();
-                    ctx.font = '600 11px sans-serif';
-                    ctx.fillStyle = '#5B6472';
-                    ctx.textAlign = pt.x > chart.chartArea.right - 130 ? 'right' : 'left';
-                    const offset = pt.x > chart.chartArea.right - 130 ? -10 : 10;
-                    ctx.fillText(ds.label, pt.x + offset, pt.y - 10);
-                    ctx.restore();
-                });
-            },
-        }],
-    });
+function _renderMarketPricingTable() {
+    const el = document.getElementById('marketPricingTable');
+    if (!el) return;
+    // Cheapest first, but anyone with no rate on file sinks to the bottom
+    // rather than sorting as $0 — an unknown rate is not a low one.
+    const own = _marketOwnWeeklyRate();
+    const sortRate = p => {
+        if (p.rate_low != null) return Number(p.rate_low);
+        if (p.is_own_program && own) return own.low;
+        return Infinity;
+    };
+    const rows = _marketProviders.slice().sort((a, b) => sortRate(a) - sortRate(b));
+    el.innerHTML = `
+        <table class="mk-table">
+            <thead><tr><th>Provider</th><th class="mk-num">Weekly rate</th><th class="mk-num">Reg. fee</th><th>Schedule</th></tr></thead>
+            <tbody>
+                ${rows.map(p => `
+                    <tr${p.is_own_program ? ' class="is-us"' : ''}>
+                        <td class="mk-td-name">${p.is_own_program ? 'Us — ' : ''}${escHtml(p.name)}</td>
+                        <td class="mk-num">${_marketRateCellHtml(p)}</td>
+                        <td class="mk-num">${escHtml(_drFeeLabel(p.reg_fee_low, p.reg_fee_high))}</td>
+                        <td><span class="mk-sched mk-sched-${_marketScheduleKind(p).key}">${_marketScheduleKind(p).label}</span> <span class="mk-sched-text">${escHtml(_marketScheduleDetail(p))}</span></td>
+                    </tr>`).join('')}
+            </tbody>
+        </table>`;
 }
 
-function _renderMarketRateChart() {
-    const canvas = document.getElementById('marketRateChart');
-    if (!canvas || typeof Chart === 'undefined') return;
-    _destroyMarketChart('rate');
-
-    const rows = _marketProviders
-        .filter(p => p.rate_low != null && p.rate_high != null)
-        .sort((a, b) => Number(a.rate_low) - Number(b.rate_low));
-
-    _marketCharts.rate = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: rows.map(p => p.name),
-            datasets: [{
-                label: 'Weekly-equivalent rate range ($)',
-                data: rows.map(p => [Number(p.rate_low), Number(p.rate_high)]),
-                backgroundColor: rows.map(_marketProviderColor),
-                borderRadius: 2,
-            }],
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true, maintainAspectRatio: false,
-            scales: {
-                x: { title: { display: true, text: 'Approx. $ per week' } },
-                y: { ticks: { font: { size: 11 } } },
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: ctx => {
-                    const v = ctx.raw;
-                    return v[0] === v[1] ? `$${v[0]}/wk` : `$${v[0]}–$${v[1]}/wk`;
-                } } },
-            },
-        },
-    });
-}
-
-function _renderMarketRegFeeChart() {
-    const canvas = document.getElementById('marketRegFeeChart');
-    if (!canvas || typeof Chart === 'undefined') return;
-    _destroyMarketChart('regfee');
-
-    const rows = _marketProviders
-        .filter(p => p.reg_fee_low != null)
-        .map(p => ({ ...p, mid: (Number(p.reg_fee_low) + Number(p.reg_fee_high ?? p.reg_fee_low)) / 2 }))
-        .sort((a, b) => a.mid - b.mid);
-
-    _marketCharts.regfee = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: rows.map(p => p.name),
-            datasets: [{
-                data: rows.map(p => p.mid),
-                backgroundColor: rows.map(_marketProviderColor),
-                borderRadius: 3,
-            }],
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            scales: {
-                y: { title: { display: true, text: '$' } },
-                x: { ticks: { font: { size: 10 }, maxRotation: 40, minRotation: 40 } },
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: ctx => {
-                    const p = rows[ctx.dataIndex];
-                    return (p.reg_fee_high != null && p.reg_fee_high !== p.reg_fee_low)
-                        ? `$${p.reg_fee_low}–$${p.reg_fee_high}` : `$${p.reg_fee_low}`;
-                } } },
-            },
-        },
-    });
-}
-
-function _renderMarketInfantCostChart() {
-    const canvas = document.getElementById('marketInfantCostChart');
-    if (!canvas || typeof Chart === 'undefined') return;
-    _destroyMarketChart('infant');
+function _renderMarketCostContext() {
+    const el = document.getElementById('marketCostContent');
+    if (!el) return;
     const ic = _marketContext.infantCost || {};
-    document.getElementById('marketInfantCostSource').textContent = ic.source || '';
-
-    _marketCharts.infant = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: ['Infant care', 'Preschool care'],
-            datasets: [{
-                data: [Number(ic.infantAnnual) || 0, Number(ic.preschoolAnnual) || 0],
-                backgroundColor: [MARKET_COLORS.tlc, MARKET_COLORS.church],
-                borderRadius: 4,
-                barThickness: 44,
-            }],
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true, maintainAspectRatio: false,
-            scales: { x: { title: { display: true, text: 'Annual cost to provide ($, Missouri)' } } },
-            plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: ctx => `$${ctx.raw.toLocaleString()}/year` } },
-            },
-        },
-    });
-}
-
-function _renderMarketWageChart() {
-    const canvas = document.getElementById('marketWageChart');
-    if (!canvas || typeof Chart === 'undefined') return;
-    _destroyMarketChart('wage');
-    const roles   = _marketContext.wageLadder || [];
+    const wage = (_marketContext.wageLadder || []).filter(w => w.role);
     const minWage = Number(_marketContext.minWage) || 0;
-    document.getElementById('marketWageSource').textContent = _marketContext.wageSource || '';
+    const money = n => '$' + Number(n || 0).toLocaleString();
+    const ratio = (Number(ic.infantAnnual) && Number(ic.preschoolAnnual))
+        ? (Number(ic.infantAnnual) / Number(ic.preschoolAnnual)).toFixed(1) + '×'
+        : '—';
 
-    _marketCharts.wage = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: roles.map(r => r.role),
-            datasets: [{
-                data: roles.map(r => [Number(r.low), Number(r.high)]),
-                backgroundColor: _marketGreenRamp(roles.length || 1),
-                borderRadius: 3,
-                barThickness: 18,
-            }],
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true, maintainAspectRatio: false,
-            scales: { x: { title: { display: true, text: '$ per hour' }, min: 10 } },
-            plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: ctx => { const v = ctx.raw; return `$${v[0]}–$${v[1]}/hr`; } } },
-            },
-        },
-        plugins: [{
-            id: 'marketMinWageLine',
-            afterDraw(chart) {
-                if (!minWage) return;
-                const { ctx, scales: { x, y } } = chart;
-                const xPos = x.getPixelForValue(minWage);
-                ctx.save();
-                ctx.strokeStyle = MARKET_ACCENT;
-                ctx.setLineDash([4, 3]);
-                ctx.lineWidth = 1.5;
-                ctx.beginPath();
-                ctx.moveTo(xPos, y.top);
-                ctx.lineTo(xPos, y.bottom);
-                ctx.stroke();
-                ctx.setLineDash([]);
-                ctx.fillStyle = MARKET_ACCENT;
-                ctx.font = '600 10px sans-serif';
-                ctx.fillText(`MO min. wage $${minWage.toFixed(2)}`, xPos + 4, y.top + 10);
-                ctx.restore();
-            },
-        }],
-    });
+    el.innerHTML = `
+        <div class="mk-costgrid">
+            <div class="mk-costbox"><div class="mk-costbox-label">Infant care</div><div class="mk-costbox-val">${money(ic.infantAnnual)}</div><div class="mk-costbox-sub">annual cost to provide</div></div>
+            <div class="mk-costbox"><div class="mk-costbox-label">Preschool care</div><div class="mk-costbox-val">${money(ic.preschoolAnnual)}</div><div class="mk-costbox-sub">annual cost to provide</div></div>
+            <div class="mk-costbox"><div class="mk-costbox-label">Infant vs. preschool</div><div class="mk-costbox-val">${ratio}</div><div class="mk-costbox-sub">more expensive to deliver</div></div>
+        </div>
+        ${ic.source ? `<p class="chart-note">${escHtml(ic.source)}</p>` : ''}
+        ${wage.length ? `
+            <div class="mk-subhead">Wage ladder${minWage ? ` — Missouri minimum wage $${escHtml(String(minWage))}/hr` : ''}</div>
+            <table class="mk-table">
+                <thead><tr><th>Role</th><th class="mk-num">Hourly range</th><th class="mk-num">vs. minimum</th></tr></thead>
+                <tbody>
+                    ${wage.map(w => {
+                        const over = minWage ? (Number(w.low) - minWage) : null;
+                        const overLabel = over == null ? '—' : (over > 0 ? `+$${over.toFixed(2)}` : over < 0 ? `-$${Math.abs(over).toFixed(2)}` : 'at minimum');
+                        return `<tr>
+                            <td class="mk-td-name">${escHtml(w.role)}</td>
+                            <td class="mk-num">$${escHtml(String(w.low))}–$${escHtml(String(w.high))}/hr</td>
+                            <td class="mk-num${over != null && over <= 0 ? ' mk-num-flag' : ''}">${escHtml(overLabel)}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+            ${_marketContext.wageSource ? `<p class="chart-note">${escHtml(_marketContext.wageSource)}</p>` : ''}
+        ` : '<p class="empty-hint">No wage ladder entered yet — add one under “Edit Stats &amp; Figures.”</p>'}`;
 }
 
 // ============================================================
@@ -323,17 +226,15 @@ function _renderMarketProvidersTable() {
     const wrap = document.getElementById('marketProvidersTableWrap');
     if (!wrap) return;
     wrap.innerHTML = `
-        <table class="rates-table">
-            <thead><tr><th>Provider</th><th>Type</th><th>Ages</th><th>Reg. Fee</th><th>Rate</th><th>Flexible?</th><th></th></tr></thead>
+        <table class="mk-table">
+            <thead><tr><th>Provider</th><th>Age range</th><th class="mk-num">Rate / wk</th><th>Schedule</th><th></th></tr></thead>
             <tbody>
                 ${_marketProviders.map(p => `
-                    <tr ${p.is_own_program ? 'class="highlight-row"' : ''} style="${p.active === false ? 'opacity:.5' : ''}">
-                        <td><strong>${escHtml(p.name)}</strong></td>
-                        <td><span class="tag ${p.provider_type}">${escHtml(MARKET_PROVIDER_TYPES.find(t => t.id === p.provider_type)?.label || p.provider_type)}</span></td>
+                    <tr${p.is_own_program ? ' class="is-us"' : ''}${p.active === false ? ' style="opacity:.5"' : ''}>
+                        <td class="mk-td-name">${p.is_own_program ? 'Us — ' : ''}${escHtml(p.name)}${p.is_own_program ? '' : `<span class="mk-td-type">${escHtml(_marketTypeLabel(p))}</span>`}</td>
                         <td>${escHtml(p.ages_text || '—')}</td>
-                        <td>${p.reg_fee_low != null ? '$' + p.reg_fee_low + (p.reg_fee_high != null && p.reg_fee_high !== p.reg_fee_low ? '–$' + p.reg_fee_high : '') : '—'}</td>
-                        <td>${p.rate_low != null ? '$' + p.rate_low + (p.rate_high != null && p.rate_high !== p.rate_low ? '–$' + p.rate_high : '') + '/wk' : '—'}</td>
-                        <td>${escHtml(p.flexible_text || '—')}</td>
+                        <td class="mk-num">${_marketRateCellHtml(p)}</td>
+                        <td><span class="mk-sched mk-sched-${_marketScheduleKind(p).key}">${_marketScheduleKind(p).label}</span> <span class="mk-sched-text">${escHtml(_marketScheduleDetail(p))}</span></td>
                         <td><button type="button" class="btn-ghost market-edit-provider-btn" data-id="${p.id}">Edit</button></td>
                     </tr>
                 `).join('')}
@@ -519,10 +420,8 @@ async function _saveMarketContext() {
         _marketContext = context;
         _marketCloseModal('marketContextModal');
         _renderMarketHeroStats();
-        _renderMarketTypeLegend();
-        _renderMarketPositionChart();
-        _renderMarketInfantCostChart();
-        _renderMarketWageChart();
+        _renderMarketPositionList();
+        _renderMarketCostContext();
     } catch (err) {
         alert('Error saving: ' + err.message);
     } finally {
@@ -534,23 +433,20 @@ async function _saveMarketContext() {
 // DIRECTOR REPORT  (consolidation pass, design_handoff_planning_market,
 // 2026-08-27) — replaces the three separate Market Position / Pricing
 // Landscape / Cost & Wage Context tools with one segmented view. Each
-// segment reuses the EXACT existing chart-render functions above, just
-// re-homed under one section with new mount ids so they aren't fighting the
-// removed sections for the same canvas id. _reloadMarketData() still renders
-// every chart on load/refresh regardless of which segment is showing (same
-// as the three-tool layout always did) — switching segments here re-invokes
-// only that segment's render functions, because Chart.js sizes a canvas off
-// its layout box at creation time, and a canvas inside a `display:none` pane
-// draws at zero size. A plain CSS toggle without a re-render would leave the
-// Pricing/Cost charts blank the first time a director actually clicks over
-// to them.
+// segment is one of the three panes above. _reloadMarketData() renders all
+// three on load regardless of which is showing; switching segments re-invokes
+// that segment's own renderer so a pane can never show pre-refresh figures.
+// (When these were charts, the re-render was mandatory — Chart.js sizes a
+// canvas off its layout box at creation time, so one built inside a
+// `display:none` pane drew at zero size. Plain HTML has no such problem; the
+// re-render is kept because it is cheap and keeps the panes in step.)
 // ============================================================
 
 const DR_SEGMENTS = ['position', 'pricing', 'cost'];
 const DR_SEG_RENDER = {
-    position: () => { _renderMarketHeroStats(); _renderMarketTypeLegend(); _renderMarketPositionChart(); },
-    pricing:  () => { _renderMarketRateChart(); _renderMarketRegFeeChart(); },
-    cost:     () => { _renderMarketInfantCostChart(); _renderMarketWageChart(); },
+    position: () => { _renderMarketHeroStats(); _renderMarketPositionList(); },
+    pricing:  _renderMarketPricingTable,
+    cost:     _renderMarketCostContext,
 };
 const DR_SEG_PANE_ID = { position: 'drPanePosition', pricing: 'drPanePricing', cost: 'drPaneCost' };
 
@@ -623,7 +519,7 @@ function _openDirectorReportPacket() {
                     ${_marketProviders.map(p => `
                     <tr>
                         <td${p.is_own_program ? ' style="font-weight:700"' : ''}>${escHtml(p.name)}</td>
-                        <td>${_drRateLabel(p.rate_low, p.rate_high)}</td>
+                        <td>${escHtml(_marketRateCell(p).label)}</td>
                         <td>${_drFeeLabel(p.reg_fee_low, p.reg_fee_high)}</td>
                     </tr>`).join('')}
                 </tbody>
