@@ -2148,6 +2148,47 @@ describe('parent upload of child documents — write-only, own-child-only', () =
     });
 });
 
+describe('Schedule tab shows the invoice\'s own amount, never a second estimate beside it', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const scheduleJs = read('js/portal/portal-schedule.js');
+    const migration  = read('supabase/migrations/20260829153628_parent_read_public_settings_keys.sql');
+
+    test('psMonthBlock prints billing_invoices.final_amount whenever an invoice exists', () => {
+        const start = scheduleJs.indexOf('function psMonthBlock(');
+        expect(start).toBeGreaterThan(-1);
+        const body = scheduleJs.slice(start, scheduleJs.indexOf('\nfunction psStatusPill', start));
+        // The invoice figure wins; the client-side day-rate sum is the fallback.
+        expect(body.includes('const billed  = inv ? Number(inv.final_amount) || 0 : total;')).toBe(true);
+        // And it is that figure, not the estimate, that gets rendered.
+        expect(body.includes('ps-month-bill">${psMoney(billed)}')).toBe(true);
+        expect(body.includes('ps-month-bill">${psMoney(total)}')).toBe(false);
+    });
+
+    test('a month with an invoice is never labeled an estimate', () => {
+        const start = scheduleJs.indexOf('function psMonthBlock(');
+        const body = scheduleJs.slice(start, scheduleJs.indexOf('\nfunction psStatusPill', start));
+        expect(body.includes("isBilled ? 'not sent yet' : 'estimate'")).toBe(true);
+    });
+
+    test('the shared fetch loads live room rates, so the estimate is not the build-time default', () => {
+        const start = scheduleJs.indexOf('function psSchedule()');
+        const body = scheduleJs.slice(start, scheduleJs.indexOf('\n}', scheduleJs.indexOf('return psPromise', start)));
+        expect(body.includes('loadRateSettings')).toBe(true);
+        // Best-effort: a rates failure must not take the whole tab down.
+        expect(body.includes('.catch(() => false)')).toBe(true);
+    });
+
+    test('a signed-in parent can read room_rates — and only the already-public keys', () => {
+        expect(migration.includes('to authenticated')).toBe(true);
+        expect(migration.includes('for select')).toBe(true);
+        expect(migration.includes("'room_rates'")).toBe(true);
+        // Nothing beyond the anon allow-list: no admin_roles, no annual budget.
+        expect(migration.includes('admin_roles')).toBe(false);
+        expect(/for (all|insert|update|delete)/i.test(migration.replace(/^--.*$/gm, ''))).toBe(false);
+    });
+});
+
 // ---- Summary ----
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;
