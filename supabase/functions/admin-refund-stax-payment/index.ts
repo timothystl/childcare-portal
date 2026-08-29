@@ -145,6 +145,16 @@ serve(async (req) => {
         }
 
         const isVoidable = tx.is_voidable === true;
+        // TEMPORARY diagnostic logging (2026-08-29) — a real refund attempt
+        // came back "Payment processor declined the request." (the generic
+        // fallback), meaning Stax's error body didn't match any of the
+        // shapes this function knows how to parse. Logging the raw
+        // status/body here to find the actual shape rather than guessing
+        // again. Remove once the real cause is found and handled.
+        console.log("admin-refund-stax-payment: tx lookup", JSON.stringify({
+            transactionId, is_voidable: tx.is_voidable, is_refundable: tx.is_refundable,
+            type: tx.type, status: tx.status, total: tx.total,
+        }));
         let kind: "void" | "refund";
         let reverseRes: Response;
         if (isVoidable) {
@@ -167,6 +177,10 @@ serve(async (req) => {
         }
 
         const reverseBody = await reverseRes.json().catch(() => ({}));
+        // TEMPORARY diagnostic logging (2026-08-29) — see note above.
+        console.log("admin-refund-stax-payment: reverse call", JSON.stringify({
+            kind, status: reverseRes.status, ok: reverseRes.ok, body: reverseBody,
+        }));
 
         await admin.from("admin_audit_log").insert({
             admin_email: callerEmail,
