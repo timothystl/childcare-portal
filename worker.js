@@ -601,7 +601,7 @@ export default {
       if (!familyId) return new Response('Unauthorized', { status: 401 });
 
       const threadRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/message_threads?id=eq.${encodeURIComponent(thread_id)}&select=id,family_id,families(parent_name)&limit=1`,
+        `${SUPABASE_URL}/rest/v1/message_threads?id=eq.${encodeURIComponent(thread_id)}&select=id,family_id,student_id,families(parent_name),students(child_name)&limit=1`,
         { headers: { 'apikey': env.SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
       );
       if (!threadRes.ok) return new Response('Failed to read thread', { status: 500 });
@@ -617,8 +617,13 @@ export default {
       const [lastMsg] = msgRes.ok ? await msgRes.json().catch(() => []) : [];
 
       const parentName = thread.families?.parent_name || 'A parent';
+      // Threads are per child (per_child_message_threads.sql), so the lock
+      // screen has to say which one — the whole reason for splitting them is
+      // that "she wouldn't nap" is ambiguous in a family with two children.
+      // Still composed here from the stored row, never from the browser.
+      const childName = thread.students?.child_name || '';
       const payload = {
-        title: `💬 ${parentName}`,
+        title: `💬 ${parentName}${childName ? ' · ' + childName : ''}`,
         body:  (lastMsg?.body || 'sent a new message.').slice(0, 180),
         tag:   `thread-${thread_id}`,
       };

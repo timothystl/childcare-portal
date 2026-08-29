@@ -3068,7 +3068,11 @@ async function fetchFireDrills(limit = 60) {
 }
 
 // ── Messaging (Phase 2) ─────────────────────────────────────
-// ONE THREAD PER FAMILY. The `messages` table and its admin inbox are untouched
+// ONE THREAD PER CHILD since per_child_message_threads.sql — the design
+// handoff's own requirement ("Each child has their own conversation history").
+// message_threads.student_id is NULL only for a family's GENERAL thread, which
+// is what a family with no children on file still needs to reach the office.
+// The `messages` table and its admin inbox are untouched
 // — that is still the public contact form, the only way a NON-family reaches
 // the office.
 //
@@ -3077,7 +3081,28 @@ async function fetchFireDrills(limit = 60) {
 // teacher has no business reading the Owl Room's. The director is unscoped —
 // she reads everything through is_admin() in the admin inbox.
 
-/** The signed-in parent's thread id, created on first use. */
+/**
+ * The thread for ONE of the caller's children, created on first use.
+ *
+ * ⚠️ A separate name, not an overload of my_message_thread(). supabase-js sends
+ * NAMED parameters, so a 0-arg and a 1-arg function of the same name are an
+ * ambiguity waiting to happen the moment either gains a default — this repo
+ * has already lost a day to exactly that on submit_incident_report.
+ *
+ * Authorization lives entirely inside the RPC (parent_owns_student). Asking for
+ * another family's child returns null and creates nothing; there is no filter
+ * here on purpose, same stance as every other parent-session read.
+ */
+async function myChildMessageThread(studentId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('my_child_message_thread', {
+        p_student_id: studentId,
+    });
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
+/** The family's GENERAL thread (student_id IS NULL), created on first use. */
 async function myMessageThread() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('my_message_thread');
@@ -3184,7 +3209,7 @@ async function fetchAllThreads() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
         .from('message_threads')
-        .select('id, family_id, last_message_at, families(parent_name, parent_email), message_items(id, body, sender_type, read_at, created_at)')
+        .select('id, family_id, student_id, last_message_at, families(parent_name, parent_email), students(child_name), message_items(id, body, sender_type, read_at, created_at)')
         .order('last_message_at', { ascending: false })
         .limit(200);
     if (error) throw friendlyError(error);

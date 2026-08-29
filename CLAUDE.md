@@ -4463,20 +4463,78 @@ second button rather than one moved by CSS: the phone's belongs to the Account
 screen's own scroll, the rail's is pinned to the rail. Both call
 `portalSignOut`.
 
-### ⚠️ Messages "now scoped per child" is a schema change, and was NOT built
+### Messages are per child now — `per_child_message_threads.sql` (2026-08-29)
 
-The handoff's README is explicit — "**Now scoped per child** ... Each child has
-their own conversation history ... `messagesByChild = { emma: [...], owen: [...] }`".
-This app cannot do that today: `message_threads` holds **one row per family**,
-and every read and write on both sides (`myMessageThread()`,
-`fetchThreadMessages()`, `sendParentMessage()`, and the admin inbox) resolves
-that single thread. Splitting it needs a `student_id` on the thread, a
-migration, a backfill decision for existing messages, and matching work in the
-admin app so the office knows which child a reply belongs to.
+The handoff's own requirement ("Each child has their own conversation
+history"), left open when the redesign shipped because it needed a schema
+change. **Applied and verified in production 2026-08-29.**
 
-Rendering the pills without that would show the same conversation twice under
-two names, which is worse than not showing them. **Left as the one open
-decision from this handoff.**
+⚠️ **The real change is one dropped constraint.** `message_threads` carried a
+UNIQUE on `family_id` — that, not any application code, is what made this app
+one-thread-per-family. Everything else follows from removing it. It is replaced
+by two partial unique indexes that say what actually holds: one thread per
+`(family_id, student_id)` where the student is set, and at most one *general*
+thread per family where it is NULL.
+
+**`student_id` stays nullable, and NULL keeps a meaning**: the family's general
+thread, which is what a family with no children on file still needs to reach
+the office through. The parent app opens a per-child thread whenever the family
+has children, so NULL is the exception.
+
+**The backfill was measured before it was written.** Production held 2 threads
+and 2 messages, and **neither belonged to a family with more than one child** —
+so every existing thread had exactly one child it could honestly be attributed
+to, and nothing was lost or guessed. The `UPDATE` still guards on
+`count(students) = 1` rather than trusting that measurement: replayed against a
+different database, a multi-child family's thread stays general instead of
+being assigned to a child at random.
+
+⚠️ **`my_child_message_thread(uuid)` is a NEW NAME, not an overload of
+`my_message_thread()`.** supabase-js sends *named* parameters, so a 0-arg and a
+1-arg function of the same name become ambiguous the moment either grows a
+default — this file already documents a day lost to exactly that on
+`submit_incident_report`. `my_message_thread()` still works and now means "the
+general thread". Authorization is `parent_owns_student()` inside the RPC;
+verified live that a caller asking for another family's child gets `NULL` and
+**no thread is created**.
+
+**A real tightening came with it, not just plumbing.** `staff_can_see_thread()`
+and `staff_list_threads()` now scope on the **thread's own child**, not the
+family. A Bee Room teacher used to see a family's single thread because *any*
+child of that family was in her room today — including a conversation about a
+sibling in another room. A general thread still falls back to the family-wide
+rule.
+
+- ⚠️ `staff_list_threads` had to be **dropped and recreated**, not `CREATE OR
+  REPLACE`d: its `RETURNS TABLE` shape changed (it returns `student_id` and
+  `child_name` now). Its `volatile` is written out explicitly — it reaches
+  `staff_id_for_pin()`, which WRITES an attempt row on every call, and a
+  `STABLE` declaration would raise `25006` on the happy path only. That is the
+  clock-in outage this file already carries.
+
+**Every reader says which child.** The parent's pills, the admin inbox row
+(`Parent · Child`), the staff thread list (child as the heading, family as the
+subtitle), and the admin push title. The push still sends **by reference** —
+the worker re-reads the thread with the service role and composes the text; the
+child's name never travels from a browser.
+
+⚠️ **Opening a thread marks only THAT child's messages read.** A sibling's stay
+unread, which is the entire point of splitting them — the badge has to keep
+pointing at something real. `pmUnreadCount()` is now a sum across every child's
+thread and still marks nothing read, and a guard asserts its own body never
+calls `pmLoad`/`pmOpenActiveThread`/`markThreadRead`.
+
+⚠️ **A test-harness trap, caught before pushing.** This suite prints its
+summary and calls `process.exit(1)` partway down the file, not at the end — a
+`describe` block appended after that line runs, prints ticks, and **cannot fail
+CI**. New blocks go *above* the summary.
+
+**Live verification.** A second thread for the same family inserts (it could
+not before); a duplicate `(family, child)` raises `unique_violation`; the two
+existing threads carry their child and kept their messages; grants are
+anon=false / authenticated=true on the parent RPC and anon=true on the
+PIN-gated staff one; every function is `SECURITY DEFINER` with `search_path`
+pinned. All probe rows were deleted and the table re-counted afterward.
 
 ### Also deliberately not built from the source
 
