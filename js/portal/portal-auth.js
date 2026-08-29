@@ -158,7 +158,16 @@ async function portalShowSignedIn() {
                 weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
                 timeZone: 'America/Chicago',
               })
-            : 'You are signed in, but the database did not recognize this session as a parent. Contact the office.';
+            // ⚠️ This is not a failure, and the old wording ("the database did
+            // not recognize this session") said it was. my_parent_context()
+            // returns null for exactly one reason: this auth user has no
+            // parent_accounts row. The commonest cause is signing in with a
+            // staff address — the admin portal is a separate sign-in — and the
+            // real one for a family is an account the office has not linked yet.
+            // Say both, because the reader is one or the other.
+            : 'This sign-in is not linked to a family account, so there is nothing to show yet. '
+              + 'If your children are enrolled, contact the office and we will link it. '
+              + 'If you are staff, the admin portal is a separate sign-in.';
     }
 
     // The feed is the point of the page. It loads after the greeting so the
