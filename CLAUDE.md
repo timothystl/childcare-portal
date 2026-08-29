@@ -4761,6 +4761,84 @@ states, offering to print a day that was not on screen — with its click handle
 wired after the early return, so it did nothing. It starts `hidden` now and is
 unhidden only on the path that renders a day.
 
+## Childcare statement — Form 2441 / employer reimbursement (2026-08-29)
+
+Built from the director's mockup of a year-end statement, with the period
+selectable because two different readers ask for it: an employer running a
+dependent-care reimbursement account wants **one month**, a tax preparer wants
+the **whole year**, and year-to-date sits between them.
+
+`family_care_statement.sql` (**applied and verified in production**) returns
+everything the document shows; `statement-print.html` / `js/statement-print.js`
+render it, reached from the parent's Documents tab *and* the Finance Ledger
+drawer. Provider identity lives in a new `provider_tax_info` setting, edited in
+Settings → Provider tax details.
+
+### ⚠️ One statement per FAMILY, not per child
+
+The mockup named a single child. `billing_payments` has **no `student_id`** —
+money is recorded against the family — so a per-child dollar figure would be a
+number this app invented, on a document filed with the IRS. Form 2441 wants the
+provider, the amount paid, and the qualifying persons, which is what the
+statement lists: one true total, every child who attended, with their day
+counts.
+
+### ⚠️ Total paid is money RECEIVED, never money billed
+
+It sums `billing_payments` over the period. `billing_invoices.final_amount` is
+what a family was *charged*, which is a different number and not the one the
+IRS asks for. Guarded by a test that fails if `final_amount` ever appears in
+that migration.
+
+### ⚠️ The coverage block is the reason this is safe to ship
+
+Measured before building, and it is not hypothetical:
+
+| | in production today |
+|---|---|
+| `billing_payments` | Jan–Jun 2026 only, then **nothing** |
+| `registration_dates` | **Apr 2026 onward** only |
+| July + August 2026 | 2,356 care days, **zero** payments recorded |
+
+So for a real family (Franczyk, checked directly) a 2026 statement would show
+$7,399.50 / 121 days while the truth is they also paid Jan–Mar (money on
+record, no care days) *and* paid something for Jul–Sep (care days, no money).
+**Both headline figures can be wrong, in opposite directions, for reasons that
+have nothing to do with the family.**
+
+`family_care_statement()` therefore returns a per-month `coverage` array —
+care days, payment count and amount for every month in the period — and the
+print page **refuses to issue** when any month has care days but no payment
+recorded, naming the months so the office knows what to reconcile. There is no
+override, and one must not be added: a statement that understates what a family
+paid is worse than one they have to wait for.
+
+### ⚠️ Nothing invents the provider identity
+
+Legal name, address and EIN are what make the statement usable on Form 2441.
+They are typed once by someone who knows them and stored in `provider_tax_info`;
+the page refuses until all three are set and says which are missing. The
+mockup's `43-1234567` is a dummy EIN — a test asserts that string appears
+nowhere in the code. The license number is genuinely optional (not every state
+issues one) and its row is removed when absent rather than blocking.
+
+### Fixed in passing: a bare `header {}` rule in styles.css
+
+`.sp-head` is a `<header>`, and `css/styles.css` styles that element globally
+(mint `--green-lt` background, centered text, 28px padding) for the public
+pages. A tax document came out with a green band across the top and a centered
+org name. `.sp-head` now resets background/text-align/padding explicitly.
+⚠️ **Any new `<header>` outside the public pages inherits the same thing** —
+worth knowing before the next standalone document.
+
+### Verification
+
+Live, impersonating each caller: the office gets a full payload for a real
+family; that family's own parent gets the same; a different parent asking for
+it gets `null`. `npm test` — 238/238 (6 new guards). The document was rendered
+in a real browser against representative values, which is what caught the
+inherited header band.
+
 ## Finance summary API (for the church ChMS finance integration)
 
 `supabase/functions/finance-summary/index.ts` — `GET`, header `X-Api-Key: <FINANCE_API_KEY>`, returns 401 if missing/wrong. Returns `{ updated_at, accounts: [], budget: [...] }` for the current month + 12 prior (13 months, oldest first). Deploy like any other edge function (paste into the Supabase dashboard editor or `supabase functions deploy finance-summary`) and set the `FINANCE_API_KEY` secret — neither is automatic.

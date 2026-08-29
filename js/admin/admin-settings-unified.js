@@ -40,6 +40,13 @@ async function renderSettingsUnifiedTool() {
         window._setApiTesterBound = true;
         setupFinanceApiTester();
     }
+    // Provider tax details — same bind-once rule as the tester above: this
+    // tool re-renders on every Settings open, and a second listener would
+    // save twice.
+    if (typeof setupProviderTaxDetails === 'function' && !window._setProviderTaxBound) {
+        window._setProviderTaxBound = true;
+        setupProviderTaxDetails();
+    }
 }
 
 // ── "Last changed by" captions ─────────────────────────────────

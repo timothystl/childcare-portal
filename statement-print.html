@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Childcare Statement — Timothy Lutheran Church MDO</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/logo/favicon-32.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lora:wght@400;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/statement-print.css">
+</head>
+<body class="sp-body">
+
+<!--
+  ============================================================
+  THE CHILDCARE STATEMENT — for Form 2441 or an employer's DCFSA
+  ============================================================
+  ⚠️ EVERY FIGURE COMES FROM family_care_statement(). There is no second source
+  and there must never be one: this is a document a parent files with the IRS
+  or hands to an employer, and a number this page computed for itself would be
+  a number nobody can reconcile against the ledger.
+
+  ⚠️ IT REFUSES TO RENDER UNTIL THE PROVIDER'S TAX DETAILS ARE ON FILE. Name,
+  address and EIN are what make the statement usable on Form 2441; a statement
+  missing them is worse than no statement, because a parent will file it. They
+  are entered once by the office in Settings and stored in the
+  provider_tax_info setting. Nothing here invents or defaults them.
+
+  ⚠️ IT REFUSES TO RENDER A PERIOD THE LEDGER CANNOT SUPPORT. family_care_
+  statement() returns a per-month coverage block; any month with care days but
+  no payment recorded means the total is short, and the page stops rather than
+  printing a confident wrong figure. The office can see exactly which month to
+  fix. Do not add an override that prints anyway.
+-->
+
+<div class="sp-bar noprint">
+  <span id="spBarNote">Preparing the statement…</span>
+  <button type="button" id="spPrint" class="sp-print-btn" hidden>🖨 Print</button>
+</div>
+
+<div id="spState" class="sp-state">Loading the statement…</div>
+
+<section id="spPage" class="sp-page hidden">
+  <header class="sp-head">
+    <div>
+      <h1 id="spOrgName" class="sp-org"></h1>
+      <p id="spOrgSub" class="sp-org-sub"></p>
+      <p id="spOrgAddr" class="sp-org-addr"></p>
+    </div>
+    <div class="sp-taxyear">
+      <div class="sp-taxyear-label">Statement period</div>
+      <div id="spTaxYear" class="sp-taxyear-value"></div>
+    </div>
+  </header>
+
+  <h2 class="sp-title" id="spTitle">Childcare Statement</h2>
+  <p class="sp-lede" id="spLede"></p>
+
+  <div class="sp-block">
+    <div class="sp-block-head">Care provider information</div>
+    <table class="sp-kv">
+      <tr><td>Provider name</td><td id="spProvName"></td></tr>
+      <tr><td>Address</td><td id="spProvAddr"></td></tr>
+      <tr><td>Employer Identification Number (EIN)</td><td id="spProvEin" class="sp-mono"></td></tr>
+      <tr id="spProvLicRow"><td>License / registration #</td><td id="spProvLic" class="sp-mono"></td></tr>
+    </table>
+  </div>
+
+  <div class="sp-block">
+    <div class="sp-block-head">Family &amp; children</div>
+    <table class="sp-kv">
+      <tr><td>Parent / guardian</td><td id="spParent"></td></tr>
+      <tr><td id="spChildLabel">Children</td><td id="spChildren"></td></tr>
+      <tr><td>Care period</td><td id="spCarePeriod"></td></tr>
+    </table>
+  </div>
+
+  <div class="sp-totals">
+    <div class="sp-total">
+      <div class="sp-total-label">Total paid for care</div>
+      <div id="spTotalPaid" class="sp-total-value"></div>
+      <div id="spTotalPaidSub" class="sp-total-sub"></div>
+    </div>
+    <div class="sp-total">
+      <div class="sp-total-label">Total days of care</div>
+      <div id="spTotalDays" class="sp-total-value"></div>
+      <div id="spTotalDaysSub" class="sp-total-sub"></div>
+    </div>
+  </div>
+
+  <p class="sp-note" id="spNote"></p>
+
+  <!-- The payment detail. An employer reimbursing month to month asks for the
+       dates, not just a total. -->
+  <div class="sp-block sp-payments" id="spPaymentsBlock">
+    <div class="sp-block-head">Payments received</div>
+    <table class="sp-table" id="spPaymentsTable"></table>
+  </div>
+
+  <footer class="sp-foot">
+    <div>
+      <div id="spIssued"></div>
+      <div id="spContact"></div>
+    </div>
+    <div class="sp-sign">
+      <div id="spSignName" class="sp-sign-name"></div>
+      <div class="sp-sign-rule"></div>
+      <div class="sp-sign-role">Authorized Signature, MDO Director</div>
+    </div>
+  </footer>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="dist/supabase.min.js"></script>
+    <script src="dist/statement-print.min.js"></script>
+</body>
+</html>

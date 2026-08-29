@@ -1258,6 +1258,49 @@
                     </div>
                 </div>
 
+                <!-- Provider tax details. These are what make a childcare
+                     statement usable on IRS Form 2441, and statement-print.html
+                     REFUSES TO RENDER until the name, address and EIN are all
+                     set — a statement missing them is worse than none, because
+                     a parent will file it anyway. Nothing in this app invents
+                     or defaults these values; they are the church's own and
+                     have to be typed once by someone who knows them.
+                     Full-only, alongside the other cards in this panel. -->
+                <div class="ap-panel" id="providerTaxCard">
+                    <div class="ap-panel-head"><h3>🧾 Provider tax details</h3></div>
+                    <p class="section-desc">Printed on every childcare statement families give to their employer or tax preparer. A statement will not issue until the name, address and EIN are filled in.</p>
+                    <div class="form-grid-2">
+                        <label class="form-label">Legal name
+                            <input id="ptxLegalName" class="form-control" placeholder="Timothy Lutheran Church MDO" autocomplete="off">
+                        </label>
+                        <label class="form-label">Line under the name
+                            <input id="ptxOrgLine" class="form-control" placeholder="Timothy Lutheran Church &amp; School · Mother's Day Out" autocomplete="off">
+                        </label>
+                        <label class="form-label">Address
+                            <input id="ptxAddress" class="form-control" placeholder="Street, City, ST ZIP" autocomplete="off">
+                        </label>
+                        <label class="form-label">EIN
+                            <input id="ptxEin" class="form-control" placeholder="00-0000000" autocomplete="off">
+                        </label>
+                        <label class="form-label">License / registration # <span class="form-optional">(optional)</span>
+                            <input id="ptxLicense" class="form-control" autocomplete="off">
+                        </label>
+                        <label class="form-label">Phone
+                            <input id="ptxPhone" class="form-control" autocomplete="off">
+                        </label>
+                        <label class="form-label">Email
+                            <input id="ptxEmail" class="form-control" autocomplete="off">
+                        </label>
+                        <label class="form-label">Signature name
+                            <input id="ptxSignature" class="form-control" placeholder="Timothy Lutheran MDO" autocomplete="off">
+                        </label>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:.75rem;margin-top:.75rem">
+                        <button id="ptxSaveBtn" class="btn-primary">Save tax details</button>
+                        <span id="ptxStatus" style="font-size:.85em;color:#6b7280"></span>
+                    </div>
+                </div>
+
                 <!-- ChMS Finance API — moved from its own Finance/Bookkeeper
                      sidebar entry, 2026-08-28. Full-only, same as Access &
                      oversight above (_hide('financeApiCard') in

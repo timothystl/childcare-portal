@@ -3136,6 +3136,42 @@ async function myChildMessageThread(studentId) {
  * the caller's own auth.uid()/JWT email, so it cannot be pointed at somebody
  * else's address to ask whether they are staff.
  */
+/**
+ * The childcare statement for one family over one period — the numbers behind
+ * statement-print.html.
+ *
+ * ⚠️ Every figure on that document comes from here and nowhere else. Total paid
+ * is money RECEIVED (billing_payments), never money billed, because that is
+ * what "paid for care" means on IRS Form 2441.
+ *
+ * The payload also carries a per-month `coverage` array. It is not decoration:
+ * a month with care days and no payment recorded means the total is short, and
+ * the print page refuses to issue rather than print a confident wrong figure.
+ *
+ * Authorization is inside the RPC — the office, or the family itself. A parent
+ * asking for another family gets null.
+ */
+async function fetchFamilyCareStatement(familyId, fromDate, toDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('family_care_statement', {
+        p_family_id: familyId, p_from: fromDate, p_to: toDate,
+    });
+    if (error) throw friendlyError(error);
+    return data && data !== 'null' ? data : null;
+}
+
+/** The center's own tax identity, shown on every statement. Admin-only write. */
+async function fetchProviderTaxInfo() {
+    const raw = await fetchSetting('provider_tax_info');
+    if (!raw) return {};
+    if (typeof raw === 'string') { try { return JSON.parse(raw) || {}; } catch (_) { return {}; } }
+    return typeof raw === 'object' ? raw : {};
+}
+
+async function saveProviderTaxInfo(info) {
+    return upsertSetting('provider_tax_info', info || {});
+}
+
 async function myAppHome() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('my_app_home');

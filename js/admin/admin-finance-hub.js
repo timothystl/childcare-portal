@@ -896,6 +896,23 @@ async function _fhLoadDrawerBody(row) {
                 </li>`).join('')}</ul>` : '<p class="empty-hint">No payments recorded yet.</p>'}
         </div>
 
+        <!-- ⚠️ The statement lives HERE, in the drawer, not on a retired
+             section. billingArSection taught this repo that a control added to
+             an unreferenced screen is invisible however well it works: the
+             Ledger drawer is where a family's payments are actually looked at
+             today, so it is where "what did they pay us this year" belongs. -->
+        <div class="inc-dr-field">
+            <div class="fh-dr-card-title-row">
+                <div class="fh-dr-card-title">Childcare statement</div>
+            </div>
+            <p class="fh-dr-hint">For the family's employer reimbursement or their
+               tax preparer (IRS Form 2441). Totals are money received, not billed.</p>
+            <div class="fh-stmt-row">
+                <select id="fhStmtPeriod" class="fh-stmt-select">${_fhStatementOptions()}</select>
+                <button type="button" class="fh-link-btn" id="fhStmtOpen">Open statement</button>
+            </div>
+        </div>
+
         <div class="inc-dr-foot">
             <button type="button" class="fh-dr-save-btn" id="fhDrawerCloseFoot">Save</button>
             <button type="button" class="fh-dr-remind-btn" id="fhDrawerRemindBtn">Send payment reminder</button>
@@ -1134,6 +1151,48 @@ function _fhShowPaymentForm(row) {
         </div>`;
     _fhEl('fhPayCancel').addEventListener('click', () => { host.innerHTML = ''; });
     _fhEl('fhPaySave').addEventListener('click', () => _fhSubmitPayment(row));
+
+    _fhEl('fhStmtOpen')?.addEventListener('click', () => {
+        if (!row.familyId) { showToast('This row has no family record to bill.', 'error'); return; }
+        const { from, to } = _fhStatementRange(_fhEl('fhStmtPeriod').value);
+        window.open(`statement-print.html?family=${encodeURIComponent(row.familyId)}`
+            + `&from=${from}&to=${to}`, '_blank', 'noopener');
+    });
+}
+
+
+// ── Childcare statement ─────────────────────────────────────
+// Same three periods the parent's own Documents tab offers, for the same two
+// reasons: an employer reimburses month to month, a tax preparer wants the
+// year. The document is statement-print.html; nothing is computed here.
+function _fhStatementOptions() {
+    const now  = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+    const year = now.getFullYear();
+    let out = `<option value="ytd">Year to date — ${year}</option>`
+            + `<option value="year:${year}">All of ${year}</option>`
+            + `<option value="year:${year - 1}">All of ${year - 1}</option>`;
+    for (let m = now.getMonth(); m >= 0; m--) {
+        const d = new Date(year, m, 1);
+        out += `<option value="month:${year}-${String(m + 1).padStart(2, '0')}">`
+             + escHtml(d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }))
+             + '</option>';
+    }
+    return out;
+}
+
+function _fhStatementRange(value) {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+    if (String(value).startsWith('month:')) {
+        const key = value.slice(6);
+        const [y, m] = key.split('-').map(Number);
+        const last = new Date(y, m, 0).getDate();
+        return { from: `${key}-01`, to: `${key}-${String(last).padStart(2, '0')}` };
+    }
+    if (String(value).startsWith('year:')) {
+        const y = value.slice(5);
+        return { from: `${y}-01-01`, to: `${y}-12-31` };
+    }
+    return { from: today.slice(0, 4) + '-01-01', to: today };
 }
 
 async function _fhSubmitPayment(row) {
