@@ -319,11 +319,10 @@
         </section>
 
         <!-- ══ BILLING ════════════════════════════════════════ -->
-        <!-- Real invoices (js/portal/portal-billing.js, off the same
-             my_schedule() data the Schedule tab reads), but no online
-             payment yet — nothing in this app talks to a payment
-             processor, so "Pay" is a placeholder that says so rather than
-             pretending a card can be charged. -->
+        <!-- Real invoices and real online payment (js/portal/portal-billing.js,
+             off the same psSchedule() data the Schedule/Today tabs share) —
+             a Home/All Invoices/Invoice Detail/Payment Received screen stack,
+             not a single card list. See that file's own header comment. -->
         <section class="pt-tab hidden" data-tab="billing">
             <div class="pt-page-head"><h1 class="portal-greeting">Billing</h1></div>
             <div id="pbBody"></div>
@@ -437,8 +436,13 @@
 
                 <div id="pbStaxLineItems" class="pb-stax-line-items"></div>
 
+                <p class="pb-stax-balance">Balance due: <strong id="pbStaxBalanceDue">$0.00</strong></p>
+
+                <!-- Only the "pay a different amount" toggle + its fields are
+                     conditionally hidden — the balance line above always
+                     shows, regardless of whether this deploy's charge
+                     function supports installments. -->
                 <div id="pbStaxPaymentAmountWrap" class="pb-stax-payment-amount" hidden>
-                    <p class="pb-stax-balance">Balance due: <strong id="pbStaxBalanceDue">$0.00</strong></p>
                     <button type="button" id="pbStaxPartialToggle" class="pb-stax-link-btn"
                             aria-expanded="false" aria-controls="pbStaxPartialFields">Pay a different amount</button>
                     <div id="pbStaxPartialFields" hidden>
@@ -493,8 +497,8 @@
                     </label>
 
                     <button type="button" id="pbStaxPayBtn" class="pb-pay-btn" disabled>Pay</button>
-                    <p class="pb-stax-fine">Card details are entered directly into Stax's own secure
-                       fields above — this app never sees or stores your card number.</p>
+                    <p class="pb-stax-fine">Card details are entered directly into our payment
+                       processor's own secure fields above — this app never sees or stores your card number.</p>
                 </div>
             </div>
         </div>

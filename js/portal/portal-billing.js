@@ -1,12 +1,14 @@
 // ============================================================
 // portal-billing — the parent's Billing tab
 // ============================================================
-// Real invoices, no online payment yet. Reuses fetchMySchedule() (the same
-// call the Schedule tab makes) rather than a second RPC — my_schedule()
-// already returns this family's own billing_invoices rows via the
+// Real invoices, real online payment. Reuses psSchedule() (portal-schedule.js)
+// rather than a second RPC — my_schedule() already returns this family's own
+// billing_invoices rows (plus each one's last_payment_date) via the
 // SECURITY DEFINER / parent_family_ids() path (see
-// supabase/migrations/parent_billing_tab_and_grant_fix.sql), and Billing
-// only needs the `invoices` array out of that same payload.
+// supabase/migrations/parent_billing_tab_and_grant_fix.sql), and that one
+// fetch is shared with Today and Schedule (see psSchedule's own comment) —
+// Billing only needs the `invoices` (and, for the days-of-care screen below,
+// `registrations`) arrays out of that same payload.
 //
 // ⚠️ A DRAFT INVOICE IS NOT A BILL. my_schedule() includes every
 // non-void invoice, draft or otherwise, but a draft is the office still
@@ -14,12 +16,23 @@
 // sent_at is shown here, same rule the Schedule tab's status pill already
 // follows (portal-schedule.js, psStatusPill).
 //
-// ⚠️ PROCESSOR: Authorize.net Accept Hosted, wired for evaluation against
-// their SANDBOX credentials — nothing here has moved real money yet. "Pay"
-// opens #pbPayModal and loads Authorize.net's own hosted payment page into
-// an iframe INSIDE it (create-payment-session gets the token; this file
-// never touches card data, keeping the app at PCI SAQ A) rather than
-// redirecting the whole page — paying stays inside the portal.
+// ── Screens (2026-08-28 redesign) ──────────────────────────────
+// Home (total due + pay button + "view all invoices") → All Invoices (one
+// card per issued invoice) → Invoice Detail (billed/paid/balance +
+// day-of-care calendar, no per-day dollar figure — see
+// pbChildDayCardsForMonth's own comment) → Payment Received (Stax only; see
+// pbLastReceipt below). See pbRender()'s dispatcher and the pbGo*()
+// navigation functions. No history/hash routing — the app has none
+// anywhere else, and "back" only ever needs to go one level up.
+//
+// ⚠️ PROCESSOR: two live processors, both real money — Authorize.net
+// Accept Hosted (deployed and taking real payments) and Stax.js/Bolt
+// (production-gated; see pbStaxTestEnabled below for the sandbox
+// click-through path). "Pay" opens #pbPayModal and loads Authorize.net's
+// own hosted payment page into an iframe INSIDE it (create-payment-session
+// gets the token; this file never touches card data, keeping the app at
+// PCI SAQ A) rather than redirecting the whole page — paying stays inside
+// the portal.
 //
 // Authorize.net relays the result back to us via iframe-communicator.html
 // (a small page hosted on our own domain, required by their
@@ -32,18 +45,39 @@
 // inconsistent state — the invoice list simply still shows what's owed.
 // portal-auth.js's location.search handling (?paid=/?cancelled=) stays in
 // place as a fallback for the rare case Authorize.net falls back to
-// navigating the return URL instead of using the communicator.
+// navigating the return URL instead of using the communicator. Because that
+// confirmation is async-only, a successful Authorize.net payment still gets
+// the older "we're confirming your payment now" banner on Home
+// (pbReturnBanner) rather than the richer Payment Received screen below.
 //
 // STAX PAYMENT FLOW (live 2026-08-27): the normal Pay online button uses
 // Stax.js/Bolt fields. The full outstanding balance is the default; parents
 // can deliberately choose a smaller installment, which the server validates
-// against a fresh balance before charging.
+// against a fresh balance before charging. Unlike Authorize.net, a
+// successful Stax charge returns real confirmation data synchronously
+// (transactionId/amount), so it navigates straight to the in-app Payment
+// Received screen (pbRenderReceipt) instead of the async-confirmation
+// banner — see pbLastReceipt and pbCloseStaxModal.
 
 let pbData = null;
 let pbReturnState = null;   // 'paid' | 'cancelled' | null — set by portal-auth.js
 let pbPaying = null;        // invoice id currently starting a payment, or null
 let pbStaxPaying = null;    // invoice id currently in the Stax comparison modal, or null
 let pbStaxInstance = null;  // the live StaxJs() instance for the open modal, or null
+
+// ── Screen navigation (2026-08-28 redesign) ──────────────────
+// Billing is its own small stack — Home → All Invoices → Invoice Detail,
+// plus a Payment Received screen — entirely inside #pbBody. No history/hash
+// routing: the app has none anywhere else, and the back button here only
+// ever needs to go one level up, which a plain variable handles.
+let pbView = 'home';          // 'home' | 'invoices' | 'invoice' | 'receipt'
+let pbActiveInvoiceId = null; // set when navigating into an invoice's detail
+let pbShowBreakdown = false;  // Home screen's "Show breakdown" toggle
+// Set right before a successful Stax charge closes its modal, read once by
+// pbRenderReceipt(), then cleared. Authorize.net has no equivalent — see
+// pbClosePayModal's own comment for why that flow keeps the older banner
+// instead of this richer screen.
+let pbLastReceipt = null;
 
 /** Called from portal-auth.js when Authorize.net's hosted page redirects back. */
 function pbSetReturnState(kind) { pbReturnState = kind; }
@@ -88,6 +122,29 @@ function pbIssuedInvoices() {
     return (pbData?.invoices || []).filter(i => i.sent_at).sort((a, b) => b.month.localeCompare(a.month));
 }
 
+function pbBalance(inv) {
+    return Math.max(0, (Number(inv.final_amount) || 0) - (Number(inv.paid_amount) || 0));
+}
+
+function pbStatusPill(inv) {
+    if (inv.status === 'paid') return '<span class="ps-status ps-paid">PAID</span>';
+    return `<span class="ps-status ps-due">${inv.status === 'partial' ? 'PARTIAL' : 'DUE'}</span>`;
+}
+
+/** A bare "YYYY-MM-DD" (e.g. last_payment_date) must be read as a local
+ *  date, not UTC — new Date('YYYY-MM-DD') is UTC by spec and lands a day
+ *  early in America/Chicago. A real timestamptz (sent_at) parses safely as
+ *  a plain ISO string either way, so this only special-cases the bare form. */
+function pbDate(value) {
+    if (!value) return '—';
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function pbGoHome() { pbView = 'home'; pbShowBreakdown = false; pbRender(); }
+function pbGoInvoices() { pbView = 'invoices'; pbRender(); }
+function pbGoInvoiceDetail(id) { pbActiveInvoiceId = id; pbView = 'invoice'; pbRender(); }
+
 function pbRender() {
     const body = pbEl('pbBody');
     if (!body) return;
@@ -95,76 +152,10 @@ function pbRender() {
         body.innerHTML = '<p class="pa-empty">Could not load your billing. Pull down to retry.</p>';
         return;
     }
-
-    const invoices = pbIssuedInvoices();
-    const totalDue = invoices.reduce((sum, i) =>
-        sum + Math.max(0, (Number(i.final_amount) || 0) - (Number(i.paid_amount) || 0)), 0);
-
-    const banner = pbReturnState ? pbReturnBanner(pbReturnState) : '';
-
-    // The balance card renders even with no invoices at all. "$0.00, nothing
-    // owed" is a real answer to the question this tab exists for; the old
-    // empty state answered a different one ("no bills issued yet") and left a
-    // parent to work out for themselves whether that meant they were square.
-    //
-    // ⚠️ It carries NO Pay button, which is a deliberate deviation from the
-    // redesign screen. Paying is per invoice — pbStartStaxPayment() takes an
-    // invoice id, and the server recomputes that invoice's own balance before
-    // charging. A single "pay everything" button here would have no id to
-    // start from. The screen shows this card with a disabled "Pay online
-    // (coming soon)", which is the state this app was in before the Stax flow
-    // shipped; the working button on each month card is what replaced it.
-    const balanceCard = `<section class="pb-card pb-balance">
-        <div class="pb-label">Balance due</div>
-        <p class="pb-total">${pbMoney(totalDue)}</p>
-        <p class="pb-fine">${totalDue > 0
-            ? `Pay online on the month below, or contact the office if you have
-               questions about a balance.`
-            : `Nothing owed right now. Your next statement will appear here as soon
-               as the office sends it.`}</p>
-    </section>`;
-
-    body.innerHTML = `${banner}<div class="pb-cards">${balanceCard}${invoices.map(pbInvoiceCard).join('')}</div>`;
-
-    body.querySelectorAll('.pb-stax-btn[data-invoice-id]').forEach(btn => {
-        btn.addEventListener('click', () => pbStartStaxPayment(Number(btn.dataset.invoiceId)));
-    });
-
-    // A parent freshly back from a payment attempt: reload once more shortly
-    // after, since the webhook that actually records the payment can lag
-    // the redirect back here by a few seconds. This is a courtesy re-check,
-    // not a promise — the invoice list above already reflects whatever is
-    // true right now.
-    if (pbReturnState === 'paid') {
-        setTimeout(() => { pbLoad(); }, 3000);
-    }
-    pbReturnState = null;
-}
-
-// Which children were booked in the invoice's month, and how many days each.
-// ⚠️ Day counts only — deliberately no per-child dollar figure. The invoice
-// carries ONE total, computed server-side; splitting it per child in the
-// browser would be a second billing calculation that can drift from the bill
-// itself, which is the same reason a per-day amount was kept off the invoice
-// detail screen. Days booked are a fact this payload already holds.
-function pbChildLines(monthKey) {
-    const byChild = new Map();
-    (pbData?.registrations || []).forEach(r => {
-        const days = (r.dates || []).filter(d => !d.waitlisted && String(d.care_date).startsWith(monthKey));
-        if (!days.length) return;
-        const prev = byChild.get(r.child_name) || { days: 0, roomId: r.room_id };
-        byChild.set(r.child_name, { days: prev.days + days.length, roomId: prev.roomId || r.room_id });
-    });
-    if (!byChild.size) return '';
-
-    return [...byChild.entries()].map(([name, v]) => {
-        const room = (typeof ROOMS !== 'undefined' && ROOMS.find(x => x.id === v.roomId)) || null;
-        const label = room ? room.label.replace(/^[^A-Za-z]+/, '').trim() : '';
-        return `<div class="pb-row">
-            <span class="pb-row-label">${pbEsc(name)}${label ? ' — ' + pbEsc(label) : ''}</span>
-            <span class="pb-row-value">${v.days} ${v.days === 1 ? 'day' : 'days'}</span>
-        </div>`;
-    }).join('');
+    if (pbView === 'invoices') return pbRenderInvoiceList();
+    if (pbView === 'invoice') return pbRenderInvoiceDetail();
+    if (pbView === 'receipt') return pbRenderReceipt();
+    return pbRenderHome();
 }
 
 function pbReturnBanner(kind) {
@@ -181,33 +172,240 @@ function pbReturnBanner(kind) {
     </section>`;
 }
 
-function pbInvoiceCard(inv) {
-    const due  = Math.max(0, (Number(inv.final_amount) || 0) - (Number(inv.paid_amount) || 0));
-    const paid = inv.status === 'paid';
-    const pill = paid
-        ? '<span class="ps-status ps-paid">PAID</span>'
-        : `<span class="ps-status ps-due">${inv.status === 'partial' ? 'PARTIAL' : 'DUE'}</span>`;
+// The summary card renders even with no invoices at all. "$0.00, nothing
+// owed" is a real answer to the question this tab exists for — a parent
+// should not have to work out for themselves whether an empty screen means
+// they're square.
+function pbRenderHome() {
+    const body = pbEl('pbBody');
+    const invoices = pbIssuedInvoices();
+    const unpaid = invoices.filter(i => pbBalance(i) > 0.004);
+    const totalDue = unpaid.reduce((s, i) => s + pbBalance(i), 0);
+    // unpaid inherits pbIssuedInvoices()'s desc-by-month order, so [0] is
+    // the most recent unpaid invoice — anchoring a payment there rolls up
+    // every older unpaid month too (see createStaxChargeSession's own
+    // due-set logic), which is what "Pay $X online" here is meant to clear.
+    const mostRecentUnpaid = unpaid[0] || null;
+    const priorUnpaid = unpaid.slice(1);
+    const priorBalance = priorUnpaid.reduce((s, i) => s + pbBalance(i), 0);
 
-    return `<section class="pb-card">
-        <div class="pb-label">${pbEsc(pbMonthLabel(inv.month))}</div>
-        ${pbChildLines(inv.month)}
-        <div class="pb-row pb-row-total">
-            <span class="pb-row-label">Total</span>
-            <span class="pb-row-value">${pbMoney(inv.final_amount)}</span>
+    const banner = pbReturnState ? pbReturnBanner(pbReturnState) : '';
+    const breakdownHtml = pbShowBreakdown ? `
+        <div class="pb-breakdown">
+            ${unpaid.map(i => `<div class="pb-breakdown-row">
+                <span>${pbEsc(pbMonthLabel(i.month))}</span><span>${pbMoney(pbBalance(i))}</span>
+            </div>`).join('')}
+        </div>` : '';
+
+    body.innerHTML = `
+        ${banner}
+        <section class="pd-card pb-summary">
+            <div class="pd-card-body">
+                <p class="pb-total">${pbMoney(totalDue)}</p>
+                ${unpaid.length ? `<button type="button" class="pb-link-btn" id="pbBreakdownToggle">${pbShowBreakdown ? 'Hide breakdown' : 'Show breakdown'}</button>` : ''}
+                ${breakdownHtml}
+                ${mostRecentUnpaid ? `<button type="button" class="pb-pay-btn pb-stax-btn" data-invoice-id="${mostRecentUnpaid.id}"
+                    ${pbStaxPaying === mostRecentUnpaid.id ? 'disabled' : ''}>${pbStaxPaying === mostRecentUnpaid.id ? 'Starting payment…' : `Pay ${pbMoney(totalDue)} online`}</button>
+                    <p class="pb-pay-error" id="pbStaxError-${mostRecentUnpaid.id}" hidden></p>` : ''}
+                <p class="pb-fine">${totalDue > 0
+                    ? `Pay online above, or contact the office if you have questions about a balance.`
+                    : `Nothing owed right now. Your next statement will appear here as soon as the office sends it.`}</p>
+            </div>
+        </section>
+        ${priorBalance > 0.004 ? `
+        <section class="pb-prior-banner">
+            <p class="pb-prior-banner-title">Balance carried from a prior month</p>
+            <p class="pb-prior-banner-body">We recommend paying the prior balance
+               (${pbMoney(priorBalance)}) in full before it grows further. Partial
+               payments are still accepted on any invoice.</p>
+        </section>` : ''}
+        ${invoices.length ? `<button type="button" class="pd-row pb-view-all-btn" id="pbViewAllBtn">
+            <span class="pd-row-main"><span class="pd-row-title">🧾 View all invoices</span></span>
+            <span aria-hidden="true">›</span>
+        </button>` : ''}
+    `;
+
+    pbEl('pbBreakdownToggle')?.addEventListener('click', () => { pbShowBreakdown = !pbShowBreakdown; pbRenderHome(); });
+    pbEl('pbViewAllBtn')?.addEventListener('click', pbGoInvoices);
+    body.querySelectorAll('.pb-stax-btn[data-invoice-id]').forEach(btn => {
+        btn.addEventListener('click', () => pbStartStaxPayment(Number(btn.dataset.invoiceId)));
+    });
+
+    // A parent freshly back from a payment attempt: reload once more shortly
+    // after, since the webhook that actually records the payment can lag
+    // the redirect back here by a few seconds. This is a courtesy re-check,
+    // not a promise — the summary above already reflects whatever is true
+    // right now.
+    if (pbReturnState === 'paid') {
+        setTimeout(() => { pbLoad(); }, 3000);
+    }
+    pbReturnState = null;
+}
+
+function pbSubheadHtml(title, eyebrow) {
+    return `<div class="pb-subhead">
+        <button type="button" class="pb-back-btn" id="pbBackBtn" aria-label="Back">&larr;</button>
+        <div class="pb-subhead-text">
+            ${eyebrow ? `<p class="pb-subhead-eyebrow">${pbEsc(eyebrow)}</p>` : ''}
+            <h2 class="pb-subhead-title">${pbEsc(title)}</h2>
         </div>
-        ${inv.paid_amount > 0 ? `<div class="pb-row">
-            <span class="pb-row-label">Paid</span>
-            <span class="pb-row-value">${pbMoney(inv.paid_amount)}</span>
-        </div>` : ''}
-        ${!paid ? `<div class="pb-row">
-            <span class="pb-row-label">Balance due</span>
-            <span class="pb-row-value">${pbMoney(due)}</span>
-        </div>` : ''}
-        <div class="pb-status-row">${pill}</div>
-        ${!paid ? `<button type="button" class="pb-pay-btn pb-stax-btn" data-invoice-id="${inv.id}"
-            ${pbStaxPaying === inv.id ? 'disabled' : ''}>${pbStaxPaying === inv.id ? 'Starting payment…' : `Pay ${pbMoney(due)} online`}</button>
-            <p class="pb-pay-error" id="pbStaxError-${inv.id}" hidden></p>` : ''}
+    </div>`;
+}
+
+function pbRenderInvoiceList() {
+    const body = pbEl('pbBody');
+    const invoices = pbIssuedInvoices();
+    body.innerHTML = `
+        ${pbSubheadHtml('All invoices')}
+        ${invoices.length ? invoices.map(pbInvoiceListCard).join('') : '<p class="pa-empty">No bills issued yet.</p>'}
+    `;
+    pbEl('pbBackBtn')?.addEventListener('click', pbGoHome);
+    body.querySelectorAll('.pb-stax-btn[data-invoice-id]').forEach(btn => {
+        btn.addEventListener('click', () => pbStartStaxPayment(Number(btn.dataset.invoiceId)));
+    });
+    body.querySelectorAll('.pb-view-invoice-btn[data-invoice-id]').forEach(btn => {
+        btn.addEventListener('click', () => pbGoInvoiceDetail(Number(btn.dataset.invoiceId)));
+    });
+}
+
+function pbInvoiceListCard(inv) {
+    const due = pbBalance(inv);
+    const paid = inv.status === 'paid';
+    // ⚠️ "Due by" reads the same as "Bill date" (both sent_at) — there is no
+    // separate due-date column or setting anywhere in this app's schema.
+    // Office guidance on when payment is expected lives in the admin-edited
+    // invoice_email_note text, not a structured per-invoice field, so
+    // showing a fabricated due date here would be worse than showing the
+    // one real date twice.
+    return `<section class="pd-card">
+        <div class="pd-card-head"><span aria-hidden="true">🧾</span>${pbEsc(pbMonthLabel(inv.month))}<span class="pb-card-head-spacer"></span>${pbStatusPill(inv)}</div>
+        <div class="pd-card-body">
+            <div class="pb-row"><span class="pb-row-label">Invoice #</span><span class="pb-row-value">INV-${inv.id}</span></div>
+            <div class="pb-row"><span class="pb-row-label">Bill date</span><span class="pb-row-value">${pbDate(inv.sent_at)}</span></div>
+            <div class="pb-row"><span class="pb-row-label">Due by</span><span class="pb-row-value">${pbDate(inv.sent_at)}</span></div>
+            <div class="pb-row"><span class="pb-row-label">Billed</span><span class="pb-row-value">${pbMoney(inv.final_amount)}</span></div>
+            ${inv.paid_amount > 0 ? `<div class="pb-row"><span class="pb-row-label">Paid</span><span class="pb-row-value">${pbMoney(inv.paid_amount)}</span></div>` : ''}
+            <div class="pb-row pb-row-strong"><span class="pb-row-label">${paid ? 'Balance' : 'Balance due'}</span><span class="pb-row-value">${pbMoney(due)}</span></div>
+            <button type="button" class="pb-secondary-btn pb-view-invoice-btn" data-invoice-id="${inv.id}">View invoice — days of care</button>
+            ${!paid ? `<button type="button" class="pb-pay-btn pb-stax-btn" data-invoice-id="${inv.id}"
+                ${pbStaxPaying === inv.id ? 'disabled' : ''}>${pbStaxPaying === inv.id ? 'Starting payment…' : `Pay ${pbMoney(due)} online`}</button>
+                <p class="pb-pay-error" id="pbStaxError-${inv.id}" hidden></p>` : ''}
+        </div>
     </section>`;
+}
+
+function pbRenderInvoiceDetail() {
+    const body = pbEl('pbBody');
+    const inv = (pbData?.invoices || []).find(i => i.id === pbActiveInvoiceId);
+    if (!inv) { pbGoInvoices(); return; }
+    const due = pbBalance(inv);
+    const paid = inv.status === 'paid';
+
+    body.innerHTML = `
+        ${pbSubheadHtml(`INV-${inv.id}`, 'Invoice')}
+        <section class="pd-card">
+            <div class="pd-card-head">INV-${inv.id}<span class="pb-card-head-spacer"></span>${pbStatusPill(inv)}</div>
+            <div class="pd-card-body">
+                <div class="pb-detail-meta">
+                    <div><span class="pb-detail-meta-label">Bill date</span><span class="pb-detail-meta-value">${pbDate(inv.sent_at)}</span></div>
+                    <div><span class="pb-detail-meta-label">Due by</span><span class="pb-detail-meta-value">${pbDate(inv.sent_at)}</span></div>
+                    ${inv.last_payment_date ? `<div><span class="pb-detail-meta-label">Payment date</span><span class="pb-detail-meta-value">${pbDate(inv.last_payment_date)}</span></div>` : ''}
+                </div>
+            </div>
+        </section>
+        <p class="pb-days-heading">Days of care requested</p>
+        ${pbChildDayCardsForMonth(inv.month)}
+        <section class="pd-card pb-summary">
+            <div class="pd-card-body">
+                <div class="pb-row"><span class="pb-row-label">Billed</span><span class="pb-row-value">${pbMoney(inv.final_amount)}</span></div>
+                ${inv.paid_amount > 0 ? `<div class="pb-row"><span class="pb-row-label">Paid</span><span class="pb-row-value">${pbMoney(inv.paid_amount)}</span></div>` : ''}
+                <div class="pb-row pb-row-strong"><span class="pb-row-label">${paid ? 'Balance' : 'Balance due'}</span><span class="pb-row-value">${pbMoney(due)}</span></div>
+                ${!paid ? `<button type="button" class="pb-pay-btn pb-stax-btn" data-invoice-id="${inv.id}"
+                    ${pbStaxPaying === inv.id ? 'disabled' : ''}>${pbStaxPaying === inv.id ? 'Starting payment…' : `Pay ${pbMoney(due)} online`}</button>
+                    <p class="pb-pay-error" id="pbStaxError-${inv.id}" hidden></p>` : ''}
+            </div>
+        </section>
+    `;
+    pbEl('pbBackBtn')?.addEventListener('click', pbGoInvoices);
+    body.querySelectorAll('.pb-stax-btn[data-invoice-id]').forEach(btn => {
+        btn.addEventListener('click', () => pbStartStaxPayment(Number(btn.dataset.invoiceId)));
+    });
+}
+
+/** ⚠️ Deliberately no per-day or per-child dollar figure — my_schedule()
+ *  gives real, always-accurate care_date/day_type per child (the same data
+ *  the Schedule tab's own calendar reads), which is what these cells show.
+ *  A per-child subtotal would mean a second, client-side billing calculation
+ *  that could drift from the real invoice; the invoice's own final_amount
+ *  above stays the one dollar figure this screen shows, because it's the
+ *  only one guaranteed to match what was actually billed. Same reasoning
+ *  the six-tab redesign's own pbChildLines() (day counts, no dollars) used
+ *  for its month cards — this screen just shows the days themselves. */
+function pbChildDayCardsForMonth(month) {
+    const regs = (pbData?.registrations || []).filter(r => r.month_key === month);
+    if (!regs.length) {
+        return '<p class="pa-empty">No day-of-care detail found for this invoice\'s month.</p>';
+    }
+    return regs.map(reg => {
+        const dates = (reg.dates || []).filter(d => !d.waitlisted)
+            .sort((a, b) => a.care_date.localeCompare(b.care_date));
+        const fullDays = dates.filter(d => d.day_type !== 'half').length;
+        const halfDays = dates.filter(d => d.day_type === 'half').length;
+        const room = (typeof ROOMS !== 'undefined' ? ROOMS : []).find(r => r.id === reg.room_id);
+        const summary = [
+            fullDays ? `${fullDays} full day${fullDays === 1 ? '' : 's'}` : '',
+            halfDays ? `${halfDays} half day${halfDays === 1 ? '' : 's'}` : '',
+        ].filter(Boolean).join(', ');
+        return `<section class="pd-card">
+            <div class="pd-card-head">${pbEsc(reg.child_name)}<span class="pb-card-head-spacer"></span><span class="pb-room-label">${pbEsc(room?.label || '')}</span></div>
+            <div class="pd-card-body">
+                <div class="ps-chips">${dates.map(pbDayChip).join('')}</div>
+                ${summary ? `<p class="pb-days-summary">${pbEsc(summary)}</p>` : ''}
+            </div>
+        </section>`;
+    }).join('');
+}
+
+function pbDayChip(d) {
+    const dt = new Date(`${d.care_date}T00:00:00`);
+    const dow = dt.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+    const dateLabel = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const half = d.day_type === 'half';
+    return `<div class="ps-chip${half ? ' ps-chip-half' : ''}">
+        <span class="ps-chip-dow">${dow}</span>
+        <span class="ps-chip-date">${dateLabel}</span>
+        <span class="ps-chip-kind">${half ? 'Half' : 'Full'}</span>
+    </div>`;
+}
+
+/** Stax only — see pbLastReceipt's own comment for why Authorize.net has no
+ *  equivalent screen. Cleared after render so a stale receipt never shows
+ *  again if the parent somehow lands back on this view. */
+function pbRenderReceipt() {
+    const body = pbEl('pbBody');
+    const r = pbLastReceipt;
+    if (!r) { pbGoHome(); return; }
+
+    body.innerHTML = `
+        <section class="pd-card pb-receipt">
+            <div class="pd-card-body pb-receipt-body">
+                <div class="pb-receipt-check" aria-hidden="true">&#10003;</div>
+                <h2 class="pb-receipt-title">Payment received</h2>
+                <p class="pb-receipt-thanks">Thank you, ${pbEsc(r.familyName)}.</p>
+                <p class="pb-receipt-amount">${pbMoney(r.amount)}</p>
+                <div class="pb-receipt-box">
+                    <div class="pb-row"><span class="pb-row-label">Invoice</span><span class="pb-row-value">${pbEsc(r.invoiceNumber)}</span></div>
+                    <div class="pb-row"><span class="pb-row-label">Paid on</span><span class="pb-row-value">${pbEsc(r.paidOn)}</span></div>
+                    ${r.paymentMethodLine ? `<div class="pb-row"><span class="pb-row-label">Payment method</span><span class="pb-row-value">${pbEsc(r.paymentMethodLine)}</span></div>` : ''}
+                    <div class="pb-row"><span class="pb-row-label">Confirmation #</span><span class="pb-row-value">${pbEsc(r.confirmationNumber)}</span></div>
+                </div>
+                <p class="pb-receipt-emailed">A copy of this receipt has been emailed to the address on file.</p>
+                <button type="button" class="pb-pay-btn" id="pbReceiptDoneBtn">Done</button>
+            </div>
+        </section>
+    `;
+    pbLastReceipt = null;
+    pbEl('pbReceiptDoneBtn')?.addEventListener('click', pbGoHome);
 }
 
 /**
@@ -290,7 +488,15 @@ function pbClosePayModal(success) {
     // would keep its card-entry JS running for no reason.
     if (frame) frame.src = 'about:blank';
     pbPaying = null;
-    if (success) pbSetReturnState('paid');
+    if (success) {
+        pbSetReturnState('paid');
+        if (typeof psInvalidate === 'function') psInvalidate();
+        // The return banner only renders on the Home screen — force it back
+        // there so a payment started from Invoices/Invoice Detail doesn't
+        // strand the parent on a screen that never shows the banner.
+        pbView = 'home';
+        pbShowBreakdown = false;
+    }
     pbRender();
 }
 
@@ -560,7 +766,10 @@ function pbOpenStaxModal(session) {
     const saveCardEl = pbEl('pbStaxSaveCard');
     if (numberMount) numberMount.innerHTML = '';
     if (cvvMount) cvvMount.innerHTML = '';
-    if (nameEl) nameEl.textContent = `${session.firstname} ${session.lastname}`.trim();
+    if (nameEl) {
+        const who = `${session.firstname} ${session.lastname}`.trim();
+        nameEl.textContent = session.invoiceId ? `${who} · Invoice INV-${session.invoiceId}` : who;
+    }
     if (amountEl) amountEl.textContent = pbMoney(session.amount);
     if (balanceEl) balanceEl.textContent = pbMoney(session.amount);
     // An older deployed charge function ignores unknown request fields and
@@ -666,6 +875,18 @@ async function pbStaxTokenizeAndCharge() {
             throw new Error('Payment was not confirmed. Please try again.');
         }
 
+        // A fresh card's brand/last-four live only inside Stax's own iframe —
+        // this app never reads card data, so unlike the saved-card path below
+        // there's no verified field to show here. pbRenderReceipt already
+        // omits the row entirely when paymentMethodLine is null.
+        pbLastReceipt = {
+            familyName: (typeof portalContext !== 'undefined' && (portalContext?.parent_name || portalContext?.family_name)) || 'there',
+            amount: Number(chargeResult.amount) || amount,
+            invoiceNumber: `INV-${session.invoiceId}`,
+            paidOn: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            paymentMethodLine: null,
+            confirmationNumber: chargeResult.transactionId || '—',
+        };
         pbCloseStaxModal(true);
     } catch (e) {
         if (e.nextPaymentAttemptId) session.paymentAttemptId = e.nextPaymentAttemptId;
@@ -694,6 +915,16 @@ async function pbStaxChargeSavedCard() {
         if (!chargeResult || chargeResult.success !== true) {
             throw new Error('Payment was not confirmed. Please try again.');
         }
+        pbLastReceipt = {
+            familyName: (typeof portalContext !== 'undefined' && (portalContext?.parent_name || portalContext?.family_name)) || 'there',
+            amount: Number(chargeResult.amount) || amount,
+            invoiceNumber: `INV-${session.invoiceId}`,
+            paidOn: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            paymentMethodLine: session.savedCard
+                ? `${session.savedCard.brand || 'Card'} ending in ${session.savedCard.last4 || '????'}`
+                : null,
+            confirmationNumber: chargeResult.transactionId || '—',
+        };
         pbCloseStaxModal(true);
     } catch (e) {
         if (e.nextPaymentAttemptId) session.paymentAttemptId = e.nextPaymentAttemptId;
@@ -716,8 +947,27 @@ function pbCloseStaxModal(success) {
     pbStaxInstance = null;
     window.__pbStaxSession = null;
     pbStaxPaying = null;
-    if (success) pbSetReturnState('paid');
+    // A confirmed Stax charge has real, synchronous confirmation data (see
+    // pbStaxTokenizeAndCharge/pbStaxChargeSavedCard) — go straight to the
+    // Payment Received screen instead of the older "confirming now" banner,
+    // which stays reserved for Authorize.net's async-only confirmation.
+    if (success && pbLastReceipt) {
+        if (typeof psInvalidate === 'function') psInvalidate();
+        pbView = 'receipt';
+    } else if (success) {
+        pbSetReturnState('paid');
+        if (typeof psInvalidate === 'function') psInvalidate();
+        pbView = 'home';
+        pbShowBreakdown = false;
+    }
     pbRender();
+    // Refresh pbData in the background once the cache above is invalidated,
+    // so Home reflects the real post-payment balance whenever the parent
+    // navigates there — psSchedule() is otherwise cached for the rest of the
+    // session (portal-nav.js only calls pbLoad() on Billing's first open),
+    // and pbLoad()'s own "Loading…" wipe would blank the receipt screen the
+    // parent is looking at right now, so this refetches quietly instead.
+    if (success) pbRefreshQuietly();
 }
 
 async function pbLoad() {
@@ -730,4 +980,16 @@ async function pbLoad() {
         pbData = null;
     }
     pbRender();
+}
+
+/** Same fetch as pbLoad(), without the "Loading…" wipe — used right after a
+ *  payment so a screen already on view (the receipt, or Home's return
+ *  banner) doesn't flash blank while pbData catches up in the background. */
+async function pbRefreshQuietly() {
+    try {
+        pbData = await psSchedule();
+        pbRender();
+    } catch (e) {
+        console.warn('billing refresh:', e);
+    }
 }

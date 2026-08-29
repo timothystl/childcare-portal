@@ -32,6 +32,16 @@ function psSchedule() {
     }
     return psPromise;
 }
+
+/**
+ * Clears the shared cache so the next psSchedule() call actually refetches.
+ * Billing calls this after a payment succeeds — my_schedule()'s invoices are
+ * exactly what changed, and this promise is otherwise cached for the life of
+ * the session (portal-nav.js's lazy-first-open guard means a tab switch does
+ * NOT re-trigger a load), so without this a paid invoice would read as still
+ * due until the parent reloads the whole page.
+ */
+function psInvalidate() { psPromise = null; }
 function psEsc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => (
         { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
