@@ -1044,18 +1044,32 @@ function _fmDocSize(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// A parent-submitted file is the only kind whose displayed name still
+// starts with "parent-" once listChildDocuments() strips the leading
+// "<digits>-" timestamp — see parent_upload_child_documents.sql /
+// uploadChildDocumentAsParent(). No metadata table, so this is the only
+// signal available to tell an office upload from a parent one.
+function _fmDocIsFromParent(name) {
+    return /^parent-/.test(name);
+}
+
 function _fmRenderDocList(listEl, docs) {
     if (!docs.length) {
         listEl.innerHTML = '<p class="fm-doc-empty">No documents attached.</p>';
         return;
     }
-    listEl.innerHTML = docs.map(d => `
+    listEl.innerHTML = docs.map(d => {
+        const fromParent = _fmDocIsFromParent(d.name);
+        const displayName = fromParent ? d.name.replace(/^parent-/, '') : d.name;
+        return `
         <div class="fmc-doc-item" data-path="${escHtml(d.path)}">
-            <span class="fmc-doc-name">${escHtml(d.name)}</span>
+            ${fromParent ? '<span class="fmc-doc-badge" title="Uploaded by the parent">From parent</span>' : ''}
+            <span class="fmc-doc-name">${escHtml(displayName)}</span>
             <span class="fmc-doc-meta">${escHtml(_fmDocSize(d.size))}</span>
             <button type="button" class="fmc-doc-view" data-path="${escHtml(d.path)}" title="View / download">View</button>
             <button type="button" class="fmc-doc-remove" data-path="${escHtml(d.path)}" title="Remove">✕</button>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 }
 
 async function _fmLoadDocuments(row) {

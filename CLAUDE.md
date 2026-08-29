@@ -3954,6 +3954,55 @@ documented above, not by pattern-matching the diff).
 
 ---
 
+## Parents can now hand in immunization/medical records themselves (2026-08-29)
+
+Asked directly: the portal's "Immunization records" card just said the
+record is "held on paper in the office... Message the office ... to hand
+one in" — no way to actually submit anything, only a pointer to a different
+tab. Built a real upload path, reusing the existing `child-documents`
+bucket rather than inventing a second document system.
+
+- **`20260829143213_parent_upload_child_documents.sql`** (applied) adds one
+  new storage policy — `FOR INSERT TO authenticated`, scoped to
+  `<student_id>/...` via `parent_owns_student()`, same UUID-prefix-regex
+  guard as `parent_edit_child_profile_photo.sql`. **Deliberately no parent
+  SELECT/UPDATE/DELETE.** `add_child_documents_bucket.sql`'s own header
+  says this bucket is "admin-only, on purpose... nothing here grants a
+  parent read policy" — granting a parent SELECT on the whole folder now
+  would retroactively expose whatever the office already has in there,
+  written under the explicit assumption no parent could ever see it. A
+  parent can hand in a document; they cannot browse the folder afterward,
+  matching the card's own existing "hand one in" language — the same
+  one-directional model as handing a paper copy across the counter.
+- **No new bucket, no metadata table.** `uploadChildDocumentAsParent()`
+  (`js/supabase.js`) writes into the exact same `child-documents` bucket
+  the office already uses, so a parent's submission shows up in the
+  existing Family Directory → Documents list with zero new admin UI to
+  build. The only marker is the filename itself:
+  `<student_id>/<timestamp>-parent-<name>.<ext>` — the leading digits are
+  what `listChildDocuments()` already strips for display, so `parent-` is
+  the one prefix that survives onto the visible name. `_fmDocIsFromParent()`
+  (`admin-families.js`) keys off exactly that to show a "From parent" badge
+  and strip the marker from what the office actually reads.
+- **Portal side** (`portal-documents.js`): `pdImmunizationSection()` renders
+  one upload row per child (a name label only appears if there's more than
+  one), each with the same "📷 Take a photo" / "⬆ Upload a file" two-button
+  pattern the admin side already uses for the identical bucket, and an
+  inline status line for the most recent attempt — no persistent list,
+  matching the write-only policy above. Broadened from "Immunization
+  records" to "Immunization & medical records" so a doctor's note has an
+  obvious place to go too, without adding a second upload path.
+- Reused `parent_owns_student()` (already live, backing the profile-photo
+  policy) rather than writing a new ownership check — same function, same
+  guarantee, one less thing that could disagree with the rest of the app
+  about who owns which child.
+
+`npm test` — 238/238 (6 new guards: INSERT-only + no other verb granted,
+the ownership-scoped WITH CHECK, the filename tagging, the admin badge, the
+write-only section body, and no inline event-handler attribute).
+
+---
+
 ## Ledger's "Total to bill" was a net figure with nothing showing its parts — broken into a 4-box strip (2026-08-28)
 
 Asked directly: the Ledger tab's headline stat read as one opaque number, with
