@@ -933,6 +933,91 @@
 .pb-return-paid      .pd-card-body { background: var(--green-pale); color: var(--green-dark, var(--green-text)); border-radius: 10px; }
 .pb-return-cancelled .pd-card-body { background: var(--linen); color: var(--text-muted); border-radius: 10px; }
 
+/* ============================================================
+   BILLING — Home / All Invoices / Invoice Detail / Payment Received
+   (2026-08-28 redesign). See portal-billing.js's pbView dispatcher.
+   ============================================================ */
+.pb-link-btn {
+    display: block; margin: 6px 0 0; padding: 0; border: none; background: none;
+    color: var(--navy); font: inherit; font-size: .82em; font-weight: 700;
+    text-decoration: underline; cursor: pointer;
+}
+.pb-breakdown { margin-top: 10px; border-top: 1px solid var(--linen); padding-top: 8px; }
+.pb-breakdown-row {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; padding: 4px 0; font-size: .85em; color: var(--text);
+}
+
+.pb-prior-banner {
+    background: var(--tang-pale); border-left: 3px solid var(--tang);
+    border-radius: 10px; padding: 12px 16px; margin-bottom: 14px;
+}
+.pb-prior-banner-title { margin: 0 0 4px; font-weight: 800; color: var(--tang-dark, #7a2a18); font-size: .9em; }
+.pb-prior-banner-body  { margin: 0; font-size: .84em; line-height: 1.5; color: var(--tang-dark, #7a2a18); }
+
+.pb-view-all-btn {
+    width: 100%; background: #fff; cursor: pointer;
+    font: inherit; text-align: left;
+}
+.pb-view-all-btn span[aria-hidden] { color: var(--text-muted); font-size: 1.2em; }
+
+.pb-subhead { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.pb-back-btn {
+    flex: none; width: 38px; height: 38px; border-radius: 999px;
+    background: #fff; border: 1px solid var(--border); color: var(--navy);
+    font-size: 18px; line-height: 1; cursor: pointer;
+}
+.pb-subhead-text { min-width: 0; }
+.pb-subhead-eyebrow {
+    margin: 0; font-size: .72em; font-weight: 800; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--text-muted);
+}
+.pb-subhead-title {
+    margin: 1px 0 0; font-family: var(--font-head); font-size: 1.2em; color: var(--navy);
+}
+
+.pb-card-head-spacer { flex: 1; }
+.pb-room-label { font-size: .8em; font-weight: 700; color: var(--text-muted); }
+
+.pb-days-heading {
+    margin: 4px 2px 8px; font-size: .82em; font-weight: 800;
+    letter-spacing: .03em; text-transform: uppercase; color: var(--text-muted);
+}
+.pb-days-summary { margin: 10px 0 0; font-size: .82em; color: var(--text-muted); }
+
+.pb-detail-meta { display: flex; flex-wrap: wrap; gap: 16px; padding: 4px 0; }
+.pb-detail-meta-label {
+    display: block; font-size: .72em; font-weight: 800; letter-spacing: .03em;
+    text-transform: uppercase; color: var(--text-muted);
+}
+.pb-detail-meta-value { display: block; margin-top: 2px; font-weight: 700; color: var(--navy); font-size: .92em; }
+
+.pb-secondary-btn {
+    width: 100%; margin-top: 10px; min-height: 44px;
+    background: #fff; border: 1.5px solid var(--navy); border-radius: 10px;
+    color: var(--navy); font-family: inherit; font-size: .86em; font-weight: 700;
+    cursor: pointer;
+}
+.pb-secondary-btn:hover { background: var(--linen); }
+
+/* Payment Received — Stax's synchronous confirmation only; Authorize.net
+   keeps the older pb-return-banner instead. See pbLastReceipt's comment. */
+.pb-receipt-body { padding: 28px 20px; text-align: center; }
+.pb-receipt-check {
+    width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 999px;
+    background: var(--green-pale); color: var(--green-dark, var(--green-text));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 800;
+}
+.pb-receipt-title  { margin: 0 0 4px; font-family: var(--font-head); font-size: 1.3em; color: var(--navy); }
+.pb-receipt-thanks { margin: 0 0 10px; font-size: .9em; color: var(--text-muted); }
+.pb-receipt-amount { margin: 0 0 18px; font-family: var(--font-head); font-size: 2em; color: var(--navy); }
+.pb-receipt-box {
+    text-align: left; background: var(--linen); border-radius: 10px;
+    padding: 6px 16px; margin-bottom: 16px;
+}
+.pb-receipt-emailed { margin: 0 0 18px; font-size: .8em; color: var(--text-muted); }
+
 /* Pay-online modal — Authorize.net's Accept Hosted form embedded in an
    iframe (see portal-billing.js). Sits above the tab bar/app shell, which is
    why it lives outside #portalSignedIn rather than inside a tab pane. */
@@ -1040,7 +1125,7 @@ body.pb-modal-open { overflow: hidden; }
     margin: 0 0 16px; padding: 12px; border: 1px solid var(--border);
     border-radius: var(--radius-sm); background: var(--white);
 }
-.pb-stax-balance { margin: 0; color: var(--text); font-size: .9em; }
+.pb-stax-balance { margin: 0 0 12px; color: var(--text); font-size: .9em; font-weight: 700; }
 .pb-stax-payment-amount .pb-stax-link-btn { margin-left: 0; }
 .pb-stax-money-input {
     display: flex; align-items: center; border: 1px solid var(--border);
@@ -1381,48 +1466,21 @@ body.pb-modal-open { overflow: hidden; }
 .ps-disclaimer { font-size: .78em; color: var(--text-muted); line-height: 1.55; margin-bottom: 8px; }
 
 /* ── Billing ─────────────────────────────────────────────── */
-.pb-cards { display: grid; gap: 14px; }
-.pb-card {
-    background: var(--white);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 18px;
-}
-.pb-label {
-    font-size: .74em;
-    font-weight: 800;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 10px;
-}
-.pb-total {
-    font-family: var(--font-head);
-    font-size: 34px;
-    font-weight: 700;
-    color: var(--navy);
-    margin: 0 0 14px;
-}
-/* ⚠️ NO .pb-pay-btn rule here on purpose. The redesign screen shows a
-   disabled "Pay online (coming soon)" — that is the state this app was in
-   before the Stax flow shipped. The real, working navy Pay button is styled
-   earlier in this file; overriding it here would have dressed a live payment
-   button up as a placeholder. */
-.pb-fine { font-size: .8em; color: var(--text-muted); line-height: 1.55; margin: 10px 0 0; }
-.pb-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 12px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: .95em;
-}
-.pb-row-label { color: var(--text); }
-.pb-row-value { font-weight: 700; color: var(--navy); white-space: nowrap; }
-.pb-row-total { border-bottom: none; border-top: 2px solid var(--navy); font-size: 1.05em; }
-.pb-row-total .pb-row-label { font-weight: 800; color: var(--navy); }
-.pb-status-row { margin-top: 8px; }
+/* The flat-card Billing styling that used to live here (.pb-cards/.pb-card/
+   .pb-label/.pb-row-total/.pb-status-row and second .pb-total/.pb-fine/.pb-row
+   definitions) was for a one-card-per-month list that no longer renders —
+   Billing was rebuilt as a Home/All Invoices/Invoice Detail/Payment Received
+   stack that reuses the shared .pd-card system instead. Its styling
+   (.pb-summary/.pb-total/.pb-row/.pb-fine/etc.) lives with the rest of the
+   BILLING block earlier in this file, right after .pb-return-cancelled —
+   removed here rather than left dead, since these exact class names were
+   about to silently win the cascade over the versions actually in use.
+   ⚠️ A second session re-added this exact block on 2026-08-29 while
+   refining the same redesign against its real design source, unaware this
+   session had already swapped Billing's markup out — dropped again for the
+   same reason. If it comes back a third time, that's a sign the two
+   sessions' work needs to be reconciled at the source, not just at the
+   merge. */
 
 /* ── Messages ────────────────────────────────────────────── */
 .portal-app .pm-section { margin-top: 0; padding-top: 0; border-top: none; }
@@ -1648,8 +1706,10 @@ body.pb-modal-open { overflow: hidden; }
     .pt-event-body { flex-direction: row; align-items: baseline; justify-content: space-between; width: 100%; }
 
     .ps-cards { grid-template-columns: 1fr 1fr; gap: 20px; max-width: 920px; }
-    /* Balance beside the itemized month, not two equal columns. */
-    .pb-cards { grid-template-columns: 360px minmax(0, 1fr); gap: 24px; max-width: 920px; }
+    /* .pb-cards isn't listed here — Billing (#pbBody) is a narrative screen
+       stack (Home/All Invoices/Invoice Detail/Payment Received), not a card
+       grid, on both phone and wide layouts; see portal-billing.js's own
+       header comment. */
     .portal-app .pd-body { grid-template-columns: 1fr 1fr; gap: 16px; max-width: 960px; }
     .portal-app .pd-body { display: grid; gap: 14px; align-items: start; }
     /* The switcher is a phone affordance. With room for every child's card
