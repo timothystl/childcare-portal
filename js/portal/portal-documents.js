@@ -68,6 +68,8 @@ function pdRender() {
         ${pdImmunizationSection()}
         ${pdStatementsSection()}`;
 
+    pdWireStatement();
+
     body.querySelectorAll('[data-print]').forEach(b => {
         b.onclick = () => window.open(
             `incident-print.html?id=${encodeURIComponent(b.dataset.print)}`, '_blank', 'noopener');
@@ -189,12 +191,79 @@ async function pdUploadDocument(input) {
     }
 }
 
+// ⚠️ The period options exist because two different people ask for this
+// document for two different reasons: an employer running a dependent-care
+// reimbursement account wants ONE MONTH at a time, and a tax preparer wants
+// the WHOLE YEAR for Form 2441. Year to date sits between them for anyone
+// checking where they are.
+//
+// The statement itself is statement-print.html, which reads
+// family_care_statement() directly — this card only builds the link. It does
+// not compute or preview a total, deliberately: a figure here that disagreed
+// with the document by a rounding step would be the parent's problem to
+// explain to the IRS, not ours.
 function pdStatementsSection() {
+    const famId = portalContext?.family_id;
+    if (!famId) {
+        return pdCard('Statements and tax documents', '🧾', `
+            <p class="pd-none">This sign-in is not linked to a family account, so there
+            is no statement to issue.</p>`);
+    }
+
+    const now  = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+    const year = now.getFullYear();
+    const months = [];
+    for (let m = now.getMonth(); m >= 0; m--) {
+        const d = new Date(year, m, 1);
+        months.push({
+            value: `${year}-${String(m + 1).padStart(2, '0')}`,
+            label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        });
+    }
+
     return pdCard('Statements and tax documents', '🧾', `
-        <p class="pd-none">Bills and year-end tax statements come from the office by
-        email.</p>
-        <p class="pd-fine">Online statements, a saved card and autopay are still to
-        come. Nothing about how you pay has changed.</p>`);
+        <p class="pd-row-body">A statement of what you have paid for care, for your
+        employer's reimbursement account or for your tax preparer (IRS Form 2441).</p>
+        <div class="pd-stmt">
+            <label class="pd-stmt-label" for="pdStmtPeriod">Period</label>
+            <select id="pdStmtPeriod" class="pd-stmt-select">
+                <option value="ytd">Year to date — ${year}</option>
+                <option value="year:${year}">All of ${year}</option>
+                <option value="year:${year - 1}">All of ${year - 1}</option>
+                ${months.map(m => `<option value="month:${m.value}">${escHtml(m.label)}</option>`).join('')}
+            </select>
+            <button type="button" id="pdStmtOpen" class="pd-print">Open statement</button>
+        </div>
+        <p class="pd-fine">Opens as a printable page. If a month has not been
+        reconciled by the office yet, the statement will say so rather than give you
+        a total that is short.</p>`);
+}
+
+// month:YYYY-MM | year:YYYY | ytd  →  { from, to }
+function pdStatementRange(value) {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+    if (String(value).startsWith('month:')) {
+        const [y, m] = value.slice(6).split('-').map(Number);
+        const last = new Date(y, m, 0).getDate();   // day 0 of next month
+        return { from: `${value.slice(6)}-01`, to: `${value.slice(6)}-${String(last).padStart(2, '0')}` };
+    }
+    if (String(value).startsWith('year:')) {
+        const y = value.slice(5);
+        return { from: `${y}-01-01`, to: `${y}-12-31` };
+    }
+    return { from: today.slice(0, 4) + '-01-01', to: today };   // ytd
+}
+
+function pdWireStatement() {
+    const btn = pdEl('pdStmtOpen');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+        const famId = portalContext?.family_id;
+        if (!famId) return;
+        const { from, to } = pdStatementRange(pdEl('pdStmtPeriod').value);
+        window.open(`statement-print.html?family=${encodeURIComponent(famId)}`
+            + `&from=${from}&to=${to}`, '_blank', 'noopener');
+    });
 }
 
 function pdCard(title, icon, inner) {

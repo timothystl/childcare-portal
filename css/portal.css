@@ -1779,3 +1779,32 @@ body.pb-modal-open { overflow: hidden; }
     color: var(--text-muted);
     text-align: center;
 }
+
+/* Statement period picker (Documents). The document itself is
+   statement-print.html; this is only the control that opens it. */
+.pd-stmt {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0 4px;
+}
+.pd-stmt-label {
+    font-size: .72em;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    width: 100%;
+}
+.pd-stmt-select {
+    flex: 1 1 190px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1.5px solid #d7dee5;
+    border-radius: var(--radius-sm);
+    font: inherit;
+    font-size: .92em;
+    background: var(--white);
+    color: var(--navy);
+}
