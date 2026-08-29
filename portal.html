@@ -155,10 +155,23 @@
     </script>
 
     <!-- Sign in -->
+    <!-- Sign in is a split screen on a laptop and one navy column on a phone:
+         the brand panel is the same element either way, laid out by CSS. The
+         wordmark moved OUT of the card and into that panel — the design's card
+         carries only the parent badge, and two wordmarks stacked was the shape
+         the old single-card layout left behind. -->
+    <div id="portalSignInShell" class="portal-signin-shell">
+    <div class="portal-signin-brand">
+        <!-- The dark-background variant, not the _light one the design file
+             references. They are the same mark; _light is drawn for a light
+             page and its "MDO" is a white outline that all but disappears on
+             this navy panel. Checked byte-for-byte: the design bundle ships
+             the identical file, so the prototype simply had the same problem. -->
+        <img class="portal-signin-mark" src="/images/logo/myMDO_primary_wordmark_dark.png" alt="myMDO">
+        <p class="portal-signin-tagline">Welcome. Receive. Grow. Go.</p>
+        <p class="portal-signin-org">Timothy Lutheran Church — Mother's Day Out</p>
+    </div>
     <div id="portalSignIn" class="portal-card">
-        <div class="portal-logo">
-            <img src="/images/logo/myMDO_parent_wordmark_light.png" alt="myMDO">
-        </div>
         <h1 class="sr-only">Parent Portal</h1>
         <div class="mdo-signin-badge mdo-signin-badge--parent">
             <img src="/images/logo/icon-parent-icon.png" alt="">
@@ -191,7 +204,7 @@
             <a href="lookup.html">View my schedule</a>
         </div>
 
-        <p class="mdo-signin-footer">Timothy Lutheran Church</p>
+    </div>
     </div>
 
     <!-- Signed in — five-tab app shell (docs/design_handoff/README.md §Navigation).
@@ -384,6 +397,11 @@
           <img src="/images/logo/myMDO_primary_wordmark_dark.png" alt="myMDO">
         </div>
         <nav id="ptTabs" class="tabbar" role="tablist" aria-label="Parent portal"></nav>
+        <!-- Sign out sits at the foot of the rail on a laptop, per the design,
+             and is hidden on a phone where it lives under Account instead.
+             Two buttons rather than one moved by CSS: the phone's belongs to
+             the Account screen's own scroll, the rail's is pinned to the rail. -->
+        <button id="portalSignOutRail" class="portal-signout-rail">Sign out</button>
       </aside>
     </div>
 
