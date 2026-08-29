@@ -1702,6 +1702,46 @@ one-line check — see the verification query at the bottom of the migration.
 
 ---
 
+## ⚠️ RLS DOES NOT STOP `TRUNCATE` — and `authenticated` held it until 2026-08-29
+
+`revoke_truncate_from_authenticated.sql`, **applied and verified in production
+2026-08-29.** The 2026-08-14 sweep below closed this for `anon` and the
+2026-08-19 Phase 0 closed it for one table; **neither ever looked at
+`authenticated`**, because at the time every authenticated session belonged to
+an admin.
+
+That assumption died on 2026-08-12, when `parent_portal_option_b_accounts`
+gave families real Supabase Auth accounts. Measured before the fix: **48 of 67
+public tables** let any signed-in parent run `TRUNCATE families`,
+`registrations`, `billing_invoices`, `settings` or `staff_clock_events`.
+TRUNCATE reads no rows, so no policy is ever consulted — the grant alone is
+sufficient, and recovery would have been a database restore.
+
+- **DELETE was deliberately left alone.** DELETE reads rows, so RLS does apply
+  to it, and admin paths in this app legitimately delete. Only the `D` bit was
+  touched; `SELECT` (63 tables) and `DELETE` (51) are unchanged, and
+  `service_role` keeps TRUNCATE on all 67.
+- **The default privilege was fixed too, not just the existing tables.**
+  Supabase hands a new `public` table `arwdDxtm` to anon *and* authenticated —
+  that D is what let `add_admin_push_subscriptions` reopen this three days
+  after the sweep meant to close it (NEW-1/SX1). `ALTER DEFAULT PRIVILEGES FOR
+  ROLE postgres IN SCHEMA public REVOKE TRUNCATE ON TABLES FROM anon,
+  authenticated` makes the default itself correct.
+  ⚠️ **Only the `postgres` default ACL could be changed** — postgres is not a
+  member of `supabase_admin` (checked), whose own default ACL for schema
+  `public` still carries the D. A table created by that role still needs the
+  explicit revoke, so **keep the per-migration rule as well as this.**
+- Verified live in a rolled-back transaction as `authenticated`: `TRUNCATE
+  families` and `TRUNCATE settings` both raise `insufficient_privilege`, and
+  row counts afterward are unchanged (125 families, 613 registrations, 1,674
+  clock events).
+
+**The lesson, and it is the same one twice now: a grant is only as safe as the
+population holding the role.** `authenticated` was a synonym for "an admin" for
+months, and nothing announced the day it stopped being one. Re-run the
+`relacl` sweep for **both** browser roles whenever the set of people who can
+get a session changes — not only when a table is added.
+
 ## ⚠️ RLS DOES NOT STOP `TRUNCATE` (found and closed 2026-08-14)
 
 `anon` held `arwdDxtm` — **every** privilege, including `DELETE` and `TRUNCATE` —

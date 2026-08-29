@@ -2189,6 +2189,38 @@ describe('Schedule tab shows the invoice\'s own amount, never a second estimate 
     });
 });
 
+describe('TRUNCATE is not a grant any browser role holds', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const migration = read('supabase/migrations/20260829154130_revoke_truncate_from_authenticated.sql');
+
+    test('the sweep revokes TRUNCATE from anon, authenticated AND public', () => {
+        expect(migration.includes('revoke truncate on %s from anon, authenticated, public')).toBe(true);
+        // Every public table, not a hand-listed set that a new table escapes.
+        expect(migration.includes("where n.nspname = 'public' and c.relkind in ('r', 'p')")).toBe(true);
+    });
+
+    test('DELETE is left alone — RLS applies to it, and admin paths use it', () => {
+        expect(/revoke\s+delete/i.test(migration)).toBe(false);
+        expect(/revoke\s+all/i.test(migration)).toBe(false);
+    });
+
+    test('the default privilege for a NEW public table no longer carries TRUNCATE', () => {
+        expect(migration.includes('alter default privileges for role postgres in schema public')).toBe(true);
+        expect(migration.includes('revoke truncate on tables from anon, authenticated')).toBe(true);
+    });
+
+    test('no app code truncates anything, so nothing depended on the grant', () => {
+        const files = [
+            'js/supabase.js', 'js/app.js', 'worker.js',
+            'js/admin/admin-billing.js', 'js/admin/admin-families.js',
+        ];
+        for (const f of files) {
+            expect(/\btruncate\b/i.test(read(f))).toBe(false);
+        }
+    });
+});
+
 // ---- Summary ----
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;
