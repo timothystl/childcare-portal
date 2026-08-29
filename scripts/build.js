@@ -105,6 +105,17 @@ const ENTRIES = [
         },
     },
     {
+        // The childcare statement. Standalone for the same reason the incident
+        // report is: opened in a new tab from both the parent's Documents tab
+        // and the admin portal, and every figure comes from
+        // family_care_statement() rather than either app's state.
+        outfile: 'dist/statement-print.min.js',
+        stdin: {
+            contents: fs.readFileSync(path.join(ROOT, 'js/statement-print.js'), 'utf8'),
+            resolveDir: ROOT,
+        },
+    },
+    {
         outfile: 'dist/waitlist-status.min.js',
         stdin: {
             contents: fs.readFileSync(path.join(ROOT, 'js/waitlist-status.js'), 'utf8'),
@@ -333,6 +344,17 @@ const HTML_PATCHES = [
         insert: [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/incident-print.min.js"></script>`,
+        ],
+    },
+    {
+        file: 'statement-print.html',
+        remove: [
+            /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
+            /<script src="js\/statement-print\.js[^"]*"><\/script>\n/,
+        ],
+        insert: [
+            `    <script src="dist/supabase.min.js"></script>`,
+            `    <script src="dist/statement-print.min.js"></script>`,
         ],
     },
     {

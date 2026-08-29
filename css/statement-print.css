@@ -1,0 +1,158 @@
+/* ============================================================
+   statement-print.css — the childcare statement, US Letter
+   ============================================================
+   Same shape as incident-print.css: a screen preview that is already the
+   printed page, so what the office sees is what the parent files. */
+
+.sp-body {
+    background: var(--warm-gray);
+    margin: 0;
+    padding: 0 0 40px;
+    font-family: var(--font-body);
+    color: var(--text);
+}
+
+.sp-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 20px;
+    background: var(--navy);
+    color: #fff;
+    font-size: 13px;
+}
+.sp-print-btn {
+    background: var(--sun);
+    color: var(--navy);
+    border: none;
+    border-radius: 8px;
+    padding: 9px 18px;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.sp-state {
+    max-width: 640px;
+    margin: 40px auto;
+    padding: 22px 24px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 15px;
+    line-height: 1.6;
+}
+.sp-state strong { display: block; margin-bottom: 8px; color: var(--navy); font-size: 17px; }
+.sp-state p { margin: 0; color: var(--text-muted); }
+/* A refusal is not an error — it is the document declining to be wrong. */
+.sp-state-fail { border-left: 4px solid var(--sun); }
+
+.sp-page {
+    width: 8.5in;
+    min-height: 11in;
+    margin: 28px auto;
+    padding: 0.7in 0.75in;
+    background: #fff;
+    box-sizing: border-box;
+    box-shadow: var(--shadow-lift);
+}
+
+/* ⚠️ styles.css carries a BARE `header {}` rule — mint background, centered
+   text, 28px padding — meant for the public pages' page header. A <header>
+   element here inherits all of it, which put a green band across the top of a
+   tax document and centered the org name. Reset explicitly rather than
+   renaming the element: the band is not obviously wrong until you see it. */
+.sp-head {
+    background: none;
+    border-bottom: 3px solid var(--navy);
+    text-align: left;
+    color: inherit;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 0 0 14px;
+}
+.sp-org { font-family: var(--font-head); font-size: 25px; color: var(--navy); margin: 0; }
+.sp-org-sub, .sp-org-addr { margin: 3px 0 0; font-size: 11px; color: var(--text-muted); }
+.sp-taxyear { text-align: right; flex: none; }
+.sp-taxyear-label {
+    font-size: 9.5px; font-weight: 800; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--text-muted);
+}
+.sp-taxyear-value { font-family: var(--font-head); font-size: 26px; color: var(--navy); }
+
+.sp-title { font-family: var(--font-head); font-size: 18px; color: var(--navy); margin: 22px 0 4px; }
+.sp-lede { margin: 0 0 18px; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+.sp-block { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px; overflow: hidden; }
+.sp-block-head {
+    background: var(--linen);
+    padding: 8px 14px;
+    font-size: 10px; font-weight: 800; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+}
+.sp-kv { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.sp-kv td { padding: 9px 14px; border-bottom: 1px solid var(--warm-gray); vertical-align: top; }
+.sp-kv tr:last-child td { border-bottom: none; }
+.sp-kv td:first-child { width: 46%; color: var(--text-muted); }
+.sp-kv td:last-child { color: var(--navy); font-weight: 700; }
+.sp-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; }
+.sp-kid-days { font-weight: 400; color: var(--text-muted); }
+.sp-none { font-weight: 400; color: var(--text-muted); }
+
+.sp-totals { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 4px 0 14px; }
+.sp-total {
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 14px 16px; text-align: center;
+}
+.sp-total-label {
+    font-size: 9.5px; font-weight: 800; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--text-muted);
+}
+.sp-total-value { font-family: var(--font-head); font-size: 28px; color: var(--navy); margin: 6px 0 2px; }
+.sp-total-sub { font-size: 10.5px; color: var(--text-muted); }
+
+.sp-note {
+    background: var(--sun-pale);
+    border: 1px solid #F2E3B8;
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: #6a5320;
+    margin: 0 0 16px;
+}
+
+.sp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sp-table th {
+    text-align: left; padding: 8px 14px; font-size: 10px; font-weight: 800;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+}
+.sp-table td { padding: 7px 14px; border-bottom: 1px solid var(--warm-gray); color: var(--navy); }
+.sp-right { text-align: right; }
+.sp-total-row td { font-weight: 800; border-top: 2px solid var(--navy); border-bottom: none; }
+
+.sp-foot {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 24px; margin-top: 26px; font-size: 10.5px; color: var(--text-muted);
+}
+.sp-sign { text-align: center; min-width: 2.4in; }
+.sp-sign-name { font-family: 'Dancing Script', cursive; font-size: 21px; color: var(--navy); }
+.sp-sign-rule { border-bottom: 1px solid var(--navy); margin: 2px 0 4px; }
+.sp-sign-role { font-size: 9.5px; }
+
+.hidden { display: none !important; }
+
+@media print {
+    .sp-body { background: #fff; padding: 0; }
+    .noprint { display: none !important; }
+    .sp-page { margin: 0; box-shadow: none; width: auto; min-height: 0; padding: 0.4in 0.3in; }
+    /* The payment list is the part that can run long; keep its rows together
+       rather than orphaning a total onto a page of its own. */
+    .sp-payments { break-inside: avoid; }
+    .sp-totals   { break-inside: avoid; }
+}

@@ -6,6 +6,65 @@
 
 // SUMMER CAMP VISIBILITY SETTING
 // ============================================================
+// ── Provider tax details ────────────────────────────────────
+// The center's own identity as it appears on a childcare statement. Typed
+// once, by somebody who knows the EIN — this app never invents or defaults
+// these, and statement-print.html refuses to issue a document without the
+// legal name, address and EIN.
+const PTX_FIELDS = {
+    ptxLegalName: 'legal_name',
+    ptxOrgLine:   'org_line',
+    ptxAddress:   'address',
+    ptxEin:       'ein',
+    ptxLicense:   'license_no',
+    ptxPhone:     'phone',
+    ptxEmail:     'email',
+    ptxSignature: 'signature_name',
+};
+
+async function setupProviderTaxDetails() {
+    const saveBtn = document.getElementById('ptxSaveBtn');
+    if (!saveBtn) return;
+
+    try {
+        const info = await fetchProviderTaxInfo();
+        Object.entries(PTX_FIELDS).forEach(([id, key]) => {
+            const el = document.getElementById(id);
+            if (el) el.value = info?.[key] || '';
+        });
+    } catch (e) {
+        console.warn('provider tax details:', e);
+    }
+
+    saveBtn.addEventListener('click', async () => {
+        const status = document.getElementById('ptxStatus');
+        const info = {};
+        Object.entries(PTX_FIELDS).forEach(([id, key]) => {
+            info[key] = (document.getElementById(id)?.value || '').trim();
+        });
+
+        // Name which fields a statement still needs, rather than saving quietly
+        // and letting the refusal surface later in front of a parent.
+        const missing = [['legal_name', 'legal name'], ['address', 'address'], ['ein', 'EIN']]
+            .filter(([k]) => !info[k]).map(([, label]) => label);
+
+        saveBtn.disabled = true;
+        try {
+            await saveProviderTaxInfo(info);
+            if (status) {
+                status.textContent = missing.length
+                    ? `Saved — statements still need: ${missing.join(', ')}.`
+                    : 'Saved. Statements can be issued.';
+            }
+            if (typeof logAdminAction === 'function') logAdminAction('provider_tax_info_saved', {});
+        } catch (e) {
+            if (status) status.textContent = 'Could not save: ' + (e.message || e);
+        } finally {
+            saveBtn.disabled = false;
+        }
+    });
+}
+
 async function setupSummerCamp() {
     const toggle   = document.getElementById('hideSummerCampToggle');
     const btn      = document.getElementById('saveSummerCampBtn');

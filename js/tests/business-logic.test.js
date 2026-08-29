@@ -2095,6 +2095,70 @@ describe('non-parent sessions are sent to their own app', () => {
     });
 });
 
+// ============================================================
+// Childcare statement (family_care_statement.sql)
+// ============================================================
+// This document is filed with the IRS or handed to an employer. The guards
+// below are about the two ways it could be quietly wrong: a total built from
+// the wrong column, and a total covering a period the ledger cannot support.
+describe('childcare statement', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const migration = read('supabase/migrations/family_care_statement.sql');
+    const page = read('js/statement-print.js');
+
+    test('total paid is money received, never money billed', () => {
+        // "Paid for care" on Form 2441 means what the family actually paid.
+        // Summing billing_invoices.final_amount would report what they were
+        // charged, which is a different number and not the one the IRS wants.
+        expect(/sum\(amount\).{0,40}from pays/s.test(migration)).toBe(true);
+        expect(/from billing_payments bp/.test(migration)).toBe(true);
+        expect(migration.includes('final_amount')).toBe(false);
+    });
+
+    test('the office or the family, and nobody else', () => {
+        expect(/is_admin\(\) or p_family_id in \(select parent_family_ids\(\)\)/.test(migration)).toBe(true);
+        expect(/revoke all on function public\.family_care_statement\(uuid, date, date\) from public, anon/.test(migration)).toBe(true);
+    });
+
+    test('every month in the period reports its own coverage', () => {
+        // Production has care days in months with no payments recorded at all.
+        // Without this the statement would print a confident short total.
+        expect(migration.includes("'coverage'")).toBe(true);
+        expect(/'care_days',[\s\S]{0,200}'payments',/.test(migration)).toBe(true);
+    });
+
+    test('the page refuses rather than issuing a wrong document', () => {
+        // Two refusals, and neither may grow an override.
+        expect(/function spMissingProviderFields/.test(page)).toBe(true);
+        expect(/function spUncoveredMonths/.test(page)).toBe(true);
+        // A month with care days and no payment is what "uncovered" means.
+        expect(/care_days \|\| 0\) > 0 && \(m\.payments \|\| 0\) === 0/.test(page)).toBe(true);
+        // EIN is required; the license number is genuinely optional.
+        expect(/\['ein',\s*'Employer Identification Number/.test(page)).toBe(true);
+        expect(page.includes("['license_no'")).toBe(false);
+    });
+
+    test('nothing invents the provider identity', () => {
+        // An EIN this app made up would be filed with a tax return. The values
+        // come from the provider_tax_info setting or the document does not
+        // issue — there is no default anywhere.
+        expect(page.includes('43-1234567')).toBe(false);   // the mockup's dummy EIN
+        expect(migration.includes('43-1234567')).toBe(false);
+        expect(/provider_tax_info/.test(migration)).toBe(true);
+    });
+
+    test('both the parent and the office reach the same document', () => {
+        expect(read('js/portal/portal-documents.js').includes('statement-print.html')).toBe(true);
+        expect(read('js/admin/admin-finance-hub.js').includes('statement-print.html')).toBe(true);
+        // Same three periods on both sides.
+        ['month:', 'year:', 'ytd'].forEach(tok => {
+            expect(read('js/portal/portal-documents.js').includes(tok)).toBe(true);
+            expect(read('js/admin/admin-finance-hub.js').includes(tok)).toBe(true);
+        });
+    });
+});
+
 // ---- Summary ----
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;

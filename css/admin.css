@@ -5989,3 +5989,34 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 @media (max-width: 700px) {
     .rc-actions-cell { flex-wrap: wrap; }
 }
+
+/* Provider tax details (Settings). A plain two-column field grid — these are
+   eight short values typed once, not a workflow. */
+.form-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: .75rem 1rem;
+}
+.form-grid-2 .form-label {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    font-size: .85em;
+    font-weight: 700;
+    color: var(--navy);
+}
+.form-optional { font-weight: 400; color: var(--text-muted); }
+
+/* Statement period picker in the Ledger drawer. */
+.fh-stmt-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-top: .4rem; }
+.fh-stmt-select {
+    flex: 1 1 200px;
+    min-width: 0;
+    padding: .5rem .6rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: inherit;
+    font-size: .9em;
+    background: #fff;
+    color: var(--navy);
+}
