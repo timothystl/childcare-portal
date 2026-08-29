@@ -378,8 +378,13 @@
 
                 <div id="pbStaxLineItems" class="pb-stax-line-items"></div>
 
+                <p class="pb-stax-balance">Balance due: <strong id="pbStaxBalanceDue">$0.00</strong></p>
+
+                <!-- Only the "pay a different amount" toggle + its fields are
+                     conditionally hidden — the balance line above always
+                     shows, regardless of whether this deploy's charge
+                     function supports installments. -->
                 <div id="pbStaxPaymentAmountWrap" class="pb-stax-payment-amount" hidden>
-                    <p class="pb-stax-balance">Balance due: <strong id="pbStaxBalanceDue">$0.00</strong></p>
                     <button type="button" id="pbStaxPartialToggle" class="pb-stax-link-btn"
                             aria-expanded="false" aria-controls="pbStaxPartialFields">Pay a different amount</button>
                     <div id="pbStaxPartialFields" hidden>
@@ -434,8 +439,8 @@
                     </label>
 
                     <button type="button" id="pbStaxPayBtn" class="pb-pay-btn" disabled>Pay</button>
-                    <p class="pb-stax-fine">Card details are entered directly into Stax's own secure
-                       fields above — this app never sees or stores your card number.</p>
+                    <p class="pb-stax-fine">Card details are entered directly into our payment
+                       processor's own secure fields above — this app never sees or stores your card number.</p>
                 </div>
             </div>
         </div>

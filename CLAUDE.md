@@ -4039,6 +4039,79 @@ and one migration, no `js/`). No `dist/` symbol check applies to this phase
 for the same reason; the next phase (the actual UI) will need the standard
 `npm run build` + bundle-grep discipline this file asks for everywhere else.
 
+### Phase 2 — the portal UI itself, built (2026-08-28)
+
+`portal-billing.js` was rebuilt from the single flat invoice-card list into
+the mockup's actual four-screen stack: **Home → All Invoices → Invoice
+Detail → Payment Received**, all inside `#pbBody`, using a plain `pbView`
+variable rather than history/hash routing — the app has no routing anywhere
+else, and "back" only ever needs to go one level up, which a variable and
+three `pbGo*()` functions handle. `pbRender()` is now a small dispatcher
+over `pbView`; nothing about how invoices are fetched changed (still
+`fetchMySchedule()`, still filtered to `sent_at`-only via `pbIssuedInvoices()`).
+
+- **Home** shows the total across every unpaid issued invoice, a
+  "Show breakdown" toggle (one row per unpaid month), the Pay button
+  (anchored on the most recent unpaid invoice, which rolls up every older
+  one — matching `createStaxChargeSession`'s own due-set logic, so the
+  number on the button and what actually gets charged can't disagree), a
+  prior-balance banner when more than one month is owed, and a "View all
+  invoices" row.
+- **All Invoices** lists every issued invoice as its own card (billed/paid/
+  balance, a status pill, a Pay button when unpaid) with a "View invoice —
+  days of care" link into Invoice Detail.
+- **Invoice Detail** shows the invoice's own billed/paid/balance figures
+  plus a real days-of-care calendar per child, reusing `.ps-chip` verbatim
+  from the Schedule tab's own calendar chips (`pbDayChip()`). ⚠️
+  **Deliberately no per-day or per-child dollar figure** — see this file's
+  own note on this from Phase 1: the itemized breakdown
+  (`compute_family_month_charges_itemized()`) is aggregated per child, not
+  per date, and is only returned by the charge-reservation endpoint, not
+  something to call just to render a read-only view. The calendar shows
+  `day_type` (Full/Half) only; the invoice's own `final_amount` stays the
+  one dollar figure this screen shows, because it's the only one guaranteed
+  to match what was actually billed.
+- **Payment Received** is Stax-only. A Stax charge returns real
+  confirmation data synchronously (`transactionId`/`amount` from
+  `stax_finalize_charge`'s response), so `pbStaxTokenizeAndCharge()` and
+  `pbStaxChargeSavedCard()` now populate a `pbLastReceipt` object right
+  before closing the modal, and `pbCloseStaxModal()` routes to
+  `pbView = 'receipt'` instead of the old "confirming now" banner.
+  Authorize.net's confirmation is async-only (the webhook, not the iframe
+  relay, is what actually marks an invoice paid — unchanged from Phase 1's
+  design), so it still gets the older `pbReturnBanner()` on Home; forcing
+  `pbView = 'home'` on a successful Authorize.net close is the one other
+  navigation change, so the banner (which only renders on Home) doesn't get
+  stranded behind whichever screen the parent started the payment from.
+  ⚠️ **The fresh-card charge path (`pbStaxTokenizeAndCharge`) shows no
+  payment-method line on the receipt** — the card's brand/last-four live
+  only inside Stax's own iframe, and this app has never read card data out
+  of a `tokenize()` result (only out of the *charge response*, server-side,
+  for the saved-card-metadata write). Rather than guess at an unverified
+  field name, that row is simply omitted (`pbRenderReceipt()` already
+  handles a null `paymentMethodLine`). The saved-card path
+  (`pbStaxChargeSavedCard`) does show it, from `session.savedCard`, which
+  was already real, confirmed data used elsewhere in the same modal.
+- **Stax modal polish**: "Balance due" was pulled out of the
+  `supportsPartialPayments`-gated wrapper so it always shows — only the
+  "Pay a different amount" toggle and its fields stay conditionally hidden
+  behind that flag (an older deployed charge function would ignore an
+  unrecognized partial-amount field and just charge the full balance, so
+  installments must stay opt-in to the server's own advertised support).
+  The modal's subtitle now appends the invoice number
+  (`… · Invoice INV-<id>`), and the footer copy was genericized from
+  "Stax's own secure fields" to "our payment processor's own secure
+  fields" — this app runs two processors, and naming one by name in UI
+  copy that both flows share was a Phase-1-era leftover from before Stax
+  existed as an option.
+
+`npm test` — 205/205 (unchanged; this phase has no drift-guarded functions
+of its own — the day-cards intentionally compute nothing that needs
+guarding). `npm run build` — `dist/portal.min.js` rebuilt and grepped for
+`pbRenderReceipt`/`pbGoInvoiceDetail`/`pbChildDayCardsForMonth`/
+`pbRenderInvoiceList` to confirm the new screens actually shipped in the
+bundle `portal.html` loads, not just the source.
+
 ---
 
 ## Finance summary API (for the church ChMS finance integration)
