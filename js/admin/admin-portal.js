@@ -268,10 +268,12 @@ const AP_TOOLS = [
     // inside Staff → Build Staff Schedule — see apOnToolOpened().
     { key: 'wlPlanner',   pane: 'waitlist', section: 'waitlistPlannerSection', tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '🗂️', name: 'Waitlist & Capacity Planner',
       blurb: 'The queue, the grid, and the board — one shared allocation, now with demand-by-month and age-out rollups inline.' },
-    { key: 'wlNotify',    pane: 'waitlist', section: 'wlNotifySection',       tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '📨', name: 'Waitlist Inquiries',
-      blurb: 'Shareable inquiry link, notification email, and weekly reminders.' },
-    { key: 'wlImport',    pane: 'waitlist', section: 'wlImportSection',       tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '📥', name: 'Import Waitlist from File',
-      blurb: 'Bulk-import waitlist applications from CSV or Excel.' },
+    { key: 'wlNotify',    pane: 'waitlist', section: 'wlNotifySection',       tab: 'planning', group: 'Waitlist', tint: AP_TINT.gold, icon: '📨', name: 'Waitlist Signup Link',
+      blurb: 'Shareable signup link, notification email, and weekly reminders.' },
+    // 'wlImport' (Import Waitlist from File) was retired from the sidebar at
+    // the director's request — #wlImportSection stays in admin.html but is
+    // unreferenced here, which is this shell's own way of making a tool
+    // unreachable without deleting markup anything else might read.
 
     // ── Planning · Enrollment Outlook ──
     // `capacityOverview` was retired from here in the Classroom Tab Redesign
@@ -1500,7 +1502,7 @@ function apDashPlanning(live) {
         left: [
             apPanel({ title: 'Waitlist pressure by room',
                 sub: 'Active applications against the seats actually open this week.',
-                body: apRowsHtml(pressure), tools: ['wlPlanner', 'wlImport'] }),
+                body: apRowsHtml(pressure), tools: ['wlPlanner'] }),
         ],
         // Enrollment Outlook's own pill — otherwise ratioStep had no path in
         // from a phone at all. Demand-by-month, the demand forecast, and

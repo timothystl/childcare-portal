@@ -1759,6 +1759,28 @@ describe('Waitlist Planner — Grid drawer is reachable, weekday headers print o
         expect(/\$\{[^}]*wlpRenderGridSidebar\(/.test(wl)).toBe(false);
     });
 
+    test("closing the drawer leaves the week's child cards open", () => {
+        // The roster block and the drawer are separate state on purpose:
+        // wlpCloseDrawer clears the drawer selection and the rollup drawer,
+        // never rosterCell, which only the roster's own ✕ clears.
+        // Checks for an assignment, not a mention — the function's own comment
+        // names rosterCell to explain why it is left alone.
+        const close = wl.match(/function wlpCloseDrawer[\s\S]*?\n}/)[0];
+        expect(/rosterCell\s*=/.test(close)).toBe(false);
+        expect(close.includes('_wlp.selCellA = null')).toBe(true);
+        expect(wl.includes("wlpGridRosterClose')?.addEventListener('click', () => { _wlp.rosterCell = null;")).toBe(true);
+    });
+
+    test('every queue row carries the same Enroll action as its expanded panel', () => {
+        expect(wl.includes('wlp-row-enroll-btn')).toBe(true);
+        // Same data attributes as the expanded footer's button, so the one
+        // [data-wlp-enroll-full] listener — which stops propagation, keeping
+        // the row from toggling — covers both with no extra wiring.
+        const row = wl.match(/const rowEnrollBtn[\s\S]*?;\n/)[0];
+        expect(row.includes('data-wlp-enroll-full=')).toBe(true);
+        expect(row.includes('data-wlp-enroll-month=')).toBe(true);
+    });
+
     test('the drawer is actually rendered and wired, not just defined', () => {
         // The lesson from the refund button that shipped into a dead section:
         // a symbol present in the bundle is not the same claim as a feature
@@ -1766,6 +1788,25 @@ describe('Waitlist Planner — Grid drawer is reachable, weekday headers print o
         expect(/\$\{isGrid \? wlpRenderDrawer\(alloc\) : ''\}/.test(wl)).toBe(true);
         expect(wl.includes('wlpAttachDrawerListeners();')).toBe(true);
         expect(wl.includes('data-wlp-drawer-close')).toBe(true);
+    });
+});
+
+describe('Planning tab nav — the two sidebar entries the director asked for', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const portal = read('js/admin/admin-portal.js');
+
+    test('the inquiry tool is named "Waitlist Signup Link"', () => {
+        expect(portal.includes("name: 'Waitlist Signup Link'")).toBe(true);
+        expect(portal.includes("name: 'Waitlist Inquiries'")).toBe(false);
+    });
+
+    test('Import Waitlist from File is unreachable, and nothing links to it', () => {
+        // Unreferenced by AP_TOOLS is this shell's own way of retiring a tool
+        // (its <section> stays in admin.html). A dashboard panel's `tools:`
+        // pill pointing at a retired key would be a dead link, so check both.
+        expect(/key: 'wlImport'/.test(portal)).toBe(false);
+        expect(/tools: \[[^\]]*'wlImport'/.test(portal)).toBe(false);
     });
 });
 

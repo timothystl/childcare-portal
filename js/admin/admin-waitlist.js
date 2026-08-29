@@ -116,7 +116,12 @@ async function loadWaitlistApplications() {
 let _wlp = {
     activeTab: 'queue',       // 'queue' | 'capacity' | 'moving'
     capacityView: 'grid',     // 'grid' | 'board'
-    selCellA: null,           // Grid: {roomId, monthIdx}
+    selCellA: null,           // Grid: {roomId, monthIdx} — which cell's DRAWER is open
+    rosterCell: null,         // Grid: {roomId, monthIdx} — which week's "Who's enrolled"
+                              // child cards are open below the table. Deliberately
+                              // separate from selCellA: closing the drawer leaves the
+                              // cards up, so the roster stays readable while you work.
+
     expandedKidB: null,       // Queue: waitlist_applications.id
     selStripB: null,          // Queue: {kidId, monthIdx}
     archivingKidId: null,     // Queue: id whose inline archive-reason form is open
@@ -808,6 +813,8 @@ function wlpRenderDrawer(alloc) {
 }
 
 function wlpCloseDrawer() {
+    // rosterCell is deliberately untouched — the "Who's enrolled" cards stay
+    // open after the drawer closes, and are dismissed by their own ✕.
     _wlp.selCellA = null;
     _wlp.rollupDrawer = null;
     renderWaitlistPlanner();
@@ -1019,6 +1026,17 @@ function wlpRenderQueueRow(k, alloc) {
         ? ` · <span class="wlp-bestfit">can seat ${bestFit} of ${wantDays} day${wantDays === 1 ? '' : 's'} now</span>`
         : '';
 
+    // Enroll, on the row itself — the same action the expanded panel offers,
+    // at the child's desired-start month (the expanded panel's own default
+    // when no month tile is selected), so the two can't target different
+    // months. Same data attributes, so [data-wlp-enroll-full]'s listener —
+    // which already stops propagation, keeping the row from toggling —
+    // covers it with no wiring change.
+    const rowOpenDays = k.days.filter(d => startDayMap[d] >= 1).length;
+    const rowEnrollBtn = k.promised
+        ? ''
+        : `<button type="button" class="wlp-row-enroll-btn" data-wlp-enroll-full="${k.id}" data-wlp-enroll-month="${k.desiredStartM}" ${rowOpenDays ? '' : 'disabled'} title="${rowOpenDays ? `Enroll for ${escHtml(alloc.months[k.desiredStartM].label)}` : 'No requested day is open at their desired start'}">${rowOpenDays ? '✅ Enroll' : 'Not open yet'}</button>`;
+
     return `
         <div class="wlp-row" data-kid-id="${k.id}">
             <div class="wlp-row-main" data-wlp-toggle="${k.id}">
@@ -1030,6 +1048,7 @@ function wlpRenderQueueRow(k, alloc) {
                 </div>
                 <div class="wlp-row-tail">
                     <div class="wlp-status-pill ${fitCls}">${fitLabel}</div>
+                    ${rowEnrollBtn}
                     <button type="button" class="wlp-edit-btn" data-wlp-edit="${k.id}" title="Edit child">✎ Edit</button>
                     <div class="wlp-chevron">${expanded ? '▲' : '▼'}</div>
                 </div>
@@ -1386,7 +1405,7 @@ function wlpRenderGrid(alloc) {
     const roomRows = alloc.rooms.map(room => {
         const cells = gridMonths.map(mo => {
             const dayMap = alloc.finalGrid[room.id][mo.idx];
-            const sel = _wlp.selCellA;
+            const sel = _wlp.rosterCell || _wlp.selCellA;
             const isSel = sel && sel.roomId === room.id && sel.monthIdx === mo.idx;
             return TREND_DAYS.map((d, i) => {
                 const open = dayMap[d];
@@ -1407,7 +1426,7 @@ function wlpRenderGrid(alloc) {
         return `<tr><td class="wlp-room-cell">${escHtml(room.label)}<br><span class="wlp-room-cell-cap">Cap ${room.capacity ?? '—'}/day</span></td>${cells}</tr>`;
     }).join('');
 
-    const sel = _wlp.selCellA;
+    const sel = _wlp.rosterCell;
     return `
         <div class="wlp-grid-wrap">
             <div class="wlp-grid-main">
@@ -1441,10 +1460,11 @@ function wlpAttachGridListeners() {
             // Only one drawer is ever open — the three triggers share one panel.
             _wlp.rollupDrawer = null;
             _wlp.selCellA = { roomId, monthIdx: Number(monthIdx) };
+            _wlp.rosterCell = { roomId, monthIdx: Number(monthIdx) };
             renderWaitlistPlanner();
         });
     });
-    document.getElementById('wlpGridRosterClose')?.addEventListener('click', () => { _wlp.selCellA = null; renderWaitlistPlanner(); });
+    document.getElementById('wlpGridRosterClose')?.addEventListener('click', () => { _wlp.rosterCell = null; renderWaitlistPlanner(); });
     document.querySelectorAll('[data-wlp-match-offer]').forEach(el => {
         el.addEventListener('click', e => {
             e.stopPropagation();
@@ -1456,6 +1476,7 @@ function wlpAttachGridListeners() {
         el.addEventListener('click', () => {
             const idx = Number(el.dataset.wlpDemandMonth);
             _wlp.selCellA = null;
+            _wlp.rosterCell = null;
             _wlp.rollupDrawer = (_wlp.rollupDrawer?.type === 'demand' && _wlp.rollupDrawer.monthIdx === idx)
                 ? null : { type: 'demand', monthIdx: idx };
             renderWaitlistPlanner();
@@ -1465,6 +1486,7 @@ function wlpAttachGridListeners() {
         el.addEventListener('click', () => {
             const idx = Number(el.dataset.wlpAgeoutMonth);
             _wlp.selCellA = null;
+            _wlp.rosterCell = null;
             _wlp.rollupDrawer = (_wlp.rollupDrawer?.type === 'ageout' && _wlp.rollupDrawer.monthIdx === idx)
                 ? null : { type: 'ageout', monthIdx: idx };
             renderWaitlistPlanner();

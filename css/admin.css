@@ -3662,6 +3662,13 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .wlp-row-name-text { display: inline-block; width: 230px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wlp-row-room-label { font-weight: 700; color: var(--text); white-space: nowrap; flex-shrink: 0; }
 .wlp-row-room { font-weight: 400; color: var(--text-muted); font-size: 14px; }
+.wlp-row-enroll-btn {
+    flex-shrink: 0; background: var(--green-text); color: var(--white); border: none;
+    padding: 6px 12px; border-radius: 7px; cursor: pointer;
+    font-family: var(--font-body); font-size: 12.5px; font-weight: 800; white-space: nowrap;
+}
+.wlp-row-enroll-btn:hover { background: var(--green-dark); }
+.wlp-row-enroll-btn:disabled { background: var(--linen); color: var(--text-muted); border: 1px solid var(--border); cursor: default; }
 .wlp-chip-row { display: flex; gap: 3px; margin: 5px 0 4px; flex-wrap: wrap; }
 .wlp-chip {
     display: inline-block; min-width: 32px; text-align: center; font-size: 12px;
