@@ -35,13 +35,24 @@
 // (js/portal/portal-recap.js) is the same three sections, for a date the
 // parent picks, and reuses Today's rendering vocabulary rather than keeping a
 // second copy of "how an event reads."
+// ⚠️ The icons are the illustrated PNG set from the design bundle
+// (docs/design_handoff/Parent Portal Mobile.dc.html -> images/icons/), NOT
+// emoji. The DESKTOP source uses emoji for the rail and the MOBILE source
+// uses these PNGs for the bottom bar; the director asked for the illustrated
+// set in both places, so the rail is a deliberate deviation from its own
+// source. See CLAUDE.md, "Parent app redesign".
+//
+// ⚠️ Only THIS nav renders images. js/staff/staff-nav.js and
+// js/admin/admin-portal.js emit the same `.tabbar-icon` span with emoji in
+// it, so every image rule is scoped to `.portal-app` in css/portal.css —
+// widening one would put a broken image in two apps this never touched.
 const PT_TABS = [
-    { key: 'today',     icon: '🏠', label: 'Today' },
-    { key: 'daily',     icon: '📔', label: 'Recap' },
-    { key: 'schedule',  icon: '🗓', label: 'Schedule' },
-    { key: 'billing',   icon: '💳', label: 'Billing' },
-    { key: 'messages',  icon: '💬', label: 'Messages' },
-    { key: 'account',   icon: '👤', label: 'Account' },
+    { key: 'today',     icon: '/images/icons/today.png',    label: 'Today' },
+    { key: 'daily',     icon: '/images/icons/recap.png',    label: 'Recap' },
+    { key: 'schedule',  icon: '/images/icons/schedule.png', label: 'Schedule' },
+    { key: 'billing',   icon: '/images/icons/billing.png',  label: 'Billing' },
+    { key: 'messages',  icon: '/images/icons/messages.png', label: 'Messages' },
+    { key: 'account',   icon: '/images/icons/account.png',  label: 'Account' },
 ];
 
 let ptRoute   = 'today';
@@ -58,7 +69,7 @@ function ptRenderTabs() {
         const n = ptBadges[t.key] || 0;
         return `<button type="button" class="tabbar-item ${t.key === ptRoute ? 'is-active' : ''}"
                     data-tab="${t.key}" role="tab" aria-selected="${t.key === ptRoute}">
-            <span class="tabbar-icon" aria-hidden="true">${t.icon}</span>
+            <span class="tabbar-icon" aria-hidden="true"><img class="tabbar-img" src="${t.icon}" alt=""></span>
             <span class="tabbar-label">${t.label}</span>
             ${n ? `<span class="tabbar-badge" aria-label="${n} unread">${n > 9 ? '9+' : n}</span>` : ''}
         </button>`;

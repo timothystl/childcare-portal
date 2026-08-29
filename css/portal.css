@@ -300,10 +300,14 @@
     text-transform: uppercase; color: #78838f;
 }
 .pt-photos-note { font-size: .78em; color: #96a0aa; }
+/* Four across, fixed — both design sources say repeat(4,1fr) explicitly. The
+   old auto-fill/96px floor gave three on a phone and as many as six on a wide
+   screen, so the strip changed shape with the viewport instead of reading as
+   one row of the day's pictures. */
 .pt-photo-strip {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
 }
-.pt-photo { display: block; border-radius: 10px; overflow: hidden; line-height: 0; }
+.pt-photo { display: block; border-radius: 9px; overflow: hidden; line-height: 0; }
 .pt-photo img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 
 /* ============================================================
@@ -1121,44 +1125,50 @@ body.pb-modal-open { overflow: hidden; }
 }
 
 /* ── The card every screen is built out of ───────────────── */
+/* 18px is the design source's own card padding (Parent Portal Mobile.dc.html).
+   The bottom is pulled in because .pt-event:last-child drops its rule — the
+   mockup's sc-for gives every row a border, so its flat 18px sat under one. */
 .pt-card {
     background: var(--white);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: 16px 16px 4px;
+    padding: 18px 18px 8px;
     margin-bottom: 14px;
 }
-.pt-photos.pt-card { padding: 14px 16px 16px; }
+.pt-photos.pt-card { padding: 18px; }
 
 /* ── Child switcher ──────────────────────────────────────── */
 /* A segmented control, not a row of loose buttons: one track, the active
    child raised out of it. .pt-childbtn — NOT .pt-tab, which is the class on
    each full-page <section> in the shell (see portal-today.js). */
+/* ⚠️ The track is #f2f5f7 — a COOL gray, and deliberately not --warm-gray
+   (#F5F0E4). Both design sources carry the literal, and on the cream page
+   background the warm token read as a barely-there smudge rather than a
+   track. The raised pill carries no border in the design, only a shadow. */
 .pt-switcher {
     display: inline-flex;
-    gap: 4px;
-    background: var(--warm-gray);
+    gap: 6px;
+    background: #f2f5f7;
     border-radius: 999px;
     padding: 4px;
-    margin-bottom: 14px;
+    margin-bottom: 16px;
 }
 .pt-childbtn {
-    border: 1px solid transparent;
+    border: none;
     background: none;
     border-radius: 999px;
-    padding: 7px 20px;
+    padding: 8px 18px;
     font: inherit;
     font-size: .92em;
-    font-weight: 700;
-    color: var(--text-muted);
+    font-weight: 800;
+    color: #5a6673;
     cursor: pointer;
     min-height: 36px;
 }
 .pt-childbtn.active {
     background: var(--white);
-    border-color: var(--border);
     color: var(--navy);
-    box-shadow: 0 1px 3px rgba(1, 41, 74, .10);
+    box-shadow: 0 1px 4px rgba(1, 41, 74, .12);
 }
 
 /* ── Today: the day card ─────────────────────────────────── */
@@ -1184,27 +1194,30 @@ body.pb-modal-open { overflow: hidden; }
 
 /* Allergies and care notes. The label is set small and lettered out because
    it is a heading for a fact, not a sentence to read. */
+/* No border in either design source — the sun-pale fill is the whole signal,
+   and a border on top of it read as a second, competing box inside the card.
+   #6a5320 is the source's own label/note color (a warmer brown than #7a5a00). */
 .pt-safety {
     background: var(--sun-pale);
-    border: 1px solid #F2E3B8;
+    border: none;
     border-radius: var(--radius-sm);
-    padding: 12px 14px;
+    padding: 13px 14px;
     margin-bottom: 6px;
 }
 .pt-safety-label {
     font-size: .72em;
     font-weight: 800;
-    letter-spacing: .08em;
+    letter-spacing: .06em;
     text-transform: uppercase;
-    color: #7a5a00;
-    margin-bottom: 8px;
+    color: #6a5320;
+    margin-bottom: 7px;
 }
 .pt-chip {
     display: inline-block;
     border-radius: 999px;
-    padding: 4px 12px;
+    padding: 3px 9px;
     font-size: .8em;
-    font-weight: 700;
+    font-weight: 800;
 }
 .pt-chip-severe { background: var(--tang); color: #fff; border: 1.5px solid var(--tang); }
 .pt-chip-sens   { background: #fff; color: var(--tang-dark); border: 1.5px solid var(--tang-soft); }
@@ -1299,28 +1312,31 @@ body.pb-modal-open { overflow: hidden; }
     margin-bottom: 14px;
     -webkit-overflow-scrolling: touch;
 }
+/* #eef1f4 at 1.5px, not the warm --border at 1px: the strip sits directly on
+   the cream page (not inside a card), and the warm tan border disappeared
+   into it. Both design sources carry the cool literal for exactly this row. */
 .pr-quick-day {
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    min-width: 62px;
-    padding: 9px 6px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    min-width: 56px;
+    padding: 8px 4px;
+    border: 1.5px solid #eef1f4;
+    border-radius: 10px;
     background: var(--white);
     cursor: pointer;
     font: inherit;
 }
 .pr-quick-dow {
     font-size: .68em;
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: .06em;
     text-transform: uppercase;
-    color: var(--text-muted);
+    color: #5a6673;
 }
-.pr-quick-num { font-size: 1.05em; font-weight: 800; color: var(--navy); }
+.pr-quick-num { font-size: 1.05em; font-weight: 700; color: #5a6673; }
 .pr-quick-day.active { background: var(--navy); border-color: var(--navy); }
 .pr-quick-day.active .pr-quick-dow,
 .pr-quick-day.active .pr-quick-num { color: #fff; }
@@ -1334,17 +1350,22 @@ body.pb-modal-open { overflow: hidden; }
 .ps-month-bill { font-size: 1.1em; }
 .ps-tally { display: block; margin-top: 10px; font-size: .78em; color: var(--text-muted); }
 
+/* ⚠️ A wrapping FLEX row of narrow chips, not a stretch-to-fit grid. Both
+   design sources lay the booked days out with flex-wrap and a min-width, so
+   a month with four days shows four small chips — the old grid stretched
+   those same four across the full card and made a light month look full. */
 .ps-days {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
-    gap: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
 }
 .ps-day {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 1px;
-    padding: 8px 4px;
+    min-width: 48px;
+    padding: 5px 6px;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--white);
@@ -1357,7 +1378,10 @@ body.pb-modal-open { overflow: hidden; }
 }
 .ps-day-date { font-size: .95em; font-weight: 800; color: var(--navy); }
 .ps-day-kind { font-size: .72em; font-weight: 600; color: var(--text-muted); }
-.ps-day-half { background: var(--sun-pale); border-color: var(--sun); }
+/* #FDE598 is the design's own half-day border — a soft gold that reads as a
+   tint of the sun-pale fill. --sun (#F5B731) is the saturated CTA yellow and
+   ringed the chip hard enough to outrank the closed-day strikethrough. */
+.ps-day-half { background: var(--sun-pale); border-color: #FDE598; }
 .ps-day-half .ps-day-kind { color: var(--mustard-dark); font-weight: 800; }
 /* A closed day is struck through rather than removed: the parent booked it,
    and its absence would read as a mistake in the schedule. It is not billed —
@@ -1369,12 +1393,13 @@ body.pb-modal-open { overflow: hidden; }
 
 .ps-register {
     display: block;
-    margin: 4px 0 12px;
-    padding: 15px;
+    margin: 16px 0 4px;
+    padding: 12px;
     text-align: center;
     border: 1.5px solid var(--navy);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     color: var(--navy);
+    font-size: .92em;
     font-weight: 800;
     text-decoration: none;
 }
@@ -1426,18 +1451,26 @@ body.pb-modal-open { overflow: hidden; }
 
 /* ── Messages ────────────────────────────────────────────── */
 .portal-app .pm-section { margin-top: 0; padding-top: 0; border-top: none; }
-.pm-thread { max-height: none; gap: 14px; padding-bottom: 6px; }
-.pm-theirs { background: none; border-bottom-left-radius: 14px; padding: 0 0 12px; max-width: 100%;
-             border-bottom: 1px solid var(--border); }
-.pm-mine   { background: var(--green-pale); padding: 10px 14px; }
+/* ⚠️ Both design sources draw the teacher's side as a real BUBBLE — a
+   #f2f5f7 fill with a squared bottom-left corner, capped at 82% of the
+   thread. The previous pass had flattened it to a borderless row with a
+   divider under it, which reads as a list of notices rather than a
+   conversation with two sides to it. */
+.pm-thread { max-height: none; gap: 10px; padding-bottom: 6px; }
+.pm-msg    { padding: 9px 12px; border-radius: 13px; max-width: 82%; }
+.pm-theirs { background: #f2f5f7; border-bottom: none; border-bottom-left-radius: 4px; }
+.pm-mine   { background: var(--green-pale); border-bottom-right-radius: 4px; }
 .pm-composer { border-top: 1px solid var(--border); padding-top: 12px; }
-.pm-composer textarea { border-radius: 999px; padding: 11px 16px; resize: none; }
+/* A rounded rectangle, not a pill — the composer is two rows tall in the
+   design and a 999px radius on a two-row box bows its sides. */
+.pm-composer textarea { border-radius: 10px; padding: 9px 11px; resize: none; }
 .pm-send {
     background: var(--navy);
     color: #fff;
     border: none;
-    border-radius: var(--radius-sm);
-    padding: 11px 20px;
+    border-radius: 10px;
+    min-height: 44px;
+    padding: 0 15px;
     font-weight: 800;
     cursor: pointer;
 }
@@ -1463,6 +1496,21 @@ body.pb-modal-open { overflow: hidden; }
     cursor: pointer;
 }
 
+/* ── Nav icons are images in THIS app only ───────────────── */
+/* portal-nav.js puts an <img> inside .tabbar-icon; staff-nav.js and
+   admin-portal.js put an emoji in the identically-classed span. Every rule
+   below is scoped to .portal-app for that reason — see the note on PT_TABS. */
+.portal-app .tabbar-icon { opacity: .42; }
+.portal-app .tabbar-item.is-active .tabbar-icon { opacity: 1; }
+.portal-app .tabbar-img {
+    display: block;
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+}
+.portal-app .tabbar-label { font-size: 11px; font-weight: 700; color: #9aa4ad; }
+.portal-app .tabbar-item.is-active .tabbar-label { color: var(--navy); }
+
 /* ── Wide layout: the navy rail ──────────────────────────── */
 /* Below 900px .app-nav is just a wrapper around the existing bottom bar and
    the brand mark inside it is not rendered at all. */
@@ -1478,17 +1526,20 @@ body.pb-modal-open { overflow: hidden; }
        be wrong for a screen reader as well as for CSS. order:-1 moves it to
        the left of the row without moving it in the document. */
     .portal-app .app-nav { order: -1; }
+    /* Geometry below is the desktop source's own — 236px rail, 24px/14px
+       padding, 132px mark, 11px/14px rows. See
+       docs/design_handoff/Parent Portal Desktop.dc.html. */
     .portal-app .app-nav {
         flex: none;
-        width: 228px;
+        width: 236px;
         background: var(--navy);
         display: flex;
         flex-direction: column;
-        padding: 22px 14px;
+        padding: 24px 14px;
         overflow-y: auto;
     }
-    .portal-app .pt-brand { display: block; margin: 0 8px 26px; }
-    .portal-app .pt-brand img { width: 118px; display: block; }
+    .portal-app .pt-brand { display: block; margin: 6px 0 30px 10px; }
+    .portal-app .pt-brand img { width: 132px; display: block; }
 
     .portal-app .tabbar {
         display: flex !important;      /* portal-nav sets a grid template inline */
@@ -1501,48 +1552,109 @@ body.pb-modal-open { overflow: hidden; }
     .portal-app .tabbar-item {
         flex-direction: row;
         justify-content: flex-start;
-        gap: 14px;
-        padding: 12px 14px;
-        border-radius: var(--radius-md);
-        min-height: 48px;
+        gap: 12px;
+        padding: 11px 14px;
+        border-radius: 10px;
     }
-    .portal-app .tabbar-icon  { font-size: 20px; opacity: 1; }
-    .portal-app .tabbar-label { font-size: 15px; font-weight: 700; color: #E7EEF4; }
+    .portal-app .tabbar-icon { opacity: 1; }
+    /* The rail's icons are the same PNGs, a little smaller — the design's own
+       rail glyph is 18px, and 22px is where the illustrated set still reads
+       as a drawing at that size instead of a smudge. */
+    .portal-app .tabbar-img { width: 22px; height: 22px; }
+    /* rgba(...,.72) not #E7EEF4: the design keeps every resting label a
+       translucent white so the active gold pill is the only bright thing in
+       the rail. A solid near-white made all six compete with it. */
+    .portal-app .tabbar-label { font-size: 14px; font-weight: 700; color: rgba(255, 255, 255, .72); }
     .portal-app .tabbar-item.is-active { background: var(--sun); }
-    .portal-app .tabbar-item.is-active .tabbar-label { color: var(--navy); font-weight: 800; }
+    .portal-app .tabbar-item.is-active .tabbar-label { color: var(--navy); font-weight: 700; }
     /* In the rail the badge trails the label instead of clipping the icon. */
-    .portal-app .tabbar-badge { position: static; margin-left: auto; padding: 2px 9px; font-size: 12px; }
+    .portal-app .tabbar-badge { position: static; margin-left: auto; padding: 2px 7px; font-size: 11px; }
 
-    .portal-app .app-route { padding: 0 40px 40px; }
-    .portal-app .pt-tab { padding: 0; max-width: 1040px; }
-    .pt-page-head { padding: 34px 0 22px; }
+    /* ⚠️ Sign out stays at the foot of ACCOUNT, not in the rail, even though
+       the desktop source draws it in the rail. There is exactly one such
+       button (#portalSignOutBtn, inside the Account section in portal.html)
+       and the MOBILE source puts it exactly where it already is. Styling it
+       for the navy rail from here painted white-on-cream text at the bottom
+       of the Account tab — invisible, and invisible only above 900px. A rail
+       copy would mean two buttons and two handlers to keep in step, which is
+       the same trap the one-nav-element rule above exists to avoid. */
+    .portal-signout { margin-left: 0; }
+
+    .portal-app .app-route { padding: 0 48px 60px; }
+    .portal-app .pt-tab { padding: 0; max-width: 1120px; margin: 0 auto; }
+    .pt-page-head { padding: 36px 0 22px; }
     .portal-app .portal-greeting { font-size: 2.1em; }
     .portal-app .portal-sub { font-size: .95em; }
+
+    /* Cards get the design's roomier desktop padding; the pulled-in bottom is
+       the same last-row compensation as the phone rule. */
+    .portal-app .pt-card { padding: 22px 24px 10px; }
+    .portal-app .pt-photos.pt-card { padding: 22px 24px; }
+    .portal-app .pt-photo-strip { gap: 10px; }
+    .portal-app .pt-photo { border-radius: 10px; }
+    .portal-app .pm-msg { max-width: 78%; padding: 10px 13px; border-radius: 14px; }
+    .portal-app .pm-composer textarea { resize: vertical; padding: 10px 12px; }
+    .portal-app .pm-send { padding: 0 18px; }
+    .portal-app .pr-quick-day { min-width: 64px; padding: 9px 6px; }
+    .portal-app .ps-day { min-width: 52px; padding: 6px 8px; }
+    .portal-app .ps-register { padding: 13px; }
 
     /* Today splits: the day on the left, what's going on around it on the
        right. Photos lead the left column here (order:-1) where the design
        puts them; on a phone they stay under the day, which is the order the
        phone screens show. */
-    .pt-cols { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+    /* 320px is a FIXED side column, per the design — not a ratio. The old
+       1.55fr/1fr let the announcement and This week stretch with the window,
+       and past ~1400px the side panel was wider than the day card it was
+       meant to annotate. */
+    .pt-cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
     /* Back to a real column at this width, so the two cards stack inside it. */
     .pt-col-side { display: block; }
     .pt-col-main { display: flex; flex-direction: column; }
     .pt-col-main > .pt-photos { order: -1; }
     .pt-event-body { flex-direction: row; align-items: baseline; justify-content: space-between; width: 100%; }
 
-    .ps-cards, .pb-cards, .portal-app .pd-body {
-        grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+    /* Two fixed columns and a real max-width on each screen, per the design.
+       auto-fit/330px gave three or four columns on a wide monitor and turned
+       a family's two children into a row of narrow strips. */
+    .ps-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; max-width: 920px; }
+    .portal-app .ps-register { max-width: 920px; }
+
+    /* Billing is a fixed 360px "Balance due" column beside the months, so the
+       balance keeps its size no matter how many invoices are listed and the
+       months stack down the second column rather than wrapping under it. */
+    .pb-cards {
+        grid-template-columns: 360px minmax(0, 1fr);
+        gap: 24px;
+        max-width: 920px;
+        align-items: start;
     }
-    .portal-app .pd-body { display: grid; gap: 14px; align-items: start; }
+    .pb-cards > .pb-balance { grid-column: 1; }
+    .pb-cards > .pb-card:not(.pb-balance) { grid-column: 2; }
+
+    .portal-app .pd-body {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        max-width: 960px;
+        align-items: start;
+    }
+    .portal-app .pm-section { max-width: 640px; }
     /* The switcher is a phone affordance. With room for every child's card
        side by side there is nothing to switch between, so it goes away and
        every card shows — which is why psRender() always renders them all. */
     .ps-switcher { display: none; }
     .ps-register { max-width: 760px; }
 
-    #ptAccountBody { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; align-items: start; }
+    #ptAccountBody {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+        max-width: 960px;
+        align-items: start;
+    }
     #ptAccountBody .pa-card { margin: 0; }
-    .portal-signout { margin-left: 0; }
+    .portal-app .pt-subhead { max-width: 960px; }
 }
 
 /* Below the rail breakpoint the card grids stay one column, and Schedule

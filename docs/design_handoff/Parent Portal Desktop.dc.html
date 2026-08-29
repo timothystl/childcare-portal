@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:'Nunito',system-ui,sans-serif;background:#FAF7ED;}
+    a{color:#3A7B60;}
+    a:hover{color:#01294A;}
+  </style>
+</helmet>
+
+<sc-if value="{{ isSignIn }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;min-height:100vh;background:#FDFAF0;">
+  <div style="flex:1;background:#01294A;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px;position:relative;">
+    <img src="images/logo/myMDO_parent_wordmark_light.png" alt="myMDO" style="width:220px;margin-bottom:28px;">
+    <p style="color:rgba(255,255,255,.75);font-family:'Lora',Georgia,serif;font-size:22px;font-style:italic;text-align:center;max-width:380px;line-height:1.5;">Welcome. Receive. Grow. Go.</p>
+    <p style="position:absolute;bottom:32px;color:rgba(255,255,255,.4);font-size:13px;">Timothy Lutheran Church — Mother's Day Out</p>
+  </div>
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:40px;">
+    <div style="width:100%;max-width:400px;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(1,41,74,.10);padding:40px 36px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:26px;">
+        <img src="images/logo/icon-parent-icon.png" alt="" style="width:44px;height:44px;">
+        <p style="font-weight:800;color:#01294A;font-size:16px;margin:0;">Parent</p>
+        <p style="color:#5a6673;font-size:14px;margin:0;">Sign in to your account</p>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-weight:700;color:#01294A;font-size:13px;margin-bottom:6px;">Email Address</label>
+        <input type="email" placeholder="your@email.com" style="width:100%;padding:12px 14px;border:1.5px solid #d7dee5;border-radius:10px;font-size:15px;font-family:inherit;box-sizing:border-box;">
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-weight:700;color:#01294A;font-size:13px;margin-bottom:6px;">PIN</label>
+        <input type="text" placeholder="4-digit PIN" style="width:100%;padding:12px 14px;border:1.5px solid #d7dee5;border-radius:10px;font-size:15px;font-family:inherit;box-sizing:border-box;">
+      </div>
+      <button onClick="{{ enterApp }}" style="width:100%;margin-top:6px;padding:13px;font-size:16px;border-radius:10px;cursor:pointer;background:#01294A;color:#fff;border:none;font-weight:800;">Sign In</button>
+      <p style="margin-top:16px;font-size:13px;color:#6b7683;text-align:center;line-height:1.5;">Each parent has their own PIN. <a href="#">Forgot your PIN?</a></p>
+      <div style="margin-top:22px;padding-top:18px;border-top:1px solid #eef1f4;display:flex;flex-direction:column;gap:10px;text-align:center;font-size:14px;">
+        <a href="#">Register for care days</a>
+        <a href="#">View my schedule</a>
+      </div>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isApp }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;min-height:100vh;">
+
+  <!-- ══ SIDEBAR ══ -->
+  <nav style="width:236px;flex:none;background:#01294A;display:flex;flex-direction:column;padding:24px 14px;box-sizing:border-box;">
+    <img src="images/logo/myMDO_parent_wordmark_light.png" alt="myMDO" style="width:132px;margin:6px 0 30px 10px;">
+    <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="6">
+      <button onClick="{{ item.onClick }}" style="{{ item.style }}">
+        <span style="font-size:18px;">{{ item.icon }}</span>
+        <span style="{{ item.labelStyle }}">{{ item.label }}</span>
+        <sc-if value="{{ item.hasBadge }}" hint-placeholder-val="{{ false }}">
+          <span style="margin-left:auto;background:#E97D55;color:#fff;font-size:11px;font-weight:800;border-radius:999px;padding:2px 7px;">{{ item.badge }}</span>
+        </sc-if>
+      </button>
+    </sc-for>
+    <div style="flex:1;"></div>
+    <button onClick="{{ goSignIn }}" style="background:none;border:none;color:rgba(255,255,255,.55);font-family:inherit;font-size:13px;text-decoration:underline;cursor:pointer;padding:10px;text-align:left;">Sign out</button>
+  </nav>
+
+  <!-- ══ MAIN ══ -->
+  <main style="flex:1;background:#FAF7ED;overflow-y:auto;min-height:100vh;">
+    <div style="max-width:1120px;margin:0 auto;padding:36px 48px 60px;">
+
+      <!-- TODAY -->
+      <sc-if value="{{ tabToday }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:22px;">
+          <div>
+            <h1 style="font-family:'Lora',Georgia,serif;color:#01294A;font-size:28px;margin:0 0 4px;">Good afternoon, Sarah.</h1>
+            <p style="color:#78838f;font-size:14px;margin:0;">{{ todayDateLabel }}</p>
+          </div>
+          <button onClick="{{ noop }}" style="background:none;border:1.5px solid #d7dee5;border-radius:10px;padding:10px 18px;font-family:inherit;font-size:14px;font-weight:700;color:#01294A;cursor:pointer;">🖨️ Print this day</button>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:24px;background:#f2f5f7;border-radius:999px;padding:5px;width:fit-content;">
+          <sc-for list="{{ children }}" as="c" hint-placeholder-count="2">
+            <button onClick="{{ c.onClick }}" style="{{ c.pillStyle }}">{{ c.firstName }}</button>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 320px;gap:24px;">
+          <div>
+            <div style="background:#fff;border:1px solid #E8E0CC;border-radius:14px;padding:22px 24px;margin-bottom:20px;">
+              <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#78838f;margin-bottom:2px;">Today's photos</div>
+              <div style="font-size:12px;color:#96a0aa;margin-bottom:12px;">Saved for about a week — download any you'd like to keep.</div>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+                <sc-for list="{{ activeChild.photos }}" as="p" hint-placeholder-count="4">
+                  <div style="aspect-ratio:1;border-radius:10px;background:{{ p.bg }};display:flex;align-items:center;justify-content:center;font-size:22px;">📷</div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="background:#fff;border:1px solid #E8E0CC;border-radius:14px;padding:22px 24px;">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;">
+                <span style="font-family:'Lora',Georgia,serif;font-size:19px;font-weight:700;color:#01294A;">{{ activeChild.name }}</span>
+                <span style="font-size:13px;color:#78838f;">{{ activeChild.room }}</span>
+              </div>
+
+              <div style="{{ activeChild.safetyStyle }}">
+                <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6a5320;margin-bottom:8px;">On file for {{ activeChild.firstName }}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                  <sc-for list="{{ activeChild.allergies }}" as="a" hint-placeholder-count="2">
+                    <span style="{{ a.chipStyle }}">{{ a.label }}</span>
+                  </sc-for>
+                </div>
+                <div style="margin-top:8px;font-size:13px;color:#6a5320;line-height:1.45;">{{ activeChild.careNotes }}</div>
+              </div>
+
+              <ul style="list-style:none;margin:18px 0 0;padding:0;">
+                <sc-for list="{{ activeChild.timeline }}" as="ev" hint-placeholder-count="5">
+                  <li style="display:flex;align-items:flex-start;gap:12px;padding:12px 2px;border-bottom:1px solid #f0f3f6;">
+                    <span style="font-size:18px;width:24px;text-align:center;flex:none;">{{ ev.icon }}</span>
+                    <span style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex:1;">
+                      <span style="color:#01294A;font-size:15px;font-weight:600;">{{ ev.label }}</span>
+                      <span style="color:#78838f;font-size:13px;flex:none;">{{ ev.time }}</span>
+                    </span>
+                  </li>
+                </sc-for>
+              </ul>
+            </div>
+          </div>
+
+          <div>
+            <div style="background:#EAF5EF;border-radius:14px;padding:18px 20px;margin-bottom:18px;">
+              <div style="font-weight:800;color:#1a5c3e;font-size:14px;margin-bottom:4px;">Announcement</div>
+              <div style="color:#40525f;font-size:13px;line-height:1.55;">Fall picture day is Sept 9th — order forms went home in backpacks today.</div>
+            </div>
+            <div style="background:#fff;border:1px solid #E8E0CC;border-radius:14px;padding:18px 20px;">
+              <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#78838f;margin-bottom:12px;">This week</div>
+              <div style="display:flex;justify-content:space-between;font-size:14px;color:#01294A;padding:7px 0;border-bottom:1px solid #f4f6f8;"><span>Days booked</span><strong>4</strong></div>
+              <div style="display:flex;justify-content:space-between;font-size:14px;color:#01294A;padding:7px 0;border-bottom:1px solid #f4f6f8;"><span>Unread messages</span><strong>1</strong></div>
+              <div style="display:flex;justify-content:space-between;font-size:14px;color:#01294A;padding:7px 0;"><span>Balance due</span><strong>$0.00</strong></div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- RECAP -->
+      <sc-if value="{{ tabDaily }}" hint-placeholder-val="{{ false }}">
+        <h1 style="font-family:'Lora',Georgia,serif;color:#01294A;font-size:28px;margin:0 0 22px;">Recap</h1>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;max-width:520px;">
+          <button style="width:38px;height:38px;border-radius:999px;border:1.5px solid #d7dee5;background:#fff;color:#01294A;font-size:18px;cursor:pointer;">‹</button>
+          <div style="text-align:center;">
+            <div style="font-family:'Lora',Georgia,serif;font-size:17px;color:#01294A;">Tuesday</div>
+            <div style="font-size:13px;color:#78838f;">August 25, 2026</div>
+          </div>
+          <button style="width:38px;height:38px;border-radius:999px;border:1.5px solid #d7dee5;background:#fff;color:#01294A;font-size:18px;cursor:pointer;">›</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:20px;">
+          <sc-for list="{{ recapDays }}" as="d" hint-placeholder-count="7">
+            <div style="{{ d.style }}">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;">{{ d.dow }}</div>
+              <div style="font-size:14px;font-weight:700;">{{ d.date }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="max-width:640px;background:#fff;border:1px solid #E8E0CC;border-radius:14px;padding:22px 24px;">
+          <ul style="list-style:none;margin:0;padding:0;">
+            <sc-for list="{{ recapTimeline }}" as="ev" hint-placeholder-count="5">
+              <li style="display:flex;align-items:flex-start;gap:12px;padding:12px 2px;border-bottom:1px solid #f0f3f6;">
+                <span style="font-size:18px;width:24px;text-align:center;flex:none;">{{ ev.icon }}</span>
+                <span style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex:1;">
+                  <span style="color:#01294A;font-size:15px;font-weight:600;">{{ ev.label }}</span>
+                  <span style="color:#78838f;font-size:13px;flex:none;">{{ ev.time }}</span>
+                </span>
+              </li>
+            </sc-for>
+          </ul>
+        </div>
+      </sc-if>
+
+      <!-- SCHEDULE -->
+      <sc-if value="{{ tabSchedule }}" hint-placeholder-val="{{ false }}">
+        <h1 style="font-family:'Lora',Georgia,serif;color:#01294A;font-size:28px;margin:0 0 22px;">Schedule</h1>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:920px;">
+          <sc-for list="{{ scheduleChildren }}" as="sc" hint-placeholder-count="2">
+            <section style="background:#fff;border:1px solid #E8E0CC;border-radius:14px;overflow:hidden;">
+              <h2 style="background:#FAF7ED;font-family:'Lora',Georgia,serif;font-size:16px;color:#01294A;padding:12px 18px;border-bottom:1px solid #E8E0CC;margin:0;">{{ sc.name }} · <span style="font-size:13px;font-weight:600;color:#7A6E5A;">{{ sc.room }}</span></h2>
+              <div style="padding:6px 18px 18px;">
+                <sc-for list="{{ sc.months }}" as="m" hint-placeholder-count="1">
+                  <div style="padding:12px 0;border-bottom:1px solid #F5F0E4;">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:9px;">
+                      <span style="font-family:'Lora',Georgia,serif;font-size:16px;color:#01294A;">{{ m.label }}</span>
+                      <span style="display:flex;align-items:baseline;gap:8px;">
+                        <span style="font-size:16px;font-weight:800;color:#01294A;">{{ m.total }}</span>
+                        <span style="{{ m.statusStyle }}">{{ m.status }}</span>
+                      </span>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:7px;">
+                      <sc-for list="{{ m.days }}" as="d" hint-placeholder-count="5">
+                        <div style="{{ d.style }}">
+                          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#7A6E5A;">{{ d.dow }}</div>
+                          <div style="font-size:13px;font-weight:700;color:#01294A;">{{ d.date }}</div>
+                          <div style="font-size:10px;font-weight:700;color:#7A6E5A;">{{ d.kind }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </section>
+          </sc-for>
+        </div>
+        <a href="#" style="display:block;text-align:center;margin:20px 0 8px;padding:13px;border:1.5px solid #01294A;border-radius:8px;color:#01294A;font-weight:800;text-decoration:none;max-width:920px;">Register for additional days →</a>
+      </sc-if>
+
+      <!-- BILLING -->
+      <sc-if value="{{ tabBilling }}" hint-placeholder-val="{{ false }}">
+        <h1 style="font-family:'Lora',Georgia,serif;color:#01294A;font-size:28px;margin:0 0 22px;">Billing</h1>
+        <div style="display:grid;grid-template-columns:360px 1fr;gap:24px;max-width:920px;">
+          <div style="background:#fff;border:1px solid #E8E0CC;border-radius:14px;padding:22px 24px;">
+            <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#78838f;margin-bottom:8px;">Balance due</div>
+            <p style="font-family:'Lora',Georgia,serif;font-size:34px;color:#01294A;margin:0 0 14px;">$0.00</p>
+            <button disabled="" style="width:100%;min-height:44px;background:#FAF7ED;border:1px dashed #E8E0CC;border-radius:10px;color:#7A6E5A;font-family:inherit;font-size:14px;font-weight:700;cursor:not-allowed;">Pay online (coming soon)</button>
+            <p style="margin:10px 0 0;font-size:12px;line-height:1.5;color:#7A6E5A;">Nothing owed right now. Your next statement will appear here as soon as the office sends it.</p>
+          </div>
+          <div style="background:#fff;border:1px solid #E8E0CC;border-radius:14px;padding:22px 24px;">
+            <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#78838f;margin-bottom:14px;">August 2026</div>
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+              <sc-for list="{{ billingLines }}" as="l" hint-placeholder-count="4">
+                <tr style="border-bottom:1px solid #F5F0E4;">
+                  <td style="padding:9px 0;color:#01294A;">{{ l.desc }}</td>
+                  <td style="padding:9px 0;text-align:right;color:#01294A;font-weight:700;">{{ l.amount }}</td>
+                </tr>
+              </sc-for>
+            </table>
+            <div style="display:flex;justify-content:space-between;padding-top:12px;margin-top:6px;border-top:2px solid #E8E0CC;font-size:16px;">
+              <strong style="color:#01294A;">Total</strong>
+              <strong style="color:#01294A;">$920.00</strong>
+            </div>
+            <span style="display:inline-block;margin-top:10px;background:#EAF5EF;color:#1a5c3e;font-size:11px;font-weight:800;letter-spacing:.04em;border-radius:999px;padding:3px 9px;">PAID Aug 1</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- MESSAGES -->
+      <sc-if value="{{ tabMessages }}" hint-placeholder-val="{{ false }}">
+        <h1 style="font-family:'Lora',Georgia,serif;color:#01294A;font-size:28px;margin:0 0 22px;">Messages</h1>
+        <div style="max-width:640px;background:#fff;border:1px solid #E8E0CC;border-radius:14px;padding:22px 24px;display:flex;flex-direction:column;">
+          <div style="display:grid;gap:12px;margin-bottom:16px;">
+            <sc-for list="{{ messages }}" as="m" hint-placeholder-count="4">
+              <div style="{{ m.bubbleStyle }}">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:3px;">
+                  <span style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#78838f;">{{ m.who }}</span>
+                  <span style="font-size:11px;color:#96a0aa;">{{ m.when }}</span>
+                </div>
+                <div style="color:#01294A;font-size:14px;line-height:1.5;">{{ m.body }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end;">
+            <textarea rows="2" placeholder="Message your teacher or the office…" style="flex:1;box-sizing:border-box;font-family:inherit;font-size:14px;padding:10px 12px;border:1.5px solid #d7dee5;border-radius:10px;resize:vertical;"></textarea>
+            <button style="min-height:44px;padding:0 18px;border:none;border-radius:10px;background:#01294A;color:#fff;font-family:inherit;font-weight:800;cursor:pointer;flex:none;">Send</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ACCOUNT -->
+      <sc-if value="{{ tabAccount }}" hint-placeholder-val="{{ false }}">
+        <h1 style="font-family:'Lora',Georgia,serif;color:#01294A;font-size:28px;margin:0 0 4px;">Sarah Carter</h1>
+        <p style="color:#78838f;font-size:14px;margin:0 0 24px;">sarah.carter@example.com</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:960px;">
+          <section style="background:#fff;border:1px solid #E8E0CC;border-radius:14px;overflow:hidden;">
+            <h2 style="background:#FAF7ED;font-family:'Lora',Georgia,serif;font-size:16px;color:#01294A;padding:12px 18px;border-bottom:1px solid #E8E0CC;margin:0;">Children</h2>
+            <div style="padding:4px 18px 8px;">
+              <sc-for list="{{ children }}" as="c" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #F5F0E4;">
+                  <div style="width:42px;height:42px;flex:none;border-radius:50%;background:#C9E6DC;color:#01294A;font-family:'Lora',Georgia,serif;font-size:17px;display:flex;align-items:center;justify-content:center;">{{ c.initial }}</div>
+                  <div style="flex:1;">
+                    <div style="font-size:15px;font-weight:700;color:#01294A;">{{ c.name }}</div>
+                    <div style="font-size:12px;font-weight:600;color:#7A6E5A;">{{ c.room }}</div>
+                  </div>
+                  <span style="{{ c.allergyBadgeStyle }}">{{ c.allergyBadgeLabel }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section style="background:#fff;border:1px solid #E8E0CC;border-radius:14px;overflow:hidden;">
+            <h2 style="background:#FAF7ED;font-family:'Lora',Georgia,serif;font-size:16px;color:#01294A;padding:12px 18px;border-bottom:1px solid #E8E0CC;margin:0;">Contact info</h2>
+            <div style="padding:4px 18px 14px;">
+              <div style="padding:12px 0;border-bottom:1px solid #F5F0E4;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A6E5A;">Phone</div>
+                <div style="font-size:15px;font-weight:700;color:#01294A;">(314) 555-0148</div>
+              </div>
+              <div style="padding:12px 0;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A6E5A;">Emergency contact</div>
+                <div style="font-size:15px;font-weight:700;color:#01294A;">James Carter — (314) 555-0199</div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <h2 style="font-family:'Lora',Georgia,serif;font-size:18px;color:#01294A;margin:28px 0 12px;">Documents</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:960px;">
+          <sc-for list="{{ documents }}" as="doc" hint-placeholder-count="3">
+            <div style="background:#fff;border:1px solid #E8E0CC;border-radius:14px;padding:16px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+              <div>
+                <div style="font-size:14px;font-weight:800;color:#01294A;">{{ doc.title }}</div>
+                <div style="font-size:12px;color:#7A6E5A;margin-top:2px;">{{ doc.sub }}</div>
+              </div>
+              <button style="flex:none;min-height:38px;background:#01294A;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;">View</button>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+    </div>
+  </main>
+</div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { view: 'app', tab: 'today', activeChildId: 'emma' };
+
+  navMeta = [
+    { key: 'today', icon: '🏠', label: 'Today' },
+    { key: 'daily', icon: '📔', label: 'Recap' },
+    { key: 'schedule', icon: '🗓', label: 'Schedule' },
+    { key: 'billing', icon: '💳', label: 'Billing', badge: 0 },
+    { key: 'messages', icon: '💬', label: 'Messages', badge: 1 },
+    { key: 'account', icon: '👤', label: 'Account' },
+  ];
+
+  childData = {
+    emma: {
+      name: 'Emma Carter', firstName: 'Emma', initial: 'E', room: 'Preschool',
+      careNotes: 'Needs inhaler before outside play in high pollen season.',
+      allergies: [
+        { label: 'Peanuts', severity: 'severe' },
+        { label: 'Dairy', severity: 'sensitivity' },
+      ],
+      timeline: [
+        { icon: '👋', label: 'Checked in', time: '7:42 AM' },
+        { icon: '🍎', label: 'Meal — ate most', time: '9:05 AM' },
+        { icon: '🧷', label: 'Diaper — dry', time: '10:15 AM' },
+        { icon: '😴', label: 'Fell asleep', time: '12:40 PM' },
+        { icon: '🌤️', label: 'Woke up', time: '2:05 PM' },
+        { icon: '📝', label: 'Emma had a great time building blocks today!', time: '3:00 PM' },
+      ],
+      photos: [{ bg: '#FFF8E1' }, { bg: '#EAF5EF' }, { bg: '#FDEEE8' }, { bg: '#C9E6DC' }],
+    },
+    owen: {
+      name: 'Owen Carter', firstName: 'Owen', initial: 'O', room: 'Toddlers',
+      careNotes: '',
+      allergies: [],
+      timeline: [
+        { icon: '👋', label: 'Checked in', time: '7:44 AM' },
+        { icon: '🍼', label: 'Bottle — 6 oz', time: '9:30 AM' },
+        { icon: '😴', label: 'Fell asleep', time: '1:10 PM' },
+      ],
+      photos: [{ bg: '#FFF8E1' }, { bg: '#C9E6DC' }],
+    },
+  };
+
+  chipStyle(sev) {
+    if (sev === 'severe') return 'border-radius:999px;padding:3px 10px;font-size:12px;font-weight:800;background:#E97D55;color:#fff;border:1.5px solid #E97D55;';
+    if (sev === 'sensitivity') return 'border-radius:999px;padding:3px 10px;font-size:12px;font-weight:800;background:#fff;color:#7a2a18;border:1.5px solid #f2b89a;';
+    return 'border-radius:999px;padding:3px 10px;font-size:12px;font-weight:800;background:#fff;color:#5a6673;border:1.5px solid #d7dee5;';
+  }
+
+  setTab(key) { this.setState({ tab: key }); }
+
+  renderVals() {
+    const s = this.state;
+    const activeRaw = this.childData[s.activeChildId];
+    const activeChild = {
+      ...activeRaw,
+      safetyStyle: (activeRaw.allergies.length
+        ? 'background:#FFF8E1;border-radius:10px;padding:14px 16px;margin-bottom:16px;'
+        : 'background:#FAF7ED;border-radius:10px;padding:14px 16px;margin-bottom:16px;'),
+      allergies: activeRaw.allergies.map(a => ({ ...a, chipStyle: this.chipStyle(a.severity) })),
+    };
+
+    const navItems = this.navMeta.map(n => {
+      const active = n.key === s.tab;
+      return {
+        ...n,
+        hasBadge: !!n.badge,
+        onClick: () => this.setTab(n.key),
+        style: `display:flex;align-items:center;gap:12px;width:100%;padding:11px 14px;margin-bottom:4px;border-radius:10px;border:none;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;text-align:left;` +
+          (active ? 'background:#F5B731;color:#01294A;' : 'background:none;color:rgba(255,255,255,.72);'),
+        labelStyle: 'flex:1;',
+      };
+    });
+
+    const children = Object.entries(this.childData).map(([id, c]) => ({
+      id, name: c.name, firstName: c.firstName, room: c.room, initial: c.initial,
+      onClick: () => this.setState({ activeChildId: id }),
+      pillStyle: 'border:none;border-radius:999px;padding:9px 20px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;' +
+        (id === s.activeChildId ? 'background:#fff;color:#01294A;box-shadow:0 1px 4px rgba(1,41,74,.12);' : 'background:none;color:#5a6673;'),
+      allergyBadgeStyle: c.allergies.length
+        ? 'flex:none;font-size:11px;font-weight:800;background:#E97D55;color:#fff;border:1.5px solid #E97D55;border-radius:999px;padding:3px 9px;'
+        : 'flex:none;font-size:11px;font-weight:800;background:#fff;color:#7a2a18;border:1.5px solid #f2b89a;border-radius:999px;padding:3px 9px;',
+      allergyBadgeLabel: c.allergies.length ? 'ALLERGIES' : 'NONE ON FILE',
+    }));
+
+    const scheduleChildren = [
+      { name: 'Emma', room: 'Preschool', months: [{ label: 'August 2026', total: '$920.00', status: 'PAID Aug 1', statusStyle: 'font-size:11px;font-weight:800;color:#1a5c3e;background:#EAF5EF;border-radius:999px;padding:2px 8px;',
+        days: [
+          { dow: 'Mon', date: 'Aug 4', kind: 'Full', style: 'min-width:52px;display:flex;flex-direction:column;align-items:center;gap:1px;background:#fff;border:1px solid #E8E0CC;border-radius:8px;padding:6px 8px;' },
+          { dow: 'Tue', date: 'Aug 5', kind: 'Full', style: 'min-width:52px;display:flex;flex-direction:column;align-items:center;gap:1px;background:#fff;border:1px solid #E8E0CC;border-radius:8px;padding:6px 8px;' },
+          { dow: 'Wed', date: 'Aug 6', kind: '½', style: 'min-width:52px;display:flex;flex-direction:column;align-items:center;gap:1px;background:#FFF8E1;border:1px solid #FDE598;border-radius:8px;padding:6px 8px;' },
+          { dow: 'Thu', date: 'Aug 7', kind: 'Full', style: 'min-width:52px;display:flex;flex-direction:column;align-items:center;gap:1px;background:#fff;border:1px solid #E8E0CC;border-radius:8px;padding:6px 8px;' },
+          { dow: 'Fri', date: 'Aug 8', kind: 'Closed', style: 'min-width:52px;display:flex;flex-direction:column;align-items:center;gap:1px;background:#F5F0E4;border:1px solid #E8E0CC;border-radius:8px;padding:6px 8px;opacity:.65;text-decoration:line-through;' },
+        ] }] },
+      { name: 'Owen', room: 'Toddlers', months: [{ label: 'August 2026', total: '$680.00', status: 'estimate', statusStyle: 'font-size:11px;font-weight:700;color:#7A6E5A;',
+        days: [
+          { dow: 'Mon', date: 'Aug 4', kind: 'Full', style: 'min-width:52px;display:flex;flex-direction:column;align-items:center;gap:1px;background:#fff;border:1px solid #E8E0CC;border-radius:8px;padding:6px 8px;' },
+          { dow: 'Wed', date: 'Aug 6', kind: 'Full', style: 'min-width:52px;display:flex;flex-direction:column;align-items:center;gap:1px;background:#fff;border:1px solid #E8E0CC;border-radius:8px;padding:6px 8px;' },
+          { dow: 'Fri', date: 'Aug 8', kind: 'Closed', style: 'min-width:52px;display:flex;flex-direction:column;align-items:center;gap:1px;background:#F5F0E4;border:1px solid #E8E0CC;border-radius:8px;padding:6px 8px;opacity:.65;text-decoration:line-through;' },
+        ] }] },
+    ];
+
+    const recapDays = ['Sat 22','Sun 23','Mon 24','Tue 25','Wed 26','Thu 27','Fri 28'].map((d, i) => {
+      const [dow, date] = d.split(' ');
+      const active = i === 3;
+      return { dow, date, style: 'min-width:64px;text-align:center;padding:9px 6px;border-radius:10px;cursor:pointer;' + (active ? 'background:#01294A;color:#fff;' : 'background:#fff;border:1.5px solid #eef1f4;color:#5a6673;') };
+    });
+
+    const recapTimeline = [
+      { icon: '👋', label: 'Checked in', time: '7:38 AM' },
+      { icon: '🍎', label: 'Meal — ate it all', time: '9:00 AM' },
+      { icon: '😴', label: 'Fell asleep', time: '12:35 PM' },
+      { icon: '🌤️', label: 'Woke up', time: '2:00 PM' },
+      { icon: '🏡', label: 'Checked out', time: '4:52 PM' },
+    ];
+
+    const billingLines = [
+      { desc: 'Emma Carter — Preschool (16 days)', amount: '$920.00' },
+      { desc: 'Owen Carter — Toddlers (12 days)', amount: '$0.00' },
+    ];
+
+    const messages = [
+      { who: 'Ms. Kiara', when: 'Mon 2:14 PM', body: "Emma did wonderfully on the new alphabet cards today!", bubbleStyle: 'padding:10px 13px;border-radius:14px;max-width:78%;background:#f2f5f7;border-bottom-left-radius:4px;justify-self:start;' },
+      { who: 'You', when: 'Mon 5:02 PM', body: 'Thank you so much for letting me know — she loves those.', bubbleStyle: 'padding:10px 13px;border-radius:14px;max-width:78%;background:#EAF5EF;border-bottom-right-radius:4px;justify-self:end;' },
+      { who: 'The Office', when: 'Tue 8:10 AM', body: 'Reminder: picture day order forms are due Friday.', bubbleStyle: 'padding:10px 13px;border-radius:14px;max-width:78%;background:#f2f5f7;border-bottom-left-radius:4px;justify-self:start;' },
+    ];
+
+    const documents = [
+      { title: 'Immunization record', sub: 'On file · updated Jan 2026' },
+      { title: 'Enrollment agreement', sub: 'Signed Aug 2025' },
+      { title: 'Incident report — Aug 12', sub: 'Reviewed by the director' },
+    ];
+
+    return {
+      isSignIn: s.view === 'signin', isApp: s.view === 'app',
+      enterApp: () => this.setState({ view: 'app' }),
+      goSignIn: () => this.setState({ view: 'signin' }),
+      noop: () => {},
+      navItems, children, activeChild,
+      todayDateLabel: 'Tuesday, August 25, 2026',
+      tabToday: s.tab === 'today', tabDaily: s.tab === 'daily', tabSchedule: s.tab === 'schedule',
+      tabBilling: s.tab === 'billing', tabMessages: s.tab === 'messages', tabAccount: s.tab === 'account',
+      scheduleChildren, recapDays, recapTimeline, billingLines, messages, documents,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

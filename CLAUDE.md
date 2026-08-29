@@ -4286,7 +4286,7 @@ matters.
   by side and hides the switcher entirely. Both screens are satisfied by one
   render rather than one of them being a special case in the JS.
 
-### ⚠️ `Parent Portal Desktop.dc.html` was NOT read
+### ~~⚠️ `Parent Portal Desktop.dc.html` was NOT read~~ — RESOLVED 2026-08-29
 
 The director pointed at the Claude Design project
 (`05e91ea7-93c5-43f5-9875-8f9b7d69ad93`) mid-session. `DesignSync` needs a
@@ -4297,6 +4297,14 @@ own Staff-tab entry says exactly why that is not good enough ("Read the
 time") — the source carries the literal hex values and the data-shaping the
 screens only imply. Seed that file into the repo and re-check this work against
 it before calling the redesign matched.
+
+**Both files are now in `docs/design_handoff/`** (`Parent Portal Desktop.dc.html`
+and `Parent Portal Mobile.dc.html`, arriving via a Claude Design handoff bundle)
+and the redesign has been re-checked against them — see the section below for
+what actually drifted. **The screenshot-built pass got the structure right and
+the literals wrong**, which is exactly the failure mode the Staff-tab note
+predicted: nothing was in the wrong place, and eight separate values were the
+wrong color, size or shape.
 
 ### Verification
 
@@ -4309,6 +4317,88 @@ Rendered in a real browser at 390px and 1280px against a harness carrying the
 exact markup each renderer emits — which is what caught the 560px shell cap,
 the sidebar landing on the right, and the print button eating the header row.
 None of the three was visible in the diff.
+
+---
+
+## Parent app redesign, reconciled against the real design source (2026-08-29)
+
+The two `.dc.html` files the section above says were missing are now committed
+to `docs/design_handoff/`, and every screen was re-checked against their
+literal values rather than against screenshots. **No screen was in the wrong
+shape** — the structure the previous pass built from screenshots was right.
+What was wrong was values, and a screenshot cannot carry a value.
+
+### What actually drifted, and why each one mattered
+
+| Was | Is | Why it read wrong |
+|---|---|---|
+| Child switcher track `--warm-gray` (#F5F0E4) | `#f2f5f7` | Both sources carry the cool literal. The warm token is within a few percent of the cream page behind it, so the segmented control had no visible track — it read as two loose buttons. |
+| Switcher's raised pill had a `--border` ring | shadow only | The design raises the active child with a shadow alone; the ring flattened it back into the track. |
+| `.pm-theirs` a borderless row with a divider under it | a real `#f2f5f7` bubble, squared bottom-left, 78–82% max-width | **The biggest one.** Messages had one visible side, so a teacher's note and the parent's reply read as a list of notices rather than a conversation. |
+| Composer `border-radius: 999px` | `10px` | The composer is two rows tall; a pill radius on a two-row box bows its sides. |
+| Photo strip `auto-fill, minmax(96px, 1fr)` | `repeat(4, 1fr)` | Both sources say four explicitly. Auto-fill gave three on a phone and up to six on a wide monitor, so the strip changed shape with the window. |
+| Schedule days a stretch-to-fit grid (`minmax(74px,1fr)`) | wrapping flex, `min-width: 48/52px` | The grid stretched a four-day month across the whole card, making a light month look full. |
+| Half-day chip border `--sun` (#F5B731) | `#FDE598` | The saturated CTA yellow ringed the chip hard enough to outrank the closed-day strikethrough next to it. |
+| Recap day strip border 1px `--border` | 1.5px `#eef1f4` | That strip sits on the cream page, not inside a card; the warm tan border vanished into it. |
+| Today's side column `1fr / 1.55fr` | fixed `320px` | Past ~1400px the side panel grew wider than the day card it annotates. |
+| `.ps-cards`/`#ptAccountBody`/`.pd-body` `auto-fit, minmax(330px,1fr)` | `repeat(2, …)` + the design's own max-widths (920/960px) | On a wide monitor auto-fit gave three or four columns, turning a family's two children into a row of narrow strips. |
+| Rail: 228px, 118px mark, 15px rows, `#E7EEF4` labels | 236px, 132px, 14px, `rgba(255,255,255,.72)` | A solid near-white on all six labels competed with the gold active pill, which is the only thing in the rail meant to be bright. |
+
+### Nav icons are the illustrated PNG set now, in both layouts
+
+`images/icons/{today,recap,schedule,billing,messages,account}.png` (from the
+handoff bundle) replace the emoji in `PT_TABS`. ⚠️ **The desktop source uses
+emoji for the rail** — putting the PNGs there too is a deliberate deviation the
+director asked for, not a match. Rail glyphs render at 22px, the bottom bar at
+26px, per the mobile source.
+
+⚠️ **`.tabbar-icon` is rendered by three different files.** `staff-nav.js` and
+`admin-portal.js` both emit the same span with an emoji inside it, so **every
+image rule is scoped to `.portal-app`**. Widening one puts a broken image in
+two apps this redesign never touched.
+
+### Messages still has no per-child switcher — and the sources disagree here
+
+The **mobile** source gives Messages an Emma/Owen switcher with a separate
+thread per child. The **desktop** source does not, and the desktop source
+agrees with the schema: a thread is per **family** (one row per family in
+`message_threads`). Pills that filter nothing, or that show the same
+conversation twice, are worse than no pills. **Splitting threads per child is
+real schema work, not a CSS reconcile** — decided with the director rather than
+inferred, and left for its own session.
+
+### Kept against the sources, deliberately
+
+- **"This week" stays on the phone.** The mobile source's Today screen has no
+  such card. It is real data a parent glances at, and the same
+  "match the visual language while keeping the data" call this file already
+  made for Enrollment & Capacity's FTE table.
+- ⚠️ **Sign out stays at the foot of Account, not in the rail**, even though
+  the desktop source draws it in the rail. There is exactly one such button
+  (`#portalSignOutBtn`, inside the Account section), and the mobile source puts
+  it exactly where it already is. **The first attempt styled it for the rail
+  from inside the ≥900px block and painted white-on-cream text at the bottom of
+  the Account tab** — invisible, and invisible *only* above 900px. Caught in
+  the browser, not in the diff. A rail copy would mean two buttons and two
+  handlers to keep in step, which is what the one-nav-element rule exists to
+  avoid.
+
+### Verification
+
+`npm test` — 211/211, including the CSP guards: the two new `.dc.html` files
+carry `<script type="text/x-dc">` blocks, which the hash guard correctly
+excludes as non-executable, so no CSP hash or `_headers` change was needed.
+
+`npm run build` — `dist/` rebuilt and `dist/portal.min.js` grepped for
+`tabbar-img` and `images/icons/today.png`. **CSS is not bundled**, so the
+bundle check covers only the nav change; the CSS is verified below instead.
+
+Rendered in Chromium at 390px and 1280px across all five screens against a
+harness carrying each renderer's exact markup — zero console errors, zero
+horizontal overflow. ⚠️ **`.portal-body.portal-app-open` sets `overflow:
+hidden` and `.app-route` is the only scroller**, so a `fullPage: true`
+screenshot silently clips to the viewport and everything below the fold looks
+missing. Use a tall viewport, not `fullPage`, when shooting this app.
 
 ## Finance summary API (for the church ChMS finance integration)
 
