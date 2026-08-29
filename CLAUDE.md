@@ -3901,6 +3901,57 @@ processed, which `verify` has no way to know in advance. The fix has to
 live in `merge-to-main`, where the real merged tree exists — which is
 exactly where it now does.
 
+### With the button finally reachable, the first real click-through found a genuine Stax API gap: a stale `is_voidable` flag
+
+Once the workflow fix above landed and the director could actually reach
+the Refund link, her first real click on the Stax sandbox test payment
+failed with a bare "Payment processor declined the request." — the
+function's own generic fallback string. Function logs (queried directly
+against the deployed function, not guessed at) showed the real shape:
+`GET /transaction/{id}` reported `is_voidable: true`, so
+`admin-refund-stax-payment` correctly attempted a void — but the void call
+came back HTTP 400 with `child_transactions: [{type: "void", success:
+false, error_description: "gateway response: Batch Closed"}]`. The
+original charge was ~6 hours old; Stax's own daily settlement batch had
+closed in the meantime, and the gateway (BlockChyp sandbox) rejected the
+void even though the transaction object's own `is_voidable` field still
+said `true`.
+
+Two real bugs, both fixed the same session:
+
+- **The error-parsing only checked a bare `{error}`/`{errors}` shape.** A
+  rejected void/refund actually comes back as the **full transaction
+  object** (200-shaped, not a simple error body), with the real reason
+  nested in the most recent `child_transactions[]` entry's
+  `error_description`/`message`. `staxErrorMessage()` now checks that
+  nested shape too, found by reading the actual logged response rather
+  than guessing at Stax's docs a second time.
+- **`is_voidable` can be stale relative to the gateway's real batch-cutoff
+  state**, confirmed live. Rather than trust the flag as the only signal,
+  a void failure now retries once as a refund before giving up — refund is
+  always the correct action once a transaction has actually settled, so
+  this fallback covers exactly the race the flag can lose. The admin never
+  needs to know or care which path Stax actually took; the response's
+  `kind` field is informational only.
+
+⚠️ **No fixed refund window.** Refunding stays available indefinitely —
+only *which* mechanism Stax uses internally (void before the daily batch
+closes, real refund after) has a cutoff, and the fallback above means the
+admin-facing button doesn't need to expose that distinction at all.
+
+Temporary diagnostic `console.log` calls added earlier in this same
+session (to capture the real failure shape before it was known) are still
+in the deployed function as of this fix — left in deliberately rather than
+stripped immediately, since they cost nothing at rest and the next real
+Stax refund attempt (this one, or a genuine future one) will confirm the
+fix from the same log stream that diagnosed the original bug.
+
+`npm test` — 211/211 (existing refund guards all still pass against the
+retry-as-refund fallback; no new guard added since the fallback logic
+isn't something a static source-string check can meaningfully verify —
+this fix is behavioral and was validated against real Stax API responses,
+documented above, not by pattern-matching the diff).
+
 ---
 
 ## Ledger's "Total to bill" was a net figure with nothing showing its parts — broken into a 4-box strip (2026-08-28)
