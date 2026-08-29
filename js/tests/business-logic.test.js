@@ -2095,6 +2095,59 @@ describe('non-parent sessions are sent to their own app', () => {
     });
 });
 
+describe('parent upload of child documents — write-only, own-child-only', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const migration = read('supabase/migrations/20260829143213_parent_upload_child_documents.sql');
+    const supabaseJs = read('js/supabase.js');
+    const portalJs = read('js/portal/portal-documents.js');
+    const adminFamiliesJs = read('js/admin/admin-families.js');
+
+    test('the storage policy grants INSERT only — no parent SELECT/UPDATE/DELETE on the bucket', () => {
+        expect(migration.includes('FOR INSERT TO authenticated')).toBe(true);
+        expect(/FOR (ALL|SELECT|UPDATE|DELETE) TO authenticated/.test(migration)).toBe(false);
+    });
+
+    test('the policy is scoped to the child\'s own folder via parent_owns_student(), never a bare bucket check', () => {
+        const checkAt = migration.indexOf('WITH CHECK');
+        expect(checkAt).toBeGreaterThan(-1);
+        const checkBlock = migration.slice(checkAt);
+        expect(checkBlock.includes("bucket_id = 'child-documents'")).toBe(true);
+        expect(checkBlock.includes('parent_owns_student(split_part(storage.objects.name')).toBe(true);
+        expect(checkBlock.includes("~ '^[0-9a-fA-F]{8}-")).toBe(true);
+    });
+
+    test('uploadChildDocumentAsParent() tags the filename so the admin list can tell it apart from an office upload', () => {
+        const start = supabaseJs.indexOf('async function uploadChildDocumentAsParent');
+        expect(start).toBeGreaterThan(-1);
+        const fnBody = supabaseJs.slice(start, supabaseJs.indexOf('\n}', start));
+        expect(fnBody.includes('${studentId}/${Date.now()}-parent-${base}.${ext}')).toBe(true);
+        expect(fnBody.includes("from('child-documents')")).toBe(true);
+    });
+
+    test('the admin Family Directory documents list badges a parent-submitted file', () => {
+        expect(adminFamiliesJs.includes('function _fmDocIsFromParent(name)')).toBe(true);
+        expect(adminFamiliesJs.includes('/^parent-/')).toBe(true);
+        expect(adminFamiliesJs.includes('From parent')).toBe(true);
+    });
+
+    test('the portal upload card is per-child and never renders a list of what was already sent', () => {
+        expect(portalJs.includes('async function pdUploadDocument(input)')).toBe(true);
+        expect(portalJs.includes('uploadChildDocumentAsParent(studentId, file)')).toBe(true);
+        // Write-only: the section builder must never call a list/fetch of
+        // existing documents back for the parent to browse.
+        const sectionStart = portalJs.indexOf('function pdImmunizationSection()');
+        const sectionEnd = portalJs.indexOf('\n}', portalJs.indexOf('pdUploadDocument', sectionStart));
+        const sectionBody = portalJs.slice(sectionStart, sectionEnd);
+        expect(sectionBody.includes('listChildDocuments')).toBe(false);
+    });
+
+    test('no inline event-handler attribute was used for the new upload inputs (CSP script-src has no unsafe-inline)', () => {
+        expect(portalJs.includes('addEventListener')).toBe(true);
+        expect(/\son(click|change)=["']/.test(portalJs)).toBe(false);
+    });
+});
+
 // ---- Summary ----
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;

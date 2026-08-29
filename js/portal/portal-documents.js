@@ -72,6 +72,10 @@ function pdRender() {
         b.onclick = () => window.open(
             `incident-print.html?id=${encodeURIComponent(b.dataset.print)}`, '_blank', 'noopener');
     });
+
+    body.querySelectorAll('.pd-upload-input').forEach(input => {
+        input.addEventListener('change', () => pdUploadDocument(input));
+    });
 }
 
 function pdIncidentSection() {
@@ -125,16 +129,64 @@ function pdFormsSection() {
     return pdCard('Policies and forms', '📋', rows);
 }
 
-// ⚠️ No immunization table exists in this app. Rather than draw an empty
-// shelf that looks like a bug, the card says where the record actually lives
-// today. When a table lands, this becomes a list and nothing else changes.
+// ⚠️ No immunization table exists in this app, and this card doesn't list
+// anything back — uploadChildDocumentAsParent() is write-only by design
+// (see parent_upload_child_documents.sql), the same way handing a paper
+// copy across the counter isn't something you can browse afterward. The
+// office reviews what actually landed in the child-documents bucket; this
+// card only confirms that a file was handed in, one child at a time.
 function pdImmunizationSection() {
-    return pdCard('Immunization records', '💉', `
-        <p class="pd-none">Your ${pdChildWord()}'s immunization record is held on
-        paper in the office.</p>
-        <p class="pd-fine">Missouri licensing requires a current copy on file. Message
-        the office from the Messages tab if you need a copy or have an updated one to
-        hand in.</p>`);
+    const kids = typeof ptChildren !== 'undefined' ? ptChildren : [];
+    const rows = kids.map(k => `
+        <div class="pd-upload-row" data-student="${escHtml(String(k.id))}">
+            ${kids.length > 1 ? `<div class="pd-upload-name">${escHtml(k.child_name)}</div>` : ''}
+            <div class="pd-upload-btns">
+                <label class="pd-upload-btn">📷 Take a photo
+                    <input type="file" class="pd-upload-input hidden-file-input"
+                           accept="image/*" capture="environment" data-student="${escHtml(String(k.id))}">
+                </label>
+                <label class="pd-upload-btn">&#8593; Upload a file
+                    <input type="file" class="pd-upload-input hidden-file-input"
+                           accept="image/jpeg,image/png,image/webp,application/pdf" data-student="${escHtml(String(k.id))}">
+                </label>
+            </div>
+            <p class="pd-upload-status" data-student-status="${escHtml(String(k.id))}"></p>
+        </div>`).join('');
+
+    const forWhom = kids.length > 1 ? 'each of your children' : 'your child';
+    return pdCard('Immunization & medical records', '💉', `
+        <p class="pd-none">Missouri licensing requires a current immunization record on
+        file for ${forWhom}. You can hand one in below, or a doctor's note for anything
+        else we need on file.</p>
+        ${rows || ''}
+        <p class="pd-fine">A photo or a scanned copy both work. Once it's uploaded, the
+        office reviews it and adds it to your ${pdChildWord()}'s file — you won't see it
+        listed back here, the same way you wouldn't see a paper copy again once you
+        hand it across the counter. Already sent one and just checking? Ask from the
+        Messages tab instead of uploading it twice.</p>`);
+}
+
+async function pdUploadDocument(input) {
+    const studentId = input.dataset.student;
+    const file = input.files?.[0];
+    input.value = ''; // allow picking the exact same file again later
+    if (!studentId || !file) return;
+
+    const status = document.querySelector(`.pd-upload-status[data-student-status="${studentId}"]`);
+    if (status) { status.textContent = 'Uploading…'; status.className = 'pd-upload-status'; }
+
+    try {
+        await uploadChildDocumentAsParent(studentId, file);
+        if (status) {
+            status.textContent = `Uploaded — ${pdDate(new Date().toISOString())}. The office will add it to the file.`;
+            status.classList.add('pd-upload-ok');
+        }
+    } catch (err) {
+        if (status) {
+            status.textContent = `Couldn't upload that: ${err.message || err}. Please try again, or message the office.`;
+            status.classList.add('pd-upload-err');
+        }
+    }
 }
 
 function pdStatementsSection() {
