@@ -302,8 +302,13 @@
     text-transform: uppercase; color: #78838f;
 }
 .pt-photos-note { font-size: .78em; color: #96a0aa; }
+/* Four across, fixed — both `.dc.html` sources say `repeat(4,1fr)` outright.
+   The auto-fill/96px floor gave three on a phone and as many as six on a wide
+   monitor, so the day's pictures reshaped with the window instead of reading
+   as one row. Missed by the source reconcile because the screenshots it was
+   first built from happened to show four. */
 .pt-photo-strip {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
 }
 .pt-photo { display: block; border-radius: 10px; overflow: hidden; line-height: 0; }
 .pt-photo img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
@@ -1507,12 +1512,20 @@ body.pb-modal-open { overflow: hidden; }
 
 /* ── Messages ────────────────────────────────────────────── */
 .portal-app .pm-section { margin-top: 0; padding-top: 0; border-top: none; }
-.pm-thread { max-height: none; gap: 14px; padding-bottom: 6px; }
-.pm-theirs { background: none; border-bottom-left-radius: 14px; padding: 0 0 12px; max-width: 100%;
-             border-bottom: 1px solid var(--border); }
-.pm-mine   { background: var(--green-pale); padding: 10px 14px; }
+/* ⚠️ Both `.dc.html` sources draw the teacher's side as a real BUBBLE — an
+   #f2f5f7 fill with a squared bottom-left corner, capped at 82% of the thread
+   (78% wide). It had been flattened to a borderless row with a divider under
+   it, which left the thread with only ONE visible side: a teacher's note and
+   the parent's reply no longer read as two people talking, just a list of
+   notices with the parent's replies tinted. Restored to the source. */
+.pm-thread { max-height: none; gap: 10px; padding-bottom: 6px; }
+.pm-msg    { padding: 9px 12px; border-radius: 13px; max-width: 82%; }
+.pm-theirs { background: #f2f5f7; border-bottom: none; border-bottom-left-radius: 4px; }
+.pm-mine   { background: var(--green-pale); border-bottom-right-radius: 4px; }
 .pm-composer { border-top: 1px solid var(--border); padding-top: 12px; }
-.pm-composer textarea { border-radius: 999px; padding: 11px 16px; resize: none; }
+/* A rounded rectangle, not a pill: the composer is two rows tall and a 999px
+   radius on a two-row box bows its sides. The sources say 10px. */
+.pm-composer textarea { border-radius: 10px; padding: 9px 11px; resize: none; }
 .pm-send {
     background: var(--navy);
     color: #fff;
@@ -1726,6 +1739,11 @@ body.pb-modal-open { overflow: hidden; }
     .pt-col-side { display: block; }
     .pt-col-main { display: flex; flex-direction: column; }
     .pt-col-main > .pt-photos { order: -1; }
+    /* The desktop source's own bubble/gutter sizes — a touch roomier than the
+       phone's, and the textarea can be dragged taller where there is room. */
+    .portal-app .pm-msg { max-width: 78%; padding: 10px 13px; border-radius: 14px; }
+    .portal-app .pm-composer textarea { resize: vertical; padding: 10px 12px; }
+    .portal-app .pt-photo-strip { gap: 10px; }
     .pt-event-body { flex-direction: row; align-items: baseline; justify-content: space-between; width: 100%; }
 
     .ps-cards { grid-template-columns: 1fr 1fr; gap: 20px; max-width: 920px; }
