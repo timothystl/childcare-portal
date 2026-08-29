@@ -5004,8 +5004,48 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 .market-hero-num span { color: var(--green-text); font-size: .6em; margin-left: 2px; }
 .market-hero-label { font-size: .78em; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
 
-.market-type-legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 0; font-size: .82em; color: var(--text-muted); }
-.market-type-legend .swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; margin-right: 6px; vertical-align: middle; }
+/* ── Director Report panes — plain lists and tables, not charts
+   (design_handoff_planning_market). The "Us" row is tinted green with a
+   green left rule everywhere it appears, so the center's own line is
+   findable at a glance in any of the three panes. ─────────────────── */
+.mk-list { margin-top: 18px; border-top: 1px solid var(--border); }
+.mk-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 13px 12px; border-bottom: 1px solid var(--border);
+}
+.mk-row.is-us { background: var(--green-pale); box-shadow: inset 3px 0 0 var(--green-text); }
+.mk-row-name { font-weight: 700; color: var(--navy); font-size: .98em; }
+.mk-row-sub { font-size: .8em; color: var(--text-muted); margin-top: 3px; }
+.mk-sched {
+    flex-shrink: 0; font-size: .74em; font-weight: 800; border-radius: 999px; padding: 4px 11px;
+    background: var(--linen); color: var(--text-muted);
+}
+.mk-sched-flexible { background: var(--green-pale); color: var(--green-text); }
+.mk-sched-partial  { background: var(--sun-pale);   color: var(--tang-dark); }
+.mk-sched-text { font-size: .8em; color: var(--text-muted); }
+
+.mk-table { border-collapse: collapse; width: 100%; font-size: .92em; }
+.mk-table th {
+    text-align: left; font-size: .72em; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--text-muted);
+    padding: 0 12px 9px; border-bottom: 1px solid var(--border);
+}
+.mk-table td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.mk-table th.mk-num, .mk-table td.mk-num { text-align: right; white-space: nowrap; }
+.mk-table td.mk-num-flag { color: var(--ap-deep-tang); font-weight: 700; }
+.mk-num-note { display: block; font-size: .72em; font-weight: 400; color: var(--text-muted); margin-top: 2px; }
+.mk-table tr.is-us td { background: var(--green-pale); font-weight: 600; }
+.mk-table tr.is-us td:first-child { box-shadow: inset 3px 0 0 var(--green-text); }
+.mk-td-name { font-weight: 700; color: var(--navy); }
+.mk-td-type { display: block; font-weight: 400; font-size: .78em; color: var(--text-muted); margin-top: 2px; }
+
+.mk-costgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 4px; }
+@media (max-width: 720px) { .mk-costgrid { grid-template-columns: 1fr; } }
+.mk-costbox { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--white); }
+.mk-costbox-label { font-size: .74em; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+.mk-costbox-val { font-family: var(--font-head); font-size: 1.7em; font-weight: 700; color: var(--navy); line-height: 1.1; margin-top: 4px; }
+.mk-costbox-sub { font-size: .78em; color: var(--text-muted); margin-top: 3px; }
+.mk-subhead { font-family: var(--font-head); font-size: 1.15em; font-weight: 700; color: var(--navy); margin: 26px 0 10px; }
 
 /* ── Director Report (consolidation pass, design_handoff_planning_market,
    2026-08-27) — header row + LIVE pill + segmented-control panes. The
