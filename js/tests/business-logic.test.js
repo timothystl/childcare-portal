@@ -2095,6 +2095,100 @@ describe('non-parent sessions are sent to their own app', () => {
     });
 });
 
+describe('parent upload of child documents — write-only, own-child-only', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const migration = read('supabase/migrations/20260829143213_parent_upload_child_documents.sql');
+    const supabaseJs = read('js/supabase.js');
+    const portalJs = read('js/portal/portal-documents.js');
+    const adminFamiliesJs = read('js/admin/admin-families.js');
+
+    test('the storage policy grants INSERT only — no parent SELECT/UPDATE/DELETE on the bucket', () => {
+        expect(migration.includes('FOR INSERT TO authenticated')).toBe(true);
+        expect(/FOR (ALL|SELECT|UPDATE|DELETE) TO authenticated/.test(migration)).toBe(false);
+    });
+
+    test('the policy is scoped to the child\'s own folder via parent_owns_student(), never a bare bucket check', () => {
+        const checkAt = migration.indexOf('WITH CHECK');
+        expect(checkAt).toBeGreaterThan(-1);
+        const checkBlock = migration.slice(checkAt);
+        expect(checkBlock.includes("bucket_id = 'child-documents'")).toBe(true);
+        expect(checkBlock.includes('parent_owns_student(split_part(storage.objects.name')).toBe(true);
+        expect(checkBlock.includes("~ '^[0-9a-fA-F]{8}-")).toBe(true);
+    });
+
+    test('uploadChildDocumentAsParent() tags the filename so the admin list can tell it apart from an office upload', () => {
+        const start = supabaseJs.indexOf('async function uploadChildDocumentAsParent');
+        expect(start).toBeGreaterThan(-1);
+        const fnBody = supabaseJs.slice(start, supabaseJs.indexOf('\n}', start));
+        expect(fnBody.includes('${studentId}/${Date.now()}-parent-${base}.${ext}')).toBe(true);
+        expect(fnBody.includes("from('child-documents')")).toBe(true);
+    });
+
+    test('the admin Family Directory documents list badges a parent-submitted file', () => {
+        expect(adminFamiliesJs.includes('function _fmDocIsFromParent(name)')).toBe(true);
+        expect(adminFamiliesJs.includes('/^parent-/')).toBe(true);
+        expect(adminFamiliesJs.includes('From parent')).toBe(true);
+    });
+
+    test('the portal upload card is per-child and never renders a list of what was already sent', () => {
+        expect(portalJs.includes('async function pdUploadDocument(input)')).toBe(true);
+        expect(portalJs.includes('uploadChildDocumentAsParent(studentId, file)')).toBe(true);
+        // Write-only: the section builder must never call a list/fetch of
+        // existing documents back for the parent to browse.
+        const sectionStart = portalJs.indexOf('function pdImmunizationSection()');
+        const sectionEnd = portalJs.indexOf('\n}', portalJs.indexOf('pdUploadDocument', sectionStart));
+        const sectionBody = portalJs.slice(sectionStart, sectionEnd);
+        expect(sectionBody.includes('listChildDocuments')).toBe(false);
+    });
+
+    test('no inline event-handler attribute was used for the new upload inputs (CSP script-src has no unsafe-inline)', () => {
+        expect(portalJs.includes('addEventListener')).toBe(true);
+        expect(/\son(click|change)=["']/.test(portalJs)).toBe(false);
+    });
+});
+
+describe('Schedule tab shows the invoice\'s own amount, never a second estimate beside it', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const scheduleJs = read('js/portal/portal-schedule.js');
+    const migration  = read('supabase/migrations/20260829153628_parent_read_public_settings_keys.sql');
+
+    test('psMonthBlock prints billing_invoices.final_amount whenever an invoice exists', () => {
+        const start = scheduleJs.indexOf('function psMonthBlock(');
+        expect(start).toBeGreaterThan(-1);
+        const body = scheduleJs.slice(start, scheduleJs.indexOf('\nfunction psStatusPill', start));
+        // The invoice figure wins; the client-side day-rate sum is the fallback.
+        expect(body.includes('const billed  = inv ? Number(inv.final_amount) || 0 : total;')).toBe(true);
+        // And it is that figure, not the estimate, that gets rendered.
+        expect(body.includes('ps-month-bill">${psMoney(billed)}')).toBe(true);
+        expect(body.includes('ps-month-bill">${psMoney(total)}')).toBe(false);
+    });
+
+    test('a month with an invoice is never labeled an estimate', () => {
+        const start = scheduleJs.indexOf('function psMonthBlock(');
+        const body = scheduleJs.slice(start, scheduleJs.indexOf('\nfunction psStatusPill', start));
+        expect(body.includes("isBilled ? 'not sent yet' : 'estimate'")).toBe(true);
+    });
+
+    test('the shared fetch loads live room rates, so the estimate is not the build-time default', () => {
+        const start = scheduleJs.indexOf('function psSchedule()');
+        const body = scheduleJs.slice(start, scheduleJs.indexOf('\n}', scheduleJs.indexOf('return psPromise', start)));
+        expect(body.includes('loadRateSettings')).toBe(true);
+        // Best-effort: a rates failure must not take the whole tab down.
+        expect(body.includes('.catch(() => false)')).toBe(true);
+    });
+
+    test('a signed-in parent can read room_rates — and only the already-public keys', () => {
+        expect(migration.includes('to authenticated')).toBe(true);
+        expect(migration.includes('for select')).toBe(true);
+        expect(migration.includes("'room_rates'")).toBe(true);
+        // Nothing beyond the anon allow-list: no admin_roles, no annual budget.
+        expect(migration.includes('admin_roles')).toBe(false);
+        expect(/for (all|insert|update|delete)/i.test(migration.replace(/^--.*$/gm, ''))).toBe(false);
+    });
+});
+
 // ============================================================
 // Childcare statement (family_care_statement.sql)
 // ============================================================

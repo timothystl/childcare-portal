@@ -1827,6 +1827,28 @@ async function deleteChildDocument(path) {
     if (error) throw error;
 }
 
+// A parent hands in a document (immunization record, doctor's note) for
+// their OWN child (portal Documents card) — see
+// parent_upload_child_documents.sql. Write-only from the parent's side:
+// the storage policy grants INSERT only, no SELECT, so a parent cannot list
+// or re-download what they (or the office) have put in that folder — this
+// call's return value (the path) is the only confirmation the portal ever
+// gets. The "-parent-" marker survives listChildDocuments()'s existing
+// "<digits>-" strip, so this is the one filename shape the admin-side list
+// can reliably tell apart from an office-uploaded document, with no new
+// metadata table.
+async function uploadChildDocumentAsParent(studentId, file) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const ext  = (file.name.split('.').pop() || 'bin').replace(/[^a-zA-Z0-9]/g, '') || 'bin';
+    const base = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'document';
+    const path = `${studentId}/${Date.now()}-parent-${base}.${ext}`;
+    const { error } = await sbClient.storage.from('child-documents').upload(path, file, {
+        contentType: file.type || 'application/octet-stream',
+    });
+    if (error) throw error;
+    return path;
+}
+
 // Signed URL for viewing/downloading one document. Short-lived — documents
 // aren't previewed inline the way a profile photo is, so there's no need to
 // batch-sign a whole child's folder up front.

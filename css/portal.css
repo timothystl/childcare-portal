@@ -893,6 +893,29 @@
     margin: 10px 0 2px; font-size: .82em; line-height: 1.55; color: var(--text-muted);
 }
 
+/* Immunization & medical records upload (portal-documents.js) — one row per
+   child, write-only: no list of what was already sent, just the two upload
+   buttons and an inline status line for the most recent attempt. */
+.hidden-file-input { display: none; }
+.pd-upload-row {
+    margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid var(--linen);
+}
+.pd-upload-row:first-of-type { border-top: none; }
+.pd-upload-name { font-size: .9em; font-weight: 800; color: var(--navy); margin-bottom: 8px; }
+.pd-upload-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.pd-upload-btn {
+    flex: none; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;
+    background: var(--linen); color: var(--navy); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 14px; font-family: inherit; font-size: .85em;
+    font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.pd-upload-btn:hover { background: var(--warm-gray, var(--border)); }
+.pd-upload-status {
+    margin: 8px 0 0; font-size: .82em; line-height: 1.5; color: var(--text-muted); min-height: 1.2em;
+}
+.pd-upload-status.pd-upload-ok  { color: var(--green-text); }
+.pd-upload-status.pd-upload-err { color: var(--ap-deep-tang, #b3492c); }
+
 /* ============================================================
    BILLING TAB (portal-billing.js) — reuses .pd-card for its own cards;
    these rules are just the row layout and the Pay button/return states.

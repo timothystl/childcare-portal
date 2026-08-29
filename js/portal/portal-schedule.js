@@ -6,11 +6,14 @@
 // half-day rate when the room offers one and the day is a half, full otherwise.
 //
 // ⚠️ THE DESIGN'S "PAID Aug 1" / "DUE SEP 1" PILL IS NOT RENDERED FROM NOTHING.
-// Every billing_invoices row in production is draft or void — no invoice has
-// ever been finalized, sent or paid. So a status pill appears only when a real
-// issued invoice exists for that month, and an amount without one is labeled an
-// estimate. Showing "DUE" off a computed figure would tell a parent they owe
-// money the office has never billed them for.
+// A status pill appears only when a real issued invoice exists for that month.
+// Showing "DUE" off a computed figure would tell a parent they owe money the
+// office has never billed them for.
+//
+// ⚠️ And the amount beside that pill is the INVOICE's amount whenever an
+// invoice exists — never the rate maths below. The two disagreeing in front of
+// a parent (Schedule "$75.00 DUE", Billing "INV-3995 $50.00", same child, same
+// month) is what this rule exists to prevent; see psMonthBlock().
 
 let psData = null;
 let psLoadFailed = false;   // a thrown error, as distinct from an empty payload
@@ -29,7 +32,20 @@ function psEl(id) { return document.getElementById(id); }
  */
 function psSchedule() {
     if (!psPromise) {
-        psPromise = fetchMySchedule().catch(e => { psPromise = null; throw e; });
+        // ⚠️ The live room_rates setting is loaded alongside the schedule, not
+        // assumed from the ROOMS defaults in js/supabase.js. Those defaults have
+        // drifted from what the office actually charges (Summer Camp is $50 in
+        // settings and $75 in the defaults), so an estimate built from them told
+        // a parent a number the invoice for the same month contradicted. Rates
+        // are best-effort: a failure leaves the defaults in place rather than
+        // failing the whole tab, and the invoice figure below is what a month
+        // with a real invoice shows anyway.
+        psPromise = Promise.all([
+            fetchMySchedule(),
+            (typeof loadRateSettings === 'function'
+                ? loadRateSettings() : Promise.resolve(false)).catch(() => false),
+        ]).then(([sched]) => sched)
+          .catch(e => { psPromise = null; throw e; });
     }
     return psPromise;
 }
@@ -169,6 +185,17 @@ function psMonthBlock(monthKey, days, room, closed, invoiceByMonth) {
     const inv = invoiceByMonth.get(monthKey);
     const status = inv ? psStatusPill(inv) : '';
 
+    // ⚠️ ONE FIGURE PER MONTH, AND THE INVOICE WINS.
+    // `total` above is a client-side estimate; billing_invoices.final_amount is
+    // what the office actually billed, computed server-side by
+    // compute_family_month_charges(). When both exist they are two answers to
+    // one question, and the parent saw both at once — this screen showing an
+    // estimate beside a DUE pill while Billing showed the real invoice. An
+    // invoice, draft or issued, is therefore the only amount this row prints;
+    // the estimate is for a month nothing has been billed for yet.
+    const billed  = inv ? Number(inv.final_amount) || 0 : total;
+    const isBilled = !!inv;
+
     const tally = [
         full ? `<span class="ps-tally-full">${full} Full</span>` : '',
         half ? `<span class="ps-tally-half">${half} Half</span>` : '',
@@ -178,8 +205,8 @@ function psMonthBlock(monthKey, days, room, closed, invoiceByMonth) {
         <div class="ps-month-row">
             <span class="ps-month-label">${psEsc(psMonthLabel(monthKey))}</span>
             <span class="ps-month-meta">
-                <span class="ps-month-bill">${psMoney(total)}</span>
-                ${status || '<span class="ps-est">estimate</span>'}
+                <span class="ps-month-bill">${psMoney(billed)}</span>
+                ${status || `<span class="ps-est">${isBilled ? 'not sent yet' : 'estimate'}</span>`}
             </span>
         </div>
         <div class="ps-days">${days.map(d => psChip(d, closed)).join('')}</div>

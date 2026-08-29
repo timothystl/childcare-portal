@@ -2080,6 +2080,10 @@ tr.pending-approval:hover { background: var(--sun-pale); }
 }
 .fmc-doc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .fmc-doc-meta { flex: none; color: var(--text-muted); font-size: .92em; }
+.fmc-doc-badge {
+    flex: none; background: var(--gold-pale, var(--linen)); color: var(--navy);
+    border-radius: 999px; padding: 2px 8px; font-size: .8em; font-weight: 700;
+}
 .fmc-doc-view, .fmc-doc-remove {
     flex: none; background: none; border: 1px solid var(--border); border-radius: 5px;
     padding: 2px 8px; font-size: .92em; cursor: pointer; color: var(--text-muted);
