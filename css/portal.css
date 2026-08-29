@@ -1671,3 +1671,17 @@ body.pb-modal-open { overflow: hidden; }
     /* One child: no switcher is rendered, so nothing carries .is-active. */
     .ps-cards > .ps-card:only-child { display: block; }
 }
+/* Unread on a child's pill: which sibling has a message waiting has to be
+   visible before you switch to them, or the tab badge is the only clue and it
+   cannot say which child it means. */
+.pm-pill-unread {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--tang);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    vertical-align: 1px;
+}

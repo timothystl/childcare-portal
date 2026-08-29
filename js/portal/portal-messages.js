@@ -1,15 +1,23 @@
 // ============================================================
 // portal-messages — the parent's side of the conversation (Phase 2)
 // ============================================================
-// One thread per family. The plan allowed subjects; for 121 families "message
-// the office" is a single ongoing conversation, and a thread list where every
-// family has exactly one row is a list nobody needs to read.
+// ONE THREAD PER CHILD (per_child_message_threads.sql), which is what the
+// design handoff asks for: "Each child has their own conversation history."
+// The child switcher above the thread is the same control Today and Schedule
+// use, and it swaps the whole conversation rather than filtering one.
 //
-// It lives BELOW the day on the Today card rather than behind a tab, because a
-// parent who opens the app is looking at today — and a reply they have not seen
-// should be in front of them, not one navigation away.
+// Why per child rather than per family: the office replies "she wouldn't nap"
+// and the parent has two children. A family thread makes the reader work out
+// who every message is about, and gets it wrong eventually.
+//
+// ⚠️ A family with NO children on file still needs to reach the office — that
+// is the general thread (student_id IS NULL, myMessageThread()), and it is the
+// only case where no switcher is rendered.
 
-let pmThreadId = null;
+let pmThreadId = null;          // the thread currently open
+let pmActiveId = null;          // which child it belongs to, null = general
+let pmThreadByChild = {};       // studentId -> thread id, resolved once each
+let pmUnreadByChild = {};       // studentId -> unread count, for the pills
 let pmSending  = false;
 
 function pmEl(id) { return document.getElementById(id); }
@@ -36,6 +44,39 @@ function pmTime(iso) {
     return d.toLocaleDateString('en-US', { ...fmt, timeZone: 'America/Chicago' }) + ' ' + time;
 }
 
+// Reuses ptChildren (portal-today.js loads it once on sign-in) rather than a
+// second fetch — the pills must name the same children, in the same order, as
+// Today and Schedule do.
+function pmChildren() {
+    return (typeof ptChildren !== 'undefined' && Array.isArray(ptChildren)) ? ptChildren : [];
+}
+
+function pmRenderSwitcher() {
+    const wrap = pmEl('pmSwitcher');
+    if (!wrap) return;
+    const kids = pmChildren();
+    if (kids.length < 2) { wrap.classList.add('hidden'); return; }
+    wrap.classList.remove('hidden');
+    wrap.innerHTML = kids.map(function (c) {
+        const n = pmUnreadByChild[c.id] || 0;
+        const on = String(c.id) === String(pmActiveId) ? 'active' : '';
+        const first = pmEsc(String(c.child_name || '').split(' ')[0]);
+        const dot = n ? '<span class="pm-pill-unread">' + (n > 9 ? '9+' : n) + '</span>' : '';
+        return '<button type="button" class="pt-childbtn ' + on + '" data-child="' +
+               pmEsc(c.id) + '">' + first + dot + '</button>';
+    }).join('');
+    wrap.querySelectorAll('.pt-childbtn').forEach(function (b) {
+        b.addEventListener('click', function () { pmSelectChild(b.dataset.child); });
+    });
+}
+
+async function pmSelectChild(childId) {
+    if (String(childId) === String(pmActiveId)) return;
+    pmActiveId = childId;
+    pmRenderSwitcher();
+    await pmOpenActiveThread();
+}
+
 function pmRender(items) {
     const wrap = pmEl('pmThread');
     if (!wrap) return;
@@ -54,11 +95,6 @@ function pmRender(items) {
             ? `<span class="pm-receipt">${m.read_at ? 'Read' : 'Sent'}</span>`
             : '';
         const who = mine ? 'You' : (m.sender_name || (m.sender_type === 'admin' ? 'The office' : 'Teacher'));
-        // ⚠️ There is no per-child message thread. The design shows the child
-        // switcher on this screen, but a thread is per FAMILY (one row per
-        // family in message_threads) — rendering pills that filter nothing, or
-        // that silently show the same conversation twice, would be worse than
-        // not showing them. Splitting threads by child is its own piece of work.
         return `<div class="pm-msg ${mine ? 'pm-mine' : 'pm-theirs'}">
             <div class="pm-msg-head">
                 <span class="pm-who">${pmEsc(who)}</span>
@@ -74,45 +110,103 @@ function pmRender(items) {
 }
 
 /**
- * Unread count for the Messages tab badge. Deliberately separate from pmLoad:
- * it counts WITHOUT marking anything read. Calling pmLoad to get this number
- * would clear the badge for a parent who never opened the tab — the badge would
- * be permanently zero and the feature pointless.
+ * Unread for the tab badge AND for the per-child pills. Deliberately separate
+ * from pmLoad: it counts WITHOUT marking anything read. Calling pmLoad to get
+ * this number would clear the badge for a parent who never opened the tab —
+ * the badge would be permanently zero and the feature pointless.
+ *
+ * It is now a sum across every child's thread, because there is one per child.
  */
-async function pmUnreadCount() {
+async function pmThreadFor(childId) {
+    if (pmThreadByChild[childId] !== undefined) return pmThreadByChild[childId];
+    const id = await myChildMessageThread(childId);
+    pmThreadByChild[childId] = id;
+    return id;
+}
+
+async function pmRefreshUnread() {
+    pmUnreadByChild = {};
+    const kids = pmChildren();
     try {
-        const id = await myMessageThread();
-        if (!id) return 0;
-        const items = await fetchThreadMessages(id);
-        return items.filter(m => m.sender_type !== 'parent' && !m.read_at).length;
+        if (!kids.length) {
+            const id = await myMessageThread();
+            if (!id) return 0;
+            const items = await fetchThreadMessages(id);
+            return items.filter(function (m) { return m.sender_type !== 'parent' && !m.read_at; }).length;
+        }
+        // One round trip per child. For a roster of one or two that is cheaper
+        // than a bespoke aggregate RPC; revisit only if a family ever has
+        // enough children for it to matter.
+        const counts = await Promise.all(kids.map(async function (c) {
+            const id = await pmThreadFor(c.id);
+            if (!id) return 0;
+            const items = await fetchThreadMessages(id);
+            const n = items.filter(function (m) { return m.sender_type !== 'parent' && !m.read_at; }).length;
+            pmUnreadByChild[c.id] = n;
+            return n;
+        }));
+        return counts.reduce(function (a, b) { return a + b; }, 0);
     } catch (_) {
         return 0;   // a badge is not worth an error state
+    }
+}
+
+async function pmUnreadCount() {
+    return pmRefreshUnread();
+}
+
+/** Loads and renders whichever child is selected, and marks THAT thread read. */
+async function pmOpenActiveThread() {
+    const wrap = pmEl('pmThread');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="pm-empty">Loading…</p>';
+    try {
+        pmThreadId = pmActiveId ? await pmThreadFor(pmActiveId) : await myMessageThread();
+        if (!pmThreadId) {
+            wrap.innerHTML = '<p class="pm-empty">Messages are unavailable right now.</p>';
+            return;
+        }
+
+        const items = await fetchThreadMessages(pmThreadId);
+        pmRender(items);
+
+        // Opening a thread is reading it — but only THIS child's. A sibling's
+        // unread messages stay unread, which is the point of splitting the
+        // threads at all: the badge has to keep pointing at what is unread.
+        if (items.some(function (m) { return m.sender_type !== 'parent' && !m.read_at; })) {
+            await markThreadRead(pmThreadId);
+            if (pmActiveId) pmUnreadByChild[pmActiveId] = 0;
+            pmRenderSwitcher();
+            if (typeof ptSetBadge === 'function') {
+                ptSetBadge('messages', Object.keys(pmUnreadByChild)
+                    .reduce(function (a, k) { return a + pmUnreadByChild[k]; }, 0));
+            }
+        }
+    } catch (e) {
+        console.warn('messages:', e);
+        wrap.innerHTML = '<p class="pm-empty">Messages are unavailable right now.</p>';
     }
 }
 
 async function pmLoad() {
     const wrap = pmEl('pmThread');
     if (!wrap) return;
-    try {
-        pmThreadId = await myMessageThread();
-        if (!pmThreadId) { pmEl('pmSection')?.classList.add('hidden'); return; }
-        pmEl('pmSection')?.classList.remove('hidden');
+    pmEl('pmSection')?.classList.remove('hidden');
 
-        const items = await fetchThreadMessages(pmThreadId);
-        pmRender(items);
-
-        // Opening the thread is reading it — clears staff/office messages so
-        // the unread badge does not persist after the parent has plainly seen it.
-        if (items.some(m => m.sender_type !== 'parent' && !m.read_at)) {
-            await markThreadRead(pmThreadId);
-            // The badge must clear at the same moment, or it contradicts the
-            // thread the parent is looking at.
-            if (typeof ptSetBadge === 'function') ptSetBadge('messages', 0);
-        }
-    } catch (e) {
-        console.warn('messages:', e);
-        wrap.innerHTML = '<p class="pm-empty">Messages are unavailable right now.</p>';
+    const kids = pmChildren();
+    // Start on whichever child the rest of the app has open, so moving to
+    // Messages does not silently change who you were looking at.
+    if (kids.length) {
+        pmActiveId = (typeof ptActiveId !== 'undefined' &&
+                      kids.some(function (c) { return String(c.id) === String(ptActiveId); }))
+            ? ptActiveId : kids[0].id;
+    } else {
+        pmActiveId = null;   // no children on file — the general thread
     }
+
+    await pmRefreshUnread();
+    pmRenderSwitcher();
+    await pmOpenActiveThread();
 }
 
 async function pmSend() {
@@ -127,7 +221,9 @@ async function pmSend() {
     try {
         await sendParentMessage(pmThreadId, body, portalContext?.parent_name || null);
         input.value = '';
-        await pmLoad();
+        // Only the open thread. pmLoad() would re-resolve every child's thread
+        // and re-count unread for siblings this send never touched.
+        await pmOpenActiveThread();
     } catch (e) {
         console.warn('send message:', e);
         // Deliberately does NOT clear the box on failure — retyping a message

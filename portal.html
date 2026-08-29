@@ -335,7 +335,11 @@
              parent's unread badge for messages they never looked at. -->
         <section class="pt-tab hidden" data-tab="messages">
             <div class="pt-page-head"><h1 class="portal-greeting">Messages</h1></div>
+            <!-- One thread per child (per_child_message_threads.sql), so the
+                 switcher here swaps the whole conversation. Hidden for a family
+                 with fewer than two children, same rule as Today's. -->
             <div id="pmSection" class="pm-section hidden">
+                <div id="pmSwitcher" class="pt-switcher hidden"></div>
                 <div class="pt-card">
                     <div id="pmThread" class="pm-thread"></div>
                     <div class="pm-composer">

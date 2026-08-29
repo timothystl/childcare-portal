@@ -178,8 +178,16 @@ function _msgBuildFeed() {
         const last  = msgs[msgs.length - 1];
         const waiting = _msgThreadUnread(t) > 0;
         items.push({
-            key, kind: 'thread', name: t.families?.parent_name || 'Family',
-            metaLine: 'Family conversation · ' + (t.families?.parent_email || ''),
+            // ⚠️ Threads are PER CHILD now (per_child_message_threads.sql), so
+            // the row has to say which one — the office replies "she wouldn't
+            // nap" and a parent with two children cannot tell who that was
+            // about. A thread with no student_id is the family's general one.
+            key, kind: 'thread',
+            name: t.students?.child_name
+                ? `${t.families?.parent_name || 'Family'} · ${t.students.child_name}`
+                : (t.families?.parent_name || 'Family'),
+            metaLine: (t.students?.child_name ? 'About ' + t.students.child_name : 'Family conversation')
+                + ' · ' + (t.families?.parent_email || ''),
             preview: last?.body || 'No messages yet', sortTs: t.last_message_at || last?.created_at || 0,
             priority: waiting ? 0 : 1, icon: _msgInitials(t.families?.parent_name), iconBg: '#C9E6DC',
             accent: waiting ? 'var(--tang)' : 'var(--green-text)',

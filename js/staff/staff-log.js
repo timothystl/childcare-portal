@@ -329,6 +329,14 @@ function slCloseSheet() {
 }
 
 // ── Messages ────────────────────────────────────────────────
+// ⚠️ Threads are PER CHILD now (per_child_message_threads.sql), and the room
+// scope follows the THREAD'S OWN child rather than the family. A Bee Room
+// teacher used to see a family's single thread because any child of that
+// family was in her room today — including a conversation about a sibling in
+// another room. staff_can_see_thread() and staff_list_threads() both test the
+// thread's student now; a general thread (student_id IS NULL) still falls back
+// to the family-wide rule.
+//
 // A teacher only sees threads for families with a child on THEIR room's roster
 // today — the scoping is enforced in the RPC, not here. Messages can be about
 // custody, health or money, and a Bee Room teacher has no business reading the
@@ -387,9 +395,10 @@ function slRenderThreadList() {
     wrap.innerHTML = slThreads.map(t => `
         <button type="button" class="sl-thread" data-thread="${t.thread_id}">
             <span class="sl-thread-top">
-                <span class="sl-thread-name">${slEsc(t.family_name || 'Family')}</span>
+                <span class="sl-thread-name">${slEsc(t.child_name || t.family_name || 'Family')}</span>
                 ${t.unread ? `<span class="sl-thread-unread">${t.unread}</span>` : ''}
             </span>
+            <span class="sl-thread-sub">${slEsc(t.child_name ? (t.family_name || 'Family') : 'Family conversation')}</span>
             <span class="sl-thread-last">${slEsc(t.last_body || 'No messages yet')}</span>
         </button>`).join('');
     wrap.querySelectorAll('.sl-thread').forEach(b => {

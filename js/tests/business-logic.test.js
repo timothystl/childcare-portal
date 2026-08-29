@@ -1954,7 +1954,95 @@ describe('CSP tightening — script-src hash allowlist, no inline handlers', () 
     });
 });
 
+// ============================================================
+// Per-child message threads (per_child_message_threads.sql)
+// ============================================================
+// Source guards, not behavioral tests: the logic that matters here lives in
+// Postgres (verified against production when the migration was applied) and in
+// DOM-rendering functions that cannot be require()d. What CAN drift silently is
+// the wiring — which is exactly what already went wrong once on this feature's
+// neighbours (a refund button shipped into a section nothing renders).
+describe('per-child message threads', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+
+    const migration = read('supabase/migrations/per_child_message_threads.sql');
+    const portalMsg = read('js/portal/portal-messages.js');
+    const supa      = read('js/supabase.js');
+
+    test('the migration drops the one-thread-per-family constraint', () => {
+        // THE enabling change. Without it a second child's thread cannot be
+        // inserted at all and my_child_message_thread() fails on child two.
+        expect(/drop constraint if exists message_threads_family_id_key/.test(migration)).toBe(true);
+    });
+
+    test('a family can hold one thread per child, and one general thread', () => {
+        expect(/create unique index[^;]*message_threads_family_student_uidx[^;]*\(family_id, student_id\)[^;]*where student_id is not null/s
+            .test(migration)).toBe(true);
+        expect(/create unique index[^;]*message_threads_family_general_uidx[^;]*\(family_id\)[^;]*where student_id is null/s
+            .test(migration)).toBe(true);
+    });
+
+    test('the parent RPC authorizes the child, never trusting the id', () => {
+        expect(/if not parent_owns_student\(p_student_id\) then return null/.test(migration)).toBe(true);
+        // anon must not reach it: a thread is family data behind a real session.
+        expect(/revoke all on function public\.my_child_message_thread\(uuid\) from public, anon/.test(migration)).toBe(true);
+        expect(/grant execute on function public\.my_child_message_thread\(uuid\) to authenticated/.test(migration)).toBe(true);
+    });
+
+    test('the backfill refuses to guess for a multi-child family', () => {
+        // Every existing thread belonged to a single-child family when this
+        // ran, but the guard is what makes replaying it safe later.
+        expect(/select count\(\*\) from public\.students s2 where s2\.family_id = t\.family_id\) = 1/
+            .test(migration)).toBe(true);
+    });
+
+    test('staff room scoping follows the thread\'s own child', () => {
+        // A Bee Room teacher must not read a conversation about a sibling in
+        // another room just because this family has someone in Bee today.
+        const scoped = /t\.student_id IS NOT NULL AND st\.id = t\.student_id/;
+        expect(migration.match(new RegExp(scoped, 'g')).length).toBeGreaterThan(1);
+        expect(/t\.student_id IS NULL\s+AND st\.family_id = t\.family_id/.test(migration)).toBe(true);
+    });
+
+    test('the PIN-gated thread list is VOLATILE', () => {
+        // staff_list_threads reaches staff_id_for_pin, which WRITES an attempt
+        // row on every call. STABLE would raise 25006 on the happy path only —
+        // the clock-in outage this repo already had.
+        expect(/language plpgsql\n(--[^\n]*\n)*volatile\nsecurity definer/.test(migration)).toBe(true);
+    });
+
+    test('the parent app opens a per-child thread and never a sibling\'s', () => {
+        expect(/rpc\('my_child_message_thread', \{\s*p_student_id: studentId/.test(supa)).toBe(true);
+        // Marking read is scoped to the thread on screen. Marking every thread
+        // read on open would silently clear a sibling's unread badge, which is
+        // the one thing splitting the threads was meant to fix.
+        expect(/await markThreadRead\(pmThreadId\)/.test(portalMsg)).toBe(true);
+        expect(/pmThreadByChild\)?\.forEach[^\n]*markThreadRead/.test(portalMsg)).toBe(false);
+    });
+
+    test('the unread badge counts every child, and still marks nothing read', () => {
+        expect(/async function pmRefreshUnread\(\)/.test(portalMsg)).toBe(true);
+        expect(/async function pmUnreadCount\(\)/.test(portalMsg)).toBe(true);
+        // pmUnreadCount must not route through the loader — that would mark
+        // the thread read for a parent who never opened the tab. Read only
+        // ITS OWN body: pmOpenActiveThread is declared right after it, and a
+        // fixed-length slice ran straight into that function's name.
+        const after = portalMsg.slice(portalMsg.indexOf('async function pmUnreadCount()'));
+        const own   = after.slice(0, after.indexOf('\n}') + 2);
+        expect(/pmLoad|pmOpenActiveThread|markThreadRead/.test(own)).toBe(false);
+    });
+
+    test('every reader of a thread says which child it is about', () => {
+        expect(/students\(child_name\)/.test(supa)).toBe(true);                       // admin inbox
+        expect(/t\.students\?\.child_name/.test(read('js/admin/admin-messages-unified.js'))).toBe(true);
+        expect(/t\.child_name \|\| t\.family_name/.test(read('js/staff/staff-log.js'))).toBe(true);
+        expect(/thread\.students\?\.child_name/.test(read('worker.js'))).toBe(true);  // the push
+    });
+});
+
 // ---- Summary ----
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;
 if (_failed > 0) process.exit(1);
+

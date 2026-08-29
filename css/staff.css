@@ -295,6 +295,9 @@
 }
 .sl-thread-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .sl-thread-name { font-weight: 800; color: var(--navy); }
+/* The child is the heading of a thread now; the family name is the
+   subtitle under it (per_child_message_threads.sql). */
+.sl-thread-sub { display: block; font-size: .8em; color: var(--text-muted); margin-top: 1px; }
 .sl-thread-unread {
     background: var(--tang); color: #fff; border-radius: 999px;
     padding: 1px 9px; font-size: .76em; font-weight: 800; flex: none;
