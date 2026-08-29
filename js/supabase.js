@@ -3103,6 +3103,24 @@ async function myChildMessageThread(studentId) {
 }
 
 /** The family's GENERAL thread (student_id IS NULL), created on first use. */
+/**
+ * Which app this signed-in session belongs to: 'parent' | 'admin' | 'staff',
+ * or null for a session that matches none of them.
+ *
+ * ⚠️ PARENT WINS inside the RPC. Someone who is both an admin and a parent is
+ * on the portal deliberately, and must not be bounced to the admin app.
+ *
+ * Not an enumeration oracle: the function takes no parameter and reads only
+ * the caller's own auth.uid()/JWT email, so it cannot be pointed at somebody
+ * else's address to ask whether they are staff.
+ */
+async function myAppHome() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('my_app_home');
+    if (error) throw friendlyError(error);
+    return data ?? null;
+}
+
 async function myMessageThread() {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('my_message_thread');

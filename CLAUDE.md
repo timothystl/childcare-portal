@@ -4622,6 +4622,56 @@ this shell.
 - Nothing about Today, Recap, Schedule, Messages, Account, the nav rail, or
   the This week card changed in this reconciliation.
 
+## Wrong-app sessions are redirected out of the portal (2026-08-29)
+
+Reported live twice in one morning: `portal.html` showing "Good morning,
+there.", a notice about the session not being recognized, and — on the Billing
+and Schedule tabs — "Could not load your billing. Pull down to retry."
+
+**Nothing was broken.** The director had signed in on both of her addresses a
+minute apart; the portal session was the *staff* one, which has no
+`parent_accounts` row. `my_parent_context()` and `my_schedule()` both return
+the **jsonb `'null'`** for such a caller — not an error, not SQL NULL — so the
+client folded a perfectly correct answer into its failure branch and told her
+to retry a state no retry can change.
+
+`my_app_home_redirect.sql` (**applied and verified in production**) adds
+`my_app_home()`, returning `'parent' | 'admin' | 'staff' | null` for the
+caller's own session. `portalShowSignedIn()` calls it when there is no parent
+context and `location.replace()`s to `admin.html` / `staff.html`.
+
+- ⚠️ **PARENT WINS, and the branch order is the whole point.** An admin or
+  teacher who *also* has a child enrolled is on the portal deliberately;
+  bouncing them to the admin app would be worse than the bug being fixed.
+  Guarded by a test that asserts the ordering in the SQL, because the failure
+  is invisible until the one person it affects hits it.
+- ⚠️ **Not an enumeration oracle.** The function takes no argument — every
+  branch reads `auth.uid()` / `auth.jwt()`. A function that answered "is *this*
+  address staff?" would enumerate the roster for any caller.
+- ⚠️ **The `staff` branch is unreachable today**, and that is fine. Staff have
+  no Supabase Auth accounts at all (the staff app is PIN-gated; 0 of 7 auth
+  users match a staff email). It is there so the rule holds if an admin ever
+  provisions one. The reachable staff case is a teacher typing their work
+  address into the portal's sign-in form, which is answered by a **static**
+  line under the links pointing at the staff and admin apps — static because
+  looking the address up to decide whether to show it is that same oracle.
+- **The redirect runs BEFORE the shell is revealed**, so the empty parent app
+  never paints. `location.replace`, not `href`: Back must not drop them into
+  the app they were just moved out of.
+
+⚠️ **A null payload is not a failure, and Billing/Schedule now say so.**
+`pbLoadFailed` / `psLoadFailed` separate a thrown error ("Pull down to retry")
+from an empty payload ("This sign-in is not linked to a family account"). The
+redirect makes the second rare, but the copy was actively misleading and this
+is the second time in one session that a state which cannot resolve was
+presented as one that might.
+
+**Also fixed the same morning:** `#ptPrintBtn` moved into the page head during
+the desktop redesign and so rendered on the no-children and not-a-parent
+states, offering to print a day that was not on screen — with its click handler
+wired after the early return, so it did nothing. It starts `hidden` now and is
+unhidden only on the path that renders a day.
+
 ## Finance summary API (for the church ChMS finance integration)
 
 `supabase/functions/finance-summary/index.ts` — `GET`, header `X-Api-Key: <FINANCE_API_KEY>`, returns 401 if missing/wrong. Returns `{ updated_at, accounts: [], budget: [...] }` for the current month + 12 prior (13 months, oldest first). Deploy like any other edge function (paste into the Supabase dashboard editor or `supabase functions deploy finance-summary`) and set the `FINANCE_API_KEY` secret — neither is automatic.

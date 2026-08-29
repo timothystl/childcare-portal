@@ -132,8 +132,38 @@ async function portalLoadContext() {
     return data && data !== 'null' ? data : null;
 }
 
+// Where a session that is NOT a parent belongs. Returns true if it sent the
+// browser somewhere else, in which case the caller must stop.
+//
+// ⚠️ Runs BEFORE the shell is revealed. The whole point is that an admin never
+// sees the empty parent app — greeting with no name, a notice about not being
+// recognized, and Billing/Schedule reporting a load failure that retrying can
+// never fix, because my_schedule() returns null for a caller with no family.
+//
+// location.replace, not href: Back must not drop them straight back into the
+// app they were just moved out of.
+async function portalRedirectNonParent() {
+    let home = null;
+    try {
+        home = await myAppHome();
+    } catch (e) {
+        // A session we cannot classify stays put and sees the notice below.
+        // Better a plain screen than a redirect loop on a bad network.
+        console.warn('my_app_home:', e);
+        return false;
+    }
+    if (home === 'admin') { location.replace('admin.html'); return true; }
+    if (home === 'staff') { location.replace('staff.html'); return true; }
+    return false;
+}
+
 async function portalShowSignedIn() {
     portalContext = await portalLoadContext();
+
+    // Not a parent — but possibly an admin or a staff member with a session
+    // from one of the other apps on this origin. Send them home instead of
+    // rendering a portal with nothing in it.
+    if (!portalContext && await portalRedirectNonParent()) return;
 
     pEl('portalSignInShell')?.classList.add('hidden');
     pEl('portalSignedIn')?.classList.remove('hidden');

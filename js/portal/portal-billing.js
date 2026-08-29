@@ -60,6 +60,7 @@
 // banner — see pbLastReceipt and pbCloseStaxModal.
 
 let pbData = null;
+let pbLoadFailed = false;   // a thrown error, as distinct from an empty payload
 let pbReturnState = null;   // 'paid' | 'cancelled' | null — set by portal-auth.js
 let pbPaying = null;        // invoice id currently starting a payment, or null
 let pbStaxPaying = null;    // invoice id currently in the Stax comparison modal, or null
@@ -149,7 +150,9 @@ function pbRender() {
     const body = pbEl('pbBody');
     if (!body) return;
     if (!pbData) {
-        body.innerHTML = '<p class="pa-empty">Could not load your billing. Pull down to retry.</p>';
+        body.innerHTML = pbLoadFailed
+            ? '<p class="pa-empty">Could not load your billing. Pull down to retry.</p>'
+            : '<p class="pa-empty">This sign-in is not linked to a family account, so there is nothing billed to it.</p>';
         return;
     }
     if (pbView === 'invoices') return pbRenderInvoiceList();
@@ -973,11 +976,18 @@ function pbCloseStaxModal(success) {
 async function pbLoad() {
     const body = pbEl('pbBody');
     if (body) body.innerHTML = '<p class="pa-empty">Loading…</p>';
+    // ⚠️ A null payload is NOT a failure. my_schedule() returns the jsonb
+    // 'null' for a caller with no family behind the session, and folding that
+    // into the catch told a reader to "pull down to retry" a state no retry
+    // can change. Non-parent sessions are redirected away before this runs
+    // (portal-auth.js), so this is the residue: a session that matched no app.
+    pbLoadFailed = false;
     try {
         pbData = await psSchedule();   // shared with Schedule and Today — one fetch, not three
     } catch (e) {
         console.warn('billing:', e);
         pbData = null;
+        pbLoadFailed = true;
     }
     pbRender();
 }

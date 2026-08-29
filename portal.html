@@ -204,6 +204,17 @@
             <a href="lookup.html">View my schedule</a>
         </div>
 
+        <!-- Staff have no account here at all — the staff app is PIN-gated and
+             holds no Supabase Auth session — so a teacher typing their work
+             address into this form only ever gets "not a family". This line is
+             static on purpose: looking the address up to decide whether to show
+             it would answer "is this person staff?" for anyone who asked, which
+             is an enumeration oracle over the roster. -->
+        <p class="portal-wrong-app">
+            Staff sign in at <a href="staff.html">the staff app</a>.
+            Administrators sign in at <a href="admin.html">the admin portal</a>.
+        </p>
+
     </div>
     </div>
 

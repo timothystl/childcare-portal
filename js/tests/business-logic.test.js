@@ -2041,6 +2041,60 @@ describe('per-child message threads', () => {
     });
 });
 
+// ============================================================
+// Wrong-app redirect (my_app_home_redirect.sql)
+// ============================================================
+describe('non-parent sessions are sent to their own app', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const migration = read('supabase/migrations/my_app_home_redirect.sql');
+    const auth = read('js/portal/portal-auth.js');
+
+    test('parent wins over admin and staff', () => {
+        // An admin or teacher who ALSO has a child enrolled is on the parent
+        // portal deliberately. If this ordering ever flips they get bounced
+        // out of their own child's app, which is worse than the bug it fixes.
+        const parentAt = migration.indexOf('from parent_accounts pa where pa.user_id = auth.uid()');
+        const adminAt  = migration.indexOf('when is_admin()');
+        const staffAt  = migration.indexOf('from staff s');
+        expect(parentAt > -1).toBe(true);
+        expect(adminAt > parentAt).toBe(true);
+        expect(staffAt > adminAt).toBe(true);
+    });
+
+    test('it takes no argument, so it cannot be pointed at anyone else', () => {
+        // A function that answered "is THIS address staff?" would enumerate
+        // the roster for any caller. Every branch reads the caller's own
+        // session instead.
+        expect(/create or replace function public\.my_app_home\(\)/.test(migration)).toBe(true);
+        expect(/revoke all on function public\.my_app_home\(\) from public, anon/.test(migration)).toBe(true);
+        expect(/grant execute on function public\.my_app_home\(\) to authenticated/.test(migration)).toBe(true);
+    });
+
+    test('the redirect runs before the portal shell is revealed', () => {
+        const redirectAt = auth.indexOf('await portalRedirectNonParent()');
+        const revealAt   = auth.indexOf("pEl('portalSignInShell')?.classList.add('hidden')");
+        expect(redirectAt > -1).toBe(true);
+        expect(redirectAt < revealAt).toBe(true);
+        // Back must not drop them into the app they were just moved out of.
+        expect(/location\.replace\('admin\.html'\)/.test(auth)).toBe(true);
+        expect(/location\.replace\('staff\.html'\)/.test(auth)).toBe(true);
+    });
+
+    test('only a real failure says "retry"', () => {
+        // my_schedule() returns null for a session with no family. Reporting
+        // that as a load failure told the reader to retry a state no retry can
+        // change — the bug this pass was opened for.
+        const billing = read('js/portal/portal-billing.js');
+        const sched   = read('js/portal/portal-schedule.js');
+        expect(/pbLoadFailed\s*$/m.test(billing) || billing.includes('pbLoadFailed')).toBe(true);
+        expect(/pbLoadFailed[\s\S]{0,120}Pull down to retry/.test(billing)).toBe(true);
+        expect(/psLoadFailed[\s\S]{0,120}Pull down to retry/.test(sched)).toBe(true);
+        expect(billing.includes('not linked to a family account')).toBe(true);
+        expect(sched.includes('not linked to a family account')).toBe(true);
+    });
+});
+
 // ---- Summary ----
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;

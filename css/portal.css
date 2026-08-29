@@ -1745,3 +1745,14 @@ body.pb-modal-open { overflow: hidden; }
     font-weight: 800;
     vertical-align: 1px;
 }
+
+/* "You may be in the wrong app" — under the sign-in links. Quiet: it is for
+   the few who need it, not a second call to action for the families who do
+   not. */
+.portal-wrong-app {
+    margin: 14px 0 0;
+    font-size: .8em;
+    line-height: 1.55;
+    color: var(--text-muted);
+    text-align: center;
+}

@@ -13,6 +13,7 @@
 // money the office has never billed them for.
 
 let psData = null;
+let psLoadFailed = false;   // a thrown error, as distinct from an empty payload
 let psPromise = null;      // one fetch, shared with Billing and Today
 let psActiveChild = null;  // phone only — the wide layout shows every child
 
@@ -77,7 +78,11 @@ function psRender() {
     const wrap = psEl('ptScheduleBody');
     if (!wrap) return;
     if (!psData) {
-        wrap.innerHTML = '<p class="pa-empty">Could not load your schedule.</p>';
+        // Same distinction as Billing: an empty payload means no family behind
+        // this session, not a call that failed.
+        wrap.innerHTML = psLoadFailed
+            ? '<p class="pa-empty">Could not load your schedule. Pull down to retry.</p>'
+            : '<p class="pa-empty">This sign-in is not linked to a family account, so there are no care days on it.</p>';
         return;
     }
 
@@ -212,11 +217,13 @@ function psChip(d, closed) {
 async function psLoad() {
     const wrap = psEl('ptScheduleBody');
     if (wrap) wrap.innerHTML = '<p class="pa-empty">Loading…</p>';
+    psLoadFailed = false;
     try {
         psData = await psSchedule();
     } catch (e) {
         console.warn('schedule:', e);
         psData = null;
+        psLoadFailed = true;
     }
     psRender();
 }
