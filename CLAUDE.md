@@ -3771,6 +3771,136 @@ feature actually shipped in the bundles the live site loads, not just the
 source — the standing check this file has asked for since the Bookkeeper
 and Enrollment & Capacity tabs each shipped half-live.
 
+### ⚠️ …and the button above was wired into a genuinely dead section — found within the hour, by the person testing it
+
+Asked directly, minutes after the PR above merged: "where is refunds?" — on
+the live **Finance → Bookkeeper → Accounts Receivable** screen, which shows
+only an aging summary (banner + 0–14/15–29/30+ day bands), no per-payment
+list, no button of any kind. The Refund button this session had just built
+was real, tested, and shipped in the bundle — and **unreachable**, because
+it was added to `admin-billing.js`'s `renderPaymentHistory()`, which only
+ever renders inside `billingArSection`'s `#arTableWrap` — and
+`billingArSection` is one of the ten tools this file's own Finance-tab
+overhaul section already documents as retired from `AP_TOOLS` in the
+2026-08-27 Bookkeeper redesign ("Accounts Receivable, Reconcile Payments,
+Revenue Dashboard…"), unreferenced and therefore unreachable per the
+shell's own rule (`apShowSection()` never shows a section no `AP_TOOLS`
+entry points at). Confirmed by grepping `admin-portal.js` for
+`billingArSection` — zero matches.
+
+⚠️ **This means the pre-existing Authorize.net refund button — not just the
+Stax one this session added — has been unreachable since that same redesign
+merged**, a full day before this session started. Nobody had needed to
+refund an online payment in the meantime, so nothing surfaced it. This
+wasn't caused by this session's change; this session's change just happened
+to add a second, equally-invisible button right next to the first one,
+which is what made it worth checking where "the AR table" that
+`admin-billing.js`'s comments still describe actually renders today.
+
+**The fix wasn't re-registering `billingArSection`.** The whole point of
+retiring it was fewer screens computing the same numbers differently, and
+reopening it as a nav entry would have undone that. Instead, the Refund
+control was added to the place a family's payments are actually visible
+today: the **Ledger drawer** (`_fhLoadDrawerBody()` in
+`admin-finance-hub.js`, opened from Finance → Ledger by clicking any family
+row) — which already had its own "Payments" list and a "+ Record payment"
+button, but no way to reverse one. New `_fhCanRefund()` (same gate as the
+old `renderPaymentHistory()`: processor is `authorizenet` or `stax`,
+positive amount, not itself a reversal, not already reversed) and
+`_fhRefundPayment()` (confirm → `adminRefundPayment(paymentId, processor)`
+→ `_fhLoad()`, the same reload `_fhSubmitPayment()` already does after
+recording a payment, so Bookkeeper's cache invalidates and the drawer
+re-renders with current data). `admin-billing.js`'s original wiring was
+left in place rather than deleted — same "unreferenced, not deleted"
+convention this file uses for every other retired tool, in case
+`billingArSection` is ever revived — but it is dead weight, not a second
+live implementation to keep in sync.
+
+**New drift guard**, specifically to stop this exact class of mistake from
+recurring: a test asserts `billingArSection` stays absent from
+`admin-portal.js` (documenting that it actually is dead, not assuming it)
+*and* that `admin-finance-hub.js` carries the real, reachable refund wiring
+— so a future refund-related change made only to the old file would fail
+this test rather than ship silently unreachable again.
+
+**The lesson to take from this, generalized:** `npm run build` + grepping
+the bundle for a new symbol (this file's standing check since the
+Bookkeeper/Enrollment & Capacity "shipped half-live" incidents) proves a
+change is *in* the bundle. It does not prove the bundle's own code path
+that contains it is one `apShowSection()` will ever call. For any change to
+a section's markup or its rendering function, check `AP_TOOLS` for that
+section id too — a symbol present in the bundle and a feature reachable in
+the shell are two different claims, and this file's existing checklist
+only ever verified the first one.
+
+`npm test` — 203/203 (3 more guards: the dead-code confirmation, the live
+drawer wiring, and the double-refund guard). `npm run build` — `dist/`
+rebuilt and grepped for `_fhRefundPayment`/`_fhCanRefund` to confirm the
+*actually reachable* version shipped, not just the first one.
+
+### ⚠️ It shipped half-live a THIRD time in the same evening — and this time the root cause was in the auto-merge workflow itself, not in this feature
+
+The director tested the fix above from a fresh admin login (version badge
+correctly reading the new build) and the Refund link still wasn't there —
+twice. Both times, `git show origin/main:dist/admin.min.js | grep -c
+_fhRefundPayment` came back `0` while the *source* on `main` had it the
+whole time. Not a browser cache issue either time (ruled out directly: the
+version banner embedded inside `dist/admin.min.js` itself, not just the
+HTML, matched the deployed `package.json` version — so the exact bundle
+running in the browser really was the one just deployed, and it genuinely
+lacked the fix). Two more `claude/**` branches had each merged into `main`
+within the same half hour, each hitting the identical dist conflict this
+file already documents twice above (Bookkeeper, Enrollment & Capacity) —
+except by the third occurrence in one evening it was clear the fix each
+time ("rebuild and re-push") was treating a symptom, not the disease.
+
+**Root cause, found by finally reading `.github/workflows/auto-merge-claude.yml`
+line by line instead of re-patching around it a fourth time:** the
+conflict-resolution step's own comment said "take the branch's dist
+bundles (they were built on top of main's JS)" and unconditionally ran
+`git checkout --theirs` for every conflicting `dist/*.min.js` — with
+**no check on which side was actually newer**. That assumption holds for
+exactly one merge in isolation. It silently breaks the moment a *second*
+`claude/**` branch is queued behind a first: branch B was forked from (and
+last built its own `dist/` against) a `main` that predates branch A's
+merge. By the time B's own turn to merge arrives, "theirs" is B's
+own bundle — stale relative to the `main` this merge is about to produce —
+and the workflow took it anyway, every time, because nothing about the
+rule was version-aware. The `sort -V | tail -1` logic just above it in the
+same step only ever decided the **version number string** written into
+`package.json`/`build-version.js`; it never gated which side's `dist/*.min.js`
+bytes got used. Two completely different questions were being resolved by
+one comparison that only answered the first.
+
+**Fixed by not picking a side at all.** On any conflict that reaches this
+step, `dist/` is now unconditionally **rebuilt from the just-merged source**
+(`npm run build`, then a follow-up commit if it produced a diff) instead of
+`git checkout --theirs` on the bundle files. A bundle generated from the
+tree this exact merge just produced cannot be stale relative to that tree —
+there's no side to pick wrong. This also fixes a subtler case the old rule
+never touched at all: two branches whose `dist/*.min.js` happened to merge
+with **no textual conflict** (neither touched the same bytes) still ended
+up carrying the *old* `__BUILD_VERSION__` banner from whichever side's
+un-conflicting copy git kept, mismatched against the version number the
+`package.json` conflict resolution had just forced to something higher.
+Rebuilding fixes that silently-wrong case too, which a "pick the right
+side" rule could never have covered because there was no wrong side to
+avoid — both were stale relative to the version just written.
+
+⚠️ **This needed Node available earlier in the job.** `actions/setup-node`
++ `npm ci` were previously only run right before the deploy step, after the
+merge had already been pushed. Both moved up to before the merge step, so
+`npm run build` has a working toolchain available mid-conflict-resolution.
+
+**Not chased further:** the `verify` job (which runs per-branch, before
+this) still cannot catch this class of bug on its own — it rebuilds and
+diffs `dist/` against that one branch's own `js/`, which was correct
+*for that branch in isolation* at push time. The staleness only exists
+relative to whatever `main` looks like at the moment its merge is actually
+processed, which `verify` has no way to know in advance. The fix has to
+live in `merge-to-main`, where the real merged tree exists — which is
+exactly where it now does.
+
 ---
 
 ## Ledger's "Total to bill" was a net figure with nothing showing its parts — broken into a 4-box strip (2026-08-28)
@@ -4113,6 +4243,191 @@ guarding). `npm run build` — `dist/portal.min.js` rebuilt and grepped for
 bundle `portal.html` loads, not just the source.
 
 ---
+
+## Parent app redesign — phone and desktop (2026-08-28)
+
+Built from the director's redesign screens for **Today, Recap, Schedule,
+Billing, Messages and Account**, phone and wide. Nothing about what the portal
+*reads* changed — no new RPC, no migration, no new query. This is the same six
+tabs, restyled, plus one genuinely new card (This week) built entirely from
+data three tabs already had in hand.
+
+### ⚠️ One navigation element, two layouts
+
+`#ptTabs` renders the same six buttons either way — **`portal-nav.js` is
+untouched**. Below 900px the new `<aside class="app-nav">` is the fixed bottom
+tab bar this app already had; at 900px and up CSS turns it into the navy rail
+with the myMDO mark above it and the active tab as a solid `--sun` pill. There
+is deliberately no second nav to keep in step with the first.
+
+- **The rail is `order: -1`, not a DOM move.** The nav stays last in the
+  document — it is the bottom bar on a phone, and a nav rendered before the
+  content it sits under would be wrong for a screen reader as well as for CSS.
+- ⚠️ **Every layout override is scoped to `.portal-app`.** `.app-shell`,
+  `.app-route` and `.tabbar` live in `css/styles.css` and are shared with the
+  **staff** app; widening those selectors here would have restyled an app this
+  redesign was never scoped to touch.
+- `.portal-app`'s `max-width: 560px` and `margin: 0 auto` (the phone shell is a
+  centered column) both have to be lifted inside the media query, or the rail
+  layout renders as a 560px strip floating in the middle of the window. Caught
+  in a real browser, not from the diff.
+- 900px is the same breakpoint the admin shell already uses for its drawer,
+  deliberately, rather than adding a seventh number to U4's list.
+
+### ⚠️ `.pt-tab` was two different things, and the CSS hit both
+
+Each full-page `<section>` in the shell is `class="pt-tab"` — and so was every
+button in the child switcher. So a rule written for a pill (`border-radius:
+999px`, `min-height: 44px`, `flex: 1`) was landing on six whole screens, and
+`.pt-tab { padding: 0 16px }` (the shell's page padding) was landing on the
+buttons. Both were live on `main` and neither was visible as a bug, because the
+section rules happened to be harmless and the page padding on a pill just made
+it wider.
+
+The switcher buttons are **`.pt-childbtn`** now, in all three files that render
+one (`portal-today.js`, `portal-recap.js`, `portal-schedule.js`), and the old
+`.pt-tab` pill rules are deleted rather than left to apply to sections.
+
+### One `my_schedule()` fetch, shared by three tabs
+
+`psSchedule()` (portal-schedule.js) memoizes the call. Schedule reads booked
+days from it, Billing reads invoices from it, and Today now reads the child's
+**room label** from it — three tabs asking the database the same question three
+times was three round trips for one answer. A rejection is **not** cached, so a
+failed load is retryable by reopening the tab rather than sticky for the
+session.
+
+### "This week" derives nothing of its own
+
+Days booked and balance due come out of that same payload; unread comes from
+`pmUnreadCount()`, which counts **without** marking anything read (see the note
+on that function — calling `pmLoad()` for the number would clear the badge for
+a parent who never opened the tab).
+
+⚠️ **Balance due counts ISSUED invoices only (`sent_at` set)**, exactly as the
+Billing tab does — the same "a draft is not a bill" rule this file already
+records for `psStatusPill` and `_buildArRows`. The card and Billing therefore
+cannot disagree.
+
+### Billing shows day counts per child, never dollars per child
+
+The redesign's month card lists each child with a figure beside them. The
+invoice carries **one** total, computed server-side; splitting it per child in
+the browser would be a second billing calculation that can drift from the bill
+itself. `pbChildLines()` shows each child's room and **days booked** — facts the
+payload already holds — and the invoice's own Total underneath. Same call, same
+reasoning, as the per-day amount already scoped out of the invoice detail
+screen.
+
+### ⚠️ There is no emergency-contact field in this database
+
+The Account design shows one. `families` / `parent_accounts` hold parent 1 and
+parent 2 and nothing else; the real emergency contact is on the paper
+enrollment form. `paEmergencyValue()` shows the **other parent on the record**
+when there is one — who the center actually calls second — and otherwise says
+plainly where the answer is kept.
+
+It deliberately does **not** reuse a pickup contact: "may collect your child"
+and "call this person in an emergency" are different permissions, and quietly
+treating one as the other is the kind of thing that only surfaces on the day it
+matters.
+
+### Deliberate deviations from the screens
+
+- **Messages has no child switcher.** The design shows one; a thread is per
+  **family** (one row per family in `message_threads`). Pills that filter
+  nothing, or that show the same conversation twice, would be worse than no
+  pills. Splitting threads per child is its own piece of work.
+- **Account keeps Parents & guardians, Approved for pickup and Notifications.**
+  The Account screens show only Children, Contact info and Documents. Those
+  three cards are the only place a family can manage the pickup list, their PIN
+  and their notification preferences, so they were kept below Contact info
+  rather than deleted on the strength of a screen that may simply be
+  abbreviated. **Worth confirming with the director** — if they are genuinely
+  meant to go, they need somewhere else to live first.
+- **Documents was not rebuilt.** `portal-documents.js` still renders its four
+  sections (incidents, forms, immunization, statements) rather than the
+  design's flat list of rows with a View button. It lays out in the new card
+  grid on a wide screen and is otherwise untouched.
+- **Recap's day strip is a window AROUND the selected day** (3 back, 3 forward),
+  oldest first, replacing "the last 8 days counting backwards" — so stepping
+  with ‹ / › reads as moving along a strip that stays put. A future day keeps
+  its place but is `disabled`: the strip does not change shape, and there is
+  still no peeking at a day that has not happened.
+- **Schedule renders every child's card every time.** Which ones are visible is
+  CSS: the phone shows one behind the switcher, the wide layout lays them side
+  by side and hides the switcher entirely. Both screens are satisfied by one
+  render rather than one of them being a special case in the JS.
+
+### ⚠️ `Parent Portal Desktop.dc.html` was NOT read
+
+The director pointed at the Claude Design project
+(`05e91ea7-93c5-43f5-9875-8f9b7d69ad93`) mid-session. `DesignSync` needs a
+`/design-login` this remote session cannot run, and the file is not in
+`docs/design_handoff/`, so **this was built from the screenshots**. This file's
+own Staff-tab entry says exactly why that is not good enough ("Read the
+`.dc.html` template directly rather than re-guessing from a screenshot a second
+time") — the source carries the literal hex values and the data-shaping the
+screens only imply. Seed that file into the repo and re-check this work against
+it before calling the redesign matched.
+
+### Verification
+
+`npm test` — 168/168. `npm run build` — `dist/` rebuilt and grepped for
+`pt-childbtn`, `ptWeekCard`, `pbChildLines`, `paEmergencyValue`,
+`portalGreetingWord` and `psSchedule`, per this file's standing "it shipped
+half-live" check.
+
+Rendered in a real browser at 390px and 1280px against a harness carrying the
+exact markup each renderer emits — which is what caught the 560px shell cap,
+the sidebar landing on the right, and the print button eating the header row.
+None of the three was visible in the diff.
+
+### ⚠️ This redesign's own Billing rebuild collided with a concurrent one — reconciled, not picked between (2026-08-29)
+
+This session and the "Parent payment flow redesign" session above both rebuilt
+the Billing tab from **two different sets of director screens**, landing on
+`main` the same evening. This one's Billing (`pbInvoiceCard`/`pbChildLines`,
+one card per month, day counts only, no dollar breakdown) merge-conflicted
+against the other's four-screen Home/All Invoices/Invoice Detail/Payment
+Received stack. Neither side auto-resolves a design collision, so the merge
+was held and the call was put to the director rather than guessed: **keep
+this redesign's nav shell, Today/Recap/Schedule/Messages/Account and This
+week card exactly as shipped here, but replace this redesign's Billing
+screen with the other session's four-screen stack**, restyled to sit inside
+this shell.
+
+- `js/portal/portal-billing.js` is now that four-screen stack (see "Parent
+  payment flow redesign" → "Phase 2" above for what each screen shows) —
+  `pbLoad()` still calls `psSchedule()`, the shared fetch this session added,
+  unchanged.
+- **A real gap in `psSchedule()` was found and closed while integrating,
+  not before.** `portal-nav.js`'s lazy-first-open guard means `pbLoad()` only
+  ever runs once per session — switching to Billing a second time does not
+  reload it — and `psPromise` itself never expires once resolved. Before this
+  fix, a parent who paid and then clicked "Done" on the new Payment Received
+  screen (or a "confirming now" Authorize.net return) would see their
+  pre-payment balance for the rest of the session, since nothing ever told
+  `psSchedule()` its cached answer was stale. Added `psInvalidate()` to
+  `portal-schedule.js` (clears `psPromise`); Billing calls it the moment a
+  payment succeeds, then quietly refetches in the background
+  (`pbRefreshQuietly()` — deliberately doesn't reuse `pbLoad()`'s own
+  "Loading…" wipe, which would blank the receipt screen the parent is
+  looking at). This is a real fix to code this redesign shipped, found by a
+  different session integrating with it — not a defect in the four-screen
+  design itself.
+- The old Billing-only CSS block (`.pb-cards`/`.pb-card`/`.pb-label`/
+  `.pb-row-total`/`.pb-status-row`, plus second `.pb-total`/`.pb-fine`/
+  `.pb-row` definitions) is deleted from `css/portal.css` rather than left
+  unreferenced — those exact class names were about to silently win the
+  cascade over the versions the four-screen stack actually uses, which is a
+  worse failure mode than the "delete the markup, leave old CSS orphaned"
+  convention this file uses elsewhere (unreferenced CSS is inert; a
+  same-named *conflicting* rule two screens down is not). The wide-layout
+  `.pb-cards` grid selector was likewise dropped — Billing is a narrative
+  screen stack, not a card grid, at any width.
+- Nothing about Today, Recap, Schedule, Messages, Account, the nav rail, or
+  the This week card changed in this reconciliation.
 
 ## Finance summary API (for the church ChMS finance integration)
 

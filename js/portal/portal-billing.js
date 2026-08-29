@@ -1,13 +1,13 @@
 // ============================================================
 // portal-billing — the parent's Billing tab
 // ============================================================
-// Real invoices, real online payment. Reuses fetchMySchedule() (the same
-// call the Schedule tab makes) rather than a second RPC — my_schedule()
-// already returns this family's own billing_invoices rows (plus, as of the
-// 2026-08-28 redesign, each one's last_payment_date) via the
+// Real invoices, real online payment. Reuses psSchedule() (portal-schedule.js)
+// rather than a second RPC — my_schedule() already returns this family's own
+// billing_invoices rows (plus each one's last_payment_date) via the
 // SECURITY DEFINER / parent_family_ids() path (see
-// supabase/migrations/parent_billing_tab_and_grant_fix.sql), and Billing
-// only needs the `invoices` (and, for the days-of-care screen below,
+// supabase/migrations/parent_billing_tab_and_grant_fix.sql), and that one
+// fetch is shared with Today and Schedule (see psSchedule's own comment) —
+// Billing only needs the `invoices` (and, for the days-of-care screen below,
 // `registrations`) arrays out of that same payload.
 //
 // ⚠️ A DRAFT INVOICE IS NOT A BILL. my_schedule() includes every
@@ -152,14 +152,6 @@ function pbRender() {
         body.innerHTML = '<p class="pa-empty">Could not load your billing. Pull down to retry.</p>';
         return;
     }
-    if (!pbIssuedInvoices().length) {
-        body.innerHTML = `<div class="tab-placeholder">
-            <h2>No bills issued yet</h2>
-            <p>Once the office issues a bill for a month, it will show up here
-               with what's owed. Until then, nothing has changed about how you pay.</p>
-        </div>`;
-        return;
-    }
     if (pbView === 'invoices') return pbRenderInvoiceList();
     if (pbView === 'invoice') return pbRenderInvoiceDetail();
     if (pbView === 'receipt') return pbRenderReceipt();
@@ -180,6 +172,10 @@ function pbReturnBanner(kind) {
     </section>`;
 }
 
+// The summary card renders even with no invoices at all. "$0.00, nothing
+// owed" is a real answer to the question this tab exists for — a parent
+// should not have to work out for themselves whether an empty screen means
+// they're square.
 function pbRenderHome() {
     const body = pbEl('pbBody');
     const invoices = pbIssuedInvoices();
@@ -211,8 +207,9 @@ function pbRenderHome() {
                 ${mostRecentUnpaid ? `<button type="button" class="pb-pay-btn pb-stax-btn" data-invoice-id="${mostRecentUnpaid.id}"
                     ${pbStaxPaying === mostRecentUnpaid.id ? 'disabled' : ''}>${pbStaxPaying === mostRecentUnpaid.id ? 'Starting payment…' : `Pay ${pbMoney(totalDue)} online`}</button>
                     <p class="pb-pay-error" id="pbStaxError-${mostRecentUnpaid.id}" hidden></p>` : ''}
-                <p class="pb-fine">Pay online above, or contact the office if you have
-                   questions about a balance.</p>
+                <p class="pb-fine">${totalDue > 0
+                    ? `Pay online above, or contact the office if you have questions about a balance.`
+                    : `Nothing owed right now. Your next statement will appear here as soon as the office sends it.`}</p>
             </div>
         </section>
         ${priorBalance > 0.004 ? `
@@ -222,10 +219,10 @@ function pbRenderHome() {
                (${pbMoney(priorBalance)}) in full before it grows further. Partial
                payments are still accepted on any invoice.</p>
         </section>` : ''}
-        <button type="button" class="pd-row pb-view-all-btn" id="pbViewAllBtn">
+        ${invoices.length ? `<button type="button" class="pd-row pb-view-all-btn" id="pbViewAllBtn">
             <span class="pd-row-main"><span class="pd-row-title">🧾 View all invoices</span></span>
             <span aria-hidden="true">›</span>
-        </button>
+        </button>` : ''}
     `;
 
     pbEl('pbBreakdownToggle')?.addEventListener('click', () => { pbShowBreakdown = !pbShowBreakdown; pbRenderHome(); });
@@ -237,8 +234,8 @@ function pbRenderHome() {
     // A parent freshly back from a payment attempt: reload once more shortly
     // after, since the webhook that actually records the payment can lag
     // the redirect back here by a few seconds. This is a courtesy re-check,
-    // not a promise — the invoice list above already reflects whatever is
-    // true right now.
+    // not a promise — the summary above already reflects whatever is true
+    // right now.
     if (pbReturnState === 'paid') {
         setTimeout(() => { pbLoad(); }, 3000);
     }
@@ -260,7 +257,7 @@ function pbRenderInvoiceList() {
     const invoices = pbIssuedInvoices();
     body.innerHTML = `
         ${pbSubheadHtml('All invoices')}
-        ${invoices.map(pbInvoiceListCard).join('')}
+        ${invoices.length ? invoices.map(pbInvoiceListCard).join('') : '<p class="pa-empty">No bills issued yet.</p>'}
     `;
     pbEl('pbBackBtn')?.addEventListener('click', pbGoHome);
     body.querySelectorAll('.pb-stax-btn[data-invoice-id]').forEach(btn => {
@@ -335,14 +332,15 @@ function pbRenderInvoiceDetail() {
     });
 }
 
-/** ⚠️ Deliberately no per-day or per-child dollar figure — see CLAUDE.md's
- *  own note on this screen. my_schedule() gives real, always-accurate
- *  care_date/day_type per child (the same data the Schedule tab's calendar
- *  already reads), which is what these cells show. A per-child subtotal
- *  would mean a second, client-side billing calculation that could drift
- *  from the real invoice; the invoice's own final_amount above stays the
- *  one dollar figure this screen shows, because it's the only one that's
- *  guaranteed to match what was actually billed. */
+/** ⚠️ Deliberately no per-day or per-child dollar figure — my_schedule()
+ *  gives real, always-accurate care_date/day_type per child (the same data
+ *  the Schedule tab's own calendar reads), which is what these cells show.
+ *  A per-child subtotal would mean a second, client-side billing calculation
+ *  that could drift from the real invoice; the invoice's own final_amount
+ *  above stays the one dollar figure this screen shows, because it's the
+ *  only one guaranteed to match what was actually billed. Same reasoning
+ *  the six-tab redesign's own pbChildLines() (day counts, no dollars) used
+ *  for its month cards — this screen just shows the days themselves. */
 function pbChildDayCardsForMonth(month) {
     const regs = (pbData?.registrations || []).filter(r => r.month_key === month);
     if (!regs.length) {
@@ -492,6 +490,7 @@ function pbClosePayModal(success) {
     pbPaying = null;
     if (success) {
         pbSetReturnState('paid');
+        if (typeof psInvalidate === 'function') psInvalidate();
         // The return banner only renders on the Home screen — force it back
         // there so a payment started from Invoices/Invoice Detail doesn't
         // strand the parent on a screen that never shows the banner.
@@ -953,23 +952,44 @@ function pbCloseStaxModal(success) {
     // Payment Received screen instead of the older "confirming now" banner,
     // which stays reserved for Authorize.net's async-only confirmation.
     if (success && pbLastReceipt) {
+        if (typeof psInvalidate === 'function') psInvalidate();
         pbView = 'receipt';
     } else if (success) {
         pbSetReturnState('paid');
+        if (typeof psInvalidate === 'function') psInvalidate();
         pbView = 'home';
         pbShowBreakdown = false;
     }
     pbRender();
+    // Refresh pbData in the background once the cache above is invalidated,
+    // so Home reflects the real post-payment balance whenever the parent
+    // navigates there — psSchedule() is otherwise cached for the rest of the
+    // session (portal-nav.js only calls pbLoad() on Billing's first open),
+    // and pbLoad()'s own "Loading…" wipe would blank the receipt screen the
+    // parent is looking at right now, so this refetches quietly instead.
+    if (success) pbRefreshQuietly();
 }
 
 async function pbLoad() {
     const body = pbEl('pbBody');
     if (body) body.innerHTML = '<p class="pa-empty">Loading…</p>';
     try {
-        pbData = await fetchMySchedule();
+        pbData = await psSchedule();   // shared with Schedule and Today — one fetch, not three
     } catch (e) {
         console.warn('billing:', e);
         pbData = null;
     }
     pbRender();
+}
+
+/** Same fetch as pbLoad(), without the "Loading…" wipe — used right after a
+ *  payment so a screen already on view (the receipt, or Home's return
+ *  banner) doesn't flash blank while pbData catches up in the background. */
+async function pbRefreshQuietly() {
+    try {
+        pbData = await psSchedule();
+        pbRender();
+    } catch (e) {
+        console.warn('billing refresh:', e);
+    }
 }

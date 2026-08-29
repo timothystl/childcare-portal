@@ -1593,11 +1593,13 @@ describe('Stax payment security guards', () => {
     });
 });
 
-describe('admin-refund-stax-payment — the AR "Refund" button now covers Stax too', () => {
+describe('admin-refund-stax-payment — Stax reversal support, wired into the LIVE Ledger drawer', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
     const refundFn = read('supabase/functions/admin-refund-stax-payment/index.ts');
     const billingJs = read('js/admin/admin-billing.js');
+    const financeHubJs = read('js/admin/admin-finance-hub.js');
+    const portalJs = read('js/admin/admin-portal.js');
     const supabaseJs = read('js/supabase.js');
 
     test('requires a full-admin session, same gate as the Authorize.net refund function', () => {
@@ -1636,12 +1638,6 @@ describe('admin-refund-stax-payment — the AR "Refund" button now covers Stax t
         expect(refundFn.includes('billing_invoices')).toBe(false);
     });
 
-    test('the admin AR refund button now shows for stax payments too, keyed off the real processor', () => {
-        expect(billingJs.includes("REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax'])")).toBe(true);
-        expect(billingJs.includes('data-processor="${escHtml(p.processor)}"')).toBe(true);
-        expect(billingJs.includes("refundOnlinePayment(Number(refundBtn.dataset.paymentId), refundBtn.dataset.processor)")).toBe(true);
-    });
-
     test('adminRefundPayment routes to the stax edge function only when asked, else the authorizenet one', () => {
         const start = supabaseJs.indexOf('async function adminRefundPayment');
         const end = supabaseJs.indexOf('async function unmarkInvoiceSent');
@@ -1649,6 +1645,44 @@ describe('admin-refund-stax-payment — the AR "Refund" button now covers Stax t
         expect(end).toBeGreaterThan(start);
         const fnBody = supabaseJs.slice(start, end);
         expect(fnBody.includes("processor === 'stax' ? 'admin-refund-stax-payment' : 'admin-refund-payment'")).toBe(true);
+    });
+
+    // ⚠️ billingArSection (the old admin-billing.js AR table this refund
+    // logic was first added to) was retired from AP_TOOLS in the Bookkeeper
+    // overhaul (2026-08-27) and is unreachable in the live admin shell — its
+    // own comment in admin-portal.js says so. A Refund button added only
+    // there would be dead code nobody could ever click. This guard fails if
+    // that ever silently becomes reachable again without someone re-checking
+    // whether admin-billing.js's refund wiring should move with it.
+    test('billingArSection (admin-billing.js\'s AR table) is still unreferenced by AP_TOOLS — confirms it is dead code', () => {
+        expect(billingJs.includes('pay-hist-refund-btn')).toBe(true); // the old wiring still exists...
+        expect(portalJs.includes('billingArSection')).toBe(false);   // ...but is not reachable from the shell.
+    });
+
+    test('the LIVE Ledger drawer (Finance → Ledger, the reachable Accounts Receivable view) shows a Refund control per payment', () => {
+        expect(financeHubJs.includes('function _fhCanRefund(')).toBe(true);
+        expect(financeHubJs.includes("REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax'])")).toBe(true);
+        expect(financeHubJs.includes('data-processor="${escHtml(p.processor)}"')).toBe(true);
+        expect(financeHubJs.includes('async function _fhRefundPayment(')).toBe(true);
+        expect(financeHubJs.includes("adminRefundPayment(paymentId, processor)")).toBe(true);
+    });
+
+    test('drawer refund keeps _fhRows/Bookkeeper in sync afterward, same reload pattern as recording a payment', () => {
+        const submitPaymentAt = financeHubJs.indexOf('async function _fhSubmitPayment');
+        const refundAt = financeHubJs.indexOf('async function _fhRefundPayment');
+        expect(submitPaymentAt).toBeGreaterThan(-1);
+        expect(refundAt).toBeGreaterThan(-1);
+        const refundBody = financeHubJs.slice(refundAt, financeHubJs.indexOf('\n}', refundAt));
+        expect(refundBody.includes('await _fhLoad()')).toBe(true);
+        expect(refundBody.includes('_fhRenderDrawer()')).toBe(true);
+    });
+
+    test('a payment already reversed, or itself a reversal, never shows a second Refund button', () => {
+        const start = financeHubJs.indexOf('function _fhCanRefund');
+        const end = financeHubJs.indexOf('\n}', start);
+        const fnBody = financeHubJs.slice(start, end);
+        expect(fnBody.includes('p.refund_of_payment_id')).toBe(true);
+        expect(fnBody.includes('allPayments.some(o => o.refund_of_payment_id === p.id)')).toBe(true);
     });
 });
 
@@ -1694,6 +1728,85 @@ describe('Stax payment reconciliation job', () => {
         expect(schedule.includes("cron.schedule(\n  'reconcile-stax-payments'")).toBe(true);
         expect(schedule.includes('{SERVICE_ROLE_KEY}')).toBe(true);
         expect(/sb_secret_|sb_[a-z]+_[A-Za-z0-9_-]{20,}/.test(schedule)).toBe(false);
+    });
+});
+
+describe('Waitlist Planner — Grid drawer is reachable, weekday headers print once', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const wl = read('js/admin/admin-waitlist.js');
+
+    test('the Grid renders weekday labels in a header row, not inside every cell', () => {
+        // The old markup stamped a .wlp-cap-chip-day label into all five chips
+        // of every room/month cell — thirty per row — which is what made the
+        // table too wide to show more than two months. The header row prints
+        // them once instead.
+        expect(wl.includes('wlp-cap-chip-day')).toBe(false);
+        expect(wl.includes('class="wlp-day-head')).toBe(true);
+        expect(wl.includes('colspan="5"')).toBe(true);
+    });
+
+    test('all three Grid detail panels route through the one drawer', () => {
+        // wlpRenderGridSidebar / wlpRenderDemandDrawer / wlpRenderAgeOutDrawer
+        // return {title, sub, body} for the shared shell now. If one is ever
+        // interpolated straight into markup again it renders "[object Object]"
+        // on the page — which is exactly what happened while building this.
+        const dispatch = wl.match(/function wlpDrawerContent[\s\S]*?\n}/)[0];
+        ['wlpRenderGridSidebar', 'wlpRenderDemandDrawer', 'wlpRenderAgeOutDrawer']
+            .forEach(fn => expect(dispatch.includes(fn)).toBe(true));
+        // No caller may interpolate a drawer builder into a template literal.
+        expect(/\$\{[^}]*wlpRender(Demand|AgeOut)Drawer\(/.test(wl)).toBe(false);
+        expect(/\$\{[^}]*wlpRenderGridSidebar\(/.test(wl)).toBe(false);
+    });
+
+    test("closing the drawer leaves the week's child cards open", () => {
+        // The roster block and the drawer are separate state on purpose:
+        // wlpCloseDrawer clears the drawer selection and the rollup drawer,
+        // never rosterCell, which only the roster's own ✕ clears.
+        // Checks for an assignment, not a mention — the function's own comment
+        // names rosterCell to explain why it is left alone.
+        const close = wl.match(/function wlpCloseDrawer[\s\S]*?\n}/)[0];
+        expect(/rosterCell\s*=/.test(close)).toBe(false);
+        expect(close.includes('_wlp.selCellA = null')).toBe(true);
+        expect(wl.includes("wlpGridRosterClose')?.addEventListener('click', () => { _wlp.rosterCell = null;")).toBe(true);
+    });
+
+    test('every queue row carries the same Enroll action as its expanded panel', () => {
+        expect(wl.includes('wlp-row-enroll-btn')).toBe(true);
+        // Same data attributes as the expanded footer's button, so the one
+        // [data-wlp-enroll-full] listener — which stops propagation, keeping
+        // the row from toggling — covers both with no extra wiring.
+        const row = wl.match(/const rowEnrollBtn[\s\S]*?;\n/)[0];
+        expect(row.includes('data-wlp-enroll-full=')).toBe(true);
+        expect(row.includes('data-wlp-enroll-month=')).toBe(true);
+    });
+
+    test('the drawer is actually rendered and wired, not just defined', () => {
+        // The lesson from the refund button that shipped into a dead section:
+        // a symbol present in the bundle is not the same claim as a feature
+        // the shell will ever reach.
+        expect(/\$\{isGrid \? wlpRenderDrawer\(alloc\) : ''\}/.test(wl)).toBe(true);
+        expect(wl.includes('wlpAttachDrawerListeners();')).toBe(true);
+        expect(wl.includes('data-wlp-drawer-close')).toBe(true);
+    });
+});
+
+describe('Planning tab nav — the two sidebar entries the director asked for', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const portal = read('js/admin/admin-portal.js');
+
+    test('the inquiry tool is named "Waitlist Signup Link"', () => {
+        expect(portal.includes("name: 'Waitlist Signup Link'")).toBe(true);
+        expect(portal.includes("name: 'Waitlist Inquiries'")).toBe(false);
+    });
+
+    test('Import Waitlist from File is unreachable, and nothing links to it', () => {
+        // Unreferenced by AP_TOOLS is this shell's own way of retiring a tool
+        // (its <section> stays in admin.html). A dashboard panel's `tools:`
+        // pill pointing at a retired key would be a dead link, so check both.
+        expect(/key: 'wlImport'/.test(portal)).toBe(false);
+        expect(/tools: \[[^\]]*'wlImport'/.test(portal)).toBe(false);
     });
 });
 

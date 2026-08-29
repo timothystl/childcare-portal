@@ -22,7 +22,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=28">
+    <link rel="stylesheet" href="css/admin.css?v=31">
     <link rel="stylesheet" href="css/admin-portal.css?v=7">
 </head>
 <body class="admin-body">
@@ -597,10 +597,19 @@
             <!-- Waitlist & Capacity Planner — one shared allocation drives every
                  view (Waitlist Queue / Capacity Planner → Grid or Board / Moving),
                  plus the demand-by-month and age-out rollups inline in the Grid.
-                 See renderWaitlistPlanner() in js/admin/admin-waitlist.js. -->
+                 See renderWaitlistPlanner() in js/admin/admin-waitlist.js.
+
+                 No static h2/p here on purpose — a concurrent session (same
+                 day, same live bug, same screenshot) removed the shell's own
+                 name+blurb tile entirely (see apRenderDetail()'s comment in
+                 admin-portal.js), which means every OTHER section now relies
+                 on its own <h2>/<p> as the one real header. This section is
+                 the exception: renderWaitlistPlanner() already renders a real
+                 header of its own (icon, name, subtitle, tab pills) into
+                 #wlpRoot below, so a static h2/p here would still duplicate
+                 against THAT even with the shell tile gone — left out rather
+                 than added back. -->
             <section class="admin-section" id="waitlistPlannerSection">
-                <h2>🗂️ Waitlist &amp; Capacity Planner</h2>
-                <p class="section-desc">One shared allocation drives every view — Waitlist Queue, the Capacity Planner grid or board, and Moving — with demand-by-month and age-out rollups inline below the grid. The queue is first-come, first-served by inquiry date.</p>
                 <div id="wlpRoot" style="margin-bottom:20px;"><p class="empty-hint">Loading…</p></div>
             </section>
 
@@ -616,7 +625,7 @@
                  identical name+blurb header. See roomCapacityOverviewSection
                  below for the screenshot-confirmed case. -->
             <section class="admin-section" id="wlNotifySection">
-                <h2>📨 Waitlist Inquiries</h2>
+                <h2>📨 Waitlist Signup Link</h2>
                 <div class="wl-notify-panel">
                     <div class="wl-notify-row">
                         <div class="wl-notify-field">

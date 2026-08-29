@@ -13,8 +13,35 @@
 // money the office has never billed them for.
 
 let psData = null;
+let psPromise = null;      // one fetch, shared with Billing and Today
+let psActiveChild = null;  // phone only — the wide layout shows every child
 
 function psEl(id) { return document.getElementById(id); }
+
+/**
+ * my_schedule(), fetched at most once per session and shared.
+ * Today reads it for the room label beside a child's name, Billing reads it for
+ * invoices, Schedule reads it for booked days — three tabs asking the database
+ * the same question three times was three round trips for one answer.
+ * Rejections are not cached: a failed load should be retryable by reopening the
+ * tab, not sticky for the life of the session.
+ */
+function psSchedule() {
+    if (!psPromise) {
+        psPromise = fetchMySchedule().catch(e => { psPromise = null; throw e; });
+    }
+    return psPromise;
+}
+
+/**
+ * Clears the shared cache so the next psSchedule() call actually refetches.
+ * Billing calls this after a payment succeeds — my_schedule()'s invoices are
+ * exactly what changed, and this promise is otherwise cached for the life of
+ * the session (portal-nav.js's lazy-first-open guard means a tab switch does
+ * NOT re-trigger a load), so without this a paid invoice would read as still
+ * due until the parent reloads the whole page.
+ */
+function psInvalidate() { psPromise = null; }
 function psEsc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => (
         { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
@@ -82,18 +109,40 @@ function psRender() {
         return;
     }
 
-    wrap.innerHTML = children.map(c => psChildCard(c, closed, invoiceByMonth)).join('') + `
+    if (!psActiveChild || !children.some(c => c.child === psActiveChild)) {
+        psActiveChild = children[0].child;
+    }
+
+    // Every child is rendered every time. Which ones are VISIBLE is CSS's job:
+    // the phone shows one at a time behind the switcher (design), the wide
+    // layout lays them out side by side and hides the switcher entirely. Doing
+    // it this way means the two layouts share one render rather than one of
+    // them being a special case in here.
+    const pills = children.length > 1
+        ? `<div class="pt-switcher ps-switcher">${children.map(c =>
+            `<button type="button" class="pt-childbtn ${c.child === psActiveChild ? 'active' : ''}"
+                     data-child="${psEsc(c.child)}">${psEsc(String(c.child).split(' ')[0])}</button>`
+          ).join('')}</div>`
+        : '';
+
+    wrap.innerHTML = pills + `<div class="ps-cards">${
+        children.map(c => psChildCard(c, closed, invoiceByMonth)).join('')}</div>` + `
         <a class="ps-register" href="/calendar">Register for additional days →</a>
         <p class="ps-disclaimer">Amounts are worked out from the days booked and
            your room's rates. Your statement from the office is the bill —
            anything issued will show here as it happens.</p>`;
+
+    wrap.querySelectorAll('.ps-switcher .pt-childbtn').forEach(b => {
+        b.addEventListener('click', () => { psActiveChild = b.dataset.child; psRender(); });
+    });
 }
 
 function psChildCard(child, closed, invoiceByMonth) {
     const room = psRoom(child.roomId);
     const months = Object.entries(child.months).sort(([a], [b]) => a.localeCompare(b));
 
-    return `<section class="pa-card">
+    return `<section class="pa-card ps-card ${child.child === psActiveChild ? 'is-active' : ''}"
+             data-child="${psEsc(child.child)}">
         <h2 class="pa-card-head">${psEsc(String(child.child).split(' ')[0])}${
             room ? ` · <span class="ps-room">${psEsc(room.label)}</span>` : ''}</h2>
         <div class="pa-card-body">
@@ -124,12 +173,12 @@ function psMonthBlock(monthKey, days, room, closed, invoiceByMonth) {
         <div class="ps-month-row">
             <span class="ps-month-label">${psEsc(psMonthLabel(monthKey))}</span>
             <span class="ps-month-meta">
-                <span class="ps-tally">${tally}</span>
                 <span class="ps-month-bill">${psMoney(total)}</span>
                 ${status || '<span class="ps-est">estimate</span>'}
             </span>
         </div>
-        <div class="ps-chips">${days.map(d => psChip(d, closed)).join('')}</div>
+        <div class="ps-days">${days.map(d => psChip(d, closed)).join('')}</div>
+        ${tally ? `<div class="ps-tally">${tally}</div>` : ''}
     </div>`;
 }
 
@@ -149,14 +198,14 @@ function psChip(d, closed) {
     const date = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const isClosed = closed.has(d.care_date);
     const isHalf   = d.day_type === 'half';
-    const cls = isClosed ? 'ps-chip ps-chip-closed'
-              : isHalf   ? 'ps-chip ps-chip-half' : 'ps-chip';
+    const cls = isClosed ? 'ps-day ps-day-closed'
+              : isHalf   ? 'ps-day ps-day-half' : 'ps-day';
     const kind = isClosed ? 'Closed' : (isHalf ? '½' : 'Full');
     const title = isClosed ? ` title="${psEsc(closed.get(d.care_date) || 'Center closed')} — no charge"` : '';
     return `<span class="${cls}"${title}>
-        <span class="ps-chip-dow">${dow}</span>
-        <span class="ps-chip-date">${date}</span>
-        <span class="ps-chip-kind">${kind}</span>
+        <span class="ps-day-dow">${dow.toUpperCase()}</span>
+        <span class="ps-day-date">${date}</span>
+        <span class="ps-day-kind">${kind}</span>
     </span>`;
 }
 
@@ -164,7 +213,7 @@ async function psLoad() {
     const wrap = psEl('ptScheduleBody');
     if (wrap) wrap.innerHTML = '<p class="pa-empty">Loading…</p>';
     try {
-        psData = await fetchMySchedule();
+        psData = await psSchedule();
     } catch (e) {
         console.warn('schedule:', e);
         psData = null;

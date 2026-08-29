@@ -890,6 +890,9 @@ async function _fhLoadDrawerBody(row) {
                 <li class="inc-sig">
                     <span>${escHtml(friendlyShort(String(p.payment_date || '').slice(0, 10)))} · ${p.payment_method === 'autopay' || p.source === 'processor' ? 'Autopay' : `Manual${p.payment_method ? ' · ' + escHtml(p.payment_method) : ''}`}</span>
                     <span class="fh-pay-amt">${_fhMoney(p.amount)} → ${escHtml(_fhMonthLabel(_fhMonthForInvoice(row, p.invoice_id)))}</span>
+                    ${_fhCanRefund(p, familyPayments)
+                        ? `<button type="button" class="fh-link-btn fh-pay-refund-btn" data-payment-id="${p.id}" data-processor="${escHtml(p.processor)}">↩ Refund</button>`
+                        : ''}
                 </li>`).join('')}</ul>` : '<p class="empty-hint">No payments recorded yet.</p>'}
         </div>
 
@@ -907,6 +910,50 @@ async function _fhLoadDrawerBody(row) {
     _fhEl('fhRecordPaymentBtn')?.addEventListener('click', () => _fhShowPaymentForm(row));
     _fhEl('fhDrawerCloseFoot')?.addEventListener('click', _fhCloseDrawer);
     _fhEl('fhDrawerRemindBtn')?.addEventListener('click', () => _fhRemindOne(row.familyId, _fhEl('fhDrawerRemindBtn')));
+    body.querySelectorAll('.fh-pay-refund-btn').forEach(btn => {
+        btn.addEventListener('click', () => _fhRefundPayment(Number(btn.dataset.paymentId), btn.dataset.processor, row));
+    });
+}
+
+/** An online card charge (Authorize.net or Stax) can be reversed; a payment
+ *  already reversed (or itself a reversal) never gets a button, so it can't
+ *  be double-clicked into two refunds for the same charge. Mirrors the same
+ *  gate the old admin-billing.js AR table used, before that table's own
+ *  section (billingArSection) was retired from AP_TOOLS and became
+ *  unreachable — this drawer is the live place a family's payments are
+ *  actually seen today, so this is where the control has to live. */
+function _fhCanRefund(p, allPayments) {
+    const REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax']);
+    if (!REFUNDABLE_PROCESSORS.has(p.processor)) return false;
+    if (!(parseFloat(p.amount || 0) > 0)) return false;
+    if (p.refund_of_payment_id) return false;
+    return !allPayments.some(o => o.refund_of_payment_id === p.id);
+}
+
+/** Refund/void an online card payment from the Ledger drawer. Only asks the
+ *  processor that actually took the charge to reverse it —
+ *  admin-refund-payment / admin-refund-stax-payment never touch
+ *  billing_payments or the invoice itself, so this button's job ends at
+ *  "submitted," not "done." The processor's own webhook records the actual
+ *  reversal a few seconds later; _fhLoad() (which invalidates Bookkeeper's
+ *  cache, per this file's own convention) and a drawer re-render pick it up
+ *  the next time either is opened, not because the reversal is guaranteed
+ *  to be reflected immediately. */
+async function _fhRefundPayment(paymentId, processor, row) {
+    const processorName = processor === 'stax' ? 'Stax' : 'Authorize.net';
+    if (!confirm(`Refund or void this online payment? This asks ${processorName} to reverse the charge and cannot be undone from here.`)) {
+        return;
+    }
+    try {
+        const result = await adminRefundPayment(paymentId, processor);
+        alert(`${result.kind === 'void' ? 'Void' : 'Refund'} submitted. It will show here once ${processorName} confirms it (usually a few seconds).`);
+        await logAdminAction(`${result.kind}_submitted`, 'billing_payment', paymentId);
+        await _fhLoad();
+        _fhDrawerRow = _fhRows.find(r => String(r.familyId) === String(row.familyId)) || null;
+        if (_fhDrawerRow) await _fhRenderDrawer(); else _fhCloseDrawer();
+    } catch (err) {
+        alert('Refund failed: ' + err.message);
+    }
 }
 
 /** Which open month a payment belongs to, from the invoice it was recorded

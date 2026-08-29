@@ -39,32 +39,43 @@ function prRenderSwitcher() {
     if (ptChildren.length < 2) { wrap.classList.add('hidden'); return; }
     wrap.classList.remove('hidden');
     wrap.innerHTML = ptChildren.map(c =>
-        `<button type="button" class="pt-tab ${c.id === prActiveId ? 'active' : ''}"
+        `<button type="button" class="pt-childbtn ${c.id === prActiveId ? 'active' : ''}"
                  data-child="${ptEsc(c.id)}">${ptEsc((c.child_name || '').split(' ')[0])}</button>`
     ).join('');
-    wrap.querySelectorAll('.pt-tab').forEach(b => {
+    wrap.querySelectorAll('.pt-childbtn').forEach(b => {
         b.addEventListener('click', () => prSelectChild(b.dataset.child));
     });
 }
 
+// A window AROUND the selected day, oldest first, rather than the last N days
+// counting backwards. Stepping with ‹ / › then reads as moving along a strip
+// that stays put, instead of the whole strip re-anchoring on every press.
+const PR_STRIP_BACK = 3;
+const PR_STRIP_FWD  = 3;
+
 function prQuickDays() {
-    // Last 8 completed days, most recent first — a fast jump for the common
-    // case without a full calendar. The date input covers anything further back.
     const days = [];
-    let d = prShiftDate(ptToday(), -1);
-    for (let i = 0; i < 8; i++) { days.push(d); d = prShiftDate(d, -1); }
+    let d = prShiftDate(prDate, -PR_STRIP_BACK);
+    for (let i = 0; i <= PR_STRIP_BACK + PR_STRIP_FWD; i++) { days.push(d); d = prShiftDate(d, 1); }
     return days;
 }
 
 function prRenderQuickDays() {
     const wrap = prEl('prQuickDays');
     if (!wrap) return;
+    const today = ptToday();
     wrap.innerHTML = prQuickDays().map(d => {
-        const label = new Date(d + 'T12:00:00').toLocaleDateString('en-US', {
-            weekday: 'short', day: 'numeric', timeZone: 'America/Chicago',
-        });
+        const dt  = new Date(d + 'T12:00:00');
+        const dow = dt.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Chicago' });
+        const num = dt.toLocaleDateString('en-US', { day: 'numeric',   timeZone: 'America/Chicago' });
+        // A future day is drawn, not hidden — the strip keeps its shape as you
+        // walk it — but it cannot be opened: there is no day there yet.
+        const future = d > today;
         return `<button type="button" class="pr-quick-day ${d === prDate ? 'active' : ''}"
-                    data-date="${d}">${ptEsc(label)}</button>`;
+                    data-date="${d}"${future ? ' disabled' : ''}>
+                    <span class="pr-quick-dow">${ptEsc(dow)}</span>
+                    <span class="pr-quick-num">${ptEsc(num)}</span>
+                </button>`;
     }).join('');
     wrap.querySelectorAll('.pr-quick-day').forEach(b => {
         b.addEventListener('click', () => prGoToDate(b.dataset.date));
@@ -159,13 +170,21 @@ async function prIncidentsForChild(childId) {
 }
 
 async function prRenderDay() {
+    const dayLabel  = prEl('prDayLabel');
     const dateLabel = prEl('prDateLabel');
     const dateInput = prEl('prDateInput');
     const isToday   = prDate === ptToday();
+    const when      = new Date(prDate + 'T12:00:00');
+    // Weekday and date on separate lines, per the design. "(today)" stays —
+    // it is the one thing the two lines cannot say on their own.
+    if (dayLabel) {
+        dayLabel.textContent = when.toLocaleDateString('en-US', { weekday: 'long' })
+            + (isToday ? ' (today)' : '');
+    }
     if (dateLabel) {
-        dateLabel.textContent = new Date(prDate + 'T12:00:00').toLocaleDateString('en-US', {
-            weekday: 'long', month: 'long', day: 'numeric',
-        }) + (isToday ? ' (today)' : '');
+        dateLabel.textContent = when.toLocaleDateString('en-US', {
+            month: 'long', day: 'numeric', year: 'numeric',
+        });
     }
     if (dateInput) { dateInput.value = prDate; dateInput.max = ptToday(); }
     const nextBtn = prEl('prNextBtn');
