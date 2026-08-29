@@ -4286,17 +4286,101 @@ matters.
   by side and hides the switcher entirely. Both screens are satisfied by one
   render rather than one of them being a special case in the JS.
 
-### ⚠️ `Parent Portal Desktop.dc.html` was NOT read
+### The real design source arrived, and it changed things (2026-08-29)
 
-The director pointed at the Claude Design project
-(`05e91ea7-93c5-43f5-9875-8f9b7d69ad93`) mid-session. `DesignSync` needs a
-`/design-login` this remote session cannot run, and the file is not in
-`docs/design_handoff/`, so **this was built from the screenshots**. This file's
-own Staff-tab entry says exactly why that is not good enough ("Read the
-`.dc.html` template directly rather than re-guessing from a screenshot a second
-time") — the source carries the literal hex values and the data-shaping the
-screens only imply. Seed that file into the repo and re-check this work against
-it before calling the redesign matched.
+`design_handoff_parent_portal/` (README + `Parent Portal Desktop.dc.html` +
+`Parent Portal Mobile.dc.html`) was supplied after the first pass shipped. The
+screens had been right about layout; the source carried the literal numbers,
+two whole screens the screenshots never showed, and one requirement that needs
+a schema decision.
+
+**Corrected against the source's own values** (the first pass guessed these):
+rail 236px with 24px padding, brand mark 132px; content column 1120px inside
+48px gutters; Today's grid is `1fr 320px`, not `1.55fr 1fr`; Billing is
+`360px 1fr`; Schedule and Account are plain `1fr 1fr` at 920/960px; nav items
+11px/14px with a 10px radius; recap pills 64px wide with a `1.5px solid #eef1f4`
+border; day chips 52px minimum and a **wrapped flex row, not a grid** — a short
+month ends early instead of padding its last row out.
+
+**Sign in is a screen this app never had.** Split at 900px (navy brand half,
+card half), one navy column below it, with the tagline "Welcome. Receive. Grow.
+Go." and the org line at the foot. The card's own contents were already right;
+the wordmark moved out of it into the brand panel.
+
+- ⚠️ **It uses `myMDO_primary_wordmark_dark.png`, not the `_light` file the
+  design references.** Checked byte-for-byte: the handoff ships the identical
+  `_light` asset this repo already has, and it is drawn for a light page — its
+  "MDO" is a white outline that all but vanishes on the navy panel. The
+  prototype had the same problem; it is a bug in the mockup, not a variant.
+- ⚠️ **`.portal-body`'s 24px padding had to go.** It existed to inset a
+  centered sign-in card; against a full-bleed split screen it drew a cream
+  border around the navy half.
+- On a phone `.portal-signin-brand` is `display: contents`, so the mark, the
+  tagline and the org line become direct children of the shell column. That is
+  what lets the org line sit at the foot of the screen — it comes *before* the
+  card in the document, so it needs `order: 1` as well as `margin-top: auto`.
+  Both revert at 900px, where the brand is a real panel again.
+- The Sign In button stays the parent app's green (`mdo-signin-btn--parent`)
+  rather than the design's navy. That per-app accent postdates the design and
+  is deliberate elsewhere in this repo; flagged rather than silently reverted.
+
+**The illustrated icon set replaced the emoji**, in both layouts. `PT_TABS`
+now holds image paths (`images/icons/{today,recap,schedule,billing,messages,
+account}.png`, added to the repo from the handoff) and `ptRenderTabs()` emits
+an `<img class="tabbar-icon">`. Inactive is `opacity: .42`, not a different
+glyph. ⚠️ **The sizing rules are scoped to `.portal-app`** — `.tabbar-icon` in
+`styles.css` is still an emoji `<span>` in the **staff** app, and a
+width/height there would do nothing good. The desktop rail in the design file
+still showed emoji; its own README says to "swap for the same illustrated icon
+set once available", which this does.
+
+**Sign out is now also at the foot of the rail** (`#portalSignOutRail`), a
+second button rather than one moved by CSS: the phone's belongs to the Account
+screen's own scroll, the rail's is pinned to the rail. Both call
+`portalSignOut`.
+
+### ⚠️ Messages "now scoped per child" is a schema change, and was NOT built
+
+The handoff's README is explicit — "**Now scoped per child** ... Each child has
+their own conversation history ... `messagesByChild = { emma: [...], owen: [...] }`".
+This app cannot do that today: `message_threads` holds **one row per family**,
+and every read and write on both sides (`myMessageThread()`,
+`fetchThreadMessages()`, `sendParentMessage()`, and the admin inbox) resolves
+that single thread. Splitting it needs a `student_id` on the thread, a
+migration, a backfill decision for existing messages, and matching work in the
+admin app so the office knows which child a reply belongs to.
+
+Rendering the pills without that would show the same conversation twice under
+two names, which is worse than not showing them. **Left as the one open
+decision from this handoff.**
+
+### Also deliberately not built from the source
+
+- **Billing's per-line dollar amounts.** The design's month card is a real
+  itemized table (`Emma Carter - Preschool (16 days)` ... `$920.00`). The invoice
+  carries ONE server-computed total; the per-child split exists in the database
+  as `compute_family_month_charges_itemized()` but is only returned by
+  `create-stax-charge`, which reserves a payment attempt and must not be called
+  to render a read-only screen. Exposing it needs a read-only RPC (or a field
+  on `my_schedule()`) — a migration, not a CSS change. Until then the amount
+  column shows **days booked**, which is a fact this payload already holds.
+- **The disabled "Pay online (coming soon)" button.** The design shows it; the
+  live app has a working Stax flow. The design predates it. The working button
+  stays, and no `.pb-pay-btn` rule was added that would restyle it as a
+  placeholder.
+- **Documents was not restructured.** The design's flat card grid is close to
+  what `.pd-row` already renders (title, subtitle, navy button); its four
+  sections carry empty-state copy worth keeping. It grids two-up on desktop.
+
+### ⚠️ The first pass built from screenshots, and it showed
+
+`DesignSync` could not reach the Claude Design project from this remote session
+(it needs a `/design-login` that cannot run here), so the first pass was built
+from screenshots — exactly what this file's Staff-tab entry warns against. The
+source arrived as a zip afterward and the section above lists what it changed:
+a dozen measurements, two screens that were never in the screenshots at all
+(Sign in, the illustrated icon set), and the per-child Messages requirement.
+**The lesson holds: ask for the `.dc.html` before building, not after.**
 
 ### Verification
 

@@ -14,9 +14,11 @@
     background: var(--cream);
     min-height: 100vh;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     justify-content: center;
-    padding: 24px 16px;
+    /* No padding: the sign-in shell is a full-bleed split screen and owns its
+       own gutters. This used to inset a centered card; the shell replaced it. */
+    padding: 0;
 }
 
 /* Signed in, the app shell owns the viewport and the body must stop being the
@@ -1272,9 +1274,9 @@ body.pb-modal-open { overflow: hidden; }
 /* ── Recap ───────────────────────────────────────────────── */
 .pr-daynav { align-items: center; margin-bottom: 12px; }
 .pr-nav-btn {
-    width: 40px; height: 40px;
+    width: 38px; height: 38px;
     border-radius: 999px;
-    border: 1px solid var(--border);
+    border: 1.5px solid #d7dee5;
     background: var(--white);
     color: var(--navy);
     font-size: 18px;
@@ -1301,14 +1303,15 @@ body.pb-modal-open { overflow: hidden; }
 }
 .pr-quick-day {
     flex: 0 0 auto;
+    min-width: 64px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2px;
     min-width: 62px;
     padding: 9px 6px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border: 1.5px solid #eef1f4;
+    border-radius: 10px;
     background: var(--white);
     cursor: pointer;
     font: inherit;
@@ -1334,12 +1337,11 @@ body.pb-modal-open { overflow: hidden; }
 .ps-month-bill { font-size: 1.1em; }
 .ps-tally { display: block; margin-top: 10px; font-size: .78em; color: var(--text-muted); }
 
-.ps-days {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
-    gap: 8px;
-}
+/* A wrapped row, not a fixed grid — the design lets short months end early
+   rather than padding the last row out to the full width. */
+.ps-days { display: flex; flex-wrap: wrap; gap: 7px; }
 .ps-day {
+    min-width: 52px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1357,15 +1359,13 @@ body.pb-modal-open { overflow: hidden; }
 }
 .ps-day-date { font-size: .95em; font-weight: 800; color: var(--navy); }
 .ps-day-kind { font-size: .72em; font-weight: 600; color: var(--text-muted); }
-.ps-day-half { background: var(--sun-pale); border-color: var(--sun); }
+.ps-day-half { background: var(--sun-pale); border-color: var(--sun-lt); }
 .ps-day-half .ps-day-kind { color: var(--mustard-dark); font-weight: 800; }
 /* A closed day is struck through rather than removed: the parent booked it,
    and its absence would read as a mistake in the schedule. It is not billed —
    psMonthBlock leaves it out of the total. */
 .ps-day-closed { background: var(--warm-gray); border-color: var(--border); }
-.ps-day-closed .ps-day-dow,
-.ps-day-closed .ps-day-date,
-.ps-day-closed .ps-day-kind { color: var(--text-muted); text-decoration: line-through; }
+.ps-day-closed { opacity: .65; text-decoration: line-through; }
 
 .ps-register {
     display: block;
@@ -1398,7 +1398,7 @@ body.pb-modal-open { overflow: hidden; }
 }
 .pb-total {
     font-family: var(--font-head);
-    font-size: 2.2em;
+    font-size: 34px;
     font-weight: 700;
     color: var(--navy);
     margin: 0 0 14px;
@@ -1463,6 +1463,117 @@ body.pb-modal-open { overflow: hidden; }
     cursor: pointer;
 }
 
+/* ── Sign in: brand panel + card ─────────────────────────── */
+/* Split screen at 900px and up (navy half, card half); one navy column on a
+   phone with the wordmark and tagline above the card. Same two elements. */
+.portal-signin-shell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    width: 100%;
+    min-height: 100dvh;
+    background: var(--navy);
+    padding: 56px 26px 32px;
+    box-sizing: border-box;
+}
+/* On a phone the shell itself is the navy page, so the brand "panel" is not a
+   panel at all — display:contents dissolves it and lets the mark, the tagline
+   and the org line lay out as direct children of the shell column. That is
+   what lets the org line sit at the very bottom of the screen (margin-top:auto
+   below) with the card above it, instead of being trapped mid-column between
+   the tagline and the card. It becomes a real panel again at 900px. */
+.portal-signin-brand {
+    display: contents;
+    text-align: center;
+}
+.portal-signin-mark { width: 180px; margin-bottom: 22px; }
+.portal-signin-tagline {
+    color: rgba(255, 255, 255, .75);
+    font-family: var(--font-head);
+    font-size: 17px;
+    font-style: italic;
+    line-height: 1.5;
+    margin: 0 0 30px;
+    max-width: 380px;
+}
+.portal-signin-org {
+    color: rgba(255, 255, 255, .4);
+    font-size: 11px;
+    text-align: center;
+    /* display:contents made these siblings of the card, but the org line still
+       comes BEFORE it in the document. order:1 puts it last, and only then can
+       the auto top margin push it to the foot of the page. */
+    order: 1;
+    margin: auto 0 0;
+    padding-top: 26px;
+}
+.portal-signin-shell .portal-card { padding: 26px 22px; }
+/* The card is the page on a phone, so it may not also be a floating panel —
+   the navy behind it is the shadow. */
+.portal-signin-shell .portal-card { box-shadow: none; }
+
+@media (min-width: 900px) {
+    .portal-signin-shell {
+        flex-direction: row;
+        align-items: stretch;
+        padding: 0;
+        background: var(--cream);
+    }
+    .portal-signin-brand {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: var(--navy);
+        padding: 60px;
+        position: relative;
+    }
+    .portal-signin-mark { width: 220px; margin-bottom: 28px; }
+    .portal-signin-tagline { font-size: 22px; margin-bottom: 0; }
+    .portal-signin-org { position: absolute; bottom: 32px; font-size: 13px; margin: 0; padding: 0; order: 0; }
+    .portal-signin-shell > .portal-card {
+        flex: 1;
+        max-width: none;
+        align-self: center;
+        margin: 0 auto;
+        width: min(400px, 100%);
+        padding: 40px 36px;
+        box-shadow: 0 4px 24px rgba(1, 41, 74, .10);
+    }
+}
+
+/* ── Tab bar / rail icons ────────────────────────────────── */
+/* The illustrated set is images, so size and dim them as images. Scoped to
+   .portal-app: .tabbar-icon in styles.css is still an emoji <span> in the
+   staff app, and a width/height on that would do nothing good there. */
+.portal-app .tabbar-icon {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    opacity: .42;
+    font-size: 0;          /* alt text must not draw if an icon 404s */
+}
+.portal-app .tabbar-item.is-active .tabbar-icon { opacity: 1; }
+.portal-app .tabbar-label { font-size: 11px; font-weight: 700; color: #9aa4ad; }
+.portal-app .tabbar-item.is-active .tabbar-label { color: var(--navy); font-weight: 800; }
+
+.portal-signout-rail {
+    display: none;
+    margin-top: auto;
+    padding: 10px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, .55);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
 /* ── Wide layout: the navy rail ──────────────────────────── */
 /* Below 900px .app-nav is just a wrapper around the existing bottom bar and
    the brand mark inside it is not rendered at all. */
@@ -1480,15 +1591,17 @@ body.pb-modal-open { overflow: hidden; }
     .portal-app .app-nav { order: -1; }
     .portal-app .app-nav {
         flex: none;
-        width: 228px;
+        width: 236px;
         background: var(--navy);
         display: flex;
         flex-direction: column;
-        padding: 22px 14px;
+        padding: 24px 14px;
         overflow-y: auto;
+        box-sizing: border-box;
     }
-    .portal-app .pt-brand { display: block; margin: 0 8px 26px; }
-    .portal-app .pt-brand img { width: 118px; display: block; }
+    .portal-app .pt-brand { display: block; margin: 6px 0 30px 10px; }
+    .portal-app .pt-brand img { width: 132px; display: block; }
+    .portal-app .portal-signout-rail { display: block; }
 
     .portal-app .tabbar {
         display: flex !important;      /* portal-nav sets a grid template inline */
@@ -1501,38 +1614,43 @@ body.pb-modal-open { overflow: hidden; }
     .portal-app .tabbar-item {
         flex-direction: row;
         justify-content: flex-start;
-        gap: 14px;
-        padding: 12px 14px;
-        border-radius: var(--radius-md);
-        min-height: 48px;
+        gap: 12px;
+        padding: 11px 14px;
+        border-radius: 10px;
+        min-height: 44px;
+        text-align: left;   /* .tabbar-item centers its label for the phone bar */
     }
-    .portal-app .tabbar-icon  { font-size: 20px; opacity: 1; }
-    .portal-app .tabbar-label { font-size: 15px; font-weight: 700; color: #E7EEF4; }
+    .portal-app .tabbar-icon  { width: 22px; height: 22px; opacity: 1; }
+    .portal-app .tabbar-label {
+        flex: 1; font-size: 14px; font-weight: 700; color: rgba(255, 255, 255, .72);
+    }
     .portal-app .tabbar-item.is-active { background: var(--sun); }
     .portal-app .tabbar-item.is-active .tabbar-label { color: var(--navy); font-weight: 800; }
     /* In the rail the badge trails the label instead of clipping the icon. */
     .portal-app .tabbar-badge { position: static; margin-left: auto; padding: 2px 9px; font-size: 12px; }
 
-    .portal-app .app-route { padding: 0 40px 40px; }
-    .portal-app .pt-tab { padding: 0; max-width: 1040px; }
-    .pt-page-head { padding: 34px 0 22px; }
-    .portal-app .portal-greeting { font-size: 2.1em; }
+    /* 1120px content column inside 48px gutters, per the design source. */
+    .portal-app .app-route { padding: 0 48px 60px; }
+    .portal-app .pt-tab { padding: 0; max-width: 1120px; margin: 0 auto; }
+    .pt-page-head { padding: 36px 0 22px; }
+    .portal-app .portal-greeting { font-size: 28px; }
     .portal-app .portal-sub { font-size: .95em; }
 
     /* Today splits: the day on the left, what's going on around it on the
        right. Photos lead the left column here (order:-1) where the design
        puts them; on a phone they stay under the day, which is the order the
        phone screens show. */
-    .pt-cols { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+    .pt-cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
     /* Back to a real column at this width, so the two cards stack inside it. */
     .pt-col-side { display: block; }
     .pt-col-main { display: flex; flex-direction: column; }
     .pt-col-main > .pt-photos { order: -1; }
     .pt-event-body { flex-direction: row; align-items: baseline; justify-content: space-between; width: 100%; }
 
-    .ps-cards, .pb-cards, .portal-app .pd-body {
-        grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
-    }
+    .ps-cards { grid-template-columns: 1fr 1fr; gap: 20px; max-width: 920px; }
+    /* Balance beside the itemized month, not two equal columns. */
+    .pb-cards { grid-template-columns: 360px minmax(0, 1fr); gap: 24px; max-width: 920px; }
+    .portal-app .pd-body { grid-template-columns: 1fr 1fr; gap: 16px; max-width: 960px; }
     .portal-app .pd-body { display: grid; gap: 14px; align-items: start; }
     /* The switcher is a phone affordance. With room for every child's card
        side by side there is nothing to switch between, so it goes away and
@@ -1540,7 +1658,7 @@ body.pb-modal-open { overflow: hidden; }
     .ps-switcher { display: none; }
     .ps-register { max-width: 760px; }
 
-    #ptAccountBody { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; align-items: start; }
+    #ptAccountBody { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; max-width: 960px; }
     #ptAccountBody .pa-card { margin: 0; }
     .portal-signout { margin-left: 0; }
 }
