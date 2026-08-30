@@ -1375,6 +1375,7 @@ async function emailStaffSchedule() {
             if (!staffMember?.email) { skipped++; continue; }
             try {
                 await sendStaffScheduleEmail({
+                    staffId:    staffMember.id,
                     staffName:  name,
                     staffEmail: staffMember.email,
                     weekStart,
