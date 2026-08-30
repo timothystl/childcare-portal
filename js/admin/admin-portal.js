@@ -1806,6 +1806,7 @@ function apRenderStaffReq() {
 
     if (!sf.rows.length) {
         host.innerHTML = '<p class="empty-hint">No children are registered for this week yet — pick another week above.</p>';
+        apCostRender(sf);
         return;
     }
 
@@ -1874,6 +1875,277 @@ function apRenderStaffReq() {
         <p style="color:var(--text-muted);font-size:.86em;margin-top:14px;max-width:76ch;text-wrap:pretty">
             Ratios come from Settings → Staff-to-Child Ratios. AM counts every child booked that day; PM counts full-day children only, since a half-day booking drops for the afternoon — a room shows one number when AM and PM match, and both when they don't. An orange count means that shift is exactly at ratio — one more child adds another staff member. "Total on the floor" and the cost estimate are built from the AM figure, since it is always the day's peak.
         </p>`;
+    apCostRender(sf);
+}
+
+// ============================================================
+// Cost to add staff — Day / Week, one calculation
+// ============================================================
+// The design handoff's own version of this was a flat table: one row per
+// room, "next AM hire +$104 / next PM hire +$78" — the same two figures
+// repeated five times, because a hire costs the same wherever it stands.
+// What actually differs per room is what that hire *covers*: at 1:4 a Bear
+// hire buys 4 seats ($21.70/child at our shift length), at 1:12 a Pre-K
+// hire buys 12 ($7.23/child). Three times the value for the same dollar,
+// and the flat table hid it entirely.
+//
+// So this is a coverage view instead. Each staff member owns a group of
+// `ratio` seats; children fill the seats left to right; a group with
+// nobody assigned to it is the deficit, drawn in deep tangerine. Assigning
+// one more person in the grid turns the next group green — the whole point
+// of the ask ("as staff are added to a room"), which a static snapshot
+// cannot show.
+//
+// ⚠️ Assigned counts come from _readAssignmentsFromDOM() (admin-reports.js)
+// — the same helper saveStaffSchedule(), the XLSX export and the By-worker
+// pivot all read through. Any second source and this could show coverage
+// that disagrees with what Save would actually persist.
+//
+// ⚠️ Shift cost uses SCHED_SHIFT_HOURS, the app's own real shift lengths
+// (5h / 5h), NOT the mockup's 6h/4.5h split — which would make AM and PM
+// hires cost $104/$78 as drawn but disagree with the per-person cost
+// renderScheduleByWorker() already prints from the same constant. Same
+// reasoning as everywhere else in this tool: one number, one source.
+const apCostState = { view: 'day', dayIdx: 0 };
+let _apCostWired = false;
+
+// apMoney() rounds to whole dollars — right for a week's labor total, wrong
+// for a wage or a per-child figure, where the rounding is a third of the
+// number. These two get cents.
+function apCostCents(n) {
+    return '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function apShiftHireCost(shift) {
+    const hours  = (typeof SCHED_SHIFT_HOURS === 'object' && SCHED_SHIFT_HOURS[shift]) || 5;
+    const wage   = Number(apReqInputs.wage) || 0;
+    const burden = 1 + (Number(apReqInputs.burden) || 0) / 100;
+    return hours * wage * burden;
+}
+
+// One row per room per day, both shifts, with what's actually assigned
+// laid over what the ratios require.
+function apCoverage(sf, assignments) {
+    return sf.rows.map(r => {
+        const ratio = r.ratio;
+        const days  = sf.weekDates.map((date, i) => {
+            const cell = r.cells[i];
+            const shift = (key, kids, required) => {
+                const assigned = (assignments?.[date]?.[r.room.id]?.[key] || []).length;
+                const groups   = Math.max(required, assigned, kids > 0 ? 1 : 0);
+                return {
+                    kids, required, assigned, groups,
+                    covered: Math.min(kids, assigned * ratio),
+                    deficit: Math.max(0, required - assigned),
+                    buffer:  Math.max(0, assigned - required),
+                    hireCost: apShiftHireCost(key),
+                };
+            };
+            return {
+                date, closed: cell.closed,
+                am: shift('am', cell.kids,   cell.staff),
+                pm: shift('pm', cell.kidsPm, cell.staffPm),
+            };
+        });
+        return { room: r.room, label: r.label, ratio, ratioLabel: r.ratioLabel, days };
+    });
+}
+
+function apCostRender(sf) {
+    const host = document.getElementById('staffCostAddBody');
+    if (!host) return;
+
+    if (!sf.rows.length) { host.innerHTML = ''; return; }
+
+    const assignments = (typeof _readAssignmentsFromDOM === 'function')
+        ? _readAssignmentsFromDOM(sf.weekDates) : {};
+    const rows = apCoverage(sf, assignments);
+
+    // ⚠️ A week nobody has filled in yet would otherwise render as five
+    // rooms fully in the red, which reads as a crisis rather than as an
+    // empty form. Until at least one slot is assigned anywhere in the week,
+    // this shows the requirement and the price of meeting it — no deficit
+    // styling, because "0 assigned" and "not filled in yet" are the same
+    // DOM state and only one of them is a problem.
+    const anyAssigned = rows.some(r => r.days.some(d => d.am.assigned || d.pm.assigned));
+
+    if (apCostState.dayIdx > sf.weekDates.length - 1) apCostState.dayIdx = 0;
+
+    const toggle = `
+        <div class="ap-seg ap-cost-seg" id="apCostViewToggle">
+            <button class="ap-seg-btn${apCostState.view === 'day'  ? ' is-on' : ''}" data-ap-cost-view="day">One day</button>
+            <button class="ap-seg-btn${apCostState.view === 'week' ? ' is-on' : ''}" data-ap-cost-view="week">All week</button>
+        </div>`;
+
+    const planningNote = anyAssigned ? '' : `
+        <p class="ap-cost-note is-planning">No one is assigned for this week yet, so nothing below is counted as short — these are the seats the ratios require and what covering them costs.</p>`;
+
+    host.innerHTML = `
+        <div class="ap-cost-head">
+            <div>
+                <h3 class="ap-cost-title">Cost to add staff</h3>
+                <p class="ap-cost-sub">What one more hire covers, and what it costs, at ${escHtml(apCostCents(Number(apReqInputs.wage) || 0))}/hr + ${escHtml(String(Number(apReqInputs.burden) || 0))}% burden.</p>
+            </div>
+            ${toggle}
+        </div>
+        ${planningNote}
+        ${apCostState.view === 'day' ? apCostDayView(sf, rows, anyAssigned) : apCostWeekView(sf, rows, anyAssigned)}
+        <p class="ap-cost-note">Each block is one staff member's worth of seats at that room's ratio. Filled dots are children booked; a block with nobody on it is the gap. Assign someone in <strong>This week's schedule</strong> and these update — the count comes from the same grid Save writes, so it can't disagree with it.</p>`;
+
+    apCostWire();
+}
+
+function apCostShiftRow(shiftKey, s, ratio, anyAssigned) {
+    const label = shiftKey === 'am' ? 'AM' : 'PM';
+    if (!s.kids) {
+        return `<div class="ap-cost-shift is-empty"><span class="ap-cost-shift-tag">${label}</span><span class="ap-cost-shift-none">no children booked</span></div>`;
+    }
+
+    // Seats, grouped one block per staff member. Children fill left to
+    // right, so the block that runs out of staff is visibly the last one.
+    let seated = 0;
+    const blocks = [];
+    for (let g = 0; g < s.groups; g++) {
+        const staffed = g < s.assigned;
+        const dots = [];
+        for (let i = 0; i < ratio; i++) {
+            dots.push(`<span class="ap-cost-seat${seated < s.kids ? ' is-filled' : ''}"></span>`);
+            seated++;
+        }
+        const beyondNeed = g >= s.required;
+        const cls = !anyAssigned ? 'is-plan' : staffed ? (beyondNeed ? 'is-buffer' : 'is-staffed') : 'is-gap';
+        blocks.push(`<span class="ap-cost-block ${cls}">${dots.join('')}</span>`);
+    }
+
+    let status;
+    if (!anyAssigned) {
+        status = `<span class="is-plan-text">${s.required} needed · ${escHtml(apMoney(s.required * s.hireCost))}</span>`;
+    } else if (s.deficit > 0) {
+        status = `<span class="is-gap-text">Short ${s.deficit} · ${escHtml(apMoney(s.deficit * s.hireCost))} to cover</span>`;
+    } else {
+        const seats = Math.max(0, s.assigned * ratio - s.kids);
+        const seatTxt = seats === 0
+            ? 'at ratio — the next child adds staff'
+            : `${seats} seat${seats === 1 ? '' : 's'} of room`;
+        status = s.buffer > 0
+            ? `<span class="is-buffer-text">Covered · ${s.buffer} spare staff · ${escHtml(seatTxt)}</span>`
+            : `<span class="is-ok-text">Covered · ${escHtml(seatTxt)}</span>`;
+    }
+
+    return `
+        <div class="ap-cost-shift">
+            <span class="ap-cost-shift-tag">${label}</span>
+            <span class="ap-cost-blocks">${blocks.join('')}</span>
+            <span class="ap-cost-shift-meta">
+                <span class="ap-cost-shift-kids">${s.kids} kids · ${s.assigned} on</span>
+                ${status}
+            </span>
+        </div>`;
+}
+
+function apCostDayView(sf, rows, anyAssigned) {
+    const i = apCostState.dayIdx;
+    const days = sf.weekDates.map((d, idx) => `
+        <button class="ap-cost-day${idx === i ? ' is-on' : ''}${sf.closed[idx] ? ' is-closed' : ''}" data-ap-cost-day="${idx}">
+            ${AP_DAYS[idx]}<span>${escHtml(friendlyShort(d).replace(/, \d{4}$/, '').replace(/^[A-Za-z]+, /, ''))}</span>
+        </button>`).join('');
+
+    if (sf.closed[i]) {
+        return `<div class="ap-cost-days">${days}</div>
+            <p class="empty-hint">The center is closed on ${escHtml(AP_DAYS[i])} — no staffing required.</p>`;
+    }
+
+    const cards = rows.map(r => {
+        const d = r.days[i];
+        return `
+        <div class="ap-cost-room">
+            <div class="ap-cost-room-head">
+                <span class="ap-cost-room-name">${escHtml(r.label)}</span>
+                <span class="ap-cost-room-ratio">${escHtml(r.ratioLabel)}</span>
+                <span class="ap-cost-room-hire">
+                    <strong>+${escHtml(apCostCents(apShiftHireCost('am')))}</strong> per hire
+                    · covers ${r.ratio} · ${escHtml(apCostCents(apShiftHireCost('am') / r.ratio))}/child
+                </span>
+            </div>
+            ${apCostShiftRow('am', d.am, r.ratio, anyAssigned)}
+            ${apCostShiftRow('pm', d.pm, r.ratio, anyAssigned)}
+        </div>`;
+    }).join('');
+
+    const gapCost = rows.reduce((a, r) =>
+        a + r.days[i].am.deficit * r.days[i].am.hireCost + r.days[i].pm.deficit * r.days[i].pm.hireCost, 0);
+    const gapStaff = rows.reduce((a, r) => a + r.days[i].am.deficit + r.days[i].pm.deficit, 0);
+
+    const footer = !anyAssigned ? '' : gapStaff
+        ? `<div class="ap-cost-total is-gap">${gapStaff} shift${gapStaff === 1 ? '' : 's'} unstaffed on ${escHtml(AP_DAYS[i])} · ${escHtml(apMoney(gapCost))} to close the gap</div>`
+        : `<div class="ap-cost-total is-ok">Every room is covered on ${escHtml(AP_DAYS[i])}.</div>`;
+
+    return `<div class="ap-cost-days">${days}</div><div class="ap-cost-rooms">${cards}</div>${footer}`;
+}
+
+// All-week view is AM only, on purpose: apStaffing()'s own note says AM is
+// always the day's peak (a half-day booking can only ever remove a PM
+// child, never add one), so the AM figure is the one that decides whether
+// the day is staffed. Five rooms x five days x two shifts of seat blocks
+// would also be unreadable — the day view is where both shifts live.
+function apCostWeekView(sf, rows, anyAssigned) {
+    const head = sf.weekDates.map((d, i) =>
+        `<th>${AP_DAYS[i]}<span>${escHtml(friendlyShort(d).replace(/, \d{4}$/, '').replace(/^[A-Za-z]+, /, ''))}</span></th>`).join('');
+
+    const body = rows.map(r => `
+        <tr>
+            <td class="ap-cost-wk-room">
+                <span class="ap-cost-room-name">${escHtml(r.label)}</span>
+                <span class="ap-cost-room-ratio">${escHtml(r.ratioLabel)} · +${escHtml(apCostCents(apShiftHireCost('am')))} per hire covers ${r.ratio}</span>
+            </td>
+            ${r.days.map((d, i) => {
+                if (sf.closed[i]) return '<td class="ap-cost-wk-cell is-closed"><span class="ap-cost-wk-none">closed</span></td>';
+                const s = d.am;
+                if (!s.kids)     return '<td class="ap-cost-wk-cell"><span class="ap-cost-wk-none">—</span></td>';
+                const pct = Math.round((s.covered / s.kids) * 100);
+                const cls = !anyAssigned ? 'is-plan' : s.deficit ? 'is-gap' : s.buffer ? 'is-buffer' : 'is-ok';
+                const note = !anyAssigned ? `${s.required} needed`
+                    : s.deficit ? `short ${s.deficit} · ${apMoney(s.deficit * s.hireCost)}`
+                    : s.buffer  ? `${s.buffer} spare` : 'covered';
+                return `
+                <td class="ap-cost-wk-cell ${cls}">
+                    <div class="ap-cost-wk-bar"><span style="width:${anyAssigned ? pct : 0}%"></span></div>
+                    <div class="ap-cost-wk-kids">${s.kids} kids · ${s.assigned}/${s.required}</div>
+                    <div class="ap-cost-wk-note">${escHtml(note)}</div>
+                </td>`;
+            }).join('')}
+        </tr>`).join('');
+
+    const perDayGap = sf.weekDates.map((_, i) =>
+        rows.reduce((a, r) => a + (sf.closed[i] ? 0 : r.days[i].am.deficit * r.days[i].am.hireCost), 0));
+
+    return `
+        <div style="overflow-x:auto">
+            <table class="ap-cost-wk-table">
+                <thead><tr><th class="ap-cost-wk-roomhead">Room · AM shift</th>${head}</tr></thead>
+                <tbody>${body}</tbody>
+                ${anyAssigned ? `<tfoot><tr>
+                    <td class="ap-cost-wk-roomhead">Cost to close the gap</td>
+                    ${perDayGap.map(v => `<td>${v ? escHtml(apMoney(v)) : '—'}</td>`).join('')}
+                </tr></tfoot>` : ''}
+            </table>
+        </div>`;
+}
+
+// Delegated once on the persistent container — apCostRender() replaces its
+// innerHTML on every re-render, so a listener bound to the buttons
+// themselves would be dropped each time.
+function apCostWire() {
+    if (_apCostWired) return;
+    const host = document.getElementById('staffCostAddBody');
+    if (!host) return;
+    _apCostWired = true;
+    host.addEventListener('click', e => {
+        const v = e.target.closest('[data-ap-cost-view]');
+        if (v) { apCostState.view = v.dataset.apCostView; apRenderStaffReq(); return; }
+        const d = e.target.closest('[data-ap-cost-day]');
+        if (d) { apCostState.dayIdx = parseInt(d.dataset.apCostDay, 10) || 0; apRenderStaffReq(); }
+    });
 }
 
 // Shared header cards (Children this week / Est. labor cost) above the tab

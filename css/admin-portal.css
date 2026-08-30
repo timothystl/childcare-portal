@@ -1934,3 +1934,133 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 
 /* Build Staff Schedule: "By worker" pivot table */
 .sched-by-worker-table td { font-size: 12.5px; line-height: 1.5; }
+
+/* ── Cost to add staff (Daily Staffing Requirement) ──────────────
+   Coverage, not a price list: each .ap-cost-block is one staff
+   member's worth of seats at the room's ratio, and a block with
+   nobody assigned to it is the gap. Colors follow the same palette
+   the rest of this tool uses — green covered, deep tangerine short,
+   gold-pale spare — so "short" reads identically here and on the
+   Attendance Board's ratio pill. */
+.ap-cost-head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin: 30px 0 4px;
+    padding-top: 24px; border-top: 1px solid var(--ap-border-lt);
+}
+.ap-cost-title { margin: 0; font-size: 1.06em; color: var(--navy); font-weight: 800; }
+.ap-cost-sub   { margin: 3px 0 0; font-size: .86em; color: var(--text-muted); max-width: 62ch; }
+.ap-cost-seg   { flex: 0 0 auto; }
+.ap-cost-note  { font-size: .84em; color: var(--text-muted); margin: 14px 0 0; max-width: 78ch; text-wrap: pretty; }
+.ap-cost-note.is-planning {
+    background: var(--green-pale); border: 1px solid var(--ap-border-lt);
+    border-radius: 10px; padding: 9px 13px; margin: 12px 0 0; color: var(--navy);
+}
+
+/* Day picker */
+.ap-cost-days { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 14px; }
+.ap-cost-day {
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    min-width: 74px; padding: 7px 12px; cursor: pointer;
+    background: #fff; border: 1px solid var(--ap-border-lt); border-radius: 10px;
+    font-weight: 800; font-size: .84em; color: var(--navy);
+}
+.ap-cost-day span { font-weight: 500; font-size: .84em; color: var(--text-muted); }
+.ap-cost-day:hover { border-color: var(--green-text); }
+.ap-cost-day.is-on { background: var(--navy); border-color: var(--navy); color: #fff; }
+.ap-cost-day.is-on span { color: rgba(255,255,255,.72); }
+.ap-cost-day.is-closed { opacity: .5; }
+
+/* Per-room card, day view */
+.ap-cost-rooms { display: flex; flex-direction: column; gap: 10px; }
+.ap-cost-room {
+    background: #fff; border: 1px solid var(--ap-border-lt);
+    border-radius: 12px; padding: 12px 14px;
+}
+.ap-cost-room-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.ap-cost-room-hire { margin-left: auto; font-size: .78em; color: var(--text-muted); }
+.ap-cost-room-hire strong { color: var(--navy); }
+.ap-cost-room-name  { font-weight: 800; color: var(--navy); font-size: .96em; }
+.ap-cost-room-ratio { font-size: .8em; color: var(--text-muted); }
+
+.ap-cost-shift {
+    display: grid; grid-template-columns: 34px 1fr auto;
+    align-items: center; gap: 12px;
+    padding: 7px 0; border-top: 1px solid var(--ap-border-lt);
+}
+.ap-cost-shift.is-empty { color: var(--text-muted); }
+.ap-cost-shift-tag {
+    font-size: .68em; font-weight: 800; letter-spacing: .06em;
+    color: var(--text-muted); text-transform: uppercase;
+}
+.ap-cost-shift-none { grid-column: 2 / -1; font-size: .84em; color: var(--text-muted); }
+
+/* Seat blocks — one block per staff member, one dot per seat */
+.ap-cost-blocks { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-cost-block {
+    display: inline-flex; gap: 3px; align-items: center;
+    padding: 4px 5px; border-radius: 7px; border: 1.5px solid;
+}
+.ap-cost-block.is-staffed { background: var(--green-pale); border-color: var(--green-text); }
+.ap-cost-block.is-buffer  { background: var(--gold-pale, #FDF3D8); border-color: var(--sun); }
+.ap-cost-block.is-gap     { background: var(--tang-pale); border-color: var(--ap-deep-tang); }
+.ap-cost-block.is-plan    { background: #fff; border-color: var(--ap-border-lt); border-style: dashed; }
+.ap-cost-seat {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: transparent; border: 1.5px solid rgba(0,0,0,.16);
+}
+.ap-cost-block.is-staffed .ap-cost-seat.is-filled { background: var(--green-text); border-color: var(--green-text); }
+.ap-cost-block.is-buffer  .ap-cost-seat.is-filled { background: var(--sun);        border-color: var(--sun); }
+.ap-cost-block.is-gap     .ap-cost-seat.is-filled { background: var(--ap-deep-tang); border-color: var(--ap-deep-tang); }
+.ap-cost-block.is-plan    .ap-cost-seat.is-filled { background: var(--navy);       border-color: var(--navy); }
+
+.ap-cost-shift-meta { display: flex; flex-direction: column; gap: 1px; text-align: right; font-size: .8em; white-space: nowrap; }
+.ap-cost-shift-kids { color: var(--text-muted); }
+.ap-cost-shift-meta .is-gap-text    { color: var(--ap-deep-tang); font-weight: 800; }
+.ap-cost-shift-meta .is-buffer-text { color: var(--navy); font-weight: 700; }
+.ap-cost-shift-meta .is-ok-text     { color: var(--green-text); font-weight: 700; }
+.ap-cost-shift-meta .is-plan-text   { color: var(--navy); font-weight: 700; }
+
+.ap-cost-next {
+    display: flex; flex-direction: column; gap: 1px; text-align: right;
+    min-width: 150px; padding-left: 12px; border-left: 1px solid var(--ap-border-lt);
+}
+.ap-cost-next-amt { font-weight: 800; color: var(--navy); font-size: .92em; }
+.ap-cost-next-lbl { font-size: .72em; color: var(--text-muted); }
+
+.ap-cost-total {
+    margin-top: 12px; padding: 10px 14px; border-radius: 10px;
+    font-weight: 800; font-size: .9em;
+}
+.ap-cost-total.is-gap { background: var(--tang-pale); color: var(--ap-deep-tang); }
+.ap-cost-total.is-ok  { background: var(--green-pale); color: var(--green-text); }
+
+/* Week view */
+.ap-cost-wk-table { border-collapse: collapse; width: 100%; min-width: 760px; margin-top: 14px; }
+.ap-cost-wk-table th {
+    background: var(--navy); color: #fff; font-size: .7em; font-weight: 800;
+    letter-spacing: .06em; text-transform: uppercase; padding: 8px 10px; text-align: center;
+}
+.ap-cost-wk-table th span { display: block; font-weight: 500; letter-spacing: 0; text-transform: none; opacity: .75; }
+.ap-cost-wk-table th.ap-cost-wk-roomhead { text-align: left; }
+.ap-cost-wk-table td { padding: 9px 10px; text-align: center; border-bottom: 1px solid var(--ap-border-lt); vertical-align: top; }
+.ap-cost-wk-room { text-align: left; }
+.ap-cost-wk-room .ap-cost-room-name,
+.ap-cost-wk-room .ap-cost-room-ratio { text-align: left; }
+.ap-cost-wk-room .ap-cost-room-name  { display: block; }
+.ap-cost-wk-room .ap-cost-room-ratio { display: block; margin-top: 1px; }
+.ap-cost-wk-bar { height: 7px; border-radius: 4px; background: var(--tang-pale); overflow: hidden; margin-bottom: 5px; }
+.ap-cost-wk-bar span { display: block; height: 100%; background: var(--green-text); }
+.ap-cost-wk-cell.is-plan   .ap-cost-wk-bar { background: var(--ap-border-lt); }
+.ap-cost-wk-cell.is-buffer .ap-cost-wk-bar span { background: var(--sun); }
+.ap-cost-wk-kids { font-size: .8em; font-weight: 700; color: var(--navy); }
+.ap-cost-wk-note { font-size: .74em; color: var(--text-muted); margin-top: 1px; }
+.ap-cost-wk-cell.is-gap    .ap-cost-wk-note { color: var(--ap-deep-tang); font-weight: 800; }
+.ap-cost-wk-cell.is-ok     .ap-cost-wk-note { color: var(--green-text); font-weight: 700; }
+.ap-cost-wk-none { color: var(--text-muted); font-size: .82em; }
+.ap-cost-wk-table tfoot td { border-bottom: none; font-weight: 800; color: var(--ap-deep-tang); padding-top: 10px; }
+.ap-cost-wk-table tfoot td.ap-cost-wk-roomhead { text-align: left; color: var(--navy); }
+
+@media (max-width: 760px) {
+    .ap-cost-shift { grid-template-columns: 30px 1fr; row-gap: 6px; }
+    .ap-cost-shift-meta, .ap-cost-next { grid-column: 2; text-align: left; border-left: none; padding-left: 0; min-width: 0; }
+}
