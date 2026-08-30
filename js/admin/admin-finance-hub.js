@@ -216,6 +216,9 @@ async function _fhLoad() {
     // cached month rather than recomputing the whole year on every write,
     // which was the actual cause of "the Bookkeeper tab is very slow."
     if (typeof bookkeeperInvalidate === 'function') bookkeeperInvalidate(_fhMonth);
+    // Recording or importing a payment can close a coverage gap — drop the
+    // cached months so the card reflects it rather than showing a stale gap.
+    _fhCoverageInvalidate();
     const label = _fhEl('fhMonthLabel');
     if (label) label.textContent = _fhMonthLabel(_fhMonth);
     const root = _fhEl('fhRoot');
@@ -434,6 +437,56 @@ function _fhVisibleRows() {
     });
 }
 
+// ── Payment coverage ────────────────────────────────────────
+// The childcare statement refuses any month with care days and no payment
+// recorded. That refusal is right, but it lands one family at a time with a
+// parent waiting. This is the same question center-wide and up front.
+//
+// ⚠️ The months come from center_payment_coverage(), which uses the SAME
+// care-day definition family_care_statement() does. Computing it here instead
+// would let this card call a month fine while the statement refuses it.
+let _fhCoverage = null;      // cached per Ledger session
+let _fhCoverageLoading = false;
+
+function _fhCoverageInvalidate() { _fhCoverage = null; }
+
+async function _fhRenderCoverage() {
+    const el = _fhEl('fhCoverage');
+    if (!el) return;
+
+    if (!_fhCoverage && !_fhCoverageLoading) {
+        _fhCoverageLoading = true;
+        try {
+            const year = String(_fhMonth || '').slice(0, 4) || String(new Date().getFullYear());
+            _fhCoverage = await fetchPaymentCoverage(`${year}-01-01`, `${year}-12-31`);
+        } catch (e) {
+            console.warn('payment coverage:', e);
+            _fhCoverage = [];
+        } finally {
+            _fhCoverageLoading = false;
+        }
+    }
+    if (!_fhCoverage) return;
+
+    // Only the months that actually block something: care on record, nothing
+    // received. A month with neither is simply a month the center was closed.
+    const gaps = _fhCoverage.filter(m => (m.care_days || 0) > 0 && (m.payments || 0) === 0);
+    if (!gaps.length) { el.innerHTML = ''; return; }
+
+    el.innerHTML = `<div class="fh-coverage">
+        <div class="fh-coverage-head">⚠ ${gaps.length} ${gaps.length === 1 ? 'month has' : 'months have'}
+            care on record and no payments recorded</div>
+        <p class="fh-coverage-note">A childcare statement covering ${gaps.length === 1 ? 'it' : 'any of them'}
+           will not issue — the total under it would be short. Import the payments
+           (Finance → ProCare Import) or record them in a family's drawer.</p>
+        <ul class="fh-coverage-list">${gaps.map(m => `<li>
+            <strong>${escHtml(_fhMonthLabel(m.month))}</strong>
+            <span>${m.care_days} care ${m.care_days === 1 ? 'day' : 'days'} across
+                  ${m.families} ${m.families === 1 ? 'family' : 'families'}</span>
+        </li>`).join('')}</ul>
+    </div>`;
+}
+
 function _fhRenderLedger() {
     const root = _fhEl('fhRoot');
     if (!root) return;
@@ -494,6 +547,7 @@ function _fhRenderLedger() {
     ];
 
     root.innerHTML = `
+        <div id="fhCoverage"></div>
         <div class="fh-strip">
             <div class="fh-stat">
                 <div class="fh-stat-num">${_fhMoney(grossTuition)}</div>
@@ -572,6 +626,9 @@ function _fhRenderLedger() {
         <p class="ap-note fh-footer-note">${_fhBillingReportLinkNote()}</p>`;
 
     _fhBindLedgerListeners(root);
+
+    // Async and cached — later renders reuse the first fetch.
+    _fhRenderCoverage();
 }
 
 /** "Billing Report is the only other screen — read-only, for the binder or

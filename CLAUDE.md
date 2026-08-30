@@ -4839,6 +4839,69 @@ it gets `null`. `npm test` — 238/238 (6 new guards). The document was rendered
 in a real browser against representative values, which is what caught the
 inherited header band.
 
+## ProCare import duplicate guard + payment coverage (2026-08-29)
+
+Both asked for directly, after the childcare statement shipped and the office
+planned to close the July/August payment gap with a ProCare export.
+
+### ⚠️ The import had no duplicate guard, and Jan–Jun are already loaded
+
+`_handleProCareImport()` inserted every confirmed row, every time. A full-year
+export would therefore have doubled January through June — the months whose
+statements already work. **A doubled payment inflates a family's childcare
+statement, which is filed with the IRS, and nothing downstream flags it.**
+Undercounting at least surfaces: the statement refuses a month with no
+payments at all.
+
+ProCare's export carries **no transaction id**, so "already imported" is
+inferred from the row: `family_id | payment_date | amount | note`
+(`_procareDupKey()`), matched against one `fetchPaymentsInRange()` call over
+the file's own date window. Duplicates are marked in the preview, excluded
+from the count, and — this is the actual guard — filtered out of `valid`
+before insert.
+
+- ⚠️ **Two genuinely separate payments of the same amount, same day, same
+  family, same description are indistinguishable from a duplicate and the
+  second IS skipped.** That is the safer side to err on for a tax document,
+  and every skipped row is listed in the preview so the office can spot one
+  and record it by hand in the Ledger.
+- ⚠️ **A failed lookup does not silently import unguarded.** `dupCheckFailed`
+  is set *and surfaced* as a warning in the preview — a flag with no consumer
+  is the FS29/`daysSince` mistake this file already carries.
+- The generic CSV importer still has **FS12** (`_normalizeImportDate` does
+  `new Date(raw)` first). The ProCare path does **not** use it — it converts
+  Excel serials explicitly and the workbook is read without `cellDates`, so
+  dates arrive as serials and land on the right day. Use the ProCare importer.
+
+### Payment coverage, center-wide and up front
+
+`center_payment_coverage.sql` (**applied and verified in production**) returns
+per-month care days, families, payments and amount. `_fhRenderCoverage()` puts
+the blocking months on the Finance Ledger.
+
+⚠️ **It must use the SAME care-day definition `family_care_statement()` uses**
+(non-waitlisted `registration_dates` on a non-cancelled registration), or the
+card calls a month fine while the statement refuses it — the worst of both.
+That is why it is a server-side RPC rather than a client recomputation.
+
+Only months with **care days and zero payments** are shown: a month with
+neither is a month the center was closed. `_fhCoverageInvalidate()` runs from
+`_fhLoad()`, so recording or importing a payment drops the cached months
+rather than leaving a closed gap on screen.
+
+Live at the time of writing: Jan–Mar have payments and no care days
+(`registration_dates` starts in April), Apr–Jun have both, **Jul–Sep have
+2,900+ care days and no payments at all.**
+
+### Provider tax details are on file
+
+`provider_tax_info` written 2026-08-29: Timothy Lutheran Church, 6704 Fyler
+Ave, St. Louis, MO 63139, EIN 43-6003738. ⚠️ **The phone on the statement is
+314-781-8673, the MDO office direct line — not 314-783-0523, which is the
+church** and is what the rest of the site publishes. A parent or tax preparer
+calling about childcare should reach MDO. License number is deliberately blank
+(none supplied); its row is removed rather than blocking the document.
+
 ## Finance summary API (for the church ChMS finance integration)
 
 `supabase/functions/finance-summary/index.ts` — `GET`, header `X-Api-Key: <FINANCE_API_KEY>`, returns 401 if missing/wrong. Returns `{ updated_at, accounts: [], budget: [...] }` for the current month + 12 prior (13 months, oldest first). Deploy like any other edge function (paste into the Supabase dashboard editor or `supabase functions deploy finance-summary`) and set the `FINANCE_API_KEY` secret — neither is automatic.

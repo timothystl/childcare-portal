@@ -691,6 +691,18 @@ async function onPaymentCsvChange(file) {
 // PROCARE IMPORT
 // ============================================================
 
+// The fingerprint a ProCare row and a stored payment are compared on. Amount is
+// fixed to 2dp because the sheet gives a float and the column is numeric — 60
+// and 60.00 are the same payment.
+function _procareDupKey(p) {
+    return [
+        String(p.family_id),
+        String(p.payment_date).slice(0, 10),
+        Number(p.amount || 0).toFixed(2),
+        String(p.note || '').trim().toLowerCase(),
+    ].join('|');
+}
+
 async function _handleProCareImport(rows, wrap) {
     wrap.innerHTML = '<p class="empty-hint">Loading child roster for matching…</p>';
 
@@ -719,7 +731,46 @@ async function _handleProCareImport(rows, wrap) {
         return { idx, dateVal, studentRaw: String(studentRaw || ''), firstChild, familyId, type: String(type || ''), description: String(description || ''), status: String(status || ''), amount: Number(amountRaw) || 0 };
     }).filter(r => r.dateVal && r.type && r.amount > 0);
 
+    // ── Duplicate guard ─────────────────────────────────────
+    // ⚠️ Re-importing an export that overlaps what is already recorded used to
+    // double every row in the overlap, silently. That matters more than it
+    // looks: a doubled payment inflates a family's childcare statement, which
+    // is a document they file with the IRS, and nothing downstream would ever
+    // flag it. Undercounting at least surfaces — the statement refuses a month
+    // with no payments at all.
+    //
+    // ProCare's export carries no transaction id, so "already imported" has to
+    // be inferred from the row: family + date + amount + description. One
+    // fetch over the file's own date window, matched in memory.
+    //
+    // ⚠️ Two genuinely separate payments of the same amount, on the same day,
+    // from the same family, with the same description are indistinguishable
+    // from a duplicate here and the second WILL be skipped. That is the safer
+    // side to err on for a tax document, and the preview lists every skipped
+    // row so the office can spot one and record it by hand in the Ledger.
+    const withFamily = parsed.filter(r => r.familyId && r.type !== 'Invoice');
+    if (withFamily.length) {
+        const dates = withFamily.map(r => r.dateVal).sort();
+        try {
+            const existing = await fetchPaymentsInRange(dates[0], dates[dates.length - 1]);
+            const seen = new Set(existing.map(_procareDupKey));
+            parsed.forEach(r => {
+                if (r.familyId && r.type !== 'Invoice' && seen.has(_procareDupKey({
+                    family_id: r.familyId, payment_date: r.dateVal,
+                    amount: r.amount, note: r.description,
+                }))) r.alreadyImported = true;
+            });
+        } catch (e) {
+            // A failed lookup must not turn into a silent double-import: say so
+            // and let the office decide, rather than importing unguarded.
+            console.warn('duplicate check:', e);
+            parsed.forEach(r => { r.dupCheckFailed = true; });
+        }
+    }
+
     const matched   = parsed.filter(r => r.familyId);
+    const dupes     = parsed.filter(r => r.alreadyImported);
+    const toImport  = matched.filter(r => !r.alreadyImported);
     const unmatched = parsed.filter(r => !r.familyId);
 
     // Build family options for unmatched rows
@@ -738,8 +789,11 @@ async function _handleProCareImport(rows, wrap) {
             : `<td><select class="procare-family-sel form-control" data-idx="${r.idx}" style="font-size:.8rem;padding:2px 4px">
                 <option value="">— skip —</option>${familyOpts}
                </select></td>`;
-        return `<tr style="${bg}">
-            <td style="white-space:nowrap">${escHtml(r.dateVal)}</td>
+        const dupCell = r.alreadyImported
+            ? '<span style="color:#7a2a18;font-weight:700">already imported</span>'
+            : '';
+        return `<tr style="${r.alreadyImported ? 'background:#f5f0e4;opacity:.7' : bg}">
+            <td style="white-space:nowrap">${escHtml(r.dateVal)} ${dupCell}</td>
             <td style="font-size:.8rem">${escHtml(r.studentRaw)}</td>
             <td>${typeLabel(r.type)}</td>
             <td style="font-size:.8rem;color:#6b7280">${escHtml(r.description.substring(0, 50))}${r.description.length > 50 ? '…' : ''}</td>
@@ -751,8 +805,11 @@ async function _handleProCareImport(rows, wrap) {
 
     wrap.innerHTML = `
         <div style="margin-bottom:12px;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-            <span style="font-size:.9rem"><strong>${matched.length}</strong> matched &nbsp;·&nbsp; <strong style="color:#d97706">${unmatched.length}</strong> unmatched (assign below or skip)</span>
-            <button id="procareImportBtn" class="btn-primary">Import ${matched.length} matched rows</button>
+            <span style="font-size:.9rem"><strong>${toImport.length}</strong> to import &nbsp;·&nbsp; <strong style="color:#d97706">${unmatched.length}</strong> unmatched (assign below or skip)${
+                dupes.length ? ` &nbsp;·&nbsp; <strong style="color:#7a2a18">${dupes.length}</strong> already imported (skipped)` : ''}</span>
+            ${parsed.some(r => r.dupCheckFailed) ? `<span style="font-size:.85rem;color:#7a2a18;font-weight:700">
+                ⚠ The duplicate check could not run — importing now may double rows already recorded. Reload and try again.</span>` : ''}
+            <button id="procareImportBtn" class="btn-primary">Import ${toImport.length} rows</button>
         </div>
         <div style="overflow-x:auto">
         <table class="report-table" style="font-size:.82rem">
@@ -780,7 +837,10 @@ async function _confirmProCareImport(rows, wrap) {
     const btn = document.getElementById('procareImportBtn');
     if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
 
-    const valid = rows.filter(r => r.familyId && !(r.type === 'Payment' && r.status !== 'Success'));
+    // Duplicates are excluded here as well as hidden from the count above —
+    // the preview is advisory, this is the guard.
+    const valid = rows.filter(r => r.familyId && !r.alreadyImported
+        && !(r.type === 'Payment' && r.status !== 'Success'));
 
     try {
         const adminEmail = await getAdminEmail();
