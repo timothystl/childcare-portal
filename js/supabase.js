@@ -4188,12 +4188,15 @@ async function sendScheduleChangeEmail({ parentName, parentEmail, childName, mon
     return data;
 }
 
-async function sendStaffScheduleEmail({ staffName, staffEmail, weekStart, shifts }) {
+// staffId is optional so this stays backward compatible with any other caller
+// that doesn't have it handy — the edge function only attempts a push when
+// it's present, and the email always sends either way.
+async function sendStaffScheduleEmail({ staffId, staffName, staffEmail, weekStart, shifts }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: { session } } = await sbClient.auth.getSession();
     const token = session?.access_token || SUPABASE_ANON_KEY;
     const { data, error } = await sbClient.functions.invoke('send-staff-schedule', {
-        body: { staffName, staffEmail, weekStart, shifts },
+        body: { staffId, staffName, staffEmail, weekStart, shifts },
         headers: { Authorization: `Bearer ${token}` },
     });
     if (error) throw error;

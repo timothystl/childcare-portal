@@ -25,7 +25,9 @@
 //      not stamp anything and is clearly marked in the subject and body.
 //
 // Deploy:  supabase functions deploy send-invoice
-// Secrets: RESEND_API_KEY, RESEND_FROM_EMAIL, RESEND_REPLY_TO
+// Secrets: RESEND_API_KEY, RESEND_FROM_EMAIL, RESEND_REPLY_TO,
+//          WORKER_URL, SUPABASE_SERVICE_ROLE_KEY (for the push notice below —
+//          both are already project-wide secrets, set for check-missed-clocks)
 // ============================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -401,6 +403,11 @@ serve(async (req) => {
         const sent: Array<{ id: number; to: string }> = [];
         const skipped: Array<{ id: number; reason: string }> = [];
 
+        // Read once for the whole batch — used below to fire a best-effort
+        // push alongside each sent invoice's email.
+        const workerUrl      = Deno.env.get("WORKER_URL") || ""; // e.g. https://mdo.timothystl.org
+        const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
         for (const inv of invoices || []) {
             // A void invoice is dead by definition — nothing should ever be
             // charged or claimed against it. Caught live 2026-08-26: a stale
@@ -468,6 +475,24 @@ serve(async (req) => {
             }
 
             sent.push({ id: inv.id, to: fam.parent_email });
+
+            // Best-effort push alongside the email (same escape-hatch pattern
+            // /send-push already documents for scheduled/service-role senders
+            // like this one). A family who doesn't check their inbox still
+            // gets a lock-screen notice — no dollar figure in the push body,
+            // by the same convention every other push in this app follows:
+            // a short teaser, full detail only inside the portal.
+            if (workerUrl && serviceRoleKey) {
+                await fetch(`${workerUrl}/send-push`, {
+                    method:  "POST",
+                    headers: { "Authorization": `Bearer ${serviceRoleKey}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        family_id: inv.family_id,
+                        title:     "Invoice Ready",
+                        body:      `Your ${monthLabel(month)} invoice is ready to view in the MDO portal.`,
+                    }),
+                }).catch(() => {});
+            }
         }
 
         // Missing ids (deleted between drafting and sending) are reported too.

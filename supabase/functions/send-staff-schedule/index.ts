@@ -56,7 +56,8 @@ serve(async (req) => {
             });
         }
 
-        const { staffName, staffEmail, weekStart, shifts } = await req.json() as {
+        const { staffId, staffName, staffEmail, weekStart, shifts } = await req.json() as {
+            staffId?: string;
             staffName: string;
             staffEmail: string;
             weekStart: string;
@@ -178,6 +179,27 @@ serve(async (req) => {
             return new Response(JSON.stringify({ error: payload }), {
                 status: res.status, headers: { ...ch, "Content-Type": "application/json" },
             });
+        }
+
+        // Best-effort push alongside the email — same non-blocking pattern as
+        // check-missed-clocks: a staff member who doesn't check email between
+        // shifts still gets a lock-screen notice that a new schedule is up.
+        // staffId is optional (older callers may not send it yet), and a push
+        // failure here must never turn an already-sent email into an error.
+        if (staffId) {
+            const workerUrl      = Deno.env.get("WORKER_URL") || ""; // e.g. https://mdo.timothystl.org
+            const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+            if (workerUrl && serviceRoleKey) {
+                await fetch(`${workerUrl}/send-staff-push`, {
+                    method:  "POST",
+                    headers: { "Authorization": `Bearer ${serviceRoleKey}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        staff_id: staffId,
+                        title:    "New Schedule Posted",
+                        body:     `${shifts.length} shift${shifts.length === 1 ? "" : "s"} for the week of ${weekLabel}. Tap to view.`,
+                    }),
+                }).catch(() => {});
+            }
         }
 
         return new Response(JSON.stringify({ success: true, id: payload.id }), {
