@@ -6024,3 +6024,22 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     background: #fff;
     color: var(--navy);
 }
+
+/* Payment-coverage warning on the Ledger. Months with care on record and no
+   payments — the same gap a childcare statement refuses to issue over. */
+.fh-coverage {
+    background: var(--sun-pale);
+    border: 1px solid #F2E3B8;
+    border-left: 4px solid var(--sun);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+}
+.fh-coverage-head { font-weight: 800; color: #6a5320; font-size: .95em; }
+.fh-coverage-note { margin: 6px 0 10px; font-size: .85em; line-height: 1.55; color: #6a5320; }
+.fh-coverage-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.fh-coverage-list li {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    font-size: .88em; color: var(--navy);
+}
+.fh-coverage-list span { color: var(--text-muted); }

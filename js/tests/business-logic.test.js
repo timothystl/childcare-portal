@@ -2447,6 +2447,59 @@ describe('cost to add staff', () => {
     });
 });
 
+// ============================================================
+// Payment import dedup + coverage (center_payment_coverage.sql)
+// ============================================================
+describe('payment import duplicate guard and coverage', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const billing = read('js/admin/admin-billing.js');
+    const hub = read('js/admin/admin-finance-hub.js');
+    const coverage = read('supabase/migrations/center_payment_coverage.sql');
+
+    test('a re-imported ProCare row is skipped, not inserted twice', () => {
+        // A doubled payment inflates a family's childcare statement, which is
+        // filed with the IRS, and nothing downstream would flag it.
+        expect(billing.includes('_procareDupKey')).toBe(true);
+        expect(/r\.alreadyImported = true/.test(billing)).toBe(true);
+        // The guard is on the IMPORT, not only the preview count.
+        expect(/const valid = rows\.filter\(r => r\.familyId && !r\.alreadyImported/.test(billing)).toBe(true);
+    });
+
+    test('the fingerprint includes the description, not just family+date+amount', () => {
+        // Two children can produce two equal payments on one day; the
+        // description is what usually separates them.
+        ['family_id', 'payment_date', 'amount', 'note'].forEach(f => {
+            expect(new RegExp('p\\.' + f).test(billing)).toBe(true);
+        });
+        // Amounts are compared at 2dp — the sheet gives a float, the column is numeric.
+        expect(/toFixed\(2\)/.test(billing)).toBe(true);
+    });
+
+    test('a failed duplicate check warns instead of importing unguarded', () => {
+        // Set AND surfaced. A flag with no consumer is the FS29 mistake.
+        expect(billing.includes('dupCheckFailed = true')).toBe(true);
+        expect(/dupCheckFailed\)[\s\S]{0,200}duplicate check could not run/.test(billing)).toBe(true);
+    });
+
+    test('coverage uses the statement\'s own care-day definition', () => {
+        // If these drift, the card calls a month fine while the statement
+        // refuses it — the worst of both.
+        expect(/waitlisted is not true/.test(coverage)).toBe(true);
+        expect(/r\.status <> 'cancelled'/.test(coverage)).toBe(true);
+        expect(/where is_admin\(\)/.test(coverage)).toBe(true);
+        expect(/revoke all on function public\.center_payment_coverage\(date, date\) from public, anon/.test(coverage)).toBe(true);
+    });
+
+    test('the coverage card flags only months that actually block a statement', () => {
+        // Care on record and nothing received. A month with neither is just a
+        // month the center was closed.
+        expect(/care_days \|\| 0\) > 0 && \(m\.payments \|\| 0\) === 0/.test(hub)).toBe(true);
+        // Recording a payment must drop the cache, or the gap shows as stale.
+        expect(hub.includes('_fhCoverageInvalidate();')).toBe(true);
+    });
+});
+
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;
 if (_failed > 0) process.exit(1);

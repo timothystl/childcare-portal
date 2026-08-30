@@ -4920,6 +4920,42 @@ async function fetchPaymentsForInvoice(invoiceId) {
     return data || [];
 }
 
+/**
+ * Every payment in a date window, for the ProCare import's duplicate check.
+ *
+ * ⚠️ The import has no natural key from ProCare — the export carries no
+ * transaction id — so "already imported" is inferred from the row itself:
+ * family + date + amount + description. Fetching the window once and matching
+ * in memory keeps that a single round trip instead of one per row.
+ */
+/**
+ * Per-month care days vs payments recorded, center-wide — the office's view of
+ * the same gap the childcare statement refuses on.
+ *
+ * ⚠️ Computed server-side, by the SAME care-day definition family_care_statement()
+ * uses. Recomputing it here would let the coverage screen call a month fine
+ * while the statement refuses it, which is the worst of both.
+ */
+async function fetchPaymentCoverage(fromDate, toDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('center_payment_coverage', {
+        p_from: fromDate, p_to: toDate,
+    });
+    if (error) throw friendlyError(error);
+    return Array.isArray(data) ? data : [];
+}
+
+async function fetchPaymentsInRange(fromDate, toDate) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('billing_payments')
+        .select('family_id, payment_date, amount, note')
+        .gte('payment_date', fromDate)
+        .lte('payment_date', toDate);
+    if (error) throw error;
+    return data || [];
+}
+
 async function insertBillingPayment(row) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient
