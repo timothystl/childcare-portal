@@ -23,7 +23,7 @@
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/admin.css?v=32">
-    <link rel="stylesheet" href="css/admin-portal.css?v=7">
+    <link rel="stylesheet" href="css/admin-portal.css?v=8">
 </head>
 <body class="admin-body">
 
@@ -1498,6 +1498,12 @@
                         </div>
                     </div>
                     <div id="staffReqBody"><p class="empty-hint">Loading…</p></div>
+                    <!-- Cost to add staff — apCostRender() in admin-portal.js.
+                         Its own container, not part of #staffReqBody, because
+                         apRenderStaffReq() replaces that element's innerHTML on
+                         every render and would otherwise destroy this block's
+                         delegated listener along with it. -->
+                    <div id="staffCostAddBody"></div>
                 </div>
             </section>
 

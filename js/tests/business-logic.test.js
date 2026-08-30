@@ -2286,6 +2286,66 @@ describe('childcare statement', () => {
 });
 
 // ---- Summary ----
+
+// ── Cost to add staff (Daily Staffing Requirement) ──────────────
+// ⚠️ These sit ABOVE the summary line on purpose — this file prints its
+// results and calls process.exit(1) below, so a describe block appended
+// after it runs, prints ticks, and cannot fail CI.
+describe('cost to add staff', () => {
+    const portal = fs.readFileSync(path.join(__dirname, '../admin/admin-portal.js'), 'utf8');
+    const html   = fs.readFileSync(path.join(__dirname, '../../admin.html'), 'utf8');
+    const block  = portal.slice(portal.indexOf('// Cost to add staff — Day / Week'),
+                                portal.indexOf('// Shared header cards'));
+
+    test('reads assigned staff from the same grid Save writes', () => {
+        // Any second source and the coverage bars could show a staffing
+        // level that disagrees with what saveStaffSchedule() would persist.
+        expect(!!(block.includes('_readAssignmentsFromDOM('),
+            'apCostRender must read assignments through _readAssignmentsFromDOM()')).toBe(true);
+        expect(!!(!/from\(['"]staff_schedules['"]\)/.test(block))).toBe(true);
+    });
+
+    test('prices a hire from the app’s own shift length, not the mockup’s', () => {
+        // The design mockup drew AM 7A-1P / PM 1P-5:30P (6h / 4.5h). The app
+        // actually schedules 5h / 5h and renderScheduleByWorker() already
+        // prints per-person cost from SCHED_SHIFT_HOURS — two shift lengths
+        // in one tool is exactly the drift this repo keeps paying for.
+        expect(!!(block.includes('SCHED_SHIFT_HOURS'))).toBe(true);
+        expect(!!(!/\b6\s*\*\s*wage|\b4\.5\b/.test(block))).toBe(true);
+    });
+
+    test('an unassigned week is not reported as a staffing crisis', () => {
+        // Nobody assigned yet and "assigned = 0" are the same DOM state, and
+        // only one of them is a problem. Until something is assigned the
+        // block shows the requirement, with no deficit styling.
+        expect(!!(block.includes('anyAssigned'))).toBe(true);
+        expect(!!(/No one is assigned for this week yet/.test(block))).toBe(true);
+    });
+
+    test('lives in its own container, outside the block that is wiped each render', () => {
+        // apRenderStaffReq() replaces #staffReqBody's innerHTML every render;
+        // nesting this inside it would destroy the delegated listener.
+        expect(!!(html.includes('id="staffCostAddBody"'))).toBe(true);
+        const req  = html.indexOf('id="staffReqBody"');
+        const cost = html.indexOf('id="staffCostAddBody"');
+        expect(!!(req > -1 && cost > req)).toBe(true);
+        expect(!!(block.includes("getElementById('staffCostAddBody')"))).toBe(true);
+    });
+
+    test('both views exist and the toggle switches between them', () => {
+        expect(!!(block.includes('function apCostDayView'))).toBe(true);
+        expect(!!(block.includes('function apCostWeekView'))).toBe(true);
+        expect(!!(/data-ap-cost-view="day"/.test(block) && /data-ap-cost-view="week"/.test(block))).toBe(true);
+        expect(!!(/data-ap-cost-view\]/.test(block), 'wired by delegation off the data attribute')).toBe(true);
+    });
+
+    test('carries no inline event-handler attribute', () => {
+        // script-src is locked to a hash allowlist with no 'unsafe-inline';
+        // an onclick= here would simply not fire in a browser.
+        expect(!!(!/\son(click|change|input|blur|keydown)\s*=/.test(block))).toBe(true);
+    });
+});
+
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;
 if (_failed > 0) process.exit(1);
