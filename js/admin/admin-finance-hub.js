@@ -940,7 +940,9 @@ async function _fhLoadDrawerBody(row) {
  *  unreachable — this drawer is the live place a family's payments are
  *  actually seen today, so this is where the control has to live. */
 function _fhCanRefund(p, allPayments) {
-    const REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax']);
+    // Stax only — Authorize.net was removed 2026-08-30, and no
+    // billing_payments row has ever carried it.
+    const REFUNDABLE_PROCESSORS = new Set(['stax']);
     if (!REFUNDABLE_PROCESSORS.has(p.processor)) return false;
     if (!(parseFloat(p.amount || 0) > 0)) return false;
     if (p.refund_of_payment_id) return false;
@@ -949,7 +951,7 @@ function _fhCanRefund(p, allPayments) {
 
 /** Refund/void an online card payment from the Ledger drawer. Only asks the
  *  processor that actually took the charge to reverse it —
- *  admin-refund-payment / admin-refund-stax-payment never touch
+ *  admin-refund-stax-payment never touches
  *  billing_payments or the invoice itself, so this button's job ends at
  *  "submitted," not "done." The processor's own webhook records the actual
  *  reversal a few seconds later; _fhLoad() (which invalidates Bookkeeper's

@@ -1126,9 +1126,6 @@ export default {
       // console error to say why — the same silent-failure shape as R25 above.
       // Both hosts are needed: the /maps?output=embed URL is served by
       // maps.google.com and redirects to www.google.com/maps/embed.
-      // test.authorize.net (sandbox) / accept.authorize.net (production) are
-      // the online-payment iframe in the parent portal — see
-      // portal-billing.js and create-payment-session.
       // staxjs.staxpayments.com / omni.fattmerchant.com: Stax.js mounts the
       // card-number/CVV fields as small iframes from one of these — the
       // charge response's own merchant_location_descriptor names
@@ -1141,7 +1138,7 @@ export default {
       // https://test.blockchyp.com as the target origin the iframe never
       // reached (blocked here, so it stayed at origin 'null' — the
       // "flash of real fields, then reverts to blocked" symptom).
-      "frame-src https://maps.google.com https://www.google.com https://test.authorize.net https://accept.authorize.net https://staxjs.staxpayments.com https://omni.fattmerchant.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com; " +
+      "frame-src https://maps.google.com https://www.google.com https://staxjs.staxpayments.com https://omni.fattmerchant.com https://core.spreedly.com https://test.blockchyp.com https://api.blockchyp.com; " +
       "font-src 'self' data: https://fonts.gstatic.com"
     );
     // SX4: the rest of the baseline security headers. Kept byte-identical to

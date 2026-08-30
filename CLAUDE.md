@@ -3063,6 +3063,68 @@ Set as Cloudflare Pages environment variables and Supabase Edge Function secrets
 
 ---
 
+## ⚠️ Authorize.net is GONE, and Stax is not live yet (2026-08-30)
+
+Two separate facts, and confusing them is how someone concludes payments work.
+
+**Authorize.net was removed entirely**, at the director's direction ("we will
+not use authorize at all... it is stax or nothing right now"). Removed, not
+disabled: `create-payment-session`, `authorizenet-webhook`,
+`admin-refund-payment` and `reconcile-anet-payments` are deleted from
+`supabase/functions/` and replaced **live** with inert 410 stubs (a
+delete-function tool does not exist in these sessions — deleting them in the
+dashboard is a checklist item). `iframe-communicator.html`, the Accept Hosted
+modal in `portal.html`, `createPaymentSession()`, the `?paid=`/`?cancelled=`
+return handling and the authorize.net CSP hosts are all gone, and the
+`reconcile-anet-payments` cron is unscheduled
+(`20260830211423_retire_authorizenet_processor.sql`, applied).
+
+- **Safe because it never took a cent.** Measured before removing: all 453
+  `billing_payments` rows have `processor IS NULL`, and zero rows have ever
+  carried `'authorizenet'`. No payment history, no refund path, no
+  reconciliation backlog depended on it.
+- ⚠️ **There is no fallback any more, and that is the point.** The portal used
+  to divert to Authorize.net whenever Stax refused. It now tells the parent
+  "Online payment is not available yet. Please contact the office." A silent
+  switch between processors is how a family ends up unable to say which
+  company took their money.
+
+**Stax is still not live.** `STAX_ENVIRONMENT` is sandbox, so both parent
+endpoints fail closed and no family can pay online at all today. Everything
+needed to flip it — including the steps nobody can do from code — is written
+down in **`docs/STAX_GO_LIVE.md`**. Read that before touching payments.
+
+### ⚠️ The merchant pin, and why it is the important one
+
+Sandbox and production share ONE API host (`apiprod.fattlabs.com`); only the
+key decides which merchant a charge lands on, and `STAX_ENVIRONMENT` is a
+label this app sets for itself. So flipping it to `production` with a stale
+sandbox key would charge **nobody**, while this app recorded real payments,
+marked invoices paid and emailed families receipts. Nothing downstream could
+tell the difference.
+
+`assertStaxMerchant()` (duplicated in all four Stax functions — this repo's
+edge functions have no shared import path) verifies the key's own merchant
+against `STAX_MERCHANT_ID` before any Stax call and **fails closed**, treating
+"could not read a merchant id" the same as "wrong merchant". Unset ⇒ behavior
+unchanged, so sandbox testing still works.
+
+- ⚠️ **It is in source, NOT deployed.** Redeploying 83 KB of live payment code
+  by hand through a chat tool was judged the bigger risk; deploying the four
+  functions is step one of `docs/STAX_GO_LIVE.md` §2. Grep the deployed source
+  for `assertStaxMerchant` — a guard only git has is not a guard.
+- ⚠️ **The `/self` response shape is unverified** — no production key exists to
+  test against. It reads `merchant.id` / `merchant_id` and refuses anything
+  else. If the first production charge answers "Could not verify the payment
+  merchant", the shape differs: fix the pin, do not remove it.
+
+### The rollout is all-or-nothing as built
+
+The moment the two environment secrets are set, **every** family's Pay button
+goes to Stax. There is no per-family gate. The director's stated plan is a
+small pilot group of willing families first (the way the scheduler app rolled
+out), which needs an allowlist built before the flip — not yet written.
+
 ## Stax payment processor — embedded checkout built, awaiting a real browser test (2026-08-26)
 
 The center is evaluating Stax alongside the already-live Authorize.net integration
