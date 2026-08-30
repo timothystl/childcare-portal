@@ -84,6 +84,49 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const ALLOWED_ORIGIN = "https://mdo.timothystl.org";
 const STAX_API_URL = "https://apiprod.fattlabs.com";
 
+// ⚠️ MERCHANT PIN — the line between test money and real money.
+// Sandbox and production share ONE API host (apiprod.fattlabs.com); only the
+// key decides which merchant a charge lands on. STAX_ENVIRONMENT is a label
+// this code sets for itself, not something Stax confirms — so flipping it to
+// "production" while a stale sandbox key is still in place would charge
+// nobody at all, while this app recorded a real payment, marked the invoice
+// paid and emailed the family a receipt. Nothing downstream could tell.
+//
+// When STAX_MERCHANT_ID is set, every call verifies the key's own merchant
+// against it and refuses on a mismatch OR on an answer it cannot read —
+// fail closed, because "could not verify" and "wrong merchant" are the same
+// risk here. When it is unset, behavior is unchanged (sandbox testing keeps
+// working), which is why setting it is a go-live checklist step and not
+// optional: see docs/STAX_GO_LIVE.md.
+let _staxMerchantVerified = false;
+async function assertStaxMerchant(apiKey: string): Promise<void> {
+    const expected = (Deno.env.get("STAX_MERCHANT_ID") || "").trim();
+    if (!expected || _staxMerchantVerified) return;
+    let body: Record<string, unknown> | null = null;
+    try {
+        const res = await fetch(`${STAX_API_URL}/self`, {
+            headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+        });
+        if (res.ok) body = await res.json().catch(() => null);
+    } catch (_e) {
+        body = null;
+    }
+    // Only a merchant-shaped field counts. A top-level `id` on /self is the
+    // API user, not the merchant, and accepting it would compare the wrong
+    // thing — better to fail closed and be told so by the checklist step.
+    const merchant = (body as { merchant?: { id?: unknown } } | null)?.merchant;
+    const actual = String(merchant?.id ?? (body as { merchant_id?: unknown } | null)?.merchant_id ?? "").trim();
+    if (!actual) {
+        console.error("stax merchant pin: could not read a merchant id from /self");
+        throw new Error("Could not verify the payment merchant.");
+    }
+    if (actual !== expected) {
+        console.error(`stax merchant pin: key belongs to ${actual}, expected ${expected}`);
+        throw new Error("Payment merchant does not match the configured account.");
+    }
+    _staxMerchantVerified = true;
+}
+
 function corsHeaders(req: Request): Record<string, string> {
     const origin = req.headers.get("origin") || "";
     return {
@@ -323,6 +366,7 @@ serve(async (req) => {
         }
         const apiKey = Deno.env.get("STAX_API_KEY");
         if (!apiKey) return json({ error: "Payment processing is not configured yet." }, 500, ch);
+        await assertStaxMerchant(apiKey);
 
         // ── 1. Authenticate the parent and resolve their families ──────
         const authHeader = req.headers.get("Authorization");

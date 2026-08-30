@@ -1552,10 +1552,18 @@ describe('Stax payment security guards', () => {
         }
     });
 
-    test('portal falls back to the existing hosted checkout while Stax is gated', () => {
+    // Authorize.net was removed 2026-08-30 ("it is stax or nothing"), so the
+    // old fallback-to-hosted-checkout guard became the opposite requirement:
+    // there must be NO second processor to silently divert a payment to.
+    test('a gated Stax tells the parent plainly — there is no second processor to fall back to', () => {
         const portal = read('js/portal/portal-billing.js');
         expect(portal.includes("e?.message === 'Online payments are not configured for production yet.'")).toBe(true);
-        expect(portal.includes('return pbStartPayment(invoiceId)')).toBe(true);
+        expect(portal.includes('Online payment is not available yet. Please contact the office')).toBe(true);
+        // Every trace of the Accept Hosted flow is gone from the portal.
+        ['pbStartPayment', 'pbClosePayModal', 'CommunicationHandler', 'pbPayFrame'].forEach(sym => {
+            expect(portal.includes(sym + '(') || portal.includes("'" + sym + "'")).toBe(false);
+        });
+        expect(read('portal.html').includes('pbPayModal')).toBe(false);
     });
 
     test('saved-card response does not expose the opaque payment method id', () => {
@@ -1638,13 +1646,17 @@ describe('admin-refund-stax-payment — Stax reversal support, wired into the LI
         expect(refundFn.includes('billing_invoices')).toBe(false);
     });
 
-    test('adminRefundPayment routes to the stax edge function only when asked, else the authorizenet one', () => {
+    test('adminRefundPayment has exactly one destination and refuses any other processor', () => {
         const start = supabaseJs.indexOf('async function adminRefundPayment');
         const end = supabaseJs.indexOf('async function unmarkInvoiceSent');
         expect(start).toBeGreaterThan(-1);
         expect(end).toBeGreaterThan(start);
         const fnBody = supabaseJs.slice(start, end);
-        expect(fnBody.includes("processor === 'stax' ? 'admin-refund-stax-payment' : 'admin-refund-payment'")).toBe(true);
+        expect(fnBody.includes("const fnName = 'admin-refund-stax-payment';")).toBe(true);
+        // Authorize.net is retired: an unknown processor must raise, never
+        // fall through to an edge function that is now an inert 410 stub.
+        expect(fnBody.includes("if (processor && processor !== 'stax')")).toBe(true);
+        expect(fnBody.includes('admin-refund-payment')).toBe(false);
     });
 
     // ⚠️ billingArSection (the old admin-billing.js AR table this refund
@@ -1661,7 +1673,7 @@ describe('admin-refund-stax-payment — Stax reversal support, wired into the LI
 
     test('the LIVE Ledger drawer (Finance → Ledger, the reachable Accounts Receivable view) shows a Refund control per payment', () => {
         expect(financeHubJs.includes('function _fhCanRefund(')).toBe(true);
-        expect(financeHubJs.includes("REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax'])")).toBe(true);
+        expect(financeHubJs.includes("REFUNDABLE_PROCESSORS = new Set(['stax'])")).toBe(true);
         expect(financeHubJs.includes('data-processor="${escHtml(p.processor)}"')).toBe(true);
         expect(financeHubJs.includes('async function _fhRefundPayment(')).toBe(true);
         expect(financeHubJs.includes("adminRefundPayment(paymentId, processor)")).toBe(true);
@@ -2282,6 +2294,95 @@ describe('childcare statement', () => {
             expect(read('js/portal/portal-documents.js').includes(tok)).toBe(true);
             expect(read('js/admin/admin-finance-hub.js').includes(tok)).toBe(true);
         });
+    });
+});
+
+describe('Stax merchant pin — the guard between test money and real money', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const FNS = [
+        'supabase/functions/charge-stax-payment/index.ts',
+        'supabase/functions/create-stax-charge/index.ts',
+        'supabase/functions/admin-refund-stax-payment/index.ts',
+        'supabase/functions/reconcile-stax-payments/index.ts',
+    ];
+
+    test('every function that holds the Stax API key verifies the merchant first', () => {
+        for (const f of FNS) {
+            const src = read(f);
+            expect(src.includes('async function assertStaxMerchant(')).toBe(true);
+            expect(src.includes('await assertStaxMerchant(apiKey);')).toBe(true);
+            // The check must come before the key is ever used against Stax.
+            const check = src.indexOf('await assertStaxMerchant(apiKey);');
+            const firstUse = src.indexOf('Bearer ${apiKey}', src.indexOf('serve('));
+            if (firstUse > -1) expect(check).toBeLessThan(firstUse);
+        }
+    });
+
+    test('it fails CLOSED — an unreadable answer is treated like a wrong merchant', () => {
+        for (const f of FNS) {
+            const src = read(f);
+            const start = src.indexOf('async function assertStaxMerchant(');
+            const body = src.slice(start, src.indexOf('\n}', start));
+            expect(body.includes('if (!actual)')).toBe(true);
+            expect(body.includes('throw new Error("Could not verify the payment merchant.")')).toBe(true);
+            expect(body.includes('if (actual !== expected)')).toBe(true);
+            // A top-level `id` on /self is the API user, not the merchant —
+            // comparing it would check the wrong thing and pass by accident.
+            expect(/\bbody\?\.id\b/.test(body)).toBe(false);
+        }
+    });
+
+    test('an unset STAX_MERCHANT_ID leaves behavior unchanged, so this cannot break sandbox testing', () => {
+        const body = read(FNS[0]);
+        expect(body.includes('if (!expected || _staxMerchantVerified) return;')).toBe(true);
+    });
+
+    test('the go-live checklist names setting it as a required step', () => {
+        const doc = read('docs/STAX_GO_LIVE.md');
+        expect(doc.includes('STAX_MERCHANT_ID')).toBe(true);
+        expect(doc.includes('STAX_SANDBOX_TEST_ENABLED')).toBe(true);
+        expect(doc.includes('create_transaction')).toBe(true);
+        // The pin ships in source only — deploying it is its own step, and
+        // forgetting it would leave the guard in git and not in production.
+        expect(doc.includes('assertStaxMerchant')).toBe(true);
+    });
+});
+
+describe('Authorize.net is fully retired — one processor, no silent second path', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const exists = rel => fs.existsSync(path.join(repoRoot, rel));
+
+    test('its edge function sources and the iframe relay are gone from the repo', () => {
+        ['supabase/functions/create-payment-session',
+         'supabase/functions/authorizenet-webhook',
+         'supabase/functions/admin-refund-payment',
+         'supabase/functions/reconcile-anet-payments',
+         'iframe-communicator.html'].forEach(p => expect(exists(p)).toBe(false));
+    });
+
+    test('no client code can start or reverse an Authorize.net payment', () => {
+        const supabaseJs = read('js/supabase.js');
+        expect(supabaseJs.includes('createPaymentSession')).toBe(false);
+        expect(supabaseJs.includes('create-payment-session')).toBe(false);
+        expect(supabaseJs.includes('admin-refund-payment')).toBe(false);
+    });
+
+    test('the CSP no longer frames authorize.net, and _headers still matches worker.js', () => {
+        const headers = read('_headers');
+        expect(headers.includes('authorize.net')).toBe(false);
+        expect(read('worker.js').includes('authorize.net')).toBe(false);
+        // The line-length ceiling that broke a Cloudflare deploy once already.
+        const cspLine = headers.split('\n').find(l => l.includes('Content-Security-Policy'));
+        expect(cspLine.length).toBeLessThan(1950);
+    });
+
+    test('the retired reconciliation cron is unscheduled by a committed migration', () => {
+        const mig = read('supabase/migrations/20260830211423_retire_authorizenet_processor.sql');
+        expect(mig.includes("cron.unschedule('reconcile-anet-payments')")).toBe(true);
+        // reconcile-stax-payments must not be touched by the same migration.
+        expect(mig.includes("unschedule('reconcile-stax-payments')")).toBe(false);
     });
 });
 

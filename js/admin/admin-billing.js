@@ -574,7 +574,7 @@ async function savePaymentFromModal() {
 /**
  * Refund/void an online card payment. Only asks the processor (Authorize.net
  * or Stax, whichever actually took the charge) to reverse it —
- * admin-refund-payment / admin-refund-stax-payment never touch
+ * admin-refund-stax-payment never touches
  * billing_payments or the invoice itself, so this button's job ends at
  * "submitted," not "done." The actual reversal lands via that processor's
  * webhook a few seconds later; the AR view is reloaded here so it's current
@@ -1413,7 +1413,9 @@ function renderPaymentHistory(payments, finalAmount, containerId) {
     // gets one, so it can't be double-clicked into two refunds for the
     // same charge.
     const reversedIds = new Set(payments.map(p => p.refund_of_payment_id).filter(Boolean));
-    const REFUNDABLE_PROCESSORS = new Set(['authorizenet', 'stax']);
+    // Stax only — Authorize.net was removed 2026-08-30, and no
+    // billing_payments row has ever carried it.
+    const REFUNDABLE_PROCESSORS = new Set(['stax']);
 
     let running = 0;
     const rows = payments.map(p => {

@@ -4764,35 +4764,7 @@ async function emailInvoices(invoiceIds, { resend = false, test = false } = {}) 
 
 /**
  * Start an online payment for one of the signed-in parent's own invoices.
- * Only an invoice id travels — create-payment-session reads the amount and
- * confirms ownership server-side, and never trusts anything else from here.
- *
- * @param {number} invoiceId
- * @returns {Promise<{token: string, formUrl: string, amount: number}>}
- *   `token` + `formUrl` are handed straight to Authorize.net's Accept
- *   Hosted page (see portal-billing.js) — this app never sees card data.
- */
-async function createPaymentSession(invoiceId) {
-    if (!sbClient) throw new Error('Supabase not configured.');
-    const { data: { session } } = await sbClient.auth.getSession();
-    const token = session?.access_token;
-    if (!token) throw new Error('Not authenticated.');
-    const { data, error } = await sbClient.functions.invoke('create-payment-session', {
-        body: { invoiceId },
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (error) {
-        let detail = '';
-        try { detail = (await error.context?.json())?.error || ''; } catch (_) { /* ignore */ }
-        throw new Error(detail || error.message || 'Could not start payment.');
-    }
-    return data;
-}
-
-/**
- * Start a Stax evaluation payment — same shape as createPaymentSession,
- * but for the Stax comparison flow (see portal-billing.js's staxtest
- * gate). Only an invoice id travels; create-stax-charge computes the
+ * Only an invoice id travels; create-stax-charge computes the
  * amount and confirms ownership server-side.
  *
  * @param {number} invoiceId
@@ -4887,8 +4859,9 @@ async function chargeStaxPayment(invoiceId, paymentMethodId, opts) {
  * processor confirms it.
  *
  * @param {number} paymentId
- * @param {'authorizenet'|'stax'} [processor] — which edge function to call;
- *   defaults to 'authorizenet' for older call sites.
+ * @param {'stax'} [processor] — kept in the signature because every call
+ *   site passes it and a future second processor would need it again; Stax
+ *   is the only accepted value since Authorize.net was removed (2026-08-30).
  * @returns {Promise<{submitted: boolean, kind: 'void'|'refund', processorTransactionId: string}>}
  */
 async function adminRefundPayment(paymentId, processor) {
@@ -4896,7 +4869,12 @@ async function adminRefundPayment(paymentId, processor) {
     const { data: { session } } = await sbClient.auth.getSession();
     const token = session?.access_token;
     if (!token) throw new Error('Not authenticated.');
-    const fnName = processor === 'stax' ? 'admin-refund-stax-payment' : 'admin-refund-payment';
+    // ⚠️ No default branch any more. An unknown processor must not quietly
+    // route to a function that no longer exists — say so instead.
+    if (processor && processor !== 'stax') {
+        throw new Error(`Payments taken through ${processor} cannot be reversed from here.`);
+    }
+    const fnName = 'admin-refund-stax-payment';
     const { data, error } = await sbClient.functions.invoke(fnName, {
         body: { paymentId },
         headers: { Authorization: `Bearer ${token}` },
