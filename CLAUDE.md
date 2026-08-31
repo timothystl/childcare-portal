@@ -5255,19 +5255,59 @@ five new names carry the same registration counts and no old spelling remains.
 `Chloe Cambridge` renamed above, both parents `Cambridge`). Same six-table
 check, same one-statement update: 2 students, 7 registrations.
 
-⚠️ **`Michelle` is the one still open, and it is not a spelling question.**
-She is stored with no surname; her only parent is `Denise Davis`, but the
-family's email is `eredd3760@gmail.com`, and the roster carries an unrelated
-`Montana Redd` — so `Davis`, `Redd`, or neither are all live possibilities and
-the parent's own surname is not the corroboration it was for the other seven.
-Separately, the ProCare export names a **`June Davis`** (2 payments, $2,100)
-that matches nothing on the roster, while Michelle's family has **zero**
-recorded payments and confirmed July/August registrations — consistent with
-their being the same child under a different first name, and equally consistent
-with two different children. `June` is not a misspelling of `Michelle`, so this
-needs the office to say who the child is, not a rule.
+**`Michelle` → `Michelle Davis`, resolved by the office 2026-08-31**, and it
+was never a spelling question. Two candidate readings had to be told apart by a
+person, not a rule: the family email is `eredd3760@gmail.com` against a parent
+named `Denise Davis`, the roster carries an unrelated `Montana Redd`, and the
+ProCare export named a `June Davis` (2 payments, $2,100) matching nothing on the
+roster while Michelle's family had zero recorded payments. That was equally
+consistent with one child under two first names and with two children. The
+office's answer: **two different families.** Michelle Davis is Denise Davis's
+child; June Davis is an infant of Mary Beth Sells and Reed Davis, no longer
+enrolled and never in this system at all (searched — no family, no student, no
+registration matches Sells or that Reed).
 
-⚠️ She is also the only one of the eight with a **`billing_overrides` row keyed
-on the literal string** (`id 6`, month `2026-06`, amount 0). That table must be
-in the same statement as any rename of her, or the override silently stops
-applying — which is exactly the free-text-name hazard this section is about.
+⚠️ **Michelle was the only one of the eight carrying a `billing_overrides` row
+keyed on the literal string** (`id 6`, month `2026-06`, amount 0), so her rename
+had to move `students`, `registrations` **and** `billing_overrides` in one
+statement — 1 + 4 + 1 rows — or the override would have silently stopped
+applying. Verified afterward: nothing references the bare `Michelle`.
+
+**June Davis's $2,100 was deliberately NOT imported.** Recording it would have
+meant creating a family record for a departed child with no email (the field
+that drives portal login, the statement's child list, and every registration
+join) purely to hold two payments. The director's call: she is not enrolled and
+the money is not needed on the books. There are no care days for her either, so
+no statement is short as a result — which is the test that matters, since the
+coverage rule only blocks a month that has care days and no payment.
+
+### The 2026 ProCare import, as actually run (2026-08-31)
+
+Run server-side against the full-year export rather than through the tool, once
+the guard above made the overlap safe. **202 payments, $116,270.31**, batch id 2,
+`payment_method = 'procare_payment'`. **444 rows were recognized as already
+recorded and skipped.**
+
+| | Jan | Feb | Mar | Apr | May | Jun | Jul | Aug |
+|---|---|---|---|---|---|---|---|---|
+| imported | 2 | 2 | 8 | 3 | 5 | 4 | **86** | **92** |
+
+⚠️ **What made this safe to commit was not re-reading the SQL.** The matching
+and dedup were written twice, independently — once in Python against the
+spreadsheet, once in SQL against a staging table — and both said *444 already
+recorded, 202 to import* before anything was written. The staged file also
+totaled `$367,706.47`, matching the spreadsheet to the cent. A single
+implementation checked twice is not the same evidence.
+
+Everything landed under one `billing_import_batches` id, so
+`delete from billing_payments where import_batch_id = 2` reverses it whole.
+
+**52 rows were left unimported** — children with no record here (four "Baby ___"
+placeholders and families who left before April). ⚠️ One of those is
+`Penelope Fister` (4 rows, $1,850), and it is **not** a typo: ProCare has her as
+`Penelope "Penny" Fister` and the roster has `Penny Fister`. The importer strips
+quoted nicknames, so storing her as `Penelope "Penny" Fister` would make her
+match — a roster-side choice, not a defect.
+
+**Coverage after the import:** Jul and Aug are clear. Sep (828 care days) and
+Oct (21) still read as blocking, which is correct — nobody has paid them yet.
