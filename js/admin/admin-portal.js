@@ -188,6 +188,25 @@ const AP_TOOLS = [
     // entry's own on-screen title was removed from #fhBody the same day, so
     // the field had nothing left reading it.
     { key: 'financeHub',  pane: 'finance', section: 'financeHubSection',    tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '💵', name: 'Finance' },
+    // ⚠️ Restored 2026-08-31. The Bookkeeper redesign retired seven Finance
+    // tools from AP_TOOLS; #billingPaymentsSection was not one of the seven
+    // it named, but it was never registered either, so the ProCare Import
+    // screen has been unreachable in this shell since the redesign shipped —
+    // unreferenced means unreachable, per the shell's own rule. Found the
+    // same way the retired Refund button was: by grepping AP_TOOLS for the
+    // section id before telling the director where to click, rather than
+    // assuming a screen that exists in admin.html can be opened.
+    //
+    // It is a genuine tool with no replacement anywhere in Bookkeeper: the
+    // Ledger's "+ Record payment" enters ONE payment by hand. Recording a
+    // month of ProCare payments needs the bulk path, its preview, its
+    // duplicate guard and its unmatched-name dropdown.
+    //
+    // `pane: 'finance'` matches where the section actually lives in
+    // admin.html (#tab-finance) — checked against apShowSection()'s own
+    // hide rule, not inferred from the tab it appears under.
+    { key: 'procareImport', pane: 'finance', section: 'billingPaymentsSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '📂', name: 'ProCare Import',
+      blurb: 'Bulk-import payments exported from ProCare. Shows every row for review first, skips rows already recorded, and lets you assign any child it could not match.' },
     { key: 'discount',    pane: 'finance', section: 'discountPricingSection', tab: 'finance', group: 'Money In', tint: AP_TINT.gold, icon: '🏷️', name: 'Discounts & Scholarships',
       blurb: 'Children on a staff, custom, or scholarship discount, with expiry.' },
 

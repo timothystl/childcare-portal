@@ -1671,6 +1671,44 @@ describe('admin-refund-stax-payment — Stax reversal support, wired into the LI
         expect(portalJs.includes('billingArSection')).toBe(false);   // ...but is not reachable from the shell.
     });
 
+    // ⚠️ Same bug class as billingArSection above, found 2026-08-31 while
+    // telling the director where to click to import a ProCare payment
+    // export: #billingPaymentsSection exists in admin.html and its handlers
+    // are wired unconditionally by setupBilling(), but no AP_TOOLS entry
+    // pointed at it, so the shell could never show it. Unlike the AR table,
+    // this one has NO replacement in Bookkeeper — the Ledger's
+    // "+ Record payment" enters a single payment by hand; nothing else does
+    // a bulk import with a preview, a duplicate guard and name matching.
+    // These guards fail if the entry is dropped again, or if its `pane`
+    // stops matching where the section really lives (apShowSection() hides
+    // every .tab-pane whose id isn't 'tab-' + tool.pane, so a wrong `pane`
+    // hides the section along with its own tab — the exact trap that made
+    // attBoard/incidents/drills and staffInjury/clockIntegrity blank).
+    test('ProCare Import is reachable from the shell', () => {
+        const entry = portalJs.split('\n').find(l =>
+            l.includes("section: 'billingPaymentsSection'") && l.trim().startsWith('{'));
+        expect(entry === undefined).toBe(false);
+        expect(entry.includes("pane: 'finance'")).toBe(true);   // matches #tab-finance in admin.html
+        expect(entry.includes("tab: 'finance'")).toBe(true);
+    });
+
+    test('ProCare Import stays full-admin only, via the finance tab gate', () => {
+        // Finance is in AP_FULL_ONLY_TABS, so the tool needs no key of its
+        // own — but if finance ever leaves that list, payment import must
+        // not quietly open up to `restricted`.
+        const fullOnlyTabs = portalJs.match(/AP_FULL_ONLY_TABS\s*=\s*[^;]+;/);
+        expect(fullOnlyTabs === null).toBe(false);
+        expect(fullOnlyTabs[0].includes("'finance'")).toBe(true);
+    });
+
+    test('the ProCare importer still guards against re-importing rows already recorded', () => {
+        expect(billingJs.includes('function _procareDupKey(')).toBe(true);
+        // The guard is the filter in _confirmProCareImport, not the preview count.
+        const confirmAt = billingJs.indexOf('async function _confirmProCareImport');
+        expect(confirmAt).toBeGreaterThan(-1);
+        expect(billingJs.slice(confirmAt, confirmAt + 900).includes('!r.alreadyImported')).toBe(true);
+    });
+
     test('the LIVE Ledger drawer (Finance → Ledger, the reachable Accounts Receivable view) shows a Refund control per payment', () => {
         expect(financeHubJs.includes('function _fhCanRefund(')).toBe(true);
         expect(financeHubJs.includes("REFUNDABLE_PROCESSORS = new Set(['stax'])")).toBe(true);
