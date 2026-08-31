@@ -658,6 +658,7 @@ function _dbRowsToAssignments(rows, weekDates) {
     weekDates.forEach(d => {
         assignments[d] = {};
         ROOMS.forEach(r => { assignments[d][r.id] = { am: [], pm: [] }; });
+        assignments[d][PM_COMBINED_HOST_ROOM_ID] = { am: [], pm: [] };
     });
     rows.forEach(row => {
         const slot = assignments[row.work_date]?.[row.room_id];
@@ -726,14 +727,24 @@ function _buildShiftCounts(weekDates) {
     weekDates.forEach(d => {
         counts[d] = {};
         ROOMS.forEach(r => { counts[d][r.id] = { total: 0, halfDay: 0, fullDay: 0 }; });
+        // Pooled PM headcount for the Goose/Turtle/Owl afternoon combination
+        // (PM_COMBINED_*, supabase.js) — filled in below from the exact same
+        // per-room full-day counts, so it can never disagree with them.
+        counts[d][PM_COMBINED_HOST_ROOM_ID] = { total: 0, halfDay: 0, fullDay: 0 };
     });
+    const combinedIds = new Set(PM_COMBINED_ROOM_IDS);
     allRegistrations.forEach(reg => {
         (reg.registration_dates || []).forEach(d => {
             if (!d.waitlisted && weekDates.includes(d.care_date)) {
                 const c = counts[d.care_date][reg.room_id];
                 if (!c) return;
                 c.total++;
-                if (d.day_type === 'half') c.halfDay++; else c.fullDay++;
+                if (d.day_type === 'half') { c.halfDay++; } else {
+                    c.fullDay++;
+                    if (combinedIds.has(reg.room_id)) {
+                        counts[d.care_date][PM_COMBINED_HOST_ROOM_ID].fullDay++;
+                    }
+                }
             }
         });
     });
@@ -824,6 +835,13 @@ function renderScheduleTables(weekDates, counts, assignments) {
         }).join('');
     }
 
+    // Goose, Turtle and Owl combine into one supervised group from 1:00p to
+    // 5:00p (PM_COMBINED_*, supabase.js) — each still gets its own AM row,
+    // but their PM row shows a note instead of its own select stack, and one
+    // shared "After Care" row (below, after this map) carries the pooled PM
+    // assignments instead.
+    const pmCombinedIds = new Set(PM_COMBINED_ROOM_IDS);
+
     const rows = getSortedRooms().map(room => {
         const ratio = room.staffRatio || 10;
         const hasEnrollment = weekDates.some(d => (counts[d]?.[room.id]?.total || 0) > 0);
@@ -833,13 +851,29 @@ function renderScheduleTables(weekDates, counts, assignments) {
             const total = counts[d]?.[room.id]?.total || 0;
             return Math.max(mx, total > 0 ? Math.ceil(total / ratio) : 0);
         }, 0);
+
+        const roomCell = shiftIdx => shiftIdx === 0
+            ? `<td class="sched-grid-room" rowspan="2">${escHtml(room.label)}<div class="sched-grid-ratio">Ratio 1:${ratio}</div></td>` : '';
+
+        if (pmCombinedIds.has(room.id)) {
+            const pmNote = weekDates.map(() =>
+                `<td class="sched-grid-cell sched-grid-combined-note">Combined into<br>After Care (PM) →</td>`).join('');
+            return `
+            <tr class="sched-grid-row">
+                ${roomCell(0)}
+                <td class="sched-grid-shift"><span class="sched-shift-pill is-am">AM</span><div class="sched-grid-time">8:15a–1:15p</div></td>
+                ${selectStack(room, ratio, 'am', maxAmNeed)}
+            </tr>
+            <tr class="sched-grid-row sched-grid-row-pm">
+                <td class="sched-grid-shift"><span class="sched-shift-pill is-pm">PM</span><div class="sched-grid-time">1:00p–5:00p</div></td>
+                ${pmNote}
+            </tr>`;
+        }
+
         const maxPmNeed = weekDates.reduce((mx, d) => {
             const fd = counts[d]?.[room.id]?.fullDay || 0;
             return Math.max(mx, fd > 0 ? Math.ceil(fd / ratio) : 0);
         }, 0);
-
-        const roomCell = shiftIdx => shiftIdx === 0
-            ? `<td class="sched-grid-room" rowspan="2">${escHtml(room.label)}<div class="sched-grid-ratio">Ratio 1:${ratio}</div></td>` : '';
 
         return `
         <tr class="sched-grid-row">
@@ -853,18 +887,35 @@ function renderScheduleTables(weekDates, counts, assignments) {
         </tr>`;
     }).filter(Boolean).join('');
 
+    // One pooled PM-only row for the After Care combination, built from the
+    // same counts[d][PM_COMBINED_HOST_ROOM_ID] the room rows above already
+    // read for their "combined" note — see _buildShiftCounts().
+    const acHasEnrollment = weekDates.some(d => (counts[d]?.[PM_COMBINED_HOST_ROOM_ID]?.fullDay || 0) > 0);
+    const acRoom = { id: PM_COMBINED_HOST_ROOM_ID, label: '🌆 After Care' };
+    const acMaxPmNeed = weekDates.reduce((mx, d) => {
+        const fd = counts[d]?.[PM_COMBINED_HOST_ROOM_ID]?.fullDay || 0;
+        return Math.max(mx, fd > 0 ? Math.ceil(fd / PM_COMBINED_RATIO) : 0);
+    }, 0);
+    const acRow = acHasEnrollment ? `
+    <tr class="sched-grid-row">
+        <td class="sched-grid-room">${escHtml(acRoom.label)}<div class="sched-grid-ratio">Ratio 1:${PM_COMBINED_RATIO} · Goose/Turtle/Owl combined</div></td>
+        <td class="sched-grid-shift"><span class="sched-shift-pill is-pm">PM</span><div class="sched-grid-time">1:00p–5:00p</div></td>
+        ${selectStack(acRoom, PM_COMBINED_RATIO, 'pm', acMaxPmNeed)}
+    </tr>` : '';
+    const rowsWithAc = rows + acRow;
+
     container.innerHTML = `
         <div class="sched-actions-bar">
             <button id="printStaffAssignBtn" class="btn-ghost">🖨 Print</button>
             <button id="exportStaffAssignBtn" class="btn-ghost">⬇ Export XLSX</button>
         </div>
         <div id="scheduleTablesWrap">
-            ${rows ? `
+            ${rowsWithAc ? `
             <div class="sched-grid-card">
                 <div class="table-wrapper">
                     <table class="report-table sched-grid-table">
                         <thead><tr><th class="sched-grid-room-head">Room</th><th class="sched-grid-shift-head">Shift</th>${dayHeaders}</tr></thead>
-                        <tbody>${rows}</tbody>
+                        <tbody>${rowsWithAc}</tbody>
                     </table>
                 </div>
             </div>` : '<p class="empty-hint">No enrollment this week — nobody needs to be scheduled.</p>'}
@@ -914,6 +965,14 @@ function renderScheduleTables(weekDates, counts, assignments) {
             });
             return row;
         });
+        // After Care's pooled PM group (Goose/Turtle/Owl combined) has no AM
+        // column of its own, only PM.
+        const acRowVals = ['🌆 After Care (Goose/Turtle/Owl combined)'];
+        wDates.forEach(d => {
+            acRowVals.push('—');
+            acRowVals.push((asgn[d]?.[PM_COMBINED_HOST_ROOM_ID]?.pm || []).join(', ') || '—');
+        });
+        if (acRowVals.some((v, i) => i > 0 && i % 2 === 0 && v !== '—')) dataRows.push(acRowVals);
         const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
         ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length, 16) }));
         const wb = XLSX.utils.book_new();
@@ -961,16 +1020,32 @@ function _printDay(date, weekDates, counts, assignments) {
     const dt       = new Date(date + 'T00:00:00');
     const dayLabel = `${DAY_ABBR[dt.getDay()]} ${friendlyShort(date)}`;
 
+    const pmCombinedIds = new Set(PM_COMBINED_ROOM_IDS);
+
     const roomSections = getSortedRooms().map(room => {
         const ratio  = room.staffRatio || 10;
         const c      = currentCounts[date]?.[room.id] || { total: 0, fullDay: 0, halfDay: 0 };
         if (!c.total && !c.fullDay) return '';
         const amStaff = (currentAsgn[date]?.[room.id]?.am || []).filter(Boolean);
-        const pmStaff = (currentAsgn[date]?.[room.id]?.pm || []).filter(Boolean);
         const amNeed  = c.total   > 0 ? Math.ceil(c.total   / ratio) : 0;
-        const pmNeed  = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
         const amStatus = amStaff.length >= amNeed ? '' : ` <span style="color:#c00">(need ${amNeed})</span>`;
-        const pmStatus = pmStaff.length >= pmNeed ? '' : ` <span style="color:#c00">(need ${pmNeed})</span>`;
+        // Goose/Turtle/Owl's PM headcount is staffed as one pooled After
+        // Care group (its own section below), not per room.
+        const pmRow = pmCombinedIds.has(room.id) ? `
+                <tr>
+                    <td style="padding:5px 12px;font-weight:600;color:#92400e">PM 1:00–5:00</td>
+                    <td colspan="2" style="padding:5px 12px;color:#666">Combined into After Care — see below</td>
+                </tr>` : (() => {
+            const pmStaff = (currentAsgn[date]?.[room.id]?.pm || []).filter(Boolean);
+            const pmNeed  = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
+            const pmStatus = pmStaff.length >= pmNeed ? '' : ` <span style="color:#c00">(need ${pmNeed})</span>`;
+            return `
+                <tr>
+                    <td style="padding:5px 12px;font-weight:600;color:#92400e">PM 12:00–5:00</td>
+                    <td style="padding:5px 12px">${c.fullDay} kids (full-day)${pmStatus}</td>
+                    <td style="padding:5px 12px">${pmStaff.length ? escHtml(pmStaff.join(', ')) : '<em style="color:#999">unassigned</em>'}</td>
+                </tr>`;
+        })();
         return `
         <div style="margin-bottom:16px;border:1px solid #ddd;border-radius:6px;overflow:hidden">
             <div style="background:#f0f4ff;padding:7px 12px;font-weight:700;font-size:13px">${escHtml(room.label)} <span style="font-weight:400;color:#666;font-size:11px">· ratio 1:${ratio}</span></div>
@@ -980,14 +1055,27 @@ function _printDay(date, weekDates, counts, assignments) {
                     <td style="padding:5px 12px;border-bottom:1px solid #eee">${c.total} kids${amStatus}</td>
                     <td style="padding:5px 12px;border-bottom:1px solid #eee">${amStaff.length ? escHtml(amStaff.join(', ')) : '<em style="color:#999">unassigned</em>'}</td>
                 </tr>
-                <tr>
-                    <td style="padding:5px 12px;font-weight:600;color:#92400e">PM 12:00–5:00</td>
-                    <td style="padding:5px 12px">${c.fullDay} kids (full-day)${pmStatus}</td>
-                    <td style="padding:5px 12px">${pmStaff.length ? escHtml(pmStaff.join(', ')) : '<em style="color:#999">unassigned</em>'}</td>
-                </tr>
+                ${pmRow}
             </table>
         </div>`;
     }).filter(Boolean).join('');
+
+    const acC = currentCounts[date]?.[PM_COMBINED_HOST_ROOM_ID] || { fullDay: 0 };
+    const acStaff = (currentAsgn[date]?.[PM_COMBINED_HOST_ROOM_ID]?.pm || []).filter(Boolean);
+    const acNeed  = acC.fullDay > 0 ? Math.ceil(acC.fullDay / PM_COMBINED_RATIO) : 0;
+    const acStatus = acStaff.length >= acNeed ? '' : ` <span style="color:#c00">(need ${acNeed})</span>`;
+    const acSection = acC.fullDay > 0 ? `
+        <div style="margin-bottom:16px;border:1px solid #ddd;border-radius:6px;overflow:hidden">
+            <div style="background:#f0f4ff;padding:7px 12px;font-weight:700;font-size:13px">🌆 After Care <span style="font-weight:400;color:#666;font-size:11px">· ratio 1:${PM_COMBINED_RATIO} · Goose/Turtle/Owl combined</span></div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+                <tr>
+                    <td style="padding:5px 12px;font-weight:600;color:#92400e">PM 1:00–5:00</td>
+                    <td style="padding:5px 12px">${acC.fullDay} kids${acStatus}</td>
+                    <td style="padding:5px 12px">${acStaff.length ? escHtml(acStaff.join(', ')) : '<em style="color:#999">unassigned</em>'}</td>
+                </tr>
+            </table>
+        </div>` : '';
+    const allSections = roomSections + acSection;
 
     const win = window.open('', '_blank');
     win.document.write(`<!DOCTYPE html><html><head><title>Daily Staff – ${escHtml(dayLabel)}</title>
@@ -996,7 +1084,7 @@ function _printDay(date, weekDates, counts, assignments) {
         @media print{body{padding:0}}</style></head>
         <body><h2>Daily Staff Schedule — ${escHtml(dayLabel)}</h2>
         <p>Timothy Lutheran MDO · Printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</p>
-        ${roomSections || '<p>No enrollment on this day.</p>'}
+        ${allSections || '<p>No enrollment on this day.</p>'}
         </body></html>`);
     win.document.close();
     win.print();
@@ -1007,6 +1095,7 @@ function _readAssignmentsFromDOM(weekDates) {
     weekDates.forEach(d => {
         assignments[d] = {};
         ROOMS.forEach(r => { assignments[d][r.id] = { am: [], pm: [] }; });
+        assignments[d][PM_COMBINED_HOST_ROOM_ID] = { am: [], pm: [] };
     });
     const slotMap = {};
     document.querySelectorAll('#staffContent select.sched-staff-select').forEach(sel => {
@@ -1055,7 +1144,10 @@ function renderScheduleByWorker() {
         return;
     }
     const asgn  = _readAssignmentsFromDOM(weekDates);
-    const rooms = getSortedRooms();
+    // Includes the After Care pooled PM group (Goose/Turtle/Owl combined,
+    // PM_COMBINED_*) alongside the real rooms, so staff scheduled there show
+    // up in this pivot too.
+    const rooms = [...getSortedRooms(), { id: PM_COMBINED_HOST_ROOM_ID, label: '🌆 After Care' }];
     const rateByName = new Map((allStaffData || []).map(s => [s.name, s]));
 
     // key: name|roomId|shift -> { name, room, shift, days:[date,...] }
@@ -1195,21 +1287,28 @@ async function autoFillStaffSchedule() {
         const weeklyHours = new Map(active.map(s => [s.id, 0]));
         const weeklyDays  = new Map(active.map(s => [s.id, 0]));
 
+        const combinedIds = new Set(PM_COMBINED_ROOM_IDS);
+
         // Build assignment map: { date: { roomId: { am: [names], pm: [names] } } }
         const assignments = {};
         weekDates.forEach(d => {
             assignments[d] = {};
             ROOMS.forEach(r => { assignments[d][r.id] = { am: [], pm: [] }; });
+            assignments[d][PM_COMBINED_HOST_ROOM_ID] = { am: [], pm: [] };
         });
 
         weekDates.forEach(d => {
             const dayName = DAY_ABBR[new Date(d + 'T00:00:00').getDay()];
 
             ROOMS.forEach(room => {
+                const combines = combinedIds.has(room.id);
                 const c       = counts[d][room.id] || { total: 0, fullDay: 0 };
                 const ratio   = room.staffRatio || 10;
                 const amNeed  = c.total  > 0 ? Math.ceil(c.total  / ratio) : 0;
-                const pmNeed  = c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0;
+                // Goose/Turtle/Owl are staffed PM as one pooled After Care
+                // group (below), not separately per room — see PM_COMBINED_*
+                // (supabase.js).
+                const pmNeed  = combines ? 0 : (c.fullDay > 0 ? Math.ceil(c.fullDay / ratio) : 0);
 
                 // Candidates: active staff available today and assigned to this room (or float)
                 const candidates = active.filter(s => {
@@ -1281,6 +1380,51 @@ async function autoFillStaffSchedule() {
                     pmFilled++;
                 }
             });
+
+            // Pooled PM fill for the Goose/Turtle/Owl afternoon combination —
+            // one shared group instead of the three separate PM fills the
+            // loop above deliberately skipped (pmNeed forced to 0). Needed
+            // count and headcount both come from counts[d][PM_COMBINED_HOST_ROOM_ID],
+            // which _buildShiftCounts() already pools from those three rooms.
+            const acC      = counts[d][PM_COMBINED_HOST_ROOM_ID] || { fullDay: 0 };
+            const acNeed   = acC.fullDay > 0 ? Math.ceil(acC.fullDay / PM_COMBINED_RATIO) : 0;
+            const acCandidates = active.filter(s => {
+                if ((approvedOff[s.id] || []).includes(d)) return false;
+                const avail = staffAvailability[s.id];
+                const availDays = avail?.dayPeriods
+                    ? Object.keys(avail.dayPeriods).filter(d2 => avail.dayPeriods[d2]?.length > 0)
+                    : (avail?.days ?? ['Mon','Tue','Wed','Thu','Fri']);
+                if (!availDays.includes(dayName)) return false;
+                if (avail?.dayPeriods) { if (!avail.dayPeriods[dayName]?.includes('pm')) return false; }
+                else { const periods = avail?.periods; if (periods && !periods.includes('pm')) return false; }
+                const excluded = avail?.excluded_rooms || [];
+                return combinedIds.has(s.room_id) || s.room_id === PM_COMBINED_HOST_ROOM_ID ||
+                    (!s.room_id && ![...combinedIds].some(id => excluded.includes(id)));
+            });
+            // Prefer whoever is already on one of the three rooms' AM shift today.
+            const acSorted = [
+                ...acCandidates.filter(s => combinedIds.has(s.room_id) && assignments[d][s.room_id]?.am.includes(s.name)),
+                ...acCandidates.filter(s => !(combinedIds.has(s.room_id) && assignments[d][s.room_id]?.am.includes(s.name))),
+            ].sort((a, b) => (weeklyHours.get(a.id) || 0) - (weeklyHours.get(b.id) || 0));
+            let acFilled = 0;
+            for (const s of acSorted) {
+                if (acFilled >= acNeed) break;
+                const maxHrs   = staffAvailability[s.id]?.maxHours ?? 40;
+                const maxDays  = staffAvailability[s.id]?.maxDays  ?? 5;
+                const used     = weeklyHours.get(s.id) || 0;
+                const daysUsed = weeklyDays.get(s.id) || 0;
+                const alreadyToday = combinedIds.has(s.room_id) && assignments[d][s.room_id]?.am.includes(s.name);
+                const addHrs  = alreadyToday ? 0 : SHIFT_HRS.pm;
+                const addDays = alreadyToday ? 0 : 1;
+                if (used + addHrs > maxHrs) continue;
+                if (!alreadyToday && daysUsed >= maxDays) continue;
+                assignments[d][PM_COMBINED_HOST_ROOM_ID].pm.push(s.name);
+                if (!alreadyToday) {
+                    weeklyHours.set(s.id, used + SHIFT_HRS.pm);
+                    weeklyDays.set(s.id, daysUsed + addDays);
+                }
+                acFilled++;
+            }
         });
 
         renderScheduleTables(weekDates, counts, assignments);
@@ -1363,6 +1507,12 @@ async function emailStaffSchedule() {
                         staffShifts[name].push({ date: d, dayLabel, roomLabel: room.label, shift });
                     });
                 });
+            });
+            // After Care's pooled PM group (Goose/Turtle/Owl combined) — see
+            // PM_COMBINED_* (supabase.js).
+            (assignments[d]?.[PM_COMBINED_HOST_ROOM_ID]?.pm || []).forEach(name => {
+                if (!staffShifts[name]) staffShifts[name] = [];
+                staffShifts[name].push({ date: d, dayLabel, roomLabel: staffRoomLabel(PM_COMBINED_HOST_ROOM_ID), shift: 'pm' });
             });
         });
 
@@ -4889,13 +5039,15 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
 
     // Accumulate labor cost per room per month
     const laborMap = new Map(); // `mo|roomId` → cost
+    const centerLaborByMonth = {}; // mo → total cost
+    const centerLaborSource  = {}; // mo → 'historical' | 'hours' | 'salary_estimate'
+    const pmCombinedRoomIds  = new Set(PM_COMBINED_ROOM_IDS);
     staffDayMap.forEach(shifts => {
         const mo        = shifts[0].work_date.substring(0, 7);
         const payType   = shifts[0].pay_type;
         const totalHrs  = shifts.reduce((s, r) => s + (SHIFT_HRS[r.shift] || 0), 0);
 
         shifts.forEach(r => {
-            const mapKey = `${mo}|${r.room_id}`;
             let cost = 0;
             if (payType === 'salary') {
                 // Daily cost = biweekly salary / 10 working days, prorated by this shift's hours
@@ -4904,6 +5056,28 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
             } else {
                 cost = (r.hourly_rate || 0) * (SHIFT_HRS[r.shift] || 0);
             }
+            if (r.room_id === PM_COMBINED_HOST_ROOM_ID) {
+                // After Care's pooled PM group (Goose/Turtle/Owl combined —
+                // PM_COMBINED_*, supabase.js) has no revenue of its own, so
+                // its labor is split across the three real rooms by that
+                // month's attendance weight, the same distribution Tier 3's
+                // salaried-overhead split below already uses — never left
+                // sitting under a room id the room-total read loop can't see.
+                const moRooms = ROOMS.filter(cr => pmCombinedRoomIds.has(cr.id)
+                    && (arMap[mo]?.[cr.id]?.attendees || 0) > 0);
+                const totalAtt = moRooms.reduce((s, cr) => s + arMap[mo][cr.id].attendees, 0);
+                if (totalAtt > 0) {
+                    moRooms.forEach(cr => {
+                        const share = cost * arMap[mo][cr.id].attendees / totalAtt;
+                        const key = `${mo}|${cr.id}`;
+                        laborMap.set(key, (laborMap.get(key) || 0) + share);
+                    });
+                } else {
+                    centerLaborByMonth[mo] = (centerLaborByMonth[mo] || 0) + cost;
+                }
+                return;
+            }
+            const mapKey = `${mo}|${r.room_id}`;
             laborMap.set(mapKey, (laborMap.get(mapKey) || 0) + cost);
         });
     });
@@ -4913,8 +5087,6 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
     //   1. Historical Payroll Records (Staffing tab) — actual total paid per period
     //   2. Logged staff hours (staff_hours table)    — for months not in history
     //   3. Salary estimates from staff table          — absolute last resort
-    const centerLaborByMonth = {}; // mo → total cost
-    const centerLaborSource  = {}; // mo → 'historical' | 'hours' | 'salary_estimate'
 
     // Helper: parse "Month Day[, Year] - Month Day, Year" label → {start, end} Date objects
     function _parsePayrollLabel(label) {

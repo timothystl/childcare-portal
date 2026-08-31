@@ -488,8 +488,10 @@ function apFmtDayShort(dateStr) {
  */
 function apStaffing(weekDates) {
     const rooms = getSortedRooms().filter(r => !r.hidden);
+    const combinedIds = new Set(PM_COMBINED_ROOM_IDS);
     const rows  = rooms.map(room => {
         const ratio = room.staffRatio || 10;
+        const combines = combinedIds.has(room.id);
         const cells = weekDates.map(date => {
             const closed = allClosureDates.has(date);
             let kids = 0, kidsPm = 0;
@@ -504,17 +506,54 @@ function apStaffing(weekDates) {
                     });
                 });
             }
-            const staff   = kids   > 0 ? Math.ceil(kids   / ratio) : 0;
-            const staffPm = kidsPm > 0 ? Math.ceil(kidsPm / ratio) : 0;
+            const staff = kids > 0 ? Math.ceil(kids / ratio) : 0;
+            // Goose/Turtle/Owl combine into one supervised group from
+            // 1:00p–5:00p (PM_COMBINED_ROOM_IDS, supabase.js) — their PM
+            // headcount is pooled and staffed under After Care (below)
+            // instead of counted separately per room, so a combined room's
+            // own PM figure here is always 0 rather than its own ceil().
+            const staffPm = combines ? 0 : (kidsPm > 0 ? Math.ceil(kidsPm / ratio) : 0);
             return {
-                kids, kidsPm, staff, staffPm, closed,
+                kids, kidsPm: combines ? 0 : kidsPm, staff, staffPm, closed,
                 // "at ratio" — one more child adds another staff member, AM or PM
                 atEdge:   kids   > 0 && kids   % ratio === 0,
-                atEdgePm: kidsPm > 0 && kidsPm % ratio === 0,
+                atEdgePm: !combines && kidsPm > 0 && kidsPm % ratio === 0,
             };
         });
         return { room, label: room.label, ratio, ratioLabel: `1 : ${ratio}`, cells };
     }).filter(r => r.cells.some(c => c.kids > 0));
+
+    // The pooled After Care row: PM-only, built from the SAME per-room kid
+    // counts above (before they were zeroed out) so the combined figure can
+    // never disagree with what the three rooms' own AM figures already show.
+    const combinedRooms = rooms.filter(r => combinedIds.has(r.id));
+    if (combinedRooms.length) {
+        const acCells = weekDates.map((date, i) => {
+            const closed = allClosureDates.has(date);
+            let kidsPm = 0;
+            if (!closed) {
+                (allRegistrations || []).forEach(reg => {
+                    if (!combinedIds.has(reg.room_id)) return;
+                    (reg.registration_dates || []).forEach(d => {
+                        if (!d.waitlisted && d.care_date === date && d.day_type !== 'half') kidsPm++;
+                    });
+                });
+            }
+            const staffPm = kidsPm > 0 ? Math.ceil(kidsPm / PM_COMBINED_RATIO) : 0;
+            return {
+                kids: 0, kidsPm, staff: 0, staffPm, closed,
+                atEdge: false, atEdgePm: kidsPm > 0 && kidsPm % PM_COMBINED_RATIO === 0,
+            };
+        });
+        if (acCells.some(c => c.kidsPm > 0)) {
+            rows.push({
+                room: { id: PM_COMBINED_HOST_ROOM_ID },
+                label: `🌆 After Care · combined 1–5p (${combinedRooms.map(r => r.label.replace(/^\S+\s/, '')).join('/')})`,
+                ratio: PM_COMBINED_RATIO, ratioLabel: `1 : ${PM_COMBINED_RATIO}`,
+                cells: acCells,
+            });
+        }
+    }
 
     const classroom   = weekDates.map((_, i) => rows.reduce((a, r) => a + r.cells[i].staff,   0));
     const classroomPm = weekDates.map((_, i) => rows.reduce((a, r) => a + r.cells[i].staffPm, 0));
@@ -1892,7 +1931,7 @@ function apRenderStaffReq() {
             </table>
         </div>
         <p style="color:var(--text-muted);font-size:.86em;margin-top:14px;max-width:76ch;text-wrap:pretty">
-            Ratios come from Settings → Staff-to-Child Ratios. AM counts every child booked that day; PM counts full-day children only, since a half-day booking drops for the afternoon — a room shows one number when AM and PM match, and both when they don't. An orange count means that shift is exactly at ratio — one more child adds another staff member. "Total on the floor" and the cost estimate are built from the AM figure, since it is always the day's peak.
+            Ratios come from Settings → Staff-to-Child Ratios. AM counts every child booked that day; PM counts full-day children only, since a half-day booking drops for the afternoon — a room shows one number when AM and PM match, and both when they don't. An orange count means that shift is exactly at ratio — one more child adds another staff member. "Total on the floor" and the cost estimate are built from the AM figure, since it is always the day's peak. Goose, Turtle and Owl combine into one supervised group from 1:00p–5:00p — their own PM figure is always 0, and the pooled staffing need for the three together shows as the After Care row.
         </p>`;
     apCostRender(sf);
 }

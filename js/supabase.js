@@ -142,11 +142,13 @@ function getSortedRooms(rooms = ROOMS) {
 // shown (Staff Roster's "Room" field, payroll room labels, the attendance/
 // headcount board, "My schedule") — added for before-open and after-close
 // coverage. These are deliberately NOT entries in ROOMS: no capacity, no
-// staff ratio, no rates, and no age range, so they never appear in parent
-// registration, billing, capacity planning, or the Build Staff Schedule
-// room/shift grid (which is driven entirely by booked child enrollment).
-// Add a new one here, never to ROOMS, unless it is meant to be a real
-// classroom children can be enrolled and billed into.
+// per-child rate, and no age range, so they never appear in parent
+// registration, billing rates, or child capacity planning. After Care is
+// also where Goose/Turtle/Owl's combined-afternoon staffing lands in the
+// Build Staff Schedule grid — see PM_COMBINED_* below — so it is the one
+// STAFF_ONLY_ROOMS entry the schedule grid does show a PM row for; Morning
+// Care never appears there. Add a new one here, never to ROOMS, unless it
+// is meant to be a real classroom children can be enrolled and billed into.
 const STAFF_ONLY_ROOMS = [
     { id: 'morning_care', label: '🌅 Morning Care' },
     { id: 'after_care',   label: '🌆 After Care' },
@@ -167,6 +169,27 @@ function staffRoomLabel(roomId) {
     if (!roomId) return 'Float';
     return getStaffRoomOptions().find(r => r.id === roomId)?.label || 'Float';
 }
+
+// AFTERNOON ROOM COMBINATION
+// ============================================================
+// Goose, Turtle and Owl physically combine into one supervised group from
+// 1:00p to 5:00p (staff may arrive a little before that to get set up, but
+// the children are only together 1–5p). Staffing this as three separately
+// ratio'd rooms overstates what is actually needed — e.g. 5 kids in each of
+// the three rooms needs ceil(5/8)=1 staff apiece (3 total) computed
+// separately, but pooled as one group of 15 it's ceil(15/8)=2. Every PM
+// staffing calculation for these three rooms (Daily Staffing Requirement,
+// Build Staff Schedule, the live Attendance Board's ratio watch) pools
+// their afternoon headcount into one figure instead, recorded under the
+// After Care duty station (STAFF_ONLY_ROOMS above) since no single one of
+// the three rooms is the "real" room for that hour.
+// ⚠️ All three rooms already share staffRatio: 8 (checked against ROOMS),
+// so PM_COMBINED_RATIO does not need to derive a "strictest of the three"
+// value today — but if that ever changes, this constant, not any one room's
+// own staffRatio, is what every combined-PM calculation reads.
+const PM_COMBINED_ROOM_IDS   = ['goose', 'turtle', 'owl'];
+const PM_COMBINED_HOST_ROOM_ID = 'after_care';
+const PM_COMBINED_RATIO      = 8;
 
 // Populates a "which room is your sibling in" <select> with all non-hidden
 // rooms, age-sorted, keeping any existing placeholder option (e.g. "— Not
