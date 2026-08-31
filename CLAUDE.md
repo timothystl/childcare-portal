@@ -5145,3 +5145,67 @@ first.** And when adding an anon write, prefer a definer RPC over a table grant.
 - Verifying a write **as the role under test** fails when that role cannot read
   the table — the error looks like the function is broken when the test is.
   `reset role` before checking what was written.
+
+---
+
+## ⚠️ ProCare Import was unreachable, and the dedup key can't survive a different ProCare report (2026-08-31)
+
+Two findings from one real import, both worth keeping.
+
+### The screen had no `AP_TOOLS` entry
+
+`#billingPaymentsSection` (ProCare Import) exists in `admin.html` and
+`setupBilling()` wires its file input unconditionally at init — but nothing
+in `AP_TOOLS` pointed at it, so `apShowSection()` could never show it.
+Unreferenced means unreachable, per the shell's own rule. Found by grepping
+`AP_TOOLS` for the section id **before** telling the director where to click,
+rather than assuming a screen present in `admin.html` can be opened — the
+exact discipline the retired-Refund-button incident above asks for.
+
+Unlike `billingArSection`, this one has **no replacement in Bookkeeper**: the
+Ledger's "+ Record payment" enters ONE payment by hand; nothing else does a
+bulk import with a preview, a duplicate guard and unmatched-name assignment.
+Restored as `procareImport` under Finance → Money In, `pane: 'finance'`
+(verified against where the section really lives in `#tab-finance`, not
+inferred from the tab it appears under). Full-only falls out of
+`AP_FULL_ONLY_TABS` already containing `finance`; a guard asserts that stays
+true rather than relying on it silently.
+
+### ⚠️ `_procareDupKey` keys on the description, and ProCare's description is not stable across reports
+
+The guard fingerprints `family | date | amount | description`. Measured
+against a real second export covering months already imported:
+
+| Fingerprint | File rows found already in the database |
+|---|---|
+| date + amount + description (**the live guard**) | **15 of 516** |
+| date + amount | **454 of 516** |
+
+The stored notes came from an earlier ProCare report that truncates at 30
+characters (`Online Payment By Parent: K...`); the new export writes
+`By Kristine Hernandez. Last 4: 2352`. Same payments, same dates, same
+amounts, structurally different text — so the one field the guard leans on is
+the one that changes with which report the office happens to export.
+
+Importing that file would have added 439 already-recorded payments, roughly
+doubling Jan–Jun on every affected family's **childcare tax statement**.
+Caught before import by simulating the guard against the live table, not by
+reading the file. **A duplicate guard is only as good as the stability of the
+field it fingerprints — verify it against the real stored rows before
+trusting it on a second export from the same system.**
+
+Worked around for this import by trimming the file to the uncovered months
+(the overlap is what needed guarding, and there was none). **Not fixed in
+code**: dropping `description` from the key would have caught essentially all
+454, at the cost of collapsing two genuine same-family/same-day/same-amount
+payments into one. That trade needs deciding, not assuming — see the note
+already in `_procareDupKey` about erring toward the safer side for a tax
+document.
+
+Also confirmed while checking: the Jan–Jun rows already in the database
+reconcile to the new export within **$253.00** across six months, and the
+file's "extra" rows are almost entirely children with no matching roster
+name — the same ones the first import skipped.
+
+`npm test` — 274/274 (3 new guards). `npm run build` — `dist/admin.min.js`
+grepped for `procareImport`.
