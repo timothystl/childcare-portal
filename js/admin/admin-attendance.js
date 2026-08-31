@@ -41,13 +41,38 @@ function _abEl(id) { return document.getElementById(id); }
 // merged from the 'staff_ratios' setting at runtime, so this reads whatever the
 // office last saved rather than the declaration default.
 function _abRatio(roomId) {
+    if (roomId === PM_COMBINED_HOST_ROOM_ID) return PM_COMBINED_RATIO;
     const room = (typeof ROOMS !== 'undefined' ? ROOMS : []).find(r => r.id === roomId);
     return Number(room?.staffRatio) || null;
 }
 
 function _abRoomLabel(id) {
+    if (id === PM_COMBINED_HOST_ROOM_ID) return '🌆 After Care · Goose/Turtle/Owl combined';
     const room = (typeof ROOMS !== 'undefined' ? ROOMS : []).find(r => r.id === id);
     return room ? room.label : (id === 'unassigned' ? 'Room not set' : id || '—');
+}
+
+// Goose/Turtle/Owl physically combine into one supervised group from 1:00p
+// to 5:00p (PM_COMBINED_*, supabase.js) — checked against Central time
+// (America/Chicago, same zone _abTime() already uses), not the viewing
+// browser's own clock, since an admin could be looking at this board from
+// anywhere.
+function _abPmCombinedNow() {
+    const hour = Number(new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric', hour12: false, timeZone: 'America/Chicago',
+    }).format(new Date()));
+    return hour >= 13 && hour < 17;
+}
+
+// A kid/staff row's real room_id matches roomId directly, UNLESS roomId is
+// the After Care combined marker, in which case any of Goose/Turtle/Owl's
+// real room ids counts as a match — see PM_COMBINED_* (supabase.js). Kept
+// as one helper so the board and the ratio math it feeds can never
+// disagree about who is "in" the combined group.
+function _abMatchesRoom(itemRoomId, roomId) {
+    const iid = itemRoomId || 'unassigned';
+    if (roomId === PM_COMBINED_HOST_ROOM_ID) return PM_COMBINED_ROOM_IDS.includes(iid);
+    return iid === roomId;
 }
 
 function _abTime(iso) {
@@ -264,11 +289,21 @@ function _abRender() {
     const allergyKids = kids.filter(c => _abAllergySummary(c.allergies));
 
     // Rooms in ROOMS order, plus anything unexpected the data threw up.
-    const roomIds = [...new Set([
+    let roomIds = [...new Set([
         ...(typeof ROOMS !== 'undefined' ? ROOMS : []).map(r => r.id),
         ...kids.map(c => c.room_id || 'unassigned'),
     ])].filter(id => kids.some(c => (c.room_id || 'unassigned') === id)
                   || staff.some(s => (s.room_id || 'unassigned') === id));
+
+    // Goose/Turtle/Owl combine into one supervised group from 1:00p–5:00p
+    // (PM_COMBINED_*, supabase.js) — show one merged section instead of
+    // three separate ones during that window, so the ratio watch reflects
+    // the group they're actually in rather than flagging three empty-looking
+    // rooms as understaffed.
+    if (_abPmCombinedNow() && PM_COMBINED_ROOM_IDS.some(id => roomIds.includes(id))) {
+        roomIds = roomIds.filter(id => !PM_COMBINED_ROOM_IDS.includes(id));
+        roomIds.push(PM_COMBINED_HOST_ROOM_ID);
+    }
 
     const atLimit = roomIds.filter(id => _abRoomRatio(id, present, staff, hasCheckins).state === 'limit');
     const over    = roomIds.filter(id => _abRoomRatio(id, present, staff, hasCheckins).state === 'over');
@@ -385,8 +420,8 @@ function _abAllergyWords(kids) {
 }
 
 function _abRoomRatio(roomId, present, staff, hasCheckins) {
-    const inRoom    = present.filter(c => (c.room_id || 'unassigned') === roomId).length;
-    const staffHere = staff.filter(s => (s.room_id || 'unassigned') === roomId).length;
+    const inRoom    = present.filter(c => _abMatchesRoom(c.room_id, roomId)).length;
+    const staffHere = staff.filter(s => _abMatchesRoom(s.room_id, roomId)).length;
     const ratio     = _abRatio(roomId);
 
     // With no check-ins and no clock-ins there is nothing to judge, and a red
@@ -400,8 +435,8 @@ function _abRoomRatio(roomId, present, staff, hasCheckins) {
 }
 
 function _abRoom(roomId, kids, staff, hasCheckins) {
-    const roomKids  = kids.filter(c => (c.room_id || 'unassigned') === roomId);
-    const roomStaff = staff.filter(s => (s.room_id || 'unassigned') === roomId);
+    const roomKids  = kids.filter(c => _abMatchesRoom(c.room_id, roomId));
+    const roomStaff = staff.filter(s => _abMatchesRoom(s.room_id, roomId));
     const present   = roomKids.filter(c => c.attendance_status === 'present');
     const expected  = roomKids.filter(c => c.marked !== 'absent');
     const r = _abRoomRatio(roomId, kids.filter(c => c.attendance_status === 'present'),
@@ -441,7 +476,7 @@ function _abRoom(roomId, kids, staff, hasCheckins) {
                 <span class="ab-kid-name" title="${escHtml(c.child_name)}">${escHtml(c.child_name)}</span>
                 <span class="ab-kid-badges">${badges}</span>
             </span>
-            ${canAct ? _abActionsHtml(c, roomId) : `<span class="ab-kid-mark">${escHtml(mark)}</span>`}
+            ${canAct ? _abActionsHtml(c, c.room_id || roomId) : `<span class="ab-kid-mark">${escHtml(mark)}</span>`}
         </div>`;
     }).join('');
 
