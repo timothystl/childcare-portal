@@ -41,9 +41,9 @@ const PRECACHE_URLS = [
   '/js/supabase.js',
   '/js/error-monitor.js',
   '/js/lookup.js',
-  '/images/logo/parent-pwa-icon-192.png',
+  '/images/logo/apps/parent/parent-launcher-192.png',
   '/images/logo/brand-notification-badge-96.png',
-  '/images/logo/parent-wordmark-on-light.png',
+  '/images/logo/apps/parent/parent-wordmark-on-light.png',
   '/images/logo/brand-splash-church-pale.png',
   '/images/icons/nav-today.png',
   '/images/icons/nav-recap.png',
@@ -140,7 +140,7 @@ self.addEventListener('push', event => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body:  data.body,
-      icon:  '/images/logo/parent-pwa-icon-192.png',
+      icon:  '/images/logo/apps/parent/parent-launcher-192.png',
       badge: '/images/logo/brand-notification-badge-96.png',
       tag:   data.tag || 'mdo',
     })
