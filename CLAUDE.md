@@ -5249,10 +5249,25 @@ the MCP `execute_sql` tool does not reliably share transaction state across
 `;`-separated statements, per this file's own warning). Verified afterward: the
 five new names carry the same registration counts and no old spelling remains.
 
-⚠️ **Three more of the same class are still there and were left alone**, since
-the director's confirmation named the five above: `Anothony Guletz` (parent is
-`Anthony Guletz Sr.`), and `Adam` / `Michelle`, both stored with no surname.
-`Adam` is Chloe Cambridge's sibling in the same family, so his surname follows
-from a rename already made. ⚠️ `Michelle` has a **`billing_overrides` row keyed
-on that exact string** — the only one of the eight that does — so renaming her
-needs that table in the same statement or the override silently stops applying.
+**Two more followed the same day**, once the director confirmed the class:
+`Anothony Guletz` → `Anthony Guletz` (parent is `Anthony Guletz Sr.`, sibling
+`Violet Guletz`) and `Adam` → `Adam Cambridge` (only sibling is the
+`Chloe Cambridge` renamed above, both parents `Cambridge`). Same six-table
+check, same one-statement update: 2 students, 7 registrations.
+
+⚠️ **`Michelle` is the one still open, and it is not a spelling question.**
+She is stored with no surname; her only parent is `Denise Davis`, but the
+family's email is `eredd3760@gmail.com`, and the roster carries an unrelated
+`Montana Redd` — so `Davis`, `Redd`, or neither are all live possibilities and
+the parent's own surname is not the corroboration it was for the other seven.
+Separately, the ProCare export names a **`June Davis`** (2 payments, $2,100)
+that matches nothing on the roster, while Michelle's family has **zero**
+recorded payments and confirmed July/August registrations — consistent with
+their being the same child under a different first name, and equally consistent
+with two different children. `June` is not a misspelling of `Michelle`, so this
+needs the office to say who the child is, not a rule.
+
+⚠️ She is also the only one of the eight with a **`billing_overrides` row keyed
+on the literal string** (`id 6`, month `2026-06`, amount 0). That table must be
+in the same statement as any rename of her, or the override silently stops
+applying — which is exactly the free-text-name hazard this section is about.
