@@ -35,10 +35,12 @@ function setupStaffRoster() {
     // Pay type toggle
     document.getElementById('sfPayType')?.addEventListener('change', e => _togglePayFields(e.target.value));
 
-    // Populate room picker in the add/edit form
+    // Populate room picker in the add/edit form — real classrooms plus the
+    // staff-only Morning Care / After Care duty stations (see
+    // STAFF_ONLY_ROOMS in supabase.js).
     const sel = document.getElementById('sfRoom');
     if (sel) {
-        getSortedRooms().forEach(r => {
+        getStaffRoomOptions().forEach(r => {
             const opt = document.createElement('option');
             opt.value = r.id; opt.textContent = r.label;
             sel.appendChild(opt);
@@ -120,7 +122,7 @@ function renderStaffList(staff) {
             </thead>
             <tbody>
                 ${staff.map(s => {
-                    const roomLabel  = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
+                    const roomLabel  = staffRoomLabel(s.room_id);
                     const pinDisplay = s.has_staff_pin ? '●●●●' : '—';
                     const isSalary   = s.pay_type === 'salary';
                     const payDisplay = isSalary

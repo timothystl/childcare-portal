@@ -46,7 +46,14 @@ const HC_DRILL_LABEL = {
 function hcEl(id) { return document.getElementById(id); }
 
 function hcRoomLabel(id) {
-    const r = (typeof ROOMS !== 'undefined' ? ROOMS : []).find(x => x.id === id);
+    // Children only ever carry a real classroom id; staff can also carry one
+    // of the staff-only duty stations (STAFF_ONLY_ROOMS, e.g. Morning Care /
+    // After Care) — both need a friendly label on a drill sheet, not the raw
+    // id string.
+    const rooms = typeof getStaffRoomOptions === 'function'
+        ? getStaffRoomOptions()
+        : (typeof ROOMS !== 'undefined' ? ROOMS : []);
+    const r = rooms.find(x => x.id === id);
     if (r) return r.label;
     return id === 'unassigned' ? '❓ Room not known' : (id || '❓ Room not known');
 }
