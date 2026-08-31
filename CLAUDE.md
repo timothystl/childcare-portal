@@ -5194,13 +5194,22 @@ reading the file. **A duplicate guard is only as good as the stability of the
 field it fingerprints — verify it against the real stored rows before
 trusting it on a second export from the same system.**
 
-Worked around for this import by trimming the file to the uncovered months
-(the overlap is what needed guarding, and there was none). **Not fixed in
-code**: dropping `description` from the key would have caught essentially all
-454, at the cost of collapsing two genuine same-family/same-day/same-amount
-payments into one. That trade needs deciding, not assuming — see the note
-already in `_procareDupKey` about erring toward the safer side for a tax
-document.
+**Fixed 2026-08-31, and the trade the old note worried about was avoidable.**
+`_procareDupKey` is now `family | date | amount` — no description. The
+description had been carrying exactly one real job, separating two genuine
+payments of the same amount from the same family on the same day, and that job
+moved to **`_procareDupCounts()`**, which tallies stored rows per fingerprint
+and has the guard *consume* from the tally instead of testing set membership.
+N stored and N+1 in the file imports exactly one. So neither failure mode is
+taken: a re-export no longer doubles a month (the reason for the change), and a
+real second same-day payment is no longer silently dropped (the reason the
+description was in the key to begin with). A `Set` would have forced a choice
+between the two; a `Map` of counts does not.
+
+Re-simulated against the same real export afterward: **444 rows recognized as
+already recorded, ~200 imported** — the July/August gap plus two dozen Jan–Jun
+payments that genuinely had never been recorded, mostly for the five children
+whose roster spelling was corrected the same day (below).
 
 Also confirmed while checking: the Jan–Jun rows already in the database
 reconcile to the new export within **$253.00** across six months, and the
@@ -5209,3 +5218,41 @@ name — the same ones the first import skipped.
 
 `npm test` — 274/274 (3 new guards). `npm run build` — `dist/admin.min.js`
 grepped for `procareImport`.
+
+### Five roster names were corrected, in `students` AND `registrations` (2026-08-31)
+
+The ProCare export named five children our roster spelled differently, and the
+director confirmed ours were the typos. Each was verified against the family's
+own parents before touching anything — not taken from the export alone:
+
+| Roster had | Parents on file | Corrected to |
+|---|---|---|
+| Andrew Dre**xal** | John **Drexl** | Andrew Drexl |
+| Rhodes Malc**om** | Andrew & Mariah **Malcolm** | Rhodes Malcolm |
+| Bennet Lewis | Molly & Connor Lewis | Bennett Lewis |
+| `Sullivan` (no surname) | Tim & Gina **O'Neill** | Sullivan O'Neill |
+| `Chloe` (no surname) | Kendahl & Matt **Cambridge** | Chloe Cambridge |
+
+⚠️ **A child's name is free text in six tables** — `students`,
+`registrations`, `attendance_records`, `billing_overrides`,
+`cacfp_meal_records`, `missing_child_alerts` (plus `waitlist_applications`,
+twice). There is no foreign key: `registrations` does not reference
+`students.id`, it carries its own `child_name` string, and
+`family_care_statement()` reads the child list from **registrations**, not
+students. Renaming one table alone would drop the child off their own tax
+statement while still showing them on the roster.
+
+Checked every one of the six before the update: only `students` (5 rows) and
+`registrations` (18 rows) held these names, no target name already existed, and
+both were updated in **one statement** (data-modifying CTEs, so it is atomic —
+the MCP `execute_sql` tool does not reliably share transaction state across
+`;`-separated statements, per this file's own warning). Verified afterward: the
+five new names carry the same registration counts and no old spelling remains.
+
+⚠️ **Three more of the same class are still there and were left alone**, since
+the director's confirmation named the five above: `Anothony Guletz` (parent is
+`Anthony Guletz Sr.`), and `Adam` / `Michelle`, both stored with no surname.
+`Adam` is Chloe Cambridge's sibling in the same family, so his surname follows
+from a rename already made. ⚠️ `Michelle` has a **`billing_overrides` row keyed
+on that exact string** — the only one of the eight that does — so renaming her
+needs that table in the same statement or the override silently stops applying.

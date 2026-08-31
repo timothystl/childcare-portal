@@ -694,13 +694,43 @@ async function onPaymentCsvChange(file) {
 // The fingerprint a ProCare row and a stored payment are compared on. Amount is
 // fixed to 2dp because the sheet gives a float and the column is numeric — 60
 // and 60.00 are the same payment.
+//
+// ⚠️ The description is deliberately NOT part of this key, as of 2026-08-31.
+// It used to be, and that made the guard useless against a re-export: ProCare
+// writes different description text depending on which report the office
+// pulls. Measured against a real second export of months already imported,
+// family+date+amount+description recognized 15 of 516 overlapping rows;
+// family+date+amount recognized 454. The stored rows came from a report that
+// truncates at 30 characters ("Online Payment By Parent: K..."), the new one
+// writes "By Kristine Hernandez. Last 4: 2352" — same payments, unrecognizable
+// to each other. Importing on the old key would have added 439 already-recorded
+// payments, roughly doubling six months on every affected family's childcare
+// tax statement.
+//
+// The description had been carrying one real job — separating two genuine
+// payments of the same amount, from the same family, on the same day. That job
+// now belongs to _procareDupCounts() below, which matches by COUNT rather than
+// by presence, so the second such payment still imports.
 function _procareDupKey(p) {
     return [
         String(p.family_id),
         String(p.payment_date).slice(0, 10),
         Number(p.amount || 0).toFixed(2),
-        String(p.note || '').trim().toLowerCase(),
     ].join('|');
+}
+
+// How many stored payments carry each fingerprint. The guard consumes from
+// this tally: a file row is "already imported" only while an unconsumed stored
+// row matches it, so N in the database and N+1 in the file imports exactly one.
+// A Set would have marked all N+1 as duplicates and silently dropped the extra
+// payment, which on a tax document is the same class of error as doubling one.
+function _procareDupCounts(payments) {
+    const counts = new Map();
+    (payments || []).forEach(p => {
+        const k = _procareDupKey(p);
+        counts.set(k, (counts.get(k) || 0) + 1);
+    });
+    return counts;
 }
 
 async function _handleProCareImport(rows, wrap) {
@@ -743,22 +773,24 @@ async function _handleProCareImport(rows, wrap) {
     // be inferred from the row: family + date + amount + description. One
     // fetch over the file's own date window, matched in memory.
     //
-    // ⚠️ Two genuinely separate payments of the same amount, on the same day,
-    // from the same family, with the same description are indistinguishable
-    // from a duplicate here and the second WILL be skipped. That is the safer
-    // side to err on for a tax document, and the preview lists every skipped
-    // row so the office can spot one and record it by hand in the Ledger.
+    // Matching is by count, not presence — see _procareDupCounts(). Two
+    // genuinely separate payments of the same amount, on the same day, from
+    // the same family are no longer collapsed into one: the file's second such
+    // row imports unless a second stored row already matches it. The preview
+    // still lists every skipped row so the office can check one by eye.
     const withFamily = parsed.filter(r => r.familyId && r.type !== 'Invoice');
     if (withFamily.length) {
         const dates = withFamily.map(r => r.dateVal).sort();
         try {
             const existing = await fetchPaymentsInRange(dates[0], dates[dates.length - 1]);
-            const seen = new Set(existing.map(_procareDupKey));
+            const remaining = _procareDupCounts(existing);
             parsed.forEach(r => {
-                if (r.familyId && r.type !== 'Invoice' && seen.has(_procareDupKey({
-                    family_id: r.familyId, payment_date: r.dateVal,
-                    amount: r.amount, note: r.description,
-                }))) r.alreadyImported = true;
+                if (!r.familyId || r.type === 'Invoice') return;
+                const k = _procareDupKey({
+                    family_id: r.familyId, payment_date: r.dateVal, amount: r.amount,
+                });
+                const left = remaining.get(k) || 0;
+                if (left > 0) { remaining.set(k, left - 1); r.alreadyImported = true; }
             });
         } catch (e) {
             // A failed lookup must not turn into a silent double-import: say so
