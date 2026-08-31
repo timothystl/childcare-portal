@@ -11,19 +11,19 @@
   "categories": ["education", "lifestyle"],
   "icons": [
     {
-      "src": "/images/logo/icon-192.png",
+      "src": "/images/logo/parent-pwa-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/images/logo/icon-512.png",
+      "src": "/images/logo/parent-pwa-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/images/logo/icon-maskable-512.png",
+      "src": "/images/logo/parent-pwa-icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -34,13 +34,13 @@
       "name": "Family Portal",
       "short_name": "Portal",
       "url": "/portal",
-      "icons": [{ "src": "/images/logo/icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/images/logo/parent-pwa-icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Staff Clock-In",
       "short_name": "Clock In",
       "url": "/clockin",
-      "icons": [{ "src": "/images/logo/icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/images/logo/clockin-pwa-icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

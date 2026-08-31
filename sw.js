@@ -1,7 +1,7 @@
 // Service Worker for Timothy Lutheran MDO
 // Cache-first for static assets, network-only for API calls
 
-const CACHE_NAME = 'tl-mdo-v8';
+const CACHE_NAME = 'tl-mdo-v9';
 
 // Static assets to pre-cache on install
 // Uses clean URLs (no .html) to match how Cloudflare Assets serves them.
@@ -41,7 +41,23 @@ const PRECACHE_URLS = [
   '/js/supabase.js',
   '/js/error-monitor.js',
   '/js/lookup.js',
-  '/images/logo/icon-192.png',
+  '/images/logo/parent-pwa-icon-192.png',
+  '/images/logo/brand-notification-badge-96.png',
+  '/images/logo/parent-wordmark-on-light.png',
+  '/images/logo/brand-splash-church-pale.png',
+  '/images/icons/nav-today.png',
+  '/images/icons/nav-recap.png',
+  '/images/icons/nav-schedule.png',
+  '/images/icons/nav-billing.png',
+  '/images/icons/nav-messages.png',
+  '/images/icons/nav-account.png',
+  '/images/illustrations/empty-today.svg',
+  '/images/illustrations/empty-recap.svg',
+  '/images/illustrations/empty-schedule.svg',
+  '/images/illustrations/empty-messages.svg',
+  '/images/illustrations/empty-documents.svg',
+  '/images/illustrations/empty-billing.svg',
+  '/images/illustrations/payment-received.svg',
 ];
 
 // ── Install: pre-cache static assets ────────────────────────────────────────
@@ -124,8 +140,8 @@ self.addEventListener('push', event => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body:  data.body,
-      icon:  '/images/logo/icon-192.png',
-      badge: '/images/logo/icon-192.png',
+      icon:  '/images/logo/parent-pwa-icon-192.png',
+      badge: '/images/logo/brand-notification-badge-96.png',
       tag:   data.tag || 'mdo',
     })
   );

@@ -82,7 +82,7 @@ function pdRender() {
 
 function pdIncidentSection() {
     if (!pdReports.length) {
-        return pdCard('Incident reports', '🩹', `
+        return pdCard('Incident reports', '/images/icons/document-incident.svg', `
             <p class="pd-none">Nothing on file — no incident report has been filed
             and closed for your ${pdChildWord()}.</p>
             <p class="pd-fine">If a teacher files one, you'll be told the same day and
@@ -109,7 +109,7 @@ function pdIncidentSection() {
         </div>`;
     }).join('');
 
-    return pdCard('Incident reports', '🩹', rows + `
+    return pdCard('Incident reports', '/images/icons/document-incident.svg', rows + `
         <p class="pd-fine">Each copy carries all three signatures — the teacher who
         filed it, you at pickup, and the director. The center keeps the original for
         three years.</p>`);
@@ -117,7 +117,8 @@ function pdIncidentSection() {
 
 function pdFormsSection() {
     if (!pdForms.length) {
-        return pdCard('Policies and forms', '📋', `
+        return pdCard('Policies and forms', '/images/icons/document-policy.svg', `
+            <img class="ui-empty-illustration" src="/images/illustrations/empty-documents.svg" alt="">
             <p class="pd-none">The office hasn't posted any forms here yet.</p>`);
     }
     const rows = pdForms.map(f => `
@@ -128,7 +129,7 @@ function pdFormsSection() {
             </div>
             <span class="pd-print">Open</span>
         </a>`).join('');
-    return pdCard('Policies and forms', '📋', rows);
+    return pdCard('Policies and forms', '/images/icons/document-policy.svg', rows);
 }
 
 // ⚠️ No immunization table exists in this app, and this card doesn't list
@@ -156,7 +157,7 @@ function pdImmunizationSection() {
         </div>`).join('');
 
     const forWhom = kids.length > 1 ? 'each of your children' : 'your child';
-    return pdCard('Immunization & medical records', '💉', `
+    return pdCard('Immunization & medical records', '/images/icons/document-immunization.svg', `
         <p class="pd-none">Missouri licensing requires a current immunization record on
         file for ${forWhom}. You can hand one in below, or a doctor's note for anything
         else we need on file.</p>
@@ -205,7 +206,7 @@ async function pdUploadDocument(input) {
 function pdStatementsSection() {
     const famId = portalContext?.family_id;
     if (!famId) {
-        return pdCard('Statements and tax documents', '🧾', `
+        return pdCard('Statements and tax documents', '/images/icons/document-tax.svg', `
             <p class="pd-none">This sign-in is not linked to a family account, so there
             is no statement to issue.</p>`);
     }
@@ -221,7 +222,7 @@ function pdStatementsSection() {
         });
     }
 
-    return pdCard('Statements and tax documents', '🧾', `
+    return pdCard('Statements and tax documents', '/images/icons/document-tax.svg', `
         <p class="pd-row-body">A statement of what you have paid for care, for your
         employer's reimbursement account or for your tax preparer (IRS Form 2441).</p>
         <div class="pd-stmt">
@@ -268,7 +269,7 @@ function pdWireStatement() {
 
 function pdCard(title, icon, inner) {
     return `<section class="pd-card">
-        <div class="pd-card-head"><span aria-hidden="true">${icon}</span>${escHtml(title)}</div>
+        <div class="pd-card-head"><img class="pd-card-icon" src="${icon}" alt="" aria-hidden="true">${escHtml(title)}</div>
         <div class="pd-card-body">${inner}</div>
     </section>`;
 }

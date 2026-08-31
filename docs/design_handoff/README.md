@@ -56,7 +56,7 @@ Screens are grouped into three rows on the canvas. Row 1 is the recreation of wh
 
 ### Row 1 — Current production (reference only, already built)
 
-**1. `lookup.html` — sign in.** Exact recreation of the shipping page. Background `--green-lt`; centered white card, `max-width:440px`, `padding:44px 40px`, `border-radius:var(--radius-md)`, `box-shadow:0 16px 56px rgba(0,0,0,.22)`, `border:1px solid var(--border)`. Logo `images/logo/myMDO_primary_logo_light.png` at `height:70px`. H1 "My Schedule" in `--font-head` at `1.45em`, `--navy`. Email + PIN fields, ProCare hint line, full-width `.btn-primary`, "← Back to Registration".
+**1. `lookup.html` — sign in.** Exact recreation of the shipping page. Background `--green-lt`; centered white card, `max-width:440px`, `padding:44px 40px`, `border-radius:var(--radius-md)`, `box-shadow:0 16px 56px rgba(0,0,0,.22)`, `border:1px solid var(--border)`. Logo `images/logo/brand-wordmark-on-dark.png` at `height:70px`. H1 "My Schedule" in `--font-head` at `1.45em`, `--navy`. Email + PIN fields, ProCare hint line, full-width `.btn-primary`, "← Back to Registration".
 
 **2. `lookup.html` — results.** Header block `background:var(--green)`, `border-radius:var(--radius-md)`, `padding:24px 28px`: white `--font-head` H1, parent email at `rgba(255,255,255,.7)`, Print (`.btn-secondary`) and Log Out (`.btn-ghost` overridden white). Per-child card: `--linen` header with child first name + room label + green grand total; month blocks with tally (`N Full` in `--green-dark`, `N Half` in `--mustard-dark`) and month bill; date chips (`min-width:58px`, DOW / date / Full-or-½; half days use `--sun-pale` + `--sun-lt`); grand-total footer on `--green-pale` with `border-top:2px solid var(--green-lt)`.
 
@@ -174,7 +174,7 @@ Buttons: reuse `.btn-primary` (navy), `.btn-secondary` (sun), `.btn-ghost` (navy
 
 ## Assets
 
-- `images/logo/myMDO_primary_logo_light.png` — the shipping logo, used on both sign-in screens (70px and 78px tall). Included in this bundle; already in the repo.
+- `images/logo/brand-wordmark-on-dark.png` — the shipping logo, used on both sign-in screens (70px and 78px tall). Included in this bundle; already in the repo.
 - `img/mymdo-logo.svg` — vector alternative, also in the repo.
 - Icons are emoji, matching the current codebase (🔔 📷 🖨️ ⬇ 🏦 ✎ ✓ ✕ ← →). Swap for an icon set only if the team decides to; do not mix.
 - All photographic content is placeholder. The `<image-slot>` elements are canvas-only.
@@ -185,7 +185,7 @@ Buttons: reuse `.btn-primary` (navy), `.btn-secondary` (sun), `.btn-ghost` (navy
 - `Parent Communication.dc.html` — the full design canvas, all 21 screens side by side.
 - `Parent App Clickthrough.dc.html` — the same screens wired into one navigable phone; the authoritative reference for routing and tab-bar states.
 - `ios-frame.jsx`, `image-slot.js`, `support.js` — canvas rendering scaffolding, **not for production**.
-- `images/logo/myMDO_primary_logo_light.png` — real asset.
+- `images/logo/brand-wordmark-on-dark.png` — real asset.
 
 Repo files to read before implementing: `css/styles.css` (tokens and components), `lookup.html` + `js/lookup.js` + `css/lookup.css` (existing parent portal and month/rate math), `js/push-notifications.js` + `sw.js` + `worker.js` (push plumbing and the `/push-subscribe` endpoint), `js/admin/admin-messages.js` (message inbox), `js/admin/admin-billing.js` + `supabase/migrations/add_billing_module.sql` (billing model), `supabase/migrations/add_attendance_records.sql` (attendance), and `scripts/build.js` (add any new page bundle here).
 

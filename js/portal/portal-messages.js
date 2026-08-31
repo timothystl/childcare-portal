@@ -82,8 +82,10 @@ function pmRender(items) {
     if (!wrap) return;
 
     if (!items.length) {
-        wrap.innerHTML = `<p class="pm-empty">No messages yet. Anything you send here goes to your
-            child's teacher and the office.</p>`;
+        wrap.innerHTML = `<div class="pm-empty ui-empty-state">
+            <img class="ui-empty-illustration" src="/images/illustrations/empty-messages.svg" alt="">
+            <p>No messages yet. Anything you send here goes to your child's teacher and the office.</p>
+        </div>`;
         return;
     }
 

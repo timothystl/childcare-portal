@@ -265,7 +265,7 @@ function buildReceiptHtml(o: {
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(1,41,74,.08);">
         <tr>
           <td style="background:#01294A;padding:28px 32px;text-align:center;">
-            <img src="https://mdo.timothystl.org/images/logo/myMDO_primary_logo_light.png"
+            <img src="https://mdo.timothystl.org/images/logo/brand-wordmark-on-dark.png"
                  alt="my MDO" width="120" height="auto" style="display:block;margin:0 auto 10px;">
             <p style="margin:0;color:#F5B731;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;">Timothy Lutheran Church</p>
             <p style="margin:4px 0 0;color:rgba(255,255,255,.75);font-size:13px;">Mother's Day Out</p>
@@ -273,9 +273,9 @@ function buildReceiptHtml(o: {
         </tr>
         <tr>
           <td style="padding:34px 32px 8px;text-align:center;">
-            <table cellpadding="0" cellspacing="0" style="margin:0 auto 16px;">
-              <tr><td width="52" height="52" style="background:#C9E6DC;border-radius:50%;text-align:center;vertical-align:middle;font-size:26px;color:#3A7B60;">&#10003;</td></tr>
-            </table>
+            <img src="https://mdo.timothystl.org/images/illustrations/payment-received.png"
+                 alt="" width="180" height="135"
+                 style="display:block;margin:0 auto 10px;width:180px;height:auto;">
             <h1 style="margin:0 0 4px;color:#01294A;font-size:22px;font-weight:800;font-family:Georgia,'Times New Roman',serif;">Payment received</h1>
             <p style="margin:0 0 18px;color:#7A6E5A;font-size:14px;">Thank you, ${escHtml(o.familyName)}.</p>
             <p style="margin:0 0 26px;color:#01294A;font-size:34px;font-weight:800;font-family:Georgia,'Times New Roman',serif;">${escHtml(money(o.totalPaid))}</p>

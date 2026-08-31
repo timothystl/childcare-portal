@@ -121,7 +121,8 @@ function psRender() {
 
     const children = Object.values(byChild).filter(c => Object.keys(c.months).length);
     if (!children.length) {
-        wrap.innerHTML = `<div class="tab-placeholder">
+        wrap.innerHTML = `<div class="tab-placeholder ui-empty-state">
+            <img class="ui-empty-illustration" src="/images/illustrations/empty-schedule.svg" alt="">
             <h2>No care days booked yet</h2>
             <p>Once you register, your days and what they cost appear here.</p>
             <div class="tab-ph-links">
