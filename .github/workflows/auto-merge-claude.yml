@@ -70,6 +70,29 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # ⚠️ Many claude/** branches can push within seconds of each other,
+          # and each push triggers its own run of this workflow concurrently.
+          # Every one of those runs checks out main at roughly the same
+          # commit, merges its own branch, and pushes — so whichever job
+          # pushes first wins and every other job's `git push origin main`
+          # is rejected with "fetch first" (main moved under it). The old
+          # version of this step treated that rejection as fatal and simply
+          # failed the run, which is why "auto-merge failed" kept showing up
+          # even though nothing was actually wrong with any individual
+          # branch — it was a plain non-fast-forward race, not a conflict.
+          #
+          # Retry the whole fetch → merge → push cycle instead of giving up
+          # after one collision. Each attempt starts from a fresh main, so a
+          # rejected push just means "redo the merge against the new main
+          # and try again" rather than a real failure.
+          max_attempts=8
+          attempt=1
+          while :; do
+            echo "::group::Merge attempt $attempt/$max_attempts"
+
+            git fetch origin main "${{ github.ref_name }}"
+            git checkout -B main origin/main
+
           if git merge "origin/${{ github.ref_name }}" --no-ff -m "Auto-merge ${{ github.ref_name }}"; then
             echo "Clean merge."
           else
@@ -153,7 +176,22 @@ jobs:
             fi
           fi
 
-          git push origin main
+            if git push origin main; then
+              echo "Pushed."
+              echo "::endgroup::"
+              break
+            fi
+
+            echo "::endgroup::"
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "::error::git push origin main kept losing the race after $max_attempts attempts — giving up."
+              exit 1
+            fi
+            # Jittered backoff so a pile of concurrent runs don't all retry
+            # in lockstep and collide again on the very next attempt.
+            sleep "$(( (RANDOM % 5) + 1 ))"
+            attempt=$((attempt + 1))
+          done
 
       - name: Deploy to Cloudflare Workers
         run: npx wrangler deploy
