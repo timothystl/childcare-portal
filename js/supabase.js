@@ -136,6 +136,38 @@ function getSortedRooms(rooms = ROOMS) {
         .map(({ room }) => room);
 }
 
+// STAFF-ONLY ROOM OPTIONS
+// ============================================================
+// Selectable wherever a STAFF member's own room/duty station is assigned or
+// shown (Staff Roster's "Room" field, payroll room labels, the attendance/
+// headcount board, "My schedule") — added for before-open and after-close
+// coverage. These are deliberately NOT entries in ROOMS: no capacity, no
+// staff ratio, no rates, and no age range, so they never appear in parent
+// registration, billing, capacity planning, or the Build Staff Schedule
+// room/shift grid (which is driven entirely by booked child enrollment).
+// Add a new one here, never to ROOMS, unless it is meant to be a real
+// classroom children can be enrolled and billed into.
+const STAFF_ONLY_ROOMS = [
+    { id: 'morning_care', label: '🌅 Morning Care' },
+    { id: 'after_care',   label: '🌆 After Care' },
+];
+
+// getSortedRooms() (real classrooms) plus STAFF_ONLY_ROOMS, for any dropdown
+// that assigns a STAFF member's room. Never use this for a child/enrollment
+// room select — those must stay scoped to getSortedRooms()/ROOMS.
+function getStaffRoomOptions() {
+    return [...getSortedRooms(), ...STAFF_ONLY_ROOMS];
+}
+
+// Resolves a staff.room_id to its display label across both real classrooms
+// and STAFF_ONLY_ROOMS, falling back to 'Float' the same way every existing
+// `ROOMS.find(r => r.id === s.room_id)?.label || 'Float'` call site already
+// did for an unassigned staff member.
+function staffRoomLabel(roomId) {
+    if (!roomId) return 'Float';
+    return getStaffRoomOptions().find(r => r.id === roomId)?.label || 'Float';
+}
+
 // Populates a "which room is your sibling in" <select> with all non-hidden
 // rooms, age-sorted, keeping any existing placeholder option (e.g. "— Not
 // sure —") already in the markup. Shared by the parent, inquiry, and admin

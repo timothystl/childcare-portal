@@ -1953,7 +1953,7 @@ function renderPayrollReport(startVal, endVal, staff, periodMap, ytdMap, periodD
 
     const rows = staff.map(s => {
         const isSalary  = s.pay_type === 'salary';
-        const roomLabel = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
+        const roomLabel = staffRoomLabel(s.room_id);
         const inactive  = !s.active ? ' <span class="chip-waitlist status-chip" style="font-size:.75em">Inactive</span>' : '';
 
         const pHrsTotal = periodMap.get(s.id) || 0;
@@ -2661,7 +2661,7 @@ async function exportPayrollReport() {
             return {
                 'Name':             s.name,
                 'Role':             s.role || '',
-                'Room':             ROOMS.find(r => r.id === s.room_id)?.label || 'Float',
+                'Room':             staffRoomLabel(s.room_id),
                 'Pay Type':         'Salary',
                 'Rate':             `$${sal.toFixed(2)}/period`,
                 'Period Hours':     '—',
@@ -2676,7 +2676,7 @@ async function exportPayrollReport() {
         return {
             'Name':             s.name,
             'Role':             s.role || '',
-            'Room':             ROOMS.find(r => r.id === s.room_id)?.label || 'Float',
+            'Room':             staffRoomLabel(s.room_id),
             'Pay Type':         'Hourly',
             'Rate':             `$${rate.toFixed(2)}/hr`,
             'Period Hours':     pHrs.toFixed(2),
@@ -2711,7 +2711,7 @@ async function printPayrollSummary() {
     let totPeriodPay = 0;
     const rowsHtml = staff.map(s => {
         const isSalary = s.pay_type === 'salary';
-        const roomLabel = ROOMS.find(r => r.id === s.room_id)?.label || 'Float';
+        const roomLabel = staffRoomLabel(s.room_id);
         const ptoUsed = (periodPtoMap.get(s.id) || {}).used || 0;
         let hrsStr, payStr;
         if (isSalary) {
@@ -4963,6 +4963,16 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
             // Staff lookup by ID (for clock events which don't carry pay info)
             const staffById = new Map(allStaff.map(s => [s.id, s]));
 
+            // staff.room_id can now also hold a STAFF_ONLY_ROOMS duty station
+            // (Morning Care / After Care — see supabase.js), which is not a
+            // real classroom and has no attendance/revenue of its own. Every
+            // per-room labor allocation below must only treat a REAL room id
+            // as a room to bucket cost into, or that staff member's cost
+            // would silently vanish from both the room total and the
+            // center-wide fallback total (laborMap keyed on a fake room id is
+            // never read back — see the room P&L read loop further down).
+            const realRoomIds = new Set(ROOMS.map(r => r.id));
+
             // Build a lookup: set of date strings (YYYY-MM-DD) covered by historical records
             // so logged-hours entries on those dates aren't double-counted.
             const histCoveredDates = new Set();
@@ -4996,7 +5006,7 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
                         if (!s.gross_pay || s.gross_pay <= 0) return;
                         // Find room_id for this staff_id (staffById built in Tier 2 block, but we need it here too)
                         const staffRec = s.staff_id ? allStaff.find(a => a.id === s.staff_id) : null;
-                        const roomId = staffRec?.room_id || null;
+                        const roomId = (staffRec?.room_id && realRoomIds.has(staffRec.room_id)) ? staffRec.room_id : null;
                         Object.entries(moWorkDays).forEach(([mo, days]) => {
                             if (mo < fromMo || mo > toMo) return;
                             const prorated = s.gross_pay * days / totalWorkDays;
@@ -5061,7 +5071,7 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
                 if (histCoveredDates.has(h.work_date)) return;
                 if (h.pay_type === 'salary') return;
                 const s = staffById.get(h.staff_id);
-                const roomId = s?.room_id;
+                const roomId = (s?.room_id && realRoomIds.has(s.room_id)) ? s.room_id : null;
                 const cost = (h.hourly_rate || 0) * h.hours_worked;
                 if (roomId) {
                     const key = `${mo}|${roomId}`;
@@ -5082,7 +5092,8 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
                 if (hrs <= 0) return;
                 const s = staffById.get(ev.staff_id);
                 if (!s || s.pay_type === 'salary') return;
-                const roomId = ev.room_id || s.room_id;
+                const rawRoomId = ev.room_id || s.room_id;
+                const roomId = (rawRoomId && realRoomIds.has(rawRoomId)) ? rawRoomId : null;
                 const cost = (s.hourly_rate || 0) * hrs;
                 if (roomId) {
                     const key = `${mo}|${roomId}`;
@@ -5096,7 +5107,8 @@ async function _buildRoomPnlData(fromDate, toDate, { skipHistoricalOverride = fa
 
             // ── Tier 3: Salaried overhead staff (no room) → attendance-weighted per room ──
             // Director salary is split across rooms proportional to child-attendance each month.
-            const salaryOverhead = allStaff.filter(s => s.pay_type === 'salary' && !s.room_id && (s.salary_biweekly || 0) > 0);
+            const salaryOverhead = allStaff.filter(s => s.pay_type === 'salary'
+                && (!s.room_id || !realRoomIds.has(s.room_id)) && (s.salary_biweekly || 0) > 0);
             if (salaryOverhead.length > 0) {
                 const totalOvhdPerPeriod = salaryOverhead.reduce((sum, s) => sum + (s.salary_biweekly || 0), 0);
                 _buildPayrollPeriodList().forEach(p => {

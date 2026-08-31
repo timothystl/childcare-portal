@@ -155,7 +155,8 @@ function slRenderRooms() {
 
 async function slOpenRoom(roomId) {
     slRoomId = roomId;
-    const room = ROOMS.find(r => r.id === roomId);
+    const room = (typeof getStaffRoomOptions === 'function' ? getStaffRoomOptions() : ROOMS)
+        .find(r => r.id === roomId);
     slEl('slRoomTitle').textContent = room ? room.label : 'Room';
     slShow('slRosterScreen');
     if (typeof slInitTabs === 'function') slInitTabs();

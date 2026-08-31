@@ -251,7 +251,10 @@ function slShiftLabel(s) {
 }
 
 function slRoomLabel(id) {
-    const room = (typeof ROOMS !== 'undefined' ? ROOMS : []).find(r => r.id === id);
+    const rooms = typeof getStaffRoomOptions === 'function'
+        ? getStaffRoomOptions()
+        : (typeof ROOMS !== 'undefined' ? ROOMS : []);
+    const room = rooms.find(r => r.id === id);
     return room ? room.label : (id || '');
 }
 
