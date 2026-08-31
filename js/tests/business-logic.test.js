@@ -205,6 +205,27 @@ function escHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
+// ── ProCare import duplicate guard (copy of js/admin/admin-billing.js) ───────
+// Guarded by the source-drift check below. Behavior, not shape, is what these
+// two are tested for: a doubled payment inflates a family's childcare tax
+// statement, and a dropped one understates it.
+function _procareDupKey(p) {
+    return [
+        String(p.family_id),
+        String(p.payment_date).slice(0, 10),
+        Number(p.amount || 0).toFixed(2),
+    ].join('|');
+}
+
+function _procareDupCounts(payments) {
+    const counts = new Map();
+    (payments || []).forEach(p => {
+        const k = _procareDupKey(p);
+        counts.set(k, (counts.get(k) || 0) + 1);
+    });
+    return counts;
+}
+
 function _buildArRows(month, families, invoices, monthPayments) {
     const invoiceByFamily = new Map(invoices.map(inv => [String(inv.family_id), inv]));
 
@@ -1288,6 +1309,8 @@ describe('source-drift guard — copies must match js/ source', () => {
         ['_forecastConfidence', 'js/admin/admin-reports.js'],
         ['_buildForecastRows',  'js/admin/admin-reports.js'],
         ['_buildArRows',        'js/admin/admin-billing.js'],
+        ['_procareDupKey',      'js/admin/admin-billing.js'],
+        ['_procareDupCounts',   'js/admin/admin-billing.js'],
     ];
 
     for (const [fnName, relPath] of GUARDED) {
@@ -2504,14 +2527,66 @@ describe('payment import duplicate guard and coverage', () => {
         expect(/const valid = rows\.filter\(r => r\.familyId && !r\.alreadyImported/.test(billing)).toBe(true);
     });
 
-    test('the fingerprint includes the description, not just family+date+amount', () => {
-        // Two children can produce two equal payments on one day; the
-        // description is what usually separates them.
-        ['family_id', 'payment_date', 'amount', 'note'].forEach(f => {
-            expect(new RegExp('p\\.' + f).test(billing)).toBe(true);
+    // ⚠️ The fingerprint deliberately excludes the description, as of
+    // 2026-08-31. ProCare writes different description text depending on which
+    // report the office exports: measured against a real re-export of months
+    // already imported, family+date+amount+description recognized 15 of 516
+    // overlapping rows, family+date+amount recognized 454. Keying on the
+    // description would have re-imported 439 recorded payments.
+    test('the fingerprint is family+date+amount, and never the description', () => {
+        const src = extractFunction(billing, '_procareDupKey');
+        ['family_id', 'payment_date', 'amount'].forEach(f => {
+            expect(src.includes('p.' + f)).toBe(true);
         });
-        // Amounts are compared at 2dp — the sheet gives a float, the column is numeric.
-        expect(/toFixed\(2\)/.test(billing)).toBe(true);
+        expect(src.includes('p.note')).toBe(false);
+        // Amounts compare at 2dp — the sheet gives a float, the column is numeric.
+        expect(src.includes('toFixed(2)')).toBe(true);
+    });
+
+    test('a payment already recorded is recognized even though the description differs', () => {
+        // The exact shape that defeated the old key: same family, same day,
+        // same amount, two different ProCare report wordings.
+        const stored = [{ family_id: 'fam-1', payment_date: '2026-03-15', amount: 460,
+                          note: 'Online Payment By Parent: K...' }];
+        const counts = _procareDupCounts(stored);
+        const fileRow = { family_id: 'fam-1', payment_date: '2026-03-15', amount: 460,
+                          note: 'By Kristine Hernandez. Last 4: 2352' };
+        expect(counts.get(_procareDupKey(fileRow))).toBe(1);
+    });
+
+    test('matching is by count, so a genuine second same-day payment still imports', () => {
+        // One stored, two in the file: exactly one is a duplicate. A Set-based
+        // guard would have marked both and silently dropped a real payment.
+        const counts = _procareDupCounts([
+            { family_id: 'fam-1', payment_date: '2026-07-02', amount: 60 },
+        ]);
+        const rows = [
+            { family_id: 'fam-1', payment_date: '2026-07-02', amount: 60 },
+            { family_id: 'fam-1', payment_date: '2026-07-02', amount: 60 },
+        ];
+        const flagged = rows.map(r => {
+            const k = _procareDupKey(r);
+            const left = counts.get(k) || 0;
+            if (left > 0) { counts.set(k, left - 1); return true; }
+            return false;
+        });
+        expect(flagged[0]).toBe(true);
+        expect(flagged[1]).toBe(false);
+    });
+
+    test('a different family on the same day and amount is never a duplicate', () => {
+        const counts = _procareDupCounts([
+            { family_id: 'fam-1', payment_date: '2026-07-02', amount: 60 },
+        ]);
+        expect(counts.get(_procareDupKey(
+            { family_id: 'fam-2', payment_date: '2026-07-02', amount: 60 })) || 0).toBe(0);
+    });
+
+    test('the import consumes the tally rather than testing membership', () => {
+        // The count-aware path has to be the one that actually runs.
+        expect(billing.includes('_procareDupCounts(existing)')).toBe(true);
+        expect(/remaining\.set\(k, left - 1\)/.test(billing)).toBe(true);
+        expect(billing.includes('new Set(existing.map(_procareDupKey))')).toBe(false);
     });
 
     test('a failed duplicate check warns instead of importing unguarded', () => {
