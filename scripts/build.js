@@ -10,7 +10,7 @@
 //   dist/supabase.min.js   — shared data layer
 //   dist/app.min.js        — parent registration flow (index/calendar)
 //   dist/lookup.min.js     — schedule lookup
-//   dist/portal.min.js     — parent portal (portal.html)
+//   dist/parent.min.js     — parent portal (parent.html)
 //   dist/admin.min.js      — admin dashboard (all modules bundled)
 //   dist/error-monitor.min.js
 //
@@ -156,26 +156,26 @@ const ENTRIES = [
     },
     {
         // Parent portal. One file today (sign-in); Phase 1 adds the Today feed,
-        // day report and photo grid as further js/portal/ modules concatenated
+        // day report and photo grid as further js/parent/ modules concatenated
         // here in load order, the way the admin bundle does it.
-        outfile: 'dist/portal.min.js',
+        outfile: 'dist/parent.min.js',
         stdin: {
             contents: [
-                // Load order matters: portal-auth calls ptLoadToday() once a
+                // Load order matters: parent-auth calls ptLoadToday() once a
                 // session exists, so the feed's functions must already exist.
-                'js/portal/portal-nav.js',
-        'js/portal/portal-account.js',
-        'js/portal/portal-schedule.js',
-        'js/portal/portal-billing.js',
-        'js/portal/portal-today.js',
-                // After portal-today: reuses its PT_EVENT label map, ptEsc/ptTime/
+                'js/parent/parent-nav.js',
+        'js/parent/parent-account.js',
+        'js/parent/parent-schedule.js',
+        'js/parent/parent-billing.js',
+        'js/parent/parent-today.js',
+                // After parent-today: reuses its PT_EVENT label map, ptEsc/ptTime/
                 // ptToday helpers, and ptChildren/ptActiveId.
-                'js/portal/portal-recap.js',
-                'js/portal/portal-messages.js',
-                // After portal-today: reads ptChildren for the child's name on
+                'js/parent/parent-recap.js',
+                'js/parent/parent-messages.js',
+                // After parent-today: reads ptChildren for the child's name on
                 // an incident row and for singular/plural wording.
-                'js/portal/portal-documents.js',
-                'js/portal/portal-auth.js',
+                'js/parent/parent-documents.js',
+                'js/parent/parent-auth.js',
             ].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'),
             resolveDir: ROOT,
         },
@@ -372,16 +372,16 @@ const HTML_PATCHES = [
         ],
     },
     {
-        file: 'portal.html',
+        file: 'parent.html',
         remove: [
             /<script src="js\/supabase\.js[^"]*"><\/script>\n/,
             /<script src="js\/error-monitor\.js"><\/script>\n/,
-            /<script src="js\/portal\/portal-auth\.js[^"]*"><\/script>\n/,
+            /<script src="js\/parent\/parent-auth\.js[^"]*"><\/script>\n/,
         ],
         insert: [
             `    <script src="dist/supabase.min.js"></script>`,
             `    <script src="dist/error-monitor.min.js"></script>`,
-            `    <script src="dist/portal.min.js"></script>`,
+            `    <script src="dist/parent.min.js"></script>`,
             `    <script src="dist/app-update.min.js"></script>`,
         ],
     },

@@ -8,6 +8,12 @@ Phase 4 (payments) is unblocked but waits on a processor decision.
 **Design source:** `design_handoff_parent_communication` (canvas + README, 14 screens)
 **Written:** 2026-08-11
 
+⚠️ **Renamed 2026-09-01:** `portal.html` → `parent.html`, `js/portal/` → `js/parent/`,
+`css/portal.css` → `css/parent.css`, to match the `admin.html`/`staff.html`/
+`clockin.html` naming convention (and the `/admin`, `/staff`, `/clockin` clean
+URLs). The file references below are historical — they describe the app under
+its old name at the time each note was written.
+
 Replaces ProCare parent communication: daily feed of photos and moments,
 check-in/out, naps, meals & bottles, diapering, direct messaging, announcements,
 incident reports, push notifications, and online billing.

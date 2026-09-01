@@ -1549,7 +1549,7 @@ describe('Stax payment security guards', () => {
         // "(test)" text a real parent could be confused by. pbStaxTestEnabled()
         // gates whether the underlying calls carry sandboxTest:true, and it
         // reads sessionStorage/the URL rather than defaulting true.
-        const portal = read('js/portal/portal-billing.js');
+        const portal = read('js/parent/parent-billing.js');
         expect(portal.includes('class="pb-pay-btn pb-stax-btn"')).toBe(true);
         expect(portal.includes('with Stax (test)')).toBe(false);
         expect(portal.includes('function pbStaxTestEnabled()')).toBe(true);
@@ -1579,14 +1579,14 @@ describe('Stax payment security guards', () => {
     // old fallback-to-hosted-checkout guard became the opposite requirement:
     // there must be NO second processor to silently divert a payment to.
     test('a gated Stax tells the parent plainly — there is no second processor to fall back to', () => {
-        const portal = read('js/portal/portal-billing.js');
+        const portal = read('js/parent/parent-billing.js');
         expect(portal.includes("e?.message === 'Online payments are not configured for production yet.'")).toBe(true);
         expect(portal.includes('Online payment is not available yet. Please contact the office')).toBe(true);
         // Every trace of the Accept Hosted flow is gone from the portal.
         ['pbStartPayment', 'pbClosePayModal', 'CommunicationHandler', 'pbPayFrame'].forEach(sym => {
             expect(portal.includes(sym + '(') || portal.includes("'" + sym + "'")).toBe(false);
         });
-        expect(read('portal.html').includes('pbPayModal')).toBe(false);
+        expect(read('parent.html').includes('pbPayModal')).toBe(false);
     });
 
     test('saved-card response does not expose the opaque payment method id', () => {
@@ -1617,7 +1617,7 @@ describe('Stax payment security guards', () => {
     });
 
     test('public bundles contain no server-side Stax or Supabase secret names', () => {
-        const bundles = read('dist/portal.min.js') + read('dist/supabase.min.js');
+        const bundles = read('dist/parent.min.js') + read('dist/supabase.min.js');
         for (const secretName of ['STAX_API_KEY', 'STAX_WEBHOOK_SECRET', 'SUPABASE_SERVICE_ROLE_KEY']) {
             expect(bundles.includes(secretName)).toBe(false);
         }
@@ -2040,7 +2040,7 @@ describe('per-child message threads', () => {
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 
     const migration = read('supabase/migrations/per_child_message_threads.sql');
-    const portalMsg = read('js/portal/portal-messages.js');
+    const portalMsg = read('js/parent/parent-messages.js');
     const supa      = read('js/supabase.js');
 
     test('the migration drops the one-thread-per-family constraint', () => {
@@ -2121,7 +2121,7 @@ describe('non-parent sessions are sent to their own app', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
     const migration = read('supabase/migrations/my_app_home_redirect.sql');
-    const auth = read('js/portal/portal-auth.js');
+    const auth = read('js/parent/parent-auth.js');
 
     test('parent wins over admin and staff', () => {
         // An admin or teacher who ALSO has a child enrolled is on the parent
@@ -2158,8 +2158,8 @@ describe('non-parent sessions are sent to their own app', () => {
         // my_schedule() returns null for a session with no family. Reporting
         // that as a load failure told the reader to retry a state no retry can
         // change — the bug this pass was opened for.
-        const billing = read('js/portal/portal-billing.js');
-        const sched   = read('js/portal/portal-schedule.js');
+        const billing = read('js/parent/parent-billing.js');
+        const sched   = read('js/parent/parent-schedule.js');
         expect(/pbLoadFailed\s*$/m.test(billing) || billing.includes('pbLoadFailed')).toBe(true);
         expect(/pbLoadFailed[\s\S]{0,120}Pull down to retry/.test(billing)).toBe(true);
         expect(/psLoadFailed[\s\S]{0,120}Pull down to retry/.test(sched)).toBe(true);
@@ -2173,7 +2173,7 @@ describe('parent upload of child documents — write-only, own-child-only', () =
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
     const migration = read('supabase/migrations/20260829143213_parent_upload_child_documents.sql');
     const supabaseJs = read('js/supabase.js');
-    const portalJs = read('js/portal/portal-documents.js');
+    const portalJs = read('js/parent/parent-documents.js');
     const adminFamiliesJs = read('js/admin/admin-families.js');
 
     test('the storage policy grants INSERT only — no parent SELECT/UPDATE/DELETE on the bucket', () => {
@@ -2224,7 +2224,7 @@ describe('parent upload of child documents — write-only, own-child-only', () =
 describe('Schedule tab shows the invoice\'s own amount, never a second estimate beside it', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    const scheduleJs = read('js/portal/portal-schedule.js');
+    const scheduleJs = read('js/parent/parent-schedule.js');
     const migration  = read('supabase/migrations/20260829153628_parent_read_public_settings_keys.sql');
 
     test('psMonthBlock prints billing_invoices.final_amount whenever an invoice exists', () => {
@@ -2348,11 +2348,11 @@ describe('childcare statement', () => {
     });
 
     test('both the parent and the office reach the same document', () => {
-        expect(read('js/portal/portal-documents.js').includes('statement-print.html')).toBe(true);
+        expect(read('js/parent/parent-documents.js').includes('statement-print.html')).toBe(true);
         expect(read('js/admin/admin-finance-hub.js').includes('statement-print.html')).toBe(true);
         // Same three periods on both sides.
         ['month:', 'year:', 'ytd'].forEach(tok => {
-            expect(read('js/portal/portal-documents.js').includes(tok)).toBe(true);
+            expect(read('js/parent/parent-documents.js').includes(tok)).toBe(true);
             expect(read('js/admin/admin-finance-hub.js').includes(tok)).toBe(true);
         });
     });

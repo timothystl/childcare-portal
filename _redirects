@@ -6,3 +6,10 @@
 # Compatibility: anyone who bookmarked the bare portal URL from the old structure
 /register      /calendar    301
 /signup        /calendar    301
+
+# Compatibility: parent app renamed from /portal to /parent (2026-09-01) to match
+# the /admin, /staff, /clockin naming convention. An already-installed PWA icon's
+# manifest still points at the old start_url, and at least one real parent has
+# this bookmarked — redirect rather than 404.
+/portal        /parent      301
+/portal.html   /parent.html 301

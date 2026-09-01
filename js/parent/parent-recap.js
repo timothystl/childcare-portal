@@ -11,7 +11,7 @@
 // Deliberately reuses portal-today's vocabulary rather than a second copy:
 // PT_EVENT (how an event reads), ptEsc/ptTime/ptToday (escaping, formatting,
 // "what day is it in the center's timezone"), and ptChildren/ptActiveId (the
-// child list and whichever child Today has selected). portal-today.js loads
+// child list and whichever child Today has selected). parent-today.js loads
 // first in the bundle (scripts/build.js), so all of that is in scope here.
 //
 // ⚠️ Photos are NOT kept forever (see the retention note on Today's photo

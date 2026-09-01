@@ -1,7 +1,7 @@
 // Service Worker for Timothy Lutheran MDO
 // Cache-first for static assets, network-only for API calls
 
-const CACHE_NAME = 'tl-mdo-v9';
+const CACHE_NAME = 'tl-mdo-v10';
 
 // Static assets to pre-cache on install
 // Uses clean URLs (no .html) to match how Cloudflare Assets serves them.
@@ -10,7 +10,7 @@ const CACHE_NAME = 'tl-mdo-v9';
 // worker installed with an empty cache and no offline fallback at all. Every
 // entry here must exist in the repo.
 //
-// /portal is the parent manifest's start_url — an installed home screen icon
+// /parent is the parent manifest's start_url — an installed home screen icon
 // opens it, so it and the assets it loads have to be in the offline shell.
 //
 // Admin, the staff app and the time clock each have their OWN manifest so that
@@ -18,7 +18,7 @@ const CACHE_NAME = 'tl-mdo-v9';
 // four manifests belong in the shell for the same reason.
 const PRECACHE_URLS = [
   '/',
-  '/portal',
+  '/parent',
   '/calendar',
   '/lookup',
   '/admin',
@@ -33,8 +33,8 @@ const PRECACHE_URLS = [
   '/css/styles.css',
   '/css/admin.css',
   '/css/lookup.css',
-  '/css/portal.css',
-  '/dist/portal.min.js',
+  '/css/parent.css',
+  '/dist/parent.min.js',
   '/dist/supabase.min.js',
   '/dist/error-monitor.min.js',
   '/js/app.js',

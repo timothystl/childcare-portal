@@ -44,7 +44,7 @@ function pmTime(iso) {
     return d.toLocaleDateString('en-US', { ...fmt, timeZone: 'America/Chicago' }) + ' ' + time;
 }
 
-// Reuses ptChildren (portal-today.js loads it once on sign-in) rather than a
+// Reuses ptChildren (parent-today.js loads it once on sign-in) rather than a
 // second fetch — the pills must name the same children, in the same order, as
 // Today and Schedule do.
 function pmChildren() {

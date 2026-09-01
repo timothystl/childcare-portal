@@ -86,7 +86,7 @@ function ptRenderTimeline(events) {
 // is also a .pt-tab, so the old class name meant every rule written for the
 // child switcher also hit six full-page sections (and vice versa — .pt-tab's
 // own 16px page padding was landing on these buttons). Same collision exists in
-// portal-recap.js and portal-schedule.js; all three use .pt-childbtn now.
+// parent-recap.js and parent-schedule.js; all three use .pt-childbtn now.
 function ptRenderSwitcher() {
     const wrap = ptEl('ptSwitcher');
     if (!wrap) return;
@@ -515,7 +515,7 @@ async function ptLoadToday() {
 
     ptEl('ptPrintBtn')?.addEventListener('click', () => window.print());
     // Only now is there a day to print — see the note on the button in
-    // portal.html. Every path that returns before this leaves it hidden.
+    // parent.html. Every path that returns before this leaves it hidden.
     ptEl('ptPrintBtn')?.classList.remove('hidden');
 
     ptEl('ptNoChildren')?.classList.add('hidden');

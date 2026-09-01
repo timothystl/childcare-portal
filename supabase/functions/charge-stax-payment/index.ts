@@ -323,7 +323,7 @@ function buildReceiptHtml(o: {
         </tr>
         <tr>
           <td style="padding:22px 32px 30px;text-align:center;">
-            <a href="https://mdo.timothystl.org/portal.html"
+            <a href="https://mdo.timothystl.org/parent.html"
                style="display:inline-block;background:#01294A;color:#fff;text-decoration:none;font-size:14px;font-weight:700;padding:13px 28px;border-radius:8px;">View billing account</a>
           </td>
         </tr>

@@ -783,7 +783,7 @@ function apNavHtml() {
 /**
  * The bottom tab bar — the mobile (<900px) equivalent of the sidebar, same
  * seven tabs and same visual pattern (.tabbar) as the parent app's own
- * bottom nav in portal.html. Unlike the sidebar it carries no tool
+ * bottom nav in parent.html. Unlike the sidebar it carries no tool
  * sub-list — a tool is one tap further, via the dashboard's own pills.
  */
 function apTabbarHtml() {

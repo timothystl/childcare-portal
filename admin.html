@@ -4,7 +4,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/images/logo/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/images/logo/favicon-16.png">
   <!-- Admin gets its OWN manifest, icon and home-screen name. The shared
-       /manifest.json has start_url "/portal", so a phone that installed this
+       /manifest.json has start_url "/parent", so a phone that installed this
        page from it opened the PARENT portal instead of the admin portal. -->
   <link rel="apple-touch-icon" href="/images/logo/apps/admin/admin-touch-180.png">
   <link rel="manifest" href="/manifest-admin.json">
@@ -1171,7 +1171,7 @@
                      API was folded in below). Feeds two places from the same
                      `enrollment_forms` setting: the public /enroll page and
                      the parent portal's Account → Documents → "Policies and
-                     forms" card (js/portal/portal-documents.js
+                     forms" card (js/parent/parent-documents.js
                      pdFormsSection()) — that card has said "The office
                      hasn't posted any forms here yet" since forms were
                      retired, because nothing let the office post one.
@@ -2411,7 +2411,7 @@
 
                 <!-- Approved for pickup — the family's own list, read-only here.
                      Added 2026-08-28: parents record this in their own portal
-                     (portal-account.js "Approved for pickup") via
+                     (parent-account.js "Approved for pickup") via
                      add_pickup_contact/remove_pickup_contact, writing into
                      pickup_contacts (family_id, name, relationship, note).
                      Nothing in the admin app read that table before this —

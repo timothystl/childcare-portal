@@ -12,7 +12,7 @@
 //
 // "Tab state is a single `route` value" (README, Interactions). Deliberately
 // NOT a router with URLs: these are panes of one signed-in app, and a
-// deep-linkable /portal#billing would need auth-gated route restoration that
+// deep-linkable /parent#billing would need auth-gated route restoration that
 // nothing yet asks for. When push deep links land (README: "Push → deep link"),
 // this is the function they call.
 //
@@ -20,19 +20,19 @@
 // tab that was a "coming soon" placeholder, then removed in favor of
 // Documents, which was itself later folded into Account. It's a tab again
 // because a parent needs to see what's billed and what's owed, which is real
-// data now (portal-billing.js, off the same my_schedule() invoices the
+// data now (parent-billing.js, off the same my_schedule() invoices the
 // Schedule tab already reads) — only the "Pay" button is still a
 // placeholder, because no payment processor is wired into this app yet.
 //
 // ⚠️ Documents is NOT its own tab. It renders inside the Account tab
-// (portal.html, #pdBody nested under #ptAccountBody) — see portal-account.js
+// (parent.html, #pdBody nested under #ptAccountBody) — see parent-account.js
 // / paLoad, which loads it together with the rest of Account on first visit.
 //
 // ⚠️ Recap IS its own tab, unlike Documents — a parent asking "how did today
 // go" wants the browsable record (daily-sheet events, photos, incidents) for
 // ANY day, not just the printable copy of one. Today already renders all of
-// this live for the current day (js/portal/portal-today.js); Recap
-// (js/portal/portal-recap.js) is the same three sections, for a date the
+// this live for the current day (js/parent/parent-today.js); Recap
+// (js/parent/parent-recap.js) is the same three sections, for a date the
 // parent picks, and reuses Today's rendering vocabulary rather than keeping a
 // second copy of "how an event reads."
 //

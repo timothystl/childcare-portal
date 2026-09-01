@@ -382,10 +382,10 @@ function setupFamilyLookup() {
 // loadSiblingBookedDays() reads _viaPortalSession instead.
 let _familyAuth = null;
 
-// True when the family came from a /portal session rather than email + PIN.
+// True when the family came from a /parent session rather than email + PIN.
 let _viaPortalSession = false;
 
-// A parent who signed in at /portal already proved who they are. Rather than
+// A parent who signed in at /parent already proved who they are. Rather than
 // asking for the same email and PIN a second time, adopt that session: the
 // family comes from parent_accounts via the JWT, exactly the way every parent
 // RLS policy resolves it.
@@ -1106,7 +1106,7 @@ async function loadSiblingBookedDays() {
         //
         // The portal path has no PIN to pass; my_family_registrations() reads
         // the family off the session instead. Without this branch a parent who
-        // came from /portal would silently lose the sibling discount from their
+        // came from /parent would silently lose the sibling discount from their
         // quote — the invoice is recomputed server-side and would still be
         // right, so the only symptom would be a quote higher than the bill.
         let results;
