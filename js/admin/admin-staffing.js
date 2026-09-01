@@ -83,8 +83,17 @@ function _srContactCell(s) {
     return rows.join('<br>');
 }
 
+// `restricted` can see the roster (names, rooms, roles — what she needs to
+// build the schedule) but not pay/payroll, and the `staff` table's own RLS
+// stays full-only for writes — so this role also gets no edit/deactivate/
+// delete controls, rather than buttons that would just fail on click.
+function _staffRosterReadOnly() {
+    return typeof currentAdminRole !== 'undefined' && currentAdminRole === 'restricted';
+}
+
 function renderStaffList(staff) {
     const container = document.getElementById('staffRosterContent');
+    const readOnly = _staffRosterReadOnly();
     if (!staff.length) {
         container.innerHTML = '<p class="empty-hint">No staff members found. Click "+ Add Staff Member" to get started.</p>';
         return;
@@ -124,11 +133,27 @@ function renderStaffList(staff) {
                 ${staff.map(s => {
                     const roomLabel  = staffRoomLabel(s.room_id);
                     const pinDisplay = s.has_staff_pin ? '●●●●' : '—';
+                    // pay_type/hourly_rate/salary_biweekly already come back null
+                    // for a restricted admin (admin_staff_roster() redacts them
+                    // server-side) — this is a belt-and-suspenders UI label, not
+                    // the actual redaction.
                     const isSalary   = s.pay_type === 'salary';
-                    const payDisplay = isSalary
-                        ? `<span class="pay-type-chip pay-salary">Salary</span> $${(s.salary_biweekly || 0).toFixed(2)}/period`
-                        : `$${(s.hourly_rate || 0).toFixed(2)}/hr`;
+                    const payDisplay = readOnly
+                        ? '<span class="pay-redacted" title="Visible to full-access admins only">🔒 Full access only</span>'
+                        : (isSalary
+                            ? `<span class="pay-type-chip pay-salary">Salary</span> $${(s.salary_biweekly || 0).toFixed(2)}/period`
+                            : `$${(s.hourly_rate || 0).toFixed(2)}/hr`);
                     const photoUrl = s.profile_photo_path ? _staffPhotoUrlCache.get(s.profile_photo_path) : null;
+                    const actionsCell = readOnly
+                        ? '<td class="actions-cell">—</td>'
+                        : `<td class="actions-cell">
+                                <button class="btn-secondary staff-edit-btn" data-staff-id="${s.id}">Edit</button>
+                                <button class="${s.active ? 'btn-warning' : 'btn-secondary'} staff-toggle-btn"
+                                    data-staff-id="${s.id}" data-active="${s.active}">
+                                    ${s.active ? 'Deactivate' : 'Restore'}
+                                </button>
+                                <button class="btn-danger staff-delete-btn" data-staff-id="${s.id}" data-staff-name="${escHtml(s.name)}" title="Permanently delete staff member">🗑 Delete</button>
+                            </td>`;
                     return `
                         <tr class="${s.active ? '' : 'staff-inactive-row'}" data-staff-id="${s.id}">
                             <td>${photoUrl
@@ -141,14 +166,7 @@ function renderStaffList(staff) {
                             <td><code>${pinDisplay}</code></td>
                             <td class="sr-contact-cell">${_srContactCell(s)}</td>
                             <td><span class="status-chip ${s.active ? 'chip-confirmed' : 'chip-waitlist'}">${s.active ? 'Active' : 'Inactive'}</span></td>
-                            <td class="actions-cell">
-                                <button class="btn-secondary staff-edit-btn" data-staff-id="${s.id}">Edit</button>
-                                <button class="${s.active ? 'btn-warning' : 'btn-secondary'} staff-toggle-btn"
-                                    data-staff-id="${s.id}" data-active="${s.active}">
-                                    ${s.active ? 'Deactivate' : 'Restore'}
-                                </button>
-                                <button class="btn-danger staff-delete-btn" data-staff-id="${s.id}" data-staff-name="${escHtml(s.name)}" title="Permanently delete staff member">🗑 Delete</button>
-                            </td>
+                            ${actionsCell}
                         </tr>`;
                 }).join('')}
             </tbody>

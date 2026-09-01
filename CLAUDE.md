@@ -2968,8 +2968,46 @@ Migrations are in `supabase/migrations/` and must be applied manually in the Sup
 Three access levels (stored in `settings` key `admin_roles`):
 
 - **full** — unrestricted access to all tabs
-- **restricted** — schedule planner only; no Finance, no Payroll, no Staff Roster, limited Settings
+- **restricted** — schedule planner, plus the Staff Roster read-only (names,
+  rooms, roles — no wages); no Finance, no Payroll, no Log Hours, limited Settings
 - **staff** — Classrooms tab only (read-only roster view)
+
+### ⚠️ Restricted can now see the Staff Roster, with pay redacted server-side (2026-09-01)
+
+Asked for directly: `restricted` should see the Staff tab (names/rooms/roles,
+for scheduling) but never wages or payroll — and staff names were not
+populating in Build Staff Schedule for that role at all.
+
+Root cause of both, and it was one bug: `staff`'s own RLS
+(`policy_scoping_stage2_admin_only_tables.sql`) is a single `FOR ALL` policy
+gated on `admin_role() = 'full'`. Every read of the table — including the
+`staff:staff_id(name)` PostgREST embeds `fetchStaffScheduleWeek()` and
+`fetchTimeOffRequests()` used to reconstruct names — silently returned
+nothing for a restricted admin. Not an error: an embedded join against a row
+the caller can't see just comes back null, so the schedule grid and the
+"Needs your OK" time-off queue rendered with blank names and nobody saw why.
+
+Fixed by `restricted_admin_staff_roster_visibility.sql` (**applied and
+verified in production 2026-09-01**), which adds `admin_staff_roster()` — a
+`SECURITY DEFINER` RPC, executable by any admin, that nulls out
+`pay_type`/`hourly_rate`/`salary_biweekly`/`pto_starting_balance` when the
+caller isn't `admin_role() = 'full'`. **The `staff` table's own RLS is
+unchanged** — writes and a raw `.from('staff').select(...)` stay `full`-only.
+RLS is row-level, not column-level, and both admin tiers connect as the same
+`authenticated` Postgres role, so there is no way to grant `restricted`
+SELECT on `staff` and have Postgres itself hide the wage columns from that
+same query — R20's lesson (browser-only redaction is not redaction) means the
+redaction has to happen in the function, not the UI.
+
+`fetchAllStaff()`, `fetchStaffScheduleWeek()` and `fetchTimeOffRequests()`
+(`js/supabase.js`) all read through `admin_staff_roster()` now instead of a
+direct table query or embed. `renderStaffList()` (`js/admin/admin-staffing.js`)
+also redacts the Pay column's own label for `restricted` as a belt-and-
+suspenders UI cue (the underlying data is already null by then) and drops the
+Edit/Deactivate/Delete buttons for that role, since the table's write policy
+is still `full`-only and a visible button that always fails is worse than no
+button. `applyRoleRestrictions()` (`admin-settings.js`) stopped hiding
+`staffRosterSection` for `restricted` and hides `addStaffBtn` instead.
 
 ---
 

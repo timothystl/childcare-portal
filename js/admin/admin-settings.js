@@ -863,7 +863,7 @@ async function setupPtoSettings() {
 
 const ROLE_LABELS = {
     full:       'Full Access',
-    restricted: 'Restricted — Schedule Planner only',
+    restricted: 'Restricted — Schedule Planner + Staff Roster (no pay/payroll)',
     staff:      'Staff — Classroom Roster (read-only)',
 };
 
@@ -899,11 +899,18 @@ function applyRoleRestrictions() {
     _hide('apHrPillInjury');
 
     if (currentAdminRole === 'restricted') {
-        // Staffing tab: hide everything except the schedule planner
+        // Staffing tab: the schedule planner, plus the Staff Roster (names,
+        // rooms, roles — read-only; see below) so she can see who she's
+        // scheduling. Pay/payroll stays hidden — Log Hours and Payroll are
+        // wage-and-hours tools with no non-pay use, unlike the roster.
         _hide('logHoursSection');
         _hide('payrollSection');
-        _hide('staffRosterToggleWrap');
-        _hide('staffRosterSection');
+        // The roster itself stays writable only by `full` (the `staff` table's
+        // RLS is admin_role() = 'full' for INSERT/UPDATE/DELETE) — hide the
+        // add button so restricted doesn't get a control that would just fail.
+        // renderStaffList() (admin-staffing.js) drops the per-row Edit/
+        // Deactivate/Delete buttons the same way.
+        _hide('addStaffBtn');
         // Settings tab: show only Registration Window Override
         ['setClosedDaysBlock', 'setSummerCampBlock', 'setRoomsCard', 'offerLinksSection']
             .forEach(id => _hide(id));
