@@ -1074,7 +1074,11 @@ function showDayRosterDetail(dateStr, roomId, enrolled, cap, parentEl) {
                         return { ...reg, registration_dates: dates };
                     });
                     closeDayRosterDetail();
-                    drawRoomCalendar();
+                    // The per-room calendar modal may never have been opened this
+                    // session (e.g. a move made from Day/Month view or the
+                    // Attendance Board) — rcalMonthDate is only set by
+                    // openRoomCalendar(), so redraw it only if it's actually live.
+                    if (rcalMonthDate) drawRoomCalendar();
                     renderCapacityOverview();
                     // Day view isn't wired into the room-calendar-modal era's
                     // refresh list above; it re-renders itself if it's the
@@ -1265,7 +1269,9 @@ async function _aadConfirm() {
         );
 
         _closeAdminAddDayModal();
-        drawRoomCalendar();
+        // Same guard as the move-a-child handler above: the per-room modal
+        // may never have been opened this session.
+        if (rcalMonthDate) drawRoomCalendar();
         renderCapacityOverview();
         // Refresh the day detail panel for the same date
         const enrolled = [];
