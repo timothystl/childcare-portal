@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>myMDO User Guides — Timothy Lutheran Mother's Day Out</title>
+<link rel="stylesheet" href="handbook.css">
+<style>
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; padding: 30px 44px; }
+  .card {
+    background: var(--white); border: 1px solid var(--border); border-radius: 14px;
+    padding: 22px; text-decoration: none; color: var(--text); display: block;
+    box-shadow: var(--shadow-card, 0 2px 12px rgba(1,41,74,.06));
+  }
+  .card:hover { border-color: var(--sun); }
+  .card .badge { display:inline-block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; padding:4px 10px; border-radius:999px; margin-bottom:10px; }
+  .card h3 { font-family: var(--font-head); color: var(--navy); margin: 0 0 6px; font-size:20px; }
+  .card p { color: var(--text-muted); font-size: 14px; margin: 0 0 10px; }
+  .card .go { color: var(--green-text); font-weight: 800; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <section class="cover" style="min-height:auto;padding:50px 40px 20px;">
+    <img class="wordmark" src="images/brand-wordmark-on-light.png" alt="myMDO — Timothy Lutheran Church">
+    <h1 style="font-size:32px;">User Guides</h1>
+    <p class="tagline">One handbook per app — sign-in, daily tasks, and a quick reference for each</p>
+  </section>
+
+  <div class="grid">
+    <a class="card" href="parent-guide.html">
+      <span class="badge" style="background:var(--green-pale);color:var(--green-text);">Parent</span>
+      <h3>Parent Guide</h3>
+      <p>Daily care updates, messages, billing, payments, schedule, and account.</p>
+      <span class="go">Open guide →</span>
+    </a>
+    <a class="card" href="staff-guide.html">
+      <span class="badge" style="background:#dbe8fb;color:#1F5278;">Staff</span>
+      <h3>Staff Guide</h3>
+      <p>Room roster, daily logging, your schedule, messages, and head count.</p>
+      <span class="go">Open guide →</span>
+    </a>
+    <a class="card" href="clockin-guide.html">
+      <span class="badge" style="background:var(--sun-pale);color:#7a5a00;">Clock In / Out</span>
+      <h3>Clock In/Out Guide</h3>
+      <p>Clocking in, clocking out, and asking for a day off.</p>
+      <span class="go">Open guide →</span>
+    </a>
+    <a class="card" href="admin-guide.html">
+      <span class="badge" style="background:#ece3f7;color:#5b3a99;">Admin</span>
+      <h3>Admin Guide</h3>
+      <p>Director dashboard, classrooms, staff, finance, planning, and settings.</p>
+      <span class="go">Open guide →</span>
+    </a>
+  </div>
+
+  <div class="contact-card" style="margin:10px 44px 40px;">
+    <h3>Timothy Lutheran Mother's Day Out</h3>
+    <p>6704 Fyler Ave, St. Louis, MO 63139</p>
+    <p>Office: <a href="tel:+13147818673">(314) 781-8673</a> &nbsp;·&nbsp;
+    Email: <a href="mailto:mdo@timothystl.org">mdo@timothystl.org</a></p>
+  </div>
+
+  <footer class="doc-footer">
+    myMDO User Guides · Timothy Lutheran Mother's Day Out · September 2026<br>
+    Each guide can be printed or saved as a PDF directly from your browser (File → Print).
+  </footer>
+</div>
+</body>
+</html>
