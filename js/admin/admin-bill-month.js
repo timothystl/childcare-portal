@@ -186,7 +186,7 @@ async function computeBillMonthExceptions(month) {
         });
 
         if (regFeeOwedByChild.size && owedChildren.length && regFee > 0) {
-            causes.push({ kind: 'fee', text: `Registration fee due — ${owedChildren.map(c => c.childName).join(', ')}` });
+            causes.push({ kind: 'fee', text: `Annual supply fee due — ${owedChildren.map(c => c.childName).join(', ')}` });
         }
         if (familyNewFee > 0) causes.push({ kind: 'fee', text: 'New-family fee due' });
         if (creditTotal > 0)  causes.push({ kind: 'credit', text: `$${creditTotal.toFixed(2)} credit on account, unapplied` });
@@ -343,7 +343,7 @@ function _bmExceptionCard(r) {
         r.base       ? { label: 'Tuition', amt: r.base } : null,
         r.discount   ? { label: 'Discounts', amt: -r.discount } : null,
         r.changeFees ? { label: 'Schedule change fees', amt: r.changeFees } : null,
-        r.regFee     ? { label: 'Registration fee', amt: r.regFee } : null,
+        r.regFee     ? { label: 'Annual supply fee', amt: r.regFee } : null,
         r.familyNewFee ? { label: 'New-family fee', amt: r.familyNewFee } : null,
         r.creditTotal ? { label: 'Credit applied', amt: -r.creditTotal } : null,
     ].filter(Boolean);
