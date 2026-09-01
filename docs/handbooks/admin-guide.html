@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>myMDO Admin Guide — Timothy Lutheran Mother's Day Out</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+
+<div class="web-bar no-print">
+  <span>myMDO User Guides</span>
+  <span><a href="index.html">All guides</a> &nbsp;·&nbsp; <a href="https://mdo.timothystl.org/admin.html">Open the Admin Portal →</a></span>
+</div>
+
+<div class="doc">
+
+  <section class="cover">
+    <img class="wordmark" src="images/brand-wordmark-on-light.png" alt="myMDO — Timothy Lutheran Church">
+    <span class="app-badge" style="background:#ece3f7;color:#5b3a99;">Admin</span>
+    <h1>Admin Guide</h1>
+    <p class="tagline">Director, Classrooms, Staff, Finance, Planning, Market Analysis, and Settings</p>
+    <p class="date">September 2026 &nbsp;·&nbsp; v1</p>
+
+    <div class="url-callout">
+      Sign in at<br><strong>mdo.timothystl.org/admin.html</strong>
+    </div>
+
+    <div class="noticebox">
+      <strong>Sample data only.</strong> The names, schedules, and dollar figures in these screenshots
+      are fictional demo data, generated for this guide — not real families, staff, or finances.
+    </div>
+
+    <p class="org">Timothy Lutheran Church — Mother's Day Out<br>
+    6704 Fyler Ave, St. Louis, MO 63139 &nbsp;·&nbsp; (314) 781-8673 &nbsp;·&nbsp; mdo@timothystl.org</p>
+  </section>
+
+  <nav class="toc">
+    <a href="#start"><span><span class="n">01</span>Start here — the portal shell</span></a>
+    <a href="#signin"><span><span class="n">02</span>Sign in</span></a>
+    <a href="#director"><span><span class="n">03</span>The Director dashboard</span></a>
+    <a href="#classrooms"><span><span class="n">04</span>Classrooms — Attendance Board</span></a>
+    <a href="#calendar"><span><span class="n">05</span>Care Calendar &amp; registrations</span></a>
+    <a href="#other-tabs"><span><span class="n">06</span>Staff, Finance, Planning, Market, Settings</span></a>
+    <a href="#roles"><span><span class="n">07</span>Admin roles &amp; access</span></a>
+    <a href="#quickref"><span><span class="n">08</span>Quick reference</span></a>
+  </nav>
+
+  <section class="section" id="start">
+    <h2 class="sec-title">Start here — the portal shell</h2>
+    <div class="note">
+      <strong>Where to go.</strong> The Admin Portal lives at
+      <a href="https://mdo.timothystl.org/admin.html">mdo.timothystl.org/admin.html</a>. It's a
+      full desktop experience — a laptop or tablet in landscape is the best fit, though a phone works too.
+    </div>
+    <p>The admin portal has <strong>seven tabs</strong> down the left sidebar: <strong>Director</strong>,
+    <strong>Classrooms</strong>, <strong>Staff</strong>, <strong>Finance</strong>, <strong>Planning</strong>,
+    <strong>Market Analysis</strong>, and <strong>Settings</strong>. Below 900px screen width the sidebar
+    becomes a hamburger menu with the same seven tabs inside.</p>
+    <p>Each tab works the same two-level way:</p>
+    <ul>
+      <li><strong>Dashboard</strong> — the tab's landing view: key numbers, a "Needs you" action queue,
+        and shortcut pills into the tools that explain those numbers. This is what you land on every
+        time you open a tab.</li>
+      <li><strong>Detail</strong> — a specific tool, open and in focus. The sidebar stays visible and
+        highlights where you are, with a <strong>Related</strong> row of nearby tools at the bottom —
+        there's no separate "back" button because the sidebar always shows the way out.</li>
+    </ul>
+    <div class="tip">
+      <strong>Director owns no tools of its own.</strong> It's a pure dashboard — every link on it opens
+      the real tool under its actual home tab, so the sidebar always shows you where a thing actually
+      lives rather than keeping a second index to remember.
+    </div>
+  </section>
+
+  <section class="section" id="signin">
+    <h2 class="sec-title">Sign in</h2>
+    <figure class="shot">
+      <img src="images/signin-admin.png" alt="Admin sign-in screen">
+      <figcaption>Admin sign-in at mdo.timothystl.org/admin.html</figcaption>
+    </figure>
+    <ol class="steps">
+      <li>Go to <a href="https://mdo.timothystl.org/admin.html">mdo.timothystl.org/admin.html</a>.</li>
+      <li>Enter your <strong>admin email</strong> and <strong>password</strong>, then tap
+        <strong>Login</strong>.</li>
+      <li>Use <strong>Forgot password?</strong> if needed — a reset link is emailed to your account.</li>
+    </ol>
+    <div class="warn">
+      Admin accounts are created and role-assigned by the director, not self-registered. Ask the
+      director for an account if you don't have one yet.
+    </div>
+  </section>
+
+  <section class="section" id="director">
+    <h2 class="sec-title">The Director dashboard</h2>
+    <figure class="shot">
+      <img src="images/admin-dashboard.png" alt="Director dashboard with Needs you queue and weekly metrics">
+      <figcaption>Director dashboard: the "Needs you" queue and the week's key numbers</figcaption>
+    </figure>
+    <ol class="steps">
+      <li>The <strong>Needs you</strong> panel at the top is a single action queue — day-off requests,
+        incident reports awaiting your sign-off, unread messages, and staffing warnings all land here,
+        most urgent first. Each row has its own inline button, so you can clear it without leaving the
+        page.</li>
+      <li>Below that, the <strong>metric cards</strong> show the week at a glance: the staff schedule by
+        day, days off waiting on you, unread messages, seats open this week, and what's billed so far
+        this month.</li>
+      <li>Tap any card's link (for example <strong>Build staff schedule</strong> or <strong>Review and
+        send</strong>) to jump straight into the tool that explains that number.</li>
+      <li>Further down, <strong>Staff needed this week</strong> and <strong>How full each room is</strong>
+        summarize the classroom picture, and <strong>Next up on the waitlist</strong> shows who's
+        waiting.</li>
+    </ol>
+    <div class="tip">
+      <strong>These are the same numbers everywhere else in the app.</strong> The dashboard never
+      computes a figure of its own — it reads the exact same registrations, invoices, and schedules the
+      detail tools use, so the numbers here and the numbers in a tool can never disagree.
+    </div>
+  </section>
+
+  <section class="section" id="classrooms">
+    <h2 class="sec-title">Classrooms — Attendance Board</h2>
+    <figure class="shot">
+      <img src="images/admin-attendance-board.png" alt="Attendance Board showing rooms with In/Out buttons per child">
+      <figcaption>Attendance Board: office view of who's checked in, by room</figcaption>
+    </figure>
+    <ol class="steps">
+      <li>From the sidebar, open <strong>Classrooms → Daily → Attendance Board</strong>.</li>
+      <li>The summary tiles at the top show who's here now, who hasn't arrived, who's marked absent, and
+        whether any room is at its staff-to-child ratio limit.</li>
+      <li>Each room card lists its children with <strong>In</strong> / <strong>Out</strong> buttons and an
+        allergy flag where one applies. This mirrors the same check-in record the classroom's own Staff
+        app writes — marking a child here or on a teacher's phone updates the same record either way.</li>
+      <li>Use <strong>Move →</strong> on a child's row to move them to a different room for the day.</li>
+    </ol>
+    <p>The other Classrooms tools follow the same "office view of a real staff workflow" pattern:
+    <strong>Incident Reports</strong> and <strong>Fire Drills</strong> let the director file a report or
+    log a drill directly, in addition to reading what staff filed from the floor.</p>
+  </section>
+
+  <section class="section" id="calendar">
+    <h2 class="sec-title">Care Calendar &amp; registrations</h2>
+    <figure class="shot">
+      <img src="images/admin-care-calendar.png" alt="Care Calendar list of registrations with parent, child, pattern, and bill">
+      <figcaption>Care Calendar: every family's registration, searchable and editable</figcaption>
+    </figure>
+    <ol class="steps">
+      <li>Open <strong>Classrooms → Records → Care Calendar</strong> for the full list of registrations —
+        search by child, parent, or email, and filter by month.</li>
+      <li>Each row shows the parent's contact info, the child and room, a computed <strong>pattern</strong>
+        summary (which weekdays are booked), and the current bill.</li>
+      <li>Use <strong>Edit days</strong> to open a child's calendar and add or remove care days. Billing
+        recomputes automatically from the child's real registered days — there's no separate "add a
+        charge" step to keep in sync.</li>
+    </ol>
+    <div class="note">
+      <strong>Missing Care Calendar</strong>, right next to Care Calendar in the sidebar, flags children
+      whose registered pattern doesn't match what's actually been booked for the upcoming month — useful
+      for catching a family who forgot to register before the month starts.
+    </div>
+  </section>
+
+  <section class="section" id="other-tabs">
+    <h2 class="sec-title">Staff, Finance, Planning, Market Analysis, Settings</h2>
+    <h3 class="sub-title">Staff</h3>
+    <p><strong>Build Staff Schedule</strong> is the weekly room/shift grid, with a By-worker view and the
+    week's staffing requirement side by side. <strong>Staff Roster</strong> holds the team directory.
+    <strong>Payroll</strong> covers pay periods, PTO policy, and time-clock settings. <strong>HR &amp;
+    Handbook</strong> holds policies, write-ups, and staff injury reports.</p>
+
+    <h3 class="sub-title">Finance</h3>
+    <p>The <strong>Bookkeeper</strong> tab is the single source for money: an Overview with the annual
+    budget and year-over-year comparison, Accounts Receivable, Room P&amp;L, Month-End Close,
+    Reconciliation, and a GL Export. <strong>Invoices</strong> is where a drafted bill actually gets
+    issued — <em>Email invoices</em> sends it and starts aging it as receivable; <em>Mark sent (no
+    email)</em> does the same when a bill went out another way.</p>
+    <div class="tip">
+      <strong>An invoice sitting in draft is not yet a bill.</strong> The Accounts Receivable "owed"
+      figure only counts invoices that have actually been sent — review and send drafted invoices
+      regularly so the numbers the office sees match what families have actually been shown.
+    </div>
+
+    <h3 class="sub-title">Planning</h3>
+    <p>Enrollment outlook, room capacity modeling, and What-If scenario/enrollment planning tools live
+    here — useful for a rate change or a "what if we opened a new room" question.</p>
+
+    <h3 class="sub-title">Market Analysis</h3>
+    <p>Compares local market position, pricing, and cost context — <code>full</code>-role access only.</p>
+
+    <h3 class="sub-title">Settings</h3>
+    <p>Room rates and capacity, registration rules, closures, admin roles and access, enrollment forms,
+    provider tax details for the year-end statement, and the ChMS finance API connection all live under
+    Settings as one continuous page — there's intentionally no second sidebar level inside it.</p>
+  </section>
+
+  <section class="section" id="roles">
+    <h2 class="sec-title">Admin roles &amp; access</h2>
+    <p>Every admin account has one of three access levels:</p>
+    <ul>
+      <li><strong>full</strong> — unrestricted access to every tab and tool.</li>
+      <li><strong>restricted</strong> — day-to-day scheduling and classroom tools, without Finance,
+        Payroll, Staff Roster, or the more sensitive Settings sections.</li>
+      <li><strong>staff</strong> — Classrooms tab only, and read-only there.</li>
+    </ul>
+    <p>Roles are managed under <strong>Settings → Access &amp; oversight</strong>. If a tool you expect
+    to see is missing from the sidebar, check your assigned role there before assuming something is
+    broken.</p>
+  </section>
+
+  <section class="section" id="quickref">
+    <h2 class="sec-title">Admin quick reference</h2>
+    <table class="qref">
+      <thead><tr><th>I need to…</th><th>Go to</th></tr></thead>
+      <tbody>
+        <tr><td>See what needs my attention today</td><td>Director dashboard</td></tr>
+        <tr><td>Check who's checked in right now</td><td>Classrooms → Attendance Board</td></tr>
+        <tr><td>Add or change a family's care days</td><td>Classrooms → Care Calendar → Edit days</td></tr>
+        <tr><td>Approve a staff day-off request</td><td>Director dashboard, or Staff → Build Staff Schedule</td></tr>
+        <tr><td>Send this month's invoices</td><td>Finance → Invoices → Email invoices</td></tr>
+        <tr><td>Review what's owed and aging</td><td>Finance → Bookkeeper → Accounts Receivable</td></tr>
+        <tr><td>Sign off on an incident report</td><td>Classrooms → Incident Reports</td></tr>
+        <tr><td>Change room rates or ratios</td><td>Settings → Rooms &amp; rates</td></tr>
+        <tr><td>Add or change an admin account's access</td><td>Settings → Access &amp; oversight</td></tr>
+      </tbody>
+    </table>
+
+    <div class="contact-card">
+      <h3>Timothy Lutheran Mother's Day Out</h3>
+      <p>Office: <a href="tel:+13147818673">(314) 781-8673</a> &nbsp;·&nbsp;
+      Email: <a href="mailto:mdo@timothystl.org">mdo@timothystl.org</a></p>
+      <p>Admin Portal: <a href="https://mdo.timothystl.org/admin.html">mdo.timothystl.org/admin.html</a></p>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    myMDO Admin Guide · Timothy Lutheran Mother's Day Out · September 2026<br>
+    Screens shown use fictional demo data.
+  </footer>
+
+</div>
+</body>
+</html>
