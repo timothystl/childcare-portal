@@ -41,16 +41,16 @@ function ptTime(iso) {
 // Written as a parent would say it, not as the database stores it. "Nap
 // 12:40 – 2:05pm" is what someone wants at pickup; "nap_end" is not.
 const PT_EVENT = {
-    check_in:   { icon: '👋', label: () => 'Checked in' },
-    check_out:  { icon: '🏡', label: () => 'Checked out' },
-    nap_start:  { icon: '😴', label: () => 'Fell asleep' },
-    nap_end:    { icon: '🌤️', label: () => 'Woke up' },
-    diaper:     { icon: '🧷', label: d => ({ wet: 'Diaper — wet', bm: 'Diaper — BM', dry: 'Diaper — dry' }[d?.kind] || 'Diaper change') },
-    bottle:     { icon: '🍼', label: d => d?.oz ? `Bottle — ${d.oz} oz` : 'Bottle' },
-    meal:       { icon: '🍎', label: d => ({ none: 'Meal — did not eat', some: 'Meal — ate some',
+    check_in:   { icon: '/images/icons/event-check-in.svg', label: () => 'Checked in' },
+    check_out:  { icon: '/images/icons/event-check-out.svg', label: () => 'Checked out' },
+    nap_start:  { icon: '/images/icons/event-nap.svg', label: () => 'Fell asleep' },
+    nap_end:    { icon: '/images/icons/event-wake.svg', label: () => 'Woke up' },
+    diaper:     { icon: '/images/icons/event-diaper.svg', label: d => ({ wet: 'Diaper — wet', bm: 'Diaper — BM', dry: 'Diaper — dry' }[d?.kind] || 'Diaper change') },
+    bottle:     { icon: '/images/icons/event-bottle.svg', label: d => d?.oz ? `Bottle — ${d.oz} oz` : 'Bottle' },
+    meal:       { icon: '/images/icons/event-meal.svg', label: d => ({ none: 'Meal — did not eat', some: 'Meal — ate some',
                                              most: 'Meal — ate most', all: 'Meal — ate it all' }[d?.amount] || 'Meal') },
-    note:       { icon: '📝', label: d => d?.text || 'Note from the teacher' },
-    supplies:   { icon: '📦', label: () => 'Supplies needed' },
+    note:       { icon: '/images/icons/event-note.svg', label: d => d?.text || 'Note from the teacher' },
+    supplies:   { icon: '/images/icons/event-supplies.svg', label: () => 'Supplies needed' },
 };
 
 function ptRenderTimeline(events) {
@@ -61,7 +61,8 @@ function ptRenderTimeline(events) {
         // Distinguish "nothing logged yet" from "not a care day". A parent
         // seeing an empty feed on a Tuesday their child does not attend should
         // not think the teacher forgot.
-        wrap.innerHTML = `<div class="pt-empty">
+        wrap.innerHTML = `<div class="pt-empty ui-empty-state">
+            <img class="ui-empty-illustration" src="/images/illustrations/empty-today.svg" alt="">
             <p>Nothing logged yet today.</p>
             <p class="pt-empty-sub">Teachers log the day as it happens — check back this afternoon.</p>
         </div>`;
@@ -69,10 +70,10 @@ function ptRenderTimeline(events) {
     }
 
     wrap.innerHTML = events.map(e => {
-        const spec  = PT_EVENT[e.event_type] || { icon: '•', label: () => e.event_type };
+        const spec  = PT_EVENT[e.event_type] || { icon: '/images/icons/document-generic.svg', label: () => e.event_type };
         const label = typeof spec.label === 'function' ? spec.label(e.detail) : spec.label;
         return `<li class="pt-event">
-            <span class="pt-event-icon" aria-hidden="true">${spec.icon}</span>
+            <img class="pt-event-icon" src="${spec.icon}" alt="" aria-hidden="true">
             <span class="pt-event-body">
                 <span class="pt-event-label">${ptEsc(label)}</span>
                 <span class="pt-event-time">${ptEsc(ptTime(e.occurred_at))}</span>

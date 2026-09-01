@@ -1726,7 +1726,13 @@ input.prefilled {
     font: inherit;
     min-height: 44px;        /* the repo's minimum tap target */
 }
-.tabbar-icon  { font-size: 20px; line-height: 1; opacity: .5; }
+.tabbar-icon  {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    display: block;
+    opacity: .5;
+}
 .tabbar-label { font-size: 10.5px; font-weight: 600; color: var(--text-muted); }
 .tabbar-item.is-active .tabbar-icon  { opacity: 1; }
 .tabbar-item.is-active .tabbar-label { font-weight: 800; color: var(--navy); }
@@ -1776,8 +1782,8 @@ input.prefilled {
    "Loading myMDO…". An <img> loading an SVG renders in an isolated
    context that cannot see this page's linked Google Fonts, so any text
    baked into an image would fall back to a generic sans. The wordmark
-   (images/logo/myMDO_*_wordmark_light.png) and the silhouette
-   (images/logo/splash-church-pale.png) are pixel crops straight out of
+   (images/logo/*-wordmark-on-light.png) and the silhouette
+   (images/logo/brand-splash-church-pale.png) are pixel crops straight out of
    the brand pack's own mockup — not redrawn — and the tagline/footer
    text are live text in the font already linked on every page that shows
    a splash (Nunito), reproducing the brand pack's copy verbatim. */
@@ -1840,9 +1846,7 @@ input.prefilled {
     border-right-color: #F5B731;
     animation: mdoSpinnerSpin .9s linear infinite;
 }
-@keyframes mdoSpinnerSpin {
-    to { transform: rotate(360deg); }
-}
+@keyframes mdoSpinnerSpin { to { transform: rotate(360deg); } }
 .mdo-splash-footer p {
     font-family: 'Nunito', sans-serif;
     font-size: 15px;
@@ -1900,7 +1904,7 @@ input.prefilled {
    "APP INTRO / FEATURE HIGHLIGHTS" panels, combined into one 5-slide
    sequence (welcome + 4 feature cards). Shown once per browser per app
    (localStorage flag set by the page's own inline script) before the
-   sign-in card. images/logo/onboarding-scene.png is the brand pack's own
+   sign-in card. images/logo/onboarding-welcome-scene.png is the brand pack's own
    illustration with its baked-in headline erased back to plain sky so the
    headline can be live text in this page's linked fonts instead. */
 .mdo-onboard {
@@ -2026,9 +2030,9 @@ input.prefilled {
 }
 .mdo-onboard-next:hover { background: var(--navy-lt); }
 
-/* Empty state: brand pack's "EMPTY STATE EXAMPLE" — a backpack instead of
-   a generic icon. images/logo/empty-backpack.png is a pixel crop of the
-   brand pack's own illustration. */
+/* Empty states share the flat vector language and brand palette from the
+   supplied myMDO design pack. Each route now uses relevant artwork instead
+   of reusing one backpack for unrelated states. */
 .mdo-empty {
     display: flex;
     align-items: center;
@@ -2038,7 +2042,7 @@ input.prefilled {
     border: 1px solid #eee2d0;
     border-radius: 14px;
 }
-.mdo-empty img { width: 56px; height: auto; flex: 0 0 auto; }
+.mdo-empty img { width: 96px; height: auto; flex: 0 0 auto; }
 .mdo-empty-text strong {
     display: block;
     font-family: 'Nunito', sans-serif;

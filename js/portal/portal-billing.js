@@ -272,7 +272,10 @@ function pbRenderInvoiceList() {
     const invoices = pbIssuedInvoices();
     body.innerHTML = `
         ${pbSubheadHtml('All invoices')}
-        ${invoices.length ? invoices.map(pbInvoiceListCard).join('') : '<p class="pa-empty">No bills issued yet.</p>'}
+        ${invoices.length ? invoices.map(pbInvoiceListCard).join('') : `<div class="pa-empty ui-empty-state">
+            <img class="ui-empty-illustration" src="/images/illustrations/empty-billing.svg" alt="">
+            <p>No bills issued yet.</p>
+        </div>`}
     `;
     pbEl('pbBackBtn')?.addEventListener('click', pbGoHome);
     body.querySelectorAll('.pb-stax-btn[data-invoice-id]').forEach(btn => {
@@ -404,7 +407,7 @@ function pbRenderReceipt() {
     body.innerHTML = `
         <section class="pd-card pb-receipt">
             <div class="pd-card-body pb-receipt-body">
-                <div class="pb-receipt-check" aria-hidden="true">&#10003;</div>
+                <img class="pb-receipt-art" src="/images/illustrations/payment-received.svg" alt="">
                 <h2 class="pb-receipt-title">Payment received</h2>
                 <p class="pb-receipt-thanks">Thank you, ${pbEsc(r.familyName)}.</p>
                 <p class="pb-receipt-amount">${pbMoney(r.amount)}</p>

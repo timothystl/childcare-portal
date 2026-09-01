@@ -4293,7 +4293,7 @@ rows (payment_method, notes) the parent app has no reason to see.
 
 `sendReceiptEmail()` in `charge-stax-payment/index.ts` and
 `authorizenet-webhook/index.ts` (deployed versions 15 and 18) both rebuilt
-from the mockup: navy header with the real `myMDO_primary_logo_light.png`
+from the mockup: navy header with the real `brand-wordmark-on-dark.png`
 logo (the same asset `send-schedule-confirmation` already uses — no
 placeholder "Logo" box, since there's nothing to embed that isn't already a
 real, hosted asset), a green checkmark, "Payment received" / "Thank you,
@@ -4582,7 +4582,7 @@ card half), one navy column below it, with the tagline "Welcome. Receive. Grow.
 Go." and the org line at the foot. The card's own contents were already right;
 the wordmark moved out of it into the brand panel.
 
-- ⚠️ **It uses `myMDO_primary_wordmark_dark.png`, not the `_light` file the
+- ⚠️ **It uses `brand-wordmark-on-dark.png`, not the `_light` file the
   design references.** Checked byte-for-byte: the handoff ships the identical
   `_light` asset this repo already has, and it is drawn for a light page — its
   "MDO" is a white outline that all but vanishes on the navy panel. The

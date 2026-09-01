@@ -12,19 +12,19 @@
   "categories": ["education", "productivity"],
   "icons": [
     {
-      "src": "/images/logo/icon-staff-192.png",
+      "src": "/images/logo/apps/staff/staff-launcher-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/images/logo/icon-staff-512.png",
+      "src": "/images/logo/apps/staff/staff-launcher-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/images/logo/icon-staff-maskable-512.png",
+      "src": "/images/logo/apps/staff/staff-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

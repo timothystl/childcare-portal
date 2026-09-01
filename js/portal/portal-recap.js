@@ -92,17 +92,18 @@ function prRenderTimeline(events) {
     const wrap = prEl('prTimeline');
     if (!wrap) return;
     if (!events.length) {
-        wrap.innerHTML = `<div class="pt-empty">
+        wrap.innerHTML = `<div class="pt-empty ui-empty-state">
+            <img class="ui-empty-illustration" src="/images/illustrations/empty-recap.svg" alt="">
             <p>Nothing logged for this day.</p>
             <p class="pt-empty-sub">Either it wasn't a care day, or nothing was recorded — try another date above.</p>
         </div>`;
         return;
     }
     wrap.innerHTML = events.map(e => {
-        const spec  = PT_EVENT[e.event_type] || { icon: '•', label: () => e.event_type };
+        const spec  = PT_EVENT[e.event_type] || { icon: '/images/icons/document-generic.svg', label: () => e.event_type };
         const label = typeof spec.label === 'function' ? spec.label(e.detail) : spec.label;
         return `<li class="pt-event">
-            <span class="pt-event-icon" aria-hidden="true">${spec.icon}</span>
+            <img class="pt-event-icon" src="${spec.icon}" alt="" aria-hidden="true">
             <span class="pt-event-body">
                 <span class="pt-event-label">${ptEsc(label)}</span>
                 <span class="pt-event-time">${ptEsc(ptTime(e.occurred_at))}</span>

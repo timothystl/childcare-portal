@@ -399,7 +399,7 @@ serve(async (req) => {
         <!-- Header -->
         <tr>
           <td style="background:#01294A;padding:28px 32px;text-align:center;">
-            <img src="https://mdo.timothystl.org/images/logo/myMDO_primary_logo_light.png"
+            <img src="https://mdo.timothystl.org/images/logo/brand-wordmark-on-dark.png"
                  alt="my MDO" width="120" height="auto"
                  style="display:block;margin:0 auto 10px;">
             <p style="margin:0;color:#F5B731;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;">Timothy Lutheran Church</p>

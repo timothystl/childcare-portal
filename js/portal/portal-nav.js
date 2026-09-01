@@ -43,12 +43,12 @@
 // the design file still showed emoji as placeholders; its own README says to
 // "swap for the same illustrated icon set once available", which this does.
 const PT_TABS = [
-    { key: 'today',     icon: 'images/icons/today.png',    label: 'Today' },
-    { key: 'daily',     icon: 'images/icons/recap.png',    label: 'Recap' },
-    { key: 'schedule',  icon: 'images/icons/schedule.png', label: 'Schedule' },
-    { key: 'billing',   icon: 'images/icons/billing.png',  label: 'Billing' },
-    { key: 'messages',  icon: 'images/icons/messages.png', label: 'Messages' },
-    { key: 'account',   icon: 'images/icons/account.png',  label: 'Account' },
+    { key: 'today',     icon: 'images/icons/nav-today.png',    label: 'Today' },
+    { key: 'daily',     icon: 'images/icons/nav-recap.png',    label: 'Recap' },
+    { key: 'schedule',  icon: 'images/icons/nav-schedule.png', label: 'Schedule' },
+    { key: 'billing',   icon: 'images/icons/nav-billing.png',  label: 'Billing' },
+    { key: 'messages',  icon: 'images/icons/nav-messages.png', label: 'Messages' },
+    { key: 'account',   icon: 'images/icons/nav-account.png',  label: 'Account' },
 ];
 
 let ptRoute   = 'today';
