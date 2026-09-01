@@ -2,7 +2,7 @@
   "name": "myMDO — Timothy Lutheran Mother's Day Out",
   "short_name": "myMDO",
   "description": "Mother's Day Out — care day scheduling and family portal",
-  "start_url": "/portal",
+  "start_url": "/parent",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
@@ -33,7 +33,7 @@
     {
       "name": "Family Portal",
       "short_name": "Portal",
-      "url": "/portal",
+      "url": "/parent",
       "icons": [{ "src": "/images/logo/apps/parent/parent-launcher-192.png", "sizes": "192x192" }]
     },
     {

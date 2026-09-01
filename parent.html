@@ -15,7 +15,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Parent Portal — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/portal.css">
+    <link rel="stylesheet" href="css/parent.css">
 </head>
 <body class="portal-body">
 
@@ -292,7 +292,7 @@
         <!-- ══ RECAP ══════════════════════════════════════════ -->
         <!-- The browsable record behind Today: the same daily-sheet events,
              photos and incidents, for any date the parent picks rather than
-             only the current one. js/portal/portal-recap.js. -->
+             only the current one. js/parent/parent-recap.js. -->
         <section class="pt-tab hidden" data-tab="daily">
         <div class="pt-page-head"><h1 class="portal-greeting">Recap</h1></div>
         <div id="prBody" class="pt-feed hidden">
@@ -336,7 +336,7 @@
         </section>
 
         <!-- ══ BILLING ════════════════════════════════════════ -->
-        <!-- Real invoices and real online payment (js/portal/portal-billing.js,
+        <!-- Real invoices and real online payment (js/parent/parent-billing.js,
              off the same psSchedule() data the Schedule/Today tabs share) —
              a Home/All Invoices/Invoice Detail/Payment Received screen stack,
              not a single card list. See that file's own header comment. -->
@@ -377,7 +377,7 @@
             <div id="ptAccountBody"></div>
 
             <!-- Documents lives here rather than as its own tab — see the
-                 note on PT_TABS in portal-nav.js. The signed incident report
+                 note on PT_TABS in parent-nav.js. The signed incident report
                  lands here when the director closes it, which is the only
                  place a family can get the three-signature copy. -->
             <h2 class="pt-subhead">Documents</h2>
@@ -515,7 +515,7 @@
     </script>
     <script src="dist/supabase.min.js"></script>
     <script src="dist/error-monitor.min.js"></script>
-    <script src="dist/portal.min.js"></script>
+    <script src="dist/parent.min.js"></script>
     <script src="dist/app-update.min.js"></script>
 </body>
 </html>

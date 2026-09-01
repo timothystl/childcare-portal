@@ -5311,3 +5311,86 @@ match — a roster-side choice, not a defect.
 
 **Coverage after the import:** Jul and Aug are clear. Sep (828 care days) and
 Oct (21) still read as blocking, which is correct — nobody has paid them yet.
+
+## Parent app renamed to `/parent`, and test-processor data cleaned up (2026-09-01)
+
+Two small asks, both about the parent portal's readiness for a real pilot.
+
+**The `$320` draft invoice on the "Stax Test Family" placeholder account was
+deleted outright, not written off.** It was never real care — a leftover from
+the 2026-08-26/28 sandbox click-through testing documented in the Stax section
+above — so it belongs nowhere in the books at all, unlike a real unpaid balance
+that a write-off tool exists for. Confirmed no `billing_payments` row referenced
+it before deleting (`invoice_id = 3993`).
+
+**`portal.html` → `parent.html`**, matching `admin.html`/`staff.html`/
+`clockin.html`'s own naming, and the app's own PWA manifests
+(`start_url: "/admin"`, `/staff`, `/clockin"`) — `manifest.json`'s `start_url`
+was the one outlier, still `/portal`. Renamed:
+
+- `portal.html` → `parent.html`; `css/portal.css` → `css/parent.css`;
+  `js/portal/portal-*.js` → `js/parent/parent-*.js` (all nine files);
+  `dist/portal.min.js` → `dist/parent.min.js`.
+- `manifest.json`'s `start_url` and its "Family Portal" shortcut `url`:
+  `/portal` → `/parent`. `sw.js`'s precache list and its cache version bumped
+  (`tl-mdo-v9` → `v10`) so an already-installed service worker replaces its
+  stale entries rather than trying to reuse them.
+- `_redirects` gained `/portal → /parent` and `/portal.html → /parent.html`
+  (301s) — the same compatibility pattern this file already uses for
+  `/register`/`/signup` → `/calendar`. An already-installed PWA icon's cached
+  manifest still points at the old `start_url`, and at least one real parent
+  (the pastor's own test account) has this bookmarked.
+- `charge-stax-payment`'s receipt email "View billing account" link updated
+  to `/parent.html` and redeployed (v17). ⚠️ **Deploying it also shipped an
+  already-committed-but-never-deployed change from a prior session** — the
+  Stax merchant-pin guard (`assertStaxMerchant()`, see the Stax section
+  above). Confirmed safe before deploying: it's a no-op while
+  `STAX_MERCHANT_ID` is unset, which it still is — there is no way to deploy
+  only one line of a file through this tool, so catching the function up to
+  the committed source was unavoidable, and the source was already sound.
+- **Deliberately NOT renamed:** every internal DOM id, CSS class, and JS
+  function/variable name inside `parent.html`/`css/parent.css`/`js/parent/*`
+  (`portalSignInShell`, `.portal-body`, `ptLoadToday`, `pbStartStaxPayment`,
+  etc.). Those are pervasive — hundreds of occurrences across every one of
+  these files, referencing each other as globals since the build concatenates
+  them unbundled (`bundle: false`, see `scripts/build.js`). Renaming them
+  would have touched nearly every line in the parent app for zero
+  user-visible benefit; the ask was about the URL/file naming convention, not
+  the internal implementation. `CLAUDE.md`'s and `docs/PARENT_PORTAL_PLAN.md`'s
+  own historical narrative was also left alone — those describe the app
+  under its old name at the time each note was written, matching how this
+  file always treats past sessions.
+- ⚠️ **One caught-and-fixed mistake worth recording:** the first
+  `deploy_edge_function` call for `charge-stax-payment` above was
+  accidentally sent with a placeholder string instead of the real file
+  content, which would have shipped a broken function to production
+  (version 16). Caught immediately by re-reading the tool's own response;
+  fixed with a second deploy carrying the actual source (version 17),
+  verified afterward by fetching the live function and confirming it
+  matches the committed file byte for byte. `STAX_PAYMENTS_ENABLED`/the
+  production gate meant no real parent could have been affected by the
+  ~30-second window either version was live, but it is the kind of mistake
+  worth naming rather than quietly overwriting.
+
+`npm run bump` → v2.11.60. `npm run build` — `dist/parent.min.js` and
+`dist/admin.min.js` rebuilt; grepped `parent.html` for `css/parent.css` and
+`dist/parent.min.js` to confirm the rename actually shipped in what the page
+loads, not just the source. `npm test` — 280/280, all pre-existing (the
+rename touched no logic the suite's `read('js/parent/parent-*.js')` calls
+didn't already cover once their paths were updated).
+
+**Parent sign-in was already open to any family, and needed no code change —
+verified rather than assumed.** Checked the live `family_login()` function
+body and the `parent-session` edge function source directly: there is no
+allowlist, pilot flag, or admin-side pre-linking step anywhere. Any family
+whose email + PIN (the same PIN used everywhere else in this app — Care
+Calendar, lookup.html, the kiosk) checks out against `family_login()` gets a
+real Supabase Auth user and a `parent_accounts` row **auto-provisioned on
+their first successful login** (`parent-session/index.ts`, step 2: find-or-
+create the auth user; step 4: upsert the mapping — both happen unconditionally
+on a good PIN, not gated on anything an admin has to set up first). The
+2 existing `parent_accounts` rows (the pastor's own test account and the
+`stax-test-20260828@…` placeholder) exist only because those are the only two
+people who have ever visited the URL — not because of any restriction. No page
+anywhere in the app links to `parent.html`/`/parent`, so it stays undiscovered
+by anyone who isn't handed the link directly, exactly as intended for a pilot.

@@ -148,7 +148,7 @@ serve(async (req) => {
         //      actively testing and reverted immediately after.
         //   2. The request explicitly carries sandboxTest:true — sent only
         //      when the browser tab has ?staxtest=1 in its URL
-        //      (pbStaxTestEnabled() in portal-billing.js).
+        //      (pbStaxTestEnabled() in parent-billing.js).
         // Neither signal alone is enough: leaving the server secret on by
         // mistake does nothing to a real parent's normal "Pay online"
         // click, because that request never sets sandboxTest. A charge

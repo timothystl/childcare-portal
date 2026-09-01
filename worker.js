@@ -1065,7 +1065,7 @@ export default {
       // embed this page.
       "frame-ancestors 'self'; " +
       // staxjs.staxpayments.com: Stax.js (Bolt), the embedded-checkout
-      // comparison in portal-billing.js — see its pbLoadStaxJs().
+      // comparison in parent-billing.js — see its pbLoadStaxJs().
       // core.spreedly.com: Stax.js itself loads Spreedly's iframe tokenization
       // library (core.spreedly.com/iframe/iframe-v1.min.js) to actually
       // collect the card number/CVV — found by grepping staxjs-captcha.js's

@@ -1,7 +1,7 @@
 // ============================================================
 // portal-billing — the parent's Billing tab
 // ============================================================
-// Real invoices, real online payment. Reuses psSchedule() (portal-schedule.js)
+// Real invoices, real online payment. Reuses psSchedule() (parent-schedule.js)
 // rather than a second RPC — my_schedule() already returns this family's own
 // billing_invoices rows (plus each one's last_payment_date) via the
 // SECURITY DEFINER / parent_family_ids() path (see
@@ -14,7 +14,7 @@
 // non-void invoice, draft or otherwise, but a draft is the office still
 // working the month out — nothing has been billed yet. Only a row with
 // sent_at is shown here, same rule the Schedule tab's status pill already
-// follows (portal-schedule.js, psStatusPill).
+// follows (parent-schedule.js, psStatusPill).
 //
 // ── Screens (2026-08-28 redesign) ──────────────────────────────
 // Home (total due + pay button + "view all invoices") → All Invoices (one
@@ -52,7 +52,7 @@
 
 let pbData = null;
 let pbLoadFailed = false;   // a thrown error, as distinct from an empty payload
-let pbReturnState = null;   // 'paid' | 'cancelled' | null — set by portal-auth.js
+let pbReturnState = null;   // 'paid' | 'cancelled' | null — set by parent-auth.js
 let pbStaxPaying = null;    // invoice id currently in the Stax comparison modal, or null
 let pbStaxInstance = null;  // the live StaxJs() instance for the open modal, or null
 
@@ -833,7 +833,7 @@ function pbCloseStaxModal(success) {
     // Refresh pbData in the background once the cache above is invalidated,
     // so Home reflects the real post-payment balance whenever the parent
     // navigates there — psSchedule() is otherwise cached for the rest of the
-    // session (portal-nav.js only calls pbLoad() on Billing's first open),
+    // session (parent-nav.js only calls pbLoad() on Billing's first open),
     // and pbLoad()'s own "Loading…" wipe would blank the receipt screen the
     // parent is looking at right now, so this refetches quietly instead.
     if (success) pbRefreshQuietly();
@@ -846,7 +846,7 @@ async function pbLoad() {
     // 'null' for a caller with no family behind the session, and folding that
     // into the catch told a reader to "pull down to retry" a state no retry
     // can change. Non-parent sessions are redirected away before this runs
-    // (portal-auth.js), so this is the residue: a session that matched no app.
+    // (parent-auth.js), so this is the residue: a session that matched no app.
     pbLoadFailed = false;
     try {
         pbData = await psSchedule();   // shared with Schedule and Today — one fetch, not three

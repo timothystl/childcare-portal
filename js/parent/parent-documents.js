@@ -6,7 +6,7 @@
 // statements."
 //
 // Renders into #pdBody, which lives inside the Account tab (not a tab of its
-// own — see the note on PT_TABS in portal-nav.js). Loaded by ptGoTab
+// own — see the note on PT_TABS in parent-nav.js). Loaded by ptGoTab
 // alongside paLoad() the first time a parent opens Account.
 //
 // ⚠️ AN INCIDENT REPORT IS ONLY LISTED HERE ONCE IT IS CLOSED, and that is
@@ -61,7 +61,7 @@ function pdRender() {
     if (!body) return;
 
     // No page-level heading here — #pdBody renders inside the Account tab
-    // (portal.html), under the "Documents" <h2> that already sits above it.
+    // (parent.html), under the "Documents" <h2> that already sits above it.
     body.innerHTML = `
         ${pdIncidentSection()}
         ${pdFormsSection()}

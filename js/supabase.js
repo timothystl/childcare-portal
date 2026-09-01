@@ -1135,7 +1135,7 @@ async function parentSessionToken() {
 // The family behind the current parent session — the same { family, isParent2 }
 // that lookupFamilyForRegistration() returns for an email + PIN, minus the PIN.
 //
-// This is what lets calendar.html stop asking a parent who signed in at /portal
+// This is what lets calendar.html stop asking a parent who signed in at /parent
 // to sign in a second time. my_family_payload() reads parent_accounts off the
 // JWT, so the token picks the family; there is no family id on the wire to
 // tamper with. Returns null when nobody is signed in, when the signed-in user
@@ -1915,7 +1915,7 @@ async function fetchChildDocumentUrl(path, ttlSeconds = 300) {
     return data?.signedUrl || null;
 }
 
-// ── Parent-editable child profile photo (portal.html Account tab) ─────────
+// ── Parent-editable child profile photo (parent.html Account tab) ─────────
 // A parent may replace or remove their own child's picture, but the
 // students table has no parent-facing UPDATE policy — only
 // set_child_profile_photo() can point profile_photo_path at something, and
@@ -4827,7 +4827,7 @@ async function emailInvoices(invoiceIds, { resend = false, test = false } = {}) 
  *
  * @param {number} invoiceId
  * @param {{sandboxTest?: boolean}} [opts] sandboxTest is only ever true when
- *   the tab has ?staxtest=1 — see pbStaxTestEnabled() in portal-billing.js.
+ *   the tab has ?staxtest=1 — see pbStaxTestEnabled() in parent-billing.js.
  *   It lets a real click-through against Stax's sandbox merchant bypass the
  *   production-only gate, but only when the server has ALSO explicitly
  *   turned on STAX_SANDBOX_TEST_ENABLED — this flag alone does nothing.
