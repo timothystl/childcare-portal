@@ -89,12 +89,11 @@ async function _brBuild(month) {
             .find(f => (f.parentEmail || '').toLowerCase() === (fam.email || '').toLowerCase());
         (perChild?.children || []).forEach(c => {
             const billed = c.hasOverride ? c.overrideAmount : c.subtotal;
-            const days   = c.fullDays + c.halfDays;
             const childCauses = fam.causes.filter(cz => !cz.child || cz.child === c.childName);
             rows.push({
                 childName: c.childName, roomLabel: c.roomLabel, roomId: c.roomId,
                 familyName: fam.name, payer: fam.email,
-                days, rate: days ? Math.round((billed / days) * 100) / 100 : 0,
+                fullDays: c.fullDays, halfDays: c.halfDays,
                 adjustments: childCauses.map(cz => cz.text.replace(/^.*?: /, '')).join(' · '),
                 amount: Math.round((billed + (c.changeFees || 0)) * 100) / 100,
                 isException: fam.isException,
@@ -116,6 +115,8 @@ async function _brBuild(month) {
     const fees         = famRows.reduce((s, f) => s + (f.regFee || 0) + (f.familyNewFee || 0), 0);
     const credits      = famRows.reduce((s, f) => s + (f.creditTotal || 0), 0);
     const total        = famRows.reduce((s, f) => s + f.total, 0);
+    const totalFullDays = rows.reduce((s, r) => s + (r.fullDays || 0), 0);
+    const totalHalfDays = rows.reduce((s, r) => s + (r.halfDays || 0), 0);
 
     // "Ties to": cross-check against what actually got issued this month, and
     // what last month settled at, so the report is never read in isolation.
@@ -146,6 +147,7 @@ async function _brBuild(month) {
         fees:        Math.round(fees * 100) / 100,
         credits:     Math.round(credits * 100) / 100,
         total:       Math.round(total * 100) / 100,
+        totalFullDays, totalHalfDays,
         childCount:  rows.filter(r => !r.withdrawn).length,
         familyCount: famRows.filter(f => !f.withdrawn).length,
         invoiceCount, heldCount, prevBilled, prevCollected,
@@ -211,8 +213,8 @@ function _brRoomTable() {
     }).join('');
 
     return `<div class="table-wrapper"><table class="report-table br-room-table">
-        <thead><tr><th>Child</th><th>Family &amp; payer</th><th>Days</th><th>Rate</th><th>Adjustments</th><th>Amount</th></tr></thead>
-        <tbody>${sections}${_brGrandTotalRow(6)}</tbody>
+        <thead><tr><th>Child</th><th>Family &amp; payer</th><th>Full days</th><th>Half days</th><th>Adjustments</th><th>Amount</th></tr></thead>
+        <tbody>${sections}${_brGrandTotalRow(6, 'room')}</tbody>
     </table></div>`;
 }
 
@@ -225,8 +227,8 @@ function _brChildRow(r) {
     return `<tr class="br-row${r.isException ? ' br-exc' : ''}${r.withdrawn ? ' br-withdrawn' : ''}" data-br-email="${escHtml(r.payer || '')}">
         <td>${escHtml(r.childName)}</td>
         <td>${escHtml(r.familyName)}<br><small style="color:var(--text-muted)">${escHtml(r.payer)}</small></td>
-        <td style="text-align:center">${r.days || '—'}</td>
-        <td style="text-align:right">${r.rate ? '$' + r.rate.toFixed(2) : '—'}</td>
+        <td style="text-align:center">${r.fullDays || '—'}</td>
+        <td style="text-align:center">${r.halfDays || '—'}</td>
         <td>${escHtml(r.adjustments || '—')}</td>
         <td style="text-align:right"><strong>$${(r.amount || 0).toFixed(2)}</strong></td>
     </tr>`;
@@ -248,21 +250,29 @@ function _brNameTable() {
 
     return `<div class="table-wrapper"><table class="report-table">
         <thead><tr><th>Family &amp; payer</th><th>Children &amp; room</th><th>Kids</th><th>Base</th><th>Adjustments</th><th>Notes</th><th>Amount</th></tr></thead>
-        <tbody>${rows}${_brGrandTotalRow(7)}</tbody>
+        <tbody>${rows}${_brGrandTotalRow(7, 'name')}</tbody>
     </table></div>`;
 }
 
-function _brGrandTotalRow(cols) {
+function _brGrandTotalRow(cols, mode) {
     const s = _brSummary;
     // The row body below fills 6 columns (the first cell spans 2). Any
     // column beyond that — e.g. the name table's Notes column — gets a
     // blank cell here so the Amount total stays in the table's last column
     // instead of sliding left under whatever column follows Adjustments.
     const filler = '<td></td>'.repeat(Math.max(0, cols - 6));
+    // Columns 3/4 mean different things per table: the room table's are
+    // Full days / Half days, the name table's are Kids / Base — so the
+    // totals row has to speak whichever pair the header above it actually
+    // labeled, not the same two figures under both.
+    const col3 = mode === 'room' ? s.totalFullDays : s.childCount;
+    const col4 = mode === 'room' ? s.totalHalfDays : `$${s.baseTuition.toFixed(2)}`;
+    const col3Align = 'text-align:center';
+    const col4Align = mode === 'room' ? 'text-align:center' : 'text-align:right';
     return `<tr class="br-grand-total">
-        <td colspan="2">Total · ${_brMonth}</td>
-        <td style="text-align:center">${s.childCount}</td>
-        <td style="text-align:right">$${s.baseTuition.toFixed(2)}</td>
+        <td colspan="2">Total · ${_brMonth} · ${s.childCount} children</td>
+        <td style="${col3Align}">${col3}</td>
+        <td style="${col4Align}">${col4}</td>
         <td>Discounts −$${s.discounts.toFixed(2)} · Fees +$${s.fees.toFixed(2)}</td>
         ${filler}
         <td style="text-align:right" class="br-grand-amt">$${s.total.toFixed(2)}</td>
@@ -350,10 +360,10 @@ function _brExportCsv() {
     if (!_brRows.length && !_brFamilyRows.length) { alert('Nothing to export.'); return; }
     let header, lines;
     if (_brGroup === 'room') {
-        header = ['Child', 'Family', 'Payer', 'Room', 'Days', 'Rate', 'Adjustments', 'Amount'];
+        header = ['Child', 'Family', 'Payer', 'Room', 'Full days', 'Half days', 'Adjustments', 'Amount'];
         lines = _brRows.map(r => [
             csvCell(r.childName), csvCell(r.familyName), csvCell(r.payer), csvCell(r.roomLabel),
-            r.days, r.rate.toFixed(2), csvCell(r.adjustments), (r.amount || 0).toFixed(2),
+            r.fullDays, r.halfDays, csvCell(r.adjustments), (r.amount || 0).toFixed(2),
         ].join(','));
     } else {
         header = ['Family', 'Payer', 'Children', 'Kids', 'Base', 'Adjustments', 'Notes', 'Amount'];
