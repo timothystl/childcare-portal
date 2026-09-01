@@ -167,8 +167,10 @@ function _resetRoleRestrictions() {
     // full admin logging in after a restricted one on the same page would
     // keep Rooms & rates hidden (and the portal, which indexes by
     // visibility, would drop the whole Settings tool).
-    ['logHoursSection', 'payrollSection', 'staffRosterToggleWrap',
-     'staffRosterSection', 'setAccessCard', 'setRoomsCard',
+    // staffRosterSection is no longer in this list — applyRoleRestrictions()
+    // stopped hiding it for `restricted` (she can see the roster now, just
+    // not pay/payroll), so there is nothing here for this reset to undo.
+    ['logHoursSection', 'payrollSection', 'addStaffBtn', 'setAccessCard', 'setRoomsCard',
      'setClosedDaysBlock', 'setSummerCampBlock', 'offerLinksSection']
         .forEach(id => {
             const el = document.getElementById(id);

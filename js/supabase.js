@@ -2087,16 +2087,19 @@ async function deleteWaitlistApplication(id) {
 // ============================================================
 // STAFF  (payroll)
 // ============================================================
+// Reads go through admin_staff_roster() rather than a direct `.from('staff')`
+// select. The table's own RLS is `admin_role() = 'full'` only — restricted
+// admins get zero rows from a direct query, which is what left staff names
+// blank in Build Staff Schedule and the roster invisible for that role. The
+// RPC is executable by any admin and nulls out hourly_rate/salary_biweekly/
+// pay_type/pto_starting_balance server-side when the caller isn't `full` —
+// real redaction, not a UI hide (see restricted_admin_staff_roster_visibility.sql).
 async function fetchAllStaff({ includeInactive = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    let query = sbClient
-        .from('staff')
-        .select('id, name, email, phone, role, hourly_rate, pay_type, salary_biweekly, room_id, active, hire_date, has_staff_pin, created_at, pto_starting_balance, profile_photo_path')
-        .order('name');
-    if (!includeInactive) query = query.eq('active', true);
-    const { data, error } = await query;
+    const { data, error } = await sbClient.rpc('admin_staff_roster');
     if (error) throw friendlyError(error);
-    return data || [];
+    const rows = data || [];
+    return includeInactive ? rows : rows.filter(s => s.active);
 }
 
 async function upsertStaffMember({ id = null, name, email, phone, role, payType, hourlyRate, salaryBiweekly, roomId, hireDate, staffPin, ptoStartingBalance, profilePhotoPath }) {
@@ -2280,24 +2283,36 @@ async function saveStaffScheduleWeek(weekDates, assignments, staffList) {
  * Fetches saved schedule assignments for a date range, with staff names.
  * Used to reload a saved week in the schedule planner.
  *
+ * ⚠️ Names are resolved from fetchAllStaff() (admin_staff_roster()), not a
+ * PostgREST embedded `staff:staff_id(name)` join. The embed does a real join
+ * against the `staff` table under the hood, and that table's RLS is
+ * `admin_role() = 'full'` only — for a restricted admin the embed silently
+ * returns null (no error), which is what left every staff name blank in
+ * Build Staff Schedule for that role. admin_staff_roster() is callable by
+ * any admin, so this works the same for both tiers.
+ *
  * @param {string} startDate - ISO date, inclusive
  * @param {string} endDate   - ISO date, inclusive
  * @returns {Promise<Array<{staff_id, staff_name, work_date, room_id, shift}>>}
  */
 async function fetchStaffScheduleWeek(startDate, endDate) {
     if (!sbClient) throw new Error('Supabase not configured.');
-    const { data, error } = await sbClient
-        .from('staff_schedules')
-        .select('staff_id, work_date, room_id, shift, staff:staff_id(name)')
-        .gte('work_date', startDate)
-        .lte('work_date', endDate)
-        .order('work_date')
-        .order('room_id')
-        .order('shift');
+    const [{ data, error }, staffList] = await Promise.all([
+        sbClient
+            .from('staff_schedules')
+            .select('staff_id, work_date, room_id, shift')
+            .gte('work_date', startDate)
+            .lte('work_date', endDate)
+            .order('work_date')
+            .order('room_id')
+            .order('shift'),
+        fetchAllStaff({ includeInactive: true }).catch(() => []),
+    ]);
     if (error) throw friendlyError(error);
+    const nameById = new Map(staffList.map(s => [s.id, s.name]));
     return (data || []).map(r => ({
         staff_id:   r.staff_id,
-        staff_name: r.staff?.name ?? '',
+        staff_name: nameById.get(r.staff_id) || '',
         work_date:  r.work_date,
         room_id:    r.room_id,
         shift:      r.shift,
@@ -3750,6 +3765,12 @@ async function saveStaffAvailability(availMap) {
  * Admin: every time-off request the director might act on or display.
  * Pending first (that's the "Needs your OK" queue), then most recent.
  *
+ * ⚠️ Name/role/room resolve from fetchAllStaff() (admin_staff_roster()), not
+ * a `staff:staff_id(name, role, room_id)` embed — same reason as
+ * fetchStaffScheduleWeek() above: the embed joins the `staff` table under
+ * RLS, which is `admin_role() = 'full'` only, so a restricted admin got a
+ * blank name on every row in the "Needs your OK" queue.
+ *
  * @param {{ sinceDate?: string|null }} [opts] - ISO date; drops decided
  *   one-off requests whose last day is older than this. Standing
  *   (recurring) requests are always returned regardless of date.
@@ -3757,19 +3778,26 @@ async function saveStaffAvailability(availMap) {
  */
 async function fetchTimeOffRequests({ sinceDate = null } = {}) {
     if (!sbClient) return [];
-    const { data, error } = await sbClient
-        .from('staff_time_off_requests')
-        .select('id, staff_id, off_dates, recurring, weekday, reason, note, status, source, submitted_at, decided_at, decided_by, staff:staff_id(name, role, room_id)')
-        .order('submitted_at', { ascending: false })
-        .limit(300);
+    const [{ data, error }, staffList] = await Promise.all([
+        sbClient
+            .from('staff_time_off_requests')
+            .select('id, staff_id, off_dates, recurring, weekday, reason, note, status, source, submitted_at, decided_at, decided_by')
+            .order('submitted_at', { ascending: false })
+            .limit(300),
+        fetchAllStaff({ includeInactive: true }).catch(() => []),
+    ]);
     if (error) throw friendlyError(error);
-    const rows = (data || []).map(r => ({
-        ...r,
-        off_dates:  Array.isArray(r.off_dates) ? r.off_dates : [],
-        staff_name: r.staff?.name || '',
-        staff_role: r.staff?.role || '',
-        room_id:    r.staff?.room_id || null,
-    }));
+    const staffById = new Map(staffList.map(s => [s.id, s]));
+    const rows = (data || []).map(r => {
+        const staff = staffById.get(r.staff_id);
+        return {
+            ...r,
+            off_dates:  Array.isArray(r.off_dates) ? r.off_dates : [],
+            staff_name: staff?.name || '',
+            staff_role: staff?.role || '',
+            room_id:    staff?.room_id || null,
+        };
+    });
     if (!sinceDate) return rows;
     // Keep everything still pending, everything standing, and any one-off
     // whose LAST day has not yet fallen out of the window.
