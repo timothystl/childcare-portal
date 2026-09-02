@@ -85,10 +85,35 @@
 }
 
 /* ── Header ──────────────────────────────────────────────── */
+/* ⚠️ Both of these are real <header> tags, so without an explicit reset they
+   inherit the bare `header {}` rule in styles.css meant for the MARKETING
+   pages (green-lt background, sun border, 28px/36px/32px padding, centered
+   text — and 24px/16px on a phone-width viewport, per that rule's own mobile
+   override). .sl-header only ever overrode the flex layout, so it kept that
+   inherited padding — which sits *inside* .sl-tab's own 14px gutter and
+   .app-route's own 16px gutter, insetting the bar by 30px on every side
+   instead of the flush top bar it looks like it should be. Same root cause
+   as the .sp-head fix on the childcare statement page (see CLAUDE.md): any
+   new <header> in this app inherits the same thing until it says otherwise.
 
+   The classic full-bleed escape hatch: size to the viewport rather than the
+   padded ancestor, so the bar reaches both screen edges regardless of how
+   much gutter .sl-tab/.app-route/.sl-screen happen to apply around it. */
+.sl-header, .sl-sched-head {
+    width: 100vw;
+    margin-left: calc(-1 * (50vw - 50%));
+    margin-right: calc(-1 * (50vw - 50%));
+    box-sizing: border-box;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    background: var(--green-lt);
+    border-bottom: 3px solid var(--sun);
+    text-align: left;
+}
 .sl-header {
     display: flex; align-items: center; justify-content: space-between;
     gap: 12px; margin-bottom: 14px; min-height: 44px;
+    padding-top: 14px; padding-bottom: 14px;
 }
 .sl-whoami, .sl-room-title {
     font-weight: 800; color: var(--navy); font-size: 1.02em;
@@ -778,7 +803,9 @@
 
 .sl-sched-head {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 14px 2px 10px;
+    /* top/bottom only — left/right come from the full-bleed rule above and
+       must not be clobbered by a padding shorthand here. */
+    padding-top: 14px; padding-bottom: 10px;
 }
 .sl-sched-room { display: block; font-size: .8em; color: var(--text-muted); margin-top: 2px; }
 .sl-hours-pill {
