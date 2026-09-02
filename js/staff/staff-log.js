@@ -630,11 +630,19 @@ function slCommit(eventType, detail, btnEl) {
         setTimeout(() => btnEl.classList.remove('sl-act-done'), 700);
     }
 
-    // Reflect check-in on the roster straight away so the sheet and the list
-    // never disagree while the write is still in flight.
-    if (eventType === 'check_in') {
-        slOpenChild.checked_in = true;
+    // Reflect check-in/check-out on the roster straight away so the sheet and
+    // the list never disagree while the write is still in flight.
+    // ⚠️ slRenderRoster reads `attendance_status` first and only falls back to
+    // `checked_in` when it's missing — but list_room_children() always returns
+    // a non-null attendance_status, so that fallback never fires. Setting only
+    // `checked_in` here left the roster pill stuck on "Not in" until the room
+    // was reloaded from the server, even though the event had really been
+    // recorded — which is exactly why it looked like tapping did nothing.
+    if (eventType === 'check_in' || eventType === 'check_out') {
+        slOpenChild.checked_in = eventType === 'check_in';
+        slOpenChild.attendance_status = eventType === 'check_in' ? 'present' : 'left';
         slRenderRoster();
+        slToast(`${slOpenChild.child_name} checked ${eventType === 'check_in' ? 'in' : 'out'}.`);
     }
 
     slFlushQueue();
