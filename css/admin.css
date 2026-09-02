@@ -6043,3 +6043,16 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     font-size: .88em; color: var(--navy);
 }
 .fh-coverage-list span { color: var(--text-muted); }
+.fh-coverage-setting {
+    margin: 10px 0 0; padding-top: 10px; border-top: 1px dashed #E8D9A0;
+    font-size: .82em; line-height: 1.5; color: #6a5320;
+}
+.fh-coverage-setting .fh-link-btn { margin-left: 4px; }
+/* Nothing is actively blocking a statement, but months are being suppressed
+   as a pilot — a calmer, no-alarm-icon variant of the same card so the
+   director can still see and change the setting without a warning reading
+   as active when nothing needs attention right now. */
+.fh-coverage-quiet {
+    background: var(--linen); border-left-color: var(--border);
+}
+.fh-coverage-quiet .fh-coverage-setting { border-top: none; margin: 0; padding: 0; }
