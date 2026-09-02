@@ -885,3 +885,125 @@ async function _wuMarkSigned(id) {
         showToast('Error: ' + (e.message || e), 'error');
     }
 }
+
+// ============================================================
+// Staff credentials — CPR/first-aid, TB tests
+// ============================================================
+// Self-uploaded from the staff app's Account tab (js/staff/staff-credentials.js
+// → submit-staff-credential edge function). This is the office's read side:
+// every ACTIVE staff member against the two tracked types, so a staff member
+// who has never logged one shows up as plainly as one whose record expired —
+// "nothing on file" is the more urgent gap of the two, and a screen that only
+// listed submitted rows would hide it entirely.
+//
+// ⚠️ full-role only, both here and at the database (admin_list_staff_credentials()
+// checks admin_role() = 'full' independently) — a TB test result is medical
+// information about an employee, the same class staff_injury_reports already
+// carries. Do not add a `restricted`-visible variant of this tool.
+
+const SC_ADMIN_TYPES = [
+    { key: 'cpr_first_aid', label: 'CPR / First Aid' },
+    { key: 'tb_test',       label: 'TB Test' },
+];
+
+// ⚠️ expires_at is a plain DATE ('2026-12-01'), not a timestamp. _sfWhen()
+// does `new Date(iso)`, which parses a bare date as UTC midnight — in Central
+// time that reads as the PREVIOUS evening, so both the "is it expired yet"
+// comparison and the printed date would land a day early. Same FS12-class
+// mistake this repo has already been bitten by once; _scDateLabel and the
+// "today" below both go through America/Chicago explicitly instead.
+function _scDateLabel(iso) {
+    return new Date(iso + 'T00:00:00').toLocaleDateString('en-US',
+        { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function _scAdminStatus(row) {
+    if (!row) return { cls: 'none', label: 'Nothing on file' };
+    if (!row.expires_at) return { cls: 'current', label: 'On file' };
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+    const soonBy = new Date(); soonBy.setDate(soonBy.getDate() + 30);
+    const soon = soonBy.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+    if (row.expires_at < today) return { cls: 'expired', label: 'Expired ' + _scDateLabel(row.expires_at) };
+    if (row.expires_at <= soon) return { cls: 'soon', label: 'Due ' + _scDateLabel(row.expires_at) };
+    return { cls: 'current', label: 'Good until ' + _scDateLabel(row.expires_at) };
+}
+
+const SC_ADMIN_PILL_STYLE = {
+    none:    'background:#eef2f5;color:#5a6673',
+    current: 'background:var(--green-pale);color:var(--green-dark)',
+    soon:    'background:var(--sun-badge);color:var(--mustard-dark)',
+    expired: 'background:var(--tang-pale);color:var(--tang-dark)',
+};
+
+async function renderStaffCredentialsTool() {
+    const wrap = _sfEl('staffCredentialsBody');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="muted">Loading…</p>';
+
+    let rows, staff;
+    try {
+        [rows, staff] = await Promise.all([
+            fetchAdminStaffCredentials(),
+            fetchAllStaff(),
+        ]);
+    } catch (e) {
+        wrap.innerHTML = `<p class="muted">Could not load credentials: ${escHtml(e.message || e)}</p>`;
+        return;
+    }
+
+    // One row per (staff, type) from the database, latest only — index it so
+    // each card below is a single lookup rather than a filter per cell.
+    const byStaffType = new Map();
+    rows.forEach(r => byStaffType.set(`${r.staff_id}|${r.credential_type}`, r));
+
+    let expired = 0, soon = 0, none = 0;
+    const cards = staff.map(s => {
+        const cells = SC_ADMIN_TYPES.map(t => {
+            const row = byStaffType.get(`${s.id}|${t.key}`);
+            const status = _scAdminStatus(row);
+            if (status.cls === 'expired') expired++;
+            else if (status.cls === 'soon') soon++;
+            else if (status.cls === 'none') none++;
+            const docLink = row?.document_path
+                ? ` <button type="button" class="sc-view-btn" data-path="${escHtml(row.document_path)}" style="background:none;border:none;color:var(--green-text);font-weight:700;cursor:pointer;font-size:.85em;padding:0 0 0 6px">View</button>`
+                : '';
+            return `<div style="flex:1;min-width:150px">
+                <div style="font-size:.78em;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#78838f;margin-bottom:4px">${escHtml(t.label)}</div>
+                <span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:.85em;font-weight:700;${SC_ADMIN_PILL_STYLE[status.cls]}">${escHtml(status.label)}</span>${docLink}
+            </div>`;
+        }).join('');
+
+        return `<div class="inc-card">
+            <div class="inc-head"><span class="inc-child">${escHtml(s.name)}</span></div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">${cells}</div>
+        </div>`;
+    }).join('');
+
+    const banner = (expired || soon || none)
+        ? `<p class="muted" style="margin-bottom:12px">
+             ${expired ? `<strong style="color:var(--tang-dark)">${expired} expired</strong>` : ''}
+             ${expired && (soon || none) ? ' · ' : ''}
+             ${soon ? `<strong style="color:var(--mustard-dark)">${soon} due within 30 days</strong>` : ''}
+             ${soon && none ? ' · ' : ''}
+             ${none ? `${none} with nothing on file` : ''}
+           </p>`
+        : '<p class="muted" style="margin-bottom:12px">Everyone is current.</p>';
+
+    wrap.innerHTML = staff.length
+        ? banner + `<div class="inc-list">${cards}</div>`
+        : '<p class="empty-hint">No active staff.</p>';
+
+    wrap.querySelectorAll('.sc-view-btn').forEach(b => {
+        b.addEventListener('click', () => _scViewDocument(b.dataset.path));
+    });
+}
+
+async function _scViewDocument(path) {
+    try {
+        const url = await fetchStaffCredentialUrl(path);
+        if (!url) { showToast('Could not open that document.', 'error'); return; }
+        window.open(url, '_blank', 'noopener');
+    } catch (e) {
+        showToast('Error: ' + (e.message || e), 'error');
+    }
+}

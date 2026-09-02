@@ -140,6 +140,9 @@ const ENTRIES = [
                 // and the toast helper from it.
                 'js/staff/staff-incident.js',
                 'js/staff/staff-schedule.js',
+                // Reads slStaffId/slPin/slToast and compressImageToDataUrl;
+                // slOpenAccountTab is called by staff-nav.
+                'js/staff/staff-credentials.js',
                 // Last: the head count reads slStaffId/slPin/slRoomId and the
                 // toast helper from staff-log, and staff-nav calls into it.
                 'js/staff/staff-headcount.js',

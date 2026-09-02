@@ -259,11 +259,19 @@
             <div class="sl-account-head">
                 <span id="slAccountName" class="sl-room-title"></span>
             </div>
+
             <div class="tab-placeholder">
                 <h2>Your details and training</h2>
-                <p>Display name, mobile, PIN, and CPR / first-aid expiry dates.
-                   Coming next — the office keeps these for now.</p>
+                <p>Display name, mobile, and PIN are coming next — the office keeps
+                   these for now. CPR / first-aid and TB test records are below.</p>
             </div>
+
+            <!-- Your own CPR/first-aid and TB test records — asked for
+                 directly, 2026-09-02. One row per credential TYPE, showing
+                 the latest one on file; "+ Add" opens slCredentialSheet
+                 below. See js/staff/staff-credentials.js. -->
+            <div id="slCredentialsBody" class="sl-credentials"><p class="sl-empty">Loading…</p></div>
+
             <!-- Workers' comp lives here rather than on a child's sheet: it is
                  about the person holding the phone, not anyone on the roster. -->
             <button type="button" id="slInjuryBtn" class="sl-injury-btn">🚑 Report a work injury</button>
@@ -600,6 +608,48 @@
                     <span>I had to stop work or go home because of this</span>
                 </label>
                 <button type="submit" id="slInjSubmitBtn" class="btn-primary sl-btn">Report the injury</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- CPR/first-aid + TB test entry sheet — see js/staff/staff-credentials.js -->
+    <div id="slCredentialSheet" class="sl-sheet hidden">
+        <div class="sl-sheet-inner">
+            <div class="sl-sheet-head">
+                <span class="sl-sheet-name" id="slCredSheetTitle">Add a record</span>
+                <button type="button" id="slCredCancel" class="sl-link-btn">Cancel</button>
+            </div>
+
+            <form id="slCredentialForm">
+                <input type="hidden" id="slCredType">
+                <label class="sl-field">
+                    <span>Date completed</span>
+                    <input type="date" id="slCredCompleted" required>
+                </label>
+                <label class="sl-field">
+                    <span>Good until <span class="sl-optional">(if known)</span></span>
+                    <input type="date" id="slCredExpires">
+                </label>
+                <label class="sl-field" id="slCredLabelField">
+                    <span>What is this <span class="sl-optional">(optional)</span></span>
+                    <input type="text" id="slCredLabel" placeholder="Issuing organization, course name…">
+                </label>
+
+                <p class="sl-hint">A photo or a scanned copy both work. You can log the
+                   dates now and attach the document later if you don't have it on hand.</p>
+                <div class="sl-doc-btns">
+                    <label class="sl-doc-btn">📷 Take a photo
+                        <input type="file" id="slCredPhotoInput" class="hidden"
+                               accept="image/*" capture="environment">
+                    </label>
+                    <label class="sl-doc-btn">⬆ Upload a file
+                        <input type="file" id="slCredFileInput" class="hidden"
+                               accept="image/jpeg,image/png,image/webp,application/pdf">
+                    </label>
+                </div>
+                <p class="sl-doc-status" id="slCredDocStatus"></p>
+
+                <button type="submit" id="slCredSubmitBtn" class="btn-primary sl-btn">Save</button>
             </form>
         </div>
     </div>

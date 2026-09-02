@@ -913,6 +913,11 @@ function apOnToolOpened(tool) {
         if (tool.key === 'hrHandbook' && typeof renderStaffInjuriesTool === 'function') renderStaffInjuriesTool();
         if (tool.key === 'hrHandbook' && typeof renderStaffWriteUpsTool === 'function') renderStaffWriteUpsTool();
         if (tool.key === 'hrHandbook' && typeof renderHrPoliciesTool === 'function') renderHrPoliciesTool();
+        // Credentials — full-role only, same gate as Injury Reports (a TB
+        // test result is medical information about an employee). Rendered
+        // unconditionally alongside the other three sub-tabs so switching
+        // straight to it never shows a stale/empty pane.
+        if (tool.key === 'hrHandbook' && typeof renderStaffCredentialsTool === 'function') renderStaffCredentialsTool();
         if (tool.key === 'scenario')  apRenderScenario();
         if (tool.key === 'enrollCap' && typeof renderEnrollCapTool === 'function') renderEnrollCapTool();
         if (tool.key === 'capacityOverview' && typeof renderCapacityOverviewTool === 'function') {
@@ -2294,16 +2299,18 @@ function apSwitchTimeClockTab(key) {
     }
 }
 
-// HR & Handbook: "Policies" / "Write-ups" / "Injury Reports" tabs. Injury
-// Reports is hidden client-side for anyone but a `full` admin — see
-// applyRoleRestrictions() in admin-safety.js — same reasoning `staffInjury`
-// carried as its own AP_FULL_ONLY_KEYS entry before this consolidation.
+// HR & Handbook: "Policies" / "Write-ups" / "Injury Reports" / "Credentials"
+// tabs. Injury Reports and Credentials are both hidden client-side for
+// anyone but a `full` admin — see applyRoleRestrictions() in
+// admin-settings.js — same reasoning `staffInjury` carried as its own
+// AP_FULL_ONLY_KEYS entry before this consolidation.
 function apSwitchHrTab(key) {
     document.querySelectorAll('#apHrTabs [data-ap-hr-tab]').forEach(b =>
         b.classList.toggle('is-on', b.dataset.apHrTab === key));
     document.getElementById('apHrTabPolicies')?.classList.toggle('ap-hidden-tool', key !== 'policies');
     document.getElementById('apHrTabWriteUps')?.classList.toggle('ap-hidden-tool', key !== 'writeups');
     document.getElementById('apHrTabInjury')?.classList.toggle('ap-hidden-tool', key !== 'injury');
+    document.getElementById('apHrTabCredentials')?.classList.toggle('ap-hidden-tool', key !== 'credentials');
 }
 
 // ── Ratio Step & Next Child, embedded in Build Staff Schedule ──────────

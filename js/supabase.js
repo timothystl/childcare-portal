@@ -2468,6 +2468,76 @@ async function adminLogChildEvent(studentId, eventType, occurredAt = null, careD
 }
 
 /**
+ * The signed-in staff member's own CPR/first-aid and TB-test records — the
+ * Account tab's "Your details and training" screen. Never widened to
+ * another staff id; the RPC resolves the caller from their own PIN.
+ * @returns {Promise<Array>} [] on a bad PIN — the RPC returns no rows.
+ */
+async function fetchMyStaffCredentials(staffId, pin) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('staff_list_credentials', {
+        p_staff_id: staffId, p_pin: parseInt(pin, 10),
+    });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/**
+ * Logs a CPR/first-aid renewal or a TB test, with an optional scan/photo of
+ * the document. Goes through an edge function rather than a table write:
+ * staff have no Supabase session, so the PIN is verified server-side and the
+ * write (row + storage object, if a file was attached) happens with the
+ * service role — same shape as uploadChildPhoto.
+ * @param {{credentialType:string, label?:string, completedAt:string,
+ *   expiresAt?:string, documentDataUrl?:string}} entry
+ * @returns {Promise<number>} the new record's id
+ */
+async function submitStaffCredential(staffId, pin, entry) {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/submit-staff-credential`, {
+        method:  'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            apikey:         SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+            staff_id: staffId, pin: String(pin),
+            credential_type: entry.credentialType,
+            label: entry.label || '',
+            completed_at: entry.completedAt,
+            expires_at: entry.expiresAt || null,
+            document: entry.documentDataUrl || null,
+        }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || data.error) {
+        throw new Error(data?.error || 'upload_failed');
+    }
+    return data.id;
+}
+
+/**
+ * Admin (full role only): every staff member's latest CPR/first-aid and
+ * TB-test record, for the HR & Handbook → Credentials tool. The database
+ * gate (admin_role() = 'full') is authoritative; this call simply reflects
+ * whatever it decides to return.
+ */
+async function fetchAdminStaffCredentials() {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_list_staff_credentials');
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+/** Short-lived signed URL for viewing an attached credential document. */
+async function fetchStaffCredentialUrl(path, ttlSeconds = 300) {
+    if (!sbClient || !path) return null;
+    const { data, error } = await sbClient.storage.from('staff-credentials').createSignedUrl(path, ttlSeconds);
+    if (error) throw friendlyError(error);
+    return data?.signedUrl || null;
+}
+
+/**
  * A child's logged day, newest last — the parent Today feed and the full-day
  * report both read this. RLS restricts it to the signed-in parent's children,
  * so there is no family filter here on purpose: the database owns that rule.

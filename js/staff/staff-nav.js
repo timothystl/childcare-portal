@@ -80,6 +80,7 @@ function slGoTab(key) {
         // Same rule as the parent app: opening the tab is what reads the
         // messages, so it cannot happen at sign-in.
         if (key === 'messages' && typeof slOpenMessagesTab === 'function') slOpenMessagesTab();
+        if (key === 'account' && typeof slOpenAccountTab === 'function') slOpenAccountTab();
     }
 }
 
