@@ -579,6 +579,51 @@
     padding: 14px; font-size: 1em; font-weight: 800;
     font-family: inherit; cursor: pointer;
 }
+
+/* ── Training & credentials (Account tab) ────────────────────
+   One card per credential type, showing the latest record on file. Status
+   colors reuse the same green/gold/tangerine "something needs attention"
+   language the rest of the app uses (e.g. the Attendance Board's ratio
+   pill), rather than inventing a fourth palette. */
+.sl-credentials { display: grid; gap: 10px; margin: 4px 0 18px; }
+.sl-cred-card {
+    background: #fff; border: 1.5px solid #e3e8ed; border-radius: 14px;
+    padding: 14px 16px;
+}
+.sl-cred-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.sl-cred-label { font-weight: 800; color: var(--navy); font-size: 1em; }
+.sl-cred-status {
+    flex: none; font-size: .74em; font-weight: 800; letter-spacing: .02em;
+    padding: 3px 10px; border-radius: 999px;
+}
+.sl-cred-status.is-none    { background: #eef2f5; color: #5a6673; }
+.sl-cred-status.is-current { background: var(--green-pale); color: var(--green-text); }
+.sl-cred-status.is-soon    { background: var(--sun-pale); color: var(--mustard-dark); }
+.sl-cred-status.is-expired { background: var(--tang-pale); color: var(--ap-deep-tang, var(--tang-dark)); }
+.sl-cred-detail { font-size: .84em; color: #5a6673; margin-top: 4px; }
+.sl-cred-add {
+    margin-top: 10px; width: 100%; min-height: 40px;
+    background: var(--linen); color: var(--navy); border: 1px solid var(--border);
+    border-radius: 10px; font-family: inherit; font-size: .88em; font-weight: 700;
+    cursor: pointer;
+}
+
+/* Document capture in the credential sheet — same two-button pattern as the
+   parent app's own immunization-record upload (parent-documents.js). */
+.sl-doc-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.sl-doc-btn {
+    flex: none; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;
+    background: var(--linen); color: var(--navy); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 14px; font-family: inherit; font-size: .85em;
+    font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.sl-doc-status {
+    margin: 8px 0 0; font-size: .82em; line-height: 1.5; color: var(--text-muted); min-height: 1.2em;
+}
+.sl-doc-status.is-ok  { color: var(--green-text); }
+.sl-doc-status.is-err { color: var(--tang-dark); }
 .sl-check {
     display: flex; align-items: flex-start; gap: 10px;
     margin: 4px 0 18px; font-size: .92em; line-height: 1.45; color: var(--navy);

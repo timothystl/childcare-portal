@@ -897,6 +897,13 @@ function applyRoleRestrictions() {
     // whole tool can't be gated the way Payroll is — only this one tab.
     _hide('apHrTabInjury');
     _hide('apHrPillInjury');
+    // Credentials carries the same medical-information reasoning as Injury
+    // Reports (a TB test result), so it gets the same full-only gate — the
+    // database side (admin_list_staff_credentials()) already enforces this
+    // independently; this is the UI half so `restricted`/`staff` never see a
+    // control that would return nothing.
+    _hide('apHrTabCredentials');
+    _hide('apHrPillCredentials');
 
     if (currentAdminRole === 'restricted') {
         // Staffing tab: the schedule planner, plus the Staff Roster (names,

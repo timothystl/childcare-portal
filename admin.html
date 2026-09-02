@@ -1831,6 +1831,7 @@
                     <button class="bk-pill is-on" data-ap-hr-tab="policies">Policies</button>
                     <button class="bk-pill" data-ap-hr-tab="writeups">Write-ups</button>
                     <button class="bk-pill" data-ap-hr-tab="injury" id="apHrPillInjury">Injury Reports</button>
+                    <button class="bk-pill" data-ap-hr-tab="credentials" id="apHrPillCredentials">Credentials</button>
                 </div>
 
                 <div id="apHrTabPolicies">
@@ -1847,6 +1848,14 @@
                      #staffInjuriesBody id, same renderStaffInjuriesTool(). -->
                 <div id="apHrTabInjury" class="ap-hidden-tool">
                     <div id="staffInjuriesBody"></div>
+                </div>
+
+                <!-- CPR/first-aid and TB test records, self-uploaded from the
+                     staff app's Account tab (js/staff/staff-credentials.js).
+                     Full-role only — same reasoning as Injury Reports, a TB
+                     test result is medical information about an employee. -->
+                <div id="apHrTabCredentials" class="ap-hidden-tool">
+                    <div id="staffCredentialsBody"></div>
                 </div>
             </section>
 

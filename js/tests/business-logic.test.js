@@ -2447,6 +2447,98 @@ describe('Authorize.net is fully retired — one processor, no silent second pat
     });
 });
 
+// ── Staff credentials (CPR/first-aid, TB tests) ─────────────────
+// Asked for directly 2026-09-02: staff upload their own certification
+// documents from the Account tab; the office reads the same data back in
+// HR & Handbook → Credentials. Two real bugs were caught and fixed live
+// while building this, before either was ever queried by a real caller —
+// both are guarded here so neither can quietly come back.
+describe('staff credentials', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+
+    // Copy of _scAdminStatus()/scStatus()'s pure logic (admin-safety.js /
+    // staff-credentials.js) — both files compute the same four states off a
+    // plain DATE string, and this is tested once rather than twice.
+    function credentialStatus(expiresAt, todayIso) {
+        if (!expiresAt) return 'current';
+        const soonBy = new Date(`${todayIso}T00:00:00`);
+        soonBy.setDate(soonBy.getDate() + 30);
+        const soon = soonBy.toISOString().slice(0, 10);
+        if (expiresAt < todayIso) return 'expired';
+        if (expiresAt <= soon) return 'soon';
+        return 'current';
+    }
+
+    test('four states: none is the caller\'s job, not this function\'s', () => {
+        expect(credentialStatus(null, '2026-09-02')).toBe('current');       // "on file", no expiry tracked
+        expect(credentialStatus('2026-08-01', '2026-09-02')).toBe('expired');
+        expect(credentialStatus('2026-09-15', '2026-09-02')).toBe('soon');   // within 30 days
+        expect(credentialStatus('2027-01-01', '2026-09-02')).toBe('current');
+    });
+
+    // ⚠️ Both status functions originally computed "today" with
+    // `new Date().toISOString().slice(0,10)` — the device's UTC date, which
+    // in the evening in Central time is already tomorrow. Caught before
+    // shipping: re-verify neither file regresses back to it.
+    test('neither status function computes "today" in UTC', () => {
+        [
+            ['js/admin/admin-safety.js', 'function _scAdminStatus'],
+            ['js/staff/staff-credentials.js', 'function scStatus'],
+        ].forEach(([file, marker]) => {
+            const src = read(file);
+            const start = src.indexOf(marker);
+            expect(start).toBeGreaterThan(-1);
+            // A fixed window past the declaration comfortably covers the
+            // "today"/"soon" lines without needing to brace-match the
+            // function's real end.
+            const window = src.slice(start, start + 500);
+            expect(window.includes('America/Chicago')).toBe(true);
+            expect(window.includes('toISOString().slice(0, 10)')).toBe(false);
+        });
+    });
+
+    // ⚠️ The live version of this gate was `IF admin_role() <> 'full' THEN
+    // RETURN`, which never fires for a caller with NO admin_roles entry at
+    // all (a parent's own Supabase Auth session, most notably) — `NULL <>
+    // 'full'` is NULL, and `IF NULL THEN` does not take the branch. Verified
+    // live against the real database before the COALESCE fix: a rolled-back
+    // probe as an unrecognized email got real rows back. Guarded here so the
+    // migration file — which a future edit is more likely to touch than the
+    // live function — can't drift back to the unsafe form.
+    test('admin_list_staff_credentials guards the NULL-admin_role() case', () => {
+        const mig = read('supabase/migrations/20260902030420_add_staff_credentials.sql');
+        expect(mig.includes("COALESCE(admin_role(), '') <> 'full'")).toBe(true);
+        expect(mig.includes("IF admin_role() <> 'full' THEN")).toBe(false);
+    });
+
+    test('the table has no anon/authenticated grant — every access is a SECURITY DEFINER RPC', () => {
+        const mig = read('supabase/migrations/20260902030420_add_staff_credentials.sql');
+        expect(mig.includes('REVOKE ALL ON staff_credentials FROM anon, authenticated, PUBLIC')).toBe(true);
+    });
+
+    test('a credential is always attributed to the PIN-verified caller, never a client-supplied id', () => {
+        const fn = read('supabase/functions/submit-staff-credential/index.ts');
+        // Scoped to the actual insert payload, not staff_id_for_pin's own
+        // p_staff_id argument (which legitimately carries the raw client
+        // value — that's the id being VERIFIED, not the one being trusted).
+        const insertBlock = fn.slice(fn.indexOf('.insert({'), fn.indexOf('.select("id")'));
+        expect(insertBlock.includes('staff_id: verifiedStaffId')).toBe(true);
+        expect(insertBlock.includes('staff_id: staffId')).toBe(false);
+    });
+
+    test('an object with no row is rolled back, and a failed insert never leaves an orphan', () => {
+        const fn = read('supabase/functions/submit-staff-credential/index.ts');
+        expect(fn.includes('storage.from("staff-credentials").remove([path])')).toBe(true);
+    });
+
+    test('the storage bucket is private and gated to a full admin only', () => {
+        const mig = read('supabase/migrations/20260902030420_add_staff_credentials.sql');
+        expect(mig.includes("'staff-credentials', false")).toBe(true);
+        expect(mig.includes("public.admin_role() = 'full'")).toBe(true);
+    });
+});
+
 // ---- Summary ----
 
 // ── Cost to add staff (Daily Staffing Requirement) ──────────────

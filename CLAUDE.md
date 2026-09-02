@@ -5002,6 +5002,90 @@ church** and is what the rest of the site publishes. A parent or tax preparer
 calling about childcare should reach MDO. License number is deliberately blank
 (none supplied); its row is removed rather than blocking the document.
 
+## Staff credentials — CPR/first-aid and TB test tracking (2026-09-02)
+
+Asked for directly: replace the Staff app's Account tab placeholder
+("Display name, mobile, PIN, and CPR / first-aid expiry dates. Coming
+next…") with a real screen — staff upload their own certification
+documents, and the center's biannual TB tests are tracked the same way.
+
+`add_staff_credentials.sql` (**applied and verified in production**) adds
+`staff_credentials` — one row per credential **event** (a cert renewal, a TB
+test), not one row per staff member, so history is kept rather than
+overwritten. "Current" is read off the latest row per `(staff_id,
+credential_type)`. `credential_type` also allows `'other'` for future
+flexibility; nothing in this pass builds UI for it.
+
+- **Staff read their own records** through `staff_list_credentials(p_staff_id,
+  p_pin)` — same PIN-resolves-the-caller shape as `staff_my_schedule()`, no
+  parameter widens it to another staff member.
+- **Submitting a record (with or without a document) is one edge function**,
+  `submit-staff-credential`, not a table write or a second RPC — mirrors
+  `upload-child-photo`'s posture exactly: the PIN is verified server-side,
+  and the row + storage object (if a file was attached) are written with the
+  service role. A record is always attributed to the PIN-verified caller;
+  nothing in the request body can point it at someone else. A failed row
+  insert rolls the storage object back, so a bad write can't leave an
+  orphaned file nothing ever references.
+- **The office reads everyone's latest record** via `admin_list_staff_credentials()`
+  — **`full` role only**, from the start. A TB test result is medical
+  information about an employee, the same class `staff_injury_reports`
+  already carries ("names an employee, their body, and where they were
+  treated") — this was gated on `admin_role() = 'full'` directly rather than
+  `is_admin()`, deliberately not repeating the NEW-6/SX6 mistake this file
+  already documents for two other tables.
+- **Storage**: a new private `staff-credentials` bucket (8 MB, PDF/JPEG/PNG/
+  WebP), written only by the edge function's service role. The one storage
+  policy is `SELECT` for `authenticated` where `admin_role() = 'full'` — same
+  gate as the RPC, so a signed URL can never be minted for anyone else.
+
+### ⚠️ A real access-control bug, caught live before anything could read it
+
+The first version of `admin_list_staff_credentials()` gated on
+`IF admin_role() <> 'full' THEN RETURN; END IF;`. `admin_role()` returns
+**NULL**, not a string, for any caller with no `admin_roles` entry at all —
+a parent's own real Supabase Auth session, most notably (`parent_portal_option_b_accounts`
+gave families real auth users back in August). `NULL <> 'full'` is NULL, and
+`IF NULL THEN` does **not** take the branch — unlike a `WHERE`/`USING`
+clause, where a NULL condition excludes the row, an `IF` that evaluates to
+NULL just falls through to whatever comes next. Verified directly against
+the live database before shipping: a rolled-back probe as an email with no
+`admin_roles` entry got the table's real rows back under the un-coalesced
+version of this guard. Fixed with `COALESCE(admin_role(), '') <> 'full'`,
+and re-verified three ways in the same session — a full admin sees the row,
+a `restricted` admin gets zero, and the no-role case now also gets zero.
+Guarded in `js/tests/business-logic.test.js` so the migration file can't
+drift back to the unsafe form.
+
+### ⚠️ A second bug, lower stakes but the same lesson: "today" was computed in UTC
+
+Both the staff-side status pill (`js/staff/staff-credentials.js`) and the
+admin-side one (`js/admin/admin-safety.js`) originally compared `expires_at`
+(a plain `DATE`) against `new Date().toISOString().slice(0, 10)` — the
+device's **UTC** date, which in the evening in Central time is already
+tomorrow. A credential could read "expired" or "due soon" several hours
+early, or a fresh entry's suggested dates could land a day off. Same
+FS12-class mistake this file has already recorded once for CSV imports.
+Fixed by reading `toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })`
+instead, matching the `careDate` pattern edge functions already use
+elsewhere in this app. Guarded by a structural test asserting neither status
+function's source contains the UTC form.
+
+`npm test` — 287/287 (7 new guards). `npm run build` — `dist/staff.min.js`
+and `dist/admin.min.js` rebuilt and grepped for `slOpenAccountTab`/
+`slCredentialSheet` and `renderStaffCredentialsTool`/`admin_list_staff_credentials`
+respectively, to confirm both halves actually shipped in what each page
+loads. Also verified in a real (Playwright/Chromium) browser: the Account
+tab summary renders correct status pills and dates for seeded data, the
+add-record sheet pre-fills sensible completion/expiry dates, a photo upload
+is compressed to JPEG and a PDF upload is preserved as `application/pdf`
+(neither run through the other's path), and the admin tool renders a
+per-staff, per-type breakdown with a correct expired/due-soon/none-on-file
+count banner.
+
+`v2.12.0` — a minor bump, not a patch, since this is a new feature rather
+than a fix.
+
 ## Finance summary API (for the church ChMS finance integration)
 
 `supabase/functions/finance-summary/index.ts` — `GET`, header `X-Api-Key: <FINANCE_API_KEY>`, returns 401 if missing/wrong. Returns `{ updated_at, accounts: [], budget: [...] }` for the current month + 12 prior (13 months, oldest first). Deploy like any other edge function (paste into the Supabase dashboard editor or `supabase functions deploy finance-summary`) and set the `FINANCE_API_KEY` secret — neither is automatic.
