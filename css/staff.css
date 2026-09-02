@@ -23,7 +23,7 @@
 /* ── Sign in ─────────────────────────────────────────────── */
 
 .sl-card {
-    background: #fff;
+    background: var(--cream);
     border-radius: 16px;
     box-shadow: 0 4px 24px rgba(1, 41, 74, .10);
     padding: 30px 26px;
