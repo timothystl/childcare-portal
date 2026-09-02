@@ -447,8 +447,33 @@ function _fhVisibleRows() {
 // would let this card call a month fine while the statement refuses it.
 let _fhCoverage = null;      // cached per Ledger session
 let _fhCoverageLoading = false;
+let _fhCoverageStart   = undefined; // 'YYYY-MM' or null; undefined = not loaded yet
 
 function _fhCoverageInvalidate() { _fhCoverage = null; }
+
+// ⚠️ The billing PILOT (2026-09) only invoices 4-5 test families — most
+// registered families are deliberately not being billed yet, so of course
+// their care days show no payment. The banner's own assumption ("care
+// happened, a payment should eventually appear") is only true once the
+// center is actually billing everyone, which the director controls with
+// this setting: no month before it is ever flagged, regardless of care days
+// or payments. Unset (the default for every center that hasn't opted in)
+// means no suppression at all — today's exact behavior. This does NOT touch
+// family_care_statement()'s own per-family refusal, which stays correct
+// unconditionally: a specific family's real statement must never say a
+// number that's short, pilot or not.
+async function _fhCoverageStartMonth() {
+    if (_fhCoverageStart !== undefined) return _fhCoverageStart;
+    try { _fhCoverageStart = (await fetchSetting('billing_coverage_start_month')) || null; }
+    catch (_) { _fhCoverageStart = null; }
+    return _fhCoverageStart;
+}
+
+async function _fhSaveCoverageStartMonth(value) {
+    await upsertSetting('billing_coverage_start_month', value || null);
+    _fhCoverageStart = value || null;
+    await _fhRenderCoverage();
+}
 
 async function _fhRenderCoverage() {
     const el = _fhEl('fhCoverage');
@@ -468,10 +493,32 @@ async function _fhRenderCoverage() {
     }
     if (!_fhCoverage) return;
 
+    const startMonth = await _fhCoverageStartMonth();
+
     // Only the months that actually block something: care on record, nothing
     // received. A month with neither is simply a month the center was closed.
-    const gaps = _fhCoverage.filter(m => (m.care_days || 0) > 0 && (m.payments || 0) === 0);
-    if (!gaps.length) { el.innerHTML = ''; return; }
+    // A month before the configured start is a month the pilot deliberately
+    // isn't billing yet — 'YYYY-MM' strings compare chronologically as-is.
+    const gaps = _fhCoverage.filter(m =>
+        (m.care_days || 0) > 0 && (m.payments || 0) === 0
+        && (!startMonth || m.month >= startMonth));
+    const suppressed = startMonth
+        ? _fhCoverage.filter(m => (m.care_days || 0) > 0 && (m.payments || 0) === 0 && m.month < startMonth)
+        : [];
+
+    const settingRow = `<p class="fh-coverage-setting">
+        ${startMonth
+            ? `Only tracking coverage from <strong>${escHtml(_fhMonthLabel(startMonth))}</strong> on
+               (${suppressed.length} earlier ${suppressed.length === 1 ? 'month is' : 'months are'} intentionally not billed yet — the pilot).`
+            : `Piloting invoices with a few families? Set when full-center billing starts and earlier months won't warn.`}
+        <button type="button" class="fh-link-btn" id="fhCoverageStartBtn">${startMonth ? 'Change' : 'Set start month'}</button>
+    </p>`;
+
+    if (!gaps.length) {
+        el.innerHTML = startMonth && suppressed.length ? `<div class="fh-coverage fh-coverage-quiet">${settingRow}</div>` : '';
+        _fhEl('fhCoverageStartBtn')?.addEventListener('click', () => _fhPromptCoverageStart(startMonth));
+        return;
+    }
 
     el.innerHTML = `<div class="fh-coverage">
         <div class="fh-coverage-head">⚠ ${gaps.length} ${gaps.length === 1 ? 'month has' : 'months have'}
@@ -484,7 +531,19 @@ async function _fhRenderCoverage() {
             <span>${m.care_days} care ${m.care_days === 1 ? 'day' : 'days'} across
                   ${m.families} ${m.families === 1 ? 'family' : 'families'}</span>
         </li>`).join('')}</ul>
+        ${settingRow}
     </div>`;
+    _fhEl('fhCoverageStartBtn')?.addEventListener('click', () => _fhPromptCoverageStart(startMonth));
+}
+
+function _fhPromptCoverageStart(current) {
+    const input = prompt(
+        'Stop warning about payment coverage before this month (e.g. when you open billing to the whole center).\n\nEnter as YYYY-MM, or leave blank to warn about every month again.',
+        current || '');
+    if (input === null) return; // cancelled
+    const value = input.trim();
+    if (value && !/^\d{4}-\d{2}$/.test(value)) { alert('Enter a month as YYYY-MM, e.g. 2026-11.'); return; }
+    _fhSaveCoverageStartMonth(value || null);
 }
 
 function _fhRenderLedger() {

@@ -2744,6 +2744,35 @@ describe('payment import duplicate guard and coverage', () => {
         // Recording a payment must drop the cache, or the gap shows as stale.
         expect(hub.includes('_fhCoverageInvalidate();')).toBe(true);
     });
+
+    // ⚠️ Added 2026-09-02: the September pilot only invoices 4-5 test
+    // families on purpose, so most registered families' care days will
+    // never show a payment until the office opens billing to more of the
+    // center. The banner's own assumption didn't account for that.
+    test('a configured coverage start month suppresses earlier gaps, unset suppresses nothing', () => {
+        const gatesAt = hub.indexOf('const gaps = _fhCoverage.filter(m =>');
+        expect(gatesAt).toBeGreaterThan(-1);
+        const gateBody = hub.slice(gatesAt, hub.indexOf(';', gatesAt));
+        expect(gateBody.includes('!startMonth || m.month >= startMonth')).toBe(true);
+        // Default (unset) must not silently disable the warning for every
+        // center that never opts in — the read falls back to null/no-op.
+        expect(hub.includes("fetchSetting('billing_coverage_start_month')")).toBe(true);
+        expect(hub.includes('_fhCoverageStart = null;')).toBe(true);
+    });
+
+    test('the coverage start-month setting persists through the generic settings table, not a new one', () => {
+        const saveAt = hub.indexOf('async function _fhSaveCoverageStartMonth');
+        const body = hub.slice(saveAt, hub.indexOf('\n}', saveAt));
+        expect(body.includes("upsertSetting('billing_coverage_start_month', value || null)")).toBe(true);
+    });
+
+    test('a suppressed gap never suppresses family_care_statement\'s own per-family refusal', () => {
+        // The pilot setting lives entirely in admin-finance-hub.js; the
+        // statement's own refusal logic must not reference it at all — a
+        // real family's real statement must never say a number that's short.
+        const stmtFn = read('supabase/migrations/family_care_statement.sql');
+        expect(stmtFn.includes('billing_coverage_start_month')).toBe(false);
+    });
 });
 
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
