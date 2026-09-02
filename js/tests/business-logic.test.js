@@ -1757,6 +1757,47 @@ describe('admin-refund-stax-payment — Stax reversal support, wired into the LI
         expect(fnBody.includes('p.refund_of_payment_id')).toBe(true);
         expect(fnBody.includes('allPayments.some(o => o.refund_of_payment_id === p.id)')).toBe(true);
     });
+
+    // ⚠️ Same bug class as billingArSection/#billingPaymentsSection above,
+    // found 2026-09-02: unmarkInvoiceSent() (js/supabase.js) — "Undo a send
+    // stamp — for a bill marked issued by mistake" — existed since early
+    // invoicing work but was only ever called from renderInvoiceList()'s
+    // "Undo send" button in admin-billing.js, which mounts into #invBody —
+    // an id that no longer exists anywhere in admin.html. A real, tested
+    // function with no button a human could ever click. Wired into the LIVE
+    // Ledger drawer instead, same fix as the Refund button.
+    test('unmarkInvoiceSent exists and is a plain revert-to-draft, not a delta write', () => {
+        const start = supabaseJs.indexOf('async function unmarkInvoiceSent');
+        expect(start).toBeGreaterThan(-1);
+        const body = supabaseJs.slice(start, supabaseJs.indexOf('\n}', start));
+        expect(body.includes("status: 'draft'")).toBe(true);
+        expect(body.includes('sent_at: null')).toBe(true);
+        expect(body.includes('sent_to: null')).toBe(true);
+    });
+
+    test('the LIVE Ledger drawer shows Undo send only on a sent invoice with nothing collected against it yet', () => {
+        expect(financeHubJs.includes('async function _fhUndoSend(')).toBe(true);
+        expect(financeHubJs.includes("id=\"fhUndoSendBtn\"")).toBe(true);
+        // Gated in the markup, not just in the handler — a hidden button
+        // is the difference between "can't click it" and "never offered".
+        const gateAt = financeHubJs.indexOf("row.status === 'sent' && !((row.ar?.collected || 0) > 0)");
+        expect(gateAt).toBeGreaterThan(-1);
+    });
+
+    test('Undo send confirms, never silently recalls an email already delivered', () => {
+        const start = financeHubJs.indexOf('async function _fhUndoSend');
+        const body = financeHubJs.slice(start, financeHubJs.indexOf('\n}', start));
+        expect(body.includes('unmarkInvoiceSent(row.ar.invoiceId)')).toBe(true);
+        expect(/confirm\(['"`]/.test(body)).toBe(true);
+        expect(body.toLowerCase().includes('does not') || body.toLowerCase().includes('does not recall')).toBe(true);
+    });
+
+    test('Undo send keeps _fhRows/Bookkeeper in sync afterward, same reload pattern as refund/payment', () => {
+        const start = financeHubJs.indexOf('async function _fhUndoSend');
+        const body = financeHubJs.slice(start, financeHubJs.indexOf('\n}', start));
+        expect(body.includes('await _fhLoad()')).toBe(true);
+        expect(body.includes('_fhRenderDrawer()')).toBe(true);
+    });
 });
 
 describe('Stax payment reconciliation job', () => {

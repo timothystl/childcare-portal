@@ -921,6 +921,7 @@ async function _fhLoadDrawerBody(row) {
                 <button type="button" class="fh-dr-action-btn fh-dr-action-fee" id="fhAddFeeBtn">+ Add a fee</button>
                 <button type="button" class="fh-dr-action-btn fh-dr-action-credit" id="fhAddCreditBtn">+ Add a credit</button>` : ''}
             ${row.status === 'drafted' ? `<button type="button" class="fh-dr-action-btn fh-dr-action-send" id="fhDrSendBtn">Send invoice</button>` : ''}
+            ${(row.status === 'sent' && !((row.ar?.collected || 0) > 0)) ? `<button type="button" class="fh-dr-action-btn fh-dr-action-undo" id="fhUndoSendBtn" title="Puts this invoice back to draft. Does not recall an email already delivered.">Undo send</button>` : ''}
             <button type="button" class="fh-dr-action-btn fh-dr-action-print" id="fhPrintStatementBtn">Print statement</button>
         </div>
         <div id="fhInlineForm"></div>
@@ -980,6 +981,7 @@ async function _fhLoadDrawerBody(row) {
     _fhEl('fhOverrideBtn')?.addEventListener('click', () => _fhShowOverrideForm(row));
     _fhEl('fhApproveBtn')?.addEventListener('click', () => _fhApproveAsIs(row));
     _fhEl('fhDrSendBtn')?.addEventListener('click', () => _fhSendInvoiceRow(row.familyId, _fhEl('fhDrSendBtn')));
+    _fhEl('fhUndoSendBtn')?.addEventListener('click', () => _fhUndoSend(row, _fhEl('fhUndoSendBtn')));
     _fhEl('fhPrintStatementBtn')?.addEventListener('click', () => _fhPrintStatement(row, familyPayments));
     _fhEl('fhRecordPaymentBtn')?.addEventListener('click', () => _fhShowPaymentForm(row));
     _fhEl('fhDrawerCloseFoot')?.addEventListener('click', _fhCloseDrawer);
@@ -1029,6 +1031,39 @@ async function _fhRefundPayment(paymentId, processor, row) {
         if (_fhDrawerRow) await _fhRenderDrawer(); else _fhCloseDrawer();
     } catch (err) {
         alert('Refund failed: ' + err.message);
+    }
+}
+
+/** Puts an issued invoice back to draft — "sent by mistake." unmarkInvoiceSent()
+ *  (js/supabase.js) has existed since this app's earliest invoicing work but was
+ *  only ever wired into the retired billingArSection screen (#invBody, which no
+ *  longer exists in admin.html) — a working, tested function with no button
+ *  anywhere a human could click it. Same failure class as the Refund button
+ *  before it (see this file's own header comment on billingArSection), same fix:
+ *  wire it into the drawer, where a sent invoice is actually looked at.
+ *
+ *  ⚠️ This does not and cannot recall an email already delivered — see the
+ *  confirm() copy below. It only stops OUR OWN system from treating the bill as
+ *  owed: Accounts Receivable stops ageing it, it drops out of "Ready to send"
+ *  reminders, and it becomes editable (fee/credit/override) again. Gated in the
+ *  drawer markup on nothing having been collected against it yet, so this can
+ *  never put a family into the contradictory state of having paid against a
+ *  "draft" invoice. */
+async function _fhUndoSend(row, btn) {
+    if (!row.ar?.invoiceId) return;
+    if (!confirm('Put this invoice back to draft?\n\nThis stops it aging in Accounts Receivable and lets you edit or re-send it. It does NOT recall an email already delivered to the family — if one went out, follow up with them directly.')) {
+        return;
+    }
+    if (btn) btn.disabled = true;
+    try {
+        await unmarkInvoiceSent(row.ar.invoiceId);
+        showToast('Invoice put back to draft.');
+        await _fhLoad();
+        _fhDrawerRow = _fhRows.find(r => String(r.familyId) === String(row.familyId)) || null;
+        if (_fhDrawerRow) await _fhRenderDrawer(); else _fhCloseDrawer();
+    } catch (err) {
+        alert('Could not undo that: ' + (err.message || err));
+        if (btn) btn.disabled = false;
     }
 }
 

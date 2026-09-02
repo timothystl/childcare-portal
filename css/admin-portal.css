@@ -1381,6 +1381,8 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fh-dr-action-send:hover   { background: var(--navy-lt); }
 .fh-dr-action-print  { background: #fff; border: 1px solid var(--border); color: var(--navy); }
 .fh-dr-action-print:hover  { background: var(--linen); }
+.fh-dr-action-undo   { background: #fff; border: 1px solid var(--ap-deep-tang); color: var(--ap-deep-tang); }
+.fh-dr-action-undo:hover   { background: var(--ap-deep-tang); color: #fff; }
 
 .fh-override-btn {
     background: #fff; border: 1px solid var(--tang-soft, #f2b89a); color: var(--tang-dark);
