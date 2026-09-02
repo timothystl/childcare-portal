@@ -51,6 +51,12 @@ function slShow(screen) {
     ['slPinScreen', 'slRoomScreen', 'slRosterScreen'].forEach(id => {
         slEl(id)?.classList.toggle('hidden', id !== screen);
     });
+    // .sl-app-open in staff.css — only the tab-bar shell needs the body to
+    // stop being the sign-in page's own padded, min-height:100vh wrapper.
+    // Without this the shell sits inside that wrapper's own box model and
+    // the document comes out taller than the screen, which is what let the
+    // tab bar drift instead of staying locked to the bottom.
+    document.body.classList.toggle('sl-app-open', screen === 'slRosterScreen');
 }
 
 // ── Sign in ─────────────────────────────────────────────────
