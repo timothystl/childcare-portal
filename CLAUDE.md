@@ -229,18 +229,105 @@ rebuilt and grepped for `apFamilyLookupPanelHtml`/`_flToggleChild` to
 confirm the panel actually shipped in the bundle, per this file's own
 "it shipped half-live" standing check.
 
-**Follow-up (same day): the child calendar drops Saturday/Sunday
-entirely**, rather than showing them grayed out. `_flCalGridHtml()` is a
-5-column Mon–Fri grid now — a weekday's column is `dow - 1`, a fixed
-function of the date itself, so the sequence of kept days lands in the
-right column without a running counter (a Fri→Mon jump crosses exactly one
-Sat+Sun pair, a full row-width skip). Verified with a Node harness across
-five months whose 1st falls on each different weekday (including a month
-starting on a Saturday) — every emitted cell is a genuine weekday, cell
-count is always a multiple of 5, and the now-dead `.weekend` CSS rule was
-removed rather than left unreferenced (a one-line rule, not worth the
-"leave it for a possible revert" treatment bigger retired tools get
-elsewhere in this file).
+### Design refinement pass — matched to the real design source, not just the bones (2026-09-03)
+
+The first pass above shipped the panel's structure but drifted from the
+actual design source on several visible points, plus one genuine layout bug
+(`.fl-children` was `flex-direction: column` — two siblings like the Delgado
+family's Sofia/Mateo stacked one atop the other instead of sitting side by
+side, contradicting the design's own `flex-wrap` row and the whole reason
+`.fl-cal-row` exists). Fixed by switching `.fl-children` to `flex-wrap`,
+`flex: 1 1 220px` per pill — verified in a Playwright screenshot (below),
+not just read from the CSS.
+
+- **A family is a plain row now, not a boxed card.** The design never wraps
+  a family in its own background/border — only the child pills and the
+  expanded calendar get a surface. `.fl-family-card` (bordered, warm-gray
+  fill) → `.fl-family-row` (`border-bottom` hairline only, matching the
+  design's own row separator).
+- **Edit / Edit Calendar / the "⋮" menu (Archive, Lock/Unlock registration,
+  Unlock login, Delete) are now the exact controls Family Directory's own
+  list row renders** — `fm-edit-btn` / `fm-cal-btn` / `fm-kebab*`
+  (`admin-families.js`, `renderFamiliesList()`) — not a second,
+  Lookup-specific implementation. This panel emits the same classes +
+  `data-family-id`, so admin-families.js's existing document-level click
+  handler wires them for free; `_flEditFamily()` and its `data-fl-edit`
+  wiring in `admin-portal.js` are deleted, not kept as a second path.
+  `.fl-actions .fm-edit-btn/.fm-cal-btn` overrides only the *sizing* (this
+  panel's larger buttons vs. the Directory's dense list) — the Directory's
+  own colors/behavior are untouched. "Edit Calendar" vs. "Enter Calendar"
+  uses the identical `allRegistrations.some(...)` condition the Directory
+  button already does.
+- **"PIN set" badges** (`family-pin-badge`, same class Family Directory
+  uses) next to each parent's name, and **Reg Locked / Login Locked / Summer
+  badges** in the actions row — all read straight off the family row's
+  existing `has_pin`/`has_parent2_pin`/`registration_locked`/`login_locked`/
+  `group` fields (already fetched by `fetchAllFamilies()`), nothing new to
+  load.
+- **Allergy chips are real pill badges now**, not colored text. Reused
+  `_FM_SEV_STYLE` (`admin-families.js`) — the same severe/sensitivity/note
+  palette the real Edit Family modal already renders — instead of inventing
+  a second color scheme for a read-only view. The day-count on each child
+  pill (`fl-child-days`) became a pill too (green-pale/green-text), matching
+  the design; no JS change needed, CSS only.
+- **5-day (Monday–Friday) calendar grid**, replacing the 7-column Sun–Sat
+  grid with grayed-out weekends. The center is closed weekends (same reason
+  staff time-off's `weekday` column is constrained `0..4`), so a weekend
+  date is never rendered as a cell at all — nothing to gray out, because
+  care never happens there. `_flCalGridHtml()` computes a Monday-indexed
+  weekday per date and skips Saturday/Sunday entirely; since every rendered
+  week contributes exactly 5 cells, a new row starts naturally with no extra
+  bookkeeping.
+- **The calendar card's header collapsed from two rows to one flex-wrap
+  row** ("Days of care" label + "Change days of care" button + a bordered
+  month-nav pill + a circular close button), matching the design's own
+  `flex-wrap` header instead of stacking the nav on its own line
+  underneath.
+- **`.ap-panel.tone-green`** added (matching the design's default green top
+  accent, `--green`) alongside the existing `tone-gold`.
+
+⚠️ **A real bug found only by actually opening the kebab menu, not by
+reading the diff:** `.ap-panel` sets `overflow: hidden` (so its top accent
+border respects the rounded corners) — which also clips `fm-kebab-menu`'s
+dropdown, since it's `position: absolute` inside a panel that hides
+overflow. The menu rendered with its bottom item ("Delete family") and its
+right edge cut off. `apPanel()` gained an optional `cls` parameter; this
+panel passes `cls: 'ap-panel-overflow-visible'`, a new opt-out utility class
+— safe here because nothing in this panel relies on being clipped to the
+corners. Caught by literally screenshotting the open menu in the Playwright
+harness below, not from the source.
+
+**Verified in a real browser this time**, not just the Node harness the
+first pass used: a standalone HTML page loading the actual `css/styles.css`
++ `css/admin-portal.css` + `css/admin.css` and the real
+`admin-family-lookup.js` unmodified (same mock-globals approach as the Node
+harness — `escHtml`/`apPanel`/`ROOMS`/`_FM_SEV_STYLE`/mock family+
+registration data), driven with Playwright/Chromium (pre-installed in this
+environment) at both a full-width (1180px) and a narrow (420px, below the
+900px drawer breakpoint) viewport. Confirmed: Sofia and Mateo Delgado's
+pills sit side by side when collapsed *and* their calendars render side by
+side when both are expanded; the kebab menu opens with all four items
+visible and unclipped; the 5-day grid places September 1, 2026 (a Tuesday)
+in the correct column with no stray weekend cells; narrow-width layout
+wraps every row to a single column with no overflow. `npm test` — 298/298
+(still no drift-guarded function in this panel). `npm run build` —
+`dist/admin.min.js` rebuilt and grepped for `ap-panel-overflow-visible` to
+confirm the overflow fix specifically (not just the panel generally)
+shipped in the bundle.
+
+⚠️ **A concurrent session dropped the same weekend columns independently,
+and the two landed within the same half hour.** `claude/family-lookup-
+director-dashboard-m71fgi`'s "Drop weekends from the Family Lookup child
+calendar" reached the identical 5-column Mon–Fri outcome via a different
+`_flCalGridHtml()` implementation (a `{day, col: dow - 1}` cell list rather
+than this session's Monday-indexed leading-blank counter) and merged to
+`main` first. Both were verified correct independently; this session's
+version was kept on merge, since it already sits inside the larger rewrite
+above rather than because either implementation was wrong. Worth repeating
+the lesson this file already carries elsewhere: two sessions solving the
+same real problem the same day is not a bug in either one, and the fix on
+conflict is to pick the version that's already been verified in context,
+not to silently prefer whichever merged first.
 
 ---
 
