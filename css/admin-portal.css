@@ -2201,14 +2201,13 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fl-cal-close { margin-left: auto; border: none; background: none; cursor: pointer; color: var(--text-muted); font-size: .9em; padding: 2px 4px; }
 .fl-cal-close:hover { color: var(--text); }
 
-.fl-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.fl-cal-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
 .fl-cal-hdr { text-align: center; font-size: .68em; font-weight: 700; color: var(--text-muted); padding: 2px 0; }
 .fl-cal-cell {
     text-align: center; padding: 5px 2px; border-radius: 5px;
     font-size: .78em; min-width: 24px; border: 1px solid transparent;
 }
 .fl-cal-cell.other-month { visibility: hidden; }
-.fl-cal-cell.weekend { color: var(--text-muted); background: var(--ap-border-lt); }
 .fl-cal-cell.is-full { background: var(--green-text); color: #fff; font-weight: 700; }
 .fl-cal-cell.is-half { background: var(--green-pale); color: var(--green-text); border-color: var(--green); font-weight: 700; }
 .fl-cal-empty { font-size: .78em; color: var(--text-muted); margin: 8px 0 0; }

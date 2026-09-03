@@ -229,6 +229,19 @@ rebuilt and grepped for `apFamilyLookupPanelHtml`/`_flToggleChild` to
 confirm the panel actually shipped in the bundle, per this file's own
 "it shipped half-live" standing check.
 
+**Follow-up (same day): the child calendar drops Saturday/Sunday
+entirely**, rather than showing them grayed out. `_flCalGridHtml()` is a
+5-column Mon–Fri grid now — a weekday's column is `dow - 1`, a fixed
+function of the date itself, so the sequence of kept days lands in the
+right column without a running counter (a Fri→Mon jump crosses exactly one
+Sat+Sun pair, a full row-width skip). Verified with a Node harness across
+five months whose 1st falls on each different weekday (including a month
+starting on a Saturday) — every emitted cell is a genuine weekday, cell
+count is always a multiple of 5, and the now-dead `.weekend` CSS rule was
+removed rather than left unreferenced (a one-line rule, not worth the
+"leave it for a possible revert" treatment bigger retired tools get
+elsewhere in this file).
+
 ---
 
 ## Finance tab overhaul — the Bookkeeper tab (2026-08-27)
