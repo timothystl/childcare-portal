@@ -2773,6 +2773,64 @@ describe('payment import duplicate guard and coverage', () => {
         const stmtFn = read('supabase/migrations/family_care_statement.sql');
         expect(stmtFn.includes('billing_coverage_start_month')).toBe(false);
     });
+
+    // ⚠️ Found 2026-09-02: computeBillMonthExceptions()/_fhLoad() only
+    // refetch allFamiliesData/allRegistrations if those shared globals are
+    // EMPTY — correct for an edit made from inside this tool (admin-calendar.js
+    // updates them in place, so that stays live with no refetch needed), but
+    // wrong for a registration a PARENT submitted, or an edit a DIFFERENT
+    // admin made, while her tab sat open on some other section. A director
+    // asked directly whether she'd ever have to manually refresh the browser
+    // before trusting the Ledger — the answer needed to become "no."
+    test('_fhRefreshData nulls both shared globals before reloading, never trusts a stale in-memory cache', () => {
+        const start = hub.indexOf('async function _fhRefreshData');
+        const body = hub.slice(start, hub.indexOf('\n}', start));
+        const nullAt = body.indexOf('allFamiliesData = null;');
+        const loadAt = body.indexOf('await _fhLoad();');
+        expect(nullAt).toBeGreaterThan(-1);
+        expect(body.includes('allRegistrations = null;')).toBe(true);
+        // Must null BEFORE loading, or the fetch-if-empty guard downstream
+        // still finds a (soon to be stale) array and skips the real fetch.
+        expect(loadAt).toBeGreaterThan(nullAt);
+    });
+
+    test('entering the Ledger tool always calls the live refresh, not a raw _fhLoad that could hit a stale cache', () => {
+        const start = hub.indexOf('async function renderFinanceHubTool');
+        const body = hub.slice(start, hub.indexOf('\n}\n', start));
+        expect(body.includes('await _fhRefreshData();')).toBe(true);
+    });
+
+    // ⚠️ Found while adding the Refresh button: the "Retry charge" label on a
+    // declined-card row promised a charge retry that never happened —
+    // _fhRemindOne() has only ever sent the same push reminder regardless of
+    // dispStatus, no matter which label the button carried. Currently
+    // unreachable (card_declined is hardcoded to 0, no decline signal wired
+    // up yet), but a landmine for whenever it is. Fixed to describe the real
+    // action instead of removing the false promise only where it happened to
+    // be visible today.
+    test('every button that emails or notifies a family says so in its own label or title, not just a confirm dialog', () => {
+        expect(hub.includes('Email ${drafted.length} invoice')).toBe(true);
+        expect(hub.includes('title="Recomputes and emails every invoice above to its family')).toBe(true);
+        expect(hub.includes('title="Sends each family a push notification about their balance. Not an email."')).toBe(true);
+        expect(hub.includes('title="Emails this family their invoice.">Email invoice</button>')).toBe(true);
+        expect(hub.includes('title="Emails this family their invoice now.">')).toBe(true);
+        expect(hub.includes('title="Sends this family a push notification about their balance. Not an email.">Notify</button>')).toBe(true);
+        // The old false promise must not survive anywhere in this file.
+        expect(hub.includes('Retry charge')).toBe(false);
+        expect(hub.includes('Retries the charge on file')).toBe(false);
+    });
+
+    test('the Refresh control is purely internal — reloads data, never emails, pushes, or notifies', () => {
+        const htmlSrc = read('admin.html');
+        expect(htmlSrc.includes('id="fhRefreshBtn"')).toBe(true);
+        expect(htmlSrc.includes('Does not email or notify anyone')).toBe(true);
+        const bindAt = hub.indexOf("_fhEl('fhRefreshBtn')?.addEventListener");
+        expect(bindAt).toBeGreaterThan(-1);
+        const bindBody = hub.slice(bindAt, hub.indexOf('});', bindAt) + 3);
+        expect(bindBody.includes('_fhRefreshData()')).toBe(true);
+        // No sending function may appear in the same handler.
+        expect(/emailInvoices|_woSendPush|insertNudge|reconcileBillingInvoice/.test(bindBody)).toBe(false);
+    });
 });
 
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);

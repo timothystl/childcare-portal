@@ -23,7 +23,7 @@
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/admin.css?v=34">
-    <link rel="stylesheet" href="css/admin-portal.css?v=9">
+    <link rel="stylesheet" href="css/admin-portal.css?v=10">
 </head>
 <body class="admin-body">
 
@@ -2186,6 +2186,10 @@
                                 <button type="button" id="fhMonthNext" class="fh-month-arrow" aria-label="Next month">&#9654;</button>
                             </div>
                             <input type="text" id="fhSearch" class="fh-search" placeholder="Find a family&hellip;">
+                            <!-- Purely internal — re-pulls live registration/family data and
+                                 recomputes every row. Never emails, pushes, or notifies anyone;
+                                 see _fhRefreshData() in admin-finance-hub.js. -->
+                            <button type="button" id="fhRefreshBtn" class="fh-refresh-btn" title="Reload live data. Does not email or notify anyone.">&#8635; Refresh</button>
                         </div>
                     </div>
 

@@ -80,6 +80,21 @@ function _fhIsLedgerMonth(month) { return month >= _fhDefaultMonth(); }
 // without touching the skeleton, so the header/tabs/search stay visible and
 // interactive during ordinary navigation (only #fhRoot's own "Loading…"
 // swaps in place there, same as it always has).
+// ⚠️ computeBillMonthExceptions()/_fhLoad() only refetch allFamiliesData/
+// allRegistrations if those shared globals are already empty — correct for
+// an edit made from inside this tool (admin-calendar.js updates them in
+// place, so that stays live with no refetch needed), but wrong for a
+// registration a PARENT submitted, or an edit a DIFFERENT admin made, while
+// this tab sat open elsewhere. Nulling both here forces one real fetch —
+// this is a billing screen with real money on it, and the extra round trip
+// is cheap next to billing someone off a number that went stale behind her
+// back. Purely a data reload: never emails, pushes, or notifies anyone.
+async function _fhRefreshData() {
+    allFamiliesData = null;
+    allRegistrations = null;
+    await _fhLoad();
+}
+
 async function renderFinanceHubTool() {
     if (!_fhMonth) _fhMonth = _fhDefaultMonth();
     _fhTab = 'ledger';
@@ -94,7 +109,9 @@ async function renderFinanceHubTool() {
     _fhEl('fhBody')?.style.setProperty('display', 'none');
     _fhEl('fhSkeleton')?.style.removeProperty('display');
     try {
-        await _fhLoad();
+        // Every fresh entry into the tool gets a live pull, same reasoning
+        // as _fhRefreshData()'s own header comment — not just a cache hit.
+        await _fhRefreshData();
     } finally {
         _fhEl('fhSkeleton')?.style.setProperty('display', 'none');
         _fhEl('fhBody')?.style.removeProperty('display');
@@ -106,6 +123,12 @@ function _fhBindHeaderOnce() {
     window._fhHeaderBound = true;
     _fhEl('fhMonthPrev')?.addEventListener('click', () => _fhGoToMonth(_fhShiftMonth(_fhMonth, -1)));
     _fhEl('fhMonthNext')?.addEventListener('click', () => _fhGoToMonth(_fhShiftMonth(_fhMonth, 1)));
+    _fhEl('fhRefreshBtn')?.addEventListener('click', async () => {
+        const btn = _fhEl('fhRefreshBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Refreshing…'; }
+        try { await _fhRefreshData(); }
+        finally { if (btn) { btn.disabled = false; btn.innerHTML = '&#8635; Refresh'; } }
+    });
     _fhEl('fhSearch')?.addEventListener('input', e => {
         _fhSearch = e.target.value || '';
         _fhRenderLedger();
@@ -647,7 +670,7 @@ function _fhRenderLedger() {
                 <div class="fh-stat-label">Issued</div>
             </div>
             <div class="fh-strip-spacer"></div>
-            <button type="button" class="fh-release-btn" id="fhReleaseBtn" title="Recomputes and emails every invoice above, then marks each Issued." ${drafted.length ? '' : 'disabled'}>Release ${drafted.length} invoice${drafted.length === 1 ? '' : 's'}</button>
+            <button type="button" class="fh-release-btn" id="fhReleaseBtn" title="Recomputes and emails every invoice above to its family, then marks each Issued." ${drafted.length ? '' : 'disabled'}>&#9993; Email ${drafted.length} invoice${drafted.length === 1 ? '' : 's'} to families</button>
         </div>
 
         <div class="fh-owed-banner">
@@ -656,7 +679,7 @@ function _fhRenderLedger() {
                 <div class="fh-owed-sub">across every open month, not just ${_fhMonthLabel(_fhMonth)} · computed live from the rows below</div>
             </div>
             <div class="fh-owed-actions">
-                <button type="button" class="fh-owed-btn-primary" id="fhNudgeAllBtn" ${owingRows.length ? '' : 'disabled'}>Nudge all ${owingRows.length}</button>
+                <button type="button" class="fh-owed-btn-primary" id="fhNudgeAllBtn" title="Sends each family a push notification about their balance. Not an email." ${owingRows.length ? '' : 'disabled'}>&#128276; Push reminder to ${owingRows.length}</button>
                 <button type="button" class="fh-owed-btn-outline" id="fhAgingToggleBtn">${_fhShowAging ? 'Hide aging detail' : 'Open aging detail →'}</button>
             </div>
         </div>
@@ -734,14 +757,21 @@ function _fhRowHtml(row) {
     const balCls = row.owed > 0 ? 'fh-bal-owed' : 'fh-bal-clear';
 
     // Two fixed slots, always both present (empty when the action doesn't
-    // apply to this row) — Send invoice and Remind/Retry charge otherwise
-    // land at a different x-position on every row depending on which
-    // buttons a given row happens to have, which is what actually made the
-    // column look misaligned rather than any one row being wrong.
+    // apply to this row) — Email invoice and Notify otherwise land at a
+    // different x-position on every row depending on which buttons a given
+    // row happens to have, which is what actually made the column look
+    // misaligned rather than any one row being wrong.
     const sendSlot = row.status === 'drafted'
-        ? `<button type="button" class="fh-send-btn" data-fh-send="${row.familyId}">Send invoice</button>` : '';
+        ? `<button type="button" class="fh-send-btn" data-fh-send="${row.familyId}" title="Emails this family their invoice.">Email invoice</button>` : '';
+    // ⚠️ card_declined is currently unreachable (line ~427: "no
+    // payment-processor decline signal exists yet") — _fhRemindOne() has
+    // only ever sent the same push reminder regardless of dispStatus, never
+    // an actual charge retry. The previous label for that branch (now
+    // removed) promised something the code doesn't do; fixed to describe the
+    // real action so this isn't a landmine for whenever the decline signal is
+    // wired up and the branch goes live.
     const remindSlot = row.owed > 0
-        ? `<button type="button" class="btn-xs" data-fh-remind="${row.familyId}">${dispStatus === 'card_declined' ? 'Retry charge' : 'Remind'}</button>` : '';
+        ? `<button type="button" class="btn-xs" data-fh-remind="${row.familyId}" title="Sends this family a push notification about their balance. Not an email.">Notify</button>` : '';
     const actions = `<span class="fh-action-slot">${sendSlot}</span><span class="fh-action-slot">${remindSlot}</span>`;
 
     const paidThisMonth = row.ar?.collected || 0;
@@ -842,6 +872,7 @@ async function _fhReleaseDrafts() {
         await _fhLoad();
     } catch (err) {
         alert('Could not release those invoices: ' + (err.message || err));
+        if (btn) { btn.disabled = false; btn.innerHTML = `&#9993; Email ${drafted.length} invoice${drafted.length === 1 ? '' : 's'} to families`; }
     } finally {
         _fhBusy = false;
     }
@@ -868,7 +899,7 @@ async function _fhNudgeAll() {
     } catch (err) {
         alert('Could not finish nudging: ' + (err.message || err));
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Nudge all'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = '&#128276; Push reminder'; }
     }
 }
 
@@ -901,7 +932,7 @@ async function _fhSendInvoiceRow(familyId, btn) {
         if (_fhDrawerRow && String(_fhDrawerRow.familyId) === String(familyId)) _fhCloseDrawer();
     } catch (err) {
         alert('Could not send that invoice: ' + (err.message || err));
-        if (btn) { btn.disabled = false; btn.textContent = 'Send invoice'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = '&#9993; Email invoice'; }
     }
 }
 
@@ -979,7 +1010,7 @@ async function _fhLoadDrawerBody(row) {
             ${row.status !== 'sent' ? `
                 <button type="button" class="fh-dr-action-btn fh-dr-action-fee" id="fhAddFeeBtn">+ Add a fee</button>
                 <button type="button" class="fh-dr-action-btn fh-dr-action-credit" id="fhAddCreditBtn">+ Add a credit</button>` : ''}
-            ${row.status === 'drafted' ? `<button type="button" class="fh-dr-action-btn fh-dr-action-send" id="fhDrSendBtn">Send invoice</button>` : ''}
+            ${row.status === 'drafted' ? `<button type="button" class="fh-dr-action-btn fh-dr-action-send" id="fhDrSendBtn" title="Emails this family their invoice now.">&#9993; Email invoice</button>` : ''}
             ${(row.status === 'sent' && !((row.ar?.collected || 0) > 0)) ? `<button type="button" class="fh-dr-action-btn fh-dr-action-undo" id="fhUndoSendBtn" title="Puts this invoice back to draft. Does not recall an email already delivered.">Undo send</button>` : ''}
             <button type="button" class="fh-dr-action-btn fh-dr-action-print" id="fhPrintStatementBtn">Print statement</button>
         </div>
