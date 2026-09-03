@@ -3759,6 +3759,107 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
 
 .wlp-toast { background: var(--green-pale); color: var(--green-dark); padding: 10px 24px; font-size: 15px; font-weight: 700; }
 
+/* ── Visualize view — "One child's journey" / "One room, next 12 months"
+   (design handoff 2026-09-03, Waitlist Planner Views.dc.html). Tokens only —
+   no literal hex from the mockup; every color below already exists in the
+   :root palette at the top of this file. ─────────────────────────────── */
+.wlp-viz-subhead {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap; padding: 16px 24px 14px; border-bottom: 1px solid var(--border);
+    background: var(--linen);
+}
+.wlp-viz-subhead-title { font-family: var(--font-head); font-weight: 700; font-size: 18px; color: var(--navy); }
+.wlp-viz-subhead-sub { font-size: 13.5px; color: var(--text-muted); margin-top: 2px; }
+.wlp-viz-picker { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 700; color: var(--text-muted); }
+.wlp-viz-picker select {
+    font-family: var(--font-body); font-size: 13.5px; font-weight: 700; color: var(--text);
+    background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-left: 4px;
+}
+.wlp-viz-body { padding: 18px 24px 22px; }
+
+/* Child journey — summary bar, tier note, segment cards, ribbon */
+.wlp-viz-summary {
+    display: flex; flex-wrap: wrap; gap: 8px 26px; align-items: baseline;
+    background: var(--linen); border: 1px solid var(--border); border-radius: 12px; padding: 13px 16px;
+}
+.wlp-viz-summary-name { font-family: var(--font-head); font-weight: 700; font-size: 17px; color: var(--navy); }
+.wlp-viz-summary-fact { font-size: 13.5px; color: var(--text-muted); }
+.wlp-viz-tier-note {
+    display: flex; gap: 9px; align-items: center; margin: 14px 0 0; padding: 11px 15px;
+    border-radius: 10px; font-size: 13px; font-weight: 600;
+}
+.wlp-viz-tier-note.is-held { background: var(--green-pale); color: var(--green-dark); border: 1px solid var(--green-lt); }
+.wlp-viz-tier-note.is-pending { background: var(--sun-pale); color: var(--mustard-dark); border: 1px solid var(--sun-lt); }
+
+.wlp-viz-segments { display: flex; align-items: stretch; gap: 0; margin-top: 18px; overflow-x: auto; padding-bottom: 4px; }
+.wlp-viz-seg-wrap { display: flex; align-items: center; flex: 1 1 0; min-width: 176px; }
+.wlp-viz-seg-card { flex: 1 1 0; min-width: 0; background: var(--white); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border); }
+.wlp-viz-seg-card.is-confirmed { border: 1.5px solid var(--green-lt); box-shadow: var(--shadow-card); }
+.wlp-viz-seg-room { font-family: var(--font-head); font-weight: 700; font-size: 16.5px; color: var(--navy); margin-top: 11px; }
+.wlp-viz-seg-ages { font-size: 12.5px; color: var(--text-muted); margin-top: 1px; }
+.wlp-viz-seg-range { font-size: 13.5px; font-weight: 700; color: var(--text); margin-top: 9px; }
+.wlp-viz-seg-note { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
+.wlp-viz-seg-days { border-top: 1px solid var(--border); margin-top: 11px; padding-top: 9px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.wlp-viz-seg-arrow { color: var(--border); font-size: 18px; padding: 0 8px; flex: 0 0 auto; }
+/* A downstream "planning hold" day — distinct from the Queue tab's real
+   open/full vocabulary (.wlp-chip-open/.wlp-chip-full), since a room years
+   out has no real per-day capacity check behind it, only a projection. */
+.wlp-chip-hold { background: var(--sun-pale); color: var(--mustard-dark); }
+
+.wlp-viz-ribbon-label { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin-top: 22px; }
+.wlp-viz-ribbon { display: flex; margin-top: 8px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; height: 46px; }
+.wlp-viz-ribbon-band { display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; border-right: 1px solid var(--border); }
+.wlp-viz-ribbon-band:last-child { border-right: none; }
+/* The terminal room has no age-out date this schema defines (Owl's
+   ageMaxMonths is null) — a diagonal hatch marks its band as open-ended
+   rather than implying a real exit date the way a flat color would. */
+.wlp-viz-ribbon-band.is-ongoing { background-image: repeating-linear-gradient(135deg, rgba(1,41,74,.08) 0 8px, transparent 8px 16px); }
+.wlp-viz-ribbon-ticks { display: flex; margin-top: 5px; }
+.wlp-viz-ribbon-tick { font-size: 11px; color: var(--text-muted); padding-left: 2px; }
+.wlp-viz-legend { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin: 20px 0 4px; padding: 12px 16px; background: var(--linen); border: 1px solid var(--border); border-radius: 10px; font-size: 12.5px; color: var(--text-muted); }
+.wlp-viz-legend-swatch { width: 13px; height: 13px; border-radius: 4px; display: inline-block; margin-right: 7px; vertical-align: -2px; }
+.wlp-viz-footnote { padding: 6px 0 0; font-size: 12.5px; color: var(--text-muted); }
+
+/* Room, next 12 months — month cards */
+.wlp-viz-months { display: grid; grid-template-columns: repeat(auto-fill, minmax(225px, 1fr)); gap: 12px; }
+.wlp-viz-month-card { cursor: pointer; background: var(--white); border-radius: 12px; padding: 12px 13px 11px; border: 1px solid var(--border); }
+.wlp-viz-month-card.selected { border: 2px solid var(--navy); box-shadow: var(--shadow-lift); padding: 11px 12px 10px; }
+.wlp-viz-month-head { display: flex; align-items: baseline; justify-content: space-between; }
+.wlp-viz-month-mon { font-family: var(--font-head); font-weight: 700; font-size: 15.5px; color: var(--navy); }
+.wlp-viz-month-year { font-size: 12px; color: var(--text-muted); }
+.wlp-viz-month-daynames, .wlp-viz-month-cells { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.wlp-viz-month-daynames { margin-top: 9px; }
+.wlp-viz-month-cells { margin-top: 3px; }
+.wlp-viz-month-dayname { text-align: center; font-size: 10.5px; font-weight: 700; color: var(--text-muted); }
+.wlp-viz-month-cell { text-align: center; padding: 6px 0; border-radius: 6px; font-size: 13px; font-weight: 800; }
+.wlp-viz-month-note { font-size: 11.5px; margin-top: 8px; color: var(--text-muted); }
+.wlp-viz-month-note.has-changes { color: var(--wlp-start-fg); font-weight: 700; }
+.wlp-viz-month-demand { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+
+/* Roster + queue lists below the month grid */
+.wlp-viz-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 18px; margin-top: 20px; }
+.wlp-viz-section-title { font-family: var(--font-head); font-weight: 700; font-size: 17px; color: var(--navy); }
+.wlp-viz-section-count { font-size: 13px; color: var(--text-muted); }
+.wlp-viz-table { margin-top: 12px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; overflow-x: auto; }
+.wlp-viz-roster-head, .wlp-viz-roster-row, .wlp-viz-roster-foot {
+    display: grid; grid-template-columns: 200px repeat(5, minmax(70px, 1fr)); min-width: 560px;
+}
+.wlp-viz-roster-head { background: var(--linen); border-bottom: 1px solid var(--border); }
+.wlp-viz-roster-head > div { padding: 10px 8px; text-align: center; font-size: 11.5px; font-weight: 800; color: var(--navy); border-left: 1px solid var(--border); }
+.wlp-viz-roster-head > div:first-child { text-align: left; padding-left: 14px; text-transform: uppercase; letter-spacing: .05em; font-size: 12px; color: var(--text-muted); border-left: none; }
+.wlp-viz-roster-row { border-top: 1px solid var(--warm-gray); }
+.wlp-viz-roster-row:first-of-type { border-top: none; }
+.wlp-viz-roster-name { padding: 9px 14px; }
+.wlp-viz-roster-childname { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.wlp-viz-roster-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; }
+.wlp-viz-roster-cell { padding: 7px 6px; display: flex; align-items: center; }
+.wlp-viz-roster-mark { flex: 1; text-align: center; padding: 7px 0; border-radius: 6px; font-size: 12px; font-weight: 800; }
+.wlp-viz-roster-mark.is-in { background: var(--green-pale); color: var(--green-dark); border: 1px solid var(--green-lt); }
+.wlp-viz-roster-mark.is-hold { background: var(--sun-pale); color: var(--mustard-dark); border: 1px solid var(--sun-lt); }
+.wlp-viz-roster-foot { background: var(--linen); border-top: 1px solid var(--border); }
+.wlp-viz-roster-foot > div:first-child { padding: 11px 14px; font-size: 13.5px; font-weight: 800; color: var(--green-text); }
+.wlp-viz-roster-foot .wlp-viz-roster-cell { padding: 8px 6px; }
+
 /* ── Capacity Planner — Grid view ─────────────────────────── */
 .wlp-collapse-toggle {
     display: flex; align-items: center; gap: 8px; background: none; border: none; padding: 0;
