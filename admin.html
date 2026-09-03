@@ -2442,6 +2442,43 @@
                     <div id="fmPickupList"></div>
                 </div>
 
+                <!-- Additional trusted party — a person outside parent 1/2 who
+                     needs real parent-portal access (child info, schedule,
+                     billing/payments), not just pickup authorization. Unlike
+                     Approved for Pickup above, this is admin-managed: the
+                     office adds the person and sets their PIN, since this
+                     grants portal login, not just a note on file. -->
+                <div class="fm-section" id="fmTrustedPartySection">
+                    <div class="fm-section-label">Additional Trusted Party</div>
+                    <p class="section-desc" style="margin-top:0">Grants portal login — the same access to this child's info and billing that a parent has. Use this only for someone the family has asked to have that.</p>
+                    <div id="fmTrustedPartyList"></div>
+                    <button type="button" id="fmAddTrustedPartyBtn" class="btn-secondary btn-sm" style="margin-top:8px">+ Add trusted party</button>
+                    <div id="fmTrustedPartyForm" class="fm-trusted-party-form hidden">
+                        <div class="fm-child-main" style="margin-top:8px">
+                            <div class="fm-field fm-field-grow">
+                                <label>Name *</label>
+                                <input type="text" id="fmTpName" placeholder="Full name" autocomplete="off">
+                            </div>
+                            <div class="fm-field fm-field-grow">
+                                <label>Email *</label>
+                                <input type="email" id="fmTpEmail" placeholder="email@example.com" autocomplete="off">
+                            </div>
+                            <div class="fm-field">
+                                <label>Relationship</label>
+                                <input type="text" id="fmTpRelationship" placeholder="e.g. Grandparent" autocomplete="off" style="width:130px">
+                            </div>
+                            <div class="fm-field">
+                                <label>PIN *</label>
+                                <input type="text" id="fmTpPin" placeholder="4-8 digits" maxlength="8" autocomplete="off" style="width:100px">
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:8px">
+                            <button type="button" id="fmTpSaveBtn" class="btn-primary btn-sm">Save trusted party</button>
+                            <button type="button" id="fmTpCancelBtn" class="btn-ghost btn-sm">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Group -->
                 <div class="fm-section">
                     <div class="fm-section-label">Program Group</div>

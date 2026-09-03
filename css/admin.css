@@ -1117,6 +1117,12 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     white-space: nowrap;
 }
 
+.student-nickname {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: .9em;
+}
+
 /* ============================================================
    ROOM OVERRIDE & DISCOUNT DROPDOWNS (family directory)
    ============================================================ */

@@ -88,18 +88,37 @@ serve(async (req) => {
 
         // 1. The PIN check. family_login owns bcrypt, the attempt counter and
         //    the lockout — none of that is reimplemented here.
-        const { data: login, error: loginErr } =
+        let { data: login, error: loginErr } =
             await admin.rpc("family_login", { p_email: email, p_pin: pin });
         if (loginErr) {
             console.error("family_login:", loginErr);
             return json(req, { error: "login_failed" }, 500);
         }
+
+        // 1b. Not a registered parent's email — try it as an additional
+        //     trusted party's (family_authorized_users). A real parent's
+        //     email always resolves in step 1, so this only ever fires for
+        //     an email family_login has never heard of; it never gets a
+        //     second guess at a parent's own PIN.
+        let isAuthorizedUser = false;
+        if (login?.error === "not_found") {
+            const { data: authLogin, error: authErr } =
+                await admin.rpc("authorized_user_login", { p_email: email, p_pin: pin });
+            if (authErr) {
+                console.error("authorized_user_login:", authErr);
+                return json(req, { error: "login_failed" }, 500);
+            }
+            login = authLogin;
+            isAuthorizedUser = true;
+        }
+
         if (login?.error) {
             return json(req, { error: login.error, attempts_left: login.attempts_left }, 401);
         }
 
-        const familyId   = login?.family?.id;
-        const parentSlot = login?.isParent2 ? 2 : 1;
+        const familyId        = login?.family?.id;
+        const parentSlot      = isAuthorizedUser ? null : (login?.isParent2 ? 2 : 1);
+        const authorizedUserId = isAuthorizedUser ? (login?.authorizedUserId ?? null) : null;
         if (!familyId) return json(req, { error: "login_failed" }, 500);
 
         // 2. Find or create the auth user for this address. Public signups are
@@ -157,6 +176,7 @@ serve(async (req) => {
             user_id: userId,
             family_id: familyId,
             parent_slot: parentSlot,
+            authorized_user_id: authorizedUserId,
             email,
             last_login_at: new Date().toISOString(),
         }, { onConflict: "user_id" });
@@ -194,6 +214,7 @@ serve(async (req) => {
             expires_at:    session.expires_at,
             family:        login.family,
             parent_slot:   parentSlot,
+            is_authorized_user: isAuthorizedUser,
         });
 
     } catch (err) {
