@@ -5311,6 +5311,44 @@ post-deploy fetch.
 
 Current version: v2.12.7
 
+## Waitlist Planner "Visualize" tab — "One child's journey" / "One room, next 12 months" (2026-09-03)
+
+Built from `Waitlist Planner Views.dc.html` (design handoff zip, `Waitlist_planner_visualization_mockups.zip`) — asked for directly: "ADD this design to our waitlist planner, dont lose what is currently there, just add this." The handoff's own `github.md` named exactly what already existed to build on: `js/supabase.js` (ROOMS — ages, capacity, ratios) and `js/admin/admin-waitlist.js` (`renderWaitlistPlanner`, `wlpPromotionChain`'s age-up logic).
+
+**Nothing existing was removed or restyled.** Queue / Capacity Planner / Moving are untouched. A fourth pill, **Visualize**, was added to `wlpRenderHeader()`'s tab group; opening it reveals its own Grid/Board-style sub-toggle between the mockup's two screens.
+
+### The mockup's own data was illustrative on purpose — this build is not
+
+The card in the design source says so itself: *"Illustrative data — not live enrollment."* Its `support.js` shipped a self-contained fake dataset (a hard-coded `CHILDREN` array — "Baby Garcia," "Rowan T." — a seeded-random waitlist/roster generator, its own copy of `ROOMS`). None of that was ported. Both views are wired to the **exact same allocation** `wlpRunAllocation()` already computes for Queue/Grid/Board/Moving — `alloc.rooms`, `alloc.months`, `alloc.finalGrid`, `alloc.kids`, `alloc.fitMonthByKid`, `alloc.gradOut`/`gradIn`/`incoming` — never a second, parallel calculation that could disagree with the tabs sitting right next to it. Where an existing helper already answered a question this view needed, it was called directly rather than re-derived:
+
+| Need | Reused as-is |
+|---|---|
+| Who's in a room on a given weekday, real or projected | `wlpDayRoster()` |
+| A waitlist row (rank, chips, fit pill, Enroll/Edit/expand) | `wlpRenderQueueRow()` + `wlpWireQueueRowActions()` |
+| A roster occupant's badge ("↑ moving up", "🎯 offer accepted", "＋ from waitlist") | `wlpRosterTag()` |
+| The real "Enroll" action (opens the real Add Registration flow) | `wlpEnrollFromWaitlist()` |
+| Open-seat color tiers (green/amber/red/over) | `wlpAvailClass()` + the pre-existing `.wlp-avail-*` classes |
+
+**"One room, next 12 months"** is `alloc.months` (all 12, not Grid's 6-month slice) rendered as a card grid instead of a table, each card's five weekday numbers read straight from `alloc.finalGrid`. Clicking a card shows that month's real roster — `wlpDayRoster()`'s five per-day lists inverted into one row per child (`wlpVizRoomRoster()`) — and, below it, that room's real waitlist queue, filtered from `alloc.kids` and rendered with the *actual* `wlpRenderQueueRow()`, so Enroll here is the identical, real action Queue's own Enroll button performs.
+
+**"One child's journey"** is the one screen with no existing analog — nothing in this tool previously projected a single child's whole path across every room. Its candidate list is real: every currently-enrolled child (deduped from `allRegistrations` by name, the same accepted tradeoff `_buildGraduationIndex` already documents) plus every active waitlist application already sitting in `alloc.kids`. Segments are computed with the exact age math `wlDeriveRoom`/`roomIdForAgeMonths` use everywhere else in this app (`ageMinMonths`/`ageMaxMonths` from the live, settings-merged `ROOMS`) — never a second "how old is this child" calculation.
+
+⚠️ **Forward-looking, not historical, and said so nowhere false.** An enrolled child's timeline starts **today** (this app has no single clean "when did this registration begin" field to reconstruct instead), a waitlisted child's starts at their real `desired_start_date`, clamped forward if that's earlier than the age the room actually requires — mirroring the design source's own clamp (a newborn can't start on their birthday). The status language shown is the real waitlist vocabulary this file already uses everywhere (`pending`/`offered`/`accepted`), never the mockup's own invented "fee paid / toured / inquiry" tiers, which have no basis in this schema.
+
+⚠️ **The terminal room (Owl, `ageMaxMonths: null`) is rendered open-ended, on purpose.** This schema defines no "ages out of the whole program" date, and the mockup's own `birth + 48 months` cutoff is that mockup's own invention, not a number this app has anywhere. Owl's segment card shows "{{start}} – ongoing" with no fabricated exit date; its ribbon band gets a diagonal hatch (`.wlp-viz-ribbon-band.is-ongoing`) instead of implying a real end the way a flat color band would, sized to a nominal 18 months purely so the ribbon renders as a real band.
+
+### `allRegistrations` needed a lazy load this tool never had
+
+`apOnToolOpened()`'s `'wlPlanner'` case (`admin-portal.js`) only ever loaded `_allWaitlistApps` — nothing loaded `allRegistrations`, even though `wlpRealMonthPattern()` (used by every existing tab) already reads it. The child picker's "currently enrolled" half needs it directly, so opening the Visualize tab now also triggers `wlpEnsureRegistrationsForViz()` (fire-and-forget-then-rerender, same pattern `loadWaitlistApplications()` itself already uses) if it isn't loaded yet. This is a net improvement for the pre-existing tabs too, not just this one — but scoped to firing only when Visualize is opened, not unconditionally, since R12 already documents `fetchAllRegistrations()` as expensive (923 kB) and not something to fetch on every tool open.
+
+### Styling — tokens only, no literal hex from the mockup
+
+The design source's own colors (`#01294A`, `#F5B731`, `#EAF5EF`, …) already map 1:1 onto this app's existing `:root` palette (`--navy`, `--sun`, `--green-pale`, …) — confirmed before writing a single rule, not assumed. Every new `.wlp-viz-*` class in `css/admin.css` uses the existing tokens; two spans genuinely needed a new class each (`.wlp-chip-hold` — a "planning hold" day, distinct from the Queue tab's real open/full/off vocabulary since a room years out has no real per-day capacity check behind it; the roster table's `.is-in`/`.is-hold` marks). Reused directly with zero new CSS: `.wlp-avail-green/amber/red/over` (already generic, not scoped to the Grid table), `.wl-badge-*` (the Waitlist Management table's own status badges).
+
+`npm test` — 298/298, unaffected (no drift-guarded function was touched). `npm run build` — `dist/admin.min.js` rebuilt and grepped for `wlpRenderVizChild`/`wlpRenderVizRoom`/`wlpVizChildSegments`/`wlpVizRoomRoster` to confirm the feature actually shipped in the bundle, per this file's own standing "it shipped half-live" check — and, per the Bookkeeper/Enrollment & Capacity incidents this file also documents, the fourth pill was confirmed reachable from `wlpRenderHeader()`'s own tab group (not a section left unwired the way `billingArSection` was).
+
+Current version: v2.13.0
+
 ## Finance summary API (for the church ChMS finance integration)
 
 `supabase/functions/finance-summary/index.ts` — `GET`, header `X-Api-Key: <FINANCE_API_KEY>`, returns 401 if missing/wrong. Returns `{ updated_at, accounts: [], budget: [...] }` for the current month + 12 prior (13 months, oldest first). Deploy like any other edge function (paste into the Supabase dashboard editor or `supabase functions deploy finance-summary`) and set the `FINANCE_API_KEY` secret — neither is automatic.

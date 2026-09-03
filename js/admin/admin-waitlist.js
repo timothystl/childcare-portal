@@ -114,8 +114,14 @@ async function loadWaitlistApplications() {
 // (wlpRerenderQueueRows) so typing doesn't steal focus from the input.
 
 let _wlp = {
-    activeTab: 'queue',       // 'queue' | 'capacity' | 'moving'
+    activeTab: 'queue',       // 'queue' | 'capacity' | 'moving' | 'visualize'
     capacityView: 'grid',     // 'grid' | 'board'
+    visualizeView: 'child',   // Visualize: 'child' | 'room' — its own sub-toggle,
+                              // same pattern as capacityView's Grid/Board.
+    vizChildKey: null,        // Visualize/child: selected candidate's composite key
+                              // (see wlpVizChildCandidates) — 'reg:<name>' or 'wl:<id>'.
+    vizRoomId: null,          // Visualize/room: selected room id.
+    vizMonthIdx: 0,           // Visualize/room: selected month tile, 0-11 within alloc.months.
     selCellA: null,           // Grid: {roomId, monthIdx} — which cell's DRAWER is open
     rosterCell: null,         // Grid: {roomId, monthIdx} — which week's "Who's enrolled"
                               // child cards are open below the table. Deliberately
@@ -759,6 +765,7 @@ function renderWaitlistPlanner() {
     const isQueue = _wlp.activeTab === 'queue';
     const isCapacity = _wlp.activeTab === 'capacity';
     const isMoving = _wlp.activeTab === 'moving';
+    const isVisualize = _wlp.activeTab === 'visualize';
     const isGrid = isCapacity && _wlp.capacityView === 'grid';
     const isBoard = isCapacity && _wlp.capacityView === 'board';
 
@@ -766,10 +773,12 @@ function renderWaitlistPlanner() {
         <div class="wlp-card">
             ${wlpRenderHeader()}
             ${isCapacity ? wlpRenderToolbar(alloc) : ''}
+            ${isVisualize ? wlpRenderVisualizeToolbar() : ''}
             ${isQueue ? wlpRenderQueue(alloc) : ''}
             ${isGrid ? wlpRenderGrid(alloc) : ''}
             ${isBoard ? wlpRenderBoard(alloc) : ''}
             ${isMoving ? wlpRenderMoving(alloc) : ''}
+            ${isVisualize ? wlpRenderVisualize(alloc) : ''}
         </div>
         ${isGrid ? wlpRenderDrawer(alloc) : ''}`;
 
@@ -778,6 +787,7 @@ function renderWaitlistPlanner() {
     if (isGrid) wlpAttachGridListeners();
     if (isBoard) wlpAttachBoardListeners();
     if (isMoving) wlpAttachMovingListeners();
+    if (isVisualize) wlpAttachVisualizeListeners();
 }
 
 // ── Grid's detail drawer ─────────────────────────────────────
@@ -839,11 +849,14 @@ function wlpRenderHeader() {
     const isQueue = _wlp.activeTab === 'queue';
     const isCapacity = _wlp.activeTab === 'capacity';
     const isMoving = _wlp.activeTab === 'moving';
+    const isVisualize = _wlp.activeTab === 'visualize';
     const sub = isQueue
         ? "Every waitlisted child, ranked by priority — expand any row for their 12-month outlook."
         : isMoving
             ? 'Children ready to move rooms this month, matched against the seat that just opened.'
-            : 'Open slots per room, 12 months out — click a month to see who fits.';
+            : isVisualize
+                ? "Plan the child, or plan the room — the same real numbers as the tabs above, laid out for a walkthrough."
+                : 'Open slots per room, 12 months out — click a month to see who fits.';
     // Two rows, per the design mockup: the title block (title, sub, and the
     // tab pills beneath them) on the left, and "+ Add to Waitlist" alone on
     // the right, vertically centered against that whole stack. The pills are
@@ -858,6 +871,7 @@ function wlpRenderHeader() {
                     <button type="button" class="wlp-pill-btn ${isQueue ? 'active' : ''}" data-wlp-tab="queue">Waitlist Queue</button>
                     <button type="button" class="wlp-pill-btn ${isCapacity ? 'active' : ''}" data-wlp-tab="capacity">Capacity Planner</button>
                     <button type="button" class="wlp-pill-btn ${isMoving ? 'active' : ''}" data-wlp-tab="moving">Moving</button>
+                    <button type="button" class="wlp-pill-btn ${isVisualize ? 'active' : ''}" data-wlp-tab="visualize">Visualize</button>
                 </div>
             </div>
             <div class="wlp-header-actions">
@@ -879,10 +893,25 @@ function wlpRenderToolbar(alloc) {
 
 function wlpAttachHeaderListeners() {
     document.querySelectorAll('[data-wlp-tab]').forEach(btn => {
-        btn.addEventListener('click', () => { _wlp.activeTab = btn.dataset.wlpTab; renderWaitlistPlanner(); });
+        btn.addEventListener('click', () => {
+            _wlp.activeTab = btn.dataset.wlpTab;
+            renderWaitlistPlanner();
+            // The child-journey picker needs real currently-enrolled kids
+            // (allRegistrations), which — unlike _allWaitlistApps — nothing
+            // guarantees is loaded before this tool opens (see
+            // apOnToolOpened's 'wlPlanner' case in admin-portal.js). Fetch it
+            // lazily, once, the same fire-and-forget-then-rerender pattern
+            // loadWaitlistApplications() itself uses.
+            if (_wlp.activeTab === 'visualize' && typeof allRegistrations !== 'undefined' && !allRegistrations.length) {
+                wlpEnsureRegistrationsForViz();
+            }
+        });
     });
     document.querySelectorAll('[data-wlp-view]').forEach(btn => {
         btn.addEventListener('click', () => { _wlp.capacityView = btn.dataset.wlpView; renderWaitlistPlanner(); });
+    });
+    document.querySelectorAll('[data-wlp-viz-view]').forEach(btn => {
+        btn.addEventListener('click', () => { _wlp.visualizeView = btn.dataset.wlpVizView; renderWaitlistPlanner(); });
     });
     document.getElementById('wlpAddBtn')?.addEventListener('click', _openAdminWlModal);
 }
@@ -2047,6 +2076,428 @@ function wlpAttachMovingListeners() {
     if (_wlpAlloc) {
         wlpAttachMoveConfirmListeners(_wlpAlloc, Math.max(0, Math.min(11, _wlp.movingSelectedMonthIdx)));
     }
+}
+
+// ── Visualize view: "One child's journey" / "One room, next 12 months" ─────
+// Design handoff 2026-09-03 (Waitlist Planner Views.dc.html) — a fourth pill
+// alongside Queue/Capacity/Moving, with its own Grid/Board-style sub-toggle.
+// The mockup shipped with its own illustrative room/child/waitlist data
+// (labeled on the card itself: "Illustrative data — not live enrollment").
+// This wires the same two layouts to the REAL numbers this tool already
+// computes — wlpRunAllocation()'s alloc (rooms/months/finalGrid/kids/roster
+// helpers) — rather than a second, parallel calculation that could disagree
+// with the Queue/Grid/Board/Moving tabs sitting right next to it. Where an
+// existing helper already answers a question here (wlpDayRoster for who's in
+// a room on a given day, wlpRenderQueueRow for a waitlist row, wlpRosterTag
+// for a roster occupant's badge, wlpEnrollFromWaitlist for the real Enroll
+// action), it's called directly rather than re-derived.
+
+function wlpVizAddMonths(d, months) {
+    const x = new Date(d.getTime());
+    x.setMonth(x.getMonth() + months);
+    return x;
+}
+function wlpVizFmtDate(d) {
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+const WLP_VIZ_DAY_ABBR = { Mon: 'M', Tue: 'Tu', Wed: 'W', Thu: 'Th', Fri: 'F' };
+
+async function wlpEnsureRegistrationsForViz() {
+    if (typeof allRegistrations === 'undefined' || allRegistrations.length) return;
+    try {
+        allRegistrations = await fetchAllRegistrations();
+    } catch (err) {
+        console.warn('wlpEnsureRegistrationsForViz:', err);
+        return;
+    }
+    if (_wlp.activeTab === 'visualize') renderWaitlistPlanner();
+}
+
+function wlpRenderVisualizeToolbar() {
+    const isChild = _wlp.visualizeView === 'child';
+    return `
+        <div class="wlp-toolbar">
+            <div class="wlp-pill-group">
+                <button type="button" class="wlp-pill-btn ${isChild ? 'active' : ''}" data-wlp-viz-view="child">One child's journey</button>
+                <button type="button" class="wlp-pill-btn ${!isChild ? 'active' : ''}" data-wlp-viz-view="room">One room, next 12 months</button>
+            </div>
+        </div>`;
+}
+
+function wlpRenderVisualize(alloc) {
+    return _wlp.visualizeView === 'room' ? wlpRenderVizRoom(alloc) : wlpRenderVizChild(alloc);
+}
+
+function wlpAttachVisualizeListeners() {
+    if (_wlp.visualizeView === 'room') wlpAttachVizRoomListeners();
+    else wlpAttachVizChildListeners();
+}
+
+// ── One child's journey ─────────────────────────────────────
+
+// Every real child this admin could plot a journey for: currently enrolled
+// (from allRegistrations, deduped by name — the same "most recent
+// registration wins, name alone is the key" tradeoff _buildGraduationIndex
+// above already documents and accepts) plus every real waitlist application
+// already computed into alloc.kids, so a kid's room/days/tier can never
+// disagree between this view and the Queue tab.
+function wlpVizChildCandidates(alloc) {
+    const out = [];
+    const seen = new Set();
+    (allRegistrations || []).forEach(reg => {
+        const key = (reg.child_name || '').trim().toLowerCase();
+        if (!key || seen.has(key) || !reg.child_dob) return;
+        const days = Object.keys(_weekdayDayTypeMap(reg));
+        if (!days.length) return; // no known schedule to plot
+        seen.add(key);
+        out.push({ key: 'reg:' + key, name: reg.child_name, dob: reg.child_dob, days, kind: 'enrolled' });
+    });
+    alloc.kids.forEach(k => {
+        const dob = k.app.child_dob || k.app.expected_due_date;
+        if (!dob) return;
+        out.push({
+            key: 'wl:' + k.id, name: k.name, dob,
+            days: k.flexible ? [] : wlpAppDays(k.app),
+            flexible: k.flexible, flexibleCount: k.flexibleCount,
+            kind: 'waitlist', status: k.app.status,
+            desiredStartDate: k.app.desired_start_date,
+        });
+    });
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function wlpVizChildOptionLabel(c) {
+    if (c.kind === 'enrolled') return `${c.name} · enrolled`;
+    const word = { pending: 'pending', offered: 'offer sent', accepted: 'offer accepted' }[c.status] || c.status;
+    return `${c.name} · waitlist · ${word}`;
+}
+
+// Real room-window segments for one candidate, from their effective start
+// through the terminal (open-ended) room — the exact same age math
+// wlDeriveRoom/roomIdForAgeMonths use everywhere else in this file, never a
+// second "how old is this child" calculation. Forward-looking, same as the
+// Room view's own 12-month window: an already-enrolled child's timeline
+// starts TODAY, not their original historical start date (nothing in this
+// app carries that as a single clean field); a waitlisted child's starts at
+// their real desired_start_date, clamped forward if that's earlier than the
+// age they'd actually need to be for the room it lands in (mirrors the
+// design's own clamp — a newborn can't start on their birthday).
+function wlpVizChildSegments(cand) {
+    const rooms = getSortedRooms().filter(r => r.id !== 'summer' && r.ageMinMonths != null);
+    const birth = new Date(cand.dob + 'T00:00:00');
+    const effStart = cand.kind === 'enrolled'
+        ? new Date()
+        : new Date((cand.desiredStartDate || cand.dob) + 'T00:00:00');
+    const segs = [];
+    rooms.forEach(r => {
+        let s = wlpVizAddMonths(birth, r.ageMinMonths);
+        if (s < effStart) s = effStart;
+        const e = r.ageMaxMonths == null ? null : wlpVizAddMonths(birth, r.ageMaxMonths);
+        if (e != null && e <= s) return; // already aged past this room
+        segs.push({ room: r, start: s, end: e });
+    });
+    return segs;
+}
+
+// Real waitlist status, in the same plain language the rest of this file
+// already uses for it (wlStatusBadge/wlTourBadge) — never the mockup's own
+// invented "fee paid / toured / inquiry" tiers, which have no basis in this
+// schema.
+function wlpVizTierInfo(cand) {
+    const map = {
+        pending:  { note: `${cand.name} is on the waitlist, not yet offered a spot. Nothing downstream is reserved — this shows what the journey would look like once a seat is offered and accepted.` },
+        offered:  { note: `A spot has been offered to ${cand.name}'s family, not yet accepted. Nothing downstream is reserved until they say yes.` },
+        accepted: { note: `${cand.name}'s family accepted the offer, so this seat is held in the forecast from the requested start, and every room downstream carries a planning hold so it's never double-promised.` },
+    };
+    return map[cand.status] || map.pending;
+}
+
+function wlpVizSegmentCardHtml(seg, i, segs, cand) {
+    const isFirst = i === 0;
+    const confirmed = isFirst && cand.kind === 'enrolled';
+    const heldWaitlist = isFirst && cand.kind === 'waitlist' && cand.status === 'accepted';
+    const emphasized = confirmed || heldWaitlist;
+
+    let badgeCls, badgeLabel;
+    if (confirmed) { badgeCls = 'wl-badge-enrolled'; badgeLabel = 'Confirmed · locked'; }
+    else if (heldWaitlist) { badgeCls = 'wl-badge-accepted'; badgeLabel = 'Offer accepted · held'; }
+    else if (isFirst) { badgeCls = cand.status === 'offered' ? 'wl-badge-offered' : 'wl-badge-pending'; badgeLabel = cand.status === 'offered' ? 'Spot offered' : 'Waitlist · pending'; }
+    else { badgeCls = 'wl-badge-pending'; badgeLabel = 'Planning hold'; }
+
+    let note;
+    if (confirmed) note = 'Currently enrolled — counts against capacity today';
+    else if (heldWaitlist) note = 'Seat held from the requested start';
+    else if (isFirst) note = 'Requested start — no seat held yet';
+    else note = `Projected hold, ${seg.room.ageMinMonths}${seg.room.ageMaxMonths == null ? '+' : `–${seg.room.ageMaxMonths}`} months`;
+
+    const rangeLabel = seg.end
+        ? `${wlpVizFmtDate(seg.start)} – ${wlpVizFmtDate(new Date(seg.end.getTime() - 86400000))}`
+        : `${wlpVizFmtDate(seg.start)} – ongoing`;
+
+    const dayChipsHtml = cand.flexible
+        ? `<span class="wlp-chip wlp-chip-off" style="width:auto;padding:2px 8px">any ${cand.flexibleCount}/wk</span>`
+        : TREND_DAYS.map(d => {
+            const on = cand.days.includes(d);
+            const cls = !on ? 'wlp-chip-off' : (isFirst && emphasized ? 'wlp-chip-open' : 'wlp-chip-hold');
+            return `<span class="wlp-chip ${cls}">${d}</span>`;
+        }).join('');
+
+    const seatNote = confirmed ? 'counts against capacity' : (heldWaitlist ? 'counts in forecast' : (isFirst ? 'demand only' : 'included in forecast'));
+
+    return `
+        <div class="wlp-viz-seg-wrap">
+            <div class="wlp-viz-seg-card${emphasized ? ' is-confirmed' : ''}">
+                <span class="wl-badge ${badgeCls}">${escHtml(badgeLabel)}</span>
+                <div class="wlp-viz-seg-room">${escHtml(seg.room.label)}</div>
+                <div class="wlp-viz-seg-ages">${escHtml(seg.room.ages)}</div>
+                <div class="wlp-viz-seg-range">${escHtml(rangeLabel)}</div>
+                <div class="wlp-viz-seg-note">${escHtml(note)}</div>
+                <div class="wlp-viz-seg-days">${dayChipsHtml}<span style="font-size:11.5px;color:var(--text-muted);margin-left:6px;">${escHtml(seatNote)}</span></div>
+            </div>
+            ${i < segs.length - 1 ? '<div class="wlp-viz-seg-arrow">→</div>' : ''}
+        </div>`;
+}
+
+function wlpRenderVizChild(alloc) {
+    const candidates = wlpVizChildCandidates(alloc);
+    if (!candidates.length) {
+        return `
+            <div class="wlp-viz-subhead"><div>
+                <div class="wlp-viz-subhead-title">One child, all the way through</div>
+                <div class="wlp-viz-subhead-sub">No enrolled or waitlisted child has a birth date on file yet.</div>
+            </div></div>`;
+    }
+    const cand = candidates.find(c => c.key === _wlp.vizChildKey) || candidates[0];
+    _wlp.vizChildKey = cand.key;
+    const segs = wlpVizChildSegments(cand);
+    const options = candidates.map(c => `<option value="${escHtml(c.key)}" ${c.key === cand.key ? 'selected' : ''}>${escHtml(wlpVizChildOptionLabel(c))}</option>`).join('');
+
+    if (!segs.length) {
+        return `
+            <div class="wlp-viz-subhead">
+                <div>
+                    <div class="wlp-viz-subhead-title">One child, all the way through</div>
+                    <div class="wlp-viz-subhead-sub">${escHtml(cand.name)} has aged past every room this center has.</div>
+                </div>
+                <label class="wlp-viz-picker">Child<select id="wlpVizChildSel">${options}</select></label>
+            </div>`;
+    }
+
+    const tier = cand.kind === 'waitlist' ? wlpVizTierInfo(cand) : null;
+    const segCards = segs.map((seg, i) => wlpVizSegmentCardHtml(seg, i, segs, cand)).join('');
+
+    // Ribbon: proportional width per segment, in months; the terminal
+    // open-ended room (no ageMaxMonths) gets a fixed nominal width purely so
+    // it renders as a real band — never a fabricated "ages out" date this
+    // schema doesn't define (see room config: Owl's ageMaxMonths is null).
+    const ONGOING_NOMINAL_MONTHS = 18;
+    const MS_PER_MONTH = 2629800000; // 30.44 days — average, matches wlpVizAddMonths' calendar-month steps closely enough for a proportional ribbon
+    const spans = segs.map(seg => {
+        const end = seg.end || wlpVizAddMonths(seg.start, ONGOING_NOMINAL_MONTHS);
+        return Math.max(1, (end - seg.start) / MS_PER_MONTH);
+    });
+    const total = spans.reduce((a, b) => a + b, 0) || 1;
+    const palette = [
+        { bg: 'var(--green-pale)', fg: 'var(--green-dark)' },
+        { bg: 'var(--sun-pale)', fg: 'var(--mustard-dark)' },
+        { bg: 'var(--tang-pale)', fg: 'var(--tang-dark)' },
+        { bg: 'var(--warm-gray)', fg: 'var(--text-muted)' },
+    ];
+    const ribbon = segs.map((seg, i) => {
+        const pct = (spans[i] / total) * 100;
+        const tone = palette[i % palette.length];
+        return `<div class="wlp-viz-ribbon-band${seg.end ? '' : ' is-ongoing'}" style="width:${pct}%;background:${tone.bg};color:${tone.fg}">${escHtml(seg.room.label.replace(' Room', ''))}</div>`;
+    }).join('');
+    const ticks = segs.map((seg, i) => {
+        const pct = (spans[i] / total) * 100;
+        return `<div class="wlp-viz-ribbon-tick" style="width:${pct}%">${escHtml(seg.start.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }))}</div>`;
+    }).join('');
+
+    const dobDate = new Date(cand.dob + 'T00:00:00');
+    const birthLine = (cand.kind === 'waitlist' && dobDate > new Date()) ? `Due ${wlpVizFmtDate(dobDate)}` : `Born ${wlpVizFmtDate(dobDate)}`;
+    const daysLine = cand.flexible ? `Any ${cand.flexibleCount} days/week` : (cand.days.length ? cand.days.join(' + ') : '—');
+    const lastSeg = segs[segs.length - 1];
+    const horizonLine = tier
+        ? `Waitlist · requested start ${wlpVizFmtDate(new Date((cand.desiredStartDate || cand.dob) + 'T00:00:00'))}`
+        : `Planned through ${escHtml(lastSeg.room.label.replace(' Room', ''))}${lastSeg.end ? '' : ' (ongoing)'}`;
+    const footnote = tier
+        ? tier.note
+        : `The confirmed schedule is locked and billed. Every room downstream carries a planning hold for ${cand.name}, so a seat is never double-promised.`;
+
+    return `
+        <div class="wlp-viz-subhead">
+            <div>
+                <div class="wlp-viz-subhead-title">One child, all the way through</div>
+                <div class="wlp-viz-subhead-sub">Confirmed placement, then the planning holds each room owes this child as they age up</div>
+            </div>
+            <label class="wlp-viz-picker">Child<select id="wlpVizChildSel">${options}</select></label>
+        </div>
+        <div class="wlp-viz-body">
+            <div class="wlp-viz-summary">
+                <span class="wlp-viz-summary-name">${escHtml(cand.name)}</span>
+                <span class="wlp-viz-summary-fact">${escHtml(birthLine)}</span>
+                <span class="wlp-viz-summary-fact">Requested days: ${escHtml(daysLine)}</span>
+                <span class="wlp-viz-summary-fact">${escHtml(horizonLine)}</span>
+            </div>
+            ${tier ? `<div class="wlp-viz-tier-note ${cand.status === 'accepted' ? 'is-held' : 'is-pending'}">${escHtml(tier.note)}</div>` : ''}
+            <div class="wlp-viz-segments">${segCards}</div>
+            <div class="wlp-viz-ribbon-label">Seat held, month by month</div>
+            <div class="wlp-viz-ribbon">${ribbon}</div>
+            <div class="wlp-viz-ribbon-ticks">${ticks}</div>
+            <div class="wlp-viz-legend">
+                <span><span class="wlp-viz-legend-swatch" style="background:var(--green-pale);border:1px solid var(--green-lt)"></span>Confirmed &amp; locked — counts against capacity today</span>
+                <span><span class="wlp-viz-legend-swatch" style="background:var(--sun-pale);border:1px solid var(--sun-lt)"></span>Planning hold — reserved in the forecast, not yet billed</span>
+            </div>
+        </div>
+        <div class="wlp-viz-footnote" style="padding:0 24px 22px;">${escHtml(footnote)}</div>`;
+}
+
+function wlpAttachVizChildListeners() {
+    document.getElementById('wlpVizChildSel')?.addEventListener('change', e => {
+        _wlp.vizChildKey = e.target.value;
+        renderWaitlistPlanner();
+    });
+}
+
+// ── One room, next 12 months ─────────────────────────────────
+
+// Union, across the 5 weekdays, of wlpDayRoster's real per-day rosters
+// (already handles the real/projected split — see that function's own
+// header comment) — inverted into one row per child so a whole week's
+// pattern reads at a glance, matching the design source's table shape.
+function wlpVizRoomRoster(roomId, monthIdx, alloc) {
+    const byName = new Map();
+    TREND_DAYS.forEach(day => {
+        wlpDayRoster(roomId, day, monthIdx, alloc).forEach(o => {
+            if (!byName.has(o.name)) byName.set(o.name, { name: o.name, kind: o.kind, split: o.split, days: new Set() });
+            byName.get(o.name).days.add(day);
+        });
+    });
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function wlpRenderVizRoom(alloc) {
+    const room = alloc.roomMeta[_wlp.vizRoomId]?.room || alloc.rooms[0];
+    _wlp.vizRoomId = room.id;
+    const months = alloc.months;
+    const sel = Math.min(Math.max(_wlp.vizMonthIdx || 0, 0), months.length - 1);
+    _wlp.vizMonthIdx = sel;
+    const selMo = months[sel];
+    const staffCount = room.staffRatio ? Math.ceil((room.capacity || 0) / room.staffRatio) : null;
+
+    const roomOptions = alloc.rooms.map(r => `<option value="${r.id}" ${r.id === room.id ? 'selected' : ''}>${escHtml(r.label)} · ${escHtml(r.ages)}</option>`).join('');
+
+    const monthCards = months.map(mo => {
+        const dayMap = alloc.finalGrid[room.id][mo.idx];
+        const cells = TREND_DAYS.map(d => `<div class="wlp-viz-month-cell ${wlpAvailClass(dayMap[d], room.capacity)}">${wlpOpenLabel(dayMap[d])}</div>`).join('');
+        // Total membership churn for this room this month: gradOut (leaving),
+        // gradIn (arriving up from a lower room), incoming (waitlist admits,
+        // promised or pending) — the same three real event arrays the Moving
+        // tab and Grid roster panel already read, just counted rather than
+        // narrated.
+        const changeCount = (alloc.gradOut[room.id][mo.idx] || []).length
+            + (alloc.gradIn[room.id][mo.idx] || []).length
+            + (alloc.incoming[room.id][mo.idx] || []).length;
+        const paidHolds = alloc.kids.filter(k => k.room === room.id && k.promised && alloc.fitMonthByKid[k.id] != null && alloc.fitMonthByKid[k.id] <= mo.idx).length;
+        const waiting = alloc.kids.filter(k => k.room === room.id && !k.promised && k.desiredStartM <= mo.idx
+            && !(alloc.fitMonthByKid[k.id] != null && alloc.fitMonthByKid[k.id] <= mo.idx)).length;
+        const demandParts = [];
+        if (paidHolds) demandParts.push(`${paidHolds} paid hold${paidHolds === 1 ? '' : 's'}`);
+        demandParts.push(waiting ? `${waiting} waiting` : 'no one waiting');
+        const [monLabel, yearLabel] = mo.label.split(' ');
+        return `
+            <div class="wlp-viz-month-card${mo.idx === sel ? ' selected' : ''}" data-wlp-viz-month="${mo.idx}">
+                <div class="wlp-viz-month-head"><span class="wlp-viz-month-mon">${escHtml(monLabel)}</span><span class="wlp-viz-month-year">${escHtml(yearLabel)}</span></div>
+                <div class="wlp-viz-month-daynames">${TREND_DAYS.map(d => `<div class="wlp-viz-month-dayname">${escHtml(WLP_VIZ_DAY_ABBR[d])}</div>`).join('')}</div>
+                <div class="wlp-viz-month-cells">${cells}</div>
+                <div class="wlp-viz-month-note${changeCount ? ' has-changes' : ''}">${changeCount ? `${changeCount} seat change${changeCount === 1 ? '' : 's'}` : 'No room changes'}</div>
+                <div class="wlp-viz-month-demand">${escHtml(demandParts.join(' · '))}</div>
+            </div>`;
+    }).join('');
+
+    const roster = wlpVizRoomRoster(room.id, sel, alloc);
+    const rosterRows = roster.map(o => {
+        const cells = TREND_DAYS.map(d => {
+            if (!o.days.has(d)) return '<div class="wlp-viz-roster-cell"></div>';
+            const cls = o.kind === 'enrolled' ? 'is-in' : 'is-hold';
+            const label = o.kind === 'enrolled' ? 'In' : 'Hold';
+            return `<div class="wlp-viz-roster-cell"><div class="wlp-viz-roster-mark ${cls}">${label}</div></div>`;
+        }).join('');
+        const sub = o.kind === 'enrolled' ? 'Locked schedule' : wlpRosterTag(o.kind, o.split);
+        return `
+            <div class="wlp-viz-roster-row">
+                <div class="wlp-viz-roster-name">
+                    <div class="wlp-viz-roster-childname">${escHtml(o.name)}</div>
+                    <div class="wlp-viz-roster-sub">${sub}</div>
+                </div>
+                ${cells}
+            </div>`;
+    }).join('');
+    const openRowCells = TREND_DAYS.map(d => {
+        const open = alloc.finalGrid[room.id][sel][d];
+        return `<div class="wlp-viz-roster-cell"><div class="wlp-viz-roster-mark ${wlpAvailClass(open, room.capacity)}" style="border:none">${wlpOpenLabel(open)}</div></div>`;
+    }).join('');
+
+    const roomKids = wlpSortByPriority(wlpRankedKids(alloc).filter(k => k.room === room.id));
+    const queueRowsHtml = roomKids.length
+        ? roomKids.map(k => wlpRenderQueueRow(k, alloc)).join('')
+        : `<div class="wlp-empty-note" style="padding:16px 0;">No one is waiting for ${escHtml(room.label)}.</div>`;
+    const isCurrent = sel <= alloc.anchorIdx;
+
+    return `
+        <div class="wlp-viz-subhead">
+            <div>
+                <div class="wlp-viz-subhead-title">${escHtml(room.label)} — the next ${months.length} months</div>
+                <div class="wlp-viz-subhead-sub">${escHtml(months[0].label)} – ${escHtml(months[months.length - 1].label)} · ${room.capacity ?? '—'} seats${staffCount ? ` · ${staffCount} staff at 1:${room.staffRatio}` : ''} · select a month to inspect its roster</div>
+            </div>
+            <label class="wlp-viz-picker">Room<select id="wlpVizRoomSel">${roomOptions}</select></label>
+        </div>
+        <div class="wlp-viz-body">
+            <div class="wlp-viz-months">${monthCards}</div>
+            <div class="wlp-viz-legend" style="margin-top:16px;">
+                <span><span class="wlp-viz-legend-swatch" style="background:var(--wlp-green-bg);border:1px solid var(--green-lt)"></span>3+ seats open</span>
+                <span><span class="wlp-viz-legend-swatch" style="background:var(--wlp-amber-bg);border:1px solid var(--sun-lt)"></span>1–2 left</span>
+                <span><span class="wlp-viz-legend-swatch" style="background:var(--wlp-red-bg);border:1px solid var(--tang-soft)"></span>Full</span>
+                <span>Numbers are open seats on that weekday. Click a month to open its roster.</span>
+            </div>
+
+            <div class="wlp-viz-section-head">
+                <div class="wlp-viz-section-title">${escHtml(room.label)} · ${escHtml(selMo.label)}</div>
+                <div class="wlp-viz-section-count">${roster.length} ${roster.length === 1 ? 'child appears' : 'children appear'} during this month</div>
+            </div>
+            <div class="wlp-viz-table">
+                <div class="wlp-viz-roster-head"><div>Child</div>${TREND_DAYS.map(d => `<div>${escHtml(d)}</div>`).join('')}</div>
+                ${rosterRows || `<div class="wlp-empty-note" style="padding:16px;">No one is scheduled here yet.</div>`}
+                <div class="wlp-viz-roster-foot"><div>Open seats</div>${openRowCells}</div>
+            </div>
+            <div class="wlp-viz-footnote">${isCurrent
+                ? 'Rows are real, registered bookings for this month.'
+                : 'Rows are projected forward through known graduations and matched waitlist starts — not yet real registrations.'} Children line up by weekday, so an opening is visible as an empty box rather than a number to work out.</div>
+
+            <div class="wlp-viz-section-head">
+                <div class="wlp-viz-section-title">Waitlist for ${escHtml(room.label)}</div>
+                <div class="wlp-viz-section-count">${roomKids.length} ${roomKids.length === 1 ? 'family' : 'families'} waiting</div>
+            </div>
+            <div style="margin-top:4px;">${queueRowsHtml}</div>
+        </div>`;
+}
+
+function wlpAttachVizRoomListeners() {
+    document.getElementById('wlpVizRoomSel')?.addEventListener('change', e => {
+        _wlp.vizRoomId = e.target.value;
+        _wlp.vizMonthIdx = 0;
+        renderWaitlistPlanner();
+    });
+    document.querySelectorAll('[data-wlp-viz-month]').forEach(el => {
+        el.addEventListener('click', () => {
+            _wlp.vizMonthIdx = Number(el.dataset.wlpVizMonth);
+            renderWaitlistPlanner();
+        });
+    });
+    // Same delegated Enroll/Edit/expand wiring the Queue tab uses — the rows
+    // here are rendered with wlpRenderQueueRow(), so this is the exact same
+    // markup and needs no view-specific handlers of its own.
+    wlpWireQueueRowActions();
 }
 
 // ── Offer / Tour modal bridges (reuses the existing #wlOfferModal /
