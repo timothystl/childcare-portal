@@ -29,7 +29,10 @@ let _flCalCursor  = {};               // same key -> {year, month} (0-indexed), 
 let _flRegsLoading = false;
 let _flRegsLoaded  = false;           // allRegistrations has been fetched (or confirmed already loaded) at least once
 
-const _FL_DOW    = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+// Monday–Friday only — the center is closed weekends (same 5-day week the
+// staff schedule and time-off tables already assume), so a day-of-care
+// calendar has nothing to show in a Saturday/Sunday column.
+const _FL_DOW    = ['M', 'T', 'W', 'T', 'F'];
 const _FL_MONTHS = ['January','February','March','April','May','June',
                      'July','August','September','October','November','December'];
 
@@ -214,30 +217,41 @@ function _flCalGridHtml(cursor, reg) {
     const existingMap = {};
     (reg?.registration_dates || []).forEach(d => { existingMap[d.care_date] = d; });
 
-    const firstDow     = new Date(year, month, 1).getDay(); // 0 = Sun
-    const daysInMonth  = new Date(year, month + 1, 0).getDate();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Weekends are skipped entirely, not just grayed out — a weekday's
+    // column (Mon=0 … Fri=4) is a fixed function of its own date
+    // (dow - 1), so the sequence of kept days lands in the right column
+    // on its own; a Friday→Monday jump crosses exactly one Sat+Sun pair,
+    // which is a full row-width skip, so no running column counter is
+    // needed to keep the grid aligned across the weekend.
+    const cells = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dow = new Date(year, month, day).getDay(); // 0 = Sun … 6 = Sat
+        if (dow === 0 || dow === 6) continue;
+        cells.push({ day, col: dow - 1 });
+    }
 
     let html = _FL_DOW.map(d => `<div class="fl-cal-hdr">${d}</div>`).join('');
-    for (let i = 0; i < firstDow; i++) html += '<div class="fl-cal-cell other-month"></div>';
+    if (cells.length) {
+        for (let i = 0; i < cells[0].col; i++) html += '<div class="fl-cal-cell other-month"></div>';
+    }
 
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const dow = new Date(year, month, day).getDay();
-        const isWeekend = dow === 0 || dow === 6;
-        const existing  = existingMap[dateStr];
+    cells.forEach(({ day }) => {
+        const dateStr  = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const existing = existingMap[dateStr];
         let cls = 'fl-cal-cell';
         let title = '';
         if (existing && !existing.waitlisted) {
             cls += existing.day_type === 'half' ? ' is-half' : ' is-full';
             title = existing.day_type === 'half' ? 'Half day' : 'Full day';
-        } else if (isWeekend) {
-            cls += ' weekend';
         }
         html += `<div class="${cls}"${title ? ` title="${title}"` : ''}>${day}</div>`;
-    }
+    });
 
-    const remainder = (firstDow + daysInMonth) % 7;
-    if (remainder > 0) for (let i = remainder; i < 7; i++) html += '<div class="fl-cal-cell other-month"></div>';
+    const remainder = (cells.length ? cells[0].col : 0) + cells.length;
+    const trailing  = (5 - (remainder % 5)) % 5;
+    for (let i = 0; i < trailing; i++) html += '<div class="fl-cal-cell other-month"></div>';
     return html;
 }
 
