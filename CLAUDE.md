@@ -244,6 +244,47 @@ elsewhere in this file).
 
 ---
 
+## Sidebar feature search (2026-09-03)
+
+Prompted directly: the director often can't find a tool because she
+doesn't remember which of the seven tabs it lives under. `#apNav` (the
+desktop 900px+ sidebar, `apNavHtml()` in `js/admin/admin-portal.js`) now
+carries a search box above the tool groups — typing a name filters **every**
+tool in `AP_TOOLS` regardless of which tab is currently open, not just the
+active tab's own groups, and shows which tab/group each match lives under
+so she also learns where to look next time. Clicking a result calls the
+existing `apGo(key)`, which already jumps across tabs.
+
+- **Matches name, blurb, group, and tab label** — "who owes" or "PTO"
+  finds a tool even when that phrase is only in its description, not its
+  title. `apToolAvailable(tool)` (the same role/visibility gate the normal
+  groups listing already uses) filters results too, so a `restricted`
+  admin's search can't surface a `full`-only tool that would 404 if clicked.
+- **Typing repaints only `#apNavGroups`**, not the whole sidebar — the
+  search input itself and the tabs row above it are untouched, so the
+  input never loses focus mid-keystroke the way replacing the whole `#apNav`
+  on every keystroke would (same "targeted sub-tree update" pattern the
+  Family Lookup panel above uses for its own search box).
+- **`apGo()` clears the query** on any navigation, not just a search-result
+  click — so after jumping to a tool the sidebar shows that tab's real
+  groups again rather than stale search results.
+- **Deliberately desktop-sidebar-only.** Below 900px `#apNav` doesn't
+  render at all — `#apTabbar` (the bottom tab bar) replaces it entirely and
+  carries no tool sub-list of any kind ("a tool is one tap further, via the
+  dashboard's own pills"), so there is no equivalent list for a mobile
+  search to filter. A mobile search overlay would be a separate, larger
+  feature and wasn't attempted here.
+
+Verified with a Node harness loading `admin-portal.js` standalone (stubbed
+`document`/`window`): finds a tool by name across tabs, matches on blurb
+text, respects role gating, and the clear button correctly resets `#apNavGroups`
+back to the normal tab view — no live login was available in this session to
+click through the real sidebar. `npm test` — 298/298 unaffected. `npm run
+build` — `dist/admin.min.js` grepped for `apNavSearchInput`/
+`_apNavSearchResultsHtml` to confirm it shipped in the bundle.
+
+---
+
 ## Finance tab overhaul — the Bookkeeper tab (2026-08-27)
 
 Built from `Billing_UI_inconsistency_issues.zip` → `design_handoff_finance_hub/`

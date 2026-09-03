@@ -655,6 +655,11 @@ function apGo(key) {
     if (!tool || !apToolAvailable(tool)) return;
     apState.tab  = tool.tab;
     apState.view = key;
+    // Any navigation — including clicking a sidebar search result — lands
+    // on the tool's own tab, so a stale search query left in the sidebar
+    // would otherwise keep showing search results instead of that tab's
+    // real groups the moment apNavHtml() next re-renders.
+    _apNavSearchQuery = '';
     apSavePrefs();
     apRender();
     window.scrollTo(0, 0);
@@ -741,12 +746,52 @@ function apRender() {
  * bottom tab bar (apTabbarHtml) takes over navigation entirely and this
  * tool-group listing isn't shown; the dashboard's own contextual pills are
  * the mobile way to reach a tool, same as the sidebar highlights it above.
+ *
+ * Carries a search box (apNavSearchHtml/_apNavGroupsBodyHtml) so a tool
+ * "buried" under a tab the director doesn't think to open is still findable
+ * by name — see the search section below.
  */
 function apNavHtml() {
     const tabs = Object.keys(AP_TABS).filter(apTabAvailable).map(k => `
         <button class="ap-nav-tab${k === apState.tab ? ' active is-active' : ''}" data-ap-tab="${k}">
             <span>${AP_TABS[k].icon}</span><span>${escHtml(AP_TABS[k].label)}</span>
         </button>`).join('');
+
+    return `<div class="ap-nav-tabs">${tabs}</div>
+        ${apNavSearchHtml()}
+        <div id="apNavGroups">${_apNavGroupsBodyHtml()}</div>`;
+}
+
+// ── Sidebar feature search ──────────────────────────────────
+// A director who doesn't remember which of the seven tabs a tool lives
+// under can type its name here instead of clicking through each one.
+// Searches every tool in AP_TOOLS regardless of the tab currently open —
+// apToolAvailable() doesn't read apState.tab, so this is a real cross-tab
+// search, not just a filter on the current tab's own groups.
+//
+// Deliberately desktop-sidebar-only (#apNav), same as the rest of this
+// nav — the <900px bottom tab bar carries no tool sub-list at all (a tool
+// is "one tap further, via the dashboard's own pills" there), so there is
+// no equivalent list for a mobile search to filter. A mobile search
+// overlay would be a separate, larger feature, not attempted here.
+let _apNavSearchQuery = '';
+
+function apNavSearchHtml() {
+    return `
+        <div class="ap-nav-search">
+            <input type="text" id="apNavSearchInput" class="ap-nav-search-input"
+                placeholder="Search features…" autocomplete="off" value="${escHtml(_apNavSearchQuery)}">
+            ${_apNavSearchQuery ? `<button type="button" class="ap-nav-search-clear" data-ap-nav-search-clear aria-label="Clear search">✕</button>` : ''}
+        </div>`;
+}
+
+// Split out of apNavHtml() so typing a search query only has to replace
+// this sub-tree (#apNavGroups) rather than the whole nav — the tabs row
+// and the search input itself stay untouched, so the input never loses
+// focus/cursor position mid-keystroke the way re-rendering it would.
+function _apNavGroupsBodyHtml() {
+    const q = _apNavSearchQuery.trim();
+    if (q) return _apNavSearchResultsHtml(q);
 
     const groups = apGroupsForTab(apState.tab);
     // A single group carries no differentiating information — only print the
@@ -777,7 +822,70 @@ function apNavHtml() {
         The close, bank matching and room P&amp;L live under Bookkeeper below;
         nothing here pushes them at you.</p>` : '';
 
-    return `<div class="ap-nav-tabs">${tabs}</div>${body}${financeNote}`;
+    return `${body}${financeNote}`;
+}
+
+// Matches on the tool's own name and blurb, plus the tab/group it lives
+// under — "who owes" or "PTO" should find a tool even if that phrase is
+// only in its description, not its title.
+function _apNavSearchResultsHtml(q) {
+    const lower = q.toLowerCase();
+    const matches = AP_TOOLS.filter(t => {
+        if (!apToolAvailable(t)) return false;
+        const tabLabel = AP_TABS[t.tab]?.label || '';
+        return t.name.toLowerCase().includes(lower) ||
+               (t.blurb || '').toLowerCase().includes(lower) ||
+               (t.group || '').toLowerCase().includes(lower) ||
+               tabLabel.toLowerCase().includes(lower);
+    });
+    if (!matches.length) return `<p class="ap-nav-note">No feature matches "${escHtml(q)}".</p>`;
+    return `<div class="ap-nav-group">${matches.length} result${matches.length === 1 ? '' : 's'}</div>` +
+        matches.map(t => {
+            const tabLabel = AP_TABS[t.tab]?.label || '';
+            return `
+            <button class="ap-nav-item ap-nav-search-result${t.key === apState.view ? ' active is-active' : ''}" data-ap-go="${t.key}">
+                <span>${t.icon}</span>
+                <span class="ap-nav-search-result-text">
+                    <span class="ap-nav-search-result-name">${escHtml(t.name)}</span>
+                    <span class="ap-nav-search-result-loc">${escHtml(tabLabel)}${t.group ? ' · ' + escHtml(t.group) : ''}</span>
+                </span>
+            </button>`;
+        }).join('');
+}
+
+function apNavSearchInput(value) {
+    _apNavSearchQuery = value;
+    const host = document.getElementById('apNavGroups');
+    if (host) host.innerHTML = _apNavGroupsBodyHtml();
+    // The clear button's presence depends on the query, so it's the one
+    // part of apNavSearchHtml() outside #apNavGroups that still needs a
+    // repaint — done in place rather than re-rendering the whole search
+    // box, which would drop the input's focus mid-keystroke.
+    const wrap = document.querySelector('.ap-nav-search');
+    if (wrap) {
+        let clearBtn = wrap.querySelector('.ap-nav-search-clear');
+        if (_apNavSearchQuery && !clearBtn) {
+            clearBtn = document.createElement('button');
+            clearBtn.type = 'button';
+            clearBtn.className = 'ap-nav-search-clear';
+            clearBtn.setAttribute('data-ap-nav-search-clear', '');
+            clearBtn.setAttribute('aria-label', 'Clear search');
+            clearBtn.textContent = '✕';
+            wrap.appendChild(clearBtn);
+        } else if (!_apNavSearchQuery && clearBtn) {
+            clearBtn.remove();
+        }
+    }
+}
+
+function apNavSearchClear() {
+    _apNavSearchQuery = '';
+    const input = document.getElementById('apNavSearchInput');
+    if (input) input.value = '';
+    const host = document.getElementById('apNavGroups');
+    if (host) host.innerHTML = _apNavGroupsBodyHtml();
+    document.querySelector('.ap-nav-search-clear')?.remove();
+    input?.focus();
 }
 
 /**
@@ -2715,12 +2823,15 @@ function setupAdminPortal() {
         if (flEdit) { _flEditFamily(flEdit.dataset.flEdit); return; }
         const flChangeDays = e.target.closest('[data-fl-change-days]');
         if (flChangeDays) { _flChangeDays(flChangeDays.dataset.flChangeDays); return; }
+        if (e.target.closest('[data-ap-nav-search-clear]')) { apNavSearchClear(); return; }
     });
 
-    // Family Lookup's search box — the shell has no other delegated 'input'
-    // listener, so this is a new one, not an addition to an existing block.
+    // Family Lookup's search box, and the sidebar's own feature search —
+    // the shell had no delegated 'input' listener before Family Lookup
+    // added one; both live here rather than each adding a separate listener.
     document.addEventListener('input', e => {
         if (e.target.id === 'flSearchInput') _flHandleSearchInput(e.target.value);
+        if (e.target.id === 'apNavSearchInput') apNavSearchInput(e.target.value);
     });
 
     document.addEventListener('change', e => {
