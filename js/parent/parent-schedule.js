@@ -102,7 +102,9 @@ function psRender() {
         return;
     }
 
-    const closed = new Map((psData.closures || []).map(c => [c.close_date, c.reason]));
+    // 'half' distinguishes a half-day closure ("Close at 1 pm" — still a
+    // billed, bookable morning) from a full closure (no care, not charged).
+    const closed = new Map((psData.closures || []).map(c => [c.close_date, { reason: c.reason, half: !!c.half_day }]));
     const invoiceByMonth = new Map((psData.invoices || []).map(i => [i.month, i]));
 
     // child -> month -> days
@@ -178,10 +180,15 @@ function psMonthBlock(monthKey, days, room, closed, invoiceByMonth) {
 
     const full  = days.filter(d => d.day_type !== 'half').length;
     const half  = days.filter(d => d.day_type === 'half').length;
-    // A closed day is not charged — the announcement copy in the design says so
-    // explicitly ("No charge for that day"), so the total must agree with it.
-    const total = days.reduce((sum, d) =>
-        closed.has(d.care_date) ? sum : sum + psDayRate(psRoom(d.roomId) || room, d.day_type), 0);
+    // A FULLY closed day is not charged — the announcement copy in the design
+    // says so explicitly ("No charge for that day"), so the total must agree
+    // with it. A half-day closure ("Close at 1 pm") is still a real morning of
+    // care and is billed like any other half day — only a full closure is free.
+    const total = days.reduce((sum, d) => {
+        const c = closed.get(d.care_date);
+        if (c && !c.half) return sum;
+        return sum + psDayRate(psRoom(d.roomId) || room, d.day_type);
+    }, 0);
 
     const inv = invoiceByMonth.get(monthKey);
     const status = inv ? psStatusPill(inv) : '';
@@ -229,12 +236,23 @@ function psChip(d, closed) {
     const dt   = new Date(d.care_date + 'T00:00:00');
     const dow  = dt.toLocaleDateString('en-US', { weekday: 'short' });
     const date = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const isClosed = closed.has(d.care_date);
-    const isHalf   = d.day_type === 'half';
-    const cls = isClosed ? 'ps-day ps-day-closed'
-              : isHalf   ? 'ps-day ps-day-half' : 'ps-day';
-    const kind = isClosed ? 'Closed' : (isHalf ? '½' : 'Full');
-    const title = isClosed ? ` title="${psEsc(closed.get(d.care_date) || 'Center closed')} — no charge"` : '';
+    const closure      = closed.get(d.care_date);
+    const isFullClosed = !!closure && !closure.half;
+    // A half-day closure isn't "closed" here — the child was there that
+    // morning and it's billed like any other half day (day_type is already
+    // 'half' for these). It just gets its own look so the reason ("Close at
+    // 1 pm") stays visible instead of reading as a normal, parent-chosen half day.
+    const isHalfClosure = !!closure && closure.half;
+    const isHalf         = d.day_type === 'half';
+    const cls = isFullClosed  ? 'ps-day ps-day-closed'
+              : isHalfClosure ? 'ps-day ps-day-half ps-day-half-closure'
+              : isHalf        ? 'ps-day ps-day-half' : 'ps-day';
+    const kind = isFullClosed ? 'Closed' : (isHalf ? '½' : 'Full');
+    const title = isFullClosed
+        ? ` title="${psEsc(closure.reason || 'Center closed')} — no charge"`
+        : isHalfClosure
+            ? ` title="${psEsc(closure.reason || 'Center closes early')} — half day"`
+            : '';
     return `<span class="${cls}"${title}>
         <span class="ps-day-dow">${dow.toUpperCase()}</span>
         <span class="ps-day-date">${date}</span>

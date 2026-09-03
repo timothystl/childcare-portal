@@ -1449,6 +1449,11 @@ body.pb-modal-open { overflow: hidden; }
 .ps-day-kind { font-size: .72em; font-weight: 600; color: var(--text-muted); }
 .ps-day-half { background: var(--sun-pale); border-color: var(--sun-lt); }
 .ps-day-half .ps-day-kind { color: var(--mustard-dark); font-weight: 800; }
+/* Half day because the CENTER closes early that day, not a parent's own
+   choice — same tone as a normal half day (it's billed the same way) but a
+   dashed border keeps the reason legible at a glance instead of reading as
+   an ordinary half-day pick. The title tooltip carries the actual reason. */
+.ps-day-half-closure { border-style: dashed; border-color: var(--mustard-dark); }
 /* A closed day is struck through rather than removed: the parent booked it,
    and its absence would read as a mistake in the schedule. It is not billed —
    psMonthBlock leaves it out of the total. */
