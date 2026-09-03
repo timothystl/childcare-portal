@@ -898,6 +898,10 @@ button:focus-visible,
 }
 .cal-day.closed .day-num { color: var(--text-muted); text-decoration: line-through; }
 .closed-badge { color: var(--text-muted); }
+/* Half-day closure ("Close at 1 pm") — still open and bookable, so it gets the
+   mustard "needs attention" tone rather than the closed-gray or a normal green,
+   distinct from both "fully closed" and "just a normal open day". */
+.half-closure-badge { color: var(--mustard-dark); }
 
 /* Item 3: closure reason shown on calendar cell */
 .closed-reason {

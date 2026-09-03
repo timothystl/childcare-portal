@@ -419,8 +419,10 @@ async function fetchRoomFillForMonth(roomIds, monthKey) {
 /**
  * A facility closure record.
  * @typedef {Object} ClosureRecord
- * @property {string} close_date - ISO 8601 date (YYYY-MM-DD)
- * @property {string} reason     - Human-readable reason (may be empty string)
+ * @property {string}  close_date - ISO 8601 date (YYYY-MM-DD)
+ * @property {string}  reason     - Human-readable reason (may be empty string)
+ * @property {boolean} half_day   - true = open a partial day (e.g. "Close at 1 pm"),
+ *                                   parents may still book a half day; false = fully closed.
  */
 
 /**
@@ -537,7 +539,7 @@ async function fetchClosures() {
     if (!sbClient) return [];
     const { data, error } = await sbClient
         .from('closures')
-        .select('close_date, reason')
+        .select('close_date, reason, half_day')
         .order('close_date', { ascending: true });
     if (error) { console.error('fetchClosures:', error); return []; }
     return data || [];
@@ -545,15 +547,33 @@ async function fetchClosures() {
 
 /**
  * Adds a facility closure date.
- * @param {string} closeDate - ISO 8601 date (YYYY-MM-DD)
- * @param {string} [reason]  - Optional reason string
+ * @param {string}  closeDate     - ISO 8601 date (YYYY-MM-DD)
+ * @param {string}  [reason]      - Optional reason string
+ * @param {boolean} [halfDay]     - true = open a partial day (parents may still book
+ *                                  a half day); false (default) = fully closed
  * @returns {Promise<void>}
  */
-async function addClosure(closeDate, reason) {
+async function addClosure(closeDate, reason, halfDay) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { error } = await sbClient
         .from('closures')
-        .insert({ close_date: closeDate, reason: reason || '' });
+        .insert({ close_date: closeDate, reason: reason || '', half_day: !!halfDay });
+    if (error) throw error;
+}
+
+/**
+ * Updates an existing facility closure's reason and/or half-day flag.
+ * @param {string}  closeDate - ISO 8601 date (YYYY-MM-DD)
+ * @param {string}  reason    - Reason string (may be empty)
+ * @param {boolean} halfDay   - true = partial day, false = fully closed
+ * @returns {Promise<void>}
+ */
+async function updateClosure(closeDate, reason, halfDay) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { error } = await sbClient
+        .from('closures')
+        .update({ reason: reason || '', half_day: !!halfDay })
+        .eq('close_date', closeDate);
     if (error) throw error;
 }
 

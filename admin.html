@@ -22,7 +22,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=33">
+    <link rel="stylesheet" href="css/admin.css?v=34">
     <link rel="stylesheet" href="css/admin-portal.css?v=9">
 </head>
 <body class="admin-body">
@@ -1096,13 +1096,17 @@
                                     </div>
                                     <div class="roster-field closure-reason-field">
                                         <label for="closureReason">Reason (optional)</label>
-                                        <input type="text" id="closureReason" placeholder="e.g. Thanksgiving, Snow day">
+                                        <input type="text" id="closureReason" placeholder="e.g. Thanksgiving, Snow day, Close at 1 pm">
                                     </div>
                                     <div class="roster-btns">
                                         <button id="addClosureBtn" class="btn-primary">Block Date</button>
                                         <button id="notifyClosureBtn" class="btn-secondary" title="Send push notification to all subscribed parents about this closure">🔔 Notify Parents</button>
                                     </div>
                                 </div>
+                                <label class="closure-half-day-toggle" style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;margin-top:8px;">
+                                    <input type="checkbox" id="closureHalfDay" style="width:16px;height:16px;cursor:pointer;">
+                                    Half day only — center closes early, parents can still book the morning
+                                </label>
                                 <div id="closureList">
                                     <p class="empty-hint">No closures set.</p>
                                 </div>
