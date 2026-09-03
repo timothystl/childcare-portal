@@ -7,7 +7,8 @@
 // ============================================================
 let currentAdminRole = 'full'; // 'full' | 'restricted' — set after login
 let allRegistrations = [];
-let allClosureDates  = new Set(); // YYYY-MM-DD strings
+let allClosureDates  = new Set(); // YYYY-MM-DD strings — FULL closures only, no care available
+let halfDayClosureDates = new Map(); // YYYY-MM-DD -> reason — partial day, morning care still bookable
 let tableSortState   = { col: 'submitted', dir: 'desc' }; // default: newest first
 let familiesSortBy   = 'name'; // 'name' | 'room' | 'discount' | 'age_asc' | 'age_desc'
 let familiesPage     = 0;

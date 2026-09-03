@@ -284,14 +284,16 @@ function setupOfferLinks() {
 // ============================================================
 function setupClosures() {
     document.getElementById('addClosureBtn').addEventListener('click', async () => {
-        const date   = document.getElementById('closureDate').value;
-        const reason = document.getElementById('closureReason').value.trim();
+        const date    = document.getElementById('closureDate').value;
+        const reason  = document.getElementById('closureReason').value.trim();
+        const halfDay = document.getElementById('closureHalfDay').checked;
         if (!date) { alert('Please select a date to block.'); return; }
         try {
-            await addClosure(date, reason);
-            await logAdminAction('create', 'closure', null, { date, reason: reason || null });
-            document.getElementById('closureDate').value   = '';
-            document.getElementById('closureReason').value = '';
+            await addClosure(date, reason, halfDay);
+            await logAdminAction('create', 'closure', null, { date, reason: reason || null, half_day: halfDay });
+            document.getElementById('closureDate').value    = '';
+            document.getElementById('closureReason').value  = '';
+            document.getElementById('closureHalfDay').checked = false;
             await loadClosureList();
         } catch (err) {
             alert('Error: ' + err.message);
@@ -332,7 +334,10 @@ function setupClosures() {
 async function loadClosureList() {
     try {
         const closures  = await fetchClosures();
-        allClosureDates = new Set(closures.map(c => c.close_date));
+        allClosureDates = new Set(closures.filter(c => !c.half_day).map(c => c.close_date));
+        halfDayClosureDates = new Map(
+            closures.filter(c => c.half_day).map(c => [c.close_date, c.reason || ''])
+        );
         const container = document.getElementById('closureList');
         if (!closures.length) {
             container.innerHTML = '<p class="empty-hint">No closures set.</p>';
@@ -341,9 +346,13 @@ async function loadClosureList() {
         container.innerHTML = `
             <ul class="closure-list">
                 ${closures.map(c => `
-                    <li class="closure-item">
+                    <li class="closure-item${c.half_day ? ' is-half-day' : ''}">
                         <span class="closure-date-lbl">${friendlyShort(c.close_date)}</span>
                         <span class="closure-reason-lbl">${escHtml(c.reason || '—')}</span>
+                        ${c.half_day ? '<span class="spot-badge">Half day — AM only</span>' : ''}
+                        <button class="btn-toggle-half-closure" data-date="${c.close_date}" data-reason="${escHtml(c.reason || '')}" data-half="${c.half_day ? '1' : '0'}">
+                            ${c.half_day ? 'Make fully closed' : 'Make half day'}
+                        </button>
                         <button class="btn-remove-closure" data-date="${c.close_date}">Remove</button>
                     </li>`).join('')}
             </ul>`;
@@ -354,6 +363,21 @@ async function loadClosureList() {
                 try {
                     await deleteClosure(d);
                     await logAdminAction('delete', 'closure', null, { date: d });
+                    await loadClosureList();
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            });
+        });
+        container.querySelectorAll('.btn-toggle-half-closure').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                const d          = e.currentTarget.getAttribute('data-date');
+                const reason     = e.currentTarget.getAttribute('data-reason');
+                const wasHalfDay = e.currentTarget.getAttribute('data-half') === '1';
+                const nextHalfDay = !wasHalfDay;
+                try {
+                    await updateClosure(d, reason, nextHalfDay);
+                    await logAdminAction('update', 'closure', null, { date: d, half_day: nextHalfDay });
                     await loadClosureList();
                 } catch (err) {
                     alert('Error: ' + err.message);

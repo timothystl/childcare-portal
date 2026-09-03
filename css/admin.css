@@ -569,6 +569,20 @@ tr.pending-approval:hover { background: var(--sun-pale); }
     flex-shrink: 0;
 }
 .btn-remove-closure:hover { background: var(--tang); color: var(--white); }
+.closure-item.is-half-day { border-left-color: var(--mustard-dark); }
+.btn-toggle-half-closure {
+    background: var(--white);
+    color: var(--mustard-dark);
+    border: 2px solid var(--mustard-dark);
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .82em;
+    transition: all .2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.btn-toggle-half-closure:hover { background: var(--mustard-dark); color: var(--white); }
 
 /* ============================================================
    SIMPLIFIED ROSTER — name list  (Item 2)

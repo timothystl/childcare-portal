@@ -15,7 +15,7 @@ let selectedChildren    = [];       // [{ name, dob, room: ROOMS[i], isNew: bool
 let childSchedules      = new Map();   // studentId -> Map('YYYY-MM-DD' -> { dayType: 'full'|'half', locked?: bool }) — each child's own care days
 let activeChildId       = null;        // studentId of the child currently shown on the calendar
 let capacityCache       = {};         // { roomId: { 'YYYY-MM-DD': count } }
-let closureMap          = new Map();  // 'YYYY-MM-DD' -> reason string
+let closureMap          = new Map();  // 'YYYY-MM-DD' -> { reason, half } — half=true means a partial-day closure (morning still bookable)
 let calendarLoading     = false;
 let pickerOpenDate      = null;
 let regWindowOverride   = 'auto';     // 'auto' | 'open' | 'closed'
@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     regWindowOverride = (overrideRes.status === 'fulfilled' ? overrideRes.value : null) || 'auto';
 
     const closures = closuresRes.status === 'fulfilled' ? (closuresRes.value || []) : [];
-    closureMap = new Map(closures.map(c => [c.close_date, c.reason || '']));
+    closureMap = new Map(closures.map(c => [c.close_date, { reason: c.reason || '', half: !!c.half_day }]));
 
     const win            = getRegistrationWindow();
     const targetMonthKey = getTargetMonthKey();
@@ -711,7 +711,14 @@ async function onChildrenChanged() {
                 const dow = DOW_NAMES[d.getDay()];
                 if (recurring.has(dow)) {
                     const dateStr = `${yr}-${String(mo+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                    sched.set(dateStr, { dayType: 'full', locked: true });
+                    // A full closure on a recurring day means no care at all — don't
+                    // lock the child into a day that can't happen. A half-day closure
+                    // still happens, just morning-only, so lock it in as 'half' rather
+                    // than the usual 'full' (which would silently over-book and over-bill).
+                    const closureEntry = closureMap.get(dateStr);
+                    if (closureEntry && !closureEntry.half) continue;
+                    const dayType = closureEntry?.half ? 'half' : 'full';
+                    sched.set(dateStr, { dayType, locked: true });
                 }
             }
         }
@@ -860,9 +867,15 @@ function renderCalendar() {
         const dow     = date.getDay();
         if (dow === 0 || dow === 6) continue;
 
-        const dateStr      = formatDate(date);
-        const isPast       = date < today;
-        const isClosed     = closureMap.has(dateStr);
+        const dateStr       = formatDate(date);
+        const isPast        = date < today;
+        const closureEntry  = closureMap.get(dateStr);
+        // A half-day closure ("Close at 1 pm") isn't a blocked day — the center is
+        // still open in the morning, so it's priced/selected like any other open day,
+        // just forced to a half-day booking (see showDayPicker). Only a full closure
+        // takes the day off the board entirely.
+        const isClosed      = !!closureEntry && !closureEntry.half;
+        const isHalfClosure = !!closureEntry && closureEntry.half;
         const entry        = activeSchedule().get(dateStr);
         const isSelected   = !!entry;
         const isPickerOpen = pickerOpenDate === dateStr;
@@ -890,8 +903,11 @@ function renderCalendar() {
                     ? '<span class="selected-type-badge">½ day</span>'
                     : '<span class="selected-type-badge">Full</span>');
         } else if (isClosed) {
-            const reason = closureMap.get(dateStr);
+            const reason = closureEntry.reason;
             badge = `<span class="spot-badge closed-badge">Closed</span>${reason ? `<span class="closed-reason">${escHtml(reason)}</span>` : ''}`;
+        } else if (isHalfClosure && !isPast && status !== 'full') {
+            const reason = closureEntry.reason;
+            badge = `<span class="spot-badge half-closure-badge">Half day only</span>${reason ? `<span class="closed-reason">${escHtml(reason)}</span>` : ''}`;
         } else if (!isPast && status === 'full') {
             badge = '<span class="spot-badge full-badge">Full</span>';
         } else if (!isPast && (status === 'limited' || status === 'available')) {
@@ -968,9 +984,16 @@ function showDayPicker(dateStr, cellEl) {
     document.body.appendChild(backdrop);
 
     const hasHalf = !child.room.fullDayOnly;
+    // A half-day closure ("Close at 1 pm") means the center isn't open for a
+    // full day at all — the picker should only ever offer Half Day, never let
+    // a parent book (and get billed for) a full day that can't happen.
+    const forcedHalf = !!closureMap.get(dateStr)?.half;
 
     const childNote = selectedChildren.length > 1
         ? `<p class="picker-subtitle">For ${escHtml(child.name.split(' ')[0])}</p>`
+        : '';
+    const closureNote = forcedHalf
+        ? `<p class="picker-subtitle">${escHtml(closureMap.get(dateStr).reason || 'The center closes early this day')} — morning care only</p>`
         : '';
 
     const popup = document.createElement('div');
@@ -979,11 +1002,12 @@ function showDayPicker(dateStr, cellEl) {
     popup.innerHTML = `
         <p class="picker-title">${friendlyDate(dateStr)}</p>
         ${childNote}
+        ${closureNote}
         <div class="picker-buttons">
-            <button type="button" class="picker-btn" data-date="${dateStr}" data-type="full">
+            ${forcedHalf ? '' : `<button type="button" class="picker-btn" data-date="${dateStr}" data-type="full">
                 <span class="picker-label">Full Day</span>
                 <span class="picker-rate">${formatChildRate(child, 'full')}</span>
-            </button>
+            </button>`}
             ${hasHalf ? `<button type="button" class="picker-btn" data-date="${dateStr}" data-type="half">
                 <span class="picker-label">Half Day</span>
                 <span class="picker-rate">${formatChildRate(child, 'half')}</span>
