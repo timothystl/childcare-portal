@@ -1009,7 +1009,23 @@ async function _loadAdminUsersTable() {
             loadAdminRoles(),
         ]);
         window._adminRoles = roles;
-        _renderAdminUsersTable(result.users || []);
+        // This screen manages ADMIN accounts, not every Supabase Auth user.
+        // `callAdminUsers('list')` returns the whole Auth Admin API result —
+        // which, since parent_portal_option_b_accounts, is every family's
+        // real login too (224 rows and climbing, none of them an admin).
+        // Rendering the unfiltered list showed every parent's email with a
+        // role <select> that defaulted to "Full Access" and saved to
+        // admin_roles on change, plus a Delete button wired to their real
+        // Auth account — a click either control away from actually granting
+        // access or destroying a family's login. Scope the table to emails
+        // that are actually present in admin_roles (case-insensitively, the
+        // same match rule admin_role()/is_admin() use server-side) so an
+        // account can only appear here if it is already a real admin.
+        const roleEmails = new Set(Object.keys(roles).map(e => e.toLowerCase().trim()));
+        const adminUsers = (result.users || []).filter(u =>
+            roleEmails.has((u.email || '').toLowerCase().trim())
+        );
+        _renderAdminUsersTable(adminUsers);
     } catch (err) {
         wrap.innerHTML = `<p class="empty-hint">⚠️ Could not load users: ${escHtml(err.message)}</p>`;
     }
