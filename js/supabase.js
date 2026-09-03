@@ -2661,6 +2661,18 @@ async function fetchMySchedule() {
     return data && data !== 'null' ? data : null;
 }
 
+/** Office's read-only view of a family's own pickup list — admin RLS policy allows this direct select. */
+async function fetchPickupContactsAdmin(familyId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient
+        .from('pickup_contacts')
+        .select('id, name, relationship, note')
+        .eq('family_id', familyId)
+        .order('created_at', { ascending: true });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
 async function removePickupContact(id) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('remove_pickup_contact', { p_id: id });
