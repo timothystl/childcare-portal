@@ -1119,6 +1119,7 @@ function apRenderDashboard(page) {
     page.innerHTML = `
         <p class="ap-dash-stamp">${escHtml(dash.stamp)}</p>
         ${dash.needsYou && dash.needsYou.length ? apNeedsYouHtml(dash.needsYou) : ''}
+        ${dash.top && dash.top.length ? dash.top.join('') : ''}
         ${dash.kpis.length ? `<div class="ap-metrics">${dash.kpis.map(apKpiHtml).join('')}</div>` : ''}
         <div class="ap-body">
             <div class="ap-col">${(dash.left || []).join('')}</div>
@@ -1506,6 +1507,7 @@ function apDashDirector(live) {
     return {
         stamp: `Week of ${friendlyShort(live.weekOf)} · registrations as booked`,
         needsYou,
+        top: [apFamilyLookupPanelHtml(live)],
         kpis,
         left: [
             apPanel({ title: 'Staff needed this week',
@@ -2704,6 +2706,21 @@ function setupAdminPortal() {
             apScenario.inc = {}; apScenario.regFee = 0; apScenario.supFee = 0; apScenario.wageAdd = 0;
             apRenderScenario();
         }
+        // Family Lookup (Director dashboard) — see admin-family-lookup.js.
+        const flToggle = e.target.closest('[data-fl-toggle]');
+        if (flToggle) { _flToggleChild(flToggle.dataset.flToggle); return; }
+        const flNav = e.target.closest('[data-fl-nav-key]');
+        if (flNav) { _flNavCalendar(flNav.dataset.flNavKey, parseInt(flNav.dataset.flNavDelta, 10) || 0); return; }
+        const flEdit = e.target.closest('[data-fl-edit]');
+        if (flEdit) { _flEditFamily(flEdit.dataset.flEdit); return; }
+        const flChangeDays = e.target.closest('[data-fl-change-days]');
+        if (flChangeDays) { _flChangeDays(flChangeDays.dataset.flChangeDays); return; }
+    });
+
+    // Family Lookup's search box — the shell has no other delegated 'input'
+    // listener, so this is a new one, not an addition to an existing block.
+    document.addEventListener('input', e => {
+        if (e.target.id === 'flSearchInput') _flHandleSearchInput(e.target.value);
     });
 
     document.addEventListener('change', e => {
