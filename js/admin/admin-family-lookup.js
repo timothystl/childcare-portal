@@ -2,22 +2,31 @@
 // MODULE: Director Dashboard — Family Lookup panel
 // ============================================================
 // A search-first panel embedded directly on the Director dashboard
-// (design handoff screenshot, 2026-09-03): find a family by parent or
-// child name, call or message them, and see a child's days of care for
-// the month without leaving the dashboard.
+// (design handoff, 2026-09-03): find a family by parent or child name,
+// call or message them, and see a child's days of care for the month
+// without leaving the dashboard.
 //
 // Deliberately NOT a new AP_TOOLS entry / sidebar tool — it is dashboard
 // content, the same as the "Staff needed this week" grid or the waitlist
-// queue apDashDirector() already renders. "Edit" reuses the real Family
-// Directory edit modal (openFamilyModal(), admin-families.js) rather than
-// building a second one; nothing about a family's record is computed or
-// stored here.
+// queue apDashDirector() already renders.
 //
-// ⚠️ Search-first, not list-everything. The mockup shows every family
-// (its own dataset only had 6) with no query typed. Doing that for real
-// would mean eagerly fetching allRegistrations() — 923 kB of parent PII,
-// per CLAUDE.md's own open R12 finding — on every single admin login just
-// to show day counts, before the director has asked to look anyone up.
+// Edit / Edit Calendar / the "⋮" menu (Archive, Lock/Unlock registration,
+// Unlock login, Delete) are the EXACT controls Family Directory's own list
+// row already renders (fm-edit-btn / fm-cal-btn / fm-kebab*, admin-families.js
+// renderFamiliesList()) — this panel emits the same classes + data-family-id
+// so admin-families.js's existing document-level click handler wires them
+// for free (openFamilyModal / openAdminRegModalForFamily / archive / lock /
+// delete). Only sizing is overridden here (css/admin-portal.css), to match
+// this panel's larger buttons instead of the Directory's dense list — see
+// the note in that CSS block. "Change days of care" (a single child's
+// calendar, for the month currently in view) stays local to this panel;
+// there is no Directory equivalent to reuse for that.
+//
+// ⚠️ Search-first, not list-everything. The design shows every family with
+// no query typed (its own dataset only had 6). Doing that for real would
+// mean eagerly fetching allRegistrations() — 923 kB of parent PII, per
+// CLAUDE.md's own open R12 finding — on every single admin login just to
+// show day counts, before the director has asked to look anyone up.
 // Nothing renders (and allRegistrations is never touched) until she
 // actually types something.
 // ============================================================
@@ -29,7 +38,12 @@ let _flCalCursor  = {};               // same key -> {year, month} (0-indexed), 
 let _flRegsLoading = false;
 let _flRegsLoaded  = false;           // allRegistrations has been fetched (or confirmed already loaded) at least once
 
-const _FL_DOW    = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+// The center is closed weekends (see CLAUDE.md — staff time-off weekday is
+// constrained 0..4 for the same reason), so the days-of-care calendar is a
+// 5-column Monday–Friday grid, not a 7-column Sun–Sat one. Weekend dates are
+// simply never rendered as cells (not shown-and-grayed) — there is nothing
+// to mark, since care never happens on them.
+const _FL_DOW    = ['M', 'T', 'W', 'T', 'F'];
 const _FL_MONTHS = ['January','February','March','April','May','June',
                      'July','August','September','October','November','December'];
 
@@ -38,6 +52,14 @@ function apFamilyLookupPanelHtml(live) {
     return apPanel({
         title: 'Family Lookup',
         sub: "Find a family to call or message, and check a child's days of care for the month — right from the dashboard.",
+        tone: 'green',
+        // .ap-panel clips overflow so its top accent border respects the
+        // rounded corners — fine for every other panel, but it also clips
+        // the fm-kebab-menu dropdown this panel reuses from Family
+        // Directory (found by actually opening one, not from the diff).
+        // Nothing in this panel bleeds to the edge, so opting out of the
+        // clip is harmless here.
+        cls: 'ap-panel-overflow-visible',
         body: `
             <div class="fl-panel">
                 <div class="fl-search-row">
@@ -72,7 +94,7 @@ function _flResultsBodyHtml() {
     if (!_flRegsLoaded) _flEnsureRegistrationsLoaded();
     return `
         <p class="fl-count">${matches.length} famil${matches.length === 1 ? 'y' : 'ies'} found</p>
-        <div class="fl-list">${matches.map(f => _flFamilyCardHtml(f)).join('')}</div>`;
+        <div class="fl-list">${matches.map(f => _flFamilyRowHtml(f)).join('')}</div>`;
 }
 
 async function _flEnsureRegistrationsLoaded() {
@@ -114,7 +136,7 @@ function _flFindFamilyById(id) {
     return families.find(f => String(f.id) === String(id)) || null;
 }
 
-function _flFamilyCardHtml(f) {
+function _flFamilyRowHtml(f) {
     const lastName = (f.parent_name || '').trim().split(/\s+/).pop() || '';
     const initials = (lastName.slice(0, 2) || 'FA').toUpperCase();
     const phone    = f.parent_phone || f.parent2_phone || '';
@@ -122,22 +144,43 @@ function _flFamilyCardHtml(f) {
     const openKids = kids
         .map((c, idx) => ({ c, idx }))
         .filter(({ idx }) => _flOpenKeys.has(`${f.id}:${idx}`));
+    const fid = escHtml(String(f.id));
+    // Same condition Family Directory's own fm-cal-btn uses — a family with
+    // nothing booked yet is entering a calendar, not editing one.
+    const hasBooking = typeof allRegistrations !== 'undefined' && allRegistrations.length &&
+        allRegistrations.some(r => (r.parent_email || '').toLowerCase() === (f.parent_email || '').toLowerCase());
 
     return `
-    <div class="fl-family-card">
+    <div class="fl-family-row">
         <div class="fl-family-head">
             <div class="fl-avatar">${escHtml(initials)}</div>
             <div class="fl-family-main">
                 <div class="fl-family-name">${escHtml(lastName)} Family</div>
-                ${_flParentRowHtml(f.parent_name, f.parent_email, f.parent_phone)}
-                ${f.parent2_name ? _flParentRowHtml(f.parent2_name, f.parent2_email, f.parent2_phone) : ''}
+                ${_flParentRowHtml(f.parent_name, f.parent_email, f.parent_phone, f.has_pin)}
+                ${f.parent2_name ? _flParentRowHtml(f.parent2_name, f.parent2_email, f.parent2_phone, f.has_parent2_pin) : ''}
             </div>
             <div class="fl-actions">
-                <button type="button" class="fl-btn" data-fl-edit="${escHtml(String(f.id))}">✎ Edit</button>
+                ${f.group === 'summer' ? '<span class="family-badge-summer">Summer</span>' : ''}
+                ${f.registration_locked ? '<span class="family-badge-locked" title="Registration locked for nonpayment">🔒 Reg Locked</span>' : ''}
+                <button type="button" class="fl-btn fm-edit-btn" data-family-id="${fid}" title="Edit family">✎ Edit</button>
                 ${phone
                     ? `<a class="fl-btn" href="tel:${escHtml(phone.replace(/[^\d+]/g, ''))}">📞 Call</a>`
                     : `<span class="fl-btn fl-btn-disabled" title="No phone on file">📞 Call</span>`}
                 <button type="button" class="fl-btn fl-btn-primary" data-ap-go="messages">💬 Message</button>
+                <button type="button" class="fl-btn fm-cal-btn" data-family-id="${fid}" title="${hasBooking ? 'Edit care calendar for this family' : 'Enter care calendar for this family'}">🗓️ ${hasBooking ? 'Edit Calendar' : 'Enter Calendar'}</button>
+                <div class="fm-kebab">
+                    <button type="button" class="fm-kebab-btn" data-family-id="${fid}" title="More actions" aria-haspopup="true" aria-expanded="false">⋮</button>
+                    <div class="fm-kebab-menu hidden" role="menu">
+                        <button class="fm-archive-btn" data-family-id="${fid}" data-family-name="${escHtml(f.parent_name || 'this family')}" role="menuitem">Archive family</button>
+                        ${f.registration_locked
+                            ? `<button class="fm-unlock-btn" data-family-id="${fid}" role="menuitem">🔓 Unlock registration</button>`
+                            : `<button class="fm-lock-btn" data-family-id="${fid}" role="menuitem">🔒 Lock registration</button>`}
+                        ${f.login_locked
+                            ? `<button class="fm-login-unlock-btn" data-family-id="${fid}" role="menuitem">🔓 Unlock login</button>`
+                            : ''}
+                        <button class="fm-delete-btn fm-kebab-danger" data-family-id="${fid}" data-family-name="${escHtml(f.parent_name || 'this family')}" role="menuitem">🗑 Delete family</button>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="fl-children">
@@ -149,10 +192,11 @@ function _flFamilyCardHtml(f) {
     </div>`;
 }
 
-function _flParentRowHtml(name, email, phone) {
+function _flParentRowHtml(name, email, phone, hasPin) {
     if (!name) return '';
     return `<div class="fl-parent-row">
         <span class="fl-parent-name">${escHtml(name)}</span>
+        ${hasPin ? '<span class="family-pin-badge">PIN set</span>' : ''}
         <span class="fl-parent-meta">${escHtml(email || '')}${email && phone ? ' · ' : ''}${escHtml(phone || '')}</span>
     </div>`;
 }
@@ -185,14 +229,16 @@ function _flCalendarCardHtml(f, c, idx) {
     return `
     <div class="fl-cal-card">
         <div class="fl-cal-head">
-            <span class="fl-eyebrow">Days of care</span>
+            <span class="fl-eyebrow fl-cal-title">Days of care</span>
             ${reg ? `<button type="button" class="fl-btn fl-btn-sm" data-fl-change-days="${escHtml(key)}">🗓️ Change days of care</button>` : ''}
-        </div>
-        <div class="fl-cal-nav">
-            <button type="button" class="fl-cal-nav-btn" data-fl-nav-key="${escHtml(key)}" data-fl-nav-delta="-1" aria-label="Previous month">‹</button>
-            <span class="fl-cal-nav-label">${_FL_MONTHS[cursor.month]} ${cursor.year}</span>
-            <button type="button" class="fl-cal-nav-btn" data-fl-nav-key="${escHtml(key)}" data-fl-nav-delta="1" aria-label="Next month">›</button>
-            <button type="button" class="fl-cal-close" data-fl-toggle="${escHtml(key)}" aria-label="Close">✕</button>
+            <div class="fl-cal-nav-group">
+                <div class="fl-cal-nav-pill">
+                    <button type="button" class="fl-cal-nav-btn" data-fl-nav-key="${escHtml(key)}" data-fl-nav-delta="-1" aria-label="Previous month">‹</button>
+                    <span class="fl-cal-nav-label">${_FL_MONTHS[cursor.month]} ${cursor.year}</span>
+                    <button type="button" class="fl-cal-nav-btn" data-fl-nav-key="${escHtml(key)}" data-fl-nav-delta="1" aria-label="Next month">›</button>
+                </div>
+                <button type="button" class="fl-cal-close" data-fl-toggle="${escHtml(key)}" aria-label="Close">✕</button>
+            </div>
         </div>
         <div class="fl-cal-grid">${_flCalGridHtml(cursor, reg)}</div>
         ${!reg ? `<p class="fl-cal-empty">No care days on file for ${_FL_MONTHS[cursor.month]}.</p>` : ''}
@@ -209,50 +255,55 @@ function _flCalendarCardHtml(f, c, idx) {
     </div>`;
 }
 
+// 5-column Monday–Friday grid. Each week contributes exactly 5 cells (the
+// weekend is skipped, never rendered even as a blank), so a fresh row starts
+// naturally every 5 cells with no extra bookkeeping.
 function _flCalGridHtml(cursor, reg) {
     const { year, month } = cursor;
     const existingMap = {};
     (reg?.registration_dates || []).forEach(d => { existingMap[d.care_date] = d; });
 
-    const firstDow     = new Date(year, month, 1).getDay(); // 0 = Sun
-    const daysInMonth  = new Date(year, month + 1, 0).getDate();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const mondayIndex = date => (date.getDay() + 6) % 7; // 0=Mon … 6=Sun
 
     let html = _FL_DOW.map(d => `<div class="fl-cal-hdr">${d}</div>`).join('');
-    for (let i = 0; i < firstDow; i++) html += '<div class="fl-cal-cell other-month"></div>';
+
+    const leadingBlanks = Math.min(mondayIndex(new Date(year, month, 1)), 5);
+    for (let i = 0; i < leadingBlanks; i++) html += '<div class="fl-cal-cell other-month"></div>';
+    let cellCount = leadingBlanks;
 
     for (let day = 1; day <= daysInMonth; day++) {
+        const dow = mondayIndex(new Date(year, month, day));
+        if (dow > 4) continue; // Saturday/Sunday — the center is closed, no cell.
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const dow = new Date(year, month, day).getDay();
-        const isWeekend = dow === 0 || dow === 6;
-        const existing  = existingMap[dateStr];
+        const existing = existingMap[dateStr];
         let cls = 'fl-cal-cell';
         let title = '';
         if (existing && !existing.waitlisted) {
             cls += existing.day_type === 'half' ? ' is-half' : ' is-full';
             title = existing.day_type === 'half' ? 'Half day' : 'Full day';
-        } else if (isWeekend) {
-            cls += ' weekend';
         }
         html += `<div class="${cls}"${title ? ` title="${title}"` : ''}>${day}</div>`;
+        cellCount++;
     }
 
-    const remainder = (firstDow + daysInMonth) % 7;
-    if (remainder > 0) for (let i = remainder; i < 7; i++) html += '<div class="fl-cal-cell other-month"></div>';
+    const remainder = cellCount % 5;
+    if (remainder > 0) for (let i = remainder; i < 5; i++) html += '<div class="fl-cal-cell other-month"></div>';
     return html;
 }
 
+// Allergy chips reuse _FM_SEV_STYLE (admin-families.js) — the same
+// severe/sensitivity/note colors the real Edit Family modal already shows,
+// rather than a second color scheme invented for this read-only view.
 function _flAllergyNotesHtml(c) {
     const allergies = Array.isArray(c.allergies) ? c.allergies : [];
-    const parts = [];
-    if (allergies.length) {
-        parts.push(`<p class="fl-allergy-line">${allergies.map(a =>
-            `${escHtml(a.label)} — ${escHtml(a.severity || 'note')}`).join(', ')}</p>`);
-    }
-    if (c.care_notes) {
-        parts.push(`<p class="fl-allergy-line fl-care-note">${escHtml(c.care_notes)}</p>`);
-    }
-    if (!parts.length) return `<p class="fl-allergy-line fl-none">None on file</p>`;
-    return parts.join('');
+    const chips = allergies.map(a => {
+        const style = (typeof _FM_SEV_STYLE !== 'undefined' && _FM_SEV_STYLE[a.severity]) || '';
+        return `<span class="fl-allergy-chip" style="${style}">${escHtml(a.label)}</span>`;
+    }).join('');
+    const noteLine = c.care_notes ? `<p class="fl-allergy-line">${escHtml(c.care_notes)}</p>` : '';
+    if (!chips && !noteLine) return `<p class="fl-allergy-line fl-none">None on file</p>`;
+    return `${chips ? `<div class="fl-allergy-chips">${chips}</div>` : ''}${noteLine}`;
 }
 
 function _flRoomLabel(c) {
@@ -310,7 +361,11 @@ function _flCareDayCount(reg, monthKey) {
 // Wired from setupAdminPortal()'s existing delegated click/input handlers
 // (admin-portal.js) — same data-attribute-delegation convention the rest
 // of the shell uses (data-ap-off-*, data-ap-sched-*, etc.), so nothing has
-// to re-bind listeners after a re-render.
+// to re-bind listeners after a re-render. Edit / Edit Calendar / the "⋮"
+// menu are NOT wired here — they use admin-families.js's own fm-edit-btn /
+// fm-cal-btn / fm-kebab* classes, already handled by that module's
+// document-level click listener (setupFamilies(), always registered at
+// admin init regardless of which tab is open).
 
 function _flHandleSearchInput(value) {
     _flQuery = value;
@@ -331,12 +386,6 @@ function _flNavCalendar(key, delta) {
     if (month > 11) { month = 0;  year++; }
     _flCalCursor[key] = { year, month };
     _flRenderResults();
-}
-
-function _flEditFamily(id) {
-    const family = _flFindFamilyById(id);
-    if (!family) return;
-    if (typeof openFamilyModal === 'function') openFamilyModal(family);
 }
 
 function _flChangeDays(key) {

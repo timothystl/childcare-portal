@@ -304,6 +304,12 @@
     overflow: hidden;
 }
 .ap-panel.tone-gold { border-top: 4px solid var(--sun); }
+.ap-panel.tone-green { border-top: 4px solid var(--green); }
+/* Opt out of the panel's own overflow clip — needed by any panel that pops
+   a dropdown near its edge (e.g. the Family Lookup panel's reused
+   fm-kebab-menu). Safe wherever nothing inside the panel itself relies on
+   being clipped to the rounded corners. */
+.ap-panel.ap-panel-overflow-visible { overflow: visible; }
 .ap-panel-head { padding: 18px 22px 4px; }
 .ap-panel-head h3 { font-size: 1.02em; font-weight: 800; color: var(--navy); margin: 0; }
 .ap-panel-head p  { color: var(--text-muted); font-size: .85em; margin: 4px 0 0; text-wrap: pretty; }
@@ -2084,7 +2090,7 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
    inside .ap-col — so the day-of-care calendars have room to sit side by
    side the way the design source shows, instead of squeezed into a
    340-550px dashboard column. */
-.fl-search-row { padding: 14px 22px 4px; }
+.fl-search-row { padding: 14px 24px 4px; }
 .fl-search-input {
     width: 100%;
     padding: 11px 14px;
@@ -2097,46 +2103,41 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 }
 .fl-search-input:focus { outline: none; border-color: var(--green); }
 
-.fl-empty { padding: 4px 22px 20px; color: var(--text-muted); font-size: .88em; }
-.fl-count { padding: 10px 22px 0; color: var(--text-muted); font-size: .8em; font-weight: 700; }
+.fl-empty { padding: 4px 24px 20px; color: var(--text-muted); font-size: .88em; }
+.fl-count { padding: 10px 24px 0; color: var(--text-muted); font-size: .8em; font-weight: 700; }
 
-.fl-list { padding: 10px 22px 20px; display: flex; flex-direction: column; gap: 14px; }
+.fl-list { padding: 4px 24px 20px; }
 
-.fl-family-card {
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 14px 16px;
-    background: var(--warm-gray, #F5F0E4);
-}
-.fl-family-head {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    flex-wrap: wrap;
-}
+/* A family is a plain row separated by a hairline, not a boxed card — the
+   design source never wraps a family in its own background/border; only the
+   child pills and the expanded calendar get a surface of their own. */
+.fl-family-row { padding: 14px 0; border-bottom: 1px solid var(--ap-border-lt); }
+.fl-family-row:last-child { border-bottom: none; }
+
+.fl-family-head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
 .fl-avatar {
     flex: none;
-    width: 38px; height: 38px;
+    width: 42px; height: 42px;
     border-radius: 50%;
     background: var(--green-pale);
     color: var(--green-text);
-    border: 1.5px solid var(--green);
+    font-family: var(--font-head);
     display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: .82em; letter-spacing: .02em;
+    font-weight: 800; font-size: .88em; letter-spacing: .02em;
 }
-.fl-family-main { flex: 1; min-width: 180px; }
+.fl-family-main { flex: 1; min-width: 220px; }
 .fl-family-name {
     font-family: var(--font-head);
-    font-weight: 800;
+    font-weight: 700;
     color: var(--navy);
     font-size: 1.02em;
     margin-bottom: 4px;
 }
-.fl-parent-row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; font-size: .84em; margin-top: 2px; }
+.fl-parent-row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: .85em; margin-top: 2px; }
 .fl-parent-name { font-weight: 700; color: var(--text); }
 .fl-parent-meta { color: var(--text-muted); }
 
-.fl-actions { flex: none; display: flex; gap: 8px; flex-wrap: wrap; }
+.fl-actions { flex: none; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
 .fl-btn {
     display: inline-flex; align-items: center; gap: 5px;
     padding: 7px 13px;
@@ -2158,22 +2159,52 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
 .fl-btn-disabled:hover { background: var(--white); border-color: var(--border); }
 .fl-btn-sm { padding: 5px 10px; font-size: .76em; }
 
-.fl-children { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
-.fl-child-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 9px 12px;
-    border: 1.5px solid transparent;
+/* Edit / Edit Calendar / the kebab reuse Family Directory's own fm-edit-btn /
+   fm-cal-btn / fm-kebab* classes and click handlers (admin-families.js) —
+   only sizing is overridden here, to match this panel's larger buttons
+   instead of the Directory's dense list. Two-class specificity beats the
+   single-class Directory rule regardless of stylesheet order. */
+.fl-actions .fm-edit-btn,
+.fl-actions .fm-cal-btn {
+    padding: 7px 13px;
     border-radius: 8px;
-    background: var(--white);
+    font-size: .82em;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.fl-actions .fm-kebab-btn { width: 34px; height: 34px; }
+
+/* flex-wrap, not a column stack — two children of the same family sit side
+   by side whenever the panel is wide enough, matching the design source. */
+.fl-children { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.fl-child-row {
+    flex: 1 1 220px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--warm-gray);
     cursor: pointer;
 }
-.fl-child-row:hover { border-color: var(--border); }
-.fl-child-row.is-open { border-color: var(--sun); }
-.fl-child-name { font-weight: 700; color: var(--navy); font-size: .88em; }
-.fl-child-room { color: var(--text-muted); font-size: .8em; }
-.fl-child-days { margin-left: auto; color: var(--green-text); font-weight: 700; font-size: .8em; white-space: nowrap; }
+.fl-child-row:hover { border-color: var(--green); }
+.fl-child-row.is-open { border-color: var(--sun); background: var(--white); }
+.fl-child-name { font-weight: 700; color: var(--navy); font-size: .9em; }
+.fl-child-room { color: var(--text-muted); font-size: .76em; font-weight: 700; }
+.fl-child-days {
+    margin-left: auto;
+    background: var(--green-pale);
+    color: var(--green-text);
+    font-weight: 800;
+    font-size: .76em;
+    padding: 3px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
 .fl-chevron { color: var(--text-muted); font-size: .72em; }
 
+/* Same reasoning as .fl-children — a grid that auto-fits as many
+   240px-minimum calendars as fit the row, so two (or more) open children
+   render side by side rather than stacked. */
 .fl-cal-row {
     margin-top: 12px;
     display: grid;
@@ -2181,47 +2212,65 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     gap: 12px;
 }
 .fl-cal-card {
-    background: var(--white);
+    background: var(--linen);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 14px;
 }
-.fl-cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.fl-cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.fl-cal-title { flex: 1; min-width: 90px; }
 .fl-eyebrow {
     display: block;
-    font-size: .68em; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+    font-size: .7em; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
     color: var(--text-muted);
 }
-.fl-cal-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.fl-cal-nav-group { display: flex; align-items: center; gap: 8px; }
+.fl-cal-nav-pill {
+    display: flex; align-items: center; gap: 2px;
+    background: var(--white); border: 1px solid var(--border); border-radius: 999px; padding: 3px;
+}
 .fl-cal-nav-btn {
     border: none; background: none; cursor: pointer;
-    font-size: 1.05em; color: var(--navy); font-weight: 700; padding: 2px 6px;
+    width: 22px; height: 22px; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .95em; color: var(--navy); font-weight: 700;
 }
-.fl-cal-nav-label { font-weight: 700; color: var(--navy); font-size: .84em; flex: 1; text-align: center; }
-.fl-cal-close { margin-left: auto; border: none; background: none; cursor: pointer; color: var(--text-muted); font-size: .9em; padding: 2px 4px; }
-.fl-cal-close:hover { color: var(--text); }
+.fl-cal-nav-btn:hover { background: var(--green-pale); }
+.fl-cal-nav-label { font-weight: 800; color: var(--navy); font-size: .8em; padding: 0 4px; min-width: 96px; text-align: center; display: inline-block; }
+.fl-cal-close {
+    border: 1px solid var(--border); background: var(--white); cursor: pointer;
+    color: var(--text-muted); width: 26px; height: 26px; border-radius: 999px;
+    font-size: .85em; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.fl-cal-close:hover { color: var(--text); border-color: var(--text-muted); }
 
-.fl-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
-.fl-cal-hdr { text-align: center; font-size: .68em; font-weight: 700; color: var(--text-muted); padding: 2px 0; }
+/* Monday–Friday only — see admin-family-lookup.js's own note on this. */
+.fl-cal-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.fl-cal-hdr { text-align: center; font-size: .72em; font-weight: 800; letter-spacing: .03em; color: var(--text-muted); padding: 2px 0; }
 .fl-cal-cell {
-    text-align: center; padding: 5px 2px; border-radius: 5px;
-    font-size: .78em; min-width: 24px; border: 1px solid transparent;
+    text-align: center; display: flex; align-items: center; justify-content: center;
+    aspect-ratio: 1; border-radius: 7px;
+    font-size: .84em; font-weight: 700; border: 1px solid var(--border); background: var(--white);
 }
-.fl-cal-cell.other-month { visibility: hidden; }
-.fl-cal-cell.weekend { color: var(--text-muted); background: var(--ap-border-lt); }
-.fl-cal-cell.is-full { background: var(--green-text); color: #fff; font-weight: 700; }
-.fl-cal-cell.is-half { background: var(--green-pale); color: var(--green-text); border-color: var(--green); font-weight: 700; }
+.fl-cal-cell.other-month { visibility: hidden; border-color: transparent; }
+.fl-cal-cell.is-full { background: var(--green-text); color: #fff; border-color: var(--green-text); }
+.fl-cal-cell.is-half { background: var(--green-pale); color: var(--green-text); border-color: var(--green); }
 .fl-cal-empty { font-size: .78em; color: var(--text-muted); margin: 8px 0 0; }
 
 .fl-info-block { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--ap-border-lt); }
-.fl-info-row { display: flex; justify-content: space-between; gap: 10px; font-size: .82em; padding: 3px 0; }
+.fl-info-row { display: flex; justify-content: space-between; gap: 10px; font-size: .84em; padding: 3px 0; }
 .fl-info-label { color: var(--text-muted); }
 .fl-info-value { font-weight: 700; color: var(--navy); }
-.fl-allergy-line { font-size: .82em; color: var(--ap-deep-tang, var(--tang)); font-weight: 700; margin: 4px 0 0; }
-.fl-allergy-line.fl-care-note { color: var(--text); font-weight: 500; margin-top: 4px; }
-.fl-allergy-line.fl-none { color: var(--text-muted); font-weight: 500; }
+
+/* Allergy chips — see admin-family-lookup.js: colors come from
+   _FM_SEV_STYLE (admin-families.js), the same severe/sensitivity/note
+   palette the real Edit Family modal already uses. */
+.fl-allergy-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.fl-allergy-chip { border-radius: 999px; padding: 2px 10px; font-size: .78em; font-weight: 800; letter-spacing: .02em; display: inline-block; }
+.fl-allergy-line { font-size: .82em; color: var(--text); font-weight: 500; margin: 6px 0 0; }
+.fl-allergy-line.fl-none { color: var(--text-muted); margin-top: 0; }
 
 @media (max-width: 640px) {
-    .fl-actions { width: 100%; }
-    .fl-btn { flex: 1; justify-content: center; }
+    .fl-actions { width: 100%; justify-content: flex-start; }
+    .fl-btn, .fl-actions .fm-edit-btn, .fl-actions .fm-cal-btn { flex: 1 1 auto; justify-content: center; }
 }

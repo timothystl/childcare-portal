@@ -1208,9 +1208,9 @@ function apKpiHtml(k) {
         </div>`;
 }
 
-function apPanel({ title, sub, tone, body, tools }) {
+function apPanel({ title, sub, tone, cls, body, tools }) {
     return `
-        <section class="ap-panel${tone ? ' tone-' + tone : ''}">
+        <section class="ap-panel${tone ? ' tone-' + tone : ''}${cls ? ' ' + cls : ''}">
             <div class="ap-panel-head">
                 <h3>${escHtml(title)}</h3>
                 ${sub ? `<p>${escHtml(sub)}</p>` : ''}
@@ -2707,12 +2707,14 @@ function setupAdminPortal() {
             apRenderScenario();
         }
         // Family Lookup (Director dashboard) — see admin-family-lookup.js.
+        // Edit / Edit Calendar / the "⋮" menu use admin-families.js's own
+        // fm-edit-btn / fm-cal-btn / fm-kebab* classes and are handled by
+        // that module's document-level click listener above; only the
+        // controls unique to this panel are wired here.
         const flToggle = e.target.closest('[data-fl-toggle]');
         if (flToggle) { _flToggleChild(flToggle.dataset.flToggle); return; }
         const flNav = e.target.closest('[data-fl-nav-key]');
         if (flNav) { _flNavCalendar(flNav.dataset.flNavKey, parseInt(flNav.dataset.flNavDelta, 10) || 0); return; }
-        const flEdit = e.target.closest('[data-fl-edit]');
-        if (flEdit) { _flEditFamily(flEdit.dataset.flEdit); return; }
         const flChangeDays = e.target.closest('[data-fl-change-days]');
         if (flChangeDays) { _flChangeDays(flChangeDays.dataset.flChangeDays); return; }
     });
