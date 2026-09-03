@@ -87,6 +87,7 @@ function setupFamilies() {
     document.getElementById('fmCancelBtn')?.addEventListener('click', closeFamilyModal);
     document.getElementById('fmSaveBtn')?.addEventListener('click', saveFamilyModal);
     document.getElementById('fmAddChildBtn')?.addEventListener('click', addModalChildRow);
+    setupTrustedPartyForm();
     document.getElementById('fmNewPinBtn')?.addEventListener('click', () => {
         document.getElementById('fmPin').value = generateLocalPin();
     });
@@ -644,7 +645,7 @@ function renderFamiliesList(families) {
                                             ? `<img src="${escHtml(photoUrl)}" alt="" class="roster-photo-thumb">`
                                             : '<span class="roster-photo-thumb roster-photo-thumb-empty" aria-hidden="true"></span>'}
                                         <span class="student-bullet">Child</span>
-                                        <span class="student-name">${escHtml(s.child_name)}</span>
+                                        <span class="student-name">${escHtml(s.child_name)}${s.nickname ? ` <span class="student-nickname">"${escHtml(s.nickname)}"</span>` : ''}</span>
                                         <span class="student-dob">${dobStr}</span>
                                         ${issuesBadgeHtml(sIssues)}
                                         <div class="room-override-wrap">
@@ -783,6 +784,7 @@ async function openFamilyModal(family = null) {
         _fmPhotoUrlCache = photoPaths.length ? await fetchChildProfilePhotoUrls(photoPaths).catch(() => new Map()) : new Map();
         _fmPhotosToDelete = [];
         _fmLoadPickupContacts(family.id);
+        _fmLoadTrustedParty(family.id);
     } else {
         // Clear all fields
         ['fmParentName','fmParentEmail','fmParentPhone',
@@ -802,6 +804,7 @@ async function openFamilyModal(family = null) {
         _fmPhotosToDelete = [];
         const pickupList = document.getElementById('fmPickupList');
         if (pickupList) pickupList.innerHTML = '<p class="empty-hint">Save this family first, then reopen Edit to see their pickup list.</p>';
+        _fmLoadTrustedParty(null);
     }
 
     renderModalChildRows();
@@ -821,6 +824,7 @@ function closeFamilyModal() {
     familyModalChildren = [];
     _fmPhotoUrlCache    = new Map();
     _fmPhotosToDelete   = []; // discard — nothing was actually deleted from storage yet
+    document.getElementById('fmTrustedPartyForm')?.classList.add('hidden');
 }
 
 function renderModalChildRows() {
@@ -853,6 +857,10 @@ function renderModalChildRows() {
                     <div class="fm-field fm-field-grow">
                         <label>Name *</label>
                         <input type="text" class="fmc-name" value="${escHtml(child.child_name || '')}" placeholder="Child's full name" autocomplete="off">
+                    </div>
+                    <div class="fm-field">
+                        <label>Nickname</label>
+                        <input type="text" class="fmc-nickname" value="${escHtml(child.nickname || '')}" placeholder="Optional" autocomplete="off" style="width:110px">
                     </div>
                     <div class="fm-field">
                         <label>Date of Birth</label>
@@ -1158,6 +1166,137 @@ async function _fmLoadPickupContacts(familyId) {
     }
 }
 
+// ── Additional trusted party (Family Directory modal — admin-managed) ──
+// Grants real parent-portal login (child info, schedule, billing) to a
+// person outside parent 1/2. Admin-managed, unlike Approved for Pickup
+// above: the office sets the person's PIN here because this is granting
+// login access, not recording a note.
+const _FM_TP_ERROR_MESSAGES = {
+    name_required:    'Name is required.',
+    invalid_email:    'Enter a valid email address.',
+    invalid_pin:      'PIN must be 4–8 digits.',
+    email_is_a_parent: 'That email already belongs to a parent on this or another family.',
+    email_in_use:     'That email is already a trusted party on a family.',
+};
+
+function _fmTpErrorMessage(code) {
+    return _FM_TP_ERROR_MESSAGES[code] || 'Something went wrong. Please try again.';
+}
+
+function _fmRenderTrustedPartyList(list) {
+    const el = document.getElementById('fmTrustedPartyList');
+    if (!el) return;
+    if (!list.length) {
+        el.innerHTML = '<p class="empty-hint">No additional trusted party on file.</p>';
+        return;
+    }
+    el.innerHTML = list.map(u => `
+        <div class="fm-pickup-row" data-tp-id="${u.id}">
+            <strong>${escHtml(u.name)}</strong>
+            ${u.relationship ? ` — ${escHtml(u.relationship)}` : ''}
+            <div class="fm-pickup-note">${escHtml(u.email)}${!u.active ? ' · <span style="color:var(--tang-dark)">Inactive</span>' : ''}${u.login_locked ? ' · <span style="color:var(--tang-dark)">Locked out</span>' : ''}</div>
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+                <button type="button" class="btn-ghost btn-sm fm-tp-reset-pin" data-id="${u.id}">Reset PIN</button>
+                <button type="button" class="btn-ghost btn-sm fm-tp-toggle-active" data-id="${u.id}" data-active="${u.active}">${u.active ? 'Deactivate' : 'Reactivate'}</button>
+                <button type="button" class="btn-ghost btn-sm fm-tp-remove" data-id="${u.id}">Remove</button>
+            </div>
+        </div>`).join('');
+
+    el.querySelectorAll('.fm-tp-reset-pin').forEach(btn => btn.addEventListener('click', async () => {
+        const pin = prompt('New PIN for this trusted party (4-8 digits):');
+        if (pin === null) return;
+        if (!/^\d{4,8}$/.test(pin.trim())) { alert('PIN must be 4–8 digits.'); return; }
+        try {
+            await resetAuthorizedUserPin(parseInt(btn.dataset.id), pin.trim());
+            alert('PIN updated.');
+        } catch (err) {
+            alert("Couldn't update the PIN: " + err.message);
+        }
+    }));
+
+    el.querySelectorAll('.fm-tp-toggle-active').forEach(btn => btn.addEventListener('click', async () => {
+        const id = parseInt(btn.dataset.id);
+        const row = list.find(u => u.id === id);
+        if (!row) return;
+        try {
+            await updateAuthorizedUser({ id, name: row.name, email: row.email, relationship: row.relationship, active: !row.active });
+            await _fmLoadTrustedParty(editingFamilyId);
+        } catch (err) {
+            alert("Couldn't update: " + err.message);
+        }
+    }));
+
+    el.querySelectorAll('.fm-tp-remove').forEach(btn => btn.addEventListener('click', async () => {
+        if (!confirm('Remove this trusted party? They will lose portal access immediately.')) return;
+        try {
+            await removeAuthorizedUser(parseInt(btn.dataset.id));
+            await _fmLoadTrustedParty(editingFamilyId);
+        } catch (err) {
+            alert("Couldn't remove: " + err.message);
+        }
+    }));
+}
+
+async function _fmLoadTrustedParty(familyId) {
+    const el = document.getElementById('fmTrustedPartyList');
+    if (!el) return;
+    if (!familyId) {
+        el.innerHTML = '<p class="empty-hint">Save this family first, then reopen Edit to add a trusted party.</p>';
+        return;
+    }
+    el.innerHTML = '<p class="empty-hint">Loading…</p>';
+    try {
+        _fmRenderTrustedPartyList(await fetchAuthorizedUsers(familyId));
+    } catch (err) {
+        el.innerHTML = `<p class="import-error">Couldn't load the trusted party list: ${escHtml(err.message)}</p>`;
+    }
+}
+
+function setupTrustedPartyForm() {
+    const addBtn    = document.getElementById('fmAddTrustedPartyBtn');
+    const form      = document.getElementById('fmTrustedPartyForm');
+    const saveBtn   = document.getElementById('fmTpSaveBtn');
+    const cancelBtn = document.getElementById('fmTpCancelBtn');
+    if (!addBtn || !form) return;
+
+    addBtn.addEventListener('click', () => {
+        if (!editingFamilyId) { alert('Save this family first, then reopen Edit to add a trusted party.'); return; }
+        form.classList.remove('hidden');
+        document.getElementById('fmTpName').value = '';
+        document.getElementById('fmTpEmail').value = '';
+        document.getElementById('fmTpRelationship').value = '';
+        document.getElementById('fmTpPin').value = '';
+        document.getElementById('fmTpName').focus();
+    });
+
+    cancelBtn.addEventListener('click', () => form.classList.add('hidden'));
+
+    saveBtn.addEventListener('click', async () => {
+        const name         = document.getElementById('fmTpName').value.trim();
+        const email        = document.getElementById('fmTpEmail').value.trim();
+        const relationship = document.getElementById('fmTpRelationship').value.trim();
+        const pin          = document.getElementById('fmTpPin').value.trim();
+        if (!name)  { alert('Name is required.'); return; }
+        if (!email) { alert('Email is required.'); return; }
+        if (!/^\d{4,8}$/.test(pin)) { alert('PIN must be 4–8 digits.'); return; }
+
+        saveBtn.disabled = true;
+        try {
+            const result = await addAuthorizedUser({ familyId: editingFamilyId, name, email, relationship, pin });
+            if (result?.error) {
+                alert(_fmTpErrorMessage(result.error));
+                return;
+            }
+            form.classList.add('hidden');
+            await _fmLoadTrustedParty(editingFamilyId);
+        } catch (err) {
+            alert("Couldn't add the trusted party: " + err.message);
+        } finally {
+            saveBtn.disabled = false;
+        }
+    });
+}
+
 // Uploads/removes a profile picture for the row's child. Repaints only the
 // `.fmc-photo` cell — a full renderModalChildRows() would wipe whatever the
 // admin has half-typed in the row's other fields (same reasoning as the
@@ -1213,6 +1352,7 @@ function addModalChildRow() {
         const idx = parseInt(row.dataset.index);
         if (!isNaN(idx) && familyModalChildren[idx]) {
             familyModalChildren[idx].child_name     = row.querySelector('.fmc-name')?.value.trim() || '';
+            familyModalChildren[idx].nickname       = row.querySelector('.fmc-nickname')?.value.trim() || null;
             familyModalChildren[idx].child_dob      = row.querySelector('.fmc-dob')?.value || null;
             familyModalChildren[idx].room_override  = row.querySelector('.fmc-room')?.value || null;
             familyModalChildren[idx].discount_type  = row.querySelector('.fmc-discount-type')?.value || 'none';
@@ -1227,7 +1367,7 @@ function addModalChildRow() {
     });
 
     familyModalChildren.push({
-        id: null, child_name: '', child_dob: null,
+        id: null, child_name: '', nickname: null, child_dob: null,
         room_override: null, discount_type: 'none', discount_value: 0, discount_note: null,
         discount_expires_at: null,
         recurring_days: [], allergies: [], care_notes: null, photo_release: true,
@@ -1285,6 +1425,7 @@ function readModalChildrenFromDom() {
         children.push({
             originalId:     familyModalChildren[idx]?.id || null,
             child_name:     name,
+            nickname:       row.querySelector('.fmc-nickname')?.value.trim() || null,
             child_dob:      row.querySelector('.fmc-dob').value || null,
             room_override:  row.querySelector('.fmc-room').value  || null,
             discount_type:  row.querySelector('.fmc-discount-type').value || 'none',
@@ -1347,6 +1488,7 @@ async function saveFamilyModal() {
                 await addStudent({
                     familyId:      fam.id,
                     childName:     child.child_name,
+                    nickname:      child.nickname,
                     childDob:      child.child_dob,
                     roomOverride:  child.room_override,
                     discountType:  child.discount_type,
@@ -1393,6 +1535,7 @@ async function saveFamilyModal() {
                 if (child.originalId) {
                     await updateStudent(child.originalId, {
                         child_name:     child.child_name,
+                        nickname:       child.nickname,
                         child_dob:      child.child_dob,
                         room_override:  child.room_override,
                         discount_type:  child.discount_type,
@@ -1414,6 +1557,7 @@ async function saveFamilyModal() {
                     await addStudent({
                         familyId:      editingFamilyId,
                         childName:     child.child_name,
+                        nickname:      child.nickname,
                         childDob:      child.child_dob,
                         roomOverride:  child.room_override,
                         discountType:  child.discount_type,
