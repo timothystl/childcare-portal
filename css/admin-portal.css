@@ -1159,6 +1159,17 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     transition: border-color .15s, box-shadow .15s;
 }
 .fh-search:focus { outline: none; border-color: var(--navy-lt); box-shadow: 0 0 0 3px rgba(1,41,74,.08); }
+/* Purely internal — reloads live data, never emails or notifies anyone.
+   Deliberately plain/outline, not the navy-filled treatment the
+   parent-facing send/release buttons use, so the two read as different
+   kinds of action at a glance. */
+.fh-refresh-btn {
+    background: #fff; border: 1px solid var(--border); border-radius: 999px;
+    padding: 8px 14px; font-family: var(--font-body); font-weight: 700; font-size: 13px;
+    color: var(--navy); cursor: pointer; transition: background .15s, border-color .15s;
+}
+.fh-refresh-btn:hover:not(:disabled) { background: var(--linen); border-color: var(--navy-lt); }
+.fh-refresh-btn:disabled { opacity: .55; cursor: default; }
 
 .fh-tabs { display: flex; gap: 4px; margin: 18px 0 0; border-bottom: 1.5px solid var(--border); }
 .fh-tab {
@@ -1479,6 +1490,7 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     .fh-strip-spacer { display: none; }
     .fh-release-btn { width: 100%; }
     .fh-search { width: 100%; }
+    .fh-refresh-btn { width: 100%; }
     .fh-row-actions { width: auto; }
     #fhDrawer.inc-drawer { width: 100%; }
 }
