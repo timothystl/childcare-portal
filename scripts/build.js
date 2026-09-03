@@ -204,6 +204,10 @@ const ENTRIES = [
                 // Enrollment & Capacity tool's Day/Month/Week sub-views.
                 'js/admin/admin-enrollment-capacity.js',
                 'js/admin/admin-families.js',
+                // After admin-families.js (openFamilyModal, allFamiliesData) and
+                // admin-calendar.js above (openEditDaysModal, allRegistrations):
+                // the Director dashboard's Family Lookup panel reuses all four.
+                'js/admin/admin-family-lookup.js',
                 'js/admin/admin-reports.js',
                 'js/admin/admin-finance.js',
                 'js/admin/admin-billing.js',

@@ -171,6 +171,66 @@ an `AP_TOOLS` entry, or it is unreachable.**
 
 ---
 
+## Director dashboard — Family Lookup panel (2026-09-03)
+
+Built from a director-supplied design screenshot: a search box, a family
+card (avatar, both parents' name/email/phone, Edit/Call/Message), a bar per
+child (room, days this month, expand chevron), and — when expanded — a
+read-only days-of-care calendar with month nav, child info, and allergies &
+care notes. `js/admin/admin-family-lookup.js`, wired into
+`apDashDirector()`/`apRenderDashboard()`/`setupAdminPortal()` in
+`js/admin/admin-portal.js`.
+
+**Not a new `AP_TOOLS` entry.** It is dashboard content, the same status as
+the existing "Staff needed this week" grid and waitlist queue — `apPanel()`
+output pushed into a new `dash.top` slot (`apRenderDashboard()`), rendered
+full page width above the KPI row rather than squeezed into a `.ap-col`
+column, so the two side-by-side calendar cards the design shows have room.
+Reuses three things wholesale rather than rebuilding them: `openFamilyModal()`
+for Edit, `openEditDaysModal()` for "Change days of care", and the same
+child/parent/email search fields `_arRunSearch()`/`_aadRunSearch()` already
+use (not `onFamilySearch()`'s narrower set — a *lookup* tool is exactly the
+case where searching by email should work).
+
+⚠️ **Search-first, not list-everything.** The screenshot shows every family
+with an empty query (its own dataset only had 6). Doing that for real on a
+125-family roster would mean eagerly fetching `allRegistrations()` — 923 kB
+of parent PII per this file's own open R12 finding — on every Director
+login just to print day counts, before she's asked to look anyone up.
+Nothing calls `fetchAllRegistrations()` (lazy-loaded once, same guarded
+no-op-after-first-load pattern as the Attendance Board) until a search
+actually has a result to show a day count for.
+
+**Call is a real `tel:` link** (first one in this app), using whichever
+parent has a phone on file; a family with neither renders a disabled-looking
+button rather than a dead one. **Message deep-links to the Messages tool**
+(`data-ap-go="messages"`, the shell's existing generic navigation) rather
+than opening a specific family's thread — no admin-side "open this family's
+thread" entry point exists yet (the admin inbox is one flat unified feed,
+`admin-messages-unified.js`), and building one was out of scope for adding
+this panel. A real gap, not a hidden one.
+
+Each child's calendar card is independent: multiple can be open on the same
+family at once (rendered side by side via `.fl-cal-row`'s `auto-fit` grid,
+matching the screenshot), each with its own month cursor. A registration is
+resolved by child name + either parent's email + `month_key`, the same
+match `openEditDaysModal()`'s own `openMonth` fallback uses — "Change days
+of care" only renders when a registration exists for the month currently in
+view, since there is no registration row to hand `openEditDaysModal()`
+otherwise.
+
+Verified with a Node harness that loads the module standalone (mocking
+`escHtml`/`apPanel`/`ROOMS`/`document` etc.) and exercises search, toggle,
+month nav, the Edit/Change-days deep-links, and the allergy/no-phone
+rendering paths end to end — no live Supabase session was available in this
+session to click through the real page. `npm test` — 298/298 unaffected
+(no drift-guarded function in this panel). `npm run build` — `dist/admin.min.js`
+rebuilt and grepped for `apFamilyLookupPanelHtml`/`_flToggleChild` to
+confirm the panel actually shipped in the bundle, per this file's own
+"it shipped half-live" standing check.
+
+---
+
 ## Finance tab overhaul — the Bookkeeper tab (2026-08-27)
 
 Built from `Billing_UI_inconsistency_issues.zip` → `design_handoff_finance_hub/`

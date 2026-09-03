@@ -2078,3 +2078,150 @@ tr.br-grand-total .br-grand-amt { font-family: var(--font-head); font-size: 1.15
     .ap-cost-shift { grid-template-columns: 30px 1fr; row-gap: 6px; }
     .ap-cost-shift-meta, .ap-cost-next { grid-column: 2; text-align: left; border-left: none; padding-left: 0; min-width: 0; }
 }
+
+/* ── Director dashboard: Family Lookup panel ────────────────
+   admin-family-lookup.js. Rendered via dash.top — full page width, not
+   inside .ap-col — so the day-of-care calendars have room to sit side by
+   side the way the design source shows, instead of squeezed into a
+   340-550px dashboard column. */
+.fl-search-row { padding: 14px 22px 4px; }
+.fl-search-input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-size: .92em;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--white);
+}
+.fl-search-input:focus { outline: none; border-color: var(--green); }
+
+.fl-empty { padding: 4px 22px 20px; color: var(--text-muted); font-size: .88em; }
+.fl-count { padding: 10px 22px 0; color: var(--text-muted); font-size: .8em; font-weight: 700; }
+
+.fl-list { padding: 10px 22px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+.fl-family-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    background: var(--warm-gray, #F5F0E4);
+}
+.fl-family-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.fl-avatar {
+    flex: none;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: var(--green-pale);
+    color: var(--green-text);
+    border: 1.5px solid var(--green);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: .82em; letter-spacing: .02em;
+}
+.fl-family-main { flex: 1; min-width: 180px; }
+.fl-family-name {
+    font-family: var(--font-head);
+    font-weight: 800;
+    color: var(--navy);
+    font-size: 1.02em;
+    margin-bottom: 4px;
+}
+.fl-parent-row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; font-size: .84em; margin-top: 2px; }
+.fl-parent-name { font-weight: 700; color: var(--text); }
+.fl-parent-meta { color: var(--text-muted); }
+
+.fl-actions { flex: none; display: flex; gap: 8px; flex-wrap: wrap; }
+.fl-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 13px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border);
+    background: var(--white);
+    color: var(--text);
+    font-size: .82em;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.fl-btn:hover { background: var(--green-pale); border-color: var(--green); }
+.fl-btn-primary { background: var(--navy); border-color: var(--navy); color: #fff; }
+.fl-btn-primary:hover { background: var(--navy); opacity: .9; }
+.fl-btn-disabled { opacity: .45; cursor: not-allowed; }
+.fl-btn-disabled:hover { background: var(--white); border-color: var(--border); }
+.fl-btn-sm { padding: 5px 10px; font-size: .76em; }
+
+.fl-children { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.fl-child-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px;
+    border: 1.5px solid transparent;
+    border-radius: 8px;
+    background: var(--white);
+    cursor: pointer;
+}
+.fl-child-row:hover { border-color: var(--border); }
+.fl-child-row.is-open { border-color: var(--sun); }
+.fl-child-name { font-weight: 700; color: var(--navy); font-size: .88em; }
+.fl-child-room { color: var(--text-muted); font-size: .8em; }
+.fl-child-days { margin-left: auto; color: var(--green-text); font-weight: 700; font-size: .8em; white-space: nowrap; }
+.fl-chevron { color: var(--text-muted); font-size: .72em; }
+
+.fl-cal-row {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+}
+.fl-cal-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+}
+.fl-cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.fl-eyebrow {
+    display: block;
+    font-size: .68em; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-muted);
+}
+.fl-cal-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.fl-cal-nav-btn {
+    border: none; background: none; cursor: pointer;
+    font-size: 1.05em; color: var(--navy); font-weight: 700; padding: 2px 6px;
+}
+.fl-cal-nav-label { font-weight: 700; color: var(--navy); font-size: .84em; flex: 1; text-align: center; }
+.fl-cal-close { margin-left: auto; border: none; background: none; cursor: pointer; color: var(--text-muted); font-size: .9em; padding: 2px 4px; }
+.fl-cal-close:hover { color: var(--text); }
+
+.fl-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.fl-cal-hdr { text-align: center; font-size: .68em; font-weight: 700; color: var(--text-muted); padding: 2px 0; }
+.fl-cal-cell {
+    text-align: center; padding: 5px 2px; border-radius: 5px;
+    font-size: .78em; min-width: 24px; border: 1px solid transparent;
+}
+.fl-cal-cell.other-month { visibility: hidden; }
+.fl-cal-cell.weekend { color: var(--text-muted); background: var(--ap-border-lt); }
+.fl-cal-cell.is-full { background: var(--green-text); color: #fff; font-weight: 700; }
+.fl-cal-cell.is-half { background: var(--green-pale); color: var(--green-text); border-color: var(--green); font-weight: 700; }
+.fl-cal-empty { font-size: .78em; color: var(--text-muted); margin: 8px 0 0; }
+
+.fl-info-block { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--ap-border-lt); }
+.fl-info-row { display: flex; justify-content: space-between; gap: 10px; font-size: .82em; padding: 3px 0; }
+.fl-info-label { color: var(--text-muted); }
+.fl-info-value { font-weight: 700; color: var(--navy); }
+.fl-allergy-line { font-size: .82em; color: var(--ap-deep-tang, var(--tang)); font-weight: 700; margin: 4px 0 0; }
+.fl-allergy-line.fl-care-note { color: var(--text); font-weight: 500; margin-top: 4px; }
+.fl-allergy-line.fl-none { color: var(--text-muted); font-weight: 500; }
+
+@media (max-width: 640px) {
+    .fl-actions { width: 100%; }
+    .fl-btn { flex: 1; justify-content: center; }
+}
