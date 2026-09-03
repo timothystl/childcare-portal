@@ -5086,6 +5086,171 @@ count banner.
 `v2.12.0` — a minor bump, not a patch, since this is a new feature rather
 than a fix.
 
+## Child nicknames, and a trusted third party for portal access (2026-09-03)
+
+Two asked-for features, plus a critical vulnerability found by accident
+while researching the second one.
+
+### 🚨 `set_family_pin()` / `set_staff_pin()` had NO admin check — any signed-in parent could hijack any family's PIN
+
+Found while reading `set_family_pin()` as a reference for how PINs get
+hashed (for the trusted-party feature below), not from a report. Both
+functions took an arbitrary `p_family_id`/`p_staff_id` with **nothing
+checking who was calling them**, and both are `EXECUTE`-granted to
+`authenticated`. R2 (2026-08-02) revoked `anon`/`PUBLIC` from
+`set_family_pin`, which was correct **at the time** — every
+`authenticated` session was an admin. That stopped being true
+2026-08-12, when `parent_portal_option_b_accounts` gave families real
+Supabase Auth accounts. From that day until this fix, **any signed-in
+parent could call**
+`supabase.rpc('set_family_pin', {p_family_id: '<any other family>', p_new_pin: '1234'})`
+**and take over a stranger's login** — full access to that family's
+children's info, billing, and payments. `set_staff_pin` had the
+identical shape: any parent could overwrite any staff member's
+clock-in PIN.
+
+This is the exact drift class `revoke_truncate_from_authenticated.sql`
+already documents for a table grant ("`authenticated` was a synonym
+for 'an admin' for months, and nothing announced the day it stopped
+being one") — here it was a function, not a table, so that sweep never
+looked at it.
+
+Fixed by `20260903194714_harden_set_family_and_staff_pin.sql`
+(**applied and verified in production**): both are `CREATE OR
+REPLACE` with the same signature (no grant changes needed) and gain
+`IF COALESCE(admin_role(), '') NOT IN ('full', 'restricted') THEN
+RETURN; END IF;` — the same idiom this file already uses elsewhere,
+with the explicit `COALESCE` because `admin_role()` returns `NULL`,
+not a string, for a non-admin caller. Verified live in rolled-back
+transactions, both directions: a parent's own session calling either
+function is now a silent no-op (the PIN hash is byte-for-byte
+unchanged); a real admin session still updates it (a fresh bcrypt hash
+lands, confirmed by the hash string actually changing).
+
+### Nicknames — `students.nickname`, backfilled from three quoted names
+
+Asked directly, from a screenshot of a child named `Louis "Lou"
+Berra`. Added `students.nickname` (`20260903194931_add_student_nickname.sql`,
+**applied**) and backfilled the three students whose nickname had been
+jammed into `child_name` as a quoted middle word: `Francesca "Frankie"
+Payne`, `Louis "Lou" Berra`, `Penelope "Penny" Fister`. The same three
+names also appeared in 17 `registrations` rows (its own free-text
+copy, no FK — see "roster names are free text in six tables" below) —
+cleaned identically so the two can't disagree. Measured first, not
+assumed: no other table (`attendance_records`, `billing_overrides`,
+`cacfp_meal_records`, `missing_child_alerts`) had a quoted name, and
+`waitlist_applications`' one `"..."` match (`Jream ("Dream"?)`) is an
+office spelling note on an unenrolled inquiry, not a nickname —
+deliberately left alone.
+
+⚠️ **This is also a real bug fix, not just cosmetic.** This file's own
+ProCare section already names Penelope "Penny" Fister as a case the
+importer's name-matching couldn't resolve, specifically *because* of
+the quoted form. Splitting it into its own column removes that trap.
+
+Client-side: a `Nickname` field sits next to Name in the Family
+Directory child row, saved through all four write paths (create-family
+CREATE, edit-family CREATE/UPDATE/new-child — the same four spots
+FS21 had to be fixed in four times over, so all four were touched
+together here). Shown in the family list as `Louis Berra "Lou"`,
+muted, next to the legal name.
+
+### Additional trusted party — real portal login for a person outside parent 1/2
+
+Asked directly: "a handful of people" need the same access to a
+child's info and billing/payments a parent has, not just pickup
+authorization (`pickup_contacts` — name/relationship/note only, no
+login, family self-service, unaffected by this).
+
+⚠️ **This does NOT touch `family_login()`.** It's the most
+security-hardened function in this schema (SS11/SS16/SX13 all live
+there, and — see above — its sibling `set_family_pin()` just proved
+how easily a "just add a case" edit to auth code goes wrong).
+`families`/`parent_accounts.parent_slot` are hard-coded to exactly two
+parent slots throughout (family_login's two branches, parent_slot's
+CHECK, `my_parent_context()`'s CASE); widening that in place would
+touch the primary login path for every family in the building.
+Instead, `20260903195309_family_authorized_users.sql` (**applied**)
+adds a wholly separate table and a **parallel** login RPC:
+
+- **`family_authorized_users`** — one row per trusted party
+  (`family_id`, `name`, `email`, `relationship`, `pin_hash`, `active`,
+  `login_locked`, `login_attempts`). RLS is `admin_role() IN ('full',
+  'restricted')`, same tier as the rest of Family Directory's PII —
+  but that's defense in depth only: every real read/write goes through
+  a `SECURITY DEFINER` RPC, never a direct table grant, specifically
+  so `pin_hash` is never selectable by anyone, admin included.
+  `admin_list_authorized_users` never returns it.
+- **`authorized_user_login(email, pin)`** — a second, independent
+  login RPC, same shape and lockout behavior as `family_login`
+  (5 attempts locks the **row**, never the family's own
+  `login_locked` — one trusted party mistyping their PIN must never
+  lock the actual parents out). `parent-session` (the edge function
+  every login goes through) tries `family_login` first; only on
+  `'not_found'` — the email isn't a registered parent — does it try
+  this. A real parent's email always resolves as a parent; there is no
+  second guess at a parent's own PIN.
+- **The one integration point is `parent_accounts`**, which already
+  carries everything RLS needs: `parent_owns_student()` and every
+  billing/schedule RPC key off `parent_family_ids()`/
+  `my_parent_context()->>'family_id'`, not off which parent slot
+  logged in. A new nullable `parent_accounts.authorized_user_id`
+  column (with a `CHECK ((parent_slot IS NOT NULL) <>
+  (authorized_user_id IS NOT NULL))` — a row is a parent or a trusted
+  party, never neither, never both) is the **entire** blast radius on
+  the read side: a trusted party's `parent_accounts` row gets full
+  parent-portal access — schedule, billing, payments, documents —
+  automatically, with zero changes to any of that RLS.
+  `my_parent_context()` gained one `CASE` branch so "Welcome, ___"
+  shows the trusted party's own name, not a parent's.
+- **Duplicate-email guards, both directions.** Adding a trusted party
+  whose email already belongs to a parent (on any family) or another
+  trusted party is rejected server-side (`email_is_a_parent` /
+  `email_in_use`) — since `family_login` is always tried first, a
+  collision would silently mean the person can never actually reach
+  the account they were just given.
+- **Admin-managed, unlike Approved for Pickup.** The office sets the
+  PIN directly (`admin_add_authorized_user` takes one) because this
+  grants login, not a note on file — a new "Additional Trusted Party"
+  section in the Family Directory edit modal (add / reset PIN /
+  deactivate / remove), gated the same as the rest of that modal's PII
+  (`restricted` already sees this per FS14).
+
+⚠️ **A second grant miss, found and fixed before this shipped.** The
+five `admin_*` RPCs above were created without an explicit `REVOKE …
+FROM PUBLIC, anon` — a new Postgres function grants `EXECUTE` to
+`PUBLIC` by default. Each function's own `admin_role()` gate already
+failed closed for `anon` (empty JWT ⇒ `NULL` ⇒ denied), so this was
+never exploitable, but it violated this file's own standing rule
+(R26/R27: "revoke from both, then verify with
+`has_function_privilege` rather than assuming"). Closed by
+`20260903195405_revoke_public_execute_on_authorized_user_admin_rpcs.sql`.
+Both misses in this session were caught by the same discipline this
+file keeps asking for: verify the grant live, don't trust that
+writing `GRANT … TO authenticated` implies everyone else was
+excluded.
+
+Verified live throughout, all in rolled-back transactions: a
+non-admin adding a trusted party is a silent no-op (no row inserted);
+an admin session succeeds; `authorized_user_login` with a wrong PIN
+increments the row's own `login_attempts` and a right PIN after it
+resets to 0 (never touching the family's own counter); an unknown
+email returns `not_found`; adding an email that's already a parent's
+is rejected.
+
+`npm test` — 298/298 (unaffected — this session's changes are new
+code paths, not edits to anything the suite's copies track).
+`npm run build` — `dist/admin.min.js` and `dist/supabase.min.js`
+rebuilt and grepped for `fetchAuthorizedUsers`/`fmTrustedPartyForm`
+and `fmc-nickname` to confirm both features actually shipped in the
+bundle, per this file's own standing "it shipped half-live" check.
+`parent-session` edge function redeployed (v13, `verify_jwt: false`
+explicitly preserved — see this file's own note on that flag
+defaulting to `true` when omitted) and confirmed byte-for-byte via a
+post-deploy fetch.
+
+Current version: v2.12.7
+
 ## Finance summary API (for the church ChMS finance integration)
 
 `supabase/functions/finance-summary/index.ts` — `GET`, header `X-Api-Key: <FINANCE_API_KEY>`, returns 401 if missing/wrong. Returns `{ updated_at, accounts: [], budget: [...] }` for the current month + 12 prior (13 months, oldest first). Deploy like any other edge function (paste into the Supabase dashboard editor or `supabase functions deploy finance-summary`) and set the `FINANCE_API_KEY` secret — neither is automatic.

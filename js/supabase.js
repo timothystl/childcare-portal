@@ -951,7 +951,7 @@ async function searchFamilies(query) {
     try {
         const { data, error } = await sbClient
             .from('families')
-            .select('id, parent_name, parent_email, parent_phone, has_pin, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days, allergies, care_notes, photo_release)')
+            .select('id, parent_name, parent_email, parent_phone, has_pin, students(id, child_name, nickname, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days, allergies, care_notes, photo_release)')
             .or(`parent_name.ilike.%${query}%,parent_email.ilike.%${query}%`)
             .order('parent_name')
             .limit(8);
@@ -1295,7 +1295,7 @@ async function createFamily({ parentName, parentEmail, parentPhone, pin: provide
  * @param {string|null} [params.childDob] - ISO 8601 date or null
  * @returns {Promise<Student>}
  */
-async function addStudent({ familyId, childName, childDob, roomOverride = null, discountType = null, discountValue = null, discountNote = null, discountExpiresAt = null, recurringDays = null, allergies = [], careNotes = null, photoRelease = true, profilePhotoPath = null }) {
+async function addStudent({ familyId, childName, nickname = null, childDob, roomOverride = null, discountType = null, discountValue = null, discountNote = null, discountExpiresAt = null, recurringDays = null, allergies = [], careNotes = null, photoRelease = true, profilePhotoPath = null }) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: existing } = await sbClient
         .from('students').select('id')
@@ -1306,6 +1306,7 @@ async function addStudent({ familyId, childName, childDob, roomOverride = null, 
         .insert({
             family_id:      familyId,
             child_name:     childName,
+            nickname:       nickname || null,
             child_dob:      childDob || null,
             room_override:  roomOverride || null,
             discount_type:  discountType || null,
@@ -1336,7 +1337,7 @@ async function fetchAllFamilies({ includeArchived = false } = {}) {
     if (!sbClient) throw new Error('Supabase not configured.');
     let query = sbClient
         .from('families')
-        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, created_at, active, group, registration_locked, registration_lock_reason, login_locked, new_family_fee_charged, students(id, child_name, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days, allergies, care_notes, photo_release, profile_photo_path)')
+        .select('id, parent_name, parent_email, parent_phone, has_pin, parent2_name, parent2_email, parent2_phone, has_parent2_pin, created_at, active, group, registration_locked, registration_lock_reason, login_locked, new_family_fee_charged, students(id, child_name, nickname, child_dob, room_override, discount_type, discount_value, discount_note, recurring_days, allergies, care_notes, photo_release, profile_photo_path)')
         .order('parent_name');
     if (!includeArchived) query = query.eq('active', true);
     const { data, error } = await query;
@@ -2676,6 +2677,52 @@ async function fetchPickupContactsAdmin(familyId) {
 async function removePickupContact(id) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data, error } = await sbClient.rpc('remove_pickup_contact', { p_id: id });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+// ---- Additional trusted party (admin-managed portal login for a person
+// outside parent 1/2) — see admin_add_authorized_user etc. in
+// family_authorized_users.sql. Unlike pickup_contacts, this grants real
+// parent-portal access, so every write goes through an admin-gated RPC
+// rather than a direct table call.
+async function fetchAuthorizedUsers(familyId) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_list_authorized_users', { p_family_id: familyId });
+    if (error) throw friendlyError(error);
+    return data || [];
+}
+
+async function addAuthorizedUser({ familyId, name, email, relationship, pin }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_add_authorized_user', {
+        p_family_id: familyId, p_name: name, p_email: email,
+        p_relationship: relationship || null, p_pin: pin,
+    });
+    if (error) throw friendlyError(error);
+    return data;
+}
+
+async function updateAuthorizedUser({ id, name, email, relationship, active }) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_update_authorized_user', {
+        p_id: id, p_name: name, p_email: email,
+        p_relationship: relationship || null, p_active: active !== false,
+    });
+    if (error) throw friendlyError(error);
+    return data;
+}
+
+async function resetAuthorizedUserPin(id, pin) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_reset_authorized_user_pin', { p_id: id, p_pin: pin });
+    if (error) throw friendlyError(error);
+    return data === true;
+}
+
+async function removeAuthorizedUser(id) {
+    if (!sbClient) throw new Error('Supabase not configured.');
+    const { data, error } = await sbClient.rpc('admin_remove_authorized_user', { p_id: id });
     if (error) throw friendlyError(error);
     return data === true;
 }
