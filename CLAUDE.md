@@ -315,6 +315,61 @@ wraps every row to a single column with no overflow. `npm test` — 298/298
 confirm the overflow fix specifically (not just the panel generally)
 shipped in the bundle.
 
+⚠️ **A concurrent session dropped the same weekend columns independently,
+and the two landed within the same half hour.** `claude/family-lookup-
+director-dashboard-m71fgi`'s "Drop weekends from the Family Lookup child
+calendar" reached the identical 5-column Mon–Fri outcome via a different
+`_flCalGridHtml()` implementation (a `{day, col: dow - 1}` cell list rather
+than this session's Monday-indexed leading-blank counter) and merged to
+`main` first. Both were verified correct independently; this session's
+version was kept on merge, since it already sits inside the larger rewrite
+above rather than because either implementation was wrong. Worth repeating
+the lesson this file already carries elsewhere: two sessions solving the
+same real problem the same day is not a bug in either one, and the fix on
+conflict is to pick the version that's already been verified in context,
+not to silently prefer whichever merged first.
+
+---
+
+## Sidebar feature search (2026-09-03)
+
+Prompted directly: the director often can't find a tool because she
+doesn't remember which of the seven tabs it lives under. `#apNav` (the
+desktop 900px+ sidebar, `apNavHtml()` in `js/admin/admin-portal.js`) now
+carries a search box above the tool groups — typing a name filters **every**
+tool in `AP_TOOLS` regardless of which tab is currently open, not just the
+active tab's own groups, and shows which tab/group each match lives under
+so she also learns where to look next time. Clicking a result calls the
+existing `apGo(key)`, which already jumps across tabs.
+
+- **Matches name, blurb, group, and tab label** — "who owes" or "PTO"
+  finds a tool even when that phrase is only in its description, not its
+  title. `apToolAvailable(tool)` (the same role/visibility gate the normal
+  groups listing already uses) filters results too, so a `restricted`
+  admin's search can't surface a `full`-only tool that would 404 if clicked.
+- **Typing repaints only `#apNavGroups`**, not the whole sidebar — the
+  search input itself and the tabs row above it are untouched, so the
+  input never loses focus mid-keystroke the way replacing the whole `#apNav`
+  on every keystroke would (same "targeted sub-tree update" pattern the
+  Family Lookup panel above uses for its own search box).
+- **`apGo()` clears the query** on any navigation, not just a search-result
+  click — so after jumping to a tool the sidebar shows that tab's real
+  groups again rather than stale search results.
+- **Deliberately desktop-sidebar-only.** Below 900px `#apNav` doesn't
+  render at all — `#apTabbar` (the bottom tab bar) replaces it entirely and
+  carries no tool sub-list of any kind ("a tool is one tap further, via the
+  dashboard's own pills"), so there is no equivalent list for a mobile
+  search to filter. A mobile search overlay would be a separate, larger
+  feature and wasn't attempted here.
+
+Verified with a Node harness loading `admin-portal.js` standalone (stubbed
+`document`/`window`): finds a tool by name across tabs, matches on blurb
+text, respects role gating, and the clear button correctly resets `#apNavGroups`
+back to the normal tab view — no live login was available in this session to
+click through the real sidebar. `npm test` — 298/298 unaffected. `npm run
+build` — `dist/admin.min.js` grepped for `apNavSearchInput`/
+`_apNavSearchResultsHtml` to confirm it shipped in the bundle.
+
 ---
 
 ## Finance tab overhaul — the Bookkeeper tab (2026-08-27)
@@ -5396,6 +5451,44 @@ defaulting to `true` when omitted) and confirmed byte-for-byte via a
 post-deploy fetch.
 
 Current version: v2.12.7
+
+## Waitlist Planner "Visualize" tab — "One child's journey" / "One room, next 12 months" (2026-09-03)
+
+Built from `Waitlist Planner Views.dc.html` (design handoff zip, `Waitlist_planner_visualization_mockups.zip`) — asked for directly: "ADD this design to our waitlist planner, dont lose what is currently there, just add this." The handoff's own `github.md` named exactly what already existed to build on: `js/supabase.js` (ROOMS — ages, capacity, ratios) and `js/admin/admin-waitlist.js` (`renderWaitlistPlanner`, `wlpPromotionChain`'s age-up logic).
+
+**Nothing existing was removed or restyled.** Queue / Capacity Planner / Moving are untouched. A fourth pill, **Visualize**, was added to `wlpRenderHeader()`'s tab group; opening it reveals its own Grid/Board-style sub-toggle between the mockup's two screens.
+
+### The mockup's own data was illustrative on purpose — this build is not
+
+The card in the design source says so itself: *"Illustrative data — not live enrollment."* Its `support.js` shipped a self-contained fake dataset (a hard-coded `CHILDREN` array — "Baby Garcia," "Rowan T." — a seeded-random waitlist/roster generator, its own copy of `ROOMS`). None of that was ported. Both views are wired to the **exact same allocation** `wlpRunAllocation()` already computes for Queue/Grid/Board/Moving — `alloc.rooms`, `alloc.months`, `alloc.finalGrid`, `alloc.kids`, `alloc.fitMonthByKid`, `alloc.gradOut`/`gradIn`/`incoming` — never a second, parallel calculation that could disagree with the tabs sitting right next to it. Where an existing helper already answered a question this view needed, it was called directly rather than re-derived:
+
+| Need | Reused as-is |
+|---|---|
+| Who's in a room on a given weekday, real or projected | `wlpDayRoster()` |
+| A waitlist row (rank, chips, fit pill, Enroll/Edit/expand) | `wlpRenderQueueRow()` + `wlpWireQueueRowActions()` |
+| A roster occupant's badge ("↑ moving up", "🎯 offer accepted", "＋ from waitlist") | `wlpRosterTag()` |
+| The real "Enroll" action (opens the real Add Registration flow) | `wlpEnrollFromWaitlist()` |
+| Open-seat color tiers (green/amber/red/over) | `wlpAvailClass()` + the pre-existing `.wlp-avail-*` classes |
+
+**"One room, next 12 months"** is `alloc.months` (all 12, not Grid's 6-month slice) rendered as a card grid instead of a table, each card's five weekday numbers read straight from `alloc.finalGrid`. Clicking a card shows that month's real roster — `wlpDayRoster()`'s five per-day lists inverted into one row per child (`wlpVizRoomRoster()`) — and, below it, that room's real waitlist queue, filtered from `alloc.kids` and rendered with the *actual* `wlpRenderQueueRow()`, so Enroll here is the identical, real action Queue's own Enroll button performs.
+
+**"One child's journey"** is the one screen with no existing analog — nothing in this tool previously projected a single child's whole path across every room. Its candidate list is real: every currently-enrolled child (deduped from `allRegistrations` by name, the same accepted tradeoff `_buildGraduationIndex` already documents) plus every active waitlist application already sitting in `alloc.kids`. Segments are computed with the exact age math `wlDeriveRoom`/`roomIdForAgeMonths` use everywhere else in this app (`ageMinMonths`/`ageMaxMonths` from the live, settings-merged `ROOMS`) — never a second "how old is this child" calculation.
+
+⚠️ **Forward-looking, not historical, and said so nowhere false.** An enrolled child's timeline starts **today** (this app has no single clean "when did this registration begin" field to reconstruct instead), a waitlisted child's starts at their real `desired_start_date`, clamped forward if that's earlier than the age the room actually requires — mirroring the design source's own clamp (a newborn can't start on their birthday). The status language shown is the real waitlist vocabulary this file already uses everywhere (`pending`/`offered`/`accepted`), never the mockup's own invented "fee paid / toured / inquiry" tiers, which have no basis in this schema.
+
+⚠️ **The terminal room (Owl, `ageMaxMonths: null`) is rendered open-ended, on purpose.** This schema defines no "ages out of the whole program" date, and the mockup's own `birth + 48 months` cutoff is that mockup's own invention, not a number this app has anywhere. Owl's segment card shows "{{start}} – ongoing" with no fabricated exit date; its ribbon band gets a diagonal hatch (`.wlp-viz-ribbon-band.is-ongoing`) instead of implying a real end the way a flat color band would, sized to a nominal 18 months purely so the ribbon renders as a real band.
+
+### `allRegistrations` needed a lazy load this tool never had
+
+`apOnToolOpened()`'s `'wlPlanner'` case (`admin-portal.js`) only ever loaded `_allWaitlistApps` — nothing loaded `allRegistrations`, even though `wlpRealMonthPattern()` (used by every existing tab) already reads it. The child picker's "currently enrolled" half needs it directly, so opening the Visualize tab now also triggers `wlpEnsureRegistrationsForViz()` (fire-and-forget-then-rerender, same pattern `loadWaitlistApplications()` itself already uses) if it isn't loaded yet. This is a net improvement for the pre-existing tabs too, not just this one — but scoped to firing only when Visualize is opened, not unconditionally, since R12 already documents `fetchAllRegistrations()` as expensive (923 kB) and not something to fetch on every tool open.
+
+### Styling — tokens only, no literal hex from the mockup
+
+The design source's own colors (`#01294A`, `#F5B731`, `#EAF5EF`, …) already map 1:1 onto this app's existing `:root` palette (`--navy`, `--sun`, `--green-pale`, …) — confirmed before writing a single rule, not assumed. Every new `.wlp-viz-*` class in `css/admin.css` uses the existing tokens; two spans genuinely needed a new class each (`.wlp-chip-hold` — a "planning hold" day, distinct from the Queue tab's real open/full/off vocabulary since a room years out has no real per-day capacity check behind it; the roster table's `.is-in`/`.is-hold` marks). Reused directly with zero new CSS: `.wlp-avail-green/amber/red/over` (already generic, not scoped to the Grid table), `.wl-badge-*` (the Waitlist Management table's own status badges).
+
+`npm test` — 298/298, unaffected (no drift-guarded function was touched). `npm run build` — `dist/admin.min.js` rebuilt and grepped for `wlpRenderVizChild`/`wlpRenderVizRoom`/`wlpVizChildSegments`/`wlpVizRoomRoster` to confirm the feature actually shipped in the bundle, per this file's own standing "it shipped half-live" check — and, per the Bookkeeper/Enrollment & Capacity incidents this file also documents, the fourth pill was confirmed reachable from `wlpRenderHeader()`'s own tab group (not a section left unwired the way `billingArSection` was).
+
+Current version: v2.13.0
 
 ## Finance summary API (for the church ChMS finance integration)
 
