@@ -2833,6 +2833,178 @@ describe('payment import duplicate guard and coverage', () => {
     });
 });
 
+// ============================================================
+// MDO WEBSITE CONTENT
+// ============================================================
+// ⚠️ This block must stay ABOVE the results summary below — the suite prints
+// its totals and calls process.exit() at the end of the file, so anything
+// appended after it runs, prints ticks, and can never fail CI.
+describe('mdoRichText — the FAQ answers reach a public page as innerHTML', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    // Lifted out of js/app.js by brace-matching rather than re-typed, so the
+    // thing under test is the code that actually ships. Same approach the
+    // drift guards elsewhere in this suite use for browser globals.
+    const appSrc = read('js/app.js');
+    const grab = (name) => {
+        const i = appSrc.indexOf('function ' + name + '(');
+        if (i < 0) throw new Error('mdoRichText not found in js/app.js');
+        let depth = 0;
+        for (let k = appSrc.indexOf('{', i); k < appSrc.length; k++) {
+            if (appSrc[k] === '{') depth++;
+            else if (appSrc[k] === '}' && --depth === 0) return appSrc.slice(i, k + 1);
+        }
+        throw new Error('unbalanced braces reading ' + name);
+    };
+    const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    // eslint-disable-next-line no-eval
+    const mdoRichText = eval('(' + grab('mdoRichText') + ')');
+
+    // The real question is not "does the word onclick appear" — an escaped
+    // tag legitimately contains its own text. It is "what tags does a browser
+    // actually see", so every live tag in the output is checked against the
+    // allowlist.
+    const liveTags = (html) => (html.match(/<[^>]+>/g) || []);
+    const ALLOWED = /^<\/?(?:strong|em|b|i)>$|^<a href="(?:\/(?!\/)|https:\/\/)[^"]*">$|^<\/a>$/;
+
+    test('keeps the emphasis and links the live FAQ copy already uses', () => {
+        expect(mdoRichText('a <strong>b</strong> c')).toBe('a <strong>b</strong> c');
+        expect(mdoRichText('a <em>b</em> c')).toBe('a <em>b</em> c');
+        expect(mdoRichText('see <a href="/waitlist-status">status</a>'))
+            .toBe('see <a href="/waitlist-status">status</a>');
+        expect(mdoRichText('<a href="https://x.org/p">x</a>')).toBe('<a href="https://x.org/p">x</a>');
+    });
+
+    test('emits no tag outside the allowlist, whatever is stored', () => {
+        const hostile = [
+            '<script>alert(1)</script>',
+            '<img src=x onerror=alert(1)>',
+            '<svg onload=alert(1)>',
+            '<iframe src="https://evil.example"></iframe>',
+            '<strong onclick="x">b</strong>',
+            '<a href="/x" onmouseover="y">z</a>',
+            '<a href="javascript:alert(1)">x</a>',
+            '<a href="data:text/html,<script>x</script>">y</a>',
+            '<A HREF="JAVASCRIPT:alert(1)">x</A>',
+            '<a href=/x>no quotes</a>',
+        ];
+        hostile.forEach((input) => {
+            liveTags(mdoRichText(input)).forEach((tag) => {
+                expect(ALLOWED.test(tag)).toBe(true);
+            });
+        });
+    });
+
+    // ⚠️ A leading "/" is not enough to mean "this site" — this is the same
+    // protocol-relative hole this org's own review flagged in safeUrl, and it
+    // was live in the first version of this function.
+    test('a protocol-relative href is refused, not read as an internal path', () => {
+        const out = mdoRichText('<a href="//evil.example">x</a>');
+        expect(out.includes('<a href')).toBe(false);
+        expect(out.includes('//evil.example')).toBe(true); // shown as text
+    });
+
+    test('http is refused; only https and same-site paths are links', () => {
+        expect(mdoRichText('<a href="http://evil.example">x</a>').includes('<a href')).toBe(false);
+    });
+
+    test('output is balanced, so a stray tag cannot close the page around it', () => {
+        expect(mdoRichText('a </strong> b')).toBe('a &lt;/strong&gt; b');
+        expect(mdoRichText('<strong>b')).toBe('<strong>b</strong>');
+        // A refused opening tag must not leave its closing tag live.
+        expect(mdoRichText('<a href="javascript:x">y</a>'))
+            .toBe('&lt;a href=&quot;javascript:x&quot;&gt;y&lt;/a&gt;');
+    });
+
+    test('empty and non-string inputs are empty, never "undefined"', () => {
+        expect(mdoRichText('')).toBe('');
+        expect(mdoRichText(null)).toBe('');
+        expect(mdoRichText(undefined)).toBe('');
+        expect(mdoRichText(42)).toBe('');
+    });
+});
+
+describe('MDO website content — the boundaries that keep the care system out of it', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+    const migration = read('supabase/migrations/20260904195342_add_mdo_site_content.sql');
+    const appSrc = read('js/app.js');
+    const editor = read('js/admin/admin-mdo-website.js');
+
+    // ⚠️ Supabase default-grants ALL on a new public table straight to anon,
+    // and RLS never applies to TRUNCATE. This repo has had that exact hole
+    // reopened by a new table twice.
+    test('the new tables revoke the default anon grants explicitly', () => {
+        expect(/REVOKE ALL ON mdo_site_content\s+FROM anon, authenticated, PUBLIC/.test(migration)).toBe(true);
+        expect(/REVOKE ALL ON mdo_content_revisions FROM anon, authenticated, PUBLIC/.test(migration)).toBe(true);
+        expect(migration.includes('ALTER TABLE mdo_site_content      ENABLE ROW LEVEL SECURITY')).toBe(true);
+    });
+
+    // ⚠️ admin_role() returns NULL for a caller with no admin_roles entry —
+    // and a parent's own Supabase session is exactly that. `IF NULL THEN`
+    // does not take the branch, so an un-coalesced guard falls straight
+    // through. Verified live once already on admin_list_staff_credentials.
+    test('every admin guard coalesces admin_role() before comparing', () => {
+        const guards = migration.match(/IF\s+.*admin_role\(\).*THEN/g) || [];
+        expect(guards.length).toBeGreaterThan(0);
+        guards.forEach((g) => expect(g.includes('coalesce(admin_role()')).toBe(true));
+    });
+
+    test('publishing is full-only while drafting is open to restricted', () => {
+        const pub = migration.slice(migration.indexOf('FUNCTION admin_mdo_publish'));
+        expect(pub.slice(0, 600).includes("coalesce(admin_role(), '') <> 'full'")).toBe(true);
+        const save = migration.slice(migration.indexOf('FUNCTION admin_mdo_save_draft'));
+        expect(save.slice(0, 600).includes("NOT IN ('full', 'restricted')")).toBe(true);
+    });
+
+    test('every definer function pins its search_path', () => {
+        const fns = migration.match(/CREATE OR REPLACE FUNCTION[\s\S]*?AS \$fn\$/g) || [];
+        expect(fns.length).toBeGreaterThan(0);
+        fns.forEach((f) => {
+            expect(f.includes('SECURITY DEFINER')).toBe(true);
+            expect(f.includes('SET search_path = public, pg_temp')).toBe(true);
+        });
+    });
+
+    // The whole reason publishing one section at a time is safe.
+    test('an unpublished or unreachable section falls back to the page markup', () => {
+        expect(appSrc.includes('function renderMdoSiteContent(content) {')).toBe(true);
+        const fn = appSrc.slice(appSrc.indexOf('function renderMdoSiteContent'));
+        expect(fn.slice(0, 400).includes("if (!content || typeof content !== 'object') return;")).toBe(true);
+        // A failed section must not take the other two down with it.
+        expect(fn.slice(0, 600).match(/catch \(e\)/g).length).toBe(3);
+    });
+
+    // ⚠️ An empty array here would silently wipe the questions off the page.
+    test('an empty question list never replaces the live FAQ', () => {
+        const fn = appSrc.slice(appSrc.indexOf('function renderMdoFaqs'));
+        expect(fn.slice(0, 2000).includes('if (main.length) {')).toBe(true);
+    });
+
+    // ⚠️ These are shared with billing and scheduling. A second editor for
+    // them would be a second source of truth for numbers the invoice path
+    // reads. The editor must point at Settings, not rebuild them.
+    test('the editor never writes rates, capacity, ratios or the staff directory', () => {
+        // Comments are stripped first: this file's own header names those keys
+        // precisely to say they are edited on the Settings screen instead, and
+        // a naive substring check reads that warning as a violation of itself.
+        const code = editor.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        ['room_rates', 'room_capacity', 'staff_ratios', 'staff_directory',
+         'registration_fee', 'new_family_fee'].forEach((key) => {
+            expect(code.includes(key)).toBe(false);
+        });
+        // No write path to the shared settings table at all.
+        expect(/upsertSetting|from\(['\"]settings['\"]\)/.test(code)).toBe(false);
+    });
+
+    test('the editor can only name the three sections the database accepts', () => {
+        expect(migration.includes("NOT IN ('hero', 'faqs', 'contact')")).toBe(true);
+        const keys = (editor.match(/key: '(hero|faqs|contact)'/g) || []).length;
+        expect(keys).toBe(3);
+    });
+});
+
 console.log(`\n  Results: ${_passed} passed, ${_failed} failed\n`);
 if (_failed > 0) process.exitCode = 1;
 if (_failed > 0) process.exit(1);

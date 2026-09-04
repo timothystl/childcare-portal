@@ -833,6 +833,106 @@ async function fetchPublicStaffDirectory() {
  * @param {*}      value - Any JSON-serializable value
  * @returns {Promise<void>}
  */
+// ============================================================
+// MDO PUBLIC WEBSITE CONTENT
+// ============================================================
+// Editable copy for the public home page (mdo.timothystl.org). Reads and
+// writes go through SECURITY DEFINER RPCs — anon and authenticated hold no
+// grant on mdo_site_content at all, so a draft is unreachable from a browser
+// by construction rather than by policy.
+//
+// ⚠️ Classrooms, rates, fees and the staff directory are deliberately NOT
+// here. They live in `settings` and are already edited on the Settings screen
+// and server-rendered by worker.js. See the migration header.
+
+/**
+ * The published website content, for rendering the public page.
+ * Anon-callable. Never returns drafts.
+ * @returns {Promise<Object|null>} section -> content, or null if unavailable
+ */
+async function fetchMdoPublicContent() {
+    if (!sbClient) return null;
+    const { data, error } = await sbClient.rpc('mdo_public_content');
+    if (error) { console.error('mdo_public_content:', error); return null; }
+    // jsonb comes back parsed, but the same string-vs-object defensiveness
+    // fetchSetting needs applies if the column shape ever changes.
+    const obj = typeof data === 'string' ? parseJsonOr(data, null) : data;
+    return (obj && typeof obj === 'object') ? obj : null;
+}
+
+/**
+ * Every section with both its draft and its published copy, for the editor.
+ * Returns [] for a caller who is not a full/restricted admin — the RPC itself
+ * returns no rows rather than erroring, so this is not an error path.
+ * @returns {Promise<Array>}
+ */
+async function fetchMdoAdminContent() {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient.rpc('admin_mdo_content');
+    if (error) { console.error('admin_mdo_content:', error); return []; }
+    return Array.isArray(data) ? data : [];
+}
+
+/**
+ * Saves a section's draft. Does not change what the public sees.
+ * @returns {Promise<boolean>} false when the server refused (role or section)
+ */
+async function saveMdoDraft(section, content) {
+    if (!sbClient) return false;
+    const { data, error } = await sbClient.rpc('admin_mdo_save_draft', {
+        p_section: section, p_content: content
+    });
+    if (error) { console.error('admin_mdo_save_draft:', error); return false; }
+    return data === true;
+}
+
+/**
+ * Copies a section's draft onto the live page and records a revision.
+ * ⚠️ `full` role only — a `restricted` admin may draft but not publish.
+ * @returns {Promise<boolean>}
+ */
+async function publishMdoSection(section) {
+    if (!sbClient) return false;
+    const { data, error } = await sbClient.rpc('admin_mdo_publish', { p_section: section });
+    if (error) { console.error('admin_mdo_publish:', error); return false; }
+    return data === true;
+}
+
+/**
+ * Throws the draft away and copies the published copy back over it.
+ * Refused when nothing has ever been published, so an unpublished draft can
+ * never be lost to a mis-click.
+ * @returns {Promise<boolean>}
+ */
+async function discardMdoDraft(section) {
+    if (!sbClient) return false;
+    const { data, error } = await sbClient.rpc('admin_mdo_discard_draft', { p_section: section });
+    if (error) { console.error('admin_mdo_discard_draft:', error); return false; }
+    return data === true;
+}
+
+/** Publish history for one section, newest first (max 50). */
+async function fetchMdoRevisions(section) {
+    if (!sbClient) return [];
+    const { data, error } = await sbClient.rpc('admin_mdo_revisions', { p_section: section });
+    if (error) { console.error('admin_mdo_revisions:', error); return []; }
+    return Array.isArray(data) ? data : [];
+}
+
+/**
+ * Puts an older revision back into the DRAFT for review.
+ * ⚠️ Deliberately does not republish — an old version is a starting point to
+ * read, not something to put in front of families in one click.
+ */
+async function restoreMdoRevision(revisionId) {
+    if (!sbClient) return false;
+    const { data, error } = await sbClient.rpc('admin_mdo_restore_revision', {
+        p_revision_id: revisionId
+    });
+    if (error) { console.error('admin_mdo_restore_revision:', error); return false; }
+    return data === true;
+}
+
 async function upsertSetting(key, value) {
     if (!sbClient) throw new Error('Supabase not configured.');
     const { data: upd, error: updErr } = await sbClient

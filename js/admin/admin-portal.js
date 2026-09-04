@@ -397,6 +397,13 @@ const AP_TOOLS = [
     // rates, ratios, capacity, adminRoles, auditLog); rates+ratios+capacity
     // collapsed into one Rooms & rates table. "My Notifications" (adminPush)
     // moved to the Messages tab header.
+    // MDO Website — the public home page's own copy (mdo_site_content).
+    // ⚠️ NOT in AP_FULL_ONLY_KEYS on purpose: a `restricted` admin may write a
+    // draft, and only publishing is full-only. That split is enforced in the
+    // database by admin_mdo_publish, not by this list — the Publish button is
+    // hidden for `restricted` as a courtesy, not as the control.
+    { key: 'mdoWebsite', pane: 'settings', section: 'mdoWebsiteSection', tab: 'settings', group: 'Website', tint: AP_TINT.green, icon: '🌐', name: 'MDO Website',
+      blurb: 'The wording on the public mdo.timothystl.org home page — the headline, the questions families ask, and how to reach us. Saving keeps a draft; the site changes only when you publish.' },
     { key: 'settingsHub', pane: 'settings', section: 'settingsUnifiedSection', tab: 'settings', group: 'Settings', tint: AP_TINT.gold, icon: '⚙️', name: 'Settings',
       blurb: 'The rules the portal runs on. Every control shows who last changed it.' },
 ];
@@ -999,6 +1006,7 @@ function apOnToolOpened(tool) {
         if (tool.key === 'attBoard' && typeof renderAttendanceBoard === 'function') renderAttendanceBoard();
         if (tool.key === 'printAttendance' && typeof renderPrintAttendanceTool === 'function') renderPrintAttendanceTool();
         if (tool.key === 'financeHub' && typeof renderFinanceHubTool === 'function') renderFinanceHubTool();
+        if (tool.key === 'mdoWebsite' && typeof renderMdoWebsiteTool === 'function') renderMdoWebsiteTool();
         if (tool.key === 'incidents' && typeof renderIncidentsTool === 'function') renderIncidentsTool();
         if (tool.key === 'drills' && typeof renderFireDrillsTool === 'function') renderFireDrillsTool();
         if (tool.key === 'messages' && typeof renderMessagesUnifiedTool === 'function') renderMessagesUnifiedTool();
