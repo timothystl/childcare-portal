@@ -6177,3 +6177,56 @@ input[type="time"].payroll-pair-time-out::-webkit-calendar-picker-indicator { op
     background: var(--linen); border-left-color: var(--border);
 }
 .fh-coverage-quiet .fh-coverage-setting { border-top: none; margin: 0; padding: 0; }
+
+/* ── MDO Website editor ────────────────────────────────────────────────
+   The public home page's own copy. Tokens only — no literal colors — so it
+   follows the rest of the admin if the palette ever moves. */
+.mdo-note{background:var(--green-pale);border:1px solid var(--green);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:14px;line-height:1.6;}
+.mdo-pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;}
+.mdo-pill{border:1px solid var(--line,#d8d0c8);background:#fff;border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer;}
+.mdo-pill.is-on{background:var(--navy);color:#fff;border-color:var(--navy);}
+/* An unpublished section is marked, so "what have I not put live yet" is
+   answerable without opening all three. */
+.mdo-dot{color:var(--tang);font-size:11px;vertical-align:middle;}
+.mdo-pill.is-on .mdo-dot{color:var(--sun);}
+.mdo-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:10px;}
+.mdo-h3{margin:0 0 4px;font-size:1.2rem;color:var(--navy);}
+.mdo-h4{margin:0 0 8px;font-size:1rem;color:var(--navy);}
+.mdo-blurb{margin:0;max-width:60ch;font-size:13px;}
+.mdo-status{border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:13.5px;}
+.mdo-status--ok{background:var(--green-pale);color:var(--green-text);}
+.mdo-status--warn{background:var(--gold-pale);color:var(--navy);}
+.mdo-fields{display:flex;flex-direction:column;gap:18px;max-width:760px;}
+.mdo-f label{display:block;font-weight:600;font-size:13.5px;color:var(--navy);margin-bottom:5px;}
+.mdo-f input[type=text],.mdo-f textarea{width:100%;border:1px solid var(--line,#d8d0c8);border-radius:8px;padding:9px 11px;font:inherit;font-size:14px;}
+.mdo-f textarea{resize:vertical;line-height:1.6;}
+.mdo-f textarea + textarea{margin-top:8px;}
+.mdo-f--toggle label{font-weight:600;display:flex;align-items:center;gap:8px;}
+.mdo-hint{margin:5px 0 0;font-size:12.5px;color:var(--text-muted);line-height:1.5;}
+.mdo-hint code{background:var(--cream,#f7f3ec);padding:1px 5px;border-radius:4px;font-size:12px;}
+.mdo-f--list{border:1px solid var(--line,#d8d0c8);border-radius:10px;padding:14px;background:var(--cream,#f7f3ec);}
+.mdo-qa{background:#fff;border:1px solid var(--line,#d8d0c8);border-radius:8px;padding:11px;margin-bottom:10px;}
+.mdo-qa-head{display:flex;align-items:center;gap:7px;margin-bottom:7px;}
+.mdo-qa-n{font-size:12px;color:var(--text-muted);min-width:18px;}
+.mdo-qa-q{flex:1;border:1px solid var(--line,#d8d0c8);border-radius:6px;padding:7px 9px;font:inherit;font-size:14px;font-weight:600;}
+.mdo-qa-a{width:100%;border:1px solid var(--line,#d8d0c8);border-radius:6px;padding:7px 9px;font:inherit;font-size:14px;line-height:1.6;resize:vertical;}
+.mdo-qa-show{display:flex;align-items:center;gap:7px;margin-top:7px;font-weight:400!important;font-size:12.5px;color:var(--text-muted);}
+.mdo-mini{border:1px solid var(--line,#d8d0c8);background:#fff;border-radius:6px;width:30px;height:30px;cursor:pointer;font-size:13px;}
+.mdo-mini:disabled{opacity:.35;cursor:default;}
+.mdo-mini--del{color:var(--tang);border-color:var(--tang-pale);}
+.mdo-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:22px;padding-top:18px;border-top:1px solid var(--line,#d8d0c8);}
+.mdo-cant{font-size:12.5px;max-width:42ch;line-height:1.5;}
+.mdo-history{margin-top:18px;padding:14px;border:1px solid var(--line,#d8d0c8);border-radius:10px;background:var(--cream,#f7f3ec);}
+.mdo-rev{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--line,#d8d0c8);font-size:13.5px;}
+.mdo-rev:last-of-type{border-bottom:0;}
+@media (max-width:700px){
+  .mdo-qa-head{flex-wrap:wrap;}
+  .mdo-qa-q{flex:1 1 100%;order:-1;}
+}
+/* ⚠️ `.muted` is used across five admin modules and is defined in neither
+   stylesheet — a pre-existing dead class, so those secondary lines currently
+   render at full weight. Scoped here rather than defined globally: giving
+   `.muted` a definition site-wide would silently restyle admin-announcements,
+   admin-attendance, admin-incidents and admin-messages-unified in the same
+   commit as an unrelated feature. Worth fixing globally on its own. */
+#mdoWebsiteContent .muted{color:var(--text-muted);font-weight:400;}

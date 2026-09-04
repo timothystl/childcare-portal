@@ -5490,6 +5490,139 @@ The design source's own colors (`#01294A`, `#F5B731`, `#EAF5EF`, …) already ma
 
 Current version: v2.13.0
 
+## MDO Website content editor — the home page's copy is editable (2026-09-04)
+
+Asked for as an "MDO content-management area on admin.timothystl.org". The
+architecture inspection that preceded it changed the shape of the answer, and
+the findings are worth keeping because they will come up again.
+
+### ⚠️ THE CHURCH ADMIN AND THIS APP SHARE NOTHING — the editor lives here
+
+`admin.timothystl.org` (repo `timothystl/website`) is Cloudflare D1 + its own
+`users`/`sessions` tables + R2. This app is Supabase + Supabase Auth + Supabase
+Storage. The only link between them is a hyperlink. The church admin holds **no
+Supabase credential at all** except the shared-secret `payroll_*` RPC proxy, so
+putting the editor there would have meant a second cross-app credential path —
+one RPC pair per content type — before a single field could be edited.
+
+Single sign-on was considered first and **dropped on the director's call** ("we
+tried before and it was too hard"). Two findings from that pass, kept because
+they are the reason SSO is hard here rather than merely unfinished:
+
+- **The two identity spaces do not overlap by one identifier.** The church admin
+  has 5 accounts named `admin`, `katig`, `market`, `mthompson`, `staff`; this app
+  has 4 `admin_roles` entries, all email addresses. And `admin`/`staff` are
+  **shared role logins, not people** — SSO maps one human to one account, and
+  there is no human to map `staff` to.
+- **⚠️ SUPABASE AUTH IS NOT A STAFF DIRECTORY, IT IS MOSTLY PARENTS.** 219 of
+  224 `auth.users` rows are families, auto-provisioned on first parent-portal
+  login; 5 carry `@timothystl.org`, two of which are leftover Stax test
+  accounts. Making it the identity provider for the church admin would give
+  every parent a verified identity at that admin's door, with a four-key JSON
+  blob as the only thing behind it. If SSO is revisited, the provider is Google
+  Workspace, not this project.
+
+### ⚠️ HALF THE REQUESTED CONTENT WAS ALREADY EDITABLE — do not rebuild it
+
+Classrooms, rates, capacity, ratios, the annual fees and the **staff directory**
+are already `settings` rows, already edited on the Settings screen, and already
+server-rendered into the home page by `worker.js`'s HTMLRewriter pass (which
+also already does the fail-open, 5-minute-cache, `x-ssr-rooms`-stamped thing a
+new content system would otherwise have had to invent). Rebuilding them here
+would have created a second source of truth for numbers the billing path reads.
+`admin_mdo_save_draft` refuses any section but `hero`/`faqs`/`contact`, and a
+test asserts the editor module contains none of those setting keys in code.
+
+### What was actually built
+
+`mdo_site_content` (section PK, `draft`, `published`, stamps) +
+`mdo_content_revisions`, with seven `SECURITY DEFINER` RPCs. Applied and
+verified in production 2026-09-04.
+
+- **Draft and published are separate**, mirroring the church site's own
+  `blocks`/`published_blocks` split. Saving changes nothing a visitor sees.
+- **⚠️ SEEDED AS DRAFT ONLY — `published` is deliberately NULL on all three.**
+  A section that has never been published makes the public reader fall back to
+  `index.html`'s own hardcoded markup, so applying the migration changed nothing
+  on the live site. The office reads each draft against the live page and
+  presses Publish when they agree it matches. **Nothing is live yet.**
+- **`restricted` may draft; only `full` may publish.** That is the plan's
+  editor/publisher split using roles that already exist rather than a second
+  permission system, and it is enforced in `admin_mdo_publish`, not by hiding
+  the button — the button is hidden for `restricted` as a courtesy.
+- **Restoring a revision lands in the DRAFT, never straight onto the page.**
+- Reachable at **Settings → Website → MDO Website** (`AP_TOOLS` key
+  `mdoWebsite`). ⚠️ Not in `AP_FULL_ONLY_KEYS`, on purpose — see the role split.
+
+### ⚠️ Two real bugs the tests found before this shipped
+
+Both were in the first version of `mdoRichText()`, which is what turns a stored
+FAQ answer into `innerHTML` on a public page:
+
+1. **`<a href="//evil.example">` was accepted as an internal path.** A leading
+   `/` is not enough to mean "this site" — protocol-relative is somewhere else
+   entirely. This is the same hole the church repo's own review flagged as
+   SEC-15 in `safeUrl()`, reproduced independently here. The two link guards
+   (`mdoSetLink`, the banner href) had it too.
+2. **A refused opening tag left its closing tag live**, so `<a href="javascript:…">x</a>`
+   emitted a stray `</a>` that would close a real element of the page around it.
+
+Fixed by replacing escape-then-selectively-unescape with a **tag parser that
+keeps a stack**: an inline tag is re-opened only with no attributes at all, an
+anchor only with a same-site or `https:` href, a closing tag only when it
+matches something open, and anything still open is closed at the end. Guarded
+by a test that checks **every live tag in the output against an allowlist**
+rather than grepping for scary substrings — the first version of that assertion
+reported false positives on correctly-escaped text, which is how a check stops
+being read.
+
+### Verification
+
+`npm test` — **312 passed** (14 new). ⚠️ The new blocks are inserted **above**
+the results summary: this suite prints its totals and calls `process.exit()` at
+the end of the file, so a block appended after it runs, prints ticks and can
+never fail CI. The protocol-relative guard was verified non-vacuous by
+reintroducing the hole and watching exactly that test fail.
+
+Live, in rolled-back-free single statements (per this file's own warning that
+`set_config` does not carry across `;`-separated statements in one MCP call):
+a **real parent account** gets `admin_role() = NULL`, zero rows from both read
+RPCs, and `false` from all four writes; a `restricted` admin drafts but cannot
+publish; a `full` admin publishes, gets a revision row and the right
+`published_by`. `mdo_public_content()` returns only published sections. Table
+grants to `anon`/`authenticated`/`PUBLIC`: **none**; RLS on both tables; all
+seven functions definer with `search_path` pinned. Every test row was removed
+afterward and the three drafts restored to the seed.
+
+In a real browser (Chromium) against the **actual `index.html`**: with nothing
+published the headline, questions and phone are byte-unchanged; with content
+published the hero, FAQ list, hidden-question filtering, contact cards and
+`tel:` digits all update; and a hostile answer creates no `<img>`, no
+`javascript:` anchor, and runs no handler. The editor itself renders all three
+sections, 18 hero fields, 12 questions, and shows Publish to `full` and an
+explanation to `restricted`.
+
+### Still open, deliberately
+
+- **A draft preview.** The editor links to the live page; there is no way to see
+  a draft rendered in the MDO design yet. Doing it properly means a preview
+  route on the public page that reads the draft, which is its own piece of work.
+  The status line says plainly what is and is not live rather than implying a
+  preview exists.
+- **Gallery, program highlights, the six pillar cards, how-it-works and the
+  summer-camp copy** are still hardcoded. The table takes them by adding a
+  section key in three places (the two RPC guards and `MDO_SECTIONS`).
+- **⚠️ The home page publishes 314-783-0523 as the MDO contact number.** That is
+  the church line; `provider_tax_info` and the childcare statement both use
+  **314-781-8673**, the MDO office direct line. Seeded as-is rather than
+  silently corrected — it is now a field the office can fix in one edit.
+- **`.muted` is used by five admin modules and defined in neither stylesheet.**
+  A pre-existing dead class; scoped to `#mdoWebsiteContent` here rather than
+  defined globally, which would have restyled four other modules in this commit.
+
+Current version: v2.13.1
+
+
 ## Finance summary API (for the church ChMS finance integration)
 
 `supabase/functions/finance-summary/index.ts` — `GET`, header `X-Api-Key: <FINANCE_API_KEY>`, returns 401 if missing/wrong. Returns `{ updated_at, accounts: [], budget: [...] }` for the current month + 12 prior (13 months, oldest first). Deploy like any other edge function (paste into the Supabase dashboard editor or `supabase functions deploy finance-summary`) and set the `FINANCE_API_KEY` secret — neither is automatic.

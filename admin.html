@@ -22,7 +22,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Admin — Timothy Lutheran Church MDO</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/admin.css?v=34">
+    <link rel="stylesheet" href="css/admin.css?v=36">
     <link rel="stylesheet" href="css/admin-portal.css?v=11">
 </head>
 <body class="admin-body">
@@ -1056,6 +1056,16 @@
                  design_handoff_messages_settings/Settings.dc.html). Registered
                  in AP_TOOLS as the tab's only tool. "My Notifications" moved to
                  the Messages tab header — see #apPushToggleWrap there. -->
+            <!-- MDO Website — the public home page's editable copy. Its own
+                 tool rather than a card inside Settings: it is a multi-section
+                 editor with its own draft/publish state, not a field. Sits under
+                 the Settings tab because the rates, ratios and staff photos that
+                 same page renders are edited on the Settings screen next to it. -->
+            <section class="admin-section ap-hidden-tool" id="mdoWebsiteSection">
+                <h2>🌐 MDO Website</h2>
+                <div id="mdoWebsiteContent"></div>
+            </section>
+
             <section class="admin-section" id="settingsUnifiedSection">
                 <!-- No section-desc paragraph here — it used to restate the
                      shell's own blurb for this tab almost word for word

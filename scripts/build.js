@@ -233,6 +233,7 @@ const ENTRIES = [
                 'js/admin/admin-push.js',
                 'js/admin/admin-messages-unified.js',
                 'js/admin/admin-cacfp.js',
+                'js/admin/admin-mdo-website.js',
                 'js/admin/admin-market.js',
                 // Last: the portal shell indexes the sections the modules above
                 // own, and calls into their loaders when a tool is opened.
