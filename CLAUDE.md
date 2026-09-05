@@ -5675,10 +5675,12 @@ against the bug it guards. ⚠️ Three first failed on already-fixed code becau
 the negative assertions matched the **comments naming the bug** — they strip
 comments first now.
 
-### ⚠️ THERE ARE TWO DEPLOY PATHS NOW, AND THE NEW ONE FAILS EVERY TIME
+### ⚠️ THERE WERE TWO DEPLOY PATHS, AND THE NEW ONE FAILED EVERY TIME (disconnected 2026-09-05)
 
-A check named **`Workers Builds: childcare-portal`** goes red on every commit.
-⚠️ **It is not a preview or branch build** — the first reading of this said so
+A check named **`Workers Builds: childcare-portal`** went red on every commit
+from the day the integration was connected until it was **disconnected in the
+Cloudflare dashboard on 2026-09-05**.
+⚠️ **It was not a preview or branch build** — the first reading of this said so
 and was wrong. Its build URL is under `…/childcare-portal/**production**/builds/`,
 so Cloudflare's newly-connected Git integration is trying to deploy
 **production** and failing at it.
@@ -5706,10 +5708,29 @@ and it is the one failing.
 - ⚠️ **The real cost is a permanently red check.** This repo has already learned
   once (in the church repo) that a suite with one known failure stops being read
   for the second one. A check that is always red hides the next real one.
-- **The fix is a dashboard decision and was deliberately not taken here.**
-  Disconnecting the Git integration is the likelier right call — GitHub Actions
-  already deploys, and two mechanisms racing on one Worker is exactly the class
-  of hazard the `--theirs` dist saga came from.
+- **The fix was a dashboard decision, and it was taken.** The Git integration
+  is disconnected. GitHub Actions already deploys, and two mechanisms racing on
+  one Worker is exactly the class of hazard the `--theirs` dist saga came from.
+
+**⚠️ WORKERS BUILDS IS NOT NEEDED AGAIN UNLESS GITHUB ACTIONS STOPS
+DEPLOYING — and that failure is loud, not silent.** The signals, in the order
+they would actually appear:
+
+| What you would see | What it means |
+|---|---|
+| The `deploy` job red in the PR's own check list | Actions ran and the deploy step failed. Read the job log — it is in GitHub, unlike Cloudflare's, which is dashboard-only. |
+| PR merges green, but the live version badge does not move | The workflow's own gates (`npm test`, the dist-freshness check) passed and `npx wrangler deploy` did not run or did not take. |
+| `curl -sI https://mdo.timothystl.org/ \| grep x-ssr-rooms` returns nothing | The Worker itself is not running — see the header's own section above. A number means it ran. |
+| `CLOUDFLARE_API_TOKEN` expired or revoked | The one credential the Actions path depends on. Rotating it is a repo-secret change, **not** a reason to reconnect a second deployer. |
+
+**None of those is fixed by reconnecting the Git integration**, because it was
+never deploying successfully in the first place — reconnecting would add a
+second failing path beside a broken first one. The honest reasons to reconnect
+are: the GitHub Actions workflow is deliberately retired, or somebody has read
+the Cloudflare build log (dashboard-only) and fixed whatever it names. ⚠️ If it
+is ever reconnected, expect it to fail exactly as before until that log has
+actually been read — the root cause was never diagnosed here, only ruled out
+for asset size and the `.git` pack.
 
 Current version: v2.13.4
 
