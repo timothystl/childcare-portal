@@ -580,6 +580,12 @@
     font-family: inherit; cursor: pointer;
 }
 
+.sl-help-link {
+    display: block; text-align: center; width: 100%; box-sizing: border-box;
+    min-height: 44px; line-height: 44px; margin-top: 8px;
+    color: var(--green-text); font-weight: 700; text-decoration: none;
+}
+
 /* ── Training & credentials (Account tab) ────────────────────
    One card per credential type, showing the latest record on file. Status
    colors reuse the same green/gold/tangerine "something needs attention"
