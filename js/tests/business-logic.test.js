@@ -2075,7 +2075,7 @@ describe('CSP tightening — script-src hash allowlist, no inline handlers', () 
 // Postgres (verified against production when the migration was applied) and in
 // DOM-rendering functions that cannot be require()d. What CAN drift silently is
 // the wiring — which is exactly what already went wrong once on this feature's
-// neighbours (a refund button shipped into a section nothing renders).
+// neighbors (a refund button shipped into a section nothing renders).
 describe('per-child message threads', () => {
     const repoRoot = path.resolve(__dirname, '..', '..');
     const read = rel => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
